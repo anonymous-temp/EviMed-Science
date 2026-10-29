@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs'
 import { artifacts, artifactDigests, readRelease, releaseProblems } from '../src/generate.mjs'
 import {
   CHART_COLORS,
+  CHART_OWN,
   CJK_PUNCT_FACES,
   CJK_PUNCT_RANGE,
   COLOR_RAMPS,
@@ -34,6 +35,7 @@ import {
 } from '../src/index.mjs'
 import {
   CONTRAST_RULES,
+  cie76,
   contrastFailures,
   contrastRatio,
   measureContrast,
@@ -64,14 +66,14 @@ test('a run-state dot is a graphic at 3:1 on the canvas, a card and the sidebar,
       }
     }
   }
-  // The stopped dot was text-graphic's own grey, 2.69 light and 2.71 dark.
-  assert.equal(quotedContrast(roleColor('dot-canceled', 'light'), roleColor('bg', 'light')), 3.21)
-  assert.equal(quotedContrast(roleColor('dot-canceled', 'dark'), roleColor('bg', 'dark')), 3.28)
+  // The stopped dot uses a meaningful boundary colour, never decoration.
+  assert.equal(quotedContrast(roleColor('dot-canceled', 'light'), roleColor('bg', 'light')), 3.50)
+  assert.equal(quotedContrast(roleColor('dot-canceled', 'dark'), roleColor('bg', 'dark')), 4.77)
 })
 
 test('text-graphic is decorative: it keeps a floor, a status mark may not wear it, and its figure is the documented one', () => {
   assert.ok(CONTRAST_RULES.some((rule) => rule.fg === 'text-graphic' && rule.bg === 'bg' && rule.min === 2.5))
-  assert.equal(quotedContrast(roleColor('text-graphic', 'light'), roleColor('bg', 'light')), 2.69)
+  assert.equal(quotedContrast(roleColor('text-graphic', 'light'), roleColor('bg', 'light')), 2.78)
   assert.deepEqual(sharedWithGraphic(), [])
   // The check finds what it is for: the old table, where 已停止 borrowed the grey.
   const old = { 'text-graphic': { light: '#939ca6', dark: '#535b64' }, 'dot-canceled': { light: '#939ca6', dark: '#535b64' }, 'dot-done': { light: '#1c7347', dark: '#7cc0a0' } }
@@ -103,11 +105,17 @@ test('the type scale is closed: no rung invents a size', () => {
   }
 })
 
-test('the brand keeps EviMed\'s live colour to the byte', () => {
-  // The platform is live and its logo is this blue. A tuned ramp is fine; this
-  // step is not ours to tune.
-  assert.equal(COLOR_RAMPS.brand[600], '#0a5dc1')
-  assert.equal(colorRole('accent', 'light'), '#0a5dc1')
+test('warm paper, terracotta actions and neutral identity stay independent', () => {
+  assert.equal(colorRole('bg', 'light'), '#f7f5ef')
+  assert.equal(colorRole('surface', 'light'), '#fffdf8')
+  assert.equal(colorRole('surface-1', 'light'), '#f2efe7')
+  assert.equal(colorRole('accent', 'light'), '#a34427')
+  assert.equal(colorRole('brand-ink', 'light'), '#24211e')
+  for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+    assert.notEqual(colorRole('brand-ink', scheme), colorRole('accent', scheme))
+    assert.notEqual(colorRole('danger', scheme), colorRole('accent', scheme))
+    assert.notEqual(colorRole('info', scheme), colorRole('accent', scheme))
+  }
 })
 
 test('every role resolves in both schemes', () => {
@@ -128,11 +136,11 @@ test('a comparison chart puts us in the brand and every rival in grey', () => {
   }
 })
 
-test('every rival is a visible graphic on white, darkest for the highest rank (appendix E #22)', () => {
+test('every rival is a visible graphic on paper, darkest for the highest rank (appendix E #22)', () => {
   const white = colorRole('surface', 'light')
   const ratios = CHART_COLORS.rivals.map((rival) => contrastRatio(rival, white))
   for (const [index, ratio] of ratios.entries()) {
-    // Unrounded: the third rival sits at 3.12 on white and 3.0099 on the page.
+    // Compare the exact ratio with the threshold, never a rounded quotation.
     assert.ok(ratio >= 3, `rival ${index + 1} is ${ratio}:1 on white`)
   }
   for (let index = 1; index < ratios.length; index += 1) {
@@ -141,8 +149,7 @@ test('every rival is a visible graphic on white, darkest for the highest rank (a
 })
 
 test('contrast is compared unrounded — a pair just over a floor is not rounded onto it', () => {
-  // The third rival on the page is 3.0099:1. Rounded it would read 3.01, which
-  // is harmless here and exactly the flattery that let a 4.4995 pass 4.5 once.
+  // A rounded ratio must never replace the full value used for the threshold.
   const exact = contrastRatio(CHART_COLORS.rivals[2], colorRole('bg', 'light'))
   assert.notEqual(exact, quotedContrast(CHART_COLORS.rivals[2], colorRole('bg', 'light')))
   assert.ok(exact >= 3)
@@ -151,7 +158,7 @@ test('contrast is compared unrounded — a pair just over a floor is not rounded
 test('the diverging scale is blue to a grey middle to orange, its arms matched in lightness', () => {
   const steps = CHART_COLORS.diverging
   assert.equal(steps.length, 7)
-  assert.equal(steps[0], COLOR_RAMPS.brand[600])
+  assert.equal(steps[0], '#0a5dc1', 'scientific direction is independent from the action accent')
   const luminance = (/** @type {string} */ hex) => contrastRatio(hex, '#000000')
   // Each arm lightens towards the middle, and the two arms mirror each other.
   for (let index = 0; index < 3; index += 1) {
@@ -175,7 +182,7 @@ test('the version moves with the artifacts (fusion audit F-G3)', () => {
   assert.deepEqual(releaseProblems(), [])
   // And the check goes red when a value changes under the same version —
   // proved, not assumed: a check that cannot fail is not a check.
-  const tuned = { ...artifacts(), 'tokens.css': artifacts()['tokens.css'].replace('#0a5dc1', '#0a5dc2') }
+  const tuned = { ...artifacts(), 'tokens.css': artifacts()['tokens.css'].replace(COLOR_RAMPS.brand[600], '#a44427') }
   const problems = releaseProblems(tuned)
   assert.equal(problems.length, 1)
   assert.match(problems[0], /changed but the version is still/)
@@ -304,7 +311,7 @@ test('the DTCG 2025.10 export is well formed and stands alone per mode', () => {
   // One theme file per Figma mode: the same names in both.
   const names = (/** @type {any} */ file) => Object.keys(file.role).sort()
   assert.deepEqual(names(files['light.tokens.json']), names(files['dark.tokens.json']))
-  assert.equal(files['light.tokens.json'].role.accent.$value.hex, '#0a5dc1')
+  assert.equal(files['light.tokens.json'].role.accent.$value.hex, colorRole('accent', 'light'))
   // Reduced motion: nothing travels, no fade is longer than the fast step.
   const reduced = files['motion-reduced.tokens.json']
   for (const token of Object.values(reduced.distance)) assert.equal(/** @type {any} */ (token).$value.value, 0)
@@ -374,10 +381,10 @@ test('generation is deterministic — the same table gives the same bytes', () =
 test('the artifacts carry the values, not a copy of them', () => {
   const files = artifacts()
   assert.match(files['tokens.css'], /--accent: var\(--brand-600\)/)
-  assert.match(files['element-plus.css'], /--el-color-primary: #0a5dc1;/)
+  assert.ok(files['element-plus.css'].includes(`--el-color-primary: ${colorRole('accent', 'light')};`))
   assert.match(files['tailwind-preset.js'], /"accent": "var\(--accent\)"/)
-  assert.equal(JSON.parse(files['echarts-theme.json']).light.color[0], '#0a5dc1')
-  assert.equal(JSON.parse(files['dsh-theme.json'])['--dsw-alias-link'].light, '#0a5dc1')
+  assert.equal(JSON.parse(files['echarts-theme.json']).light.color[0], CHART_COLORS.series[0])
+  assert.equal(JSON.parse(files['dsh-theme.json'])['--dsw-alias-link'].light, colorRole('accent', 'light'))
   assert.ok(JSON.parse(files['figma-tokens.json']).global.ramp.brand['600'])
 })
 
@@ -388,4 +395,36 @@ test('every contrast figure the table quotes is the figure it measures', () => {
   // four phrases a note may use are read back (`staleNotes`), not only "on the
   // page".
   assert.deepEqual(staleNotes(), [])
+})
+
+test('v3 separates verification, information, titles and field focus from actions', () => {
+  for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+    assert.equal(colorRole('title-ink', scheme), colorRole('text', scheme))
+    assert.equal(colorRole('verify-ok', scheme), colorRole('ok', scheme))
+    assert.equal(colorRole('dot-running', scheme), colorRole('info', scheme))
+    assert.equal(colorRole('dot-done', scheme), colorRole('ok', scheme))
+    assert.equal(colorRole('focus-input', scheme), colorRole('brand-ink', scheme))
+    assert.notEqual(colorRole('focus-input', scheme), colorRole('focus', scheme))
+    assert.notEqual(colorRole('verify-ok', scheme), colorRole('accent', scheme))
+    assert.equal(kernelThemeTokens()['--dsw-static-deepseek-450'][scheme], colorRole('info', scheme))
+  }
+  assert.equal(colorRole('info', 'light'), '#18324d')
+  assert.equal(colorRole('info-soft', 'light'), '#eaf0f5')
+  assert.equal(colorRole('info', 'dark'), '#9bbbd5')
+  assert.equal(colorRole('info-soft', 'dark'), '#142330')
+})
+
+
+test('comparison identity clears CIE76 15 against every rival in both themes', () => {
+  assert.equal(cie76('#ffffff', '#ffffff'), 0)
+  assert.ok(Math.abs(cie76('#ffffff', '#000000') - 100) < 0.001)
+  for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+    for (const rival of CHART_COLORS.rivals) {
+      assert.ok(cie76(CHART_OWN[scheme], rival) >= 15, `${scheme} own versus ${rival}`)
+      for (const ground of ['bg', 'surface']) {
+        assert.ok(contrastRatio(CHART_OWN[scheme], colorRole(ground, scheme)) >= 3)
+        assert.ok(contrastRatio(rival, colorRole(ground, scheme)) >= 3)
+      }
+    }
+  }
 })

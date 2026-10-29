@@ -350,6 +350,10 @@ export class GeoNativeInputs {
   }
   async reconcileTurn(project, transcript, turn, run) {
     const policy = await this.policies.forProject(project), inputs = [], failures = [];
+    // Attribution is the shared namespace's: an owned project -- every ordinary project, and a GEO project its owner works in
+    // alone -- has no namespace to attribute inputs to. Reading `policy.namespace` there threw on every reconcile cycle and
+    // wrote 「Some native inputs could not be attributed」 every 15 s for the whole of an ordinary run (2026-10-27).
+    if (!policy?.namespace?.id) return null;
     const seenSequences = new Set(), seenRequests = new Set();
     const sessionMatches = transcript.sessionId === run.sessionId && Number.isSafeInteger(turn.startSeq);
     for (const message of turn.inputs) {

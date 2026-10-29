@@ -66,7 +66,7 @@ const fact = (study, subjectKey, variable, value, extra = {}) => matching.saveFa
 const trialOf = (registryId, extra = {}) => ({
   registry: "clinicaltrials.gov", registryId, title: `Trial ${registryId}`, phase: "PHASE2", status: "RECRUITING", conditions: ["NSCLC"],
   locations: { total: 1, countries: ["China"], sites: [] }, url: `https://clinicaltrials.gov/study/${registryId}`, recordHash: HASH,
-  retrievedAt: "2026-10-10T07:00:00.000Z", eligibilityText: "", ...extra,
+  retrievedAt: "2026-10-10T07:00:00.000Z", eligibilityText: [AGE_18, AGE_70, ECOG, NO_BRAIN, EGFR, CONSENT].map(item => item.sourceText).join("\n"), ...extra,
 });
 const criterion = (kind, criterionType, sourceText, requirement) => ({ kind, criterionType, sourceText, requirement, applicability: null, sourceLocator: {}, evidenceNeeded: [], reviewState: "ai_set" });
 const AGE_18 = criterion("inclusion", "demographic", "Age >= 18", { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" });
@@ -75,6 +75,21 @@ const ECOG = criterion("inclusion", "performance_status", "ECOG 0-1", { op: "com
 const NO_BRAIN = criterion("exclusion", "comorbidity", "Active brain metastases", { op: "absent", variable: "active_brain_metastasis" });
 const EGFR = criterion("inclusion", "biomarker", "EGFR mutation", { op: "present", variable: "egfr_mutation" });
 const CONSENT = criterion("inclusion", "consent_capacity", "Able to sign consent", { op: "language", text: "Able to sign consent", key: "consent" });
+
+test("absent registry eligibility and invented criteria remain unknown despite compatible patient facts", options, async () => {
+  const study = await seedStudy(); await seedPatient(study);
+  const trials = seam();
+  const missing = await trials.writeTrial(study, { trial: trialOf("NCT06000991", { registry: "chictr", eligibilityText: "" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  assert.equal(missing.evaluation.evaluated[0].summary, "insufficient_evidence");
+  const full = await candidates.getAssessment(missing.evaluation.evaluated[0].assessmentId, study.id);
+  assert.equal(full.judgments[0].state, "unknown");
+  assert.equal(full.evidenceGaps[0].reason, "criterion_source_unavailable");
+  const invented = await trials.writeTrial(study, { trial: trialOf("NCT06000992", { eligibilityText: "ECOG 0-1" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  assert.equal(invented.evaluation.evaluated[0].summary, "insufficient_evidence");
+  const read = await trials.runtimeRead(study, { id: missing.trial.id });
+  assert.equal(read.trials[0].eligibilityCoverage.status, "unavailable");
+  assert.equal(read.trials[0].retrievedAt, "2026-10-10T07:00:00.000Z");
+});
 
 async function seedPatient(study, subjectKey = "P-1") {
   await fact(study, subjectKey, "age", 63, { unit: "year" });

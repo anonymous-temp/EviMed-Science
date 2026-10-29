@@ -364,7 +364,10 @@ test('the caller retries 429, 5xx and timeouts, and gives up with a closed code'
   assert.equal(attempts, 4);
 
   attempts = 0;
-  const hang = (url, { signal }) => { attempts++; return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason))); };
+  // A fetch that never answers until it is aborted. AbortSignal.timeout's timer is unref'd, so on Node 22 nothing would keep the
+  // loop alive while this waits and the runner cancels the file ("event loop has already resolved"): the fake holds a ref'd timer.
+  const hang = (url, { signal }) => { attempts++; const keep = setTimeout(() => {}, 10_000);
+    return new Promise((resolve, reject) => signal.addEventListener('abort', () => { clearTimeout(keep); reject(signal.reason); })); };
   await assert.rejects(dashscopeCaller({ credentialPath: await keyFile(), fetchImpl: hang, timeoutMs: 5, retries: 1, sleep: noSleep })([]),
     (error) => error.code === 'jury_timeout' && error.billed === null);
   assert.equal(attempts, 2);

@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { canonicalScenarioJson } from '../../packages/domain/src/vcrEngineJob.mjs';
 import { parseMethodValidation, bindMethodValidation, assertMethodValidationFile } from '../../apps/server/src/vcrMethodValidation.mjs';
 import { openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle } from '../../apps/server/src/security.mjs';
-import { NUMERIC_REFERENCES, methodsWithoutReference, sourceCases } from './vcr-method-references.mjs';
+import { NUMERIC_REFERENCES, REQUIRED_CURRENT_REFERENCES, methodsWithoutReference, sourceCases } from './vcr-method-references.mjs';
 
 export { NUMERIC_REFERENCES, methodsWithoutReference, sourceCases };
 
@@ -185,6 +185,10 @@ export function produceMethodValidation({ reportBytes, logBytes, sourceRevision,
   requireValue(logCases.length === definitions.size && new Set(logCases.map(match => match[1])).size === definitions.size
     && logCases.every(match => executed.has(match[1]) && match[2] === 'PASS' && !/\bskip(?:ped|ping)?\b/i.test(match[3]))
     && new RegExp(`(?:^|\\n)PASSED ${definitions.size}/${definitions.size}\\s*$`).test(log), 'numeric_log_incomplete');
+  for (const [method, requiredCases] of Object.entries(REQUIRED_CURRENT_REFERENCES)) {
+    if (!Object.hasOwn(source.methods, method)) continue;
+    for (const caseId of requiredCases) requireValue(definitions.has(caseId) && executed.has(caseId) && (strings(report.methodsByCase[caseId]) ?? []).includes(method), 'current_method_reference_missing');
+  }
   const methods = new Map();
   for (const [caseId, definition] of definitions) {
     const spec = NUMERIC_REFERENCES[caseId];

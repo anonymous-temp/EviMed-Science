@@ -18,6 +18,18 @@ const Menu = lazy(() => import("@/components/ui/Menu").then((m) => ({ default: m
 
 type LazyMenuProps = Omit<ComponentProps<typeof MenuComponent>, "children" | "defaultOpen">;
 
+/**
+ * Component: LazyMenu; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Suspense shell requests the Menu chunk on first render with an IconButton stand-in.
+ * Variants: Menu props except children/defaultOpen; fixed small overflow trigger.
+ * States: Loaded implementation replaces trigger shell; deferred interaction is replayed.
+ * Hit area: Shared small IconButton stand-in and loaded trigger.
+ * Keyboard: Trigger keyboard opens deferred Menu; Menu owns subsequent traversal.
+ * Long content: Content/viewport rules delegate to Menu.
+ * Theme: No additional theme; Menu and trigger retain semantic roles.
+ * Responsive: Delegates placement to Menu.
+ * Verification: LazyMenu.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function LazyMenu(props: LazyMenuProps) {
   const [wanted, setWanted] = useState(false);
   const standIn = (disabled: boolean) => (

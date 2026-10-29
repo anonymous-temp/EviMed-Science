@@ -78,3 +78,26 @@ describe("toast store", () => {
     expect(t.action).toEqual({ label: "撤销", onClick });
   });
 });
+
+it("counts repeated explicit event identities and keeps unrelated tasks and legacy calls separate",()=>{
+ useToastStore.setState({toasts:[]});toast.error('Failure',{eventId:'write',entityId:'a'});toast.error('  Failure ',{eventId:'write',entityId:'a'});
+ expect(useToastStore.getState().toasts).toHaveLength(1);expect(useToastStore.getState().toasts[0].occurrences).toBe(2);
+ toast.error('Failure',{eventId:'write',entityId:'b'});expect(useToastStore.getState().toasts).toHaveLength(2);
+ useToastStore.setState({toasts:[]});toast.error('Same text');toast.error('Same text');expect(useToastStore.getState().toasts).toHaveLength(2);
+});
+it("preserves separate undo actions even when event labels repeat",()=>{
+ useToastStore.setState({toasts:[]});const first=vi.fn(),second=vi.fn();toast.success('Removed',{eventId:'remove',entityId:'same',action:{label:'Undo',onClick:first}});toast.success('Removed',{eventId:'remove',entityId:'same',action:{label:'Undo',onClick:second}});
+ expect(useToastStore.getState().toasts).toHaveLength(2);expect(useToastStore.getState().toasts.map(t=>t.action?.onClick)).toEqual([first,second]);
+});
+
+it("clears retained messages/actions/timers and refuses former-session producers", async () => {
+ const { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, sessionGeneration } = await import("./sessionLifecycle");
+ vi.useFakeTimers(); const owner = sessionGeneration(); const undo = vi.fn();
+ toast.error("private A", {action:{label:"Undo", onClick:undo}});
+ window.dispatchEvent(new Event(WEB_SESSION_ENDED_EVENT)); window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT));
+ expect(useToastStore.getState().toasts).toEqual([]);
+ toast.success("late A", {sessionGeneration:owner}); expect(useToastStore.getState().toasts).toEqual([]);
+ toast.success("B"); expect(useToastStore.getState().toasts.map(item=>item.message)).toEqual(["B"]);
+ window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT)); vi.runAllTimers();
+ expect(useToastStore.getState().toasts).toEqual([]); expect(undo).not.toHaveBeenCalled(); vi.useRealTimers();
+});

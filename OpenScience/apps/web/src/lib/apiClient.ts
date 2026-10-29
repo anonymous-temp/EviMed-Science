@@ -6,6 +6,8 @@
  * branch is gone with it rather than staying as a constant that is always
  * false and a code path nothing can reach.
  */
+import { assertSessionGeneration, sessionGeneration, StaleSessionError, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "./sessionLifecycle";
+export { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "./sessionLifecycle";
 import { formatDuration } from "./format";
 import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage, personAvailability, safeAppReturnPath } from "@evimed/domain";
 import { rememberConversationTitles } from "./conversationTitles";
@@ -15,8 +17,6 @@ const rawWebApiBase = import.meta.env.VITE_OPEN_SCIENCE_API_URL?.trim() ?? "";
 export const webApiBase = rawWebApiBase.replace(/\/+$/, "");
 const PROJECT_KEY = "openScience.projectId";
 const CSRF_HEADER = "X-Open-Science-CSRF";
-export const WEB_SESSION_ENDED_EVENT = "open-science:web-session-ended";
-export const WEB_SESSION_STARTED_EVENT = "open-science:web-session-started";
 let webCsrfToken: string | null = null;
 let webCsrfRefresh: Promise<string | null> | null = null;
 
@@ -437,6 +437,8 @@ export interface WebProject {
   lastActiveAt?: string | null;
   /** When the project was made, when the control plane keeps it: what tells two projects of one name apart. */
   createdAt?: string | null;
+  /** When the project was put away, or null/absent while it is live: an archived project is no place to send a document to. */
+  archivedAt?: string | null;
 }
 
 export interface WebPluginConfiguration {
@@ -801,6 +803,9 @@ export interface WebRunProgress {
 }
 
 export interface WebAgentRun {
+  /** Present on an adopted automatic LoopX continuation; not a goal lifecycle status. */
+  automated?: boolean;
+  goal?: { id: string; runId: string | null } | null;
   stepActions?: Record<string, import("@evimed/domain").RunAction[]>;
   artifactRoles?: Record<string, import("@evimed/domain").ArtifactRole>;
   availableActions?: import("@evimed/domain").RunAction[];
@@ -1173,19 +1178,23 @@ function rememberCsrfToken(value: unknown): void {
 async function ensureWebCsrfToken(): Promise<string | null> {
   if (!hasWebApi || webCsrfToken) return webCsrfToken;
   if (!webCsrfRefresh) {
-    webCsrfRefresh = fetch(apiUrl("/me"), {
+    const owner = sessionGeneration();
+    const refresh = fetch(apiUrl("/me"), {
       credentials: "include",
       headers: { "X-Open-Science-Project": getWebProjectId() },
     })
       .then(async (res) => {
+        assertSessionGeneration(owner);
         if (!res.ok) return null;
         const body = (await res.json().catch(() => null)) as { data?: unknown } | null;
+        assertSessionGeneration(owner);
         rememberCsrfToken(body?.data);
         return webCsrfToken;
       })
       .finally(() => {
-        webCsrfRefresh = null;
+        if (webCsrfRefresh === refresh) webCsrfRefresh = null;
       });
+    webCsrfRefresh = refresh;
   }
   return webCsrfRefresh;
 }
@@ -1197,7 +1206,8 @@ export function getWebApiRequestHeaders(): Record<string, string> {
   };
 }
 
-export async function fetchWithWebAuth(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+export async function fetchWithWebAuth(input: RequestInfo | URL, init: RequestInit = {}, isCurrent?: () => boolean): Promise<Response> {
+  const owner = sessionGeneration();
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
   if (!headers.has("X-Open-Science-Project")) {
@@ -1205,13 +1215,22 @@ export async function fetchWithWebAuth(input: RequestInfo | URL, init: RequestIn
   }
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     await ensureWebCsrfToken();
+    assertSessionGeneration(owner);
     if (webCsrfToken && !headers.has(CSRF_HEADER)) headers.set(CSRF_HEADER, webCsrfToken);
   }
-  const response = await fetch(input, {
-    ...init,
-    credentials: init.credentials ?? "include",
-    headers,
-  });
+  if (isCurrent && !isCurrent()) throw new StaleSessionError();
+  let response: Response;
+  try {
+    response = await fetch(input, {
+      ...init,
+      credentials: init.credentials ?? "include",
+      headers,
+    });
+  } catch (error) {
+    assertSessionGeneration(owner);
+    throw error;
+  }
+  assertSessionGeneration(owner);
   if (response.status === 401) notifyWebSessionEnded();
   return response;
 }
@@ -1226,11 +1245,13 @@ function apiUrl(path: string): string {
 }
 
 async function parseApiResponse<T>(res: Response): Promise<T> {
+  const owner = sessionGeneration();
   const contentType = res.headers.get("content-type") ?? "";
   const body = contentType.includes("application/json")
     ? await res.json()
     : await res.text();
 
+  assertSessionGeneration(owner);
   if (!res.ok) {
     const envelope = body && typeof body === "object" ? body as Record<string, unknown> : null;
     const message = envelope && typeof envelope.error === "string"
@@ -1261,6 +1282,7 @@ async function invokeWebCommand<T>(
   command: string,
   args?: Record<string, unknown>,
   projectId: string = getWebProjectId(),
+  isCurrent?: () => boolean,
 ): Promise<T> {
   const res = await fetchWithWebAuth(commandUrl(command), {
     method: "POST",
@@ -1269,7 +1291,7 @@ async function invokeWebCommand<T>(
       "X-Open-Science-Project": projectId,
     },
     body: JSON.stringify(args ?? {}),
-  });
+  }, isCurrent);
   return parseApiResponse<T>(res);
 }
 
@@ -1277,10 +1299,10 @@ export async function invokeCommand<T>(
   command: string,
   args?: Record<string, unknown>,
   /** `projectId`: the project the command runs in, when it is not the tab's (the knowledge base page reading another project's file). */
-  options?: { projectId?: string },
+  options?: { projectId?: string; isCurrent?: () => boolean },
 ): Promise<T> {
   if (hasWebApi) {
-    return invokeWebCommand<T>(command, args, options?.projectId);
+    return invokeWebCommand<T>(command, args, options?.projectId, options?.isCurrent);
   }
   throw new BackendUnavailableError(command);
 }
@@ -2538,4 +2560,10 @@ export async function putConversationReference(sessionId: string, projectId: str
     method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Open-Science-Project': projectId }, body: JSON.stringify(reference),
   });
   await parseApiResponse(res);
+}
+
+/** Validate a selected saved object before placing its native draft. */
+export async function stageVcrConversationReference(sessionId: string, projectId: string, reference: import("./runtimeUiNavigation").VcrObjectSelection): Promise<import("./runtimeUiNavigation").VcrObjectSelection> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/vcr-reference`), { method: "POST", headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId }, body: JSON.stringify(reference) });
+  return parseApiResponse<import("./runtimeUiNavigation").VcrObjectSelection>(res);
 }

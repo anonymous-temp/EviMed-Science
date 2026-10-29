@@ -1,8 +1,8 @@
+import { Radio } from "@/components/ui/Radio";
 import { useRef, useState } from "react";
 import { VCR_EXPORT_KIND_LABELS_ZH } from "@evimed/domain";
 import { renameVcrStudy, type VcrExportKind } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
-import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { Input } from "@/components/ui/Input";
@@ -79,13 +79,7 @@ export function VcrExportDialog({ busy, onClose, onExport }: {
         <fieldset className="flex flex-col gap-1">
           <legend className="sr-only">导出什么</legend>
           {VCR_EXPORT_CHOICES.map((choice) => (
-            <label
-              key={choice.kind}
-              className={cn("flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-ui", kind === choice.kind ? "bg-accent-soft text-accent" : "text-text hover:bg-surface-1")}
-            >
-              <input type="radio" name="vcr-export-kind" value={choice.kind} checked={kind === choice.kind} onChange={() => setKind(choice.kind)} className="h-3.5 w-3.5 accent-accent" />
-              {choice.label}
-            </label>
+            <Radio key={choice.kind} label={choice.label} name="vcr-export-kind" value={choice.kind} checked={kind === choice.kind} onChange={() => setKind(choice.kind)} disabled={busy} />
           ))}
         </fieldset>
         <div className="flex justify-end gap-2">

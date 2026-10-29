@@ -88,10 +88,16 @@ class GeoToolDefinitionTests(unittest.TestCase):
         self.assertEqual(definitions["geo_read"]["inputSchema"]["properties"]["what"]["enum"], list(geo_platform.READ_WHATS))
         self.assertEqual(definitions["geo_write"]["inputSchema"]["properties"]["what"]["enum"], list(geo_platform.WRITE_WHATS))
         social = definitions["social_posts_search"]["inputSchema"]
-        self.assertEqual(social["required"], ["query", "platform"])
+        self.assertNotIn("required", social, "a read on needs the job id alone, a search a query and platforms")
+        self.assertEqual(social["oneOf"], [{"type": "object", "required": ["query", "platform"]}, {"type": "object", "required": ["query", "platforms"]},
+                                           {"type": "object", "required": ["jobId"]}])
+        self.assertEqual(social["properties"]["jobId"]["pattern"], "^[A-Fa-f0-9]{32}$")
+        self.assertEqual(social["properties"]["platforms"]["maxItems"], 6)
         self.assertEqual(social["properties"]["platform"]["enum"], list(geo_platform.SOCIAL_PLATFORMS))
-        self.assertIn("One platform per call", definitions["social_posts_search"]["description"])
+        self.assertIn("one asynchronous job", definitions["social_posts_search"]["description"])
         self.assertIn("never zero", definitions["social_posts_search"]["description"])
+        self.assertIn("pending", definitions["social_posts_search"]["description"])
+        self.assertIn("jobId", definitions["social_posts_search"]["description"])
 
     def test_the_actions_read_says_it_is_lean_and_how_to_read_one_whole(self):
         read = {tool["name"]: tool for tool in geo_platform.tool_definitions()}["geo_read"]
@@ -567,6 +573,16 @@ class SocialPostsTests(_GatewayCase):
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/geo/v1/social")
         self.assertEqual(_Gateway.seen[0]["body"], {"query": "二甲双胍", "platforms": ["xhs"], "limit": 5})
 
+    def test_multiple_platforms_share_one_call_and_invalid_selections_never_cross_boundary(self):
+        _Gateway.answers["social"] = (200, {"data": {"status": "partial_collected", "platforms": [], "posts": []}})
+        result = self.server.call_tool("social_posts_search", {"query": "q" * 256, "platforms": ["xhs", "zhihu"]})
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(_Gateway.seen[0]["body"]["platforms"], ["xhs", "zhihu"])
+        for selection in ({"platform": "xhs", "platforms": ["xhs"]}, {"platforms": []}, {"platforms": ["xhs", "xhs"]}, {"platforms": ["unknown"]}):
+            result = self.server.call_tool("social_posts_search", {"query": "q", **selection})
+            self.assertEqual(result["status"], "error")
+        self.assertEqual(len(_Gateway.seen), 1)
+
     def test_a_channel_that_did_not_answer_is_no_signal_never_zero(self):
         _Gateway.answers["social"] = (200, {"data": {"status": "request_failed", "platforms": [{"platform": "xhs", "status": "request_failed", "posts": 0}],
             "posts": []}})
@@ -574,6 +590,75 @@ class SocialPostsTests(_GatewayCase):
         self.assertEqual(result["status"], "warning")
         self.assertIn("无信号", " ".join(result["warnings"]))
         self.assertEqual(result["data"]["status"], "request_failed")
+
+    def test_a_pending_search_is_still_running_and_says_how_to_read_it_without_searching_again(self):
+        job = "a1" * 16
+        _Gateway.answers["social"] = (200, {"data": {"query": "降糖药", "sort": "hot", "status": "pending", "reason": "pending", "jobId": job,
+            "platforms": [{"platform": "xhs", "status": "collected", "posts": 1}, {"platform": "zhihu", "status": "request_failed", "posts": 0, "reason": "pending"}],
+            "posts": [{"platform": "xhs", "postId": "1"}]}})
+        result = self.server.call_tool("social_posts_search", {"query": "降糖药", "platforms": ["xhs", "zhihu"]})
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["data"]["status"], "pending")
+        self.assertEqual(result["data"]["jobId"], job)
+        self.assertEqual(len(result["data"]["posts"]), 1, "what is collected so far is kept")
+        self.assertIn("still running", result["summary"])
+        text = " ".join(result["warnings"] + result["next_actions"])
+        self.assertIn("not failed", text)
+        self.assertIn("Do not search again", text)
+        self.assertIn(job, text)
+        self.assertNotIn("shorter or more colloquial", text, "a running job is not a failed query")
+
+    def test_a_pending_search_with_no_readable_id_says_a_repeat_joins_it(self):
+        _Gateway.answers["social"] = (200, {"data": {"status": "pending", "platforms": [], "posts": []}})
+        result = self.server.call_tool("social_posts_search", {"query": "降糖药", "platform": "xhs"})
+        self.assertEqual(result["data"]["status"], "pending")
+        self.assertNotIn("jobId", result["data"])
+        self.assertIn("joins the running job", " ".join(result["next_actions"]))
+        _Gateway.answers["social"] = (200, {"data": {"status": "pending", "jobId": "../x", "platforms": [], "posts": []}})
+        self.assertNotIn("jobId", self.server.call_tool("social_posts_search", {"query": "降糖药", "platform": "xhs"})["data"], "an id of another shape is not passed on")
+
+    def test_a_job_id_alone_reads_on_through_the_gateway_and_renders_as_a_search_does(self):
+        job = "B2" * 16
+        post = {"platform": "xhs", "postId": "late", "excerpt": "饭前吃"}
+        _Gateway.answers["social_job"] = (200, {"data": {"jobId": job, "query": "二甲双胍", "sort": "hot", "status": "collected",
+            "platforms": [{"platform": "xhs", "status": "collected", "posts": 1}], "posts": [post]}})
+        result = self.server.call_tool("social_posts_search", {"jobId": job})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["posts"], [post])
+        self.assertEqual(result["data"]["query"], "二甲双胍")
+        self.assertEqual((_Gateway.seen[0]["path"], _Gateway.seen[0]["body"]), ("/internal/geo/v1/social_job", {"jobId": job}))
+        _Gateway.answers["social_job"] = (200, {"data": {"jobId": job, "query": "二甲双胍", "status": "pending", "platforms": [], "posts": []}})
+        again = self.server.call_tool("social_posts_search", {"jobId": job})
+        self.assertEqual(again["data"]["status"], "pending")
+        self.assertEqual(again["data"]["jobId"], job)
+
+    def test_a_job_id_is_read_alone_and_in_its_own_shape_before_anything_crosses(self):
+        job = "a1" * 16
+        for arguments in ({"jobId": job, "query": "q"}, {"jobId": job, "platform": "xhs"}, {"jobId": job, "limit": 3}, {"jobId": "abc"}, {"jobId": "z" * 32},
+                          {"jobId": 7}, {"query": "q"}, {}):
+            self.assertEqual(self.server.call_tool("social_posts_search", arguments)["status"], "error", arguments)
+        # The handler holds the same line when called directly.
+        with self.assertRaises(geo_platform.GeoPlatformError) as caught:
+            geo_platform.social_search({"jobId": job, "query": "q"})
+        self.assertEqual(caught.exception.code, "social_posts_job_invalid")
+        self.assertEqual(_Gateway.seen, [])
+
+    def test_a_job_that_is_not_this_projects_is_refused_by_name_with_the_next_step(self):
+        _Gateway.answers["social_job"] = (404, {"error": "This project started no social search with that jobId.", "code": "social_posts_job_unknown"})
+        result = self.server.call_tool("social_posts_search", {"jobId": "a1" * 16})
+        self.assertEqual(result["error"]["code"], "social_posts_job_unknown")
+        self.assertFalse(result["error"]["retryable"])
+        self.assertIn("search again", " ".join(result["next_actions"]))
+        _Gateway.answers["social_job"] = (503, {"error": "The record could not be read.", "code": "social_posts_job_unavailable"})
+        self.assertTrue(self.server.call_tool("social_posts_search", {"jobId": "a1" * 16})["error"]["retryable"])
+
+    def test_the_gateways_platform_bound_reaches_the_run_as_its_own_words(self):
+        _Gateway.answers["social"] = (400, {"error": "At most 2 platforms per call (the collector serves them one at a time, 30-120 s each): ask the others in another call.",
+                                            "code": "social_posts_platform_invalid"})
+        result = self.server.call_tool("social_posts_search", {"query": "q", "platforms": ["xhs", "zhihu", "douyin"]})
+        self.assertEqual(result["error"]["code"], "social_posts_platform_invalid")
+        self.assertIn("At most 2 platforms", result["error"]["message"])
+        self.assertFalse(result["error"]["retryable"])
 
     def test_an_unconfigured_channel_is_not_retried(self):
         _Gateway.answers["social"] = (503, {"error": "The social channel is not configured.", "code": "social_posts_unconfigured"})

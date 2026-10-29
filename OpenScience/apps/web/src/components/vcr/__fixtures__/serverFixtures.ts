@@ -79,9 +79,6 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
         // The programme's background conversations and the page's editable cards answer in their own shapes (no presented page).
         if (section === "runs") return { runs: [] };
         if (section === "cards") return { kind: query.get("kind"), objectId: query.get("object") ?? "pop_1", title: "", settings: [] };
-        // The ledger route answers the store's own rows (`referralOf` in `vcrMatchStore.mjs`), not a presented page:
-        // one per person the referral counts of `matching-referral.json` add up to.
-        if (section === "referrals") return referralsAnswer();
         if (section === "matching" && set === "ev201") {
           const view = query.get("view");
           // 「给患者找试验」: nobody asked for, a person the study has found no trial for (P-0201), or P-0192's ranked list — the first trial
@@ -91,10 +88,10 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
             if (query.get("candidate") === "P-0192") return fixture(query.get("trial") === "ctr_2" ? "ev201/matching-patient-trials-open.json" : "ev201/matching-patient-trials.json");
             return fixture("ev201/matching-patient-trials-nobody.json");
           }
-          // Two subjects have a page of their own: P-0201 (eligible, already contacted) and P-0192 (a referral waiting on a coordinator).
+          // Two subjects have evidence-backed matching detail records.
           if (query.get("candidate") === "P-0201") return fixture("ev201/matching-p0201.json");
           if (query.get("candidate") === "P-0192") return fixture("ev201/matching-p0192.json");
-          return fixture(view && view !== "matching" ? `ev201/matching-${view}.json` : "ev201/matching.json");
+          return fixture("ev201/matching.json");
         }
         void item;
         return fixture(`${set}/${section}.json`);
@@ -110,20 +107,4 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
     return {};
   });
   return { calls };
-}
-
-/** The referral ledger as `GET …/referrals` answers it: the four persons the fixture's counts name. */
-export function referralsAnswer() {
-  const row = (id: string, subjectKey: string, state: string, extra: Record<string, unknown> = {}) => ({
-    id, studyId: STUDY_ID, assessmentId: `asm_${subjectKey}`, siteId: "ste_01", subjectKey, state, contactApprovedBy: null, contactApprovedByName: null, contactApprovedAt: null,
-    screenFailCriterionId: null, screenFailReason: null, enrolledOn: null, createdAt: "2026-09-20T08:00:00.000Z", updatedAt: "2026-09-25T08:00:00.000Z", ...extra,
-  });
-  return {
-    referrals: [
-      row("ref_seed_1", "P-0192", "contactable"),
-      row("ref_seed_2", "P-0201", "contacted", { contactApprovedBy: "coordinator-1", contactApprovedByName: "周协调员", contactApprovedAt: "2026-09-26T09:30:00.000Z" }),
-      row("ref_seed_3", "P-0177", "needs_evidence"),
-      row("ref_seed_4", "P-0150", "enrolled", { enrolledOn: "2026-09-18T00:00:00.000Z" }),
-    ],
-  };
 }

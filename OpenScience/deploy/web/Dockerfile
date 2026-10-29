@@ -98,6 +98,10 @@ COPY --from=build /app/scripts/ops ./scripts/ops
 COPY --from=build /app/scripts/runtime/extensions/cowork ./scripts/runtime/extensions/cowork
 COPY --from=build /app/packages/domain/index.mjs ./packages/domain/index.mjs
 COPY --from=build /app/packages/domain/src ./packages/domain/src
+# The RSI dependency closure (rsiDependencyClosure.mjs) reads the lockfile and the domain package's manifest from the app root, to qualify a campaign
+# before it is imported and to resolve a policy read; without them every closure is unqualified and every campaign is refused.
+COPY --from=build /app/packages/domain/package.json ./packages/domain/package.json
+COPY --from=build /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=build /app/packages/contracts/healthflux/candidates.json ./packages/contracts/healthflux/candidates.json
 # The OpenViking compile scope proof the control plane and the runtime controller read when they load (openVikingCompileExecution.mjs).
 COPY --from=build /app/packages/contracts/openviking/compile-scope-proof.json ./packages/contracts/openviking/compile-scope-proof.json

@@ -148,6 +148,54 @@
         "authoredAt": "2026-09-05",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "review-004-english-grade-outline",
+      "inputs": {
+        "question": "Write a narrative review, in English and in exactly this outline, of what the EMPA-KIDNEY trial reports reviewed here establish about empagliflozin in adults with chronic kidney disease: Background; Certainty of the evidence; Benefits and harms; Values and preferences; Resource use; Equity and feasibility; Conclusions and practice points.",
+        "reviewType": "narrative",
+        "sources": [
+          {
+            "identifier": "PMID 36331190",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+            "expectedStudyId": "NCT03594110",
+            "role": "active randomized trial report"
+          },
+          {
+            "identifier": "PMID 39453837",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+            "expectedStudyId": "NCT03594110",
+            "role": "post-trial follow-up report"
+          },
+          {
+            "identifier": "PMID 38061371",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+            "expectedStudyId": "NCT03594110",
+            "role": "prespecified kidney-function analysis"
+          },
+          {
+            "identifier": "KDIGO 2024 CKD Guideline",
+            "url": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+            "expectedStudyId": null,
+            "role": "guideline context"
+          }
+        ]
+      },
+      "mustDo": [
+        "Keep the requested outline as the report's level-two sections, in its order and under its own English names, then add only the apparatus the outline leaves out (Abstract, Methods, Limitations, References).",
+        "Write the Values and preferences section as a section of the review, with its claims cited like any other; the numbered reference list is the last section and is the only one headed References.",
+        "Give the practice points their own section after the conclusions, with a cited claim on every action line and no derived estimate in it.",
+        "State a certainty level for each outcome only where a named instrument was applied, and say which."
+      ],
+      "mustNotDo": [
+        "Rename, merge, reorder or drop a requested section so that a checker reads the report more easily.",
+        "Write a Chinese heading, label or sentence anywhere in the report (or a Chinese gloss of a name that the English text does not need).",
+        "Condition the instruction to call emergency services on whether a medicine worked."
+      ],
+      "generated": {
+        "authoredAt": "2026-10-28",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

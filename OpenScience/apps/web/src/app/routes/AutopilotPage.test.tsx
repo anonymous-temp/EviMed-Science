@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useTaskPane } from "@/lib/taskPane";
-import { RECOMMENDATIONS } from "@/components/autopilot/taskPresentation";
+import { RECOMMENDATIONS, zoneName } from "@/components/autopilot/taskPresentation";
+import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
 import { AutopilotPage } from "./AutopilotPage";
 
 // A data router builds a `Request` with an abort signal, and jsdom's signal is not the one the platform's `Request` accepts.
@@ -44,7 +45,7 @@ function Location() { const loc = useLocation(); return <p data-testid="location
 function Pane() { const pane = useTaskPane(); return <p data-testid="pane">{pane ? `${pane.projectId}:${pane.sessionId}` : "none"}</p>; }
 function render(path = "/app/autopilot/agenda-one") {
   const router = createMemoryRouter([
-    { path: "/app/autopilot/:taskId?", element: <><AutopilotPage /><Location /><Pane /></> },
+    { path: "/app/autopilot/:taskId?", element: <><UnsavedRouteGuard /><AutopilotPage /><Location /><Pane /></> },
     { path: "/app/chat/:sessionId", element: <Location /> }, { path: "/app/runs", element: <Location /> },
     { path: "/app/runs/:runId/files/*", element: <Location /> },
   ], { initialEntries: [path] });
@@ -101,19 +102,74 @@ describe("scheduled tasks", () => {
   afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
   describe("scheduled-task corrections", () => {
-    it("offers a single first-use page with draft examples at desktop width", async () => {
+    // The owner (2026-10-28): the page is the Codex / Claude layout — the tasks' list on the left, the one shown on the right — also with no task.
+    it("is, with no task at desktop width, the list column of examples beside a ready new-task form, never a stack", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
       await screen.findByRole("button", { name: "行业要闻日报" });
-      expect(document.querySelector("[data-task-main]")).toBeNull();
-      // The first-use block is the page's column, on the title's left edge: a narrower box centred under the title was a second left
-      // edge (release walk of evimed-b559d4b7ebd0-1); the empty state centres itself inside the column.
-      const block = screen.getByRole("region", { name: "任务示例" }).parentElement!;
-      expect(block).toContainElement(screen.getByText("还没有定时任务"));
-      expect(block.className).not.toMatch(/\b(?:mx-auto|max-w-\S+)/);
-      expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "行业要闻日报" }));
-      expect(screen.getByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS[0].prompt);
+      expect(layoutOf()).toBe("split");
+      // The column holds the examples as its rows, in their order, each with a line of its instruction; the form is in the main area.
+      const examples = within(list()).getByRole("region", { name: "从示例开始" });
+      expect(within(examples).getAllByRole("button").map(button => button.textContent)).toEqual(RECOMMENDATIONS.map(item => item.title));
+      expect(within(list()).queryByRole("searchbox")).not.toBeInTheDocument();
+      expect(within(list()).queryByText("还没有定时任务")).not.toBeInTheDocument();
+      await waitFor(() => expect(here()).toBe("/app/autopilot/new"));
+      const form = task();
+      expect(within(form).getByRole("heading", { name: "新建定时任务" })).toBeInTheDocument();
+      expect(within(form).getByText("按你定的时间，让 EviMed 自己去做一件事，比如每天一份行业要闻、每周一份工作汇总，结果留在这里。")).toBeInTheDocument();
+      // No example is chosen: the form starts empty, with nowhere to cancel to and no second copy of the examples over it.
+      expect(within(form).getByLabelText("任务指令")).toHaveValue("");
+      expect(within(form).getByRole("button", { name: "创建并启用" })).toBeDisabled();
+      expect(within(form).queryByRole("button", { name: "取消" })).not.toBeInTheDocument();
+      expect(within(form).queryByRole("region", { name: "从示例开始" })).not.toBeInTheDocument();
+      expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      // An example fills the form beside it, is marked as the one shown, and creates nothing.
+      await userEvent.click(within(examples).getByRole("button", { name: RECOMMENDATIONS[0].title }));
+      expect(here()).toBe("/app/autopilot/new?example=industry-daily");
+      expect(task().querySelector("[data-task-new]")).not.toBeNull();
+      expect(within(task()).getByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS[0].prompt);
+      expect(within(task()).getByLabelText("任务指令")).toHaveFocus();
+      expect(within(list()).getByRole("button", { name: RECOMMENDATIONS[0].title })).toHaveAttribute("aria-current", "page");
+      expect(within(list()).getByRole("button", { name: RECOMMENDATIONS[1].title })).not.toHaveAttribute("aria-current");
       expect(mocks.createAgenda).not.toHaveBeenCalled();
+      // Another example replaces it in the history, so Back leaves the form rather than stepping through the examples.
+      await userEvent.click(within(list()).getByRole("button", { name: RECOMMENDATIONS[3].title }));
+      expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[3].id}`);
+      expect(within(task()).getByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS[3].prompt);
+      expect(within(task()).getByLabelText("重复")).toHaveValue("daily");
+    });
+    // The release walk of 2026-10-28, on an account with no task: four kinds of border, two left edges and two lines standing alone, the zone
+    // said three times. The sentence is the button's own and the zone is its field's.
+    it("says the first-use form's time zone once and its schedule in one sentence beside 创建并启用, with no rule over the buttons and no line of its own", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
+      await screen.findByRole("button", { name: "行业要闻日报" });
+      await waitFor(() => expect(here()).toBe("/app/autopilot/new"));
+      const form = task();
+      const zone = zoneName((within(form).getByLabelText("时区") as HTMLInputElement).value);
+      expect(zone).not.toBe("");
+      expect(form.textContent!.split(zone)).toHaveLength(2);
+      const sentence = within(form).getByRole("button", { name: "创建并启用" }).closest("[data-note]") as HTMLElement;
+      expect(sentence).not.toBeNull();
+      expect(sentence).toHaveTextContent(/^在当前项目运行 · 每天 07:00 · 预计开始：/);
+      expect(within(form).getAllByText(/预计开始/)).toHaveLength(1);
+      expect(within(form).getAllByText(/在当前项目运行/)).toHaveLength(1);
+      expect(sentence.parentElement!.querySelector(".border-t")).toBeNull();
+      expect(sentence.className).not.toContain("border");
+      // The group of examples starts where the column's title does, its rows' ground hanging outside it.
+      const examples = within(list()).getByRole("region", { name: "从示例开始" });
+      expect(list().querySelector(".overflow-y-auto")).toHaveClass("px-4");
+      expect(within(examples).getByRole("heading", { name: "从示例开始" })).not.toHaveClass("px-2");
+      expect(examples.querySelector(".-mx-2")).not.toBeNull();
+    });
+    it("makes the first task from the first-use form and opens it", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
+      await userEvent.click(await screen.findByRole("button", { name: RECOMMENDATIONS[1].title }));
+      await userEvent.click(within(task()).getByRole("button", { name: "创建并启用" }));
+      await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledWith(expect.objectContaining({ title: RECOMMENDATIONS[1].title, prompt: RECOMMENDATIONS[1].prompt, taskTypes: ["routine"] })));
+      expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, agenda.revision);
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(await barElement()).toHaveTextContent("心衰证据追踪");
     });
     it("keeps an unselected row failure visible with task identity and a safe retry", async () => {
       mocks.runAgendaNow.mockRejectedValueOnce(new Error("offline")); render("/app/autopilot");
@@ -172,7 +228,7 @@ describe("scheduled tasks", () => {
       render(); await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("ses-one"));
       await userEvent.click(within(bar()).getByRole("button", { name: "切换执行" }));
       await userEvent.click(screen.getByRole("menuitemradio", { name: "加载更早记录" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent("更早记录暂不可用");
+      expect(await screen.findByRole("note")).toHaveTextContent("更早记录暂不可用");
       expect(screen.getByTestId("pane")).toHaveTextContent("ses-one");
     });
     it("proves a notice's project before requesting any task", async () => {
@@ -329,24 +385,64 @@ describe("scheduled tasks", () => {
       mocks.createAgenda.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve; }));
       render("/app/autopilot"); await screen.findByRole("link", { name: agenda.payload.title });
       await userEvent.click(screen.getByRole("button", { name: "新建" }));
-      await userEvent.type(screen.getByLabelText("任务指令"), "保留这项任务");
+      await userEvent.type(await screen.findByLabelText("任务指令"), "保留这项任务");
       await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
-      const template = within(screen.getByRole("region", { name: "从推荐开始" })).getByRole("button", { name: RECOMMENDATIONS[0].title });
+      const template = within(screen.getByRole("region", { name: "从示例开始" })).getByRole("button", { name: RECOMMENDATIONS[0].title });
       expect(template).toBeDisabled();
       await userEvent.click(template);
       expect(screen.getByLabelText("任务指令")).toHaveValue("保留这项任务");
+      expect(within(task()).getByRole("button", { name: "取消" })).toBeDisabled();
       await act(async () => { resolveCreate(agenda); });
       await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, agenda.revision));
-      expect(screen.queryByRole("dialog", { name: "新建任务" })).not.toBeInTheDocument();
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
+    });
+    it("ignores 新建 while an unedited example is being created, so the activation that follows still runs", async () => {
+      // An example the person has not touched is not an edit, so nothing but the lock stops 新建 from making the form again mid-save.
+      let resolveCreate!: (value: unknown) => void;
+      mocks.createAgenda.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve; }));
+      render(`/app/autopilot/new?example=${RECOMMENDATIONS[0].id}`);
+      await userEvent.click(await within(task()).findByRole("button", { name: "创建并启用" }));
+      await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledTimes(1));
+      const create = screen.getByRole("button", { name: "新建" });
+      await waitFor(() => expect(create).toBeDisabled());
+      await userEvent.click(create);
+      expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[0].id}`);
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      // The list's rows are not what the form is locked against: only the form itself is.
+      expect(mocks.startAgenda).not.toHaveBeenCalled();
+      await act(async () => { resolveCreate(agenda); });
+      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, agenda.revision));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(mocks.createAgenda).toHaveBeenCalledTimes(1);
+      // The task is made and opened: 新建 is a button again.
+      expect(screen.getByRole("button", { name: "新建" })).toBeEnabled();
+    });
+    it("ignores an example pressed in the list column while the form is saving", async () => {
+      let resolveCreate!: (value: unknown) => void;
+      mocks.createAgenda.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve; }));
+      mocks.listAgendas.mockResolvedValue({ items: [] });
+      render("/app/autopilot");
+      await waitFor(() => expect(here()).toBe("/app/autopilot/new"));
+      await userEvent.click(within(list()).getByRole("button", { name: RECOMMENDATIONS[1].title }));
+      await waitFor(() => expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[1].id}`));
+      await userEvent.click(within(task()).getByRole("button", { name: "创建并启用" }));
+      await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledTimes(1));
+      const other = within(list()).getByRole("button", { name: RECOMMENDATIONS[2].title });
+      expect(other).toBeDisabled();
+      await userEvent.click(other);
+      expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[1].id}`);
+      await act(async () => { resolveCreate(agenda); });
+      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, agenda.revision));
     });
     it("keeps templates locked after partial creation and retries the same activation", async () => {
       mocks.startAgenda.mockRejectedValueOnce(new Error("offline"));
       render("/app/autopilot"); await screen.findByRole("link", { name: agenda.payload.title });
       await userEvent.click(screen.getByRole("button", { name: "新建" }));
-      await userEvent.type(screen.getByLabelText("任务指令"), "保留这项任务");
+      await userEvent.type(await screen.findByLabelText("任务指令"), "保留这项任务");
       await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
       await screen.findByText(/任务已创建，启用未成功/);
-      const template = within(screen.getByRole("region", { name: "从推荐开始" })).getByRole("button", { name: RECOMMENDATIONS[0].title });
+      const template = within(screen.getByRole("region", { name: "从示例开始" })).getByRole("button", { name: RECOMMENDATIONS[0].title });
       expect(template).toBeDisabled(); await userEvent.click(template);
       await userEvent.click(screen.getByRole("button", { name: "重试启用" }));
       await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledTimes(2));
@@ -382,9 +478,11 @@ describe("scheduled tasks", () => {
       mocks.getDigest.mockImplementationOnce(() => new Promise(resolve => { resolveDigest = resolve; })).mockResolvedValue({ ...digest, payload: { episodeIds: [] } });
       render("/app/autopilot?digest=digest-one"); await screen.findByRole("link", { name: "心衰证据追踪" });
       mocks.listEpisodes.mockResolvedValue({ items: [] });
+      mocks.listAgendas.mockResolvedValue({ items: [{ ...agenda, id: "two-task", projectId: "project-two", payload: { ...agenda.payload, title: "另一个项目的任务" } }] });
       await act(async () => { identity.projectId = "project-two"; useProjectStore.setState({ currentId: "project-two" }); });
       await act(async () => { resolveDigest(digest); });
-      expect(mocks.markDigestOpened).not.toHaveBeenCalled(); expect(here()).not.toContain("/app/autopilot/agenda-one");
+      // The old project's briefing goes nowhere; the other project's page is its own, and opens its own first task.
+      expect(mocks.markDigestOpened).not.toHaveBeenCalled(); await waitFor(() => expect(here()).toBe("/app/autopilot/two-task"));
     });
     it("says so, with the list still beside it, when the task in the address is not there", async () => {
       render("/app/autopilot/gone");
@@ -500,12 +598,12 @@ describe("scheduled tasks", () => {
       await userEvent.click(within(archive).getByRole("button", { name: "删除任务" }));
       await waitFor(() => expect(mocks.archiveAgenda).toHaveBeenCalledWith(agenda.id, 2));
     });
-    it("opens the editor from a row, and the editor is the same dialog as 新建", async () => {
+    it("opens the editor from a row as a dialog, with no examples under it: making a task is the form beside the list", async () => {
       render("/app/autopilot"); await screen.findByRole("link", { name: "心衰证据追踪" });
       await choose(rowMenu("心衰证据追踪"), "编辑");
       const form = await screen.findByRole("dialog", { name: "编辑任务" });
       expect(within(form).getByLabelText("任务指令")).toHaveValue("完整跟进心衰与肾病\n保留原始指令");
-      expect(within(form).queryByRole("region", { name: "从推荐开始" })).not.toBeInTheDocument();
+      expect(within(form).queryByRole("region", { name: /示例|推荐/ })).not.toBeInTheDocument();
     });
     it("marks the open task's row and no other", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [agenda, { ...agenda, id: "second", payload: { ...agenda.payload, title: "第二个任务" } }] });
@@ -521,27 +619,15 @@ describe("scheduled tasks", () => {
     });
     it("offers retry on a list failure", async () => {
       mocks.listAgendas.mockRejectedValueOnce(new Error("offline")); render("/app/autopilot");
-      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用"); await userEvent.click(screen.getByRole("button", { name: /重试/ }));
-      expect(await screen.findByText("心衰证据追踪")).toBeInTheDocument();
+      expect(await screen.findByRole("note")).toHaveTextContent("定时任务暂不可用"); await userEvent.click(screen.getByRole("button", { name: /重试/ }));
+      // The list's row, whatever the pane beside it has drawn by then (its heading carries the same title once it opens the first task).
+      expect(await screen.findByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
     });
-    it("draws no search box over nothing, and says there are no tasks", async () => {
+    it("draws no search box over nothing; the column offers the examples instead of a sentence about there being none", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
-      expect(await screen.findByText("还没有定时任务")).toBeInTheDocument();
+      expect(await screen.findByRole("region", { name: "从示例开始" })).toBeInTheDocument();
       expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
-    });
-    // Review L-4: with no task the right-hand pane said 「选择一项任务」, there being none to choose, and creating one was a small 「+」.
-    it("uses a single first-use page with an introduction and create action", async () => {
-      mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
-      const sentence = await screen.findByText("按你定的时间，让 EviMed 自己去做一件事，比如每天一份行业要闻、每周一份工作汇总，结果留在这里。");
-      expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
-      expect(layoutOf()).toBe("single");
-      const create = within(list()).getByRole("button", { name: "新建任务" });
-      expect(sentence.parentElement).toContainElement(create);
-      // The first-use page has one introduction and one primary create button.
-      expect(within(list()).getByText("还没有定时任务")).toBeInTheDocument();
-      expect(within(list()).getByRole("button", { name: "新建任务" })).toBeInTheDocument();
-      await userEvent.click(create);
-      expect(await screen.findByRole("dialog", { name: "新建任务" })).toBeInTheDocument();
+      expect(screen.queryByText("还没有定时任务")).not.toBeInTheDocument();
     });
     // Review L-6 (live walk 2026-10-10): where the list is the page it wore the one page column but drew its own 16 px gutter, so from 768 its
     // title started 8 px left of every other list page's (PageShell: 16 on a phone, 24 from `md`).
@@ -557,35 +643,60 @@ describe("scheduled tasks", () => {
       expect(heading.closest("header")).not.toHaveClass("px-4");
       expect(screen.getByRole("searchbox", { name: "搜索任务" }).closest("div.shrink-0")).not.toHaveClass("px-4");
     });
-    it("puts the same sentence and button in the list itself where the list is the page", async () => {
+    it("is, where the list is the page and there is no task, the examples alone; an example opens the form as the page, with the way back", async () => {
       identity.width = 800; mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
-      expect(await screen.findByText("按你定的时间，让 EviMed 自己去做一件事，比如每天一份行业要闻、每周一份工作汇总，结果留在这里。")).toBeInTheDocument();
+      expect(await screen.findByRole("region", { name: "从示例开始" })).toBeInTheDocument();
       expect(layoutOf()).toBe("single");
-      expect(within(list()).getAllByRole("button", { name: "新建任务" })).toHaveLength(1);
       expect(document.querySelector("[data-task-main]")).toBeNull();
+      // Narrow, the bare address stays the list: nothing opens the form for a reader who has not asked.
+      expect(here()).toBe("/app/autopilot");
+      await userEvent.click(screen.getByRole("button", { name: RECOMMENDATIONS[2].title }));
+      expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[2].id}`);
+      const form = task();
+      expect(within(form).getByRole("heading", { name: "新建定时任务", level: 1 })).toBeInTheDocument();
+      expect(within(form).getByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS[2].prompt);
+      expect(document.querySelector("[data-task-list]")).toBeNull();
+      await userEvent.click(within(form).getByRole("link", { name: "定时任务" }));
+      expect(here()).toBe("/app/autopilot");
+      expect(await screen.findByRole("region", { name: "从示例开始" })).toBeInTheDocument();
     });
-    it("keeps asking for a task to be chosen when a later read fails with tasks on screen — the pane does not go blank", async () => {
+    it("opens the list's first task beside the list when the address names none, keeps it when a later read fails, and never offers a choice to make", async () => {
       render("/app/autopilot");
-      await screen.findByText("选择一项任务");
-      // Asking for a choice leaves a way to make it: the pane is a recipe with a button, not a dead end.
-      const pane = document.querySelector("[data-task-main] [data-empty]") as HTMLElement;
-      expect(pane.querySelector("svg")).not.toBeNull();
-      expect(within(pane).getByRole("link", { name: "打开第一项任务" })).toHaveAttribute("href", expect.stringMatching(/^\/app\/autopilot\/[^/]+$/));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(await barElement()).toHaveTextContent("心衰证据追踪");
+      expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "心衰证据追踪" })).toHaveAttribute("aria-current", "page");
       mocks.listAgendas.mockRejectedValue(new Error("offline"));
       await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
-      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");
+      expect(await screen.findByRole("note")).toHaveTextContent("定时任务暂不可用");
       expect(screen.getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
-      expect(screen.getByText("选择一项任务")).toBeInTheDocument();
+      expect(bar()).toHaveTextContent("心衰证据追踪");
+    });
+    it("opens the task the list draws first: the soonest of 即将执行, before a paused one", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [paused({ title: "已停的任务" }, "paused"), agenda] });
+      render("/app/autopilot"); await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      cleanup(); mocks.listAgendas.mockResolvedValue({ items: [paused({ title: "已停的任务" }, "paused")] });
+      render("/app/autopilot"); await waitFor(() => expect(here()).toBe("/app/autopilot/paused"));
+    });
+    it("carries the search into the first task it opens, and leaves a briefing's address to its own redirect", async () => {
+      render("/app/autopilot?q=%E5%BF%83"); await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one?q=%E5%BF%83"));
+      cleanup(); mocks.getDigest.mockReturnValue(new Promise(() => undefined));
+      render("/app/autopilot?digest=digest-one"); await screen.findByRole("link", { name: "心衰证据追踪" });
+      expect(here()).toBe("/app/autopilot?digest=digest-one");
     });
     it("does not say the page is empty while the tasks are still being read, or when they could not be", async () => {
       mocks.listAgendas.mockReturnValue(new Promise(() => undefined)); render("/app/autopilot");
       await screen.findByRole("heading", { name: "定时任务", level: 1 });
       expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "从示例开始" })).not.toBeInTheDocument();
+      expect(here()).toBe("/app/autopilot");
       cleanup();
       mocks.listAgendas.mockReset(); mocks.listAgendas.mockRejectedValue(new Error("offline")); render("/app/autopilot");
-      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");
-      expect(screen.queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
+      expect(await screen.findByRole("note")).toHaveTextContent("定时任务暂不可用");
+      expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "从示例开始" })).not.toBeInTheDocument();
+      expect(here()).toBe("/app/autopilot");
     });
   });
 
@@ -881,9 +992,14 @@ describe("scheduled tasks", () => {
       expect(await screen.findByText("未找到这个任务")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "回到定时任务" })).toHaveAttribute("href", "/app/autopilot");
     });
-    it("shows an empty main area beside the list when no task is open", async () => {
+    it("never shows an empty main area beside the list: no task in the address is the first task, or the form for the first one", async () => {
       render("/app/autopilot");
-      expect(await screen.findByText("选择一项任务")).toBeInTheDocument();
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(await screen.findByRole("region", { name: "任务对话" })).toBeInTheDocument();
+      expect(screen.queryByText("选择一项任务")).not.toBeInTheDocument();
+      cleanup(); mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
+      await waitFor(() => expect(here()).toBe("/app/autopilot/new"));
+      expect(await within(task()).findByLabelText("任务指令")).toBeInTheDocument();
     });
   });
 
@@ -1086,28 +1202,119 @@ describe("scheduled tasks", () => {
   });
 
   describe("新建 and 编辑", () => {
-    it("is a short dialog: what to keep doing and how often, with no budget to fill in", async () => {
+    it("is a form in the main area beside the list: what to keep doing and how often, with no budget to fill in and no dialog", async () => {
       render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));
-      const dialog = await screen.findByRole("dialog", { name: "新建任务" });
-      expect(within(dialog).getByLabelText("任务指令")).toBeVisible(); expect(within(dialog).getByLabelText("重复")).toBeVisible(); expect(within(dialog).getByLabelText("时间")).toBeVisible();
-      expect(within(dialog).queryByLabelText(/上限/)).not.toBeInTheDocument(); expect(dialog).not.toHaveTextContent(/¥|上限/);
+      expect(here()).toBe("/app/autopilot/new");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(layoutOf()).toBe("split"); expect(screen.getByRole("link", { name: "心衰证据追踪" })).not.toHaveAttribute("aria-current");
+      const form = task();
+      expect(within(form).getByRole("heading", { name: "新建定时任务" })).toBeInTheDocument();
+      expect(within(form).getByLabelText("任务指令")).toBeVisible(); expect(within(form).getByLabelText("重复")).toBeVisible(); expect(within(form).getByLabelText("时间")).toBeVisible();
+      expect(within(form).queryByLabelText(/上限/)).not.toBeInTheDocument(); expect(form).not.toHaveTextContent(/¥|上限/);
+      // With tasks in the column there is no sentence about what a task is, and the pane asks for no frame.
+      expect(form).not.toHaveTextContent("按你定的时间");
+      expect(screen.getByTestId("pane")).toHaveTextContent("none");
       // The zone, the name and the task types stay under one fold; the zone is said beside it.
-      const advanced = within(dialog).getByText("高级设置").closest("details")!; expect(advanced).not.toHaveAttribute("open");
-      await userEvent.click(within(dialog).getByText("高级设置")); expect(within(dialog).getByLabelText("时区")).toBeVisible();
+      const advanced = within(form).getByText("高级设置").closest("details")!; expect(advanced).not.toHaveAttribute("open");
+      await userEvent.click(within(form).getByText("高级设置")); expect(within(form).getByLabelText("时区")).toBeVisible();
     });
-    it("offers 从推荐开始 under the form: six templates that fill it, creating nothing", async () => {
+    it("is an address of its own: a deep link opens it, from an example if one is named, and nothing reads \"new\" as a task", async () => {
+      render("/app/autopilot/new?example=drug-safety");
+      expect(await within(task()).findByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS.find(item => item.id === "drug-safety")!.prompt);
+      await screen.findByRole("link", { name: "心衰证据追踪" });
+      expect(layoutOf()).toBe("split");
+      // The list is read, and no read is made for a task called new: not its executions, not its progress, not a frame over a pane.
+      expect(mocks.listAgendas).toHaveBeenCalled();
+      expect(mocks.listEpisodes.mock.calls.filter(call => call[1] === "new")).toEqual([]);
+      expect(mocks.getResearchState).not.toHaveBeenCalled(); expect(mocks.getEpisode).not.toHaveBeenCalled();
+      expect(screen.getByTestId("pane")).toHaveTextContent("none");
+      expect(document.title).toContain("新建定时任务");
+      expect(here()).toBe("/app/autopilot/new?example=drug-safety");
+      // A name that is no example starts the form empty.
+      cleanup(); render("/app/autopilot/new?example=nope");
+      expect(await within(task()).findByLabelText("任务指令")).toHaveValue("");
+    });
+    it("opens beside the task that was open, and 取消 goes back to it", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [agenda, { ...agenda, id: "second", payload: { ...agenda.payload, title: "第二个任务" } }] });
+      render("/app/autopilot/second?q=%E4%BB%BB"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));
+      expect(here()).toBe("/app/autopilot/new");
+      await userEvent.click(within(task()).getByRole("button", { name: RECOMMENDATIONS[4].title }));
+      expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[4].id}`);
+      await userEvent.click(within(task()).getByRole("button", { name: "取消" }));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/second?q=%E4%BB%BB"));
+      expect(await barElement()).toHaveTextContent("第二个任务");
+      expect(mocks.createAgenda).not.toHaveBeenCalled();
+      // With no earlier page, 取消 goes to the list, which opens its first task.
+      cleanup(); render("/app/autopilot/new");
+      await userEvent.click(await within(task()).findByRole("button", { name: "取消" }));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+    });
+    it("offers 从示例开始 over the form while the column holds tasks: every template fills it, creating nothing", async () => {
       render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));
-      const dialog = await screen.findByRole("dialog", { name: "新建任务" });
-      const section = within(dialog).getByRole("region", { name: "从推荐开始" });
-      expect(within(section).getAllByRole("button")).toHaveLength(RECOMMENDATIONS.length);
+      const section = within(task()).getByRole("region", { name: "从示例开始" });
+      expect(within(section).getAllByRole("button").map(button => button.textContent)).toEqual(RECOMMENDATIONS.map(item => item.title));
+      expect(within(list()).queryByRole("region", { name: "从示例开始" })).not.toBeInTheDocument();
       await userEvent.click(within(section).getByRole("button", { name: "指南更新周报" }));
-      await waitFor(() => expect((within(dialog).getByLabelText("任务指令") as HTMLTextAreaElement).value).toContain("指南"));
-      expect(within(dialog).getByLabelText("重复")).toHaveValue("weekly"); expect(mocks.createAgenda).not.toHaveBeenCalled();
-      expect(within(dialog).getByLabelText("任务指令")).toHaveFocus();
+      await waitFor(() => expect((within(task()).getByLabelText("任务指令") as HTMLTextAreaElement).value).toContain("指南"));
+      expect(within(task()).getByLabelText("重复")).toHaveValue("weekly"); expect(mocks.createAgenda).not.toHaveBeenCalled();
+      expect(within(task()).getByLabelText("任务指令")).toHaveFocus();
+      expect(here()).toBe("/app/autopilot/new?example=guideline-weekly");
+    });
+    it("asks to discard an edit before an example replaces it, then makes the form again — the list is never locked", async () => {
+      render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));
+      const pick = () => within(within(task()).getByRole("region", { name: "从示例开始" })).getByRole("button", { name: "指南更新周报" });
+      await userEvent.type(within(task()).getByLabelText("任务指令"), "我自己写的草稿");
+      // The edit does not lock the list or print an instruction to go and cancel.
+      expect(pick()).toBeEnabled();
+      expect(within(task()).queryByText(/请先保存或取消/)).not.toBeInTheDocument();
+      await userEvent.click(pick());
+      const confirm = await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" });
+      // Declining leaves the edit exactly where it was, and the address as it was.
+      await userEvent.click(within(confirm).getByRole("button", { name: "取消" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "放弃未保存的修改？" })).not.toBeInTheDocument());
+      expect(within(task()).getByLabelText("任务指令")).toHaveValue("我自己写的草稿"); expect(here()).toBe("/app/autopilot/new");
+      await userEvent.click(pick());
+      await userEvent.click(within(await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" })).getByRole("button", { name: "放弃修改" }));
+      await waitFor(() => expect((within(task()).getByLabelText("任务指令") as HTMLTextAreaElement).value).toContain("指南"));
+      expect(within(task()).getByLabelText("重复")).toHaveValue("weekly"); expect(here()).toBe("/app/autopilot/new?example=guideline-weekly");
+      expect(mocks.createAgenda).not.toHaveBeenCalled();
+      // The same example picked again after another edit starts the form over once more, after the same question.
+      await userEvent.type(within(task()).getByLabelText("任务指令"), "又改了一点");
+      await userEvent.click(pick());
+      await userEvent.click(within(await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" })).getByRole("button", { name: "放弃修改" }));
+      await waitFor(() => expect((within(task()).getByLabelText("任务指令") as HTMLTextAreaElement).value).not.toContain("又改了一点"));
+      // Nothing is left asking once it has been answered; pressing 新建 over an example is the same question, and an empty form is no question.
+      expect(screen.queryByRole("alertdialog", { name: "放弃未保存的修改？" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "新建" }));
+      expect(here()).toBe("/app/autopilot/new"); expect(within(task()).getByLabelText("任务指令")).toHaveValue("");
+    });
+    it("asks the same before 取消 gives up an edit, and goes at once when there is none", async () => {
+      render("/app/autopilot/new");
+      await userEvent.type(await within(task()).findByLabelText("任务指令"), "没写完");
+      await userEvent.click(within(task()).getByRole("button", { name: "取消" }));
+      const confirm = await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" });
+      await userEvent.click(within(confirm).getByRole("button", { name: "取消" }));
+      expect(here()).toBe("/app/autopilot/new"); expect(within(task()).getByLabelText("任务指令")).toHaveValue("没写完");
+      await userEvent.click(within(task()).getByRole("button", { name: "取消" }));
+      await userEvent.click(within(await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" })).getByRole("button", { name: "放弃修改" }));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      // The shell's route guard is mounted in this router: the discard was the person's one answer, and no second question follows it.
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
+    });
+    it("asks once, through the shell's route guard, before a link leaves an edited form", async () => {
+      render("/app/autopilot/new");
+      await userEvent.type(await within(task()).findByLabelText("任务指令"), "没写完");
+      await userEvent.click(screen.getByRole("link", { name: "心衰证据追踪" }));
+      expect(await screen.findAllByRole("alertdialog")).toHaveLength(1);
+      expect(here()).toBe("/app/autopilot/new");
+      await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     });
     it("creates and enables a weekly task without altering its raw prompt, then opens it", async () => {
       render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));
-      const form = await screen.findByRole("dialog", { name: "新建任务" });
+      const form = task();
       const raw = "  肾病与心衰\n保留换行与全部指令  ";
       fireEvent.change(within(form).getByLabelText("任务指令"), { target: { value: raw } });
       await userEvent.selectOptions(within(form).getByLabelText("重复"), "weekly");
@@ -1117,7 +1324,8 @@ describe("scheduled tasks", () => {
       await userEvent.click(within(form).getByRole("button", { name: "创建并启用" }));
       await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledWith(expect.objectContaining({ prompt: raw, schedule: { kind: "weekly", weekdays: [1], time: "09:45", timeZone: "America/New_York" } })));
       expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, 2);
-      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one")); expect(screen.queryByRole("dialog", { name: "新建任务" })).not.toBeInTheDocument();
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one")); expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
+      expect(await barElement()).toHaveTextContent("心衰证据追踪");
     });
     it("keeps a successfully created task when enabling fails and retries only enabling", async () => {
       mocks.startAgenda.mockRejectedValueOnce(new Error("offline")); render("/app/autopilot");
@@ -1125,8 +1333,11 @@ describe("scheduled tasks", () => {
       await userEvent.type(await screen.findByLabelText("任务指令"), "保留这个任务");
       await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
       expect(await screen.findByText(/任务已创建，启用未成功/)).toBeInTheDocument();
+      // The task exists, so it is in the list; the form stays for the retry.
+      expect(here()).toBe("/app/autopilot/new");
       await userEvent.click(screen.getByRole("button", { name: "重试启用" }));
       await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledTimes(2)); expect(mocks.createAgenda).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
     });
     it("edits a one-time schedule from the bar and handles revision conflicts visibly", async () => {
       mocks.updateAgenda.mockRejectedValueOnce({ status: 409 }); render();
@@ -1138,15 +1349,16 @@ describe("scheduled tasks", () => {
       await waitFor(() => expect(mocks.updateAgenda).toHaveBeenCalledWith(agenda.id, expect.objectContaining({ expectedRevision: 2, schedule: { kind: "once", date: "2026-12-01", time: "07:30", timeZone: "Asia/Shanghai" } })));
       expect(await screen.findByText(/任务已被更新/)).toBeInTheDocument(); expect(mocks.getAgenda).toHaveBeenCalledWith(agenda.id);
     });
-    it("keeps the dialog open through create and enable despite close or Escape", async () => {
+    it("keeps the form through create and enable: nothing cancels it while it is on its way", async () => {
       let finish!: (value: unknown) => void;
       mocks.createAgenda.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })); render("/app/autopilot");
       await userEvent.click(await screen.findByRole("button", { name: "新建" })); await userEvent.type(await screen.findByLabelText("任务指令"), "继续完成创建并启用");
       await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
-      await userEvent.click(screen.getByRole("button", { name: "关闭" })); await userEvent.keyboard("{Escape}");
-      expect(screen.getByRole("dialog", { name: "新建任务" })).toBeInTheDocument();
+      expect(within(task()).getByRole("button", { name: "取消" })).toBeDisabled();
+      await userEvent.keyboard("{Escape}");
+      expect(screen.getByLabelText("任务指令")).toHaveValue("继续完成创建并启用"); expect(here()).toBe("/app/autopilot/new");
       await act(async () => { finish(agenda); });
-      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, 2)); expect(screen.queryByRole("dialog", { name: "新建任务" })).not.toBeInTheDocument();
+      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, 2)); expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
       await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
     });
     it("ignores late task creation after the project is switched", async () => {
@@ -1156,7 +1368,8 @@ describe("scheduled tasks", () => {
       await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
       await act(async () => { identity.projectId = "project-three"; useProjectStore.setState({ currentId: "project-three" }); });
       await act(async () => { finish(agenda); });
-      expect(mocks.startAgenda).not.toHaveBeenCalled(); expect(screen.queryByRole("dialog", { name: "新建任务" })).not.toBeInTheDocument();
+      // The address stays and the other project has its own, empty form; the first project's request goes no further.
+      expect(mocks.startAgenda).not.toHaveBeenCalled(); expect(await screen.findByLabelText("任务指令")).toHaveValue("");
     });
   });
 });

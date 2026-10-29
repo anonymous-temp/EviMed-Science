@@ -20,8 +20,7 @@
  *   (platform principle 14). A caller's abilities are the union of what the
  *   roles it holds allow (`roleAllows`), the owner being a `lead` without a
  *   membership row; a refusal names the ability rather than the role. A
- *   `site` member holds referral abilities only, so it reads no page of the
- *   study — its own site's referrals are what `GET …/referrals` gives it.
+ *   Retired recruitment roles grant no active research ability.
  *   `VCR_ROUTE_ABILITIES` is the table of which route needs what; the
  *   composed-application test drives every route as every role against it.
  * - **Changing what a study is, is the lead's.** `manage_study` (held by
@@ -34,8 +33,7 @@
  * - **The write-side actions that belong to other packages are hooks**:
  *   `orchestrator.runStep` (「让 AI 做」) and `requestExport`, `jobs.enqueue`
  *   and `cancel` and `confirmBudget`, `members`, and `matching`
- *   (`contactReferral`, the first human stop, `transitionReferral`,
- *   `listReferrals`). A hook that is not composed answers 503
+ *   (scientific matching and assessment review). A hook that is not composed answers 503
  *   `vcr_unavailable` — the route exists, the worker does not yet. Hooks are
  *   read at request time, so a package composed after the routes attaches to
  *   the same object and is found.
@@ -58,10 +56,11 @@
  * @module vcrRoutes
  */
 
+import {vcrAnalyticComputationBasis} from './vcrScientificBasis.mjs';
 import {
   VCR_ACTIONS, VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_RATINGS,
   VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
-  VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
+  VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
 
 import { createReadStream } from "node:fs";
 
@@ -71,9 +70,9 @@ import { VCR_LONGITUDINAL_JOBS, suggestIdentifierSpans } from '@evimed/domain';
 import { presentLongitudinal } from './vcrLongitudinalPresentation.mjs';
 import { LONGITUDINAL_TEMPLATES } from './vcrLongitudinal.mjs';
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
-import { isSiteScopedRole } from "./vcrRecruit.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
-import { prepareVcrMethodConfiguration, resolveJobSubject } from "./vcrSubjects.mjs";
+import { prepareVcrMethodConfiguration, resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
+import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_CARD_KINDS, createVcrCardEdits } from "./vcrCardEdits.mjs";
 import { zhTime } from "./vcrViewsKit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
@@ -132,7 +131,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_model_invalid",
   "vcr_model_exists",
   "vcr_member_role_invalid",
-  "vcr_referral_not_found",
+  "vcr_recruitment_retired",
   "vcr_forbidden",
   "vcr_unavailable",
   "vcr_data_plane_not_configured",
@@ -187,6 +186,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/method-configurations": ["run"],
   "GET /studies/:id/jobs/:job/result": ["read"],
   "GET /studies/:id/longitudinal": ["read"],
+  "GET /studies/:id/followup-history": ["read_patient_level"],
   "POST /studies/:id/longitudinal/histories": ["run"],
   "POST /studies/:id/longitudinal/predictions": ["run"],
   "POST /studies/:id/longitudinal/benchmarks": ["run"],
@@ -215,10 +215,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/members": ["read"],
   "POST /studies/:id/members": ["manage_members"],
   "DELETE /studies/:id/members/:user": ["manage_members"],
-  "GET /studies/:id/referrals": ["read", "read_referrals"],
-  "POST /studies/:id/referrals/:referral/transition": ["write_referrals", "contact_patients"],
-  "POST /studies/:id/referrals/:referral/contact": ["contact_patients"],
-  "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["write_referrals", "review_clinical", "review_any"],
+  "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["review_clinical", "review_any"],
   "POST /studies/:id/assessments/:assessment/review": ["review_clinical", "review_any"],
   "POST /models (with a study)": ["write"],
   "POST /studies/:id/pack": ["write"],
@@ -1295,16 +1292,22 @@ export function createVcrRoutes(dependencies) {
         }
         if (body.selection != null) throw new HttpError(400, 'vcr_matching_selection_invalid', 'selection is for matching only.');
         if (body.modelId != null && (typeof body.modelId !== "string" || !ID.test(body.modelId))) throw new HttpError(400, "vcr_model_invalid", "modelId is an id.");
+        if (body.kind === "apply_prognostic_model" && !body.modelId) throw new HttpError(400, "vcr_model_invalid", "Select a source-bound prognostic model before applying it.");
         const sourceModel = body.modelId ? await service.modelExecution(user, study, body.modelId, body.kind, body.scenario ?? {}) : null;
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
         // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.
         const subject = hooks.jobs.store
           ? await resolveJobSubject({ store: hooks.jobs.store, study, kind: body.kind, subjectId: body.subjectId ?? null, scenario: reconstruction.scenario ?? body.scenario ?? {} }) : null;
+        const population = await prepareVcrSubjectPopulation({ store: hooks.jobs.store, study, kind: body.kind, subject,
+          // The queue binds the verified reconstruction once; the preview above is only for subject validation.
+          scenario: body.scenario ?? {}, inputs: body.inputs ?? [], sourceModel });
+        const designBinding = await prepareVcrModelDesign({ store: hooks.jobs.store, study, subject, scenario: population.scenario, inputs: population.inputs });
         const { job, created } = await audited("vcr.job.enqueue", (result) => ({ code: result.job.id, detail: String(body.kind) }),
           { code: id, detail: String(body.kind) }, () => hooks.jobs.enqueue({
-            studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, derived: reconstruction.derived, inputs: body.inputs ?? [], qualityBasis: body.qualityBasis ?? null,
+            studyId: study.id, userId: String(user.id), kind: body.kind, scenario: designBinding.scenario, derived: [...(reconstruction.derived ?? []), ...population.derived], inputs: designBinding.inputs, qualityBasis: body.qualityBasis ?? null,
+            ...(population.derived.length ? { internal: true } : {}),
             seed: body.seed ?? null, replicates: body.replicates ?? null, cpuSecondsLimit,
-            detail: { ...(subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {})), ...(sourceModel ? { sourceModel } : {}) },
+            detail: { ...(subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {})), ...population.detail, ...designBinding.detail, ...(sourceModel ? { sourceModel } : {}) },
           }));
         if (subject && hooks.orchestrator?.noteRuntimeJob) await hooks.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
         return reply(job, created ? 201 : 200);
@@ -1331,6 +1334,7 @@ export function createVcrRoutes(dependencies) {
         const prefix = `/api/vcr/studies/${encodeURIComponent(study.id)}`;
         const { supersededBy: _supersededBy, ...historicalResult } = result;
         return reply({ jobId: parts[3], result: service.forModel(historicalResult),
+          computationBasis:vcrAnalyticComputationBasis(result,job),
           execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
           records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,
             rowsUrl: `${prefix}/${result.kind === "population" ? "population" : "patients"}/rows?result=${encodeURIComponent(result.id)}` }
@@ -1545,6 +1549,21 @@ export function createVcrRoutes(dependencies) {
       return reply(filed, filed.filed ? 201 : 200);
     }
 
+    // Human-only preserved observations. No write/resume route exists.
+    if (section === "followup-history" && parts.length === 3 && method === "GET") {
+      await authorize(id, "read_patient_level");
+      const query = Object.fromEntries(url.searchParams);
+      if (query.format === "csv") await authorize(id, "export");
+      const history = await service.followupHistory(user, id, query);
+      if (query.format === "csv") {
+        res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff", "Content-Disposition": 'attachment; filename="historical-observations.csv"' });
+        res.end(history.csv);
+        return true;
+      }
+      return reply(history);
+    }
+
     // --- export -----------------------------------------------------------------------
     if (section === "export") {
       if (parts.length === 3 && method === "POST") {
@@ -1585,11 +1604,6 @@ export function createVcrRoutes(dependencies) {
         if (typeof body.userId !== "string" || !ID.test(body.userId)) throw new HttpError(400, "vcr_payload_invalid", "userId is an id.");
         const role = word(body.role, VCR_MEMBER_ROLES, "vcr_member_role_invalid", "role");
         const detail = memberDetail(body.detail);
-        // A site reads and moves the referrals of its own site and nothing else:
-        // without the site named, the account would hold a role that does nothing.
-        if (isSiteScopedRole(role) && !detail.siteId) {
-          throw new HttpError(400, "vcr_payload_invalid", "A site member needs detail.siteId: the site it belongs to.");
-        }
         const { study } = await authorize(id, "manage_members");
         if (!hooks.members?.add) throw UNAVAILABLE();
         const result = await audited("vcr.member.add", () => ({ code: study.id, detail: role }), { code: study.id, detail: role },
@@ -1599,7 +1613,7 @@ export function createVcrRoutes(dependencies) {
       if (parts.length === 4 && method === "DELETE") {
         await bodyOf(req, maxJsonBytes, []);
         const role = url.searchParams.get("role");
-        if (role != null && !VCR_MEMBER_ROLES.includes(role)) {
+        if (role != null && !VCR_MEMBER_ROLES.includes(role) && !Object.hasOwn(VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, role)) {
           throw new HttpError(400, "vcr_member_role_invalid", `role must be one of: ${VCR_MEMBER_ROLES.join(", ")}.`);
         }
         const { study } = await authorize(id, "manage_members");
@@ -1621,7 +1635,6 @@ export function createVcrRoutes(dependencies) {
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
-    // --- the referral ledger; the first human stop is a coordinator confirming one contact --------
     // --- a person's hand on a matching assessment ---------------------------------
     // Both are a person's acts and never a run's: a coordinator or clinician
     // re-judges one criterion (the platform's answer and the person's are both
@@ -1649,41 +1662,9 @@ export function createVcrRoutes(dependencies) {
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
-    if (section === "referrals") {
-      if (parts.length === 3 && method === "GET") {
-        const { study } = await authorize(id, VCR_ROUTE_ABILITIES["GET /studies/:id/referrals"]);
-        if (!hooks.matching?.listReferrals) throw UNAVAILABLE();
-        return reply(await hooks.matching.listReferrals(user, study, { state: url.searchParams.get("state") }));
-      }
-      if (parts.length === 5 && parts[4] === "transition" && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes,
-          ["to", "note", "siteId", "screenFailCriterionId", "screenFailReason", "enrolledOn"]);
-        const result = await audited("vcr.referral.transition", (moved) => ({ code: parts[3], detail: String(moved?.referral?.state ?? "") }),
-          { code: parts[3], detail: String(body.to ?? "") }, async () => {
-            const { study } = await authorize(id, VCR_ROUTE_ABILITIES["POST /studies/:id/referrals/:referral/transition"]);
-            if (!hooks.matching?.transitionReferral) throw UNAVAILABLE();
-            return hooks.matching.transitionReferral(user, study, parts[3], body);
-          });
-        return reply(result);
-      }
-      if (parts.length === 5 && parts[4] === "contact" && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["note", "reason"]);
-        // The audit line is the outcome — and the caller's ability is part of
-        // it: a contact that was confirmed, one the caller's role could not
-        // even ask for, one the stop refused (which state, which role) and one
-        // that failed each read as what they were.
-        const result = await audited("vcr.referral.contact", (contacted) => ({
-          code: parts[3], detail: contacted?.alreadyContacted ? `${id} (already contacted)` : id,
-        }), { code: parts[3], detail: id }, async () => {
-          const { study } = await authorize(id, "contact_patients");
-          if (!hooks.matching?.contactReferral) throw UNAVAILABLE();
-          return hooks.matching.contactReferral(user, study, parts[3], {
-            note: String(body.note ?? "").slice(0, 1_000), reason: String(body.reason ?? "").slice(0, 500),
-          });
-        });
-        return reply(result);
-      }
-      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
+    if (["referrals", "sites", "followup"].includes(section)) {
+      await authorize(id, "read");
+      throw new HttpError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
     }
 
     throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
@@ -1691,22 +1672,16 @@ export function createVcrRoutes(dependencies) {
 }
 
 /**
- * What a membership may carry with it: the site a `site` member belongs to and
- * a short note. Nothing else is stored — the row is read by the referral
- * scoping, and a free-form object would be somewhere for anything to hide.
+ * What a research membership may carry with it: a short note.
  * @param {unknown} value
  */
 function memberDetail(value) {
   if (value == null) return {};
   if (typeof value !== "object" || Array.isArray(value)) throw new HttpError(400, "vcr_payload_invalid", "detail is an object.");
-  const { siteId, note, ...rest } = /** @type {Record<string, unknown>} */ (value);
-  if (Object.keys(rest).length) throw new HttpError(400, "vcr_payload_invalid", "detail takes only: siteId, note.");
+  const { note, ...rest } = /** @type {Record<string, unknown>} */ (value);
+  if (Object.keys(rest).length) throw new HttpError(400, "vcr_payload_invalid", "detail takes only: note.");
   /** @type {Record<string, string>} */
   const detail = {};
-  if (siteId != null) {
-    if (typeof siteId !== "string" || !ID.test(siteId)) throw new HttpError(400, "vcr_payload_invalid", "detail.siteId is an id.");
-    detail.siteId = siteId;
-  }
   if (note != null) detail.note = String(note).slice(0, 200);
   return detail;
 }

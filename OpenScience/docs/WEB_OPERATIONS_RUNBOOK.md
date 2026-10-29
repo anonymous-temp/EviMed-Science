@@ -637,6 +637,8 @@ researcher's page says.
 | `GeoUrgentFindingsOpen` | 循证 GEO → 准确与安全 of the project; `open_science_geo_open_errors{severity}`, `open_science_geo_safety_stops` | An engine states something wrong about the client's medicine at S3/S4. Handle or close the finding in the page; an article held by a safety finding stays held until then. |
 | `GeoProbeLoopStalled` | `/api/ready` `checks.geo.worker.loops.probe` (running, stalled, lastError, lastOkAt); `geo probe:` lines in the web container's stderr; the probe host's `/providers` | The probe loop runs every base tick, so half an hour without a success is a stuck or failing loop: usually the probe host unreachable or its CDP gone. Visibility and accuracy stop at their last round until it recovers. A loop past `OPEN_SCIENCE_GEO_LEASE_MS` cannot be cancelled; restarting the web container is. |
 | `GeoProbeEnginesPaused` | `open_science_geo_probe_paused_engines`; the inbox's `geo_probe_engine_paused` item names the engine; the probe host's tab for it | An engine answered with a login page, an empty shell or errors repeatedly and has been paused for an hour: log it in again on the probe host. The breaker re-checks every ten minutes and resumes it by itself. |
+| GEO probe tasks (no alert) | `open_science_geo_probe_tasks_total{outcome}`: `accepted`, `completed`, `partial`, `failed`, `pending`, `accepted_result_unavailable`, `resubmit_prevented`, `capacity_wait`; the probe host's `/providers` pool and `/runs/<id>` | The probe host takes an ask as a task and answers minutes later, so a task is paid for when it is accepted. `accepted` minus `completed`, `partial` and `failed` is what is still out. `pending`: an interactive ask outlived the tool's 150 s and was left for the run to read by its request id (`geo_visibility_probe op=result`; the gateway keeps the record `OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS`, 24 by default). `accepted_result_unavailable`: a task whose result could not be established, or that was still unfinished after `OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES` (45): its job failed and is never submitted again, so a rise means the host loses or never finishes tasks (read `/runs/<id>` of a recent `probe_jobs.external_ref`), not that the platform asked twice. `resubmit_prevented`: a worker died or was restarted while a job held an accepted task; the task was read instead of asked again. `capacity_wait`: the host reported an engine with no idle slot and nothing was asked; steady growth means the host's pool for that engine is too small or stuck. The queue keeps one task in flight per engine, and a task accepted but not finished never counts toward `geo_probe_host_down`. A row the host answered from its paid third-party fallback (`consumer_answer_unavailable`) is failed, never retried and not counted toward an engine's pause. The contract the platform speaks to the host (`/providers`, `/ask`, `/runs/<id>`) names no cancel, no priority flag and no switch for the fallback: an abandoned interactive task runs to its end, and none is sent. |
+| `GeoSocialCrawlerDown` / social collection failures | Collector `/health/ready`, `/api/ready` `checks.geo.social` (`configured`, and when not, `reason`), and `open_science_geo_social_requests_total{outcome}` | Configure `OPEN_SCIENCE_GEO_SOCIAL_URL` and the owner-only 0600 `OPEN_SCIENCE_GEO_SOCIAL_API_KEY_HOST_FILE` (web-only read-only mount). `reason` names what is missing: `url_missing`, `url_invalid`, `plaintext_not_allowed` (http to a public address without `OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT`; a private address needs no flag, as for the probe), `key_missing` (no file, or compose's `/dev/null` bind), `key_unreadable` (the file exists but the web user, UID 10001, cannot read it: a root-owned 0600 file), `key_mode` (group or other bits set), `key_invalid` (not a regular file, empty or oversized). The 0.5.0 client submits one Bearer-authenticated `/api/jobs` job and polls its validated id under one deadline; key rotation is read on each request. `auth_failed` is final, busy 429/503 answers use bounded retries, and a 200 answer to the submit is the collector replaying a job it already holds, accepted like a 202. Outcomes count platform rows: `collected` (complete), `partial` (usable posts, something missing), `noResults`, `failed`, and `pending` (the job was accepted and not finished when the call stopped waiting: not an upstream failure, and the job is read on with `social_posts_search {jobId}`, only by the user and project that started it, for a day); `idempotent_join` counts searches handed a running job instead of starting another (the key is derived from user, project, query, platform set, sort, limit and a ten-minute bucket), `job_unrecorded` accepted jobs whose id could not be stored (such a job is not offered for reading), `job_reads` reads on a job. A call may name at most `OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS` platforms (default 2; the collector serves them one at a time, 30-120 s each), a larger one is refused by name (`social_posts_platform_invalid`). Partial posts remain usable, including when a collected platform reports a failed comments stage. Readiness alone does not verify job authentication or platform coverage. |
 | `MemoryRerankFailing` | `open_science_memory_rerank_total{outcome,code}`; `/api/ready`'s memory check | Nothing breaks: recall keeps the index's vector order, so answers only lose ranking quality. The `code` label names the cause — the DashScope key file (`OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE`), the account's balance (`ModelProviderBalanceExhausted` fires too), `OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS`, or the pinned model withdrawn (move `OPEN_SCIENCE_MEMORY_RERANK_MODEL` after checking `deps-version.json`). |
 
 For every critical alert, record start/end time, affected release, readiness
@@ -1127,6 +1129,17 @@ is stopping, is not this and is worth a look.
 The prompt is forwarded anyway; the turn reads as unattended (no question to the person, no task changes) unless its native
 route snapshot proves a person. A steady rise means the workspace disk or the AgentBay file API is failing, not the receipts.
 
+### A kernel answers 401 to a correctly signed cookie (2026-10-27)
+
+The kernel refuses a request with 401 only at its admission check, before any handler runs, and it does so to a valid
+browser-session cookie while its Connection is being rebuilt in the first seconds after a cold start (CI: readiness passed,
+the next `session/create` answered 401; release walks: the frame's first document answered 401 and the frame showed
+「打开超时」). Every runtime request whose body can be resent is sent again twice, 250 ms and 750 ms apart
+(`requestRuntime`), and `open_science_runtime_kernel_admission_retries_total{outcome}` says how it ended. `recovered` is the
+race and needs nothing. A rising `persisted` is a cookie the kernel does not take: compare the secret in the runtime's
+`$DSH_HOME/.credentials.yaml` with the start that wrote it, and the `Host` the request carried (the cookie's name is derived
+from it).
+
 ### NCBI's file server refuses a public GEO file
 
 `gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
@@ -1144,6 +1157,50 @@ reports as `data.downloadRoutes`. Counted on
 `geo/download/?acc=…&format=file&file=…_series_matrix.txt.gz` page is not a second
 route to the matrix: it redirects to the file server's `suppl/` directory (no
 matrix there) or answers a reCAPTCHA page.
+
+### The research-database connector: refusals, limits and what an import left out
+
+The connector (`OPEN_SCIENCE_RESEARCH_DB_ALLOW` + `OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE`) reads one table of a researcher's
+own PostgreSQL into a CSV source of the project. Two counters say how it is doing; both exist from the start at zero.
+
+- `open_science_research_db_imports_total{outcome}`: `complete`, `partial` (the import was made and left something out: a
+  row cap, a cell, a column), `replayed` (a retry answered with the first result) and `refused` (no source).
+- `open_science_research_db_refusals_total{reason}`: why an operation gave nothing -- `busy` (a slot or the person's own
+  import is taken, 429), `network_denied` (the host is not in the allowlist, or its address is not the one allowed),
+  `tls_failed` (the certificate does not verify: the chain, the name or the date), `login_failed` (the server refused the
+  account or the database name), `too_privileged` (a superuser or a role that bypasses row security), `unreachable` (no
+  answer), `materials_full` (the question already holds twenty files and this is a new table), `selection_invalid`,
+  `failed` -- and which limit cut an import that was still made: `truncated` (rows, bytes or time), `cells_withheld` (a cell
+  longer than the cell limit), `columns_dropped` (an unsupported type, or past the column cap). A rising `truncated` is the
+  row limit being too small for the tables people bring, not an outage.
+
+What each failure asks of whom: `tls_failed` is the database administrator's (a renewed certificate) or yours: a database
+whose chain ends in a cloud provider's own root, or a self-signed one, needs its certificate in
+`OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR/<host>.pem` (the host in lower case, as the allowlist writes it; a file replaces the
+built-in authorities for that host; restart is not needed, the file is read at each connection). `login_failed` and
+`too_privileged` are the researcher's. `unreachable` is a firewall or a database that is down. `network_denied` is an
+allowlist entry to add or fix: the entry is `host:port=IPv4` and the host is matched in lower case; only the IPv4 answers of
+the name are checked, so a dual-stack database is admitted by its IPv4 address.
+
+The limits (rows, columns, bytes, cell size, tables, concurrent connections, connections per person, saved credentials per
+project, the 30 s end of a connection, the 20 s read, the 24 MB wire) are `OPEN_SCIENCE_RESEARCH_DB_MAX_*` and friends, each
+with its reason in `apps/server/src/researchDbConfig.mjs`. They bound ONE web process: the admission caps (4 connections, 1
+per person) are in memory since 2026-10-29, so two replicas admit twice as many readers of a remote database. The control
+plane's own database is no longer held while a remote database is read.
+
+An import is never silent about what it left out. The source's title carries it (`public.cohort（前 20,000 行，共 52,340
+行）`), `payload.snapshot` has the facts, the study's material entry carries a compact `import`, and the sidecar
+`<name>.import.json` beside the CSV (under `knowledge-base/databases/.evimed-revisions/<sha256>/`) is what a run reads: rows
+exported and in the table, the physical order, every dropped column with its type, and the cells that were withheld, written
+into the CSV as `__evimed_withheld__` (never empty: an empty cell is a NULL). Importing a table again is a new version of the
+same source -- the old version is retired and the question's material points at the new one. A snapshot is not offered to the
+knowledge engine or to the wiki and graph compile, and it cannot be added to the personal library.
+
+`/api/ready` carries a `researchDb` check: green, with `warning: research_db_keyring_incomplete` when the keyring does not hold
+the key of a saved credential (every route then answers that code until the key is restored), never red. Each saving or
+removal of a credential and each import is a line in the project's audit file (`research_db.connection.save`,
+`research_db.connection.remove`, `research_db.import`), with the connection's or the source's id and never a password,
+host or user name.
 
 ### Deleting a project, resetting memory or erasing an account while the memory index is slow
 
@@ -1248,7 +1305,7 @@ record per method body; harm shown by the same sequential test a learned method'
 <official:pack:method> <body hash>` gives a stopped body back, counted from nothing. A person's general method can join the pack 「大家的做法」 after the
 promotion gates (`OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` on, `…_PER_DAY` 3; it needs the learning loop, the official packs and a review provider that is not DeepSeek, and
 asks nothing of a model otherwise): `open_science_official_promotion_total{state}`, `…_rejected_total{reason}`, `…_activated_total`, `…_harm_checks_total{outcome}`,
-`…_harm_check_skipped_total{reason}` (J23 ships uncalibrated, so the harm check reads `skipped` until it is calibrated), `…_reviewer_configured`. No notice names an account.
+`…_harm_check_skipped_total{reason}` (J23 is calibrated, pinned in `deps-version.json` on `evals/judge-sites/J23/benefit-2026-10-27.json`: 91 of 91 settled answers right in two passes over 92 invented methods, lower95 0.968, so the harm check answers `clear`, `flagged` or `uncertain`, and reads `skipped` only for the reasons the counter names; an `uncertain` answer keeps the method waiting in `judge_pending` and is asked again no sooner than an hour later, and the third refuses it as `harm_uncertain` — a rule of this promotion only; its pin carries no drift baseline, because the path it stands beside is no check), `…_reviewer_configured`. No notice names an account.
 The capability-handbook arm is gone: the start deletes any `capability-handbook` / `handbook-candidate` method record and `evolution-handbook-*` record left in
 a database, cancels the arm's queued jobs and says it in one stderr line `handbook arm retired: …`; `handbook arm: N platform handbook tool(s) are still
 published` means the evolution module still serves handbook tools, which it retires through its own review.
@@ -1290,6 +1347,18 @@ re-runs an understanding, never reads a file again and never changes a depth, a 
 researcher or the judge already typed is left alone, and a second run reports nothing to do. Run it once after the release and read the
 report's `format` count: those documents were not named by the judge, and a 「重新读取」 on one reads it under its new type.
 
+### Personal materials and project use (2026-10-27)
+
+The knowledge page now opens the account's materials (`GET /api/sources?scope=all`). This is an authenticated, paginated source inventory, not permission to retrieve another project's private context. `scope=shared` remains the explicitly cross-project-available library subset; a project query retains its existing scope. Internal background work is excluded from the all-materials view.
+
+Personal intake uses `POST /api/library/uploads` (`filename`, `data`, `encoding`), `/api/library/links` (`url`) and `/api/library/notes` (`title`, `body`). No caller-supplied owner or project is accepted. The reserved per-account `evimed-library` project is only the original-byte storage adapter: it is hidden from project lists, unavailable to interactive runtimes, capacity-limited, and never a Compile target. Source publication, active library membership and ingestion jobs share the existing transaction. An explicitly unshared logical document stays unshared through later edits; retaining identical bytes elsewhere does not authorize the writer to revoke that independent retention.
+
+Where a document takes effect is the document's own choice (2026-10-28, owner: 「先全列出来，然后每条选择生效项目」). The account library entry (`library:<sha256>`) carries `projects`: `"all"` (every ordinary project, including those made later; an entry written before the field existed reads as all) or a list of the account's ordinary project ids, set with `PUT /api/library/:sourceId {projects, expectedRevision?}` (400 `library_projects_invalid` / `library_project_invalid` for a project that is newly named and is not the caller's own live ordinary project; a project the entry already lists is not asked about again, so an entry whose project was archived since can still be saved). A document applies to the project that holds it plus what its entry says; no entry means only its holder. One check (`libraryScope.mjs`, `sourceService.appliesTo`) answers for `kb_search`, `kb_browse`, a conversation's document selection, session sources and the reader, and refuses a document that is not the caller's. A runtime mounts its project's own view (`<dataDir>/users/<u>/library-views/<projectId>/`, real copies of exactly the entries that apply — not hard links: the data backup and the workspace readers refuse hard-linked files), never the account folder; a launch builds or repairs it, a narrowing removes the copy from the other projects' views before it answers (on AgentBay the project's Context is pushed when its session is created, so a narrowing reaches its next session, not one that is running). The account's views together are held to `OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES` (default 512 MiB): a project without a directory whose copy would pass it gets none and starts without /workspace/library (`library_views_over_budget`; `kb_search` and `kb_browse` are unaffected). `GET /api/sources?scope=all` is one row per file with `holders`, `libraryProjects` and `appliesTo`. Deleting a document in the knowledge base is deleting the file: `DELETE /api/sources/:id {expectedRevision, everywhere: true}` removes that source and every other current copy of the same bytes the account holds (other projects, personal storage), each its own transaction and the call repeatable, and the entry with the last; without `everywhere` it is the one source. Deleting a project removes the entries only that project holds, and takes its id out of every list; `GET /api/library/project-loss?projectId=` names the documents other projects lose that way, which the deletion dialog says. A replacement at the library's size limit takes the old entry's place (it is not a new entry); one that would be a second entry in a full library leaves the new version unlisted instead of failing the job. With `OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY=true` the library joins a project's compile only while every entry applies to that project (fail-closed).
+
+Personal originals use `GET /api/sources/:id/file?mode=read|preview|download`; the source and authenticated owner determine the file. This route accepts no arbitrary path, root or project. Captured cloud-drive originals remain originals before and after parsing. A legacy drive row without a preserved original may serve its parsed text, explicitly identified as `parsed-text`; it must not be presented as a preserved Office/PDF file.
+
+`GET /api/sources/openlist/status` reports `ready`, `unconfigured`, `storage_missing`, `permission_denied` or `unavailable`. Ready requires the configured storage and the account's namespace to be readable, not just a running container. The existing operator readiness page remains the deployment diagnostic entry. The ordinary UI provides retry and direct upload when the drive is unavailable; it does not configure storage or credentials.
+
 ### Knowledge pages (「知识页」) and the knowledge graph
 
 `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (on when OpenViking is the deployment's index, needs Postgres) covers the whole path: every
@@ -1314,6 +1383,8 @@ and `checks.memoryIndex.engine` in `/api/ready`. `evals/knowledge-pages` is the 
 answer; its 2026-10-12 run, on the pages of the self-built compiler since removed, did not show pages raising cross-document
 answer quality over a decomposition instruction (+0.014, interval −0.053 to 0.085), so their value is browsing, accumulation
 and the graph.
+
+New ordinary-project Compile rounds use project materials only by default. `OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY=true` is an explicit operator opt-in to the earlier whole-library wiki input behavior; it is not the default and never widens shared GEO authorization. Personal library search remains available in authorized private conversations independently of this Compile setting. To include a personal material in a project's normal compilation, explicitly add its selected version to that project. Existing compiled pages remain readable, and personal-resource synchronization is not disabled by excluding the storage project from Compile.
 
 `OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` (default off since 2026-10-13) is whether each readable document's summary and key claims
 are written into the memory capsule's `sources` layer. Off stops new writes only; what was written goes when its document does.
@@ -1740,7 +1811,9 @@ change a run's original status, verification, notices, completion time or usage,
   `expectedReceiptSha256` also checks a previously recorded receipt identity. Inspect this plan, then send the same target
   with `action: "apply"`, `expectedReceiptSha256` and `expectedPlanSha256` set to those exact values. Changed receipt,
   output or preserved-source bytes refuse the stale plan. The plan has no clock expiry. One original clinical matrix,
-  at most 64 files and 48 preserved sources are eligible in one request; existing storage and metadata limits still apply.
+  at most 64 files and `PACKAGE_SOURCE_ARTIFACT_LIMIT` preserved sources are eligible in one request (400 — the bound the
+  delivery gate and delivery capture read as well; the capture paths held a private 48 until 2026-10-28, which refused a
+  55-document review); existing storage and metadata limits still apply.
 - Apply fills missing captures through the normal capture service and reuses existing immutable version identities.
   Existing frozen quotation verdicts are reused. If none was ever persisted, a deterministic verdict over the exact
   preserved sources is recorded with `origin: "capture-repair"`, its time and verifier version; it is not a historical verdict.
@@ -2019,6 +2092,91 @@ retention follow existing policy; this feature makes no claim of instant erasure
 backup media or a provider. Do not treat these controls as HIPAA, GDPR or 21 CFR
 Part 11 certification.
 
+### Retiring legacy VCR recruitment tables (explicit offline operation)
+
+Startup preserves legacy `sites`, `referrals`, `referral_events` and historical
+recruiter/site memberships. No current route restores the contact workflow.
+Scientific `followup_episodes`, matching, research permissions and audit data stay.
+Until retirement, withdrawing even a referral-only subject marks its open legacy
+referrals `withdrawn`, without creating a contact or referral event.
+
+Use `scripts/ops/vcr-retire-recruitment.mjs` only as an operator. Configure `PGHOST`,
+`PGPORT`, `PGDATABASE`, `PGUSER` and the existing PostgreSQL credential source; never
+put a connection string or secret in arguments or logs. Configure the existing
+`OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE` to a private regular file (at least 16 characters,
+mode 0600, no symlink path). The tool shares `archive-crypto.mjs`'s existing scrypt /
+AES-256-GCM backup envelope. It never writes a plaintext archive. Use an absolute,
+non-symlink archive path in an operator-owned 0700 directory, outside backup rotation.
+Only counts, hashes, settings, fixed error codes and safe SQLSTATE are printed;
+never print or attach decrypted rows. Archive files and their `.meta.json` sidecars
+are mode 0600. Preserve the ciphertext SHA-256 independently of the archive.
+
+```sh
+node scripts/ops/vcr-retire-recruitment.mjs --archive /private/vcr-retirement/archive.enc
+```
+
+Capture normalizes UTC, `ISO, MDY` DateStyle and `postgres` IntervalStyle in its
+transaction and records those settings. Raw PostgreSQL JSON text retains numeric
+precision. It excludes withdrawn subjects and their referral notes, missing studies
+and erased accounts. When erasure removes a site authored by another account,
+its retained referrals keep their owner and events but their nullable `site_id`
+becomes null, matching that foreign key's ON DELETE SET NULL semantics. This
+transformation runs inside PostgreSQL, retaining exact numeric values. Historical
+`grantRoleCounts` are advisory observations of the live permissions database,
+refreshed on re-seal; their values are authenticated by the full archive digest but
+are excluded from the archived-row/schema equivalence proof. A later unrelated
+grant change therefore does not prevent re-retiring restored OA data. The capture
+commits before a separate disposable-schema readback recreates columns, defaults, keys, checks (including NOT VALID), foreign
+keys and indexes, avoiding a lock inversion with a user's first task. Encryption is
+verified by decrypting back; the sidecar records both ciphertext and plaintext
+hashes. A readback or write failure yields no usable retirement receipt.
+
+Before destructive retirement, stop **every** old app/worker writer and prevent its
+restart. Block new clients at the operational boundary; the command additionally
+refuses any other database client before and after mutation. Review the safe counts,
+the `.meta.json` `databaseIdentity`, and the independently retained ciphertext hash.
+`--sha256` below is that hash, and `--expected-database` is `databaseIdentity`.
+
+```sh
+node scripts/ops/vcr-retire-recruitment.mjs --retire /private/vcr-retirement/archive.enc \
+  --sha256 CIPHERTEXT_SHA256 --expected-database DATABASE_IDENTITY \
+  --workers-stopped --allow-drop-approved-tables --allow-delete-retired-members
+```
+
+Only the three named tables and retired membership rows are removed, in a locked
+READ COMMITTED comparison and RESTRICT transaction. An unapproved dependency,
+changed data or identity refuses and rolls back. An exact repeat reports
+`alreadyRetired: true`. Hash-only subject footprints allow consent withdrawal even
+when the subject's last live row was in a retired referral table; an account-erasure
+hash ledger prevents its archived role rows from returning. These are privacy
+markers, never contact permissions.
+
+**Before either readback or real restore**, re-seal against the current withdrawal /
+account-erasure state. This applies after any later withdrawal, project deletion or
+account deletion. A stale archive refuses with `vcr_retirement_forget_erased_required`.
+Re-seal writes a new immutable encrypted generation and returns its new hash and
+sidecar. Replace every retained archive copy and securely retire superseded copies
+under backup retention policy; the command cannot erase an offline/offsite copy.
+
+```sh
+node scripts/ops/vcr-retire-recruitment.mjs --forget-erased /private/vcr-retirement/archive.enc \
+  --sha256 CIPHERTEXT_SHA256 --output /private/vcr-retirement/resealed.enc
+node scripts/ops/vcr-retire-recruitment.mjs --restore-readback /private/vcr-retirement/resealed.enc \
+  --sha256 RESEALED_CIPHERTEXT_SHA256
+node scripts/ops/vcr-retire-recruitment.mjs --restore /private/vcr-retirement/resealed.enc \
+  --sha256 RESEALED_CIPHERTEXT_SHA256 --expected-database DATABASE_IDENTITY \
+  --workers-stopped --allow-restore-approved-tables
+```
+
+Real restore is explicit, offline, same cluster/database identity only, and
+transactional. It refuses existing legacy tables or retired member rows instead of
+merging them. It recreates the archived schema and retained rows; legacy membership
+checks are restored NOT VALID so historical rows survive while all subsequent
+writes still enforce the current active-role vocabulary. This does not re-enable
+CRM routes or allow new recruiter/site grants. Follow-up observations are untouched.
+An incompatible referenced research object refuses with a safe SQLSTATE. Never
+hand-edit an archive to bypass authentication, conflict, erasure or identity checks.
+
 What an evaluation rested on can change afterwards: a permission of its source, a
 reviewed text that now takes the place of a record, a record added for the person, a
 withdrawal. The facts, language judgments and assessments derived from it are marked
@@ -2108,3 +2266,14 @@ to the operator running the counter. The gate binds that port and fails if occup
 it never switches to a random port. Invalid configuration is rejected before paid provider
 compatibility calls. Only explicit release-gate projects may select this model destination;
 knowledge, memory and other auxiliary gateways retain their normal addresses.
+
+
+### Conversation computation completion and prompt admission
+
+The completion outbox and independent finish-hook consumers interleave accounts. `OPEN_SCIENCE_VCR_COMPLETION_INTERVAL_MS`, `BATCH` and `RECONCILE_BATCH` control cadence and batch size (the latter two share the `OPEN_SCIENCE_VCR_COMPLETION_` prefix). `LEASE_MS`, `RETRY_MS`, `RETRY_MAX_MS`, `MAX_ATTEMPTS`, `MAX_AGE_MS` and `RETENTION_MS` under that same prefix bound leases, exponential backoff, recovery and retained outbox payloads. `OPEN_SCIENCE_VCR_LOCAL_CONCURRENCY` bounds non-engine jobs. Defaults and all supported keys are listed in `deploy/web/.env.example` and passed by the base compose service.
+
+A failed result notification stays pending and reuses its notification identity. At budget exhaustion it is unavailable with the exact disclosure failure; it is never reported delivered. Old unresolved jobs are terminalized explicitly after downtime. Producer markers prevent a pruned outbox entry from being recreated. Observe `open_science_vcr_completions_total` and `open_science_vcr_jobs_total` for delivery and independent consumer outcomes.
+
+`OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS` (default 30000, range 500–60000) bounds final session checks and the short prompt acceptance RPC. The database client is obtained before the local session queue; a live plugin transaction is borrowed, including with a one-connection pool. Native HTTP/mux inputs and managed continuations share the session advisory lock, while model generation and event streams remain outside it. `open_science_runtime_prompt_admission_active` and `open_science_runtime_prompt_admission_total` expose occupancy and outcomes.
+
+An authenticated stop records a monotonic set of existing run IDs in `evimed_product.prompt_stop_intents`, scoped to owner/project/session and deleted with the project. It suppresses subsequent automatic admission for those runs, survives restarts and cannot be overwritten by run-learning gauges. A future explicit human request is independent. This is stop intent; it does not claim that a kernel stop RPC succeeded.

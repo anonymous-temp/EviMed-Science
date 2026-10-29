@@ -42,10 +42,10 @@ import {
   appendRuntimeEventForProvider,
   capsuleMethodsHostDir,
   issueEviMedWorkloadToken,
-  personalLibraryDir,
   runtimeCompactionSettings,
   syncRuntimeDshProfile,
 } from "../runtimeManager.mjs";
+import { projectLibraryViewDir } from "../libraryScope.mjs";
 import { compactionRuntimeEnv } from "@evimed/harness-port";
 import { runContextAuthorityPublicKey } from "@evimed/harness-port/run-context-authority";
 import { createLinkTunnel } from "./linkTunnel.mjs";
@@ -337,8 +337,10 @@ export class AgentBayRuntimeProvider {
   stateDir(project) { return path.join(project.runtimeDir, "agentbay"); }
   recordFile(project) { return path.join(this.stateDir(project), "session.json"); }
   manifestFile(project, kind) { return path.join(this.stateDir(project), `manifest-${kind}.json`); }
+  /** The library view's sync manifest: the view is the project's, and lives outside the project's own tree, so its manifest
+   *  is kept beside the account's rather than in the project (`pushProject`). */
   libraryManifestFile(project) {
-    return path.join(this.config.dataDir, "users", String(project.userId), ".agentbay", "manifest-library.json");
+    return path.join(this.config.dataDir, "users", String(project.userId), ".agentbay", `manifest-library-${sha(String(project.id))}.json`);
   }
 
   /** The tunnel's socket, beside the Docker runtimes' own control sockets. */
@@ -376,15 +378,18 @@ export class AgentBayRuntimeProvider {
       sessions: { host: path.join(hostDshHome, "sessions"), mount: SESSION_PATHS.sessions, exclude: [], upload: true },
       storages: { host: path.join(hostDshHome, "storages"), mount: SESSION_PATHS.storages, exclude: [], upload: true },
       ...(project.baseDir ? { kb: { host: path.join(project.baseDir, "knowledge-base"), mount: SESSION_PATHS.knowledgeBase, exclude: [], upload: false } } : {}),
-      library: { host: personalLibraryDir(this.config, project.userId), mount: SESSION_PATHS.library, exclude: [], upload: false, account: true },
+      // The project's own view of the library (`projectLibraryViewDir`): the entries that apply to it and no other. Its Context is the
+      // project's too — the account-wide one this replaced held every entry, whatever it applied to.
+      library: { host: projectLibraryViewDir(this.config, project.userId, project.id), mount: SESSION_PATHS.library, exclude: [], upload: false, outside: true },
     };
   }
 
   async ensureContexts(project) {
     /** @type {Record<string, { id: string, name: string }>} */
     const contexts = {};
-    for (const [kind, view] of Object.entries(this.views(project))) {
-      const scope = view.account ? `${project.userId}` : `${project.userId}\0${project.id}`;
+    // Every view's Context is the project's own, the library's included (`views`).
+    const scope = `${project.userId}\0${project.id}`;
+    for (const kind of Object.keys(this.views(project))) {
       const found = await this.client.contexts.get(this.contextName(kind, scope), { create: true });
       if (!found) throw new HttpError(502, "agentbay_context_failed", `The ${kind} Context could not be created.`);
       contexts[kind] = found;
@@ -417,12 +422,15 @@ export class AgentBayRuntimeProvider {
    * previous session left newer in them.
    */
   async pushProject(project, contexts) {
+    // The library view is brought to the entries that apply to the project before it is pushed: what is in the directory is what
+    // the session reads.
+    await this.manager.ensureLibraryView(project);
     const skipped = [];
     const maxFileBytes = Number(this.config.agentbaySyncMaxFileBytes) || 256 * 1024 * 1024;
     for (const [kind, view] of Object.entries(this.views(project))) {
       const context = contexts[kind];
-      const manifestRoot = view.account ? path.join(this.config.dataDir, "users", String(project.userId)) : project.rootDir;
-      const manifestFile = view.account ? this.libraryManifestFile(project) : this.manifestFile(project, kind);
+      const manifestRoot = view.outside ? path.join(this.config.dataDir, "users", String(project.userId)) : project.rootDir;
+      const manifestFile = view.outside ? this.libraryManifestFile(project) : this.manifestFile(project, kind);
       await fs.mkdir(path.dirname(manifestFile), { recursive: true, mode: 0o700 });
       const manifest = await loadSyncManifest(manifestRoot, manifestFile);
       if (view.upload && !manifest.clean) {

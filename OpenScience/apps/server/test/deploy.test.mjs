@@ -2139,7 +2139,10 @@ test("a capability's two skill copies never drift apart by more than their known
     // Raised on 2026-10-05 (evidence-flywheel F04): one sentence saying to look in the frontier feed first for what is new (+1).
     // Raised on 2026-10-10 (review G-D3): the brief's session-scoped path, the same words in both copies, wrapped to
     // paragraphs that begin differently (+2).
-    "clinical-evidence-synthesis": 270,
+    // Lowered to 50 on 2026-10-28 (3.0.0): the DSH body was rewritten from ~150,000 to ~13,500 characters so the whole
+    // stack is injected inline — the request decides the form and the language, no mandated Chinese headings — and
+    // the retired kernel's copy is not edited, so what is left are the new body's own lines.
+    "clinical-evidence-synthesis": 50,
     "comprehensive-drug-evaluation": 45,
     // The optional-output scoping revision synchronized the retained body too.
     "dataset-research-scoping": 0,
@@ -2629,6 +2632,18 @@ test("every workspace package the runtime's frame bundle imports is packed into 
     const missing = [...imported].filter((name) => !packed.has(name)).sort();
     assert.deepEqual(missing, [], `${dockerfile} does not pack: ${missing.join(", ")}`);
   }
+});
+
+test("the delta puts back everything the full build copies into the socket tree it wipes", async () => {
+  // Dockerfile.delta removes /opt/evimed/socket and copies packages/socket over it, so a file the full build adds there from
+  // elsewhere is lost on every delta unless the delta copies it too (the personal-skill validator, missing 2026-10-02 → 10-28).
+  const full = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const intoSocket = (text) => new Set([...text.matchAll(/^COPY (?:--[a-z]+=\S+ )*(\S+) (\/opt\/evimed\/socket\/\S*)$/gm)].map((match) => `${match[1]} ${match[2]}`));
+  const wanted = intoSocket(full);
+  assert.ok(wanted.has("scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs"), "the scan found nothing to compare");
+  const present = intoSocket(delta);
+  assert.deepEqual([...wanted].filter((line) => !present.has(line)).sort(), []);
 });
 
 test("receipt counter endpoint is a service overlay shared only with the runtime controller", async () => {

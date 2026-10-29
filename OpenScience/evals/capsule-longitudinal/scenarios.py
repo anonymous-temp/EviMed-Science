@@ -306,15 +306,20 @@ def s7_cross_project_leakage(ctx: Ctx) -> Outcome:
     rule = sc.records_holding(records, ["英文"])
     again = ctx.turns(account, [step("t2", ENGLISH_RULE_NEXT)], project=project_a, new_conversation=True)
     other = ctx.turns(account, [step("t3", OTHER_PROJECT_ASK)], project=project_b, new_conversation=True)
+    # The rule is about the deliverables, so the language measured is the deliverable's: a reply that writes the sentence in English and
+    # adds a note in Chinese obeyed it, and one that writes it in English under a Chinese preface leaked it.
+    a_again, a_detail = sc.deliverable_cjk_share(ctx.judge, ENGLISH_RULE_NEXT, again[0]["reply"])
+    b, b_detail = sc.deliverable_cjk_share(ctx.judge, OTHER_PROJECT_ASK, other[0]["reply"])
     ratios = {"a_first": sc.cjk_ratio(in_a[0]["reply"]), "a_again": sc.cjk_ratio(again[0]["reply"]), "b": sc.cjk_ratio(other[0]["reply"])}
     scopes = [{"scope": r.get("scope"), "scopeId": r.get("scopeId")} for r in rule]
     checks = [_ran(in_a + again + other, 3),
-              sc.check("the rule was applied in project A in a new conversation (the memory works at all)", ratios["a_again"] < 0.3, f"CJK share {ratios['a_again']:.2f}", premise=True),
-              sc.check("project B's reply is in Chinese: the rule did not leak", ratios["b"] >= 0.5, f"CJK share {ratios['b']:.2f}"),
+              sc.check("the rule was applied in project A in a new conversation (the memory works at all)", None if a_again is None else a_again < 0.3, a_detail, premise=True),
+              sc.check("project B's deliverable is in Chinese: the rule did not leak", None if b is None else b >= 0.5, b_detail),
               sc.check("the rule is held as project A's", any(s["scope"] == "project" and s["scopeId"] == project_a for s in scopes) if scopes else None,
                        json.dumps(scopes) if scopes else "no record holds the rule (the project card may carry it)", required=False),
               _settle_note(memory)]
-    return Outcome(checks, {"projects": {"a": project_a, "b": project_b}, "cjkShare": ratios, "ruleRecords": scopes, "turns": [_turn_evidence(t) for t in in_a + again + other]})
+    return Outcome(checks, {"projects": {"a": project_a, "b": project_b}, "cjkShare": ratios, "deliverableCjkShare": {"a_again": a_again, "b": b},
+                            "ruleRecords": scopes, "turns": [_turn_evidence(t) for t in in_a + again + other]})
 
 
 # =============================================================================================================== S8

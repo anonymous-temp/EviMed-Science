@@ -66,6 +66,17 @@ beforeEach(() => {
 });
 
 describe("ReportReader", () => {
+  it("groups the original Markdown download and browser print in one discoverable export menu", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole("button", { name: "导出与打印" }));
+    await user.click(screen.getByRole("menuitem", { name: "下载 Markdown" }));
+    expect(mocks.downloadArtifact).toHaveBeenCalledWith(REPORT_PATH, undefined, "clinical-evidence-report.md");
+    await user.click(screen.getByRole("button", { name: "导出与打印" }));
+    await user.click(screen.getByRole("menuitem", { name: "打印 / 存为 PDF" }));
+    expect(print).toHaveBeenCalledOnce();
+  });
   // Two dates above a report (2026-09-23 inventory §1.11): when the search
   // stopped — the run's own start when the package is silent — and when it
   // was written. No model name, no tally, no 「未注明」 rows.
@@ -156,7 +167,7 @@ describe("ReportReader", () => {
     renderReader();
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent("核对结果暂时读取不到");
     expect(within(table).queryByText(/暂无核对结果|未核对|核对中/)).toBeNull();
     mocks.readClaimVerification.mockResolvedValue({
@@ -165,7 +176,7 @@ describe("ReportReader", () => {
     });
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
     expect(await within(screen.getByRole("table", { name: "证据矩阵：2 条结论" })).findByText("✓ 引文已核对")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
   });
 
   it("opens a claim of the matrix tab in a drawer beside the report, with its quotation and check", async () => {
@@ -178,19 +189,11 @@ describe("ReportReader", () => {
     expect(within(drawer).getByText(/这段引文没有在保存的原文中找到/)).toBeInTheDocument();
   });
 
-  // On a phone the two text buttons wrapped onto a second row; the words drawn there are short, the names read out stay whole.
-  it("draws 下载 and 打印 as short words beside the tabs on a phone, and names the actions in full", async () => {
+  it("keeps the named export menu in the same toolbar as the views", async () => {
     renderReader();
-    const download = await screen.findByRole("button", { name: "下载 Markdown" });
-    const print = screen.getByRole("button", { name: "打印 / 存为 PDF" });
-    expect(within(download).getByText("下载")).toHaveClass("sm:hidden");
-    expect(within(download).getByText("下载 Markdown")).toHaveClass("max-sm:hidden");
-    expect(within(print).getByText("打印")).toHaveClass("sm:hidden");
-    expect(within(print).getByText("打印 / 存为 PDF")).toHaveClass("max-sm:hidden");
-    // The same row as the views: one toolbar holds the tabs and both actions.
+    const exportMenu = await screen.findByRole("button", { name: "导出与打印" });
     const tabs = await screen.findByRole("tablist", { name: "查看" });
-    expect(tabs.parentElement).toBe(download.parentElement);
-    expect(tabs.parentElement).toBe(print.parentElement);
+    expect(tabs.parentElement).toBe(exportMenu.parentElement);
   });
 
   // Chromium focuses a scroller by itself; WebKit and Firefox on the Mac do not, so a wide table in the text says it is a region.
@@ -228,9 +231,11 @@ describe("ReportReader", () => {
   it("downloads the Markdown and prints from a print copy", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => {});
     renderReader();
-    await userEvent.click(await screen.findByRole("button", { name: "下载 Markdown" }));
+    await userEvent.click(await screen.findByRole("button", { name: "导出与打印" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "下载 Markdown" }));
     expect(mocks.downloadArtifact).toHaveBeenCalledWith(REPORT_PATH, undefined, "clinical-evidence-report.md");
-    await userEvent.click(screen.getByRole("button", { name: "打印 / 存为 PDF" }));
+    await userEvent.click(screen.getByRole("button", { name: "导出与打印" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "打印 / 存为 PDF" }));
     expect(print).toHaveBeenCalled();
   });
 
@@ -287,7 +292,7 @@ describe("version-bound report evidence", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
     expect(within(table).queryByText(/暂无核对结果|未核对|核对中/)).toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
   });
   it("shows the frozen checks on the matrix tab of an old version", async () => {
     renderReader({ immutableVersion: version({ status: "available", matrixText: JSON.stringify(matrix),

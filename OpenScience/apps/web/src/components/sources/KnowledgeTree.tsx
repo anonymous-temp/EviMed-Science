@@ -42,7 +42,7 @@ export function KnowledgeTree({ rows, query, listState, empty }: { rows: readonl
     <div data-knowledge-tree="" className="space-y-3">
       {groups.map((group, index) => (
         <Disclosure key={group.id} defaultOpen={Boolean(query) || total <= 40 || index === 0}
-          summary={<span className="font-semibold text-text">{group.label}<span className="ml-2 font-normal text-text-3">{group.rows.length}</span></span>}>
+          summary={<span className="text-text">{group.label}<span className="ml-2 text-caption text-text-3">{group.rows.length}</span></span>}>
           <List label={group.label}>
             {group.rows.map((row) => <ListRow key={row.sourceId} title={row.title} to={readerPath(row.sourceId, listState)} meta={rowMeta(row)} />)}
           </List>
@@ -52,9 +52,9 @@ export function KnowledgeTree({ rows, query, listState, empty }: { rows: readonl
   );
 }
 
-/** Where the compiled files are read when the tree cannot be: the plain list of documents, and the one way to try the tree again. */
+/** What the pages say when the tree cannot be read: that, and the one way to try again. */
 export function KnowledgeTreeMissing({ onRetry }: { onRetry: () => void }) {
   return (
-    <Note className="mb-3" action={<Button size="sm" variant="secondary" onClick={onRetry}>重试</Button>}>知识页的目录暂时没能读取，下面是文件列表。</Note>
+    <Note className="mb-3" action={<Button size="sm" variant="secondary" onClick={onRetry}>重试</Button>}>知识页的目录暂时没能读取。</Note>
   );
 }

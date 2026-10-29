@@ -80,7 +80,8 @@ const MCP_NARRATION = Object.freeze({
   // 「循证 GEO」's platform tools: what was read or written, in the page's words.
   geo_read: (args) => `读取循证 GEO 项目：${geoWhat(GEO_READ_WHAT_LABELS_ZH, args?.what)}`,
   geo_write: (args) => `写入循证 GEO 项目：${geoWhat(GEO_WRITE_WHAT_LABELS_ZH, args?.what)}`,
-  social_posts_search: (args, result) => withCount(`采集社媒真实问法：「${excerpt(args?.query)}」`, result?.data?.posts ?? null),
+  // A pending search is read on by its job id alone: it has no query of its own to quote.
+  social_posts_search: (args, result) => withCount(!args?.query && typeof args?.jobId === 'string' ? '继续读取社媒采集结果' : `采集社媒真实问法：「${excerpt(args?.query)}」`, result?.data?.posts ?? null),
 })
 
 /** A GEO read or write's subject, or 「数据」 for a word this build does not know.

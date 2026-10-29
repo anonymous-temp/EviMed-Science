@@ -22,7 +22,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, normalize } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -39,6 +39,22 @@ import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SKILLS = ["vcr-protocol", "vcr-analysis", "vcr-evidence", "vcr-matching", "vcr-package"];
 const read = (/** @type {string} */ path) => readFileSync(join(root, path), "utf8");
+
+test("every VCR skill resolves one mirrored shared operating contract", () => {
+  const shared = read("capabilities/vcr-protocol/references/operating-contract.md");
+  assert.equal(shared, read("capability-skills/vcr-protocol/references/operating-contract.md"));
+  for (const skill of SKILLS) {
+    for (const tree of ["capabilities", "capability-skills"]) {
+      const body = read(`${tree}/${skill}/SKILL.md`);
+      const links = [...body.matchAll(/\]\(([^)]+operating-contract\.md)\)/g)];
+      assert.equal(links.length, 1, `${tree}/${skill} has one shared contract`);
+      assert.equal(read(normalize(join(tree, skill, links[0][1]))), shared);
+      assert.ok(body.length > 1000, "the specialty method remains in its own skill");
+    }
+    const tools = manifestTools(skill);
+    for (const [, name] of shared.matchAll(/mcp__evimed__([a-z_]+)/g)) assert.ok(tools.has(name), `${skill} can use shared ${name}`);
+  }
+});
 
 // The names the platform mounts (the domain's closed list), and the ones the MCP server of this
 // module defines itself: a skill may name a tool of either.

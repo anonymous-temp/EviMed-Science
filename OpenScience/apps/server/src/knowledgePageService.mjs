@@ -8,7 +8,8 @@ import { knowledgeDigest, knowledgeGenerationRoots, knowledgeOutputPath, readKno
 import { compileIdempotencyKey } from "./openVikingResources.mjs";
 import { isCompiledPage } from "./openVikingSourceSync.mjs";
 import { HttpError } from "./security.mjs";
-import { projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
+import { LIBRARY_PROJECT_ID } from "./internalProjects.mjs";
+import { isResearchDatabaseSource, projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 
 /**
  * 「知识页」: a project's documents compiled into a linked wiki and a knowledge graph by OpenViking's own Compile, and
@@ -161,15 +162,16 @@ export class KnowledgePageService {
    *   entries: { writePage: (request: { user: any, project: any, tree: string, rel: string, buffer: Buffer, title: string }) => Promise<any>,
    *     retirePage: (request: { user: any, source: any }) => Promise<any>, readPage: (project: any, tree: string, rel: string) => Promise<string | null> },
    *   knowledgeContext?: any,
-   *   libraryText?: ((userId: string, sourceId: string) => Promise<string | null>) | null,
+   *   libraryText?: ((userId: string, sourceId: string, projectId: string) => Promise<string | null>) | null,
+   *   libraryAppliesWhole?: ((userId: string, projectId: string) => Promise<boolean>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    *   `resources`: `OpenVikingResources`; `engine`: `OpenVikingEngine` (its `ready("knowledge")`); `sourceSync`: `OpenVikingSourceSync`;
    *   `libraryText`: the account library's own copy of a document, which a compile reads beside the project's documents
    */
-  constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, knowledgeContext = null, libraryText = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, documents, jobs, sources, store, resources, engine = null, sourceSync = null, entries, knowledgeContext = null, libraryText = null, libraryAppliesWhole = null, now = () => new Date(), report = () => {} }) {
     this.knowledgeContext = knowledgeContext;
     this.config = config; this.documents = documents; this.jobs = jobs; this.sources = sources; this.store = store;
-    this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.now = now; this.report = report;
+    this.resources = resources; this.engine = engine; this.sourceSync = sourceSync; this.entries = entries; this.libraryText = libraryText; this.libraryAppliesWhole = libraryAppliesWhole; this.now = now; this.report = report;
     this.counters = { rounds: 0, failed: 0, compiles: 0, indexOnlyRetries: 0, pagesMirrored: 0, pagesRetired: 0, blocksRestored: 0, writeBacks: 0, writeBackConflicts: 0, deferred: 0,
       quotationsPresent: 0, quotationsAbsent: 0, tokens: 0, misplaced: 0 };
   }
@@ -258,6 +260,15 @@ export class KnowledgePageService {
   /** Whether a source record is a mirrored file of a compiled tree. @param {any} source */
   static isPage(source) { return isCompiledPage(source); }
 
+  /**
+   * Whether a source record is not a document for the compile to read: a page it wrote itself, or a table imported from the
+   * researcher's own database. Such a table is never pushed to the engine (`OpenVikingSourceSync.pushable`), so the compile
+   * cannot read it; it is also not counted toward the threshold of readable documents, not announced as a change, and not
+   * a text a page's quotation is checked against.
+   * @param {any} source
+   */
+  static isExcluded(source) { return isCompiledPage(source) || isResearchDatabaseSource(source); }
+
   // -------------------------------------------------------------------------------------------------------------------
   // What the project's documents do to the queue
 
@@ -266,10 +277,10 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId @param {string} sourceId
    */
   async noteSourceReady(userId, projectId, sourceId, { strict = false } = {}) {
-    if (!this.enabled) return;
+    if (!this.enabled || projectId === LIBRARY_PROJECT_ID) return;
     try {
       const source = await this.sources.get(userId, sourceId);
-      if (!source || source.projectId !== projectId || KnowledgePageService.isPage(source)) return;
+      if (!source || source.projectId !== projectId || KnowledgePageService.isExcluded(source)) return;
       // A document is announced when its text is in and again when its understanding ends: the second says nothing the
       // round that read the text has not already taken in.
       const context = await this.#knowledgeContext(userId, projectId);
@@ -389,6 +400,7 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId @param {{ immediate?: boolean }} [options]
    */
   async schedule(userId, projectId, { immediate = false } = {}) {
+    if (projectId === LIBRARY_PROJECT_ID) return null;
     if (!this.enabled) return null;
     const { value } = await this.#state(userId, projectId);
     const wait = immediate ? 0 : this.config.knowledgePagesDebounceMs;
@@ -406,6 +418,7 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId @param {{ language?: string | null }} [options]
    */
   async requestRound(userId, projectId, { language = null } = {}) {
+    if (projectId === LIBRARY_PROJECT_ID) throw new HttpError(400, "knowledge_storage_project", "Personal storage cannot be compiled.");
     if (!this.enabled) return null;
     await this.#updateState(userId, projectId, (value) => {
       value.pending.manual = "added";
@@ -429,6 +442,7 @@ export class KnowledgePageService {
    * @returns {Promise<"scheduled" | "waiting" | "skipped">} `waiting`: a round is already queued or running for it
    */
   async catchUp(userId, projectId) {
+    if (projectId === LIBRARY_PROJECT_ID) return "skipped";
     if (!this.enabled) return "skipped";
     const { value } = await this.#state(userId, projectId);
     const context = await this.#knowledgeContext(userId, projectId);
@@ -547,7 +561,7 @@ export class KnowledgePageService {
     let cursor = null;
     for (let page = 0; page < SCAN_LIMIT / 100; page += 1) {
       const reply = await this.sources.list(userId, { projectId, state: "ready", limit: 100, cursor });
-      found.push(...reply.items.filter((/** @type {any} */ item) => !KnowledgePageService.isPage(item) && !item.deletedAt));
+      found.push(...reply.items.filter((/** @type {any} */ item) => !KnowledgePageService.isExcluded(item) && !item.deletedAt));
       cursor = reply.nextCursor;
       if (!cursor) break;
     }
@@ -567,9 +581,9 @@ export class KnowledgePageService {
       if (cache.has(id) || !SOURCE_ID.test(id)) continue;
       try {
         const source = await this.sources.get(userId, id).catch(() => null);
-        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isPage(source) || context?.kind === "geo-project" && !await context.acceptSource(source)) {
+        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isExcluded(source) || context?.kind === "geo-project" && !await context.acceptSource(source)) {
           // Not a document of this project: the account's library may hold it, and its copy there is what the compile read.
-          const copy = context?.kind !== "geo-project" && this.libraryText ? await this.libraryText(userId, id).catch(() => null) : null;
+          const copy = context?.kind !== "geo-project" && this.libraryText ? await this.libraryText(userId, id, projectId).catch(() => null) : null;
           if (copy) cache.set(id, { title: /^#[ \t]+(.+)$/m.exec(copy)?.[1]?.trim() ?? id, text: copy });
           continue;
         }
@@ -604,7 +618,7 @@ export class KnowledgePageService {
             basis: sha256(JSON.stringify([source.revision, source.payload.generation, source.payload.analysis?.textSha256 ?? null])) });
           continue;
         }
-        const copy = !shared && this.libraryText ? await this.libraryText(userId, id).catch(() => null) : null;
+        const copy = !shared && this.libraryText ? await this.libraryText(userId, id, projectId).catch(() => null) : null;
         if (copy) details.set(id, { title: /^#[ \t]+(.+)$/m.exec(copy)?.[1]?.trim() ?? id, available: true, sourceVersion: null, basis: sha256(copy) });
       } catch { /* Unavailable source metadata never certifies availability. */ }
     }
@@ -844,8 +858,13 @@ export class KnowledgePageService {
   async #submit(user, project, tree, state, attempt, { retry = false } = {}) {
     const roots = this.resources.roots(user.id, project.id);
     const from = tree === "wiki" ? [roots.sources] : [roots.sources];
-    // The account's library is a compile source beside the project's own documents, when it holds any.
-    if (tree === "wiki" && this.config.knowledgePagesIncludeLibrary !== false) {
+    // The account's library is a compile source beside the project's own documents, when it holds any — and only while every
+    // entry of it applies to this project (2026-10-28). The engine holds the whole library under one root and a compile reads
+    // a root whole, so a library with one entry limited to other projects is not offered to this project's compile at all;
+    // feeding only the entries that apply would take the engine accepting single documents as a compile source, which has not
+    // been probed. Failing to read the question is the same answer: no library.
+    if (tree === "wiki" && this.config.knowledgePagesIncludeLibrary === true
+      && await this.libraryAppliesWhole?.(user.id, project.id).catch(() => false) === true) {
       const library = await this.resources.listSources(user.id, roots.library).catch(() => []);
       if (library.length) from.push(roots.library);
     }
@@ -868,6 +887,7 @@ export class KnowledgePageService {
   async runJob(job) {
     const userId = job.userId;
     const projectId = String(job.payload?.projectId ?? job.projectId ?? "");
+    if (projectId === LIBRARY_PROJECT_ID) return { result: { skipped: "storage_project" } };
     if (!this.enabled) return { result: { skipped: "disabled" } };
     const { value: state } = await this.#state(userId, projectId);
     if (Number(job.payload?.round) !== state.round) return { result: { skipped: "round_superseded" } };
@@ -905,7 +925,8 @@ export class KnowledgePageService {
       if (this.sourceSync) {
         try {
           const projectSync = await this.sourceSync.reconcileProject(userId, projectId);
-          const librarySync = await this.sourceSync.reconcileLibrary(userId);
+          const librarySync = this.config.knowledgePagesIncludeLibrary === true
+            ? await this.sourceSync.reconcileLibrary(userId) : { failed: [] };
           if (projectSync.failed.length || librarySync.failed.length) return defer("knowledge_source_sync_pending", 30_000);
           const verified = await this.sourceSync.reconcileProject(userId, projectId, { apply: false });
           if (verified.missing.length || verified.stale.length || verified.extra.length) return defer("knowledge_source_sync_pending", 30_000);
@@ -1479,6 +1500,7 @@ export class KnowledgePageService {
    */
   async recordFailure(job, code) {
     const projectId = String(job.payload?.projectId ?? job.projectId ?? "");
+    if (projectId === LIBRARY_PROJECT_ID) return;
     if (!projectId) return;
     const { value } = await this.#state(job.userId, projectId).catch(() => ({ value: null }));
     if (value?.run?.generationId && value.round !== Number(job.payload?.round)) return;

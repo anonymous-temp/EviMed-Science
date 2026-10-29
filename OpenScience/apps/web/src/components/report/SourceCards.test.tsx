@@ -60,10 +60,12 @@ describe("the sources a report stands on, as cards", () => {
 
   it("wears the study-type badge in the palette's own colour, and says nothing for a kind the table cannot tell", () => {
     renderList();
-    const rct = screen.getByText("RCT");
+    // The badge is a `Tag` on the family's pair: the pair is on the wrapper that carries the family.
+    const rct = screen.getByText("RCT").closest("[data-study-type]");
     expect(rct).toHaveAttribute("data-study-type", "rct");
-    expect(rct.getAttribute("style")).toContain("var(--study-rct-fg)");
-    expect(screen.getByText("指南")).toHaveAttribute("data-study-type", "guideline");
+    expect(rct?.getAttribute("style")).toContain("var(--study-rct-fg)");
+    expect(screen.getByText("RCT")).toHaveAttribute("data-tag");
+    expect(screen.getByText("指南").closest("[data-study-type]")).toHaveAttribute("data-study-type", "guideline");
     // `other` is the table saying it cannot tell; it draws no badge.
     const unknown = parseClaimMatrix(JSON.stringify({ claims: [{ claimId: "CLM-009", claim: "x", claimType: "direct", sourceTitle: "A blog post", identifier: "x-1" }] }));
     render(<MemoryRouter><SourceCardList claims={unknown} /></MemoryRouter>);
@@ -90,7 +92,8 @@ describe("the sources a report stands on, as cards", () => {
     const card = screen.getByText("Metformin and CVD: a meta-analysis").closest("[data-source-index]")!;
     const notice = within(card as HTMLElement).getByRole("link", { name: /已撤稿/ });
     expect(notice).toHaveAttribute("href", "https://doi.org/10.1000/notice");
-    expect(notice).toHaveTextContent("已撤稿 · 2024-03-01");
+    expect(notice).toHaveTextContent("查看声明");
+    expect(within(card as HTMLElement).getByText("已撤稿 · 2024-03-01")).toHaveAttribute("data-tag");
     // The check answered with the work's DOI, so the card can offer it.
     expect(within(card as HTMLElement).getByRole("button", { name: /复制/ })).toHaveTextContent("10.1000/meta");
   });

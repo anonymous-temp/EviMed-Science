@@ -35,20 +35,21 @@ export function useFrontierTopics(): FrontierTopicSummary[] | null {
 }
 
 /**
- * 热点话题, above 热榜's ranking (c2-leads 2026-10-25): the medical questions today's public events raised, each one row — the
- * question (the whole line opens the topic), and under it the field, the event in one line, how many reports and studies the
- * topic holds and when it was found. Nothing active, nothing shown.
+ * 「热搜里的健康问题」, under 热榜's ranking (c2-leads 2026-10-25 as 「热点话题」 above it; owner, 2026-10-27: the ranking comes first
+ * as 「医学热点」 and these follow it, named for what they are — the health questions that the public boards raised, not a second
+ * ranking): each one row — the question (the whole line opens the topic), and under it the field, the event in one line, how many
+ * reports and studies the topic holds and when it was found. Nothing active, nothing shown.
  */
 export function HotTopics({ topics }: { topics: readonly FrontierTopicSummary[] }) {
   const origin = useFrontierOrigin();
   if (topics.length === 0) return null;
   return (
-    <Section title="热点话题" count={topics.length} className="mb-6">
-      <ul aria-label="热点话题">
+    <Section title="热搜里的健康问题" count={topics.length}>
+      <ul aria-label="热搜里的健康问题">
         {topics.map((topic) => (
           <li key={topic.id} className="border-b border-border py-3 first:pt-0">
             <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(topic.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
-              <span data-prose="" className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{topic.title}</span>
+              <span data-prose="" className="min-w-0 text-ui font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{topic.title}</span>
             </Link>
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-3">
               <Tag>{topic.domainLabel}</Tag>
@@ -86,6 +87,7 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
       padding="p-3"
       header={(
         <div className="flex items-center justify-between gap-3">
+          {/* The feed's own group heading size (the day's heading and the titles are 16/600 too): at 18 it was a fifth type pair on 精选, which holds four. */}
           <h2 className="text-body font-semibold leading-6 text-text">当前热点</h2>
           <button type="button" onClick={onOpenAll} className={cn(INLINE_ACTION, "-mr-1.5 px-1.5 text-accent")}>完整热榜 ›</button>
         </div>
@@ -152,25 +154,29 @@ export function hotWindowFilter({ window, board, onWindow }: {
  * heat — the one number — over its 24-hour trend. The time range chips live
  * in the page's view row (`HotWindowChips`); there is no 「热度怎么算」 any
  * more — the number is shown and the page does not explain the system.
+ *
+ * On the current list (owner, 2026-10-27: nobody could tell how 热点话题 related to the ranking under it) the ranking comes first,
+ * under 「医学热点」 with its count, and 「热搜里的健康问题」 follow it; a week's or a month's ranking is the ranking alone.
  */
 export function HotBoard({ state, onRetry }: {
   state: HotState;
   onRetry: () => void;
 }) {
   const board = state?.board ?? null;
-  // 热点话题 sit above the ranking on the current list only: a week's or a month's ranking is a look back.
+  // 医学热点 and the health questions under it are the current list's: a week's or a month's ranking is a look back.
   const topics = useFrontierTopics();
   const current = !board || board.window === "current";
+  const ranking = board && board.events.length > 0 ? (
+    <ol aria-label="热榜">
+      {board.events.map((event) => <HotRow key={event.id} event={event} />)}
+    </ol>
+  ) : null;
   const body = !state ? <FrontierSkeleton />
     : state.error && !board ? <LoadError message={state.error} onRetry={onRetry} />
       : !board ? <EmptyState icon={Flame} title="热榜还在准备" reason="准备好后会出现在这里。" />
         : board.events.length === 0 ? <EmptyState icon={Flame} title="暂无热点" action={<Link to="/app/frontier?view=all" className={buttonClasses({ variant: "secondary" })}>看全部动态</Link>} />
-          : (
-            <ol aria-label="热榜">
-              {board.events.map((event) => <HotRow key={event.id} event={event} />)}
-            </ol>
-          );
-  return <div>{current && topics && <HotTopics topics={topics} />}{body}</div>;
+          : current ? <Section title="医学热点" count={board.events.length}>{ranking}</Section> : ranking;
+  return <div>{body}{current && topics && <HotTopics topics={topics} />}</div>;
 }
 
 /**
@@ -187,17 +193,17 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
   const origin = useFrontierOrigin();
   return (
     <li className="flex gap-3 border-b border-border py-4">
-      <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
+      <span className={cn("w-10 shrink-0 text-ui font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
         {/* The badge stands beside the link, not in it: a tag is a label and is never part of a control (DESIGN.md rule 7). After it, not
             before: a badge in front moved the title of the rows that have one off the left edge of the titles of those that do not. */}
         <div className="flex min-h-control min-w-0 items-center gap-1.5">
           <Tooltip content={event.title} kind="label" whenTruncated>
             <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
-              <span className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
+              <span className="min-w-0 text-ui font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
             </Link>
           </Tooltip>
-          {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
+          {event.badge && <Tag tone="neutral">{event.badge === "new" ? "新" : "升温"}</Tag>}
         </div>
         <p className="text-caption text-text-3">{hotRowMeta(event)}</p>
       </div>

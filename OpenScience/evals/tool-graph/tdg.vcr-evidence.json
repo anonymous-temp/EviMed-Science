@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:ce2ad9f7da023dafe2987ef8c6ccfb51e4f2368353aed11b75e0ba741e01586a",
+  "version": "sha256:2c8ab3a83506ff674c3cd9bfd327bfb77e915b62f6b8abe4676f8bc0cab669b0",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -1228,7 +1228,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. By default the answer leads with PubMed's Best Match records and adds the EviMed index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary); `databases` [\"pubmed\"] asks PubMed alone and [\"internal\"] asks the EviMed index alone with its full abstracts and AI summaries. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1240,7 +1240,7 @@
           "pmids": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 200,
+            "maxItems": 60,
             "items": {
               "type": "string",
               "pattern": "^\\s*(?:PMID\\s*:?\\s*)?\\d{1,9}\\s*$"
@@ -1366,7 +1366,8 @@
                 "pubmed",
                 "crossref"
               ]
-            }
+            },
+            "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only, full abstracts and AI summaries. [\"crossref\"]: Crossref."
           }
         },
         "additionalProperties": false
@@ -1446,7 +1447,7 @@
     {
       "name": "mcp__evimed__open_access_full_text",
       "source": "mcp",
-      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
+      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. When Europe PMC is unavailable (an error status or no answer in time) NCBI PMC serves the same JATS instead and the result says so (data.route ncbi-pmc-xml, data.fallbackFrom); a refusal such as not open access is never retried elsewhere. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1599,7 +1600,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still waiting for the run's answer. what: candidate_trials lists the registry trials found for patients (filter.id or filter.registryId reads one with its criteria; filter.subjectKey returns that patient's trials in order with the verdict about each and the language answers still owed).",
+      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1618,12 +1619,16 @@
               "precedents",
               "matching",
               "subject_document",
+              "followup_history",
+              "model_source",
+              "generated_records",
               "results",
               "report_model",
               "snapshot_profile",
               "models",
               "jobs",
               "trial_registry_record",
+              "patient_context",
               "pack",
               "library",
               "model_assessments",
@@ -1634,86 +1639,7 @@
             ]
           },
           "filter": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "parentId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "kind": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "registryId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "registry": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "snapshotId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "sourceId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "subjectKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "documentId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "protocolVersionId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "query": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200
-              },
-              "limit": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 50,
-                "default": 20
-              },
-              "offset": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1048576
-              }
-            },
-            "additionalProperties": false
+            "type": "object"
           }
         },
         "required": [
@@ -1727,9 +1653,7 @@
         "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
         "fields": []
       },
-      "typeTags": [
-        "source_id"
-      ],
+      "typeTags": [],
       "requiredTypeTags": [],
       "outputTypeTags": [],
       "stateEffect": "none"
@@ -1737,7 +1661,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Queue a deterministic computation on the 虚拟临床研究 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method (kind). The engine reads only the keys its method names: a key it does not read, a required one that is missing, or a design or endpoint the method does not implement is refused by the field's path -- never guess a key. Before you write a scenario here, or the configuration of a trial scenario, patient set, population or comparator in vcr_write, call action shape with the kind: it answers every key that method reads (type, unit, range, default, required or optional, the endpoint or design it is read for) and a valid example; shape with no kind lists the kinds. Patient-level kinds name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence is evidence_pool and match_criteria is built by the platform from the protocol; maic_time_to_event_comparator takes reconstructionResultId, never rows. A computation of one of the study's objects (a trial scenario, population, patient set, comparator or design grid) names it: subjectId is the id vcr_write returned, and its result is filed under that object alone; with none, the one object the scenario fits is taken, and several are refused with the list. How to read the results is in the vcr-analysis skill.For matching, selection names one protocolVersionId or up to ten protocolVersionIds, subjectKeys and direction; continue a frozen batch with snapshotId and offset. ",
+      "description": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1754,6 +1678,8 @@
           "kind": {
             "type": "string",
             "enum": [
+              "fit_survival_model",
+              "apply_prognostic_model",
               "profile_snapshot",
               "build_cohort",
               "generate_population",
@@ -1822,57 +1748,20 @@
             "minLength": 1,
             "maxLength": 120
           },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "modelVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$"
+          },
           "selection": {
-            "type": "object",
-            "properties": {
-              "protocolVersionId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "protocolVersionIds": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 10,
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 160,
-                  "pattern": "^[A-Za-z0-9_.:@-]+$"
-                }
-              },
-              "subjectKeys": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 5000,
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 160,
-                  "pattern": "^[A-Za-z0-9_.:@-]+$"
-                }
-              },
-              "direction": {
-                "type": "string",
-                "enum": [
-                  "trial_to_patient",
-                  "patient_to_trial"
-                ]
-              },
-              "asOf": {
-                "type": "string"
-              },
-              "offset": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "snapshotId": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              }
-            },
-            "additionalProperties": false
+            "type": "object"
           },
           "reconstructionResultId": {
             "type": "string",
@@ -1906,13 +1795,15 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a regulatory contact, the protocol's visit schedule (soa, one visit per item), a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) and question. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous, generate_patients_binary or generate_patients_longitudinal (a trajectory over a visit schedule) for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written. what: candidate_trial writes a registry trial found for a patient: items [{registryId, criteria, subjectKeys}] -- the platform reads the trial's title, phase, status and sites from the registry, judges the named patients against the criteria (its eligibility lines, in the same shape as a protocol's) and ranks the trials; a language criterion of a trial is answered with what: language_judgment and candidateTrialId. what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; actual effects are read from preserved evidence. Never generate the file's predictions yourself.",
+      "description": "Save a research object; candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "what": {
             "type": "string",
             "enum": [
+              "task_context",
+              "patient_context",
               "definition",
               "protocol",
               "criteria",
@@ -1932,8 +1823,6 @@
               "plan",
               "fact",
               "language_judgment",
-              "site",
-              "followup",
               "field_map",
               "pack",
               "model_assessment",
@@ -1947,8 +1836,6 @@
           },
           "items": {
             "type": "array",
-            "minItems": 1,
-            "maxItems": 200,
             "items": {
               "type": "object"
             }
@@ -1976,7 +1863,7 @@
     {
       "name": "mcp__evimed__web_read",
       "source": "mcp",
-      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a snapshot with a sha256 receipt. The page itself can be the primary source: an official site, documentation, a release note, a policy text. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
+      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a snapshot with a sha256 receipt. The page itself can be the primary source: an official site, documentation, a release note, a policy text. A long page returns its opening and an outline of the saved file (read sections of it by line range); page=N pages through the text. Pages from regulators, guideline bodies and trial registries are marked official.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1988,7 +1875,8 @@
           "page": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000
+            "maximum": 1000,
+            "description": "Default 1. A long page's page 1 is its opening and an outline; page N returns the N-th 12,000-character slice of the text."
           }
         },
         "additionalProperties": false,

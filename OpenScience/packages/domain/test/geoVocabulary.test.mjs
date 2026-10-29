@@ -125,6 +125,8 @@ test("the tools narrate in the page's words, and an unknown `what` narrates as d
   assert.equal(narrateToolCall("mcp__evimed__geo_write", { what: "toString" }).text, "写入循证 GEO 项目：数据");
   assert.equal(narrateToolCall("mcp__evimed__social_posts_search", { query: "降糖药" }, { data: { posts: [{}, {}] } }).text,
     "采集社媒真实问法：「降糖药」 → 2 条");
+  // Read on by job id, the call has no query to quote.
+  assert.equal(narrateToolCall("mcp__evimed__social_posts_search", { jobId: "a".repeat(32) }, { data: { posts: [{}] } }).text, "继续读取社媒采集结果 → 1 条");
 });
 
 test("the tool codes are classified for a run, the route codes are registered, and each family answers only its own", () => {

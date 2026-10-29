@@ -11,7 +11,7 @@ import {
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
 } from "./security.mjs";
-import { userLibraryDir } from "./libraryService.mjs";
+import { projectLibraryViewDir } from "./libraryScope.mjs";
 
 export const KNOWLEDGE_BASE_DIR = "knowledge-base";
 // One name for the directory: the root prompt below, the delegation prompt the
@@ -177,13 +177,13 @@ function originOf(origin) {
 /** What a source's recorded state means to a reader. */
 const SOURCE_STATE_TEXT = Object.freeze({ retracted: "已撤稿", changed: "已更正或数据已修订", expired: "已失效" });
 
-/** How many documents the account's personal library holds on disk — what a
- *  run finds under library/, where the runtime mounts it read-only.
- * @param {any} config @param {unknown} userId */
-async function libraryDocumentCount(config, userId) {
-  if (!config?.dataDir || typeof userId !== "string" || !userId) return 0;
+/** How many documents of the personal library apply to this project, on disk — what a
+ *  run finds under library/, where the runtime mounts the project's view of it read-only.
+ * @param {any} config @param {unknown} userId @param {unknown} projectId */
+async function libraryDocumentCount(config, userId, projectId) {
+  if (!config?.dataDir || typeof userId !== "string" || !userId || typeof projectId !== "string" || !projectId) return 0;
   try {
-    const entries = await fs.readdir(userLibraryDir(config, userId), { withFileTypes: true });
+    const entries = await fs.readdir(projectLibraryViewDir(config, userId, projectId), { withFileTypes: true });
     return entries.filter((entry) => entry.isDirectory() && /^src_[a-f0-9]{32}$/.test(entry.name)).length;
   } catch {
     return 0;
@@ -295,7 +295,7 @@ export async function prepareResearchContext(
   // a small library with the files to read whole, a large one with passages.
   // The account's personal library is named the same way once it holds
   // anything: read-only under library/, and inside `kb_search`'s scope.
-  const libraryCount = await libraryDocumentCount(config, project.userId);
+  const libraryCount = await libraryDocumentCount(config, project.userId, project.id);
   const knowledgeInstruction = knowledge.count > 0 || libraryCount > 0
     ? (knowledge.count > 0 ? `个人知识库已同步到工作区的 ${RUNTIME_KNOWLEDGE_DIR}/（${knowledge.count} 个文件，解析后的正文在 .evimed-derived/*/index.md）。` : "")
       + (libraryCount > 0 ? `跨项目的个人资料库有 ${libraryCount} 份文档，只读，在工作区的 library/*/index.md。` : "")

@@ -47,6 +47,7 @@ const CHECK_LABELS: Record<string, string> = {
   geo: "循证 GEO",
   credits: "额度",
   vcr: "虚拟临床研究",
+  researchDb: "研究数据库导入",
 };
 
 /** What a row says when the registry has no sentence for the code the server sent: that there is something, and where to read it. */

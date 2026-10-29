@@ -130,5 +130,9 @@ export function createIncumbents({ config, meter }) {
       const value = { leakage: legacyRegisterPattern.test(example.input.line) };
       return { value, ms: Date.now() - started, cost: 0, billedCny: 0, failure: null };
     },
+    // The harm check on a method before it joins the platform pack had no second pass without Jev: a method that passed the other
+    // gates went on as it was (`officialPromotion.mjs`, a judge that gives no answer flags nothing). Scored as the verdict "not harmful"
+    // for every method; it costs nothing and takes no time.
+    J23: async () => ({ value: { harmful: false }, ms: 0, cost: 0, billedCny: 0, failure: null }),
   };
 }

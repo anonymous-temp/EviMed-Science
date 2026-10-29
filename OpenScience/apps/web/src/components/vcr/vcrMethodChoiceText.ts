@@ -4,7 +4,7 @@ import {
   VCR_CRITERION_TYPE_LABELS_ZH, VCR_CRITERION_STATE_LABELS_ZH, VCR_MISSING_REASON_LABELS_ZH,
   VCR_VALUE_SOURCE_LABELS_ZH, VCR_INTERVAL_KIND_LABELS_ZH,
 } from "@evimed/domain";
-import type { Schema } from "./VcrScenarioEditor";
+import type { Schema } from "./vcrScenarioFieldLabels";
 
 // Closed protocol labels only. User categories, column names, source names and saved codes are never rewritten.
 const labels: Record<string, string> = {

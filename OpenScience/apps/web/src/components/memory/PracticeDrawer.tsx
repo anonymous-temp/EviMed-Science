@@ -93,7 +93,7 @@ function PracticeDrawerView({ view }: { view: PracticeView }) {
                   {/* A version written only for the model (no summary, no steps in the researcher's words) has nothing to read: its line stands without 「查看」. */}
                   <span>{[`第 ${version.version} 版`, formatDay(version.at)].filter(Boolean).join(" · ")}{readable(version) ? " · " : ""}</span>
                   {readable(version) && <button type="button" aria-expanded={reading === version.version} onClick={() => setReading(reading === version.version ? null : version.version)}
-                    className="text-accent hover:underline">{reading === version.version ? "收起" : "查看"}</button>}
+                    className="rounded text-accent underline underline-offset-4 hover:decoration-2">{reading === version.version ? "收起" : "查看"}</button>}
                   {readable(version) && reading === version.version && (
                     <div className="mt-2 space-y-2 border-l border-border pl-3">
                       {version.summary && <p className="text-ui text-text">{version.summary}</p>}

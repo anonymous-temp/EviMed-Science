@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createVcrStudy, queueVcrJob, saveVcrMethodConfiguration, getVcrMethodResult, getVcrMethodConfiguration, cancelVcrJob, confirmVcrBudget, contactVcrReferral, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
+  createVcrStudy, queueVcrJob, saveVcrMethodConfiguration, getVcrMethodResult, getVcrMethodConfiguration, cancelVcrJob, confirmVcrBudget, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
   getVcrPatients, getVcrPopulation, getVcrPrecedents, getVcrStudy, getVcrTrial, patchVcrStudy, readVcrCounts, readVcrValue, recordVcrDecision,
-  saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers, transitionVcrReferral,
-  adoptVcrModel, getVcrReferrals, overrideVcrJudgment, readVcrReferrals, reviewVcrAssessment,
+  saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers,
+  adoptVcrModel, overrideVcrJudgment, reviewVcrAssessment,
   readVcrComparator, readVcrData, readVcrHome, readVcrMatching, readVcrModels, readVcrPatients, readVcrPopulation, readVcrStudy, readVcrTrial,
   runVcrTrialSearch,
 } from "./vcrClient";
@@ -45,7 +45,7 @@ describe("the readers over the server's own pages", () => {
     expect(patients.sensitivity?.base?.value).toBe(0.41);
 
     const comparator = await getVcrComparator(STUDY_ID);
-    expect(comparator.routes).toHaveLength(4);
+    expect(comparator.routes).toHaveLength(5);
     expect(comparator.dimensions).toHaveLength(10);
     expect(comparator.gaps?.items).toHaveLength(3);
     expect(comparator.curves.every((curve) => curve.points.length > 0)).toBe(true);
@@ -59,7 +59,7 @@ describe("the readers over the server's own pages", () => {
     const matching = await getVcrMatching(STUDY_ID);
     expect(matching.candidates.length).toBeGreaterThan(0);
     expect(matching.selected?.criteria.length).toBe(6);
-    expect(matching.ledger?.length).toBe(11);
+    expect(matching).not.toHaveProperty("ledger");
 
     const data = await getVcrData(STUDY_ID);
     expect(data.assumptions.map((card) => card.key)).toContain("control_median_pfs");
@@ -74,7 +74,7 @@ describe("the readers over the server's own pages", () => {
     const home = await getVcrHome();
     expect(home.studies).toHaveLength(2);
     expect(home.studies.every((study) => typeof study.tier === "string" && typeof study.updatedAt === "string")).toBe(true);
-    expect(home.todos?.length).toBeGreaterThan(0);
+    expect(home).not.toHaveProperty("todos");
   });
 });
 
@@ -204,8 +204,8 @@ describe("the patient's trials", () => {
 
 describe("the routes the client calls, and the bodies it posts", () => {
   it("reads a tab with its view and candidate, and the precedents with the server's own query word", async () => {
-    await getVcrMatching(STUDY_ID, { view: "referral", candidate: "P-0192" });
-    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/matching?view=referral&candidate=P-0192`);
+    await getVcrMatching(STUDY_ID, { view: "matching", candidate: "P-0192" });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/matching?view=matching&candidate=P-0192`);
     await getVcrPrecedents({ q: "NCT" });
     expect(network.productRequest).toHaveBeenCalledWith("/vcr/precedents?q=NCT");
     await getVcrPrecedents();
@@ -228,13 +228,11 @@ describe("the routes the client calls, and the bodies it posts", () => {
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/assumptions`, "POST", { key: "control_median_pfs", pointValue: 4.2 });
   });
 
-  it("confirms a contact on the person's referral, cancels a job, exports, and cannot put a budget in the settings", async () => {
-    await contactVcrReferral(STUDY_ID, "ref_seed_1", { note: "已确认" });
+  it("cancels a job, exports, and cannot put a budget in the settings", async () => {
     network.productRequest.mockResolvedValueOnce({ job: { id: "job_seed_16", kind: "generate_patients_binary", state: "canceled" }, canceled: true });
     expect((await cancelVcrJob(STUDY_ID, "job_seed_16")).state).toBe("canceled");
     const answer = await exportVcrStudy(STUDY_ID, "study_package");
     await patchVcrStudy(STUDY_ID, { status: "paused", budget: { limitSeconds: 1 } } as never);
-    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/referrals/ref_seed_1/contact`, "POST", { note: "已确认" });
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/jobs/job_seed_16/cancel`, "POST", {});
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/export`, "POST", { kind: "study_package" });
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}`, "PATCH", { status: "paused" });
@@ -242,7 +240,7 @@ describe("the routes the client calls, and the bodies it posts", () => {
   });
 });
 
-describe("members and the referral ledger", () => {
+describe("study membership", () => {
   it("reads the members as the route lists them, and drops a row with no account", async () => {
     installVcrServer(network.productRequest, {
       [`GET /vcr/studies/${STUDY_ID}/members`]: { members: [
@@ -261,33 +259,12 @@ describe("members and the referral ledger", () => {
   });
 
   it("adds a role with { userId, role } and removes one through ?role=, encoding what it puts in the path", async () => {
-    await setVcrMembers(STUDY_ID, { userId: "u_site", role: "site", detail: { siteId: "ste_01" } });
+    await setVcrMembers(STUDY_ID, { userId: "u_clinical", role: "clinical_reviewer" });
     await removeVcrMember(STUDY_ID, "u_stat", "statistical_reviewer");
     await removeVcrMember(STUDY_ID, "u_stat");
-    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members`, "POST", { userId: "u_site", role: "site", detail: { siteId: "ste_01" } });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members`, "POST", { userId: "u_clinical", role: "clinical_reviewer" });
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members/u_stat?role=statistical_reviewer`, "DELETE");
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members/u_stat`, "DELETE");
-  });
-
-  it("moves a referral through its own route, with only the keys the route lists", async () => {
-    await transitionVcrReferral(STUDY_ID, "ref_seed_1", { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
-    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/referrals/ref_seed_1/transition`, "POST",
-      { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
-  });
-
-  it("reads the ledger's rows as the route answers them, and drops a row with no id", async () => {
-    const referrals = await getVcrReferrals(STUDY_ID);
-    expect(referrals.map((row) => [row.id, row.subjectKey, row.state, row.assessmentId])).toEqual([
-      ["ref_seed_1", "P-0192", "contactable", "asm_P-0192"], ["ref_seed_2", "P-0201", "contacted", "asm_P-0201"],
-      ["ref_seed_3", "P-0177", "needs_evidence", "asm_P-0177"], ["ref_seed_4", "P-0150", "enrolled", "asm_P-0150"],
-    ]);
-    expect(referrals[1].contactApprovedBy).toBe("coordinator-1");
-    expect(referrals[1].contactApprovedByName).toBe("周协调员");
-    expect(referrals[0].contactApprovedByName).toBeNull();
-    expect(readVcrReferrals(null)).toEqual([]);
-    expect(readVcrReferrals({ referrals: [{ subjectKey: "x" }, "no", { id: "r", subjectKey: "y" }] }).map((row) => row.id)).toEqual(["r"]);
-    await getVcrReferrals(STUDY_ID, { state: "contactable" });
-    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/referrals?state=contactable`);
   });
 
   it("re-judges one rule and countersigns one assessment by the ids in the path, and adopts a model through the library route", async () => {
@@ -357,4 +334,19 @@ it("uses the public reconstruction selection in prepare and the real queue body,
   expect(network.productRequest).toHaveBeenLastCalledWith("/vcr/studies/study_1/jobs", "POST", { kind: "maic_time_to_event_comparator", subjectId: "maic_1", scenario, inputs: [{ kind: "snapshot", id: "snapshot_1" }], reconstructionResultId: "reconstruction_1" });
   network.productRequest.mockResolvedValue({ reconstructionResultId: "original_reconstruction", reconstructionResultAvailable: false, scenario });
   expect(await getVcrMethodConfiguration("study_1", "old_maic")).toMatchObject({ reconstructionResultId: "original_reconstruction", reconstructionResultAvailable: false, scenario });
+});
+
+it("preserves task-purpose research contexts in study and home readers", () => {
+  const raw = { ...fixture("ev201/study.json"), purpose: "task", definition: null };
+  expect(readVcrStudy(raw).purpose).toBe("task");
+  expect(readVcrHome({ studies: [raw] }).studies[0].purpose).toBe("task");
+  expect(readVcrStudy({ ...raw, purpose: "unknown" }).purpose).toBe("programme");
+});
+it("drops retired operational fields from old matching payloads while preserving criterion evidence", () => {
+  const raw = fixture("ev201/matching-p0192.json");
+  const parsed = readVcrMatching({ ...raw, view: "referral", ledger: [{ state: "contactable" }], forecast: {}, sites: [], followup: [], selected: { ...raw.selected, canContact: true, referralId: "retired", trace: [] } });
+  expect(parsed.view).toBe("matching");
+  expect(parsed.selected?.criteria).toEqual(raw.selected.criteria);
+  for (const key of ["ledger", "forecast", "sites", "followup"]) expect(parsed).not.toHaveProperty(key);
+  for (const key of ["canContact", "referralId", "trace"]) expect(parsed.selected).not.toHaveProperty(key);
 });

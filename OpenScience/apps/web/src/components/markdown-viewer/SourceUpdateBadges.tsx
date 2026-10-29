@@ -2,8 +2,7 @@ import { FileWarning } from "lucide-react";
 import { SOURCE_UPDATE_LABELS_ZH, SOURCE_UPDATE_WEIGHT } from "@evimed/domain";
 import type { SourceUpdate, SourceUpdateStatus } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
-import { tagClasses } from "@/components/ui/Tag";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { Tag } from "@/components/ui/Tag";
 
 /**
  * Retraction and correction notices on a cited work (plan §3.9), read from
@@ -26,11 +25,12 @@ export function SourceUpdateBadges({ updates, updateStatus, className }: {
   if (shown.length === 0 && !updateStatus) return null;
   return (
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
-      {updateStatus && <Tooltip content={updateStatus.checkedAt ? `查询于 ${new Date(updateStatus.checkedAt).toLocaleString("zh-CN")}` : "尚无可用的查询时间"}>
-        <span className={tagClasses({ tone: updateStatus.state === "unavailable" || updateStatus.state === "changed" ? "warn" : "neutral" })}>
+      {updateStatus && (
+        <Tag tone={updateStatus.state === "unavailable" || updateStatus.state === "changed" ? "warn" : "neutral"}
+          title={updateStatus.checkedAt ? `查询于 ${new Date(updateStatus.checkedAt).toLocaleString("zh-CN")}` : "尚无可用的查询时间"}>
           {({ no_update: "未发现更新", changed: "文献有更新", unknown: "更新状态未知", unavailable: "更新查询不可用" })[updateStatus.state]}
-        </span>
-      </Tooltip>}
+        </Tag>
+      )}
       {shown.map((update, index) => {
         const label = SOURCE_UPDATE_LABELS_ZH[update.kind as keyof typeof SOURCE_UPDATE_LABELS_ZH];
         const withdrawn = SOURCE_UPDATE_WEIGHT[update.kind as keyof typeof SOURCE_UPDATE_WEIGHT] === "withdrawn";
@@ -38,29 +38,18 @@ export function SourceUpdateBadges({ updates, updateStatus, className }: {
         const recorder = update.source === "retraction-watch" ? "据 Retraction Watch 记录" : update.source === "publisher" ? "据出版方记录" : null;
         const text = `${label}${update.date ? ` · ${update.date}` : ""}`;
         const title = `该文献${label}${update.date ? `（${update.date}）` : ""}${recorder ? `，${recorder}` : ""}。`;
-        // A retraction is a safety tag; a correction or an expression of
-        // concern the amber one. Never a hand-made pill (2026-09-23 plan §4).
-        const chip = cn(tagClasses({ tone: withdrawn ? "safety" : "warn" }), "gap-0.5");
-        // The chip says it in two words; the tooltip says the sentence (the
-        // link already carries it as its name, so there it is shown, not read twice).
-        return update.noticeDoi ? (
-          <Tooltip key={`${update.kind}:${update.noticeDoi}:${index}`} content={title} kind="label">
-            <a
-              href={`https://doi.org/${update.noticeDoi}`}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`${title}查看声明`}
-              className={cn(chip, "hover:underline")}
-            >
+        // A retraction is a safety tag; a correction or an expression of concern the amber one. The tag is a label and is not
+        // clickable: the notice it names is a link of its own beside it, whose name is the whole sentence.
+        return (
+          <span key={`${update.kind}:${update.noticeDoi ?? ""}:${index}`} className="inline-flex items-center gap-1">
+            <Tag tone={withdrawn ? "safety" : "warn"} title={title} className="gap-0.5">
               <FileWarning size={16} aria-hidden="true" />{text}
-            </a>
-          </Tooltip>
-        ) : (
-          <Tooltip key={`${update.kind}:${index}`} content={title}>
-            <span className={chip}>
-              <FileWarning size={16} aria-hidden="true" />{text}
-            </span>
-          </Tooltip>
+            </Tag>
+            {update.noticeDoi && (
+              <a href={`https://doi.org/${update.noticeDoi}`} target="_blank" rel="noreferrer" aria-label={`${title}查看声明`}
+                className="text-meta text-link hover:underline">查看声明</a>
+            )}
+          </span>
         );
       })}
     </span>

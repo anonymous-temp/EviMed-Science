@@ -1626,3 +1626,194 @@ class PubTator3Tests(unittest.TestCase):
         evimed.assert_not_called()
         pubmed.assert_not_called()
 
+
+
+def _pubmed_result(*records):
+    """What `_pubmed` returns for the given `(pmid, title, doi)` records."""
+    items = [
+        {"id": "PMID:%s" % pmid, "pmid": pmid, "title": title, **({"doi": doi} if doi else {}), "url": "https://pubmed.ncbi.nlm.nih.gov/%s/" % pmid}
+        for pmid, title, doi in records
+    ]
+    return {
+        "summary": "Retrieved %d traceable PubMed records of 500 matching." % len(items),
+        "data": {"items": items, "total": 500, "outcome": {"state": "more_available", "returned": len(items), "total": 500}},
+        "sources": [{"id": item["id"], "source": "pubmed", "retrievedAt": "2026-10-28T00:00:00Z"} for item in items],
+    }
+
+
+def _index_payload(*records):
+    return {"code": 200, "data": {"total": len(records), "list": list(records)}}
+
+
+class LiteratureDefaultMergesPubMedAndTheIndex(unittest.TestCase):
+    """With no `databases`, literature_search leads with PubMed's Best Match and adds the EviMed index's records (2026-10-28)."""
+
+    def search(self, pubmed, index, **arguments):
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_pubmed", return_value=pubmed) as pubmed_call, \
+             mock.patch.object(sources, "_get_json", return_value=index):
+            result = sources.literature({"query": "metformin pcos", "limit": 5, **arguments})
+        self.pubmed_call = pubmed_call
+        return result
+
+    def test_pubmed_records_come_first_then_the_index_records_pubmed_did_not_return(self):
+        result = self.search(
+            _pubmed_result(("1", "Metformin in PCOS", None), ("2", "Second trial", None)),
+            _index_payload(
+                {"id": "ix-a", "title": "An index-only paper", "url": "https://pubmed.ncbi.nlm.nih.gov/91/"},
+                {"id": "ix-b", "title": "Another index-only paper", "url": "https://pubmed.ncbi.nlm.nih.gov/92/"},
+            ),
+        )
+        self.assertEqual(
+            [item["id"] for item in result["data"]["items"]],
+            ["PMID:1", "PMID:2", "EVIMED-LITERATURE:ix-a", "EVIMED-LITERATURE:ix-b"],
+        )
+        self.assertEqual([source["id"] for source in result["sources"]], ["PMID:1", "PMID:2", "EVIMED-LITERATURE:ix-a", "EVIMED-LITERATURE:ix-b"])
+        self.assertEqual(result["status"], "warning")
+        # PubMed is asked as the PubMed route is: the query, the limit, and the dates (Best Match is `_pubmed`'s own sort).
+        self.assertEqual(self.pubmed_call.call_args.args[:2], ("metformin pcos", 5))
+        self.assertNotIn("offset", self.pubmed_call.call_args.kwargs)
+        # PubMed's own paging facts stay on the result, so the model can continue it by offset.
+        self.assertEqual(result["data"]["total"], 500)
+        self.assertEqual(result["data"]["outcome"]["state"], "more_available")
+        # How many came from each, said once, plus how to read an index record whole.
+        self.assertIn("2 records from PubMed", result["warnings"][0])
+        self.assertIn("2 from the EviMed index", result["warnings"][0])
+        self.assertIn("0 index records already returned by PubMed", result["warnings"][0])
+        self.assertTrue(any("literature_search pmids" in warning and 'databases: ["internal"]' in warning for warning in result["warnings"]))
+        self.assertTrue(any("bibliographic metadata only" in warning for warning in result["warnings"]))
+
+    def test_an_index_record_pubmed_already_returned_is_dropped_by_doi_by_pmid_and_by_title(self):
+        result = self.search(
+            _pubmed_result(
+                ("1", "Metformin in PCOS: a randomised trial.", "10.1000/Alpha"),
+                ("2", "Second trial", None),
+                ("3", "Third, trial: of Metformin", "10.1000/gamma"),
+            ),
+            _index_payload(
+                # Same DOI as PMID 1 (case and a doi.org prefix differ); its title differs, the DOI decides.
+                {"id": "dup-doi", "title": "Something else entirely", "doi": "https://doi.org/10.1000/alpha"},
+                # Same publication as PMID 2 by the PubMed link the index carries (no DOI either side).
+                {"id": "dup-pmid", "title": "Reworded", "url": "https://pubmed.ncbi.nlm.nih.gov/2/"},
+                # No DOI and no PubMed link: the normalised title (case, punctuation and spacing) matches PMID 3.
+                {"id": "dup-title", "title": "third TRIAL of metformin"},
+                # Same title as PMID 1 but a different DOI on both sides: two records, not one.
+                {"id": "other-doi", "title": "metformin in pcos a randomised trial", "doi": "10.1000/other"},
+                {"id": "kept", "title": "An index-only paper"},
+            ),
+        )
+        ids = [item["id"] for item in result["data"]["items"]]
+        self.assertEqual(ids, ["PMID:1", "PMID:2", "PMID:3", "EVIMED-LITERATURE:other-doi", "EVIMED-LITERATURE:kept"])
+        self.assertIn("3 index records already returned by PubMed were dropped as duplicates", result["warnings"][0])
+        self.assertEqual([source["id"] for source in result["sources"]], ids, "a dropped record leaves no source behind")
+
+    def test_an_index_record_is_compact_and_says_how_to_get_the_whole_record(self):
+        long_abstract = "A" * 5000
+        result = self.search(
+            _pubmed_result(("1", "Metformin in PCOS", None)),
+            _index_payload({
+                "id": "ix", "title": "Index paper", "abstract": long_abstract, "aiSummary": "An AI summary.",
+                "journal": "J", "year": 2024, "url": "https://pubmed.ncbi.nlm.nih.gov/9/",
+            }),
+        )
+        item = result["data"]["items"][1]
+        self.assertEqual(item["abstract"], "A" * 800 + "\u2026")
+        self.assertNotIn("aiSummary", item)
+        self.assertEqual((item["journal"], item["year"], item["url"]), ("J", 2024, "https://pubmed.ncbi.nlm.nih.gov/9/"))
+        self.assertTrue(any("cut to 800 characters" in warning and "url" in warning for warning in result["warnings"]))
+        # An abstract that fits is not marked as cut.
+        short = self.search(_pubmed_result(("1", "t", None)), _index_payload({"id": "s", "title": "Short", "abstract": "B" * 800}))
+        self.assertEqual(short["data"]["items"][1]["abstract"], "B" * 800)
+
+    def test_the_index_alone_keeps_its_full_payload(self):
+        payload = _index_payload({"id": "ix", "title": "Index paper", "abstract": "A" * 5000, "aiSummary": "S" * 500})
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_pubmed", side_effect=AssertionError("PubMed is not asked when the index answers alone")), \
+             mock.patch.object(sources, "_get_json", return_value=payload):
+            result = sources.literature({"query": "q", "limit": 5, "databases": ["internal"]})
+        item = result["data"]["items"][0]
+        self.assertEqual((len(item["abstract"]), item["aiSummary"]), (5000, "S" * 500))
+
+    def test_pubmed_alone_keeps_the_pubmed_only_path_and_naming_both_is_the_default(self):
+        with mock.patch.object(sources, "_evimed_literature_records", side_effect=AssertionError("the index is not asked")), \
+             mock.patch.object(sources, "_pubmed", return_value=_pubmed_result(("1", "t", None))):
+            only = sources.literature({"query": "q", "limit": 5, "databases": ["pubmed"]})
+        self.assertEqual([item["id"] for item in only["data"]["items"]], ["PMID:1"])
+        explicit = self.search(
+            _pubmed_result(("1", "Metformin in PCOS", None)),
+            _index_payload({"id": "ix", "title": "Index paper"}),
+            databases=["internal", "pubmed"],
+        )
+        self.assertEqual([item["id"] for item in explicit["data"]["items"]], ["PMID:1", "EVIMED-LITERATURE:ix"])
+
+    def test_an_offset_pages_pubmed_alone(self):
+        with mock.patch.object(sources, "_evimed_literature_records", side_effect=AssertionError("the index has no offset")), \
+             mock.patch.object(sources, "_pubmed", return_value=_pubmed_result(("7", "t", None))) as pubmed:
+            result = sources.literature({"query": "q", "limit": 5, "offset": 5})
+        self.assertEqual(pubmed.call_args.kwargs["offset"], 5)
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["PMID:7"])
+        self.assertIn("the EviMed index was not asked", " ".join(result["warnings"]))
+
+    def test_the_required_concept_filters_work_on_both_parts(self):
+        result = self.search(
+            _pubmed_result(("1", "Weight management outcomes", None), ("2", "Semaglutide for chronic weight management", None)),
+            _index_payload(
+                {"id": "off", "title": "Liraglutide and weight", "abstract": "Semaglutide is mentioned in passing."},
+                {"id": "on", "title": "Semaglutide in obesity", "abstract": "A randomised study of obesity."},
+            ),
+            requiredConcepts=["semaglutide", "obesity"],
+            requiredTitleConcepts=["semaglutide"],
+        )
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["PMID:2", "EVIMED-LITERATURE:on"])
+        self.assertTrue(any("bibliographic candidates" in warning for warning in result["warnings"]), "PubMed titles filtered")
+        self.assertTrue(any("Excluded 1" in warning for warning in result["warnings"]), "index candidates filtered")
+        self.assertEqual(result["data"]["excludedByRequiredConcepts"], 1)
+
+    def test_when_the_index_fails_pubmed_is_returned_with_the_reason(self):
+        outage = sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 502.", True)
+        with mock.patch.object(sources, "_evimed_literature_records", side_effect=outage), \
+             mock.patch.object(sources, "_evimed_evidence_records", side_effect=outage), \
+             mock.patch.object(sources, "_pubmed", return_value=_pubmed_result(("1", "t", None))):
+            result = sources.literature({"query": "q", "limit": 5})
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["PMID:1"])
+        self.assertIn("EviMed evidence search was unavailable", result["warnings"][0])
+
+    def test_when_the_index_fails_but_its_legacy_endpoint_answers_those_records_follow_pubmed_compactly(self):
+        outage = sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 502.", True)
+        legacy = {"code": 200, "data": {"paper": [{"id": "L1", "title": "Legacy paper", "summary": "S" * 3000, "pmid": "55"}]}}
+
+        def post(path, body):
+            if path.startswith("review/api/literature"):
+                raise outage
+            return legacy["data"], path
+
+        with mock.patch.object(sources, "_evimed_post", side_effect=post), \
+             mock.patch.object(sources, "_pubmed", return_value=_pubmed_result(("1", "t", None))):
+            result = sources.literature({"query": "q", "limit": 5})
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["PMID:1", "EVIMED-PAPER:L1"])
+        self.assertEqual(result["data"]["items"][1]["summary"], "S" * 800 + "\u2026")
+        self.assertTrue(any("documented EviMed literature endpoint was unavailable" in warning for warning in result["warnings"]))
+
+    def test_when_pubmed_fails_the_index_records_are_returned_with_the_reason(self):
+        outage = sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 503.", True)
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_pubmed", side_effect=outage), \
+             mock.patch.object(sources, "_get_json", return_value=_index_payload({"id": "ix", "title": "Index paper", "abstract": "A" * 2000})):
+            result = sources.literature({"query": "q", "limit": 5})
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["EVIMED-LITERATURE:ix"])
+        self.assertEqual(len(result["data"]["items"][0]["abstract"]), 801)
+        self.assertIn("PubMed was unavailable", result["warnings"][0])
+        self.assertIn("HTTP 503", result["warnings"][0])
+
+    def test_when_both_fail_it_is_pubmeds_error(self):
+        pubmed_down = sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 503.", True)
+        with mock.patch.object(sources, "_evimed_literature_records", side_effect=sources.SourceNotConfigured("evimed-evidence", "EviMed")), \
+             mock.patch.object(sources, "_pubmed", side_effect=pubmed_down):
+            with self.assertRaises(sources.PublicSourceError) as raised:
+                sources.literature({"query": "q", "limit": 5})
+        self.assertIs(raised.exception, pubmed_down)
+
+    def test_an_empty_index_answer_returns_pubmed_alone_with_the_empty_warning(self):
+        result = self.search(_pubmed_result(("1", "t", None)), _index_payload())
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["PMID:1"])
+        self.assertIn("EviMed literature search returned no records", result["warnings"][0])

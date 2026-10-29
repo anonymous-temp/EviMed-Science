@@ -26,12 +26,17 @@ import { cn } from "@/lib/cn";
  *   「›」 when it opens something (`to`, or `onOpen` without `expanded`: a drawer, a
  *   page, a conversation), 「⌄」 turned over while open when it expands in place
  *   (`onOpen` with `expanded` defined), 「↗」 when it leaves for an outside address
- *   (`href`, a new tab: a different arrow, because the reader does not stay).
+ *   (`href`, a new tab: a different arrow, because the reader does not stay) and for a route that leaves the section the list is in (`leaves`).
  *   A page does not draw its own arrow; `chevron={false}` is for the row whose press
  *   is not an opening (a 「返回上级」 row).
  * - **`trailing` does not swallow the press.** Text, a time or a Tag there lets the
  *   click through to the row; a real control placed there (a switch, a button) stays
  *   clickable. `actions` and `menu` are the places a control belongs.
+ * - **The second line (`meta`) and `leading` are the same.** Text there opens the row like
+ *   any other part of it; a real control inside (a retry button, a link to a passage, a
+ *   selection checkbox) stays above the stretched title and keeps its own press. A row
+ *   whose second line carries an identifier to copy sets `metaSelectable`: that line
+ *   then takes the pointer for itself (text can be selected, nothing opens).
  * - **What a row opens answers what the row says** (page-structure rule 6): a row
  *   with a count opens the things counted; a row that has nothing to open is not given
  *   `onOpen`.
@@ -43,6 +48,18 @@ import { cn } from "@/lib/cn";
  * button of its own (a red count that opens the thing counted); a cell without one lets
  * the press through to the row. Under 640 px the header becomes a line of sort buttons
  * and each row's cells wrap under its title, each with its label.
+ */
+/**
+ * Component: List; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named ul containing caller list items.
+ * Variants: Optional divided rows.
+ * States: Static list; children own loading/selection.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: No clipping or pagination added.
+ * Theme: Optional border dividers; no independent color.
+ * Responsive: Vertical flex list fills parent.
+ * Verification: Primitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
 export function List({
   label,
@@ -98,6 +115,18 @@ const CONTROLS = "[&_:is(a,button,input,select,textarea,label,[role=switch],[rol
  * carries an arrow (shape, not only colour) and `aria-pressed`; pressing the active column again reverses it.
  * The page owns the order — this only reports which column was pressed.
  */
+/**
+ * Component: ListHeader; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Column labels with optional sort buttons and direction marks.
+ * Variants: Static or sortable columns.
+ * States: Controlled sort key/direction; active control is aria-pressed.
+ * Hit area: Sort buttons are h-5; touch target remains a manual acceptance concern.
+ * Keyboard: Native sort buttons; no grid traversal.
+ * Long content: Column labels retained; narrow header wraps.
+ * Theme: Secondary captions; active main text.
+ * Responsive: Fixed column widths above sm; auto widths and wrapping below.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ListHeader({
   columns,
   sort,
@@ -143,11 +172,24 @@ export function ListHeader({
   );
 }
 
+/**
+ * Component: ListRow; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: li with semantic primary title, meta, optional cells and independent actions.
+ * Variants: Internal link, external link, button or static row; expanded/unread/muted/selected.
+ * States: Caller owns selected/expanded; no data-fetch state machine.
+ * Hit area: Interactive title stretches across row; action/cell controls sit above it.
+ * Keyboard: Native title and secondary controls; no row tab stop.
+ * Long content: meta and leading let the press through to the row, real controls inside them stay pressable; `metaSelectable` makes an identifier line selectable without opening the row; title identity remains accessible.
+ * Theme: Selected accent-soft ground; ordinary hover surface and semantic text.
+ * Responsive: Cells move below title below sm; row content may wrap.
+ * Verification: DataPrimitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ListRow({
   title,
   to,
   state,
   href,
+  leaves = false,
   onOpen,
   expanded,
   selected = false,
@@ -155,6 +197,7 @@ export function ListRow({
   columns,
   leading,
   meta,
+  metaSelectable = false,
   trailing,
   actions,
   menu,
@@ -170,6 +213,8 @@ export function ListRow({
   state?: unknown;
   /** An outside address the row opens in a new tab. */
   href?: string;
+  /** A route the row opens that leaves the section the list is in (a file's own page from a memory list): its mark is ↗, as an outside address's. */
+  leaves?: boolean;
   /**
    * Opens the row, when it is neither a route nor an address. Beside `to` or
    * `href` it runs as the row is followed: a notice marks itself read on the
@@ -187,10 +232,15 @@ export function ListRow({
   chevron?: boolean;
   /** Numeric columns, right-aligned and in line down the list; the page draws a `ListHeader` over them. */
   columns?: ReadonlyArray<ListCell>;
-  /** Fixed-width content before the title. */
+  /** Fixed-width content before the title. A selection control here keeps its own press; anything else lets it through to the row. */
   leading?: ReactNode;
-  /** The line under the title. */
+  /** The line under the title. A press on its text opens the row; a control inside it keeps its own press. */
   meta?: ReactNode;
+  /**
+   * The line under the title carries an identifier a person copies (a hash, an accession): it takes the pointer, so its text can be
+   * selected, and a press on it does not open the row. Off by default: the whole row is one target.
+   */
+  metaSelectable?: boolean;
   /** Right-aligned, always visible: a time, a score, a switch. */
   trailing?: ReactNode;
   /**
@@ -238,7 +288,7 @@ export function ListRow({
   // What the row does decides its mark: a route or a drawer opens something (›), an in-place row folds (⌄, turned over while
   // open), an outside address leaves (↗). A row with nothing to press has none.
   const mark = chevron === false || !interactive ? null
-    : to ? "open"
+    : to ? (leaves ? "away" : "open")
       : href ? "away"
         : expanded !== undefined ? "fold" : "open";
   const MarkIcon = mark === "away" ? ArrowUpRight : mark === "fold" ? ChevronDown : ChevronRight;
@@ -252,10 +302,23 @@ export function ListRow({
         className,
       )}
     >
-      {leading && <div className="flex shrink-0 items-center self-stretch">{leading}</div>}
+      {leading && (
+        // On a row that can be pressed the stretched title would cover a control here (a selection checkbox): raised above it,
+        // letting through what is only a mark, as `trailing` does.
+        <div data-row-leading="" className={cn("flex shrink-0 items-center self-stretch", interactive && cn("pointer-events-none relative z-sticky", CONTROLS))}>{leading}</div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {heading}
-        {meta && <div className="min-w-0 text-caption text-text-3">{meta}</div>}
+        {meta && (
+          <div
+            data-row-selectable={metaSelectable ? "" : undefined}
+            className={cn(
+              "min-w-0 text-caption text-text-3",
+              // Raised over the stretched title only where the row has one; there, text lets the press through and a control keeps it.
+              interactive && cn("relative z-page", metaSelectable ? "pointer-events-auto select-text" : cn("pointer-events-none", CONTROLS)),
+            )}
+          >{meta}</div>
+        )}
       </div>
       {(trailing || actions || menu) && (
         // Above the stretched title, so a control stays clickable; what is only text lets the press through to the row.

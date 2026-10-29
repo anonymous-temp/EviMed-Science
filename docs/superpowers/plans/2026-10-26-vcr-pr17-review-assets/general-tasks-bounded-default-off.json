@@ -1,0 +1,826 @@
+{
+  "schema_version": 1,
+  "evaluation": "bounded_general_tasks_three_arm",
+  "case_ids_requested": [
+    "G01",
+    "G02",
+    "G05",
+    "G08",
+    "G13",
+    "G16",
+    "M01"
+  ],
+  "repetitions_per_case": 1,
+  "vcr_enabled": false,
+  "model_judge_ran": false,
+  "arms": {
+    "A": {
+      "source_commit": "d757ca09e062f7f0d9c4c8d49c70075f47e9a5df",
+      "working_tree_changes": false,
+      "composition": "neutral persona and seven first-party socket plugins disabled",
+      "general": {
+        "cases": 6,
+        "run_succeeded": 6,
+        "judged_pass": 5,
+        "judged_fail": 1,
+        "judged_unjudged": 0
+      },
+      "medical": {
+        "cases": 0,
+        "run_succeeded": 0,
+        "judged_pass": 0,
+        "judged_fail": 0,
+        "judged_unjudged": 0
+      },
+      "cases": [
+        {
+          "case_id": "G01",
+          "kind": "general",
+          "family": "writing",
+          "record_sha256": "01c1b8aa266f4f26afd61d199e95c6e4b3388d4c39935da5a718231f43bb70e1",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 55295,
+              "observed_tool_calls": 0,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 15,
+            "toolsChars": 12138,
+            "systemChars": 3047
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 8,
+            "checks_required": 8,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G02",
+          "kind": "general",
+          "family": "office-docx",
+          "record_sha256": "105ef02acd1030b321fe0e8e02df9bb9212d1229c48fd82b6a3f716af4cb6b2e",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 191296,
+              "observed_tool_calls": 52,
+              "changed_file_count": 3,
+              "registered_output_count": 3
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 60,
+            "toolsChars": 79458,
+            "systemChars": 3047
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 4,
+            "checks_required": 4,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G05",
+          "kind": "general",
+          "family": "data",
+          "record_sha256": "cb0f80c602fa0d9c5216eeb7f31c0bcb357a22712267de2d3adcde66db1a16f2",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 291582,
+              "observed_tool_calls": 46,
+              "changed_file_count": 4,
+              "registered_output_count": 4
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 60,
+            "toolsChars": 79458,
+            "systemChars": 3047
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 4,
+            "checks_required": 4,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G08",
+          "kind": "general",
+          "family": "office-pdf",
+          "record_sha256": "4ee1ad39f6be69a5609514f6abc17965079a71880e14acc7b3ec2c742ca8a25c",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 269666,
+              "observed_tool_calls": 55,
+              "changed_file_count": 5,
+              "registered_output_count": 5
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 60,
+            "toolsChars": 79458,
+            "systemChars": 3047
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 3,
+            "checks_required": 3,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G13",
+          "kind": "general",
+          "family": "web-lookup",
+          "record_sha256": "f43d5d54dfc28b90d3c584dc7be243eb17a47cf977974eb27c0db30b7ea80137",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 21617,
+              "observed_tool_calls": 6,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 60,
+            "toolsChars": 79458,
+            "systemChars": 3047
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "fail",
+            "checks_passed": 6,
+            "checks_required": 7,
+            "failed_check_ids": [
+              "tools:retrieval"
+            ],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G16",
+          "kind": "general",
+          "family": "web-report",
+          "record_sha256": "00fa8ec6166d350cc80bf04ad5fa788fb31e398029fb91ce77984f8ea85a25a3",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 212677,
+              "observed_tool_calls": 31,
+              "changed_file_count": 1,
+              "registered_output_count": 1
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 60,
+            "toolsChars": 79458,
+            "systemChars": 3047
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 5,
+            "checks_required": 5,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        }
+      ]
+    },
+    "B": {
+      "source_commit": "d757ca09e062f7f0d9c4c8d49c70075f47e9a5df",
+      "working_tree_changes": false,
+      "composition": "baseline composition",
+      "general": {
+        "cases": 6,
+        "run_succeeded": 5,
+        "judged_pass": 4,
+        "judged_fail": 2,
+        "judged_unjudged": 0
+      },
+      "medical": {
+        "cases": 1,
+        "run_succeeded": 1,
+        "judged_pass": 1,
+        "judged_fail": 0,
+        "judged_unjudged": 0
+      },
+      "cases": [
+        {
+          "case_id": "G01",
+          "kind": "general",
+          "family": "writing",
+          "record_sha256": "9d51210ea8fde745095665a74bc9c0d6e2fd10231c45c61c017b71d2db877a9f",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 16390,
+              "observed_tool_calls": 0,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 8,
+            "checks_required": 8,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G02",
+          "kind": "general",
+          "family": "office-docx",
+          "record_sha256": "b7a2797346e43c90c83f2f082cba1d1fa050a38f4487ea4d432227c1c4fe72d6",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 90318,
+              "observed_tool_calls": 27,
+              "changed_file_count": 2,
+              "registered_output_count": 2
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 4,
+            "checks_required": 4,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G05",
+          "kind": "general",
+          "family": "data",
+          "record_sha256": "f7045a69e01aa5322a5d0a92850b420b4c57149f7406766d28090b16adad48f1",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 112398,
+              "observed_tool_calls": 26,
+              "changed_file_count": 3,
+              "registered_output_count": 3
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 4,
+            "checks_required": 4,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G08",
+          "kind": "general",
+          "family": "office-pdf",
+          "record_sha256": "753abc072c054a7c20ddbb03def6ad10de03a7901dcabf5a98051758bb159d2a",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 114167,
+              "observed_tool_calls": 32,
+              "changed_file_count": 3,
+              "registered_output_count": 3
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 3,
+            "checks_required": 3,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G13",
+          "kind": "general",
+          "family": "web-lookup",
+          "record_sha256": "b4a54a3b2d3b22fbbec1953faf67660de505273f204b98683277b23d59ff3d24",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 35278,
+              "observed_tool_calls": 6,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "fail",
+            "checks_passed": 6,
+            "checks_required": 7,
+            "failed_check_ids": [
+              "tools:retrieval"
+            ],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G16",
+          "kind": "general",
+          "family": "web-report",
+          "record_sha256": "43195f653864d756b461829d27911f06ca0f05cf659aaa6bdf3fba8e2a2121d2",
+          "turns": [
+            {
+              "run_status": "canceled",
+              "error_code": "runtime_canceled",
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": true,
+              "elapsed_ms": 311393,
+              "observed_tool_calls": 25,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "fail",
+            "checks_passed": 3,
+            "checks_required": 5,
+            "failed_check_ids": [
+              "run_succeeded",
+              "report_mentions"
+            ],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "M01",
+          "kind": "medical",
+          "family": "medical-qa",
+          "record_sha256": "5222bcf04f38d21bdf24ad6bc90ddc682a1de97161e69337b27c3a0f0543d9a9",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 19385,
+              "observed_tool_calls": 0,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 6,
+            "checks_required": 6,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        }
+      ]
+    },
+    "C": {
+      "source_commit": "78687911a",
+      "working_tree_changes": true,
+      "composition": "PR composition under test",
+      "general": {
+        "cases": 6,
+        "run_succeeded": 5,
+        "judged_pass": 3,
+        "judged_fail": 3,
+        "judged_unjudged": 0
+      },
+      "medical": {
+        "cases": 1,
+        "run_succeeded": 1,
+        "judged_pass": 1,
+        "judged_fail": 0,
+        "judged_unjudged": 0
+      },
+      "cases": [
+        {
+          "case_id": "G01",
+          "kind": "general",
+          "family": "writing",
+          "record_sha256": "15d791c31d2ab0ed096447558d4d4add37483dbb1113be9e20c29615796942c2",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 20123,
+              "observed_tool_calls": 0,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 8,
+            "checks_required": 8,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G02",
+          "kind": "general",
+          "family": "office-docx",
+          "record_sha256": "2735edfab00ae7eb6cdfeccd5ab3c0dd16d6b44999399a1695a36d958906c70a",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 107363,
+              "observed_tool_calls": 24,
+              "changed_file_count": 2,
+              "registered_output_count": 2
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "fail",
+            "checks_passed": 3,
+            "checks_required": 4,
+            "failed_check_ids": [
+              "docx"
+            ],
+            "unjudged_check_ids": [],
+            "failure_categories": [
+              "docx_required_heading_style_missing"
+            ]
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G05",
+          "kind": "general",
+          "family": "data",
+          "record_sha256": "939900e83b5242fbbe9723211c376ab0667c15806d690aef0756a903506444aa",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 131757,
+              "observed_tool_calls": 28,
+              "changed_file_count": 3,
+              "registered_output_count": 3
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 4,
+            "checks_required": 4,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G08",
+          "kind": "general",
+          "family": "office-pdf",
+          "record_sha256": "39bbe6911a0311dc171df11aa0e7b96a7fc6c2b1347e39e70c8549c70ed3f45a",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 154739,
+              "observed_tool_calls": 35,
+              "changed_file_count": 2,
+              "registered_output_count": 2
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 3,
+            "checks_required": 3,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G13",
+          "kind": "general",
+          "family": "web-lookup",
+          "record_sha256": "5db6e4fdd2221ed90761bd9c0057f1f210d3a9450c4501d3090bbda170118cbf",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 21487,
+              "observed_tool_calls": 4,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "fail",
+            "checks_passed": 6,
+            "checks_required": 7,
+            "failed_check_ids": [
+              "tools:retrieval"
+            ],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "G16",
+          "kind": "general",
+          "family": "web-report",
+          "record_sha256": "bf3a208f0cd1b644538a33274133e4cf07d0067e0b7f87f5323829ff5746211d",
+          "turns": [
+            {
+              "run_status": "canceled",
+              "error_code": "runtime_canceled",
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": true,
+              "elapsed_ms": 305353,
+              "observed_tool_calls": 22,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "fail",
+            "checks_passed": 3,
+            "checks_required": 5,
+            "failed_check_ids": [
+              "run_succeeded",
+              "report_mentions"
+            ],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        },
+        {
+          "case_id": "M01",
+          "kind": "medical",
+          "family": "medical-qa",
+          "record_sha256": "f78ba1f724e50c13af3fb066a563b044511ceec5e8d52dc95c4e7d57e1f3e580",
+          "turns": [
+            {
+              "run_status": "succeeded",
+              "error_code": null,
+              "agent_id": "open-domain-answer",
+              "route_reason": "unrouted:open-domain",
+              "test_budget_timed_out": false,
+              "elapsed_ms": 14852,
+              "observed_tool_calls": 0,
+              "changed_file_count": 0,
+              "registered_output_count": 0
+            }
+          ],
+          "first_agent_request": {
+            "model": "deepseek-flash",
+            "tools": 46,
+            "toolsChars": 38528,
+            "systemChars": 7190
+          },
+          "observed_vcr_root_tools": [],
+          "artifact_and_deterministic_judging": {
+            "status": "pass",
+            "checks_passed": 6,
+            "checks_required": 6,
+            "failed_check_ids": [],
+            "unjudged_check_ids": [],
+            "failure_categories": []
+          },
+          "account_cleanup_http_status": 200
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Selected subset only; this is not the full 23-general/6-medical suite.",
+    "A runs six general cases; M01 is compared only between B and C.",
+    "One stochastic sample per case; no general superiority, statistical noninferiority or causal quality regression claim.",
+    "Real DeepSeek and pinned DSH through local control-plane dispatch; host-process sandbox/network and local-library limits differ from production.",
+    "VCR-enabled-account root catalogue/live matching was not qualified by this default-off run.",
+    "The native first-request catalogue varied across cases: G01 had 15 tools and later cases had 60; cross-arm cost comparisons are not a matched catalogue experiment.",
+    "Five-minute per-turn test budgets canceled B/C G16; this does not establish a platform crash."
+  ],
+  "paired_default_off_catalogue": {
+    "cases": [
+      "G01",
+      "G02",
+      "G05",
+      "G08",
+      "G13",
+      "G16",
+      "M01"
+    ],
+    "same_tool_names_and_sizes": true,
+    "tools": 46,
+    "tool_schema_characters": 38528,
+    "system_characters": 7190,
+    "vcr_tools_observed": false
+  },
+  "account_cleanup": {
+    "recorded_cases": 20,
+    "all_http_200": true
+  }
+}

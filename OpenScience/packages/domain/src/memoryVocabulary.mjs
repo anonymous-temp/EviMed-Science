@@ -49,6 +49,7 @@ import { workspaceLayout } from './workspaceLayout.mjs'
  * @type {readonly { tag: string, role: 'injected' | 'user-wrapper', emitters: readonly string[], legacy?: string, upstream?: string }[]}
  */
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
+  { tag: 'evimed-vcr-selection', role: 'injected', emitters: ['apps/server/src/vcrConversationReference.mjs'] },
   { tag: 'evimed_geo_plan_context', role: 'injected', emitters: ['apps/server/src/geoPlanContext.mjs'] },
   { tag: 'evimed-evolution', role: 'injected', emitters: ['apps/server/src/evolutionRuns.mjs'] },
   // The capability handbooks of an account and the platform's on probation, deleted with their arm on 2026-10-25: nothing writes either tag now, and the
@@ -180,6 +181,22 @@ export function carriesPlatformContext(text) {
  */
 export function unwrapUserWrappers(text) {
   return String(text ?? '').replace(tagPattern('user-wrapper'), '').trim()
+}
+
+/**
+ * The one line the platform writes at the head of each batch of a conversation's memory session that holds the person's words, when the
+ * conversation is held in a named project (not the catch-all): the engine is shown which project it belongs to, so a rule the person gives for "this repository" or "this
+ * project" goes on that project's card and not into their preferences, which every conversation is handed (measured on the lab engine
+ * 2026-10-27: c03 wrote a preference 3/3 without it and the project's card with the rule under 约束 3/3 with it; its second sentence says
+ * that a question, a request or the person's background is no description of the project, which a card drawn from a question's topic
+ * still is in about two samples of three of `standing-role-and-focus`). It is the
+ * platform's, said as such, and the templates keep nothing the platform says; the memory gateway writes it and the write-quality
+ * runner replays it for a case held in a named project.
+ * @param {unknown} projectName @returns {string | null} null when there is no name to give
+ */
+export function projectContextLine(projectName) {
+  const name = String(projectName ?? '').replace(/[\r\n「」]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
+  return name ? `（平台信息，不是用户说的话）这段对话在用户的项目「${name}」里进行。用户问的问题、让做的事和讲的个人背景都不是对这个项目的描述。` : null
 }
 
 /**

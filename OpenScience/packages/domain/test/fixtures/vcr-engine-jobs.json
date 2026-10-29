@@ -2769,6 +2769,90 @@
           }
         ]
       }
+    },
+    {
+      "name": "fit_survival_model: published source model contract",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "fit_survival_model",
+        "method": "model.survival_fit",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "timeColumn": "AVAL",
+          "statusColumn": "CNSR",
+          "statusEncoding": "censor",
+          "distribution": "exponential",
+          "timeUnit": "months",
+          "horizons": [
+            6,
+            12
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "apply_prognostic_model: published source model contract",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "sourceCondition": "standard_care",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -3,
+            "terms": [
+              {
+                "column": "age",
+                "coefficient": 0.02,
+                "transform": "identity",
+                "unit": "years",
+                "center": 0,
+                "scale": 1
+              }
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -16346,6 +16430,184 @@
             "location": "std_1/snp_1/subject.csv",
             "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "valueSource": "synthetic"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "fit_survival_model: missing input identity",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "fit_survival_model",
+        "method": "model.survival_fit",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "idColumn": "USUBJID",
+          "timeColumn": "AVAL",
+          "statusColumn": "CNSR",
+          "statusEncoding": "censor",
+          "distribution": "exponential",
+          "timeUnit": "months",
+          "horizons": [
+            6,
+            12
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.inputId"
+      ]
+    },
+    {
+      "name": "fit_survival_model: predicted rows are not target observations",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "fit_survival_model",
+        "method": "model.survival_fit",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "timeColumn": "AVAL",
+          "statusColumn": "CNSR",
+          "statusEncoding": "censor",
+          "distribution": "exponential",
+          "timeUnit": "months",
+          "horizons": [
+            6,
+            12
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "predicted"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "apply_prognostic_model: missing input identity",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "idColumn": "USUBJID",
+          "sourceCondition": "standard_care",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -3,
+            "terms": [
+              {
+                "column": "age",
+                "coefficient": 0.02,
+                "transform": "identity",
+                "unit": "years",
+                "center": 0,
+                "scale": 1
+              }
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.inputId"
+      ]
+    },
+    {
+      "name": "apply_prognostic_model: predicted rows are not target observations",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "sourceCondition": "standard_care",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -3,
+            "terms": [
+              {
+                "column": "age",
+                "coefficient": 0.02,
+                "transform": "identity",
+                "unit": "years",
+                "center": 0,
+                "scale": 1
+              }
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "predicted"
           }
         ]
       },

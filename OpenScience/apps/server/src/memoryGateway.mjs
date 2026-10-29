@@ -1,10 +1,14 @@
-import { carriesPlatformContext, maskIdentifiers, unwrapUserWrappers } from "@evimed/domain";
+import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
+
 import {
   recordGatewayCommit, recordGatewayMasked, recordGatewayMessage, recordGatewayRefusal, recordGatewayRequest,
   recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure, recordRecallNote,
 } from "./nativeMemoryMetrics.mjs";
 import { CORRECTIONS_UNDER_PREFERENCES, DERIVED_INDEX_SEGMENT, OBSERVATIONS_SEGMENT, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
+
+/** The catch-all project: it has no single subject, so its conversations are given no project line (`residentProfile.mjs` names it the same). */
+const CATCH_ALL_PROJECT_ID = "default";
 
 /**
  * The memory gateway: `/internal/memory/v1/…`, the one door between a runtime and OpenViking's native memory engine.
@@ -179,7 +183,11 @@ async function scopedListSearch(sessions, ctx, given) {
   const empty = { memories: [], resources: [], skills: [], total: 0 };
   if (hidden(target)) return ok(empty);
   const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
-  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit, target_uri: target, level: 2 });
+  // The engine ranks before anything is hidden here, and what is hidden includes every other named project's files: asked for exactly `limit`,
+  // a conversation of one project could be answered one visible hit, or none, with its relevant ones ranked just below. So the engine is asked
+  // for more (the most it takes is 100), and the answer is still cut to `limit` below.
+  const asked = excluded.length ? Math.min(100, limit * 4) : limit;
+  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit: asked, target_uri: target, level: 2 });
   if (!answer || answer.error || !answer.result || typeof answer.result !== "object") throw new HttpError(502, "memory_gateway_upstream_invalid", "Native memory search is unavailable.");
   const result = { ...empty };
   let remaining = limit;
@@ -458,6 +466,35 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     return { status: unavailable ? 503 : 502, json: refusal("memory_gateway_upstream_unavailable", "The memory service is not reachable."), outcome: "failed", failure: code || "memory_gateway_upstream_unavailable" };
   }
 
+  /**
+   * The platform's line saying which named project of the personal namespace a conversation is held in (`projectContextLine`), so a rule the
+   * person gives for "this repository" goes on that project's card instead of into their preferences. It is written when the person speaks,
+   * never when the session is made: a session opened without a word, a reopened one, a platform-started turn whose messages are all withheld
+   * would otherwise hold the platform's own line alone, and the engine's idle commit would pay an extraction over it (and could draw a project
+   * card from it). So it goes in just before a user message, and only when no message is pending: the engine's `message_count` is the batch not
+   * yet committed (0 for a new session and right after a commit, `session-read*.json`), and the control plane commits every attended turn, so each
+   * extraction batch that holds a person's message begins with the line and none is made of platform text alone. A session the gateway makes
+   * on demand is new and needs no read. The catch-all names no project, and a shared project's namespace is the project itself. Best effort: a
+   * message without the line is still a message, and the failure is counted.
+   * @param {any} ctx @param {string} sessionId @param {{ created?: boolean }} [options] `created`: the session was made a moment ago
+   */
+  async function noteProjectContext(ctx, sessionId, { created = false } = {}) {
+    if (ctx.shared || !ctx.project || ctx.project.id === CATCH_ALL_PROJECT_ID) return;
+    const line = projectContextLine(ctx.project.name);
+    if (!line) return;
+    try {
+      if (!created) {
+        const pending = Number((await ctx.sessions.readSession(ctx.user.id, sessionId, { timeoutMs: ctx.sessions.fastTimeoutMs }))?.result?.message_count);
+        // A session the engine does not hold yet is made by the message that follows (and given the line then); a count that cannot be read is not guessed.
+        if (pending !== 0) return;
+      }
+      await ctx.sessions.addMessage(ctx.user.id, sessionId, { role: "assistant", parts: [{ type: "text", text: line }] });
+      recordGatewayMessage("project_line");
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code !== "memory_index_not_found") recordGatewayMessage("project_line_failed");
+    }
+  }
+
   async function resolveContext(user, project, expected = null) {
     if (expected && (!memoryContexts || expected.ownerId !== user.id || expected.projectId !== project.id || project.userId !== user.id)) {
       throw new HttpError(403, 'memory_scope_denied', 'The memory context does not match this project.');
@@ -627,7 +664,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         return { status: 200, json: local, outcome: "withheld" };
       }
       await ctx.ensureRegistered();
-      return { status: 200, json: await ctx.sessions.createSession(ctx.user.id, sessionId), outcome: "forwarded" };
+      const created = await ctx.sessions.createSession(ctx.user.id, sessionId);
+      return { status: 200, json: created, outcome: "forwarded" };
     },
     async sessionRead(ctx) {
       const sessionId = ctx.match[1];
@@ -660,6 +698,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       if (decision.masked) recordGatewayMasked();
       await ctx.ensureRegistered();
+      // Only a person's words open a batch with the project line; an assistant message that arrives first leaves the batch without it.
+      const spokenByPerson = decision.forward.role === "user";
+      if (spokenByPerson) await noteProjectContext(ctx, sessionId);
       let answer;
       try {
         answer = await ctx.sessions.addMessage(ctx.user.id, sessionId, decision.forward);
@@ -667,6 +708,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         // A conversation whose session start the gateway answered itself (it began as a platform turn): made now.
         if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
         await ctx.sessions.createSession(ctx.user.id, sessionId);
+        if (spokenByPerson) await noteProjectContext(ctx, sessionId, { created: true });
         answer = await ctx.sessions.addMessage(ctx.user.id, sessionId, decision.forward);
       }
       recordGatewayMessage("forwarded");
@@ -1059,8 +1101,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               throw new HttpError(503, 'memory_scope_denied', 'The memory privacy state is unavailable.');
             }) : await overlay.sensitiveUris(user.id);
             if (shared) await ctx.ensureRegistered();
+            // Another named project's card, decisions, working facts, open items and recent work: a rule given for one project ("this
+            // project's deliverables in English") is that project's, and a conversation elsewhere that searched for it applied it there
+            // (S7, 2026-10-27). The personal namespace only; a shared project's namespace holds its own project alone.
+            const otherProjects = shared || !overlay?.configured || typeof overlay.otherProjectUris !== "function" ? [] : await overlay.otherProjectUris(user.id, project.id);
             // The observations (`memories/observations`) are never read back, in either namespace.
-            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`,
+            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`, ...otherProjects,
               ...(shared ? [`${userRoot}/memories/profile.md`, `${userRoot}/memories/.overview.md`, `${userRoot}/memories/.abstract.md`, ...await privatePreferences(ctx)] : []),
               ...sensitive.filter((/** @type {string} */ uri) => !shared || uri === userRoot || uri.startsWith(`${userRoot}/`))];
           })();

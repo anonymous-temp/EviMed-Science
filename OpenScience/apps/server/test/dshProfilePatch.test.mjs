@@ -3,8 +3,8 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import YAML from "yaml";
 
-import { RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
-import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, MODEL_RETRY_POLICY, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
+import { RUNTIME_UI_DENIED_NAMESPACES, RUNTIME_UI_READABLE_SETTINGS } from "@evimed/domain";
+import { CHAT_PRESENTATION, EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, MODEL_RETRY_POLICY, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
   modelGatewayUrl: "https://open-science-web:8787/internal/model/v1",
@@ -267,26 +267,28 @@ test("the hosted composition enables the native browser without replacing the ri
   assert.match(socketPatch, /- id: ui-sidebar-terminal\n\s+disabled: true/);
 });
 
-test("a running turn's reasoning stays folded: the transcript mode is the kernel's collapsed default and nothing in a page can change it", () => {
-  // 融合方案 §8.2 asks for 「推理默认折叠并要求中文」. The folding is already the
-  // kernel's: `ui-chat` draws each reasoning block as a Think disclosure and,
-  // in its `transcriptView` Compact mode — the shipped default — folds a
-  // closed turn's reasoning, tool rows and earlier messages behind one
-  // control. What this deployment owes is that the mode cannot drift off that
-  // default, and it owes it twice, because a setting has two ways to change:
-  // the row that writes it and the method that writes it.
-  //
-  // So this is not a new gate; it is the assertion that the two existing ones
-  // cover the case. The remaining half of §8.2 — that the folded summary is
-  // Chinese — is the guidance's, and is asserted in
-  // `packages/socket/test/consistency.test.mjs`; it cannot be a check here,
-  // because language is the model's to produce (principle 1).
-  assert.ok(HOSTED_DISABLED_BROWSER_PANELS.includes("ui-settings-general"),
-    "the General settings page is where a reader would switch the transcript out of Compact");
-  assert.ok(RUNTIME_UI_DENIED_NAMESPACES.includes("settings"),
-    "and `settings/*` is how a page would write the change without the row");
+test("a running turn's steps fold into one work group: the profile sets the chat's presentation, the page can read it and nothing in a page can change it", async () => {
+  // 融合方案 §8.2 asks for 「推理默认折叠并要求中文」, and on 2026-10-28 the owner asked why a 34-minute run showed every step
+  // flat. This test used to say the folding was the kernel's shipped default; it was not. The web client's default work
+  // details are `detailed`, which groups nothing while a turn is open, and the page could never read anything else because
+  // its one settings read was denied with the namespace. So the mode is now the profile's, `standard` (steps grouped while the
+  // turn runs, titled by the step under way, the turn folded when it ends), read by the page through the one narrowed read
+  // (`RUNTIME_UI_SETTINGS_READ`), with links opening in the reader's tab.
   const rendered = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator: false } });
+  assert.match(rendered, /^- id: ui-chat\n {2}config:\n {4}transcriptView: standard\n {4}linkOpening: new-tab$/m);
+  assert.deepEqual(CHAT_PRESENTATION, { transcriptView: "standard", linkOpening: "new-tab" });
+  // Both values are the kernel's own: they are constants of the `ui-chat` schema the live kernel answered with.
+  const recorded = JSON.parse(await readFile(new URL("../../../packages/contracts/dsh/fixtures/settings-describe.json", import.meta.url), "utf8"));
+  const chat = recorded.result.value.namespaces.find((view) => view.ns === "ui-chat");
+  const constants = Object.values(chat.schema.refs).filter((node) => node.type === "const").map((node) => node.value);
+  for (const value of Object.values(CHAT_PRESENTATION)) assert.ok(constants.includes(value), `${value} is a value the kernel's schema offers`);
+  assert.deepEqual(chat.value, { ...chat.base, ...CHAT_PRESENTATION }, "and a patch row's config is what the page reads as the value");
+  // Readable, never writable: the General settings page that would switch it is hidden, `settings/*` stays denied, and
+  // the one read the proxy forwards is narrowed to this namespace.
+  assert.ok(HOSTED_DISABLED_BROWSER_PANELS.includes("ui-settings-general"));
   assert.match(rendered, /- id: ui-settings-general\n {2}disabled: true/);
+  assert.ok(RUNTIME_UI_DENIED_NAMESPACES.includes("settings"));
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
   // The chat itself stays mounted — folding is its behaviour, not ours.
   assert.doesNotMatch(rendered, /- id: ui-chat\n {2}disabled: true/);
 });
@@ -591,4 +593,14 @@ test("a model call whose tool arguments do not parse is asked again, in the runt
 test('the native thinking selector remains visible while provider settings stay hidden', () => {
   assert.equal(HOSTED_DISABLED_BROWSER_PANELS.includes('ui-model-selection'), false);
   assert.equal(HOSTED_DISABLED_BROWSER_PANELS.includes('ui-settings-models'), true);
+});
+
+test("the kernel reserves a bounded answer, so compaction leaves the run most of its window (live check 2026-10-28)", () => {
+  // DSH 0.2.1 compacts at contextWindow - maxTokens - 65,536 and the DeepSeek adapter reserves 256,000 when told nothing:
+  // on a 400,000 window that is ~78,000 tokens of input, and a 19-minute review compacted nine times.
+  const deepseek = (patch) => YAML.parse(patch).find((row) => row.id === "llm-deepseek").config;
+  assert.equal(deepseek(renderProfilePatch(input)).maxTokens, 65536);
+  assert.equal(deepseek(renderProfilePatch({ ...input, maxOutputTokens: 32768 })).maxTokens, 32768);
+  const trigger = 400_000 - deepseek(renderProfilePatch(input)).maxTokens - 65_536;
+  assert.ok(trigger > 250_000, `compaction would fire at ${trigger} tokens`);
 });

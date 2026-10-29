@@ -74,9 +74,32 @@ async function jsonFetch(url, options = {}, expected = null) {
   }
   if (expected == null ? !response.ok : response.status !== expected) {
     const code = body?.code ?? body?.data?.code ?? "unexpected_status";
-    throw failure("hosted_e2e_request_failed", `${options.method ?? "GET"} ${new URL(url).pathname} -> ${response.status} (${code})`);
+    // The status and the control plane's own code ride on the error so a caller can tell one refusal it knows how to meet from the rest.
+    throw Object.assign(
+      failure("hosted_e2e_request_failed", `${options.method ?? "GET"} ${new URL(url).pathname} -> ${response.status} (${code})`),
+      { status: response.status, responseCode: code },
+    );
   }
   return { response, body };
+}
+
+/**
+ * The transcript of a session whose run has ended. The route does not wake a runtime and the project's runtime may have
+ * stopped since the run (409 `runtime_not_running`), which is not an empty transcript: it is started once and the session
+ * read once more. A second refusal stays the answer; this never loops.
+ * @param {string} base @param {string} runtimeUrl @param {string} sessionId @param {Record<string, string>} headers
+ */
+export async function sessionTranscript(base, runtimeUrl, sessionId, headers) {
+  const url = `${runtimeUrl}/sessions/${encodeURIComponent(sessionId)}/transcript`;
+  try {
+    return await jsonFetch(url, { headers });
+  } catch (error) {
+    const refusal = /** @type {any} */ (error);
+    if (refusal?.status !== 409 || refusal?.responseCode !== "runtime_not_running") throw error;
+    await command(base, "start_runtime", {}, headers);
+    process.stderr.write("hosted production e2e: transcript: the runtime was gone; start_runtime, reading the session once more\n");
+    return jsonFetch(url, { headers });
+  }
 }
 
 async function command(base, name, args, headers) {
@@ -280,10 +303,7 @@ async function main() {
       throw failure("hosted_e2e_provenance_invalid", "The agent-run ledger does not prove specialist DeepSeek routing.");
     }
     const outputs = specialistOutputs(run.artifacts);
-    const transcript = await jsonFetch(
-      `${runtimeUrl}/sessions/${encodeURIComponent(sessionId)}/transcript`,
-      { headers: scoped },
-    );
+    const transcript = await sessionTranscript(base, runtimeUrl, sessionId, scoped);
     const messages = transcript.body?.data?.messages ?? [];
     if (!Array.isArray(messages) || !messages.some((message) => message?.role === "user")) {
       throw failure("hosted_e2e_transcript_invalid", "The run transcript carries no user message.");

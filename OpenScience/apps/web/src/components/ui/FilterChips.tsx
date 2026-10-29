@@ -42,6 +42,18 @@ export function filterChipClasses({ selected = false, className }: { selected?: 
 }
 
 /** One chip that toggles (「☆ 收藏」), or the trigger of a menu. */
+/**
+ * Component: FilterChip; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Native button with optional leading/end icon or menu chevron.
+ * Variants: Pressed toggle or menu trigger; menu suppresses aria-pressed.
+ * States: Pressed and native disabled are caller-owned.
+ * Hit area: h-sm with vertical coarse-pointer pseudo-element expansion.
+ * Keyboard: Native button activation; menu traversal belongs to Menu.
+ * Long content: Single-line chip retains intrinsic width.
+ * Theme: Selected neutral surface; semantic text roles.
+ * Responsive: Nonshrinking chip; parent owns wrapping/overflow.
+ * Verification: Primitives.test.tsx and Toolbar.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export const FilterChip = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
   pressed?: boolean;
   icon?: LucideIcon;
@@ -67,6 +79,18 @@ export const FilterChip = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
 });
 
 /** A dimension as a chip that opens a single-choice menu (「专科 ▾」). */
+/**
+ * Component: FilterSelect; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: FilterChip trigger backed by Menu choices.
+ * Variants: Optional clearing entry and empty trigger label.
+ * States: Controlled value; chosen entry marked checked.
+ * Hit area: Shared FilterChip and Menu item geometry.
+ * Keyboard: Menu owns arrows, Escape and focus restoration.
+ * Long content: Selected label stays full; menu owns viewport overflow.
+ * Theme: Neutral filter surface and semantic selection text.
+ * Responsive: Intrinsic trigger; portalled menu fits viewport.
+ * Verification: Primitives.test.tsx and Toolbar.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function FilterSelect<V extends string>({
   label,
   options,
@@ -101,6 +125,18 @@ export function FilterSelect<V extends string>({
   );
 }
 
+/**
+ * Component: FilterChips; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named group of FilterChip choices, overflow Menu and optional trailing slot.
+ * Variants: maxVisible and moreLabel configure overflow.
+ * States: Controlled single choice; counts are rendered as supplied.
+ * Hit area: Shared chips; caller trailing controls own geometry.
+ * Keyboard: Native chips plus Menu keyboard behavior.
+ * Long content: First choices occupy clipped flex group; remaining choices enter Menu.
+ * Theme: Neutral selected chips and secondary counts.
+ * Responsive: No independent breakpoint; parent width constrains inline group.
+ * Verification: Primitives.test.tsx and Toolbar.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function FilterChips<V extends string>({
   label,
   options,

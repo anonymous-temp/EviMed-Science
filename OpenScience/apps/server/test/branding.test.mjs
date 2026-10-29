@@ -25,11 +25,11 @@ test("all visible application branding uses EviMed Science", async () => {
 
   assert.doesNotMatch(frontend, /Open Science/i);
   assert.doesNotMatch(frontend, /logo\.webp/);
-  // The display name is 「EviMed Science」 since the skills and plugin centre's branding pass (2026-10-25); the mark keeps 「EviMed」.
+  // The wordmark and accessible mark name identify the same product.
   assert.match(frontend, />\s*EviMed Science\s*</);
   assert.match(html, /<title>EviMed Science<\/title>/);
   assert.doesNotMatch(html, /Open Science/i);
-  assert.match(mark, /aria-label="EviMed"/);
+  assert.match(mark, /aria-label="EviMed Science"/);
   assert.doesNotMatch(mockRuntime, /OPENCODE|OpenCode/);
   assert.match(mockRuntime, /EviMed 测试运行时/);
 });

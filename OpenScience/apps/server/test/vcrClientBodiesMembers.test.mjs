@@ -9,7 +9,7 @@ import { Readable } from "node:stream";
 import test from "node:test";
 
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
-import { assessmentReviewBody, judgmentBody, memberBody, modelBody, studyPatchBody, transitionBody } from "../../web/src/lib/vcrBodies.ts";
+import { assessmentReviewBody, judgmentBody, memberBody, modelBody, studyPatchBody } from "../../web/src/lib/vcrBodies.ts";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
 function request(method, url, body) {
@@ -74,19 +74,17 @@ function harness() {
 const ok = (/** @type {{ status: number, code: string | null, message: string }} */ answer, /** @type {string} */ what) =>
   assert.ok(answer.status >= 200 && answer.status < 300, `${what}: ${answer.status} ${answer.code ?? ""} ${answer.message}`);
 
-test("a member is added with exactly { userId, role }, and a site member with the site it belongs to", async () => {
-  const { send, seen } = harness();
-  ok(await send("POST", "/api/vcr/studies/std_1/members", memberBody({ userId: "u_stat", role: "statistical_reviewer" })), "a reviewer");
-  ok(await send("POST", "/api/vcr/studies/std_1/members", memberBody({ userId: "u_site", role: "site", detail: { siteId: "ste_01" } })), "a site member");
-  assert.deepEqual(seen, [["add", "u_stat", "statistical_reviewer", {}], ["add", "u_site", "site", { siteId: "ste_01" }]]);
-  assert.deepEqual(memberBody({ userId: "u", role: "recruiter" }), { userId: "u", role: "recruiter" }, "no detail key when there is nothing to say");
+test("research members use active roles and retired recruitment roles are refused",async()=>{
+ const {send,seen}=harness();ok(await send("POST","/api/vcr/studies/std_1/members",memberBody({userId:"u_stat",role:"statistical_reviewer"})),"reviewer");
+ assert.deepEqual(seen,[["add","u_stat","statistical_reviewer",{}]]);
+ for(const role of ["site","recruiter"])assert.equal((await send("POST","/api/vcr/studies/std_1/members",{userId:"legacy",role})).code,"vcr_member_role_invalid");
 });
 
 test("a site member with no site is what the route refuses, so the dialog cannot send one", async () => {
   const { send } = harness();
   const answer = await send("POST", "/api/vcr/studies/std_1/members", memberBody({ userId: "u_site", role: "site" }));
   assert.equal(answer.status, 400);
-  assert.equal(answer.code, "vcr_payload_invalid");
+  assert.equal(answer.code, "vcr_member_role_invalid");
 });
 
 test("one role of one account is removed through DELETE …/members/:userId?role=", async () => {
@@ -97,12 +95,8 @@ test("one role of one account is removed through DELETE …/members/:userId?role
   assert.equal(refused.code, "vcr_member_role_invalid");
 });
 
-test("the referral moves to 待补证 with the note, and the body is exactly the route's allow-list", async () => {
-  const { send, seen } = harness();
-  const body = transitionBody({ to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
-  assert.deepEqual(body, { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
-  ok(await send("POST", "/api/vcr/studies/std_1/referrals/ref_1/transition", body), "request evidence");
-  assert.deepEqual(seen, [["transition", "ref_1", { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" }]]);
+test("a stale client cannot transition a referral after retirement",async()=>{
+ const {send,seen}=harness();assert.equal((await send("POST","/api/vcr/studies/std_1/referrals/ref_1/transition",{to:"needs_evidence",note:"legacy"})).code,"vcr_recruitment_retired");assert.deepEqual(seen,[]);
 });
 
 test("the composer's 起点 is accepted by PATCH /studies/:id", async () => {
@@ -136,9 +130,6 @@ test("a person's re-judgment and countersignature are the routes' own bodies", a
   assert.deepEqual(Object.keys(judgmentBody({ state: "unknown" })), ["state"]);
 });
 
-test("the referral ledger is read from GET …/referrals, with the state filter the client can ask for", async () => {
-  const { send, seen } = harness();
-  ok(await send("GET", "/api/vcr/studies/std_1/referrals"), "the ledger");
-  ok(await send("GET", "/api/vcr/studies/std_1/referrals?state=contactable"), "the ledger, one state");
-  assert.deepEqual(seen, [["referrals"], ["referrals"]]);
+test("legacy referral reads return explicit retirement without consulting the ledger",async()=>{
+ const {send,seen}=harness();for(const suffix of ["","?state=contactable"])assert.equal((await send("GET",`/api/vcr/studies/std_1/referrals${suffix}`)).status,410);assert.deepEqual(seen,[]);
 });

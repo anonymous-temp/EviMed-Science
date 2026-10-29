@@ -79,6 +79,18 @@ const NUMBER = new Intl.NumberFormat("zh-CN");
 
 const SHELL = "flex flex-col items-center gap-3 px-6 py-12 text-center";
 
+/**
+ * Component: StepState; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Step-state body with inputs, start/stop/resume or allowance recovery.
+ * Variants: empty/queued/running/failed/credits.
+ * States: Producer facts choose branch; failed copy may state retained work; no inferred percentage.
+ * Hit area: Shared Buttons plus native input/conversation links.
+ * Keyboard: Native actions; live status does not move focus.
+ * Long content: Descriptions wrap in centered bounded text; action row wraps.
+ * Theme: Running-dot information role; warning failure; semantic text.
+ * Responsive: Centered body and wrapping controls adapt to local width.
+ * Verification: StepState.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function StepState(props: StepStateProps) {
   const { phase, step, noun, to, uses = [], gives, onStart, starting, reason, after, phaseName, counts, startedAt, onStop, stopping,
     kept, failure, onResume, resuming, waiting, topUp } = props;

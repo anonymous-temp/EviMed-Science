@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { FrontierItem } from "@/lib/frontierClient";
-import { INLINE_ACTION, ago } from "./frontierText";
+import { INLINE_ACTION, ago, titleOnlyAlert } from "./frontierText";
 
 /** How far back the strip looks (plan 2026-09-23 §6.2: 近 48 小时). */
 export const SAFETY_STRIP_HOURS = 48;
@@ -18,6 +18,14 @@ export function recentAlerts(items: readonly FrontierItem[], now = Date.now()): 
   return items
     .filter((item) => item.safetyAlert && Date.parse(item.timelineAt) >= since)
     .sort((a, b) => Date.parse(b.timelineAt) - Date.parse(a.timelineAt));
+}
+
+/**
+ * An alert the strip carries for 精选 (owner, 2026-10-27): a title-only one (`titleOnlyAlert`) inside the strip's window. 精选's day groups
+ * leave it out, so the same notice is not drawn twice; one older than the window stays a card, because nothing else would show it.
+ */
+export function foldedIntoStrip(item: FrontierItem, now = Date.now()): boolean {
+  return titleOnlyAlert(item) && recentAlerts([item], now).length > 0;
 }
 
 /** One alert's line: the title, then who issued it and when, in grey. */

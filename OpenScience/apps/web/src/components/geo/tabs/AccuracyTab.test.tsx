@@ -86,6 +86,15 @@ it("keeps partially checked and unknown answers visible beside answer-level accu
   expect(screen.getByText(/事实准确率按可判定的回答计算/)).toBeVisible();
 });
 
+it("reads the severe tile as 「严重讲错 3 条」, the unit after its label and not the label's words again", async () => {
+  const diagnosis = diagnosisWith([]);
+  client.getGeoDiagnosis.mockResolvedValue({ ...diagnosis, round: { ...diagnosis.round, done: 12 }, errorCounts: { total: 3, open: 3, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 3 } });
+  renderTab();
+  const tile = await screen.findByRole("group", { name: "严重讲错" });
+  expect(tile.querySelector("[data-stat-value]")).toHaveTextContent(/^3条$/);
+  expect(tile).not.toHaveTextContent("条严重讲错");
+});
+
 it("identifies historical accuracy instead of applying the new completeness promise to an old calculation", async () => {
   const project = geoProject();
   const accuracy = project.overview.metrics.find(item => item.key === "accuracy");
@@ -215,6 +224,7 @@ describe("准确与安全: the list is by claim", () => {
     // the severe ones: S4 and S3 that are live
     expect(claimKeys()).toEqual(["fp_b", "fp_a"]);
     await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
     // the closed one is set down, not red
     expect(claimRow("fp_d")).not.toBeNull();
@@ -228,6 +238,33 @@ describe("准确与安全: the list is by claim", () => {
     const status = within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("group", { name: "处置状态" });
     expect(within(status).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["处置中1", "全部1"]);
     expect(within(status).getByRole("button", { name: /^全部/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("counts nothing as narrowed where the page opens, so 清除筛选 is not on screen until a choice is made, and it returns 处置状态 to the opening choice", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab();
+    await screen.findByRole("heading", { name: "讲错清单，按严重度排序" });
+    const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
+    // 全部 is what this page opens on, not a choice: it must not stand as an applied filter that nothing clears.
+    expect(within(toolbar()).queryByRole("button", { name: "清除筛选" })).toBeNull();
+    await userEvent.click(within(within(toolbar()).getByRole("group", { name: "处置状态" })).getByRole("button", { name: /处置中/ }));
+    expect(screen.getByTestId("search")).toHaveTextContent("show=acting");
+    await userEvent.click(within(toolbar()).getByRole("button", { name: "清除筛选" }));
+    expect(screen.getByTestId("search")).not.toHaveTextContent("show=");
+    expect(within(within(toolbar()).getByRole("group", { name: "处置状态" })).getByRole("button", { name: /^全部/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(toolbar()).queryByRole("button", { name: "清除筛选" })).toBeNull();
+  });
+
+  it("lets go of a platform that the analysis scope set: the filter shows it, so clearing the filter clears it, and the saved selection it came with", async () => {
+    renderTab(geoProject(), "/app/geo/geo_1/accuracy?show=all&engines=kimi&selectionRef=gsel_keep&session=s1");
+    await findClaim("fp_b");
+    const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
+    await userEvent.click(within(toolbar).getByRole("button", { name: "清除筛选" }));
+    const query = new URLSearchParams(screen.getByTestId("search").textContent ?? "");
+    expect(query.has("engines")).toBe(false);
+    expect(query.has("selectionRef")).toBe(false);
+    expect(query.get("session")).toBe("s1");
+    expect(within(document.querySelector("[data-toolbar]") as HTMLElement).queryByRole("button", { name: "清除筛选" })).toBeNull();
   });
 
   it("says the sentence in body text and the grade in the badge: red is the badge alone", async () => {
@@ -275,13 +312,13 @@ describe("准确与安全: the list is by claim", () => {
     expect(within(status).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["严重3", "待处理97", "处置中3", "全部104"]);
     expect(claimKeys()).toHaveLength(3);
     await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
-    // Five on the first screen: the two pictures above carry rows of their own, and a data page's first screen holds twenty.
-    expect(claimKeys()).toHaveLength(5);
+    // Three claims initially share the first screen with the diagnostic charts; expansion preserves all claims.
+    expect(claimKeys()).toHaveLength(3);
     expect(client.getGeoDiagnosis).toHaveBeenCalledWith("geo_1", expect.any(Object), expect.objectContaining({ errorLimit: 20, errorOffset: 0 }));
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 25 条说法" }));
-    expect(claimKeys()).toHaveLength(15);
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 15 条说法" }));
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 5 条说法" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 27 条说法" }));
+    expect(claimKeys()).toHaveLength(13);
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 17 条说法" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 7 条说法" }));
     expect(claimKeys()).toHaveLength(30);
     expect(screen.queryByRole("button", { name: /显示更多/ })).toBeNull();
     // the gravest first, the closed one last
@@ -336,7 +373,13 @@ describe("准确与安全: the band's toolbar", () => {
     await userEvent.click(within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("button", { name: "清除筛选" }));
     const search = screen.getByTestId("search").textContent ?? "";
     for (const name of ["engine=", "type=", "trace=", "cluster="]) expect(search).not.toContain(name);
-    expect(search).toContain("show=all");
+    // 处置状态 is one of the narrowings the toolbar counts, so it goes back to where the page opens (the grave ones) with the rest.
+    expect(search).not.toContain("show=");
+    const status = within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("group", { name: "处置状态" });
+    expect(within(status).getByRole("button", { name: /严重/ })).toHaveAttribute("aria-pressed", "true");
+    expect(claimKeys()).toEqual(["fp_b", "fp_a"]);
+    await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
   });
 
@@ -359,7 +402,8 @@ describe("准确与安全: by engine", () => {
     const told = deepseek.querySelector("[data-geo-claim='fp_a']")!.closest("li") as HTMLElement;
     expect(told).not.toHaveTextContent("千问");
     expect(told).toHaveTextContent("出处 baike.baidu.com（百科词条）");
-    // a claim three engines tell is a row in each of the three sections
+    // Expanding retains every engine-specific occurrence of a claim.
+    await userEvent.click(screen.getByRole("button", { name: /显示更多/ }));
     expect(document.querySelectorAll("[data-geo-claim='fp_a']")).toHaveLength(3);
   });
 });
@@ -488,6 +532,7 @@ describe("准确与安全: the charts and the list share one selection", () => {
     expect(bar).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(bar);
     expect(screen.getByTestId("search")).not.toHaveTextContent("engine=");
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
   });
 
@@ -498,6 +543,7 @@ describe("准确与安全: the charts and the list share one selection", () => {
     expect(claimKeys()).toEqual(["fp_b"]);
     const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
     await userEvent.click(within(toolbar).getByRole("button", { name: /类型：与说明书冲突/ }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
   });
 

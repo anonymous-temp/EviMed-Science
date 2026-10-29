@@ -167,7 +167,7 @@ describe("设置", () => {
     mocks.allowance.mockRejectedValueOnce(new Error("network"));
     mocks.allowance.mockResolvedValue(billing(true));
     open("/app/account?tab=usage");
-    expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
+    expect(await screen.findByRole("note")).toHaveTextContent("操作未完成，请重试。");
     expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
     expect(screen.queryByText("用量分区")).not.toBeInTheDocument();
     expect(screen.queryByText("额度分区")).not.toBeInTheDocument();

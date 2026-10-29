@@ -13,6 +13,7 @@
  *
  * Nothing is real: the product, its maker, the competitors, the sites (`*.example.*`) and the answers are invented.
  */
+import { mkdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -109,6 +110,11 @@ export async function furnishGeo(app, user, { log }) {
   const geoStore = app.geo.store;
   const controlProject = await app.store.createProject(user, "geo-kangshuning", BRAND);
   const project = await geoStore.createProject({ userId: user.id, projectId: controlProject.id, engines: ENGINES, coverageDays: 90, product: { brandName: BRAND } });
+  await geoStore.updateProject(user.id, project.id, { producer: { kind: "doctor", name: "Synthetic Walk Doctor", hospital: "Synthetic Walk Hospital", department: "Endocrinology", relation: "user_of_therapy" } });
+  const sourceProject = await app.store.projectFor(user, controlProject.id);
+  const labelArtifact = ".evimed-sources/walk-synthetic-label.txt";
+  await mkdir(path.join(sourceProject.workspaceDir, ".evimed-sources"), { recursive: true });
+  await writeFile(path.join(sourceProject.workspaceDir, labelArtifact), "Synthetic UI walk fixture; invented product and label.\n本品每周一次皮下注射给药，起始剂量为2 mg，每4周可增加一次。\n用于成人2型糖尿病患者的血糖控制。\n常见不良反应为胃肠道反应（恶心、腹泻、呕吐），多在剂量增加时出现。\n");
   const write = async (/** @type {string} */ what, /** @type {any} */ body, extra = {}) => {
     // The project is read again for every write: a product write merges into the product the project holds.
     const result = await geoRuntimeWrite({ store: geoStore, project: await geoStore.getProject(user.id, project.id), what, body, articleGate: async () => "passed", ...extra });
@@ -121,9 +127,9 @@ export async function furnishGeo(app, user, { log }) {
   await write("product", { data: { brandName: BRAND, genericName: "示例周制剂注射液", aliases: ["康舒宁注射液"], rx: "rx", singleSource: true,
     indication: "成人2型糖尿病患者的血糖控制", competitors: COMPETITORS.map((name) => ({ brandName: name, genericName: "示例周制剂（对照）" })) } });
   const claims = await write("claims", { items: [
-    { claimKey: "dosing", statement: "每周皮下注射一次，起始剂量 2 mg", quote: "本品每周一次皮下注射给药，起始剂量为2 mg，每4周可增加一次。", sourceRef: "说明书 2026 版", sourceKind: "label", inLabel: true },
-    { claimKey: "indication", statement: "用于成人2型糖尿病的血糖控制", quote: "用于成人2型糖尿病患者的血糖控制。", sourceRef: "说明书 2026 版", sourceKind: "label", inLabel: true },
-    { claimKey: "adverse", statement: "常见不良反应为胃肠道反应", quote: "常见不良反应为胃肠道反应（恶心、腹泻、呕吐），多在剂量增加时出现。", sourceRef: "说明书 2026 版", sourceKind: "label", inLabel: true },
+    { claimKey: "dosing", statement: "每周皮下注射一次，起始剂量 2 mg", quote: "本品每周一次皮下注射给药，起始剂量为2 mg，每4周可增加一次。", artifactPath: labelArtifact, sourceRef: "Synthetic walk label 2026", sourceKind: "label", inLabel: true },
+    { claimKey: "indication", statement: "用于成人2型糖尿病的血糖控制", quote: "用于成人2型糖尿病患者的血糖控制。", artifactPath: labelArtifact, sourceRef: "Synthetic walk label 2026", sourceKind: "label", inLabel: true },
+    { claimKey: "adverse", statement: "常见不良反应为胃肠道反应", quote: "常见不良反应为胃肠道反应（恶心、腹泻、呕吐），多在剂量增加时出现。", artifactPath: labelArtifact, sourceRef: "Synthetic walk label 2026", sourceKind: "label", inLabel: true },
   ] });
   const groupsOf = (/** @type {typeof GROUPS} */ groups) => ({ data: { groups: groups.map((group) => ({
     pool: group.pool, name: group.name, typicalQuestion: group.typical, journeyStage: group.stage, isControl: Boolean(group.control),

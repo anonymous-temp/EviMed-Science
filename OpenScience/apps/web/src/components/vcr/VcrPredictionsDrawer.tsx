@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { VcrDesign, VcrForecast } from "@/lib/vcrClient";
 import { Drawer } from "@/components/ui/Drawer";
-import { Tabs } from "@/components/ui/Tabs";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { VcrFilePrediction, hasPredictableDesign } from "./VcrFilePrediction";
 
 /**
@@ -33,11 +33,9 @@ export function VcrPredictionsDrawer({ studyId, designs, forecasts, canFile, onF
     <Drawer title="登记预测" onClose={onClose} widthClassName="max-w-md">
       <div className="flex flex-col gap-6">
         {both && (
-          <Tabs
+          <Toolbar
             label="登记预测"
-            items={[{ value: "filed", label: "已登记", count: forecasts.length }, { value: "new", label: "新登记" }]}
-            value={view}
-            onChange={setView}
+            views={{ label: "登记预测", items: [{ value: "filed", label: "已登记", count: forecasts.length }, { value: "new", label: "新登记" }], value: view, onChange: (next) => setView(next as "filed" | "new") }}
           />
         )}
         {shown === "filed" && (forecasts.length > 0 ? <ForecastList forecasts={forecasts} /> : <p className="text-ui text-text-3">还没有登记过预测。</p>)}

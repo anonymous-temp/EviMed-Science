@@ -1,3 +1,5 @@
+import { flushSync } from "react-dom";
+import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
@@ -95,6 +97,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(text);
   const [busy, setBusy] = useState(false);
+  const editGuard = useUnsavedGuard(editing && value !== text, () => setEditing(false), busy);
   const [rejecting, setRejecting] = useState(false);
   useEffect(() => { if (!editing) setValue(text); }, [text, editing]);
   // 编辑 was a button a moment ago, so the field it opens takes the focus.
@@ -149,7 +152,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
       ...(edited ? { value: edited, summary: edited } : {}),
       ...(next.status ? { status: next.status } : {}),
     });
-    setEditing(false);
+    flushSync(() => setEditing(false));
     toast.success(next.status && !edited ? "已确认" : "已保存");
     // A line of the profile is named by its words: the edited line has a new name, and the drawer follows it.
     if (saved && saved.id !== record.id) onOpenRecord?.(saved.id);
@@ -185,7 +188,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
   const saveEntry = () => run(async () => {
     if (!entry) return;
     await updateCapsuleEntry(capsuleId, entry.id, { content: value.trim(), expectedRevision: entry.revision });
-    setEditing(false);
+    flushSync(() => setEditing(false));
     toast.success("已保存");
   }, productErrorMessage);
   const forgetEntry = () => run(async () => {
@@ -232,10 +235,13 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
   return (
     <>
+      {editGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={editGuard.discard} onCancel={editGuard.keepEditing} />}
       <Drawer
         title={record ? kindTitle(record.kind) : kindTitle(entry?.payload.factKind ?? "")}
         description={[projectName, since].filter(Boolean).join(" · ")}
         onClose={onClose}
+        dirty={editing && value !== text}
+        busy={busy}
         actions={menu.length > 0 ? <Menu label="更多" items={menu} /> : undefined}
       >
         <div className="flex min-h-full flex-col gap-6">
@@ -244,10 +250,10 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
               className="space-y-2"
               onSubmit={(event) => { event.preventDefault(); if (value.trim()) save(); }}
             >
-              <Textarea ref={field} value={value} onChange={(event) => setValue(event.target.value)} aria-label="编辑这条记忆" rows={4} maxLength={entry ? 20_000 : undefined} />
+              <Textarea ref={field} disabled={busy} value={value} onChange={(event) => setValue(event.target.value)} aria-label="编辑这条记忆" rows={4} maxLength={entry ? 20_000 : undefined} />
               <div className="flex gap-2">
                 <Button type="submit" size="sm" loading={busy} disabled={!value.trim()}>保存</Button>
-                <Button size="sm" variant="text" onClick={() => setEditing(false)}>取消</Button>
+                <Button size="sm" variant="text" disabled={busy} onClick={editGuard.requestClose}>取消</Button>
               </div>
             </form>
           ) : (
@@ -308,7 +314,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
                 </ConversationLink>
               )}
               {materials.map((material) => (
-                <Link key={material.id} to={readerPath(material.id, { scope: null, kind: null, q: "" })} className="block max-w-measure text-left text-ui text-accent hover:underline">
+                <Link key={material.id} to={readerPath(material.id, { scope: null, kind: null, q: "" })} className="block max-w-measure rounded text-left text-ui text-accent underline underline-offset-4 hover:decoration-2">
                   {`依据的资料：《${memoryExcerpt(material.title, 60)}》`}
                 </Link>
               ))}

@@ -1,3 +1,4 @@
+import { measurement } from "@/lib/measurement";
 import { useRef, useState, type ReactElement } from "react";
 import { Link, MemoryRouter } from "react-router";
 import { ArrowLeft, Library, UsersRound } from "lucide-react";
@@ -233,10 +234,10 @@ export function DataPageSample() {
       headline={{ parts: ["EviMed 记住了你的 ", { n: 48, to: "/app/memory" }, " 件事，其中 ", { n: 4, onOpen: () => {} }, " 件需要看一眼。"] }}
     >
       <StatBand label="数量" columns={4}>
-        <StatTile label="记忆" value={48} to="/app/memory" />
-        <StatTile label="资料" value={12} to="/app/files" />
-        <StatTile label="需要看一眼" value={4} onOpen={() => {}} tone="safety" />
-        <StatTile label="做法" value={24} to="/app/memory?tab=methods" />
+        <StatTile label="记忆" reading={measurement(48, "", "示例读数")} to="/app/memory" />
+        <StatTile label="资料" reading={measurement(12, "", "示例读数")} to="/app/files" />
+        <StatTile label="需要看一眼" reading={measurement(4, "", "示例读数")} onOpen={() => {}} tone="safety" />
+        <StatTile label="做法" reading={measurement(24, "", "示例读数")} to="/app/memory?tab=methods" />
       </StatBand>
       <ChartGrid
         className="mt-6"

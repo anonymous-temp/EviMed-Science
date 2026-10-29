@@ -57,7 +57,7 @@ test("long bind control directories remain private and reject symlinked sockets"
   const project = bindProject(root, "u".repeat(64), "p".repeat(64));
   const input = { port: 4096, pluginConfig: { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, capsuleMethodsMounted: 0 };
   const provider = new DockerRuntimeProvider({
-    config, ensureKnowledgeBaseDir: async () => {}, cleanupDocker: async () => ({ missing: true }),
+    config, ensureKnowledgeBaseDir: async () => {}, ensureLibraryView: async () => {}, cleanupDocker: async () => ({ missing: true }),
   });
   const server = createServer(socket => socket.end());
   try {

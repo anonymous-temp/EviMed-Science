@@ -2,28 +2,16 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * A box that scrolls sideways when its content is wider than it is: a table, a
- * heat grid, a matrix.
- *
- * Chromium puts such a scroller into the tab order by itself; WebKit and Firefox
- * on the Mac do not, so a keyboard reader there could not move a wide table at
- * all (axe `scrollable-region-focusable`, 2026-10-07 audit). A scroller that
- * takes focus also needs a role and a name, or the focus lands on nothing — so
- * while the content overflows the box is a labelled region with `tabIndex` 0,
- * and its focus ring is the global `:focus-visible` rule's.
- *
- * Only while it overflows. A report holds thirty tables and most of them fit on
- * a desktop; thirty extra stops in the tab order, each announced as a region,
- * are a cost for the reader the fit never asked for. The overflow is measured
- * (the box and the content it holds), not guessed from a breakpoint, and it is
- * measured again whenever either is resized.
- *
- * `jsx-a11y/no-noninteractive-tabindex` cannot model a scroll region; the
- * attributes are a spread on purpose, so no file has to silence the rule.
- *
- * While there is more to the right of what is in view a fade at the edge says so (R19, the walk's phone pictures: a heat grid and
- * two tables cut mid-word at the card's edge read as broken, not wide). The fade is a sibling of the scroller, so the scroller's
- * own box, border and focus ring are as they were, and it takes the colour the box sits on.
+ * Component: ScrollRegion; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Overflow-x container with optional named region and decorative right-edge fade.
+ * Variants: Caller classes select height and any extra overflow.
+ * States: Measured overflow controls focusability; scroll/resize/content/theme observers update cue.
+ * Hit area: Native scroll area; cue ignores pointers.
+ * Keyboard: Overflowing region becomes a Tab stop for native scrolling.
+ * Long content: Child width retained; scrolling reveals clipped columns.
+ * Theme: Fade reads nearest live ancestor background; no scientific palette.
+ * Responsive: ResizeObserver measures container/children; no hardcoded width.
+ * Verification: ScrollRegion.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
 export function ScrollRegion({ label, className, children }: {
   /** The region's accessible name. */
@@ -40,6 +28,7 @@ export function ScrollRegion({ label, className, children }: {
     const element = box.current;
     if (!element) return undefined;
     const measure = () => {
+      setGround(groundOf(element));
       const wide = element.scrollWidth - element.clientWidth > 1;
       setOverflows(wide);
       setMore(wide && element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
@@ -49,11 +38,17 @@ export function ScrollRegion({ label, className, children }: {
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(element);
     for (const child of Array.from(element.children)) observer?.observe(child);
-    return () => { element.removeEventListener("scroll", measure); observer?.disconnect(); };
+    const mutations = new MutationObserver(() => {
+      for (const child of Array.from(element.children)) observer?.observe(child);
+      measure();
+    });
+    mutations.observe(element, { childList: true, subtree: true, characterData: true });
+    const scheme = window.matchMedia?.("(prefers-color-scheme: dark)");
+    scheme?.addEventListener?.("change", measure);
+    const theme = new MutationObserver(measure);
+    for (let node: HTMLElement | null = element; node; node = node.parentElement) theme.observe(node, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    return () => { scheme?.removeEventListener?.("change", measure); mutations.disconnect(); theme.disconnect(); element.removeEventListener("scroll", measure); observer?.disconnect(); };
   }, []);
-  useLayoutEffect(() => {
-    if (more && ground === "" && box.current) setGround(groundOf(box.current));
-  }, [more, ground]);
   const region = overflows ? { tabIndex: 0, role: "region", "aria-label": label } : {};
   return (
     <div className="relative min-w-0">

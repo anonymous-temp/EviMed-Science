@@ -1,7 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, createHash, sign, verify } from 'node:crypto';
-import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
+import { chmod, mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { authenticateEvaluation, consumerClosure, finalizeCampaign } from '../finalize.mjs';
@@ -95,7 +95,8 @@ test('a lab-local file signer needs an owner-only Ed25519 key it can verify, by 
   try {
     const keys = localSigner('publisher');
     const pem = keys.privateKey.export({ type: 'pkcs8', format: 'pem' });
-    const write = async (name, content, mode) => { const path = join(dir, name); await writeFile(path, content, { mode }); return path; };
+    // chmod, not writeFile's mode: the umask trims that (CI's 022 turned 0o660 into 0o640, and the group-writable case passed).
+    const write = async (name, content, mode) => { const path = join(dir, name); await writeFile(path, content, { mode: 0o600 }); await chmod(path, mode); return path; };
     const config = (path, extra = {}) => ({ provider: 'file', keyId: 'publisher', publicKeySha256: fingerprint(keys.publicKey), path, ...extra });
     const unavailable = (candidate) => assert.rejects(createCampaignSigner(candidate), (error) => error.message === 'campaign_signer_unavailable' && !/\/|publisher-key|PRIVATE/.test(error.message));
     for (const [name, mode] of [['owner-only', 0o400], ['owner-read-write', 0o600], ['group-readable', 0o440]]) {

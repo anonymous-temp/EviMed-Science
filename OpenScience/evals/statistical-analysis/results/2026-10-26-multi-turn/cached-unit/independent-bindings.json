@@ -1,0 +1,130 @@
+{
+  "turns": [
+    {
+      "index": 0,
+      "referenceKind": "comparison",
+      "results": "deliverables/statistical-analysis-report/analysis-results.json",
+      "referenceOptions": {},
+      "required": [
+        "nA",
+        "nB",
+        "difference",
+        "low",
+        "high",
+        "p"
+      ],
+      "bindings": [
+        {
+          "reference": "nA",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "A"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "nB",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "B"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "difference",
+          "source": [
+            "analyses",
+            1,
+            "estimate"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "low",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "low"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "high",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "high"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "p",
+          "source": [
+            "analyses",
+            1,
+            "pValue"
+          ],
+          "absoluteTolerance": 5e-18,
+          "relativeTolerance": 0
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "referenceKind": "comparison",
+      "results": "deliverables/statistical-analysis-report/unit-conversion.json",
+      "referenceOptions": {
+        "scale": 0.1
+      },
+      "required": [
+        "difference",
+        "low",
+        "high"
+      ],
+      "bindings": [
+        {
+          "reference": "difference",
+          "source": [
+            "reportedInCm",
+            "primary_mean_difference",
+            "estimate"
+          ],
+          "absoluteTolerance": 5.500001e-07,
+          "relativeTolerance": 0,
+          "rounding": "Cached millimetre result rounded to six decimals, then converted centimetre display rounded to six decimals; combined bound 0.1*0.5e-6 + 0.5e-6."
+        },
+        {
+          "reference": "low",
+          "source": [
+            "reportedInCm",
+            "primary_mean_difference",
+            "low"
+          ],
+          "absoluteTolerance": 5.500001e-07,
+          "relativeTolerance": 0,
+          "rounding": "Cached millimetre result rounded to six decimals, then converted centimetre display rounded to six decimals; combined bound 0.1*0.5e-6 + 0.5e-6."
+        },
+        {
+          "reference": "high",
+          "source": [
+            "reportedInCm",
+            "primary_mean_difference",
+            "high"
+          ],
+          "absoluteTolerance": 5.500001e-07,
+          "relativeTolerance": 0,
+          "rounding": "Cached millimetre result rounded to six decimals, then converted centimetre display rounded to six decimals; combined bound 0.1*0.5e-6 + 0.5e-6."
+        }
+      ]
+    }
+  ]
+}

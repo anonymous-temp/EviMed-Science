@@ -269,6 +269,21 @@ def crawl_row(platform="xhs", name="xiaohongshu"):
             "config": {"url": "https://www.xiaohongshu.com/", "crawl_platform": platform, "platform": name}}
 
 
+def job_transport(handler):
+    """Wrap existing collector behavior fixtures in the upgraded terminal job envelope."""
+    def handle(request):
+        assert request.url.path == "/api/jobs" and request.method == "POST"
+        assert request.headers["authorization"] == "Bearer fake-crawler-key"
+        response = handler(request)
+        if response.status_code != 200:
+            return response
+        body = json.loads(request.content)
+        assert "platform" not in body and len(body["platforms"]) == 1, "the job takes a list of platforms, one name for the monitor"
+        return httpx.Response(202, json={"job_id": "a" * 32, "job_status": "done", "query": body["query"],
+                                       "platforms": body["platforms"], "result": json.loads(response.content)})
+    return httpx.MockTransport(handle)
+
+
 async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_author(social_settings, pool, tmp_path):
     registry = tmp_path / "social-sources.json"
     registry.write_text(json.dumps({"sources": [], "watch_list": [{"term": "司美格鲁肽", "why": "GLP-1"}, {"term": "流感", "why": "季节"}]}))
@@ -281,17 +296,17 @@ async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_
         requests.append(body)
         if len(requests) == 2:
             return httpx.Response(429, json={"detail": "busy"})
-        return httpx.Response(200, json={"platform": body["platform"], "meta": {"collection_status": "collected"}, "posts": [
+        return httpx.Response(200, json={"platform": body["platforms"][0], "meta": {"collection_status": "collected"}, "posts": [
             {"post_id": "p1", "title": "打了司美格鲁肽三个月", "content": "体重下降了 8 公斤，" * 40, "url": "https://www.xiaohongshu.com/explore/p1",
              "likes": "1.2万" , "shares": 30, "comment_count": 12, "author": "某用户", "author_id": "u1",
              "comments": [{"content": "我也是", "author": "另一人"}], "publish_time": int((NOW - timedelta(hours=5)).timestamp())},
             {"post_id": "p2", "title": "无地址的帖子"}]})
 
-    collector = SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=httpx.MockTransport(answer))
+    collector = SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=job_transport(answer))
     first = (await collector.tick())["crawl"]
     assert first == {"term": "司美格鲁肽", "platform": "xhs", "posts": 1, "new": 1}
-    assert requests[0] == {"query": "司美格鲁肽", "platform": "xhs", "sort_type": "latest", "page": 1, "minimum_detail_posts": 5,
-                           "minimum_comments_per_post": 0, "include_provider_raw": False}
+    assert requests[0] == {"query": "司美格鲁肽", "platforms": ["xhs"], "sort_type": "latest", "page": 1, "minimum_detail_posts": 5,
+                           "minimum_comments_per_post": 0, "collect_comments": False, "include_provider_raw": False}
     (row,) = await entries(pool, "social-xiaohongshu")
     assert row["channel"] == "social" and row["platform"] == "xiaohongshu" and row["author"] is None
     assert len(row["summary"]) <= 300 and "某用户" not in json.dumps(row, default=str) and "我也是" not in json.dumps(row, default=str)
@@ -302,12 +317,12 @@ async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_
 
     collector._clock = lambda: NOW + timedelta(minutes=12)
     assert (await collector.tick())["crawl"] == {"busy": "http_429"}
-    assert requests[1]["query"] == "司美格鲁肽" and requests[1]["platform"] == "zhihu", "the pair searched longest ago"
+    assert requests[1]["query"] == "司美格鲁肽" and requests[1]["platforms"] == ["zhihu"], "the pair searched longest ago"
     collector._clock = lambda: NOW + timedelta(minutes=21)
     assert (await collector.tick())["crawl"] == {"skipped": "not_yet"}, "after a busy answer GEO gets ten minutes"
     collector._clock = lambda: NOW + timedelta(minutes=23)
     await collector.tick()
-    assert len(requests) == 3 and requests[2]["platform"] == "zhihu"
+    assert len(requests) == 3 and requests[2]["platforms"] == ["zhihu"]
 
 
 CRAWL_PLATFORMS = (("xhs", "xiaohongshu"), ("douyin", "douyin"), ("zhihu", "zhihu"), ("weibo", "weibo"),
@@ -319,14 +334,15 @@ async def six_platform_monitor(social_settings, pool, tmp_path, handler, *, term
     registry.write_text(json.dumps({"sources": [], "watch_list": [{"term": term, "why": "test"} for term in terms]}))
     settings = replace(social_settings, social_registry_path=str(registry))
     await sync(pool, [crawl_row(platform, name) for platform, name in CRAWL_PLATFORMS])
-    return SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=httpx.MockTransport(handler))
+    return SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=job_transport(handler))
 
 
 def collected(request: httpx.Request, *, post_id="p"):
     body = json.loads(request.content)
-    return httpx.Response(200, json={"platform": body["platform"], "meta": {"collection_status": "collected"}, "posts": [
-        {"post_id": f"{post_id}-{body['platform']}", "title": "一条帖子", "content": "内容" * 20,
-         "url": f"https://example.test/{body['platform']}/{post_id}", "publish_time": int((NOW - timedelta(hours=2)).timestamp())}]})
+    platform = body["platforms"][0]
+    return httpx.Response(200, json={"platform": platform, "meta": {"collection_status": "collected"}, "posts": [
+        {"post_id": f"{post_id}-{platform}", "title": "一条帖子", "content": "内容" * 20,
+         "url": f"https://example.test/{platform}/{post_id}", "publish_time": int((NOW - timedelta(hours=2)).timestamp())}]})
 
 
 async def test_one_failing_platform_never_holds_the_other_five(social_settings, pool, tmp_path):
@@ -335,7 +351,7 @@ async def test_one_failing_platform_never_holds_the_other_five(social_settings, 
     down = {"xhs"}
 
     def handler(request: httpx.Request):
-        platform = json.loads(request.content)["platform"]
+        platform = json.loads(request.content)["platforms"][0]
         asked.append(platform)
         return httpx.Response(500, json={"detail": "boom"}) if platform in down else collected(request)
 
@@ -370,7 +386,7 @@ async def test_a_parked_platform_comes_back_when_its_time_is_up_and_a_success_cl
     asked, down = [], {"xhs"}
 
     def handler(request: httpx.Request):
-        platform = json.loads(request.content)["platform"]
+        platform = json.loads(request.content)["platforms"][0]
         asked.append(platform)
         return httpx.Response(500) if platform in down else collected(request)
 
@@ -407,7 +423,7 @@ async def test_a_busy_answer_parks_nobody_and_all_platforms_down_waits_without_a
     asked, status = [], [429]
 
     def handler(request: httpx.Request):
-        asked.append(json.loads(request.content)["platform"])
+        asked.append(json.loads(request.content)["platforms"][0])
         return httpx.Response(status[0], json={"detail": "x"})
 
     collector = await six_platform_monitor(social_settings, pool, tmp_path, handler, terms=("流感",))
@@ -423,6 +439,44 @@ async def test_a_busy_answer_parks_nobody_and_all_platforms_down_waits_without_a
     clock[0] += timedelta(minutes=12)
     assert (await collector.tick())["crawl"] == {"skipped": "all_parked"}
     assert len(asked) == 7
+
+
+async def test_a_partial_read_with_posts_is_a_success_that_says_it_is_partial(social_settings, pool, tmp_path):
+    """A platform whose comments stage failed kept its posts and was recorded as an http-error: its failure streak grew and its last
+    success never moved, so a platform that worked every time read as failing."""
+    def partial(request: httpx.Request):
+        body = json.loads(collected(request).content)
+        body["meta"] = {"collection_status": "partial_collected", "comments": {"failed": 3, "complete": False}}
+        return httpx.Response(200, json=body)
+
+    collector = await six_platform_monitor(social_settings, pool, tmp_path, partial, terms=("流感",))
+    assert (await collector.tick())["crawl"] == {"term": "流感", "platform": "xhs", "posts": 1, "new": 1}
+    xhs = await source(pool, "social-xiaohongshu")
+    assert xhs["consecutive_failures"] == 0 and xhs["last_ok_at"] == NOW and xhs["health"] == "healthy"
+    assert xhs["last_error_code"].startswith("partial term=流感") and "status=partial_collected" in xhs["last_error_code"]
+    async with pool.connection() as conn:
+        fetch = await (await conn.execute("SELECT outcome FROM evimed_knowledge.fetches WHERE source_id = 'social-xiaohongshu'")).fetchone()
+        state = (await (await conn.execute("SELECT value FROM evimed_knowledge.meta WHERE key = 'social_crawl_state'")).fetchone())["value"]
+    assert fetch["outcome"] == "ok" and "parked" not in state
+    assert collector.counters["crawl_partial"] == 1 and len(await entries(pool, "social-xiaohongshu")) == 1
+
+
+async def test_unmet_requirements_without_errors_are_an_empty_read_and_park_nobody(social_settings, pool, tmp_path):
+    """Fewer posts than the five asked for is a quiet term on a quiet platform, not a platform that failed: it was parked for three hours."""
+    def quiet(request: httpx.Request):
+        platform = json.loads(request.content)["platforms"][0]
+        return httpx.Response(200, json={"platform": platform, "requirements_met": False, "posts": [],
+                                         "meta": {"collection_status": "collected", "requirements_met": False}})
+
+    collector = await six_platform_monitor(social_settings, pool, tmp_path, quiet, terms=("流感",))
+    assert (await collector.tick())["crawl"] == {"term": "流感", "platform": "xhs", "posts": 0, "new": 0}
+    xhs = await source(pool, "social-xiaohongshu")
+    assert xhs["consecutive_failures"] == 0 and xhs["last_ok_at"] == NOW
+    async with pool.connection() as conn:
+        fetch = await (await conn.execute("SELECT outcome FROM evimed_knowledge.fetches WHERE source_id = 'social-xiaohongshu'")).fetchone()
+        state = (await (await conn.execute("SELECT value FROM evimed_knowledge.meta WHERE key = 'social_crawl_state'")).fetchone())["value"]
+    assert fetch["outcome"] == "empty" and "parked" not in state, "the next platform is asked in its turn"
+    assert collector.counters["crawl_parked"] == 0
 
 
 async def test_the_scheduler_never_claims_a_social_source(social_settings, pool):

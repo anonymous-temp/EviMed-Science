@@ -61,7 +61,7 @@ const TOPICS_CHECK_MS = 15 * 60_000;
  *  for the status and the metrics. A key it does not report stays 0. */
 export const PIPELINE_OUTCOMES = Object.freeze(["claimed", "promoted", "published", "merged", "screenedOut", "held", "failed",
   "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane", "genreFloor", "zhTarget", "eventPrimary", "translated", "tidied",
-  "tidyDropped", "leads", "insights", "retagged", "studyFacts", "faithChecked", "faithMismatched", "faithRepaired", "faithTrimmed", "faithUnchecked"]);
+  "tidyDropped", "leads", "retagged", "studyFacts", "faithChecked", "faithMismatched", "faithRepaired", "faithTrimmed", "faithUnchecked"]);
 
 /**
  * The internal project the feed's model calls are billed to, under the first

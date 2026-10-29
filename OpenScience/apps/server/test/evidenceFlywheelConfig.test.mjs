@@ -101,7 +101,15 @@ test("the official-promotion levers: on and three a day by default, read from th
   const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const apiOnly = await readFile(path.join(repoRoot, "deploy/web/docker-compose.api-only.yml"), "utf8");
-  for (const [name, value] of [["OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", "true"], ["OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY", "3"]]) {
+  // The standing floors: fourteen days and three runs by default, zero asks nothing, out of range stops the start by name.
+  assert.deepEqual([defaults.officialPromotionMinAccountAgeDays, defaults.officialPromotionMinFinishedRuns], [14, 3]);
+  const floors = configUnder({ OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS: "0", OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS: "10" });
+  assert.deepEqual([floors.officialPromotionMinAccountAgeDays, floors.officialPromotionMinFinishedRuns], [0, 10]);
+  for (const [name, value] of [["OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS", "366"], ["OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS", "-1"], ["OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS", "1.5"]]) {
+    assert.throws(() => configUnder({ [name]: value }), new RegExp(name), value);
+  }
+  for (const [name, value] of [["OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", "true"], ["OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY", "3"],
+    ["OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS", "14"], ["OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS", "3"]]) {
     assert.deepEqual([...example.matchAll(new RegExp(`^${name}=(.*)$`, "gm"))].map((line) => line[1]), [value], name);
     assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), name);
   }

@@ -35,6 +35,7 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
   const [settings, setSettings] = useState<Record<string, string | number | boolean>>({}), [versions, setVersions] = useState<ExtensionRevision[]>([]), [beforeRevision, setBeforeRevision] = useState<number | null>(null), [historyBusy, setHistoryBusy] = useState(false), [historyError, setHistoryError] = useState<string | null>(null);
   const [connections, setConnections] = useState<ExtensionConnection[]>([]), [connectionRefs, setConnectionRefs] = useState<string[]>([]), [connectionError, setConnectionError] = useState<string | null>(null), [connectionsLoaded, setConnectionsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false), [removing, setRemoving] = useState(false);
+  const baseline = useRef("");
   const load = useCallback(async () => {
     const request = ++generation.current;
     historyRequest.current = null; setHistoryBusy(false);
@@ -47,6 +48,7 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
       const selected = selection.selections.find(row => row.installationId === item?.id);
       if (alive.current && request === generation.current) {
         setEntry(descriptor); setInstallation(item); setProject(selection); setLoaded(true); setError(null); setMissing(false);
+        baseline.current = JSON.stringify({ settings: selected?.settings ?? (exact && descriptor ? Object.fromEntries(Object.entries(descriptor.settingsSchema).filter(([, field]) => field.default !== undefined).map(([key, field]) => [key, field.default!])) : {}), connectionRefs: selected?.connectionRefs ?? [] });
         setSettings(selected?.settings ?? (exact && descriptor ? Object.fromEntries(Object.entries(descriptor.settingsSchema).filter(([, field]) => field.default !== undefined).map(([key, field]) => [key, field.default!])) : {}));
         setConnectionRefs(selected?.connectionRefs ?? []);
         setConnectionsLoaded(!!exact && !!item && available.status === "fulfilled");
@@ -107,7 +109,7 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
   const state = installation ? extensionState(installation, selected) : null;
   if (missing) return <Drawer title="插件" onClose={onClose}><MissingRecord noun="插件" list="回到插件列表" onBack={onClose} /></Drawer>;
   return (
-    <Drawer title={entry?.title ?? "插件"} description={state ? `我的插件 · ${state}` : "可以添加"} onClose={onClose}>
+    <Drawer title={entry?.title ?? "插件"} description={state ? `我的插件 · ${state}` : "可以添加"} onClose={onClose} busy={busy} dirty={loaded && JSON.stringify({ settings, connectionRefs }) !== baseline.current}>
       {error && <p role="alert" className="mb-4 text-ui text-error">{error}<Button variant="text" disabled={busy} onClick={() => void load()}>刷新</Button></p>}
       {!loaded ? !error && <FilesSkeleton /> : coordinate && <div className="flex flex-col gap-6">
         <div className="flex flex-wrap items-center gap-3"><Tag>第三方插件</Tag>

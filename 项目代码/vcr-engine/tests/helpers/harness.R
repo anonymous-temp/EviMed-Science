@@ -287,6 +287,8 @@ vcr_test_handler_jobs <- function() {
          riskTable = lapply(seq_along(tr), function(i) list(time = tr[i], atRisk = round(200 * exp(-log(2) / med * tr[i])))))
   }
   cases <- list(
+    list("model.survival_fit", list(inputId = in_event$id, idColumn = "USUBJID", timeColumn = "AVAL", statusColumn = "CNSR", statusEncoding = "censor", distribution = "weibull", timeUnit = "months", horizons = c(3, 9, 18), sourceCondition = "control", armColumn = "PARAMCD", armValue = "OS"), list(in_event)),
+    list("model.prognostic_apply", list(inputId = in_subj$id, idColumn = "USUBJID", sourceCondition = "control", endpoint = list(type = "binary", horizon = 12, timeUnit = "months"), inputUnits = list(age = "years"), model = list(family = "logistic", intercept = -1, terms = list(list(column = "age", coefficient = .03, transform = "identity", unit = "years", center = 60, scale = 1)))), list(in_subj)),
     list("profile.snapshot", vcr_empty_object(), list(in_subj)),
     list("cohort.build", list(rules = list(list(name = "adult", rule = list(op = "compare", column = "age", comparator = "gte", value = 40)))), list(in_subj)),
     list("population.scenario", list(n = 200L, population = list(variables = list(list(name = "age", family = "normal", mean = 60, sd = 9)))), NULL),

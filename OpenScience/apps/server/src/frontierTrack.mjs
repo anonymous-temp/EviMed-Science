@@ -62,7 +62,7 @@ const READER_BEST_SOURCE_SQL = `(CASE WHEN btrim(coalesce(t.body_text, '')) <> '
 export const FRONTIER_RECAP_LIMITS = Object.freeze({ items: 12, refreshMs: 3 * HOUR, minItems: 2, min: 90, max: 460, refs: 8, perRound: 2, summary: 300 });
 const RECAP_MAX_TOKENS = 900;
 const RECAP_TIMEOUT_MS = 90_000;
-/** How many items a congress hub lists. */
+/** How many items a congress hub lists (the newest days first; its count says how many it holds, 2026-10-27). */
 const HUB_ITEM_LIMIT = 400;
 /** The days an item is dated in the feed's zone. */
 const ITEM_DAY_SQL = (/** @type {string} */ zone) => `((COALESCE(i.published_at, i.visible_at)) AT TIME ZONE ${zone})::date`;
@@ -215,7 +215,7 @@ export async function frontierWriteCongressRecap(editor, { congress, refs }) {
 // ───────────────────────── the module ─────────────────────────
 
 /**
- * @typedef {{ database: any, now?: () => Date, timeZone?: string, calendar?: readonly import("@evimed/domain").FrontierCongress[] }} FrontierTrackOptions
+ * @typedef {{ database: any, now?: () => Date, timeZone?: string, calendar?: readonly import("@evimed/domain").FrontierCongress[], readCacheMs?: number, hubItemLimit?: number }} FrontierTrackOptions
  * @typedef {{ editor: any, workerId: string, leaseMs: number, now: Date, budget: { state: string },
  *   providerPaused: () => boolean, onProviderRefused: (code: string) => void, providerUnavailable?: (code: string) => boolean,
  *   readerText: (texts: any) => ({ source: string, text: string } | null), itemGenre: (item: any) => string,
@@ -237,12 +237,21 @@ const encodeCursor = (at, id) => Buffer.from(JSON.stringify({ at, id }), "utf8")
 
 export class FrontierTrack {
   /** @param {FrontierTrackOptions} options */
-  constructor({ database, now = () => new Date(), timeZone = "Asia/Shanghai", calendar = FRONTIER_CONGRESSES }) {
+  constructor({ database, now = () => new Date(), timeZone = "Asia/Shanghai", calendar = FRONTIER_CONGRESSES, readCacheMs = 0, hubItemLimit = HUB_ITEM_LIMIT }) {
     if (!database) throw new TypeError("The tracker needs a database.");
     this.database = database;
     this.now = now;
     this.timeZone = timeZone;
     this.calendar = calendar;
+    // The congress list and a congress's hub are the same for every reader and cost a regex over a window's text per congress:
+    // 13.9 s for the list of 17 on production (2026-10-27, 40k items), past the walk's 30 s under a release's start. With
+    // `readCacheMs` (the service's reader) a read is answered from the last result and one refresh runs behind it once it is
+    // older than that; a refresh that fails leaves the last result standing. 0 (the pipeline, the tests) reads every time.
+    this.readCacheMs = readCacheMs;
+    /** How many items a hub lists (the tests lower it); its `itemCount` is the whole count whatever this is. */
+    this.hubItemLimit = Math.max(1, Math.trunc(Number(hubItemLimit)) || HUB_ITEM_LIMIT);
+    /** @type {Map<string, { at: number, value: any, pending: Promise<any> | null }>} */
+    this.readCache = new Map();
     this.counters = {
       rounds: 0, asked: 0, approvals: 0, guidelines: 0, none: 0, failed: 0, droppedFields: /** @type {Record<string, number>} */ ({}),
       recapsAsked: 0, recapsWritten: 0, recapsEmpty: 0, recapsDropped: 0, recapsFailed: 0,
@@ -441,7 +450,30 @@ export class FrontierTrack {
    * 会议: the congresses on now, coming in the next 60 days and ended within the last 30, with the number of items each has.
    * Ongoing first (the one ending soonest first), then the coming ones by start, then the recent by end, newest first.
    */
+  /**
+   * Answer `read` from the cache under `key` (see the constructor): fresh, the last value; stale, the last value while one refresh
+   * runs; absent, the read itself (callers that arrive together share it).
+   * @template T @param {string} key @param {() => Promise<T>} read @returns {Promise<T>}
+   */
+  async #cached(key, read) {
+    if (!(this.readCacheMs > 0)) return read();
+    const entry = this.readCache.get(key) ?? { at: 0, value: undefined, pending: null };
+    this.readCache.set(key, entry);
+    const refresh = () => {
+      entry.pending ??= read().then((value) => { entry.at = Date.now(); entry.value = value; return value; })
+        .finally(() => { entry.pending = null; });
+      return entry.pending;
+    };
+    if (entry.at && Date.now() - entry.at < this.readCacheMs) return entry.value;
+    if (entry.at) { refresh().catch(() => {}); return entry.value; }
+    return refresh();
+  }
+
   async congresses() {
+    return this.#cached("congresses", () => this.#readCongresses());
+  }
+
+  async #readCongresses() {
     const today = frontierDayIn(this.now(), this.timeZone);
     const order = { ongoing: 0, upcoming: 1, recent: 2 };
     const open = this.calendar.map((congress) => ({ congress, status: frontierCongressStatus(congress, today) }))
@@ -466,20 +498,29 @@ export class FrontierTrack {
   }
 
   /**
-   * One congress's hub: the congress, its days (newest first) each with its recap and its items (the selected ones first), and
-   * the number of items. Null for an id the calendar does not have.
+   * One congress's hub: the congress, its days (newest first) each with its recap and its items (the selected ones first), the number
+   * of items the congress holds (`itemCount`, the list's own count) and how many of them the days list (`listedCount`: the newest, at
+   * most `hubItemLimit`). Null for an id the calendar does not have.
    * @param {string} id
    */
   async congress(id) {
     const congress = frontierCongressById(id, this.calendar);
     if (!congress) return null;
+    return this.#cached(`congress:${congress.id}`, () => this.#readCongress(congress));
+  }
+
+  /** @param {import("@evimed/domain").FrontierCongress} congress */
+  async #readCongress(congress) {
     const today = frontierDayIn(this.now(), this.timeZone);
     const matched = congressItemsSql(congress, this.timeZone, 1);
     const rows = today >= frontierCongressItemWindow(congress).from ? (await this.database.query(`SELECT i.id, i.public_id, ${ITEM_DAY_SQL("$1")} AS day, i.selected,
         i.brief, i.genre
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
       WHERE ${matched.sql}
-      ORDER BY day DESC, i.selected DESC, i.safety_alert DESC, i.score_total DESC NULLS LAST, i.id DESC LIMIT ${HUB_ITEM_LIMIT}`, matched.params)).rows : [];
+      ORDER BY day DESC, i.selected DESC, i.safety_alert DESC, i.score_total DESC NULLS LAST, i.id DESC LIMIT ${this.hubItemLimit}`, matched.params)).rows : [];
+    // The count the list shows for this congress (`#countItems`, one query over the same match), not the rows read: a hub of 624 said
+    // 400 while its list said 624 (owner, 2026-10-27). Read inside the cache this hub is kept in.
+    const held = rows.length >= this.hubItemLimit ? await this.#countItems(congress) : rows.length;
     const recaps = (await this.database.query(`SELECT day, recap_zh, refs, generated_at FROM evimed_frontier.congress_recaps WHERE congress_id = $1 AND recap_zh IS NOT NULL
       ORDER BY day DESC`, [congress.id])).rows;
     /** @type {Map<string, { day: string, rows: any[] }>} */
@@ -499,7 +540,7 @@ export class FrontierTrack {
         recap: recap ? { text: String(recap.recap_zh), refs: Array.isArray(recap.refs) ? recap.refs : [], at: iso(recap.generated_at) } : null };
     });
     return { congress: { ...frontierCongressSummary(congress, today), sourceUrl: congress.source_url ?? null, abstractsAt: congress.abstracts_at ?? null },
-      itemCount: rows.length, days };
+      itemCount: Math.max(held, rows.length), listedCount: rows.length, days };
   }
 
   // ───────────────────────── the recap: the pipeline's step ─────────────────────────

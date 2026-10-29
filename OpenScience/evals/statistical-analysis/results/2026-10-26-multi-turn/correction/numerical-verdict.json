@@ -1,0 +1,187 @@
+{
+  "scope": "explicitly_bound_numerical_values_only",
+  "passed": true,
+  "checks": [
+    {
+      "turn": 0,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "nA",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 4e-08
+        },
+        {
+          "reference": "nB",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 4e-08
+        },
+        {
+          "reference": "difference",
+          "actual": 2.9599876249999983,
+          "expected": 2.9599876249999983,
+          "passed": true,
+          "tolerance": 2.9599876249999987e-09
+        },
+        {
+          "reference": "low",
+          "actual": 2.315310398856515,
+          "expected": 2.315310398856515,
+          "passed": true,
+          "tolerance": 2.315310398856515e-09
+        },
+        {
+          "reference": "high",
+          "actual": 3.6046648511434816,
+          "expected": 3.6046648511434816,
+          "passed": true,
+          "tolerance": 3.604664851143482e-09
+        },
+        {
+          "reference": "p",
+          "actual": 5.764068905526884e-14,
+          "expected": 5.764068905526884e-14,
+          "passed": true,
+          "tolerance": 5.764068905526884e-23
+        },
+        {
+          "reference": "t",
+          "actual": 9.140858718524651,
+          "expected": 9.140858718524651,
+          "passed": true,
+          "tolerance": 9.140858718524652e-09
+        },
+        {
+          "reference": "df",
+          "actual": 77.98256152444971,
+          "expected": 77.98256152444971,
+          "passed": true,
+          "tolerance": 7.798256152444971e-08
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "nA",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 4e-08
+        },
+        {
+          "reference": "nB",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 4e-08
+        },
+        {
+          "reference": "difference",
+          "actual": -2.9599876249999983,
+          "expected": -2.9599876249999983,
+          "passed": true,
+          "tolerance": 2.9599876249999987e-09
+        },
+        {
+          "reference": "low",
+          "actual": -3.6046648511434816,
+          "expected": -3.6046648511434816,
+          "passed": true,
+          "tolerance": 3.604664851143482e-09
+        },
+        {
+          "reference": "high",
+          "actual": -2.315310398856515,
+          "expected": -2.315310398856515,
+          "passed": true,
+          "tolerance": 2.315310398856515e-09
+        },
+        {
+          "reference": "p",
+          "actual": 5.764068905526884e-14,
+          "expected": 5.764068905526884e-14,
+          "passed": true,
+          "tolerance": 5.764068905526884e-23
+        },
+        {
+          "reference": "t",
+          "actual": -9.140858718524651,
+          "expected": -9.140858718524651,
+          "passed": true,
+          "tolerance": 9.140858718524652e-09
+        },
+        {
+          "reference": "df",
+          "actual": 77.98256152444971,
+          "expected": 77.98256152444971,
+          "passed": true,
+          "tolerance": 7.798256152444971e-08
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "role": "bindings",
+      "path": "independent-bindings.json",
+      "sha256": "4f5c24c8cdd2a450caad9cc0b12e7c36db9b52df49d446fe0a9219ec9bc4e01b",
+      "bytes": 4550
+    },
+    {
+      "role": "judge",
+      "path": "evals/statistical-analysis/live/judge.py",
+      "sha256": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
+      "bytes": 9692
+    },
+    {
+      "role": "fixture-manifest",
+      "path": "evals/statistical-analysis/live/fixture-sources.json",
+      "sha256": "5120794224a067edd8deb630e911416f653b005556257389f8aa0317cb6424a5",
+      "bytes": 1244
+    },
+    {
+      "role": "results",
+      "path": "turn-0/workspace/deliverables/marker-group-comparison-report/analysis-results.json",
+      "sha256": "fd859a6d20dbe3a30ba398383de77d81a7b99defbda85f8ac0754514a96b8d1a",
+      "bytes": 9206
+    },
+    {
+      "role": "fixture",
+      "path": "evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    },
+    {
+      "role": "results",
+      "path": "turn-1/workspace/deliverables/marker-group-comparison-report/analysis-results.json",
+      "sha256": "0868c9ac607c6aaddb9597775d4545c5268e2e9e19a9fc53906ab29bd879c92c",
+      "bytes": 10125
+    },
+    {
+      "role": "fixture",
+      "path": "evals/statistical-analysis/live/fixtures/coding-correction.csv",
+      "sha256": "a6aebffe6ee6269cfdbef4083fa4603aead1d9279fc9ab2846e1872d49c98afc",
+      "bytes": 1685
+    },
+    {
+      "role": "fixture",
+      "path": "evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    }
+  ],
+  "versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "scikit-learn": "1.6.1"
+  }
+}

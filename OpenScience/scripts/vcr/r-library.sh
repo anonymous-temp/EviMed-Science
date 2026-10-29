@@ -180,9 +180,16 @@ for (p in setdiff(want[!is.na(got) & got == want[, 2], 1], todo)) {
 if (!length(todo)) { cat('nothing to install\n'); quit(status = 0) }
 cat('installing', length(todo), 'of', nrow(want), 'packages\n')
 # The user agent is how the repository knows which R to build binaries for.
-options(HTTPUserAgent = sprintf('R/%s R (%s)', getRversion(), paste(getRversion(), R.version[['platform']], R.version[['arch']], R.version[['os']])))
-install.packages(todo, lib = site, repos = c(CRAN = Sys.getenv('VCR_CRAN_REPO')), type = 'source',
-                 dependencies = NA, Ncpus = as.integer(Sys.getenv('VCR_R_BUILD_NCPUS', '2')))
+options(timeout = 180, HTTPUserAgent = sprintf('R/%s R (%s)', getRversion(), paste(getRversion(), R.version[['platform']], R.version[['arch']], R.version[['os']])))
+for (attempt in seq_len(3L)) {
+  if (!length(todo)) break
+  install.packages(todo, lib = site, repos = c(CRAN = Sys.getenv('VCR_CRAN_REPO')), type = 'source',
+                   dependencies = NA, Ncpus = as.integer(Sys.getenv('VCR_R_BUILD_NCPUS', '2')))
+  installed <- have()
+  missing <- is.na(unname(installed[want[, 1]])) | unname(installed[want[, 1]]) != want[, 2]
+  todo <- want[missing, 1]
+  if (length(todo) && attempt < 3L) Sys.sleep(2^attempt)
+}
 "
 }
 

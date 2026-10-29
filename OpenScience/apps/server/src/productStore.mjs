@@ -226,9 +226,13 @@ export class ProductDocuments {
    * did it last change" is a question about content. A method that recorded
    * each use as a revision had 77 of them, 75 counters, and its 「回到上一版」
    * restored the previous counter (audit 2026-09-26, L-G4).
+   * `dropEarlierRevisions` is for a record whose earlier contents must not outlive a decision: every revision row saved before this write is
+   * deleted in the same transaction, so the history keeps only the record as it now stands. A write that blanks a field of the current row
+   * (a rejected promotion that keeps neither the method's text nor the author's account) is otherwise no forgetting at all, because each
+   * write saves the whole row as a revision.
    * @param {string} userId @param {string} kind @param {string} id @param {Record<string,any>} payload
-   * @param {{ expectedRevision: number, projectId?: string|null, transactionClient?: any, telemetry?: boolean, restoreDeleted?: boolean }} options */
-  async put(userId, kind, id, payload, { expectedRevision, projectId = null, transactionClient = null, telemetry = false, restoreDeleted = false }) {
+   * @param {{ expectedRevision: number, projectId?: string|null, transactionClient?: any, telemetry?: boolean, restoreDeleted?: boolean, dropEarlierRevisions?: boolean }} options */
+  async put(userId, kind, id, payload, { expectedRevision, projectId = null, transactionClient = null, telemetry = false, restoreDeleted = false, dropEarlierRevisions = false }) {
     const values = [productId(userId, "user"), productKind(kind), productId(id), productPayload(payload)];
     productInteger(expectedRevision, 0, 2_147_483_646);
     if (projectId != null) productId(projectId, "project");
@@ -244,6 +248,9 @@ export class ProductDocuments {
             WHERE user_id=$1 AND kind=$2 AND id=$3 AND revision=$5 AND (deleted_at IS NULL OR $7::boolean) RETURNING *`, [...values, expectedRevision, telemetry, restoreDeleted]);
       if (!result.rows[0]) throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
       if (!telemetry) await saveRevision(client, result.rows[0]);
+      if (dropEarlierRevisions && !telemetry) {
+        await client.query("DELETE FROM evimed_product.revisions WHERE user_id=$1 AND kind=$2 AND id=$3 AND revision<$4", [values[0], values[1], values[2], result.rows[0].revision]);
+      }
       return record(result.rows[0]);
     };
     return transactionClient ? operation(transactionClient) : this.database.transaction(operation);

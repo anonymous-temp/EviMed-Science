@@ -14,7 +14,7 @@
  * - **The database commits first.** A crash between the commit and the overwrite leaves bytes on disk that no read will serve
  *   (the rows say they are erased) and that the same request, made again, overwrites: the operations are idempotent.
  * - **A withdrawn subject is no candidate.** `subject_withdrawals` takes the subject out of every roster (`candidateSubjects`),
- *   out of a continued batch, and closes their open referrals as 「退出」; nobody is contacted who withdrew.
+ *   out of a continued batch, and marks legacy open referrals withdrawn while those tables still exist. No contact workflow runs.
  * - **Marks are labels.** `markBasisChanged` writes `derived_marks` for the facts, language judgments and assessments that were
  *   derived from a document, a projection or a permission that changed. It reads the derivation from the data (a fact's source,
  *   a judgment's evidence, the facts a frozen input names), blocks nothing and re-runs nothing.
@@ -81,7 +81,7 @@ export function redactedEvidence(evidence, erased) {
 
 /** The store of withdrawals, retirements and basis marks. @extends VcrStoreBase */
 export class VcrErasureStore extends VcrStoreBase {
-  /** @param {{ database: any, matchStore?: { transitionReferral: Function } | null, statementTimeoutMs?: number }} options */
+  /** @param {{ database: any, matchStore?: any, statementTimeoutMs?: number }} options */
   constructor({ database, matchStore = null, statementTimeoutMs }) {
     super({ database, ...(statementTimeoutMs ? { statementTimeoutMs } : {}) });
     this.matchStore = matchStore;
@@ -275,7 +275,7 @@ export class VcrErasureStore extends VcrStoreBase {
 
   /**
    * A subject's consent withdrawn: every document of theirs, and the projections of them, is erased; what was read from them
-   * is deleted or redacted; they leave every roster; their open referrals close as 「退出」. Idempotent: asked again, it finds
+   * is deleted or redacted; they leave every roster; their scientific evidence remains marked as withdrawn. Idempotent: asked again, it finds
    * the same documents (already erased) and answers the files to overwrite again.
    * @param {{ studyId: string, userId: string, actor: string, subjectKey: string, reason?: string }} input
    */
@@ -286,22 +286,22 @@ export class VcrErasureStore extends VcrStoreBase {
       const known = await this.#holdsSubject(client, studyId, subjectKey, files.length);
       if (!known) return null;
       const erased = await this.#erase(client, { studyId, userId, actor, fileIds: files.map((/** @type {any} */ row) => String(row.id)), subjectKey, cause: "withdrawn", reason });
-      let referralsClosed = 0;
-      for (const referral of (await client.query(
-        `SELECT id FROM ${VCR_SCHEMA}.referrals WHERE study_id=$1 AND subject_key=$2 AND state NOT IN ('withdrawn','screen_failed')`, [studyId, subjectKey])).rows) {
-        const moved = await this.matchStore?.transitionReferral({ referralId: referral.id, studyId, to: "withdrawn", actor, userId, note: "知情同意已撤回", guard: () => ({ ok: true }), client });
-        if (moved?.ok) referralsClosed += 1;
-      }
       await client.query(`INSERT INTO ${VCR_SCHEMA}.subject_withdrawals (study_id, subject_key, withdrawn_by, detail)
         VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (study_id, subject_key) DO NOTHING`, [studyId, subjectKey, actor, JSON.stringify({ reason })]);
+      // Parse this statement only if the offline OA retirement has not removed the table. This is a terminal privacy
+      // update, with no transition helper, contact event, referral creation or other operational side effect.
+      if ((await client.query(`SELECT to_regclass('${VCR_SCHEMA}.referrals') AS relation`)).rows[0]?.relation) {
+        await client.query(`UPDATE ${VCR_SCHEMA}.referrals SET state='withdrawn', updated_at=now()
+          WHERE study_id=$1 AND subject_key=$2 AND state NOT IN ('withdrawn','screen_failed')`, [studyId, subjectKey]);
+      }
       await this.audit({ client, studyId, userId, actor, action: "subject.withdraw", object: subjectKey,
-        detail: { ...erased.counts, referralsClosed, reason } });
-      return { subjectKey, ...erased, counts: { ...erased.counts, referralsClosed } };
+        detail: { ...erased.counts, reason } });
+      return { subjectKey, ...erased, counts: erased.counts };
     });
   }
 
   /**
-   * Whether the study holds this subject at all: a document, a fact, an assessment, a referral or a candidate row. A subject
+   * Whether the study holds this subject: a document, fact, assessment, candidate, retained historical observation, legacy referral or retired hash footprint. A subject
    * the study has never heard of is not withdrawn (and not made up).
    * @param {any} client @param {string} studyId @param {string} subjectKey @param {number} documents
    */
@@ -311,10 +311,15 @@ export class VcrErasureStore extends VcrStoreBase {
       `SELECT (EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2)
-        OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.referrals WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_candidates WHERE study_id=$1 AND subject_key=$2)
+        OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.followup_episodes WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1 AND subject_key=$2)) AS held`, [studyId, subjectKey])).rows[0];
-    return row?.held === true;
+    if (row?.held === true) return true;
+    if ((await client.query(`SELECT to_regclass('${VCR_SCHEMA}.referrals') AS relation`)).rows[0]?.relation) {
+      if ((await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.referrals WHERE study_id=$1 AND subject_key=$2 LIMIT 1`, [studyId, subjectKey])).rowCount) return true;
+    }
+    return Boolean((await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.retired_recruitment_subjects
+      WHERE study_id=$1 AND subject_hash=$2`, [studyId, sha256(subjectKey)])).rowCount);
   }
 
   /**

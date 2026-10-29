@@ -138,10 +138,10 @@ describe("an author's page", () => {
     expect(await screen.findByText("这位作者还没有公开的内容")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
   });
-  it("shows a failed read with a retry, and the skeleton while it loads", async () => {
+  it("shows a fast failed read with a retry without flashing a skeleton", async () => {
     client.fetchEvidenceAuthor.mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce(author);
     const { container } = mount();
-    expect(container.querySelector("[aria-busy], .animate-pulse")).not.toBeNull();
+    expect(container.querySelector(".animate-pulse")).toBeNull();
     await userEvent.click(await screen.findByRole("button", { name: "重试" }));
     expect(await screen.findByRole("heading", { level: 1, name: "李研究" })).toBeInTheDocument();
   });

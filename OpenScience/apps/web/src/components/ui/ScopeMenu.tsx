@@ -48,6 +48,18 @@ export interface ScopeMenuProps {
   variant?: "button" | "chip";
 }
 
+/**
+ * Component: ScopeMenu; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named scope trigger and grouped checked Menu choices.
+ * Variants: button/chip; optional all scope choice.
+ * States: Controlled scope values; checked rows reflect supplied value.
+ * Hit area: Shared button/chip trigger and Menu rows.
+ * Keyboard: Menu owns roving navigation, Escape and return focus.
+ * Long content: Trigger and menu labels truncate; scope menu scrolls beyond max-h-96.
+ * Theme: Neutral trigger and semantic selected state.
+ * Responsive: Menu placement follows available viewport.
+ * Verification: Primitives.test.tsx and Toolbar.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ScopeMenu({ label, groups, value, onChange, allLabel, variant = "button" }: ScopeMenuProps) {
   const choices = groups.flatMap((group) => group.choices);
   const chosen = choices.find((choice) => choice.id === value) ?? null;

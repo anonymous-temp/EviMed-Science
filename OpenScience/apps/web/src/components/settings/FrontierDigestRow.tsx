@@ -4,7 +4,7 @@ import { fetchFrontierDigestSwitch, setFrontierDigestSwitch, fetchFrontierNotifi
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { PanelRow } from "@/components/ui/Panel";
-import { Switch } from "@/components/ui/Switch";
+import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
 
 type SwitchState = { kind: "loading" } | { kind: "ready"; enabled: boolean } | { kind: "error"; message: string };
 
@@ -41,6 +41,8 @@ export function FrontierDigestRow({ feature, switchKey = "frontier", label = "�
     return () => { active = false; };
   }, [feature, attempt, switchKey]);
 
+  // The write's answer is the state (the server returns it): the switch settles on it and nothing is read back. A refusal is the
+  // switch's own line, not also a toast.
   const toggle = useCallback(async () => {
     if (state.kind !== "ready" || busy) return;
     const next = !state.enabled;
@@ -49,8 +51,7 @@ export function FrontierDigestRow({ feature, switchKey = "frontier", label = "�
       const enabled = await (switchKey === "frontier" ? setFrontierDigestSwitch(next) : setFrontierNotificationSwitch(switchKey, next));
       setState({ kind: "ready", enabled });
       toast.success(`${enabled ? "已开启" : "已关闭"}${label}推送`);
-    } catch (error) {
-      toast.error(webErrorMessage(error, { fallback: "推送设置没有保存成功，请稍后重试。" }));
+      return enabled;
     } finally {
       setBusy(false);
     }
@@ -63,7 +64,7 @@ export function FrontierDigestRow({ feature, switchKey = "frontier", label = "�
       description={state.kind === "error" ? <span role="alert">{state.message}</span> : description}
       control={state.kind === "error"
         ? <Button variant="text" onClick={() => setAttempt((value) => value + 1)}>重试</Button>
-        : <Switch label={label} checked={state.kind === "ready" && state.enabled} disabled={state.kind !== "ready" || busy} onChange={() => void toggle()} />}
+        : <AsyncSwitch readChecked={async () => { const enabled = await (switchKey === "frontier" ? fetchFrontierDigestSwitch() : fetchFrontierNotificationSwitch(switchKey)); setState({ kind: "ready", enabled }); return enabled; }} label={label} errorMessage={(error) => webErrorMessage(error, { fallback: "推送设置没有保存成功，请稍后重试。" })} checked={state.kind === "ready" && state.enabled} disabled={state.kind !== "ready"} pending={busy} onChange={() => toggle()} />}
     />
   );
 }

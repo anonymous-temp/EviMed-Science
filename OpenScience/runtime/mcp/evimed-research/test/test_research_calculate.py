@@ -20,7 +20,7 @@ CONTEXT = {"v": 1, "sessionId": "session", "callId": "call", "rootCallId": "root
            "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "high"}
 # The two methods the R engine runs. Their inputs are held to the control
 # plane's VCR replay in apps/server/test/engineToolContract.test.mjs.
-VCR_METHODS = {"design.analytic", "comparator.evalue"}
+VCR_METHODS = {"design.analytic", "comparator.evalue", "design.simulate", "design.assurance", "accrual.poisson_gamma", "comparator.map_prior"}
 
 
 class Gateway(BaseHTTPRequestHandler):
@@ -92,6 +92,15 @@ class ResearchCalculationTests(unittest.TestCase):
         self.assertEqual(result["data"]["cleanup"], "unknown")
         self.assertEqual(Gateway.seen[-1]["path"], "/internal/results/v1/cancel")
 
+    def test_analytic_sample_size_basis_reaches_the_native_tool_unchanged(self):
+        basis = {"basis": "normal_approximation", "total": 182, "nTreatment": 91, "nControl": 91,
+                 "powerCheckBasis": "pooled_two_sample_t", "powerAtAllocatedN": 0.798305621,
+                 "note": "Normal approximation, not exact t sizing."}
+        Gateway.answer = {"data": {"id": "calculation-job", "state": "succeeded", "computationBasis": basis}}
+        result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
+        self.assertEqual(result["data"]["computationBasis"], basis)
+        self.assertIn("not exact t", result["data"]["computationBasis"]["note"])
+
     def test_named_refusal_disabled_gateway_and_bad_response_remain_explicit(self):
         Gateway.status = 422; Gateway.answer = {"code": "result_input_changed", "error": "untrusted text is not reflected"}
         result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
@@ -130,7 +139,7 @@ class ResearchCalculationTests(unittest.TestCase):
         self.assertIn("optional parameters yates, correctZeroCells", tool["description"])
         # Paid for on every request that offers the tool, and refused by the
         # model gateway past 8 KiB: a form added to the table is weighed here.
-        self.assertLessEqual(len(tool["description"]), 2400)
+        self.assertLessEqual(len(tool["description"]), 3600)
         named = {name for spec in research_calculate.METHOD_INPUTS.values()
                  for names in spec.get("parameters", {}).values() for name in names}
         self.assertEqual(named, set(tool["inputSchema"]["properties"]["parameters"]["properties"]))
@@ -180,12 +189,12 @@ class ResearchCalculationTests(unittest.TestCase):
         self.assertEqual(missing["error"]["stopReason"], "invalid_input")
         self.assertIn("nothing was started", missing["next_actions"][0])
 
-    def test_a_failed_calculation_points_the_run_at_its_input_file(self):
+    def test_a_failed_calculation_does_not_invent_an_input_failure_or_retry(self):
         Gateway.answer = {"data": {"id": "calculation-job", "state": "failed", "error": {"code": "result_replay_failed"}}}
         result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
         self.assertEqual(result["status"], "warning")
         self.assertEqual(result["data"]["error"]["code"], "result_replay_failed")
-        self.assertIn("compare the input file with its method's shape", result["next_actions"][-1])
+        self.assertIn("Do not guess missing keys", result["next_actions"][-1])
         Gateway.answer = {"data": {"id": "calculation-job", "state": "canceled"}}
         result = self.server.call_tool("research_calculate", {"action": "cancel", "jobId": "calculation-job"})
         self.assertEqual(result["next_actions"], ["Read the named failure and continue from preserved work."])
@@ -203,12 +212,15 @@ class ResearchCalculationTests(unittest.TestCase):
                 self.assertIn("Correct that one input", result["next_actions"][-1])
                 self.assertNotIn("compare the input file", " ".join(result["next_actions"]))
         # A code it does not know is not given a sentence, and an unreadable input keeps the older hint.
-        for code in ("replay_input_invalid", "replay_made_up", "result_replay_failed"):
+        for code in ("replay_input_invalid", "replay_input_too_large", "replay_made_up", "result_replay_failed"):
             with self.subTest(code=code):
                 Gateway.answer = {"data": {"id": "calculation-job", "state": "failed", "error": {"code": code}}}
                 result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
                 self.assertEqual(len(result["warnings"]), 1)
-                self.assertIn("compare the input file with its method's shape", result["next_actions"][-1])
+                if code in ("replay_input_invalid", "replay_input_too_large"):
+                    self.assertIn("compare the input file with its method's shape", result["next_actions"][-1])
+                else:
+                    self.assertIn("Do not guess missing keys", result["next_actions"][-1])
         # A refusal is only a failed calculation's reason: a canceled one with the same code is just canceled.
         Gateway.answer = {"data": {"id": "calculation-job", "state": "canceled", "error": {"code": "replay_single_study"}}}
         result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})

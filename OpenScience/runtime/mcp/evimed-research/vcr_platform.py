@@ -57,6 +57,9 @@ from.
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 import hashlib
 import math
 import os
@@ -74,20 +77,20 @@ from immutable_capture import managed_workspace, ImmutableCaptureError
 # equal to the server's.
 READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
-    "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-    "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+    "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
+    "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
 )
-WRITE_WHATS = (
+WRITE_WHATS = ("task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-    "fact", "language_judgment", "site", "followup", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
+    "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
     "candidate_trial", "soa", "regulatory_contact",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
 # comparator-effect kinds appended after them; `test/test_vcr_platform.py` reads
 # the domain and holds this list equal to it.
-JOB_KINDS = (
+JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "profile_snapshot", "build_cohort", "generate_population", "literature_population", "synthesize_population",
     "population_quality", "generate_patients", "generate_patients_continuous", "generate_patients_binary",
     "reconstruct_km", "pool_evidence", "weight_comparator", "propensity_weight_comparator", "maic_comparator",
@@ -170,7 +173,7 @@ class VcrPlatformError(Exception):
         return "retry" if self.retryable else "unsupported"
 
 
-def tool_definitions():
+def _detailed_tool_definitions():
     return [
         {
             "name": "vcr_read",
@@ -210,6 +213,7 @@ def tool_definitions():
                             "protocolVersionId": ID,
                             "query": {"type": "string", "minLength": 1, "maxLength": 200},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
+                            "beforeSeq": {"type": "integer", "minimum": 0},
                             "offset": {"type": "integer", "minimum": 0, "maximum": 1048576},
                         },
                         "additionalProperties": False,
@@ -226,7 +230,7 @@ def tool_definitions():
                 "its structured eligibility criteria, assumption cards and their evidence items, precedents, population, "
                 "patient-set, comparator and trial designs, a design grid, a decision record, a regulatory contact, the protocol's visit schedule "
                 "(soa, one visit per item), a fitted literature model, "
-                "a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, "
+                "a model's ICH M15 assessment record, patient facts, longitudinal research history, or the report text. A disease pack: data {use: <catalogue id>} binds one, "
                 "data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population "
                 "item may carry fromLibrary {definitionId, version?} instead of a definition, or, for a real cohort, fromProtocol: true with a "
                 "snapshotId (the protocol's own criteria become its rules); a definition may carry title (the study's name, 24 characters) "
@@ -292,6 +296,8 @@ def tool_definitions():
                     "replicates": {"type": "integer", "minimum": 1, "maximum": 10000000},
                     "cpuSecondsLimit": {"type": "integer", "minimum": 1, "maximum": 86400},
                     "subjectId": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "modelId": ID,
+                    "modelVersion": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.+-]*$"},
                     "selection": {"type": "object", "properties": {
                         "protocolVersionId": ID,
                         "protocolVersionIds": {"type": "array", "minItems": 1, "maxItems": 10, "items": ID},
@@ -461,6 +467,28 @@ def tool_definitions():
     ]
 
 
+def tool_definitions():
+    """Compact root catalogue; the workflow skill and shape action carry detail."""
+    descriptions = {
+        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
+        "vcr_write": "Save a research object; candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
+        "vcr_simulate": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
+    }
+    tools = _detailed_tool_definitions()
+    for tool in tools:
+        if tool["name"] in descriptions:
+            tool["description"] = descriptions[tool["name"]]
+            # The wrapper and gateway retain their complete validation. The root
+            # learns method-specific fields from shape, not a permanent schema.
+            props = tool["inputSchema"]["properties"]
+            for name in ("filter", "data", "scenario", "selection"):
+                if name in props:
+                    props[name] = {"type": "object"}
+            if "items" in props:
+                props["items"] = {"type": "array", "items": {"type": "object"}}
+    return tools
+
+
 def _gateway():
     base = os.environ.get("EVIMED_VCR_GATEWAY_URL", "").strip().rstrip("/")
     if not base:
@@ -490,6 +518,19 @@ def _field_issues(raw) -> list:
     return out[:20]
 
 
+_EXECUTION_CONTEXT = ContextVar("vcr_execution_context", default=None)
+
+
+@contextmanager
+def invocation(execution_context):
+    """Keep native context per synchronous call, including nested wrappers."""
+    token = _EXECUTION_CONTEXT.set(execution_context)
+    try:
+        yield
+    finally:
+        _EXECUTION_CONTEXT.reset(token)
+
+
 def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict:
     base, token = _gateway()
     request = urllib.request.Request(
@@ -497,6 +538,7 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={
             "accept": "application/json",
+            **({"X-EviMed-Execution-Context": json.dumps(_EXECUTION_CONTEXT.get())} if _EXECUTION_CONTEXT.get() else {}),
             "authorization": "Bearer %s" % token,
             "content-type": "application/json",
             "user-agent": "EviMed-Research/1.2 (runtime vcr platform)",
@@ -603,6 +645,15 @@ def read(arguments: dict) -> dict:
         raise
     warnings = []
     next_actions = []
+    if what == "matching" and (arguments.get("filter") or {}).get("kind") not in ("contract", "terminology"):
+        next_actions.append("Read matching filter.kind=contract for exact protocol/fact write envelopes; vcr_read what=patient_context lists authenticated human cases; preserve the chosen messageSeq rather than guessing it.")
+        if data.get("subjectKey"):
+            if data.get("assessment") is None:
+                next_actions.append("No computed assessment is saved yet. Start vcr_simulate action=start kind=match_criteria, then read matching with this subjectKey when it completes. Do not invent judgments.")
+            else:
+                next_actions.append("The saved assessment contains criterion judgments and approved evidence. To read one criterion narrowly use filter.subjectKey plus filter.id=criterionId; missing evidence remains unknown.")
+        else:
+            next_actions.append("Read one returned subjectKey to obtain its saved assessment and quoted evidence; use filter.id for one criterion if needed.")
     if what == 'report_model':
         next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':
@@ -931,7 +982,7 @@ def shape(arguments: dict) -> dict:
         elif kind == "match_criteria":
             notes.append("Start it with an empty scenario: the platform freezes the newest protocol version's criteria and the facts written for the study.")
         else:
-            notes.append("State only %s; the sites' rates come from the study's ledger and site records." % ", ".join(platform))
+            notes.append("State only %s; the rates are explicit design assumptions, never recruitment records." % ", ".join(platform))
         data["notes"] = notes
         summary = "%s is built by the platform from the study; you state %s." % (kind, ", ".join(platform) if platform else "nothing")
     else:
@@ -1002,7 +1053,7 @@ def simulate(arguments: dict) -> dict:
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
         payload["kind"] = kind
-        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection"):
+        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion"):
             if arguments.get(key) is not None:
                 payload[key] = arguments[key]
     else:
@@ -1041,6 +1092,8 @@ def _is_computing(data: dict) -> bool:
 
 
 def _wait_for_job(first: dict) -> dict:
+    if _EXECUTION_CONTEXT.get():
+        return first  # Native async completion resumes the originating conversation.
     """Ask the platform again, every few seconds, for a job that was just queued or is still running, until it leaves
     that state or the bound runs out; return what the last answer said. A job that finishes within the bound comes back
     finished from the one call. Whatever goes wrong while waiting only ends the waiting: the answer already in hand was

@@ -56,7 +56,7 @@ const tokenRules = [
   // slash is written `\x2F` because an esquery regex literal cannot contain
   // one.
   ...banned(
-    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|surface-3|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|title-ink|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|badge|badge-fg|text-graphic|border-light|member-from|member-to|chart-own|chart-grid|chart-axis|chart-band|chart-target|dot-[a-z]+)\\x2F\\d+/",
+    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|surface-3|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|title-ink|brand-ink|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|focus-input|badge|badge-fg|text-graphic|border-light|member-from|member-to|chart-own|chart-grid|chart-axis|chart-band|chart-target|dot-[a-z]+)\\x2F\\d+/",
     "An opacity modifier on a design-token colour generates no CSS (the tokens are var() colours). Use a solid token or its -soft / -strong partner from src/index.css.",
   ),
   ...banned(
@@ -163,6 +163,10 @@ const PAGE_FILES = [
   "src/components/{geo,vcr,memory,sources,frontier,inbox,autopilot,capsule,settings,skills}/**/*.{ts,tsx}",
 ];
 const VCR_FILES = ["src/components/vcr/**/*.{ts,tsx}", "src/app/virtual-research/**/*.{ts,tsx}"];
+// A text-submit handler: Enter that confirms an IME composition must not submit a draft. It is part of the 虚拟临床研究 group's own
+// syntax list (a file's last matching group replaces the earlier ones' rules, so a rule written only in an earlier override is
+// silently dead there) and of the adopted-surfaces override at the end.
+const ENTER_SUBMIT = { selector: "BinaryExpression[left.type='MemberExpression'][left.property.name='key'][right.value='Enter']", message: "Text submission must use isSubmitKey so IME confirmation cannot submit a draft." };
 
 // `patterns` and not `paths`: a page may reach a primitive by its alias or by a relative path, and both are the same import.
 const atomPattern = (module, importNames) => ({
@@ -226,7 +230,7 @@ const LAYOUT_GROUPS = [
   {
     files: VCR_FILES,
     imports: [TAG_PATTERN, ...ATOM_PATTERNS, ...VCR_PATTERNS],
-    syntax: [...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...CHAT_NAVIGATION],
+    syntax: [...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...CHAT_NAVIGATION, ENTER_SUBMIT],
   },
 ];
 const layoutGroupOf = (file) => [...LAYOUT_GROUPS].reverse().find((group) => group.files.some((pattern) => minimatch(file, pattern))
@@ -321,6 +325,12 @@ module.exports = {
       rules: {
         "no-restricted-syntax": ["error", ...errorTextRules],
       },
+    },
+    // Adopted text-submit surfaces only: Enter activation on buttons and
+    // roving-focus controls remains native and is intentionally outside this rule.
+    {
+      files: ["src/app/routes/EvidenceZonesPage.tsx", "src/app/routes/EvidenceZonePage.tsx"],
+      rules: { "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ENTER_SUBMIT] },
     },
     ...layoutOverrides,
   ],

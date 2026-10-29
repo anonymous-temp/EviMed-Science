@@ -260,6 +260,9 @@ if node --env-file=.env -e 'process.exit(["1","true","yes"].includes(String(proc
   COMPOSE+=(-f docker-compose.browser.yml)
 fi
 if grep -qE '^OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR=.+' .env; then COMPOSE+=(-f docker-compose.vcr-backup.yml); fi
+# The opt-in RSI serving layer binds the deployment's private records directory into the web service and points the server at its
+# configuration file; the overlay is composed only where the deployment names that directory (it refuses to resolve without one).
+if grep -qE '^OPEN_SCIENCE_RSI_CONFIG_HOST_DIR=.+' .env; then COMPOSE+=(-f docker-compose.rsi.yml); fi
 if node --env-file=.env -e 'process.exit(["1","true","yes"].includes(String(process.env.OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED || "").toLowerCase()) ? 0 : 1)'; then
   COMPOSE+=(-f docker-compose.engine-keyless.yml)
 fi

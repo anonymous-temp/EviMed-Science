@@ -1,0 +1,452 @@
+{
+  "turns": [
+    {
+      "index": 0,
+      "referenceKind": "comparison",
+      "results": "deliverables/statistical-analysis-report/analysis-results.json",
+      "referenceOptions": {
+        "scale": 1,
+        "supplement": false
+      },
+      "required": [
+        "nA",
+        "nB",
+        "difference",
+        "low",
+        "high",
+        "p",
+        "rawRows",
+        "duplicates",
+        "missing"
+      ],
+      "bindings": [
+        {
+          "reference": "nA",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "A"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "nB",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "B"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "difference",
+          "source": [
+            "analyses",
+            1,
+            "estimate"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "low",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "low"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "high",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "high"
+          ],
+          "absoluteTolerance": 5.1e-07,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "p",
+          "source": [
+            "analyses",
+            1,
+            "pValue"
+          ],
+          "absoluteTolerance": 5e-18,
+          "relativeTolerance": 0,
+          "rounding": "four significant figures"
+        },
+        {
+          "reference": "rawRows",
+          "source": [
+            "cohortFlow",
+            "rows_in_file"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "source": [
+            "cohortFlow",
+            "exact_duplicate_rows"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "missing",
+          "source": [
+            "cohortFlow",
+            "missing_marker_mm"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "referenceKind": "comparison",
+      "results": "deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "referenceOptions": {
+        "scale": 0.1,
+        "supplement": false
+      },
+      "required": [
+        "nA",
+        "nB",
+        "difference",
+        "low",
+        "high",
+        "p",
+        "rawRows",
+        "duplicates",
+        "missing"
+      ],
+      "bindings": [
+        {
+          "reference": "nA",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "A"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "nB",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "B"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "difference",
+          "source": [
+            "analyses",
+            1,
+            "estimate"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "low",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "low"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "high",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "high"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "p",
+          "source": [
+            "analyses",
+            1,
+            "pValue"
+          ],
+          "absoluteTolerance": 5e-18,
+          "relativeTolerance": 0,
+          "rounding": "four significant figures"
+        },
+        {
+          "reference": "rawRows",
+          "source": [
+            "cohortFlow",
+            "rows_in_file"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "source": [
+            "cohortFlow",
+            "exact_duplicate_rows"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "missing",
+          "source": [
+            "cohortFlow",
+            "missing_marker_mm"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "referenceKind": "comparison",
+      "results": "deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "referenceOptions": {
+        "scale": 0.1,
+        "supplement": true
+      },
+      "required": [
+        "nA",
+        "nB",
+        "difference",
+        "low",
+        "high",
+        "p",
+        "rawRows",
+        "duplicates",
+        "missing"
+      ],
+      "bindings": [
+        {
+          "reference": "nA",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "A"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "nB",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "B"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "difference",
+          "source": [
+            "analyses",
+            1,
+            "estimate"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "low",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "low"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "high",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "high"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "p",
+          "source": [
+            "analyses",
+            1,
+            "pValue"
+          ],
+          "absoluteTolerance": 5e-21,
+          "relativeTolerance": 0,
+          "rounding": "four significant figures"
+        },
+        {
+          "reference": "rawRows",
+          "source": [
+            "cohortFlow",
+            "rows_in_file"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "source": [
+            "cohortFlow",
+            "exact_duplicate_rows"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "missing",
+          "source": [
+            "cohortFlow",
+            "missing_marker_mm"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "referenceKind": "comparison",
+      "results": "deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "referenceOptions": {
+        "scale": 0.1,
+        "supplement": true
+      },
+      "required": [
+        "nA",
+        "nB",
+        "difference",
+        "low",
+        "high",
+        "p",
+        "rawRows",
+        "duplicates",
+        "missing"
+      ],
+      "bindings": [
+        {
+          "reference": "nA",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "A"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "nB",
+          "source": [
+            "cohortFlow",
+            "analysis_n_by_group",
+            "B"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "difference",
+          "source": [
+            "analyses",
+            1,
+            "estimate"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "low",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "low"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "high",
+          "source": [
+            "analyses",
+            1,
+            "interval",
+            "high"
+          ],
+          "absoluteTolerance": 5.1e-08,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "p",
+          "source": [
+            "analyses",
+            1,
+            "pValue"
+          ],
+          "absoluteTolerance": 5e-21,
+          "relativeTolerance": 0,
+          "rounding": "four significant figures"
+        },
+        {
+          "reference": "rawRows",
+          "source": [
+            "cohortFlow",
+            "rows_in_file"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "source": [
+            "cohortFlow",
+            "exact_duplicate_rows"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "missing",
+          "source": [
+            "cohortFlow",
+            "missing_marker_mm"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        }
+      ]
+    }
+  ]
+}

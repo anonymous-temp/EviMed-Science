@@ -1,4 +1,4 @@
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { ensureGeoConversationSession } from "../geoConversationSession";
 import { GEO_ARTICLE_CHANNEL_LABELS_ZH } from "@evimed/domain";
 import { useState } from "react";
@@ -21,10 +21,13 @@ import { yuan } from "./geoTabText";
 import { Assumptions, Battlefield, ClientToDos, EnginePromises, Targets } from "./PlanStrategy";
 
 /** Shared contextual plan composition, including the legacy plan destination. */
-export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: { geoId: string; project: GeoProject; sourceId?: string; sourceUrl?:string; selectionRef?:string }) {
+export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: { geoId: string; project: GeoProject; sourceId?: string; sourceUrl?:string; selectionRef?:string; embedded?:boolean }) {
   const [params] = useSearchParams();
   const location = useLocation();
   const requestedVersion = Number(params.get("strategyVersion"));
+  sourceId ??= params.get("planSource") ?? undefined;
+  sourceUrl ??= params.get("planUrl") ?? undefined;
+  selectionRef ??= params.get("selectionRef") ?? undefined;
   const options = { ...(selectionRef ? {selectionRef} : {}), ...(sourceUrl ? {url:sourceUrl} : {}), ...(sourceId ? { sourceId } : {}), ...(requestedVersion > 0 ? {strategyVersion: requestedVersion} : {}) };
   const { state, reload } = useGeoStrategy(geoId, options);
   const frame = useGeoFrame();
@@ -42,7 +45,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
     try {
       const current = await getGeoProject(geoId);
       const sessionId = await ensureGeoConversationSession(geoId, project.projectId,
-        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId);
+        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId, current.sessionId || project.sessionId);
       const signature = JSON.stringify([sessionId,plan.selection?.reference,plan.version,sourceId,sourceUrl,action?.key]);
       const key = retryKey?.signature === signature ? retryKey.key : crypto.randomUUID(); setRetryKey({signature,key});
       const context = await stageGeoPlanContext(geoId, { requestKey: key, sessionId, mode: action ? "content" : "strategy",
@@ -68,7 +71,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
         {plan.summary && <p data-prose="" className="max-w-measure text-ui">{plan.summary}</p>}
         <PlanActions plan={plan} canUse={mayConverse} disabled={busy || plan.version == null} onUse={(action) => void handoff(action)} />
       </Section>
-      <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
+      <GeoAnalysisEntry key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" title="方案目标与实测分析" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
       <Targets geoId={geoId} plan={plan} onChosen={() => { reload(); frame?.data.invalidate(); }} />
       <Battlefield geoId={geoId} plan={plan} />
       <EnginePromises plan={plan} />

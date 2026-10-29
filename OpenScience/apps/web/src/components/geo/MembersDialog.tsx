@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { addGeoMember, getGeoMembers, removeGeoMember, type GeoMember, type GeoMemberRole, type GeoMembers } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
-import { FilterChips } from "@/components/ui/FilterChips";
+import { Radio } from "@/components/ui/Radio";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { Input } from "@/components/ui/Input";
 
@@ -61,7 +61,7 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
   };
 
   return (
-    <FormDialog title="成员" onClose={onClose} busy={saving}>
+    <FormDialog title="成员" onClose={onClose} busy={saving} dirty={userId.length > 0 || hospital.length > 0 || department.length > 0}>
       <ul aria-label="成员列表" className="flex flex-col divide-y divide-faint">
         {(data?.members ?? []).map((member) => (
           <li key={member.userId} className="flex items-center gap-3 py-2 text-ui">
@@ -74,9 +74,15 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
         ))}
       </ul>
       {manage && (
-        <form className="mt-4 flex flex-col gap-3" onSubmit={add} noValidate>
+        <form className="mt-4 flex flex-col gap-3" onSubmit={add} noValidate><fieldset disabled={saving} className="contents">
           <Input label="成员的账号" autoComplete="off" value={userId} onChange={(event) => setUserId(event.target.value)} />
-          <FilterChips<GeoMemberRole> label="角色" options={ROLE_OPTIONS} value={role} onChange={(next) => { if (next) setRole(next); }} />
+          {/* A choice made in a form is a field: one of three roles, said in words, not a filter chip. */}
+          <fieldset className="flex min-w-0 flex-wrap gap-x-4">
+            <legend className="mb-1 text-ui text-text">角色</legend>
+            {ROLE_OPTIONS.map((option) => (
+              <Radio key={option.value} name="geo-member-role" label={option.label} value={option.value} checked={role === option.value} onChange={() => setRole(option.value)} />
+            ))}
+          </fieldset>
           {role === "medical_reviewer" && (
             <>
               <Input label="医院" autoComplete="off" value={hospital} onChange={(event) => setHospital(event.target.value)} />
@@ -85,7 +91,7 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
           )}
           <p className="text-caption text-text-3">{ROLE_NOTE[role]}</p>
           <div className="flex justify-end"><Button type="submit" loading={saving}>添加</Button></div>
-        </form>
+        </fieldset></form>
       )}
       {error && <p role="alert" className="mt-3 text-ui text-danger">{error}</p>}
     </FormDialog>

@@ -247,6 +247,12 @@ test("a release's images are found under the names this deployment actually tags
     "open-science-runtime:dsh-0.2.1-rc.2-uv-0.11.26-526261d6a154",
     "open-science-runtime:dsh-0.2.1-rc.2-uv-0.11.26-526261d6a154-flat",
   ]);
+  // The aggregate replay image every delta rebuilds leaves with its release too.
+  assert.deepEqual(releaseImageTags([...tags, "evimed-result-replay:526261d6a154", "evimed-result-replay:9682d4bfa1a7"], "526261d6a154"), [
+    "open-science-web:526261d6a154",
+    "open-science-runtime:dsh-0.2.1-rc.2-uv-0.11.26-526261d6a154",
+    "evimed-result-replay:526261d6a154",
+  ]);
 });
 
 

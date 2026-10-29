@@ -222,6 +222,38 @@ test("a pack the folder no longer has is taken off the shelves, but a folder tha
   assert.equal(await documents.get(other, "capsule", "official-copy:review"), null);
 });
 
+test("a pack the platform took off comes back to the shelf that held it when it is published again, and a copy the person deleted stays deleted", options, async () => {
+  const returner = `official_returner_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Returner','development')", [returner]);
+  try {
+    await writePack("review", { "pack.json": CARD("系统综述"), "pooling.md": methodFile("合并之前先看异质性", "可比性不够就不合并。", "conversation, meta-analysis") });
+    await official.publishAll();
+    await capsules.received(returner);
+    const held = await documents.get(returner, "capsule", "official-copy:review");
+    assert.ok(held && !held.deletedAt, "the account holds the pack");
+    // Withdrawn: taken off, and marked as the platform's doing.
+    await rm(path.join(sources, "review"), { recursive: true });
+    await official.publishAll();
+    await capsules.received(returner);
+    const taken = await documents.get(returner, "capsule", "official-copy:review", { includeDeleted: true });
+    assert.ok(taken.deletedAt, "taken off the shelf");
+    assert.equal(taken.payload.withdrawnByPlatform, true);
+    assert.deepEqual((await capsules.officialMethods(returner)).map((method) => method.packId).filter((pack) => pack === "review"), [], "and nothing of it is mounted");
+    // Published again: the same copy comes back, without the mark; the person who deleted theirs is not given it again.
+    await writePack("review", { "pack.json": CARD("系统综述"), "pooling.md": methodFile("合并之前先看异质性", "可比性不够就不合并；先说为什么。", "conversation, meta-analysis") });
+    await official.publishAll();
+    await capsules.received(returner);
+    const back = await documents.get(returner, "capsule", "official-copy:review");
+    assert.ok(back && !back.deletedAt, "the copy is back");
+    assert.equal(back.payload.withdrawnByPlatform, undefined);
+    assert.ok((await capsules.officialMethods(returner)).some((method) => method.packId === "review" && method.body.includes("先说为什么")), "at the new version");
+    await capsules.received(person);
+    assert.ok((await documents.get(person, "capsule", "official-copy:review", { includeDeleted: true }))?.deletedAt, "a deletion of the person's own stays");
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [returner]);
+  }
+});
+
 test("a person's general method that passed the promotion gates is published as a method of the pack 「大家的做法」 for every account, and nothing of its author travels with it", options, async () => {
   const { createOfficialPromotion } = await import("../src/officialPromotion.mjs");
   const promotion = createOfficialPromotion({
@@ -238,7 +270,7 @@ test("a person's general method that passed the promotion gates is published as 
     provenance: { scope: "conversation", sourceProjectId: "private-project", runId: "private-run" },
   };
   assert.deepEqual(await promotion.consider({ userId: person, method: { id: "method:learned:send-the-table-with-its-question", payload } }), { state: "candidate" });
-  assert.deepEqual(await promotion.tick(), { judged: 0, rechecked: 1 });
+  assert.deepEqual(await promotion.tick(), { judged: 0, rechecked: 1, corroborated: 0 });
   const pack = await documents.get(PUBLISHER, "preferences", "official-pack:shared-practices");
   assert.equal(pack.payload.status, "published", "published at once, by the re-check");
   assert.equal(pack.payload.methods.length, 1);
@@ -256,4 +288,21 @@ test("a person's general method that passed the promotion gates is published as 
   // What was written down about it names no account, project, run or method of its author.
   const everything = JSON.stringify([(await documents.list(PUBLISHER, "preferences", { limit: 100 })).items, (await documents.list(other, "fact", { limit: 100 })).items]);
   for (const secret of [person, "private-project", "private-run", "method:learned:send-the-table-with-its-question"]) assert.equal(everything.includes(secret), false, secret);
+  // Nor does any earlier revision of the record: the ledger saves every write whole, and the write that let go of the account deleted the ones before it.
+  const revisions = (await database.query("SELECT id,revision,payload FROM evimed_product.revisions WHERE user_id=$1 AND kind='preferences' AND payload->>'recordType'='official-promoted'", [PUBLISHER])).rows;
+  assert.ok(revisions.length >= 1);
+  for (const secret of [person, "private-project", "private-run", "method:learned:send-the-table-with-its-question"]) assert.equal(JSON.stringify(revisions).includes(secret), false, `revisions: ${secret}`);
+
+  // An operator withdraws it (what should never have been promoted, 2026-10-27): the next tick publishes the pack again, and as it was the last
+  // method, the pack is withdrawn and taken off the shelf, marked as the platform's doing.
+  const { withdrawPromoted } = await import("../src/officialPromotion.mjs");
+  const withdrawn = await withdrawPromoted(documents, PUBLISHER, promoted.key);
+  assert.equal(withdrawn.withdrawn, true);
+  assert.deepEqual((await documents.history(PUBLISHER, "preferences", /** @type {string} */ (withdrawn.id))).map((entry) => entry.payload.status), ["rejected"], "the withdrawal keeps no earlier revision of the method");
+  await promotion.tick();
+  assert.equal((await documents.get(PUBLISHER, "preferences", "official-pack:shared-practices")).payload.status, "withdrawn");
+  official.settled.clear();
+  assert.equal((await capsules.received(other)).some((entry) => entry.official?.packId === "shared-practices"), false, "off the shelf");
+  assert.equal((await documents.get(other, "capsule", "official-copy:shared-practices", { includeDeleted: true })).payload.withdrawnByPlatform, true);
+  assert.equal((await capsules.officialMethods(other)).some((method) => method.packId === "shared-practices"), false, "and mounted nowhere");
 });

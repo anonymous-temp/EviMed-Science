@@ -1,4 +1,5 @@
-import { FRONTIER_FOLLOW_KINDS, FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, frontierEventEvidenceCounts } from '@evimed/domain';
+import { FRONTIER_FOLLOW_KINDS, FRONTIER_GENRE_LABELS_ZH, FRONTIER_HIDE_REASONS, FRONTIER_INDUSTRY_KIND_LABELS_ZH, FRONTIER_INDUSTRY_KINDS, frontierEventEvidenceCounts,
+  frontierItemIndustryKind } from '@evimed/domain';
 import { FRONTIER_SOURCE_STREAM_COLUMNS, frontierSourceStreamColumns } from "./frontierSourceColumns.mjs";
 import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
@@ -360,6 +361,9 @@ export function normalizeItemsQuery(params, vocabulary) {
   if (tag && !/^[a-z0-9][a-z0-9-]{1,79}$/.test(tag)) throw invalid("tag");
   const evidence = params.get("evidence") || null;
   if (evidence && !Object.hasOwn(vocabulary.evidenceTypes, evidence)) throw invalid("evidence");
+  // One kind of 行业动态 (c5-biz): a value outside the closed list is a 400, like every other filter; the kind implies the genre.
+  const industryKind = params.get("industryKind") || null;
+  if (industryKind && !FRONTIER_INDUSTRY_KINDS.includes(/** @type {any} */ (industryKind))) throw invalid("industryKind");
   const unreadValue = params.get("unread");
   if (unreadValue != null && !["1", "0", ""].includes(unreadValue)) throw invalid("unread");
   const window = params.get("window") || null;
@@ -386,7 +390,7 @@ export function normalizeItemsQuery(params, vocabulary) {
   const channelValue = params.get("channel") || "all";
   if (channelValue !== "all" && !Object.hasOwn(FRONTIER_CHANNEL_FILTERS, channelValue)) throw invalid("channel");
   const channel = channelValue === "all" ? null : /** @type {keyof typeof FRONTIER_CHANNEL_FILTERS} */ (channelValue);
-  return { view, by, lane, specialty, specialties, tag, evidence, unread: unreadValue === "1", window, follow, q: rawQuery || null, starred: starredValue === "1",
+  return { view, by, lane, specialty, specialties, tag, evidence, industryKind, unread: unreadValue === "1", window, follow, q: rawQuery || null, starred: starredValue === "1",
     safety: safetyValue === "1", cursor, limit, sort, channel };
 }
 
@@ -396,7 +400,8 @@ export function normalizeItemsQuery(params, vocabulary) {
 /** The filters a cursor was minted under, as a short fingerprint. @param {ItemsQuery} query */
 const filterPrint = (query) => shortHash(JSON.stringify([query.lane, query.specialty, query.window, query.starred, query.q, query.safety,
   query.q ? query.sort : "relevance", query.follow, query.readerKey ?? null, ...(query.channel ? [query.channel] : []),
-  ...(query.tag || query.evidence || query.unread ? [query.tag, query.evidence, query.unread] : [])]));
+  ...(query.tag || query.evidence || query.unread ? [query.tag, query.evidence, query.unread] : []),
+  ...(query.industryKind ? [query.industryKind] : [])]));
 
 /** @param {Record<string, unknown>} value */
 const encodeCursor = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -500,7 +505,7 @@ const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, 
      FROM (SELECT DISTINCT ON (r.id) r.slug, r.name, it.rank FROM evimed_frontier.item_tags it
              JOIN evimed_frontier.tags tg ON tg.id = it.tag_id JOIN evimed_frontier.tags r ON r.id = coalesce(tg.merged_into, tg.id)
             WHERE it.item_id = i.id AND r.state = 'active' ORDER BY r.id, it.rank) x) AS tag_refs,
-  i.genre`;
+  i.genre, i.industry_kind`;
 
 const ITEM_FROM = `evimed_frontier.items i
   JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -564,7 +569,8 @@ export class FrontierService {
     /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): 热榜's 「热点话题」, the topic page and `frontier_search`; null serves none. */
     this.topics = topics;
     /** 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the approval and guideline records and the congress hubs, read. */
-    this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai") });
+    // The congress list and hubs are read from a ten-minute cache refreshed behind the read (`readCacheMs`, frontierTrack.mjs).
+    this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai"), readCacheMs: 10 * 60_000 });
     /** Typed follows (`FrontierFollowWatch`, c3-watch): their reading, matches and counts; null stores a typed follow by its words and counts none. */
     this.watch = watch;
     /** The selection line a card's score band is read against (the pipeline's own). */
@@ -583,7 +589,13 @@ export class FrontierService {
     this.seen = new Map();
   }
 
-  async ready() { return migrateFrontier(this.database, { dimension: this.dimension }); }
+  async ready() {
+    const migrated = await migrateFrontier(this.database, { dimension: this.dimension });
+    // The first reader after a start would otherwise wait out the whole congress count (14 s on production): read it once, now,
+    // in the background, after the schema is there. A failure here is the first reader's to see again.
+    if (!this.trackWarmed) { this.trackWarmed = true; this.trackReader.congresses().catch(() => {}); }
+    return migrated;
+  }
 
   /** Whether this account sees the module. @param {{ id?: string }} user */
   allows(user) { return frontierAudienceAllows(this.config, user); }
@@ -657,6 +669,7 @@ export class FrontierService {
   #item(row) {
     const labels = this.vocabulary;
     const entities = row.entities && typeof row.entities === "object" ? row.entities : {};
+    const industryKind = frontierItemIndustryKind(row);
     const openAccess = row.open_access || row.oa_pdf_url
       ? { status: row.open_access ?? "unknown", pdfUrl: typeof row.oa_pdf_url === "string" && /^https?:\/\//.test(row.oa_pdf_url) ? row.oa_pdf_url : null }
       : null;
@@ -673,6 +686,10 @@ export class FrontierService {
       // What the item is as a reader names it (ct-write 2026-10-24): the stored genre, else code's from the item's fields — never null.
       genre: frontierItemGenre(row),
       genreLabel: FRONTIER_GENRE_LABELS_ZH[frontierItemGenre(row)],
+      // The kind of 行业动态 it is (c5-biz 2026-10-26: 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线): only an item whose genre is
+      // 行业动态 has one, and an item the model has not (yet) named has none.
+      industryKind,
+      industryKindLabel: industryKind ? FRONTIER_INDUSTRY_KIND_LABELS_ZH[industryKind] : null,
       // Contract B's card fields: where the item comes from and its first picture.
       channel: frontierItemChannel(row),
       platform: typeof row.platform === "string" && row.platform ? row.platform : null,
@@ -763,6 +780,7 @@ export class FrontierService {
     if (query.specialties?.length) where.push(`i.specialties && ${param(query.specialties)}::text[]`);
     if (query.tag) where.push(frontierTagPredicate(param(query.tag)));
     if (query.evidence) where.push(`i.evidence_type = ${param(query.evidence)}`);
+    if (query.industryKind) where.push(`i.genre = 'industry' AND i.industry_kind = ${param(query.industryKind)}`);
     if (query.unread) {
       where.push(`NOT EXISTS (SELECT 1 FROM evimed_frontier.user_state us WHERE us.user_id = ${param(userId)} AND us.item_id = i.id AND us.read_at IS NOT NULL)`);
     }
@@ -885,7 +903,7 @@ export class FrontierService {
    * @returns {Promise<{ ids: string[], mode: "keyword" | "hybrid" }>}
    */
   async #byTime(ranking, query, version, clock) {
-    const key = query.starred || query.unread || query.readerKey ? null : JSON.stringify(["time", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel, query.tag, query.evidence]);
+    const key = query.starred || query.unread || query.readerKey ? null : JSON.stringify(["time", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel, query.tag, query.evidence, query.industryKind]);
     const cached = key ? this.#cached(key, version) : null;
     if (cached) return cached;
     const candidates = ranking.lexical.length ? ranking.lexical : ranking.ids;
@@ -965,13 +983,13 @@ export class FrontierService {
     }
     // Public content is shared by every reader; "only my stars" is not.
     const cacheKey = query.starred || query.unread || query.readerKey ? null : JSON.stringify([search ? "search" : "list", query.view, query.by, query.lane, query.specialty,
-      query.window, query.q, query.safety, query.cursor, query.limit, clock, search ? query.sort : null, query.readerKey ?? null, query.channel, query.tag, query.evidence]);
+      query.window, query.q, query.safety, query.cursor, query.limit, clock, search ? query.sort : null, query.readerKey ?? null, query.channel, query.tag, query.evidence, query.industryKind]);
     let page = cacheKey ? this.#cached(cacheKey, versions.content) : null;
     if (!page) {
       if (search) {
         // The fused ranking is kept for the next pages of the same search: a
         // second page must not embed the question and run three legs again.
-        const rankingKey = query.starred || query.unread || query.readerKey ? null : JSON.stringify(["ranking", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel, query.tag, query.evidence]);
+        const rankingKey = query.starred || query.unread || query.readerKey ? null : JSON.stringify(["ranking", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel, query.tag, query.evidence, query.industryKind]);
         let ranking = rankingKey ? this.#cached(rankingKey, versions.content) : null;
         if (!ranking) {
           this.counters.searches += 1;
@@ -1029,7 +1047,7 @@ export class FrontierService {
       // whether or not the column exists yet.
       const row = (await client.query(`SELECT ${ITEM_COLUMNS}, i.quoted, i.metrics, t.abstract_raw, t.abstract_zh, t.publication_types, t.mesh, t.journal,
           t.authors_short, t.enrichment, t.body_text, t.body_excerpt, t.body_zh, t.body_zh_kind, t.body_zh_source, t.body_complete, t.quoted_zh, t.reader_tidy,
-          i.lead_zh, i.insight_zh, i.insight_refs, i.brief, i.ask_zh,
+          i.lead_zh, i.brief, i.ask_zh,
           (to_jsonb(i)->>'same_event_item_id') AS same_event_item_id
         FROM ${ITEM_FROM} WHERE i.public_id=$1 AND i.state = 'published' AND s.enabled`, [publicId])).rows[0];
       if (!row) throw failure(404, "frontier_item_not_found", "No such item.");
@@ -1083,29 +1101,6 @@ export class FrontierService {
   }
 
   /**
-   * The 「AI 解读」 (frontierInsight.mjs): its text and the reports it cites, each still published; null when there is none. A
-   * cited report that is no longer published drops out of `refs`, and the reader shows its mark as plain text.
-   * @param {any} client @param {Record<string, any>} row
-   */
-  async #insight(client, row) {
-    const text = typeof row.insight_zh === "string" && row.insight_zh.trim() ? row.insight_zh : null;
-    if (!text) return null;
-    const cited = Array.isArray(row.insight_refs) ? row.insight_refs.filter((ref) => Number.isSafeInteger(ref?.n) && /^\d{1,19}$/.test(String(ref?.item_id ?? ""))) : [];
-    const found = cited.length ? (await client.query(`SELECT i.id, i.public_id, coalesce(i.title_zh, i.title_raw) AS title, i.timeline_at,
-        i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}
-      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-      WHERE i.id = ANY($1::bigint[]) AND i.state = 'published'`, [cited.map((ref) => String(ref.item_id))])).rows : [];
-    const byId = new Map(found.map((/** @type {any} */ item) => [String(item.id), item]));
-    const refs = cited.flatMap((ref) => {
-      const item = byId.get(String(ref.item_id));
-      return item ? [{ n: ref.n, publicId: String(item.public_id), title: String(item.title),
-        source: frontierSourceDisplayName({ id: item.primary_source_id, name: item.source_name, ownerEntity: item.source_owner, access: item.source_access, journal: item.item_journal }),
-        at: new Date(item.timeline_at).toISOString() }] : [];
-    });
-    return { text, refs };
-  }
-
-  /**
    * What the reader adds to a card (contract B, 2026-10-22): the 导读, the full text and its Chinese, the post's pictures, the post
    * it quotes and its counts, the topics and tags, the item it stands beside in its event, and the event's follow-ups. Every
    * field is what was stored; one the server cannot fill is null (or empty), and the reader omits its block.
@@ -1131,7 +1126,6 @@ export class FrontierService {
       lead: row.lead_zh ?? row.summary_zh ?? null,
       // The genre's typed 「AI 要点」 (frontierBrief.mjs), with — for a reading of another report — the report it reads.
       brief: await this.#brief(client, row),
-      insight: await this.#insight(client, row),
       body: {
         zh: translated ?? (chinese ? original : null),
         original,
@@ -2063,7 +2057,9 @@ export class FrontierService {
     const listId = await this.#serve(user, "congress", `congress:${read.congress.id}`, served);
     return { congress: { ...read.congress,
       specialtyLabel: read.congress.specialty && Object.hasOwn(this.vocabulary.specialties, read.congress.specialty) ? this.vocabulary.specialties[read.congress.specialty] : null },
-    itemCount: days.reduce((sum, day) => sum + day.items.length, 0), days, listId };
+    // `itemCount` is what the congress holds, as its list line says it (owner, 2026-10-27: the hub said 400 where the list said 624);
+    // `listedCount` is how many of them the days list, the newest, before this reader's own 不感兴趣 take some away.
+    itemCount: read.itemCount, listedCount: read.listedCount, days, listId };
   }
 
   /** Persist only the exact visible versions acknowledged by the reader; newer reports remain unseen.
@@ -2090,7 +2086,13 @@ export class FrontierService {
     const day = params.get("day");
     if (day && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(`${day}T00:00:00Z`))
       || new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) !== day)) throw failure(400, "frontier_query_invalid", "Invalid daily date.");
-    return { dailies: await this.daily.list(limit), schedule: { time: this.daily.dailyTime, timeZone: this.daily.timeZone },
+    // The page after a full one (the web reads the archive sixty at a time): the issues of the days before `before`.
+    const before = params.get("before");
+    if (before && (!/^\d{4}-\d{2}-\d{2}$/.test(before) || !Number.isFinite(Date.parse(`${before}T00:00:00Z`))
+      || new Date(`${before}T00:00:00Z`).toISOString().slice(0, 10) !== before)) {
+      throw failure(400, "frontier_query_invalid", "Invalid archive cursor.");
+    }
+    return { dailies: await this.daily.list(limit, before || null), schedule: { time: this.daily.dailyTime, timeZone: this.daily.timeZone },
       publication: this.daily.publicationStatus ? await this.daily.publicationStatus(day) : null };
   }
 

@@ -3,7 +3,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Star } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Toolbar, type ToolbarFilter, type ToolbarToken } from "./Toolbar";
+import { Toolbar, type ToolbarFilter, type ToolbarProps, type ToolbarToken } from "./Toolbar";
 
 /** A viewport that matches the narrow query and nothing else (jsdom has no layout). */
 function narrow() {
@@ -17,6 +17,66 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const LANES = [{ value: "evidence", label: "临床证据" }, { value: "safety", label: "药物安全" }];
 const WINDOWS = [{ value: "now", label: "当前" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }];
+
+it("keeps a real selected scope reachable alongside a list action at narrow widths", async () => {
+  narrow();
+  const openScope = vi.fn(), continueWork = vi.fn();
+  const scope = { scopeAction: { id: "scope", label: "分析范围 · 已筛选", onSelect: openScope } } as unknown as ToolbarProps;
+  render(<Toolbar oneRow {...scope}
+    views={{ label: "研究视图", items: [{ value: "current", label: "当前" }], value: "current", onChange: () => {} }}
+    actionPlan={{ primary: { id: "continue", label: "加问", onSelect: continueWork } }} />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "分析范围 · 已筛选" }));
+  await user.click(screen.getByRole("button", { name: "加问" }));
+  expect(openScope).toHaveBeenCalledOnce();
+  expect(continueWork).toHaveBeenCalledOnce();
+});
+
+it("draws the open step's action as the toolbar's own quiet text button: never a primary, and the same 28 px as the row", async () => {
+  const onSelect = vi.fn();
+  render(<Toolbar inBand scopeAction={{ label: "分析范围", onSelect: () => {} }} contextAction={{ label: "加问", onSelect }}
+    search={{ label: "搜索问题", value: "", onChange: () => {} }} summary="24 个问题群" />);
+  const action = screen.getByRole("button", { name: "加问" });
+  expect(action).toHaveAttribute("data-toolbar-context");
+  expect(action).toHaveClass("h-sm", "bg-transparent");
+  expect(action).not.toHaveClass("bg-accent");
+  // It ends the row, after the count, where the step's action was before it was made quiet.
+  const row = action.parentElement!;
+  expect(row.lastElementChild).toBe(action);
+  await userEvent.click(action);
+  expect(onSelect).toHaveBeenCalledOnce();
+});
+
+describe("a `nowrap` band at a phone's width", () => {
+  const navigation: NonNullable<ToolbarProps["navigation"]> = [{ kind: "chips", label: "视图", options: [{ value: "a", label: "按说法" }, { value: "b", label: "按引擎" }], value: "a", onChange: () => {} }];
+  const props = { inBand: true, navigation, scopeAction: { label: "分析范围", onSelect: () => {} }, summary: "共 17 条讲错 · 已读取 17 条，归为 8 条说法",
+    search: { label: "搜索说法", value: "", onChange: () => {} }, contextAction: { label: "加问", onSelect: () => {} } } satisfies ToolbarProps;
+
+  it("is one line that scrolls sideways, with the search, the whole count and the step's action at its end", () => {
+    narrow();
+    const { container } = render(<Toolbar {...props} nowrap />);
+    const row = container.querySelector("[data-toolbar] > div") as HTMLElement;
+    expect(row).toHaveClass("flex-nowrap", "overflow-x-auto");
+    expect(row).not.toHaveClass("flex-wrap");
+    // The count is said whole (it never shrinks to nothing in a row that scrolls), the search keeps one width, the scope does not wrap.
+    expect(screen.getByText(props.summary)).toHaveClass("shrink-0", "whitespace-nowrap");
+    expect(screen.getByText(props.summary)).not.toHaveClass("truncate");
+    expect(screen.getByRole("searchbox", { name: "搜索说法" }).parentElement?.parentElement).toHaveClass("w-44", "flex-none");
+    expect(screen.getByRole("button", { name: "分析范围" })).toHaveClass("shrink-0", "whitespace-nowrap");
+    expect(row.lastElementChild?.lastElementChild).toBe(screen.getByRole("button", { name: "加问" }));
+  });
+
+  it("wraps as a band always did without it, and at a wide width", () => {
+    narrow();
+    const { container, unmount } = render(<Toolbar {...props} />);
+    expect(container.querySelector("[data-toolbar] > div")).toHaveClass("flex-wrap");
+    unmount();
+    vi.restoreAllMocks();
+    const wide = render(<Toolbar {...props} nowrap />);
+    expect(wide.container.querySelector("[data-toolbar] > div")).toHaveClass("flex-wrap");
+    expect(wide.container.querySelector("[data-toolbar] > div")).not.toHaveClass("overflow-x-auto");
+  });
+});
 
 function Page({ onSelect = vi.fn() }: { onSelect?: (value: string | null) => void }) {
   const [lane, setLane] = useState<string | null>(null);
@@ -565,14 +625,15 @@ describe("one row with a filter button (`oneRow`, 前沿动态 2026-10-25)", () 
       expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveFocus();
     });
 
-    it("draws one more line while something narrows the list, with a pinned control there, and the view's buttons in the sheet", async () => {
+    it("retains pinned controls and list actions outside the filter sheet (DS22.4)", async () => {
       narrow();
       const { container } = render(<Feed extra={[{ kind: "chips", label: "简报周期", pinned: true, options: WINDOWS, value: "now", onChange: () => {} }]} />);
       const line = container.querySelector("[data-toolbar-row]") as HTMLElement;
       expect(line).toContainElement(screen.getByRole("group", { name: "简报周期" }));
       await userEvent.click(screen.getByRole("button", { name: "筛选" }));
       const sheet = screen.getByRole("dialog", { name: "筛选" });
-      expect(within(sheet).getByRole("button", { name: "新建" })).toBeInTheDocument();
+      expect(within(sheet).queryByRole("button", { name: "新建" })).toBeNull();
+      expect(container.querySelector("[data-toolbar]")?.textContent).toContain("新建");
       await userEvent.click(within(sheet).getByRole("button", { name: "临床证据" }));
       await userEvent.click(within(sheet).getByRole("button", { name: "查看结果" }));
       expect(line).toContainElement(screen.getByRole("button", { name: "移除筛选：临床证据" }));
@@ -644,4 +705,76 @@ describe("a search box's suggestions", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(box).toHaveValue("肝");
   });
+});
+
+describe("the selection group", () => {
+  const views = { label: "视图", items: [{ value: "all", label: "全部" }, { value: "unread", label: "未读" }], value: "all", onChange: () => {}, panelId: "list" };
+  const group = <div role="toolbar" aria-label="批量"><span>已选 2 条</span><button type="button">清除选择</button></div>;
+
+  it("stands in the toolbar's row beside the actions, and is not there while the caller draws nothing", () => {
+    const { rerender } = render(<Toolbar views={views} actions={<button type="button">全部已读</button>} selection={group} />);
+    const bar = screen.getByRole("group", { name: "筛选与操作" });
+    expect(within(bar).getByRole("toolbar", { name: "批量" })).toBeInTheDocument();
+    // Before the page's own actions, in the same row.
+    expect(within(bar).getByRole("toolbar", { name: "批量" }).compareDocumentPosition(within(bar).getByRole("button", { name: "全部已读" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    rerender(<Toolbar views={views} actions={<button type="button">全部已读</button>} selection={undefined} />);
+    expect(screen.queryByRole("toolbar", { name: "批量" })).not.toBeInTheDocument();
+  });
+
+  it("is a row of its own under the views on a phone, never inside the filter sheet", () => {
+    narrow();
+    render(<Toolbar views={views} actions={<button type="button">全部已读</button>} selection={group} />);
+    const bar = screen.getByRole("group", { name: "筛选与操作" });
+    const own = within(bar).getByRole("toolbar", { name: "批量" }).parentElement as HTMLElement;
+    expect(own).toHaveAttribute("data-toolbar-row");
+    expect(within(own).getByRole("button", { name: "清除选择" })).toBeVisible();
+  });
+});
+
+it("keeps declared navigation outside filter count and reset (AT53/54)", () => {
+  const navigate = vi.fn(), reset = vi.fn();
+  render(<Toolbar navigation={[{ kind: "select", label: "查看", options: [{ value: "graph", label: "图谱" }], value: "graph", onChange: navigate }]} onClear={reset} />);
+  expect(screen.getByRole("button", { name: "查看：图谱" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "清除筛选" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /移除筛选/ })).toBeNull();
+});
+
+it('rechecks normal row folding and clipped summaries on window resize without ResizeObserver and cleans listeners', () => {
+  vi.stubGlobal('ResizeObserver', undefined);
+  let width = 1100, clipped = false;
+  const summary = '完整结果摘要';
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function(this: HTMLElement) { return this.textContent === summary ? 40 : width; });
+  vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function(this: HTMLElement) { return this.textContent === summary ? clipped ? 400 : 20 : 0; });
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function(this: HTMLElement) { return this.classList.contains('flex-wrap') && this.querySelector('[aria-label="时间范围"]') && width < 1000 ? 64 : 28; });
+  const remove = vi.spyOn(window, 'removeEventListener');
+  const { unmount } = render(<Toolbar inBand filters={[{ kind: 'chips', label: '时间范围', options: WINDOWS, value: 'now', onChange() {} }]} summary={summary} />);
+  expect(screen.getByRole('button', { name: '本周' })).toBeVisible();
+  width = 900; clipped = true;
+  act(() => window.dispatchEvent(new Event('resize')));
+  expect(screen.queryByRole('button', { name: '本周' })).toBeNull();
+  expect(screen.getByRole('button', { name: summary })).toBeVisible();
+  width = 1100; clipped = false;
+  act(() => window.dispatchEvent(new Event('resize')));
+  expect(screen.getByRole('button', { name: '本周' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: summary })).toBeNull();
+  unmount();
+  expect(remove).toHaveBeenCalledWith('resize', expect.any(Function));
+});
+
+it('rechecks oneRow view crowding on window resize without ResizeObserver', () => {
+  vi.stubGlobal('ResizeObserver', undefined);
+  let width = 1100, clipped = false;
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function(this: HTMLElement) { return this.getAttribute('role') === 'tablist' ? 100 : width; });
+  vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function(this: HTMLElement) { return this.getAttribute('role') === 'tablist' ? clipped ? 200 : 100 : 0; });
+  const remove = vi.spyOn(window, 'removeEventListener');
+  const { unmount } = render(<Toolbar oneRow inBand views={{ label: '视图', items: [{ value: 'all', label: '全部' }], value: 'all', onChange() {} }} tokens={[{ label: '已选条件', onRemove() {} }]} />);
+  expect(screen.getByRole('button', { name: '移除筛选：已选条件' })).toBeVisible();
+  clipped = true;
+  act(() => window.dispatchEvent(new Event('resize')));
+  expect(screen.queryByRole('button', { name: '移除筛选：已选条件' })).toBeNull();
+  width = 1200; clipped = false;
+  act(() => window.dispatchEvent(new Event('resize')));
+  expect(screen.getByRole('button', { name: '移除筛选：已选条件' })).toBeVisible();
+  unmount();
+  expect(remove).toHaveBeenCalledWith('resize', expect.any(Function));
 });

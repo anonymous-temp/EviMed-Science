@@ -304,6 +304,7 @@ export function SessionFrameHost() {
               sessionId={sessionId}
               active={onSurface && here}
               mirrorAddress={onChat}
+              onPaneAcknowledged={placed && here ? taskPane?.onSessionAcknowledged : undefined}
               suspended={onChat && (resolving || !addressedProject)}
               onRelease={(released) => trackRelease(projectId, released)}
             />

@@ -49,6 +49,7 @@ test("the measures the comparator-effect methods write are named in words, the s
     assert.ok(cjk.test(measureLabel(name)) && measureLabel(name) !== name, `${name} is shown as itself`);
   }
   assert.equal(measureLabel("covariate_set_estimate_3"), "第 3 个协变量集的估计");
+  assert.equal(measureLabel("duration_months"), "平均研究时长");
 });
 
 // --- robustness methods ---
@@ -301,7 +302,7 @@ test("a design keeps its own result even when another design's later run superse
   assert.equal(onlyCurrent.find((design) => design.code === "A").measures.assurance, undefined, "without the all-results list the earlier design would read as never simulated");
 });
 
-test("the brand blue exists only where a decision was recorded: `chosen` comes from a decision row and from nothing else", () => {
+test("the brand accent exists only where a decision was recorded: `chosen` comes from a decision row and from nothing else", () => {
   assert.ok(presentDesigns(designsBundle()).designs.every((design) => design.chosen === false), "nothing chosen by default, however good B looks");
   const decided = presentDesigns(designsBundle({ decisions: [{ id: "dec_1", question: "q", chosen: { id: "b", code: "B" }, createdAt: "2026-09-28T00:00:00.000Z" }] }));
   assert.deepEqual(decided.designs.filter((design) => design.chosen).map((design) => design.code), ["B"]);
@@ -725,8 +726,8 @@ test("a study with nothing in it gives every tab its empty state, and none of th
   const patients = presentPatientsTab(bundle);
   assert.deepEqual([patients.model, patients.trajectories, patients.example, patients.sensitivity], [null, null, null, null]);
   const comparator = presentComparatorTab(bundle);
-  assert.equal(comparator.routes.length, 4, "the four routes the engine can compute: the model-prediction comparator is not one of the choices");
-  assert.ok(!comparator.routes.some((route) => route.route === "model_comparator"));
+  assert.equal(comparator.routes.length, 5, "the five supported comparator routes include a scoped prediction benchmark");
+  assert.ok(comparator.routes.some((route) => route.route === "model_comparator"));
   assert.equal(comparator.dimensions.length, 10);
   assert.equal(comparator.gaps, null);
   const trial = presentTrialTab(bundle);
@@ -757,16 +758,12 @@ function matchingBundle(events, { reviewedBy = null, people } = {}) {
   };
 }
 
-test("the selected person's referral carries every move made on it: to where, when, by whom (by name), and what was said", () => {
-  const events = [
-    { toState: "candidate", occurredAt: "2026-09-27T09:40:00.000Z", actor: "control-plane", note: "" },
-    { toState: "needs_evidence", occurredAt: "2026-09-28T06:32:00.000Z", actor: "u_coord", note: "E1 申请近 4 周头颅 MRI" },
-  ];
-  const view = presentMatchingTab(matchingBundle(events, { people: new Map([["u_coord", "王协调"]]) }));
-  assert.deepEqual(view.selected.trace, [
-    { state: "candidate", at: "昨天 17:40", by: "平台", note: null },
-    { state: "needs_evidence", at: "今天 14:32", by: "王协调", note: "E1 申请近 4 周头颅 MRI" },
-  ]);
+test("matching presentation exposes scientific assessment and no recruitment actions or ledger",()=>{
+ const view=presentMatchingTab(matchingBundle([{toState:"contacted",actor:"legacy"}]));
+ assert.equal(view.selected.assessmentId,"asm_1");assert.equal(view.selected.criteria.length,1);
+ for(const key of ["ledger","forecast","sites","followup","abilities"])assert.equal(key in view,false,key);
+ for(const key of ["trace","canContact","referralId","referralState"])assert.equal(key in view.selected,false,key);
+ assert.equal(view.candidates[0].eligibility,"insufficient_evidence");
 });
 
 test("a person is shown by name and never by account id: the name when the account is there, a neutral label when it is gone, the platform's own label for its own hand, and nothing where no name was resolved", () => {
@@ -777,17 +774,17 @@ test("a person is shown by name and never by account id: the name when the accou
   ];
   // The account that moved the referral is gone: its id does not reach the page, what it did stays.
   const gone = presentMatchingTab(matchingBundle(events, { reviewedBy: "usr_deleted_1", people: new Map([["wang.coordinator", "王协调"]]) })).selected;
-  assert.deepEqual(gone.trace.map((step) => step.by), ["平台", "已注销的账号", "王协调"]);
+  assert.equal("trace" in gone,false);
   assert.equal(gone.reviewedByName, "已注销的账号");
   assert.equal(gone.reviewedBy, "usr_deleted_1", "the id stays for the page's own logic: somebody countersigned, so the offer to countersign is not made");
   const named = presentMatchingTab(matchingBundle(events, { reviewedBy: "wang.coordinator", people: new Map([["wang.coordinator", "王协调"]]) })).selected;
   assert.equal(named.reviewedByName, "王协调");
   // A presenter given a bundle with no names says nothing of a person; it never says the id.
   const unresolved = presentMatchingTab(matchingBundle(events, { reviewedBy: "wang.coordinator" })).selected;
-  assert.deepEqual(unresolved.trace.map((step) => step.by), ["平台", null, null]);
+  assert.equal("trace" in unresolved,false);
   assert.equal(unresolved.reviewedByName, null);
   for (const view of [gone, named, unresolved]) {
-    const printed = JSON.stringify(view.trace) + String(view.reviewedByName);
+    const printed = String(view.reviewedByName);
     assert.equal(/usr_9f2c41e7d0b3|wang\.coordinator|control-plane|usr_deleted_1/.test(printed), false, "no account id in anything a reader is shown");
   }
   assert.equal(presentMatchingTab(matchingBundle([], { reviewedBy: null, people: new Map() })).selected.reviewedByName, null, "nobody countersigned: no name");
@@ -856,9 +853,8 @@ test("the intake page carries how much of each reviewed document a run was shown
   assert.equal(JSON.stringify(read).includes("windows"), false, "how many reads it took is not the researcher's");
 });
 
-test("a person with no recorded moves has an empty trail, not a made-up one", () => {
-  assert.deepEqual(presentMatchingTab(matchingBundle([])).selected.trace, []);
-  assert.deepEqual(presentMatchingTab(matchingBundle(undefined)).selected.trace, []);
+test("a matching assessment has no operational trail even when the legacy bundle includes one",()=>{
+ assert.equal("trace" in presentMatchingTab(matchingBundle([])).selected,false);
 });
 
 test("a route the data tier cannot reach says what tier it needs, and a route somebody judged says what it found", () => {
@@ -1532,4 +1528,39 @@ test("an owned E-value result describes sensitivity without claiming an estimate
   assert.equal(mixed.robustness.rows[0].value.value, 2.61);
   const estimable = presentComparatorTab({ ...bundle, results: [{ ...raw, conclusion: "estimable" }] });
   assert.match(estimable.headline, /未测量混杂敏感性分析：已计算/);
+});
+
+
+test("design duration reads simulation duration_months and stays absent when uncomputed regardless of CRM forecasts",()=>{
+ const bundle=designsBundle({grid:null});
+ bundle.results[0].measures.push({...measure("duration_months",24),unit:"months"});
+ bundle.forecastResults=[{subjectId:"a",measures:[{name:"last_patient_in_months",value:99}]}];
+ const computed=presentDesigns(bundle).designs.find(row=>row.id==="a");
+ assert.equal(computed.measures.duration_months.value,24);
+ bundle.results[0].measures=bundle.results[0].measures.filter(row=>row.name!=="duration_months");
+ assert.equal('duration_months' in presentDesigns(bundle).designs.find(row=>row.id==="a").measures,false);
+});
+
+
+test("trial preserves independent LPI accrual forecasts beside mean duration, including historical rows",()=>{
+ const bundle={...emptyBundle(),...designsBundle({grid:null})};
+ bundle.results[0].measures.push({...measure("duration_months",24),unit:"months"});
+ const accrual={id:"acc1",version:1,kind:"accrual_forecast",subjectId:"a",subjectKind:"trial_scenario",createdAt:"2026-09-01",measures:[{name:"last_patient_in_months",value:11.7,source:"simulated",unit:"months",interval:{kind:"prediction",low:9,high:16,level:0.8}}],diagnostics:{probabilityByMonth:[{month:12,probability:0.7}]}};
+ bundle.allResults=[...bundle.results,accrual]; bundle.forecasts=[];bundle.schedule=null;
+ const tab=presentTrialTab(bundle);
+ const row=tab.designs.find(row=>row.id==="a");
+ assert.equal(row.measures.duration_months.value,24);assert.equal(row.measures.last_patient_in_months.value,11.7);
+ assert.equal(row.measures.last_patient_in_months.interval.kind,"prediction");
+ assert.equal(tab.accrualForecasts[0].lastPatientIn.value,11.7);
+ assert.deepEqual(tab.accrualForecasts[0].probabilityByMonth,[{month:12,probability:0.7}]);
+ assert.ok(tab.columns.find(row=>row.key==="last_patient_in_months"));
+ bundle.results[0].measures=bundle.results[0].measures.filter(row=>row.name!=="duration_months");
+ assert.equal('duration_months' in presentTrialTab(bundle).designs.find(row=>row.id==="a").measures,false);
+});
+
+
+test('an unsent saved question is restored byte-for-byte into its owned native draft',()=>{
+ const bundle=emptyBundle();const draft="  My exact question\n\nKeep this indentation.  ";
+ bundle.study={...bundle.study,status:'draft',question:draft};
+ assert.equal(presentStudy(bundle).question,draft);
 });

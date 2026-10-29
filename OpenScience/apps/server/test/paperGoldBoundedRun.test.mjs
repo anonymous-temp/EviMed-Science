@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {createServer} from 'node:http';
 import {runCycle} from '../../../evals/paper-gold/run.mjs';
 test('one-unit pilot preserves six-unit freeze and resumes without repeating dispatch or baseline',async t=>{
  const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gold-bounded-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
@@ -120,4 +121,32 @@ test('the memorisation baseline is not asked of a method case, and one recalled 
  const gold={baselineNumeric:{'analysis.hr':{value:0.72,printed:'0.72',absoluteTolerance:0.005},'analysis.lower':{value:0.61,printed:'0.61',absoluteTolerance:0.005},'analysis.upper':{value:0.85,printed:'0.85',absoluteTolerance:0.005}}};
  assert.equal(rule({numeric:{'analysis.hr':0.72}},gold),true,'the primary estimate recalled alone');
  assert.equal(rule({numeric:{'analysis.hr':0.9,'analysis.upper':0.3}},gold),false);assert.equal(rule({numeric:{}},gold),false);assert.equal(rule({},{numeric:{}}),false);
+});
+
+test('a finished run\'s transcript is read through a runtime that stopped after it: started once, read once more, never looped',async t=>{
+ const {platformDispatch}=await import('../../../evals/paper-gold/run.mjs');
+ const serve=async transcripts=>{
+  const seen={reads:0,starts:0},reply=(response,status,body)=>{response.writeHead(status,{'content-type':'application/json'});response.end(JSON.stringify(body));};
+  const server=createServer((request,response)=>{request.resume();
+   if(request.url==='/api/commands/start_runtime'){seen.starts++;return reply(response,200,{data:'ok'});}
+   if(request.url==='/api/runtime/sessions')return reply(response,200,{data:{id:'s1'}});
+   if(request.url==='/api/agent-runs/dispatch')return reply(response,200,{data:{id:'r1'}});
+   if(request.url.startsWith('/api/agent-runs?'))return reply(response,200,{data:[{id:'r1',status:'succeeded'}]});
+   if(request.url==='/api/runtime/sessions/s1/transcript'){const next=transcripts[Math.min(seen.reads++,transcripts.length-1)];return reply(response,next.status,next.body);}
+   return reply(response,200,{data:{}});
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+  return{base:`http://127.0.0.1:${server.address().port}`,seen};
+ };
+ const input={headers:{},caseRecord:{id:'a',policy:{},input:'x',capabilityId:'c'},replicate:0,cycleId:'cycle'};
+ const gone={status:409,body:{code:'runtime_not_running'}},fine={status:200,body:{data:{messages:[{role:'user'}]}}};
+ const woken=await serve([gone,fine]);
+ assert.deepEqual((await platformDispatch({base:woken.base,...input})).transcript,{messages:[{role:'user'}]});
+ assert.deepEqual(woken.seen,{reads:2,starts:2},'one start with the project and one for the stopped runtime');
+ const stuck=await serve([gone]);
+ await assert.rejects(platformDispatch({base:stuck.base,...input}),error=>error.status===409&&error.responseCode==='runtime_not_running');
+ assert.equal(stuck.seen.reads,2);assert.equal(stuck.seen.starts,2);
+ const other=await serve([{status:409,body:{code:'something_else'}}]);
+ await assert.rejects(platformDispatch({base:other.base,...input}),error=>error.responseCode==='something_else');
+ assert.equal(other.seen.reads,1);assert.equal(other.seen.starts,1);
 });

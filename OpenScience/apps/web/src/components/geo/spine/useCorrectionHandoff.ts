@@ -33,7 +33,7 @@ export function useCorrectionHandoff(geoId: string, project: Pick<GeoProject, "p
     try {
       const current = await getGeoProject(geoId);
       const sessionId = await ensureGeoConversationSession(geoId, projectId,
-        geoSessionIdFromChatPath(location.pathname) || new URLSearchParams(location.search).get("session") || current.sessionId || projectSession);
+        geoSessionIdFromChatPath(location.pathname) || new URLSearchParams(location.search).get("session") || current.sessionId || projectSession, current.sessionId || projectSession);
       const focus = { sessionId, mode: "strategy" as const, ...(selectionRef ? { selectionRef } : {}) };
       const stage = async (input: typeof focus & { errorIds?: string[] }) => {
         const signature = JSON.stringify(input);

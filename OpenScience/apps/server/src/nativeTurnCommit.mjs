@@ -101,6 +101,8 @@ export class NativeTurnCommit {
     this.inFlight = 0;
     /** The commits in progress, so a shutdown and a test can wait for them. @type {Set<Promise<void>>} */
     this.running = new Set();
+    /** The same, by account: a deletion waits for the account's own (`forgetAccount`). @type {Map<string, Set<Promise<void>>>} */
+    this.runningByUser = new Map();
     this.closed = false;
   }
 
@@ -167,8 +169,10 @@ export class NativeTurnCommit {
       this.inFlight += 1;
       const work = this.#run(entry)
         .catch((error) => { recordTurnCommit("failed"); this.report(`native turn commit: ${this.#codeOf(error)}`); })
-        .finally(() => { this.inFlight -= 1; this.running.delete(work); this.#pump(); });
+        .finally(() => { this.inFlight -= 1; this.running.delete(work); this.runningByUser.get(entry.userId)?.delete(work); this.#pump(); });
       this.running.add(work);
+      if (!this.runningByUser.has(entry.userId)) this.runningByUser.set(entry.userId, new Set());
+      /** @type {Set<Promise<void>>} */ (this.runningByUser.get(entry.userId)).add(work);
     }
   }
 
@@ -258,6 +262,26 @@ export class NativeTurnCommit {
   /** Resolves when every commit that has started has finished. A test and a shutdown wait on it. */
   async idle() {
     while (this.running.size) await Promise.allSettled([...this.running]);
+  }
+
+  /**
+   * An account is being deleted: nothing of it that is armed or queued will be committed, and this resolves once its commits in
+   * progress have finished. A commit that reached the engine as the deletion began kept the engine's extraction task running
+   * against the deletion's fence; the engine's deletion waited for that task, timed out and failed, and every retry waited on the
+   * same task — three throwaway accounts could not be deleted on 2026-10-27 until the engine was restarted.
+   * @param {string} userId
+   */
+  async forgetAccount(userId) {
+    const user = String(userId);
+    for (const [key, entry] of this.armed) {
+      if (entry.userId === user) { this.clearTimer(entry.timer); this.armed.delete(key); recordTurnCommit("account_deleted"); }
+    }
+    for (let index = this.queue.length - 1; index >= 0; index -= 1) {
+      if (this.queue[index].userId === user) { this.queue.splice(index, 1); recordTurnCommit("account_deleted"); }
+    }
+    const running = this.runningByUser.get(user);
+    while (running?.size) await Promise.allSettled([...running]);
+    this.runningByUser.delete(user);
   }
 
   /** Stops waiting: nothing armed will fire. A commit in progress finishes. */

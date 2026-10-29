@@ -50,7 +50,7 @@ export function RelatedSection({ recordId, onOpenRecord, canOpen }: {
     return (
       <li key={`${prefix}-${entry.id}`} className="text-ui text-text-2">
         {openable
-          ? <button type="button" onClick={() => onOpenRecord(entry.id)} className="max-w-measure text-left text-accent hover:underline">{`${prefix}：“${words}”`}</button>
+          ? <button type="button" onClick={() => onOpenRecord(entry.id)} className="max-w-measure rounded text-left text-accent underline underline-offset-4 hover:decoration-2">{`${prefix}：“${words}”`}</button>
           : <span>{`${prefix}：“${words}”`}</span>}
         {span && <span className="text-text-3">{`（${span}）`}</span>}
       </li>
@@ -66,8 +66,8 @@ export function RelatedSection({ recordId, onOpenRecord, canOpen }: {
           const text = `依据：${title}${state ? `（${state}）` : ""}`;
           return (
             <li key={`rest-${rest.type}-${rest.id}`} className={`text-ui ${state ? "text-warn-strong" : "text-text-2"}`}>
-              {rest.href?.startsWith("/") ? <Link to={rest.href} className="text-accent hover:underline">{text}</Link>
-                : rest.href ? <a href={rest.href} target="_blank" rel="noreferrer" className="text-accent hover:underline">{text}</a>
+              {rest.href?.startsWith("/") ? <Link to={rest.href} className="rounded text-accent underline underline-offset-4 hover:decoration-2">{text}</Link>
+                : rest.href ? <a href={rest.href} target="_blank" rel="noreferrer" className="rounded text-accent underline underline-offset-4 hover:decoration-2">{text}</a>
                   : <span>{text}</span>}
             </li>
           );

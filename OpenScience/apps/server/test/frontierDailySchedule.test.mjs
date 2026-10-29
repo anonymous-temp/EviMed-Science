@@ -29,6 +29,20 @@ test("a bad limit is still refused, and a deployment without the daily still ans
   await assert.rejects(FrontierService.prototype.dailies.call({ daily: null }, new URLSearchParams()), { status: 404 });
 });
 
+test("the archive's next page is asked for by the day it follows, and a cursor that is not a day is refused", async () => {
+  const daily = new FrontierDaily({ database: {}, config: {} });
+  /** @type {unknown[][]} */ const asked = [];
+  daily.list = async (...args) => { asked.push(args); return []; };
+  daily.publicationStatus = async () => null;
+  await FrontierService.prototype.dailies.call({ daily }, new URLSearchParams("limit=60&before=2026-08-01"));
+  await FrontierService.prototype.dailies.call({ daily }, new URLSearchParams("limit=60"));
+  assert.deepEqual(asked, [[60, "2026-08-01"], [60, null]]);
+  for (const bad of ["yesterday", "2026-13-45", "2026-02-30", "2026-8-1"]) {
+    await assert.rejects(FrontierService.prototype.dailies.call({ daily }, new URLSearchParams(`before=${bad}`)), { status: 400, code: "frontier_query_invalid" });
+  }
+  assert.equal(asked.length, 2);
+});
+
 test('a missing issue is empty only after the durable job completed empty, and a failed generation stays failed', async () => {
   let job = null;
   const daily = new FrontierDaily({ database: { query: async () => ({ rows: job ? [job] : [] }) }, owner: () => ({ userId: 'operator' }) });

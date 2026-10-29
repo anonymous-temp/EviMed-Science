@@ -1,4 +1,5 @@
 import { KNOWLEDGE_TREES, isKnowledgeMirrorPath } from "@evimed/domain";
+import { LIBRARY_PROJECT_ID } from "./internalProjects.mjs";
 import { preferredLanguage } from "./knowledgePageService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -106,6 +107,7 @@ export function createKnowledgePageRoutes({ store, service, sources, maxJsonByte
       const input = body(await readJson(req, maxJsonBytes), ["projectId", "language"]);
       if (!service.enabled) throw new HttpError(404, "knowledge_pages_disabled", "Knowledge pages are not enabled.");
       const project = await ownedProject(typeof input.projectId === "string" ? input.projectId : null);
+      if (project.id === LIBRARY_PROJECT_ID) throw new HttpError(400, "knowledge_storage_project", "Personal storage cannot be compiled.");
       const stated = input.language == null ? null : preferredLanguage(input.language);
       if (input.language != null && !stated) throw new HttpError(400, "knowledge_payload_invalid", "language must be a language tag such as zh-CN or en.");
       // A language the person names replaces the one their browser stated.

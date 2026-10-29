@@ -27,6 +27,18 @@ export interface ChartGridCell {
 const COLUMNS = { 2: "md:grid-cols-2", 3: "md:grid-cols-3" } as const;
 const SPANS = { 1: "", 2: "md:col-span-2", 3: "md:col-span-3" } as const;
 
+/**
+ * Component: ChartGrid; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Declared rows of keyed chart/card cells.
+ * Variants: Two or three columns with cell spans.
+ * States: Static layout; development warns when row spans do not fill columns.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Cells allow shrinking; individual children own content overflow.
+ * Theme: No independent color or motion.
+ * Responsive: One column below md; declared columns/spans from md.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ChartGrid({ rows, columns = 2, className }: {
   rows: ReadonlyArray<readonly ChartGridCell[]>;
   columns?: 2 | 3;

@@ -110,9 +110,15 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
     const preview = await request("/api/skills/import-preview", "POST", { resourceId });
     assert.equal(preview.instructions, "Read this source.");
     assert.equal((await request("/api/skills")).items.length, beforePreview, "preview cannot create a library record or project activation");
-    const imported = await request("/api/skills/import", "POST", { resourceId, title: "Imported method" }, 201);
+    const importIntent = { resourceId, title: "Imported method", idempotencyKey: "http-import-intent" };
+    const imported = await request("/api/skills/import", "POST", importIntent, 201);
     assert.equal(imported.payload.instructions, "Read this source.");
+    assert.equal((await request("/api/skills/import", "POST", importIntent, 201)).id, imported.id);
+    await request("/api/skills/import", "POST", { ...importIntent, title: "Changed intent" }, 409);
+    const legacyImported = await request("/api/skills/import", "POST", { resourceId, title: "Legacy import" }, 201);
+    assert.notEqual(legacyImported.id, imported.id);
     await request(`/api/skills/uploads/${encodeURIComponent(resourceId)}`, "DELETE", {});
+    assert.equal((await request("/api/skills/import", "POST", importIntent, 201)).id, imported.id, "receipt replay precedes expired upload access");
     assert.equal((await request(`/api/skills/${encodeURIComponent(imported.id)}`)).payload.instructions, "Read this source.");
     const service = app.skillLibraryService;
     service.onRemoved = async (user, id) => {

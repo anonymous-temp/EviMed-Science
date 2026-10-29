@@ -15,7 +15,7 @@ import { claimSourceKindWord, CLAIM_SOURCE_KIND_WORDS } from "./geoTabText";
 import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
 import { ValueAnalysis } from "./ValueSection";
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 
 /** Claims listed before 「显示更多」, and how many each press adds. */
 const CLAIMS_SHOWN = 8;
@@ -74,16 +74,18 @@ export function EvidenceTab({ geoId, project }: { geoId: string; project: GeoPro
   }, { replace: true });
   const switcher = { kind: "chips" as const, label: "视图", options: VIEW_OPTIONS, value: view, onChange: setView };
   useGeoToolbar(view !== "claims" || claims.length === 0
-    ? { filters: [switcher] }
+    ? { navigation: [switcher] }
     : {
-      filters: [switcher, { kind: "chips", label: "出处类型", options, value: kind, onChange: (value) => setKind(value as KindFilter) }],
+      navigation: [switcher],
+      onClear: () => { setKind("all"); setQuery(""); },
+      filters: [{ kind: "chips", label: "出处类型", options, value: kind, onChange: (value) => setKind(value as KindFilter) }],
       search: { label: "搜索结论", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
       summary: `${needle ? "匹配 " : ""}${matching.length} 条结论`,
     });
 
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
-  if (view === "coverage") return <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V16" embedded />;
+  if (view === "coverage") return <GeoAnalysisEntry geoId={geoId} project={project} initialView="V16" embedded />;
   const identity = identityRows(evidence);
 
   return (

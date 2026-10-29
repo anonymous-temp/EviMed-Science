@@ -451,6 +451,11 @@ export class NotificationService {
   /** @param {any} database */
   constructor(database) {
     this.database = database;
+    // Notices refused because their account no longer exists (`notification_recipient_unknown`), and which ids, each said
+    // once a process on stderr so the list that still names it can be found and cleaned.
+    this.unknownRecipients = 0;
+    /** @type {Set<string>} */
+    this.unknownRecipientIds = new Set();
     // Set by the IM module when it is composed (X6): the channel registry the
     // preferences are validated against, the hook that tells it an item
     // changed, and the one that carries out an action it put on its own
@@ -485,7 +490,7 @@ export class NotificationService {
     await migrateNotifications(this.database);
     const result = await this.database.query("SELECT count(*)::integer AS unresolved FROM evimed_inbox.notifications WHERE resolved_at IS NULL");
     return {
-      connected: true, unresolved: Number(result.rows[0]?.unresolved ?? 0), channel: "in-app",
+      connected: true, unresolved: Number(result.rows[0]?.unresolved ?? 0), channel: "in-app", unknownRecipients: this.unknownRecipients,
       channels: ["in-app", ...(this.channels?.registry?.enabledIds() ?? [])],
     };
   }
@@ -522,6 +527,18 @@ export class NotificationService {
     };
     await migrateNotifications(this.database);
     const saved = await this.database.transaction(async (client) => {
+      // A notice for an account that no longer exists is refused by name before any write. An id left in a configured list
+      // (OPEN_SCIENCE_OPERATOR_USERS and the preview lists) after the account was deleted otherwise failed the foreign key on
+      // every attempt — 1,781 PostgreSQL errors an hour for `cdss-access` on 2026-10-27 — and told nobody which list held it.
+      const recipient = await client.query("SELECT 1 FROM evimed_control.users WHERE id=$1", [values.user]);
+      if (!recipient.rowCount) {
+        this.unknownRecipients += 1;
+        if (!this.unknownRecipientIds.has(values.user) && this.unknownRecipientIds.size < 100) {
+          this.unknownRecipientIds.add(values.user);
+          process.stderr.write(`notification_recipient_unknown: ${values.user}\n`);
+        }
+        throw new HttpError(404, "notification_recipient_unknown", "The notice names an account that does not exist.");
+      }
       if (now === undefined) {
         // Channel bindings use the database clock. A host clock behind it must
         // not make a genuinely new notice look older than its binding.

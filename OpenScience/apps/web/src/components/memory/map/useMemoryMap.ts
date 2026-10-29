@@ -3,9 +3,9 @@ import { MEMORY_CHANGED_EVENT } from "@/lib/memoryClient";
 import { fetchMemoryMap, refreshTopics, type MapQuery, type MemoryMap } from "@/lib/memoryMapClient";
 
 /**
- * The memory map's document, read again only when what the server filters changes — the project, the range, the focus and its
- * depth — and when a memory changed on screen. The topic, the kind, the aspect and the search narrow the document in hand, so the
- * five views switch without asking (spec §5.2).
+ * The memory map's document (the blocks the dashboard draws unless `include` names others), read again only when what the server filters changes — the project, the range, the focus and its
+ * depth — and when a memory changed on screen. The topic, the kind and the search narrow the document in hand, so the
+ * dashboard's panels switch without asking.
  *
  * Refreshes retain the current selection's document. Changing project, range or focus immediately removes the old document:
  * its marks and actions must never appear under the next selection's header, even if that request fails.
@@ -14,17 +14,17 @@ import { fetchMemoryMap, refreshTopics, type MapQuery, type MemoryMap } from "@/
  * a regrouping once and reads again; the server groups only when the memories changed and the day's bound allows, so asking costs
  * nothing when there is nothing to do.
  */
-export function useMemoryMap(query: MapQuery) {
+export function useMemoryMap(query: MapQuery, include?: string) {
   const [state, setState] = useState<{ doc: MemoryMap | null; status: "loading" | "ready" | "error"; asked: string; scope: string }>({ doc: null, status: "loading", asked: "", scope: "" });
   const [attempt, setAttempt] = useState(0);
-  const scope = JSON.stringify([query.projectId, query.range, query.focus, query.depth]);
+  const scope = JSON.stringify([query.projectId, query.range, query.focus, query.depth, include ?? ""]);
   const key = `${scope}|${attempt}`;
   const doc = state.scope === scope ? state.doc : null;
   const regrouped = useRef(new Set<string>());
 
   useEffect(() => {
     let cancelled = false;
-    fetchMemoryMap(query).then(
+    fetchMemoryMap(query, undefined, include).then(
       (doc) => { if (!cancelled) setState({ doc, status: "ready", asked: key, scope }); },
       () => { if (!cancelled) setState((held) => ({ doc: held.scope === scope ? held.doc : null, status: "error", asked: key, scope })); },
     );

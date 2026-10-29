@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { frontierItem } from "./__fixtures__/frontierItems";
-import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, institutionsLine, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
+import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, dayOnlyClock, titleOnlyAlert, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
 import type { FrontierItem } from "@/lib/frontierClient";
 
 // The feed reads Beijing time whatever the machine's zone is (UTC+8, no daylight saving): `at` is the instant of a Beijing wall clock,
@@ -116,6 +116,12 @@ describe("an item whose source gave a day and no hour", () => {
     expect(metaTime(day({ timelineAt: at(21, 23, 59) }), NOW)).toBe("9月21日");
   });
 
+  it("says 「当天」, and why there is no hour, where the clock would be — and nothing for an item that has one", () => {
+    expect(dayOnlyClock(day())).toEqual({ text: "当天", hint: "来源只给出了日期" });
+    expect(dayOnlyClock(frontierItem({ datePrecision: "instant" }))).toBeNull();
+    expect(dayOnlyClock(frontierItem({ datePrecision: "inferred" }))).toBeNull();
+  });
+
   it("keeps the clock of an instant, and of an item we only dated ourselves", () => {
     expect(itemClock(frontierItem({ datePrecision: "instant", timelineAt: at(22, 9, 15) }))).toBe("09:15");
     expect(itemClock(frontierItem({ datePrecision: "inferred", timelineAt: at(22, 9, 15) }))).toBe("09:15");
@@ -136,6 +142,27 @@ describe("the day groups", () => {
       ["9月21日 周一", "c"],
       ["9月19日 周六", "d"],
     ]);
+  });
+
+  it("cut an event's reports the same way: by Beijing day in the order given, a day once, an unreadable time in a day of its own", () => {
+    const at = (timelineAt: string) => ({ timelineAt });
+    const days = groupByDay([
+      at("2026-10-26T03:00:00.000Z"), // today in Beijing
+      at("2026-10-25T17:00:00.000Z"), // 26 October 01:00 in Beijing: still that day, though yesterday in UTC
+      at("2026-10-25T10:00:00.000Z"),
+      at("2026-10-24T02:00:00.000Z"),
+      at("2026-10-25T04:00:00.000Z"), // the order interleaves the 25th: the day is not split
+      at("never"),
+    ]);
+    expect(days.map((day) => [day.key, day.label, day.items.length])).toEqual([
+      ["2026-10-26", "10月26日 周一", 2],
+      ["2026-10-25", "10月25日 周日", 2],
+      ["2026-10-24", "10月24日 周六", 1],
+      ["unknown", "日期不明", 1],
+    ]);
+    // 今天 is the heading's, from the Beijing day of the instant asked about
+    const now = Date.parse("2026-10-26T04:00:00.000Z");
+    expect(days.map((day) => dayHeading(day, false, now))).toEqual(["今天 · 10月26日 周一", "10月25日 周日", "10月24日 周六", "日期不明"]);
   });
 
   it("are headed 「今天 · 9月22日 周二 · 2 条」 — 今天 only for today, the count only for a whole day", () => {
@@ -232,7 +259,8 @@ describe("the hot list's words", () => {
   });
 
   it("stamps a ranking with its span and the time it was taken", () => {
-    expect(hotBoardStamp("current", at(22, 22, 40))).toBe("近 72 小时 · 22:40 更新");
+    // The stamp states a clock, so it says whose: Beijing time, once.
+    expect(hotBoardStamp("current", at(22, 22, 40))).toBe("近 72 小时 · 22:40 更新（北京时间）");
     expect(hotBoardStamp("week", null)).toBe("近 7 天");
   });
 });
@@ -285,13 +313,6 @@ describe("a trend line", () => {
 });
 
 describe("the event page's side column", () => {
-  it("counts the institutions by kind, else their number, else says nothing", () => {
-    expect(institutionsLine({ sourceCount72h: 2, institutions72h: { total: 2, byType: [{ type: "journal", label: "期刊", count: 1 }, { type: "media", label: "媒体", count: 1 }] } }))
-      .toBe("期刊 1 · 媒体 1");
-    expect(institutionsLine({ sourceCount72h: 7 })).toBe("7 家");
-    expect(institutionsLine({ sourceCount72h: 0, institutions72h: { total: 0, byType: [] } })).toBeNull();
-  });
-
   it("says whether the parties' own texts are among the reports", () => {
     expect(primaryHeld({ primary: "paper", items: [] })).toBe("有论文原文");
     expect(primaryHeld({ primary: null, hasPrimary: true, items: [] })).toBe("有一手材料");
@@ -397,5 +418,18 @@ describe("a moment that stands for a day and no hour (c4 review: the made-up 23:
     // An ordinary moment keeps its clock and its hours.
     expect(clock("2026-10-25T11:00:00.000Z")).toBe("19:00");
     expect(sinceText("2026-10-25T23:00:00.000Z", now)).toBe("4 小时前");
+  });
+});
+
+describe("a title-only safety alert (owner, 2026-10-27)", () => {
+  it("is an alert with no summary text: a blank one is none, and an alert that says something is not", () => {
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: null }))).toBe(true);
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: "" }))).toBe(true);
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: "  \n " }))).toBe(true);
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: "I 级召回，涉及 3 个批号。" }))).toBe(false);
+  });
+
+  it("is never an item that is not an alert, however little it says", () => {
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: false, summary: null }))).toBe(false);
   });
 });

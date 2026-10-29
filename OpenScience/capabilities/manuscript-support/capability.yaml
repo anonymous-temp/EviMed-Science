@@ -141,6 +141,7 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
+  listed: false
   title: "论文章节写作"
   category: "写作与传播"
   description: "在你给定的资料范围内起草或修改论文的一节，每条结论都能追溯到资料。"

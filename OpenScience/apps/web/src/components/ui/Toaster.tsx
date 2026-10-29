@@ -1,25 +1,25 @@
-import { useState } from "react";
+import { Announcer } from "@/lib/announce";
+import { useRef, useState } from "react";
 import { CheckCircle2, X, XCircle } from "lucide-react";
 import { useToastStore, type Toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
 /**
- * Bottom-center stack of transient notifications (a download saved or not).
- *
- * Spec §22.1: one card whatever it reports — a surface, a hairline edge,
- * `shadow-e2` — and the status is the icon's to say (a green `CheckCircle2`,
- * a red `XCircle`), not a coloured border (appendix E #7). A success is a
- * polite `status`, an error an assertive `alert`; neither takes focus.
- * Hovering or focusing a toast pauses its timer; a long message expands on
- * click; a toast can carry one action (撤销) beside its close button. It sits
- * on the toast tier (`z-toast`), above a dialog, and rises 8 px as it arrives
- * — a pure fade under reduced motion.
+ * Component: Toaster; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: persistent announcer plus up to three transient cards.
+ * Variants: success or error; optional actual undo/action.
+ * States: explicit repeated event identities show a count; timer pauses while hovered or focused; errors persist.
+ * Hit area: message, action and dismiss controls.
+ * Keyboard: native buttons; never moves focus.
+ * Long content: message expands on activation.
+ * Theme: semantic status icons on neutral surface.
+ * Responsive: safe-area bottom center stack.
+ * Verification: toast.test.ts and announce.test.tsx; real AT remains separate.
  */
 export function Toaster() {
   const { toasts, dismiss, pause, resume } = useToastStore();
-  if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-toast flex flex-col items-center gap-2">
+    <><Announcer /><div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-toast flex flex-col items-center gap-2">
       {toasts.map((t) => (
         <ToastCard
           key={t.id}
@@ -29,7 +29,7 @@ export function Toaster() {
           onResume={() => resume(t.id)}
         />
       ))}
-    </div>
+    </div></>
   );
 }
 
@@ -45,15 +45,17 @@ function ToastCard({
   onResume: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const hovered = useRef(false), focused = useRef(false);
+  const resumeIfIdle = () => { if (!hovered.current && !focused.current) onResume(); };
   const isError = t.tone === "error";
   return (
     <div
-      role={isError ? "alert" : "status"}
-      aria-live={isError ? "assertive" : "polite"}
-      onMouseEnter={onPause}
-      onMouseLeave={onResume}
-      onFocus={onPause}
-      onBlur={onResume}
+      data-toast={t.id}
+      data-toast-tone={t.tone}
+      onMouseEnter={() => { hovered.current = true; onPause(); }}
+      onMouseLeave={() => { hovered.current = false; resumeIfIdle(); }}
+      onFocus={() => { focused.current = true; onPause(); }}
+      onBlur={(event) => { if (event.currentTarget.contains(event.relatedTarget)) return; focused.current = false; resumeIfIdle(); }}
       className="pointer-events-auto flex min-h-control max-w-[70vw] animate-toast-in items-center gap-2 rounded-card border border-border bg-surface px-3 py-2 text-ui text-text shadow-e2"
     >
       {isError ? (
@@ -69,6 +71,7 @@ function ToastCard({
       >
         {t.message}
       </button>
+      {t.occurrences > 1 && <span className="shrink-0 text-caption text-text-2" aria-label={`重复 ${t.occurrences} 次`}>×{t.occurrences}</span>}
       {t.action && (
         <button
           type="button"

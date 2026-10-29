@@ -1857,7 +1857,7 @@ export class AutopilotService {
    * @param {string} userId @param {string} projectId @param {{sourceIds?: unknown, sha256?: unknown}} input
    * @param {any[]} [have]
    */
-  async materialsFor(userId, projectId, input, have = []) {
+  async materialsFor(userId, projectId, input, have = [], { replacing = null } = {}) {
     const list = (/** @type {unknown} */ value, /** @type {RegExp} */ shape) => {
       if (value === undefined) return [];
       if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !shape.test(item))) throw new HttpError(400, "autopilot_payload_invalid", "Material identifiers are invalid.");
@@ -1869,12 +1869,46 @@ export class AutopilotService {
       const source = await this.documents.get(userId, "source", id);
       if (!source || source.projectId !== projectId) throw new HttpError(404, "autopilot_material_not_found", "That source is not in this question's project.");
     }
-    const fresh = ids.filter(id => !have.some(item => item.sourceId === id));
-    if (have.length + fresh.length > AUTOPILOT_MATERIALS_MAX) throw new HttpError(409, "autopilot_materials_full", "This question already has as much material as it keeps.");
-    return [...have, ...fresh.map(sourceId => ({ sourceId, addedAt: this.now().toISOString() }))];
+    // A document imported again is the same document in a newer version: the versions of it this question already holds
+    // go, and the new one takes their place, so the list does not grow with every import.
+    const kept = replacing ? have.filter(item => ids.includes(item.sourceId) || !replacing.has(item.sourceId)) : have;
+    const fresh = ids.filter(id => !kept.some(item => item.sourceId === id));
+    if (kept.length + fresh.length > AUTOPILOT_MATERIALS_MAX) throw new HttpError(409, "autopilot_materials_full", "This question already has as much material as it keeps.");
+    return [...kept, ...fresh.map(sourceId => ({ sourceId, addedAt: this.now().toISOString() }))];
   }
 
-  async addMaterials(userId, agendaId, input) {
+  /**
+   * The ids, among a question's material, of the versions of one document: the sources whose logical path is `logicalPath`,
+   * live or retired. A document replaced by a newer version keeps its logical path, and so does the one that replaced it.
+   * @param {string} userId @param {any[]} have @param {string} logicalPath @returns {Promise<Set<string>>}
+   */
+  async materialVersionsOf(userId, have, logicalPath) {
+    const found = new Set();
+    for (const item of have) {
+      const source = await this.documents.get(userId, "source", item.sourceId, { includeDeleted: true }).catch(() => null);
+      if (source && (source.payload?.logicalPath ?? source.payload?.paths?.[0]) === logicalPath) found.add(item.sourceId);
+    }
+    return found;
+  }
+
+  /**
+   * Whether this question has room for a new version of the document at `logicalPath`, said BEFORE the work of producing it
+   * (reading a remote database): a full list refuses a new document and admits a new version of one it already holds, which
+   * takes that one's place. The same refusal `addMaterials` makes, asked early so a full list costs nothing.
+   * @param {string} userId @param {string} agendaId @param {string} logicalPath
+   */
+  async assertMaterialRoom(userId, agendaId, logicalPath) {
+    const agenda = await this.get(userId, agendaId);
+    this.assertNotArchived(agenda);
+    const have = agenda.payload.materials ?? [];
+    if (have.length < AUTOPILOT_MATERIALS_MAX) return;
+    if ((await this.materialVersionsOf(userId, have, logicalPath)).size) return;
+    throw new HttpError(409, "autopilot_materials_full", "This question already has as much material as it keeps.");
+  }
+
+  /** @param {string} userId @param {string} agendaId @param {any} input
+   * @param {{replacingLogicalPath?: string | null}} [options] `replacingLogicalPath`: the added source is a newer version of the document at this path */
+  async addMaterials(userId, agendaId, input, { replacingLogicalPath = null } = {}) {
     const agenda = await this.get(userId, agendaId);
     this.assertNotArchived(agenda);
     if (!(input.sourceIds?.length || input.sha256?.length)) throw new HttpError(400, "autopilot_payload_invalid", "Name between one and ten sources to add.");
@@ -1882,13 +1916,14 @@ export class AutopilotService {
       const current = await this.get(userId, agenda.id);
       this.assertNotArchived(current);
       const have = current.payload.materials ?? [];
-      const materials = await this.materialsFor(userId, agenda.projectId, input, have);
-      if (materials.length === have.length) return current;
+      const replacing = replacingLogicalPath ? await this.materialVersionsOf(userId, have, replacingLogicalPath) : null;
+      const materials = await this.materialsFor(userId, agenda.projectId, input, have, { replacing });
+      if (materials.length === have.length && materials.every((/** @type {any} */ item, /** @type {number} */ index) => item.sourceId === have[index]?.sourceId)) return current;
       const at = this.now().toISOString();
       try {
         return await this.putAgenda(userId, current.id, { ...current.payload,
           materials, updatedAt: at,
-        }, { expectedRevision: current.revision, projectId: current.projectId }, materials.filter(item => !have.some(previous => previous.sourceId === item.sourceId)));
+        }, { expectedRevision: current.revision, projectId: current.projectId }, materials.filter(item => !have.some((/** @type {any} */ previous) => previous.sourceId === item.sourceId)));
       } catch (error) {
         if (!isConflict(error) || attempt === 4) throw error;
       }

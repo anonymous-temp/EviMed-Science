@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handoverEntries, livedIn, ownerFirstDay, receivedPack, TODAY } from "@/components/memory/overview/__fixtures__/overviewDocs";
+import { livedIn, memoryMark, ownerFirstDay, receivedPack, TODAY } from "@/components/memory/overview/__fixtures__/overviewDocs";
 import { MemoryOverviewPage } from "@/app/routes/MemoryOverviewPage";
 import { memoryOverviewFindings } from "../../../../scripts/ops/ui-walk.mjs";
 import { compositionFacts } from "./compositionFixtures";
@@ -17,7 +17,8 @@ import { expectComposed } from "./expectComposed";
  *
  *  - **type pairs ≤ 5.** Read off the classes the components set, climbing to the nearest ancestor that names a size and a weight, which is
  *    what the browser's cascade does for the rungs (`TYPE_SCALE`: 12 / 14 / 18 …, weights 400 and 600).
- *  - **one canvas and the rest DOM.** The growth strip is the page's only `[data-chart]`; the other five cards are words and rows.
+ *  - **two canvases and the rest DOM.** The change chart and, when there is enough to see, the relation graph are the page's `[data-chart]`s;
+ *    the tiles, the sentence and the table are words and rows.
  *  - **colours from the map's palette only.** No inline colour, no arbitrary-value class, no hex in a class or a style on the page.
  *  - **at most two kinds of section** (`shapes` in the page table), counted as the walk counts them: an element and its first two kinds of child.
  *  - the framework's own assertions (`expectComposed`), and the walk's card judge on the page as drawn.
@@ -30,14 +31,12 @@ const table = JSON.parse(readFileSync(join(here, "../../../../scripts/ops/page-t
 };
 const entry = table.views.find((view) => view.view === "memory-overview")!;
 
-const reads = vi.hoisted(() => ({ map: vi.fn(), received: vi.fn(), mine: vi.fn(), preview: vi.fn(), methods: vi.fn() }));
+const reads = vi.hoisted(() => ({ map: vi.fn(), received: vi.fn(), mine: vi.fn(), methods: vi.fn() }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: reads.methods }));
 vi.mock("@/lib/memoryMapClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryMapClient")>("@/lib/memoryMapClient")), fetchMemoryMap: reads.map }));
 vi.mock("@/lib/memoryClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), fetchReceivedCapsules: reads.received, fetchMyCapsule: reads.mine,
-  fetchProjectOverview: vi.fn().mockResolvedValue(null),
 }));
-vi.mock("@/lib/productClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/productClient")>("@/lib/productClient")), previewCapsuleExport: reads.preview }));
 vi.mock("@/lib/apiClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")),
   fetchMemorySettings: () => Promise.resolve({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null }),
@@ -76,10 +75,12 @@ export function typePairs(root: Element): string[] {
 }
 
 const SECTION = "section, ul, ol, table, canvas, svg";
+/** An icon is not a picture: the walk counts a drawing only from 160 × 64 px, and jsdom has no boxes to measure. */
+const ICON = "svg.lucide, svg[aria-hidden='true']";
 /** The shapes of the sections a page stacks, as the walk reads them: the tag and its first two distinct kinds of child, outermost only. */
 function sectionShapes(root: Element): string[] {
   const units = [...root.querySelectorAll(SECTION)].filter((element) => {
-    if (element.closest("header, nav, aside, [role='tablist'], [role='dialog'], li, button, a, [role='button']")) return false;
+    if (element.closest("header, nav, aside, [role='tablist'], [role='dialog'], li, button, a, [role='button']") || element.matches(ICON)) return false;
     if (element.matches("ul, ol") && !element.querySelector(":scope > li")) return false;
     const outer = element.parentElement?.closest(SECTION);
     return !(outer && root.contains(outer));
@@ -95,25 +96,28 @@ function draw() {
   );
 }
 const loaded = () => waitFor(() => {
-  expect(document.querySelectorAll("[data-overview-card]").length).toBe(6);
-  expect(document.querySelectorAll("[data-overview-card][data-state='loading']")).toHaveLength(0);
+  expect(document.querySelectorAll("section[aria-label='记忆胶囊的四个数字'] > div > *")).toHaveLength(4);
+  expect(document.querySelectorAll("section[aria-label='记忆胶囊的四个数字'] [aria-hidden='true'].animate-pulse")).toHaveLength(0);
+  expect(document.querySelector("[data-headline], [data-empty]")).not.toBeNull();
 }, { timeout: 4_000 });
 
-/** What the walk's probe reads of the drawn page, rebuilt from the markers (the probe does it in a browser; the judge is the same). */
+/** What the walk's probe reads of the drawn page, rebuilt from the same markers (the probe does it in a browser; the judge is the same). */
 function probeRead(root: Element) {
-  const cards = [...root.querySelectorAll("[data-overview-card]")].map((element) => ({
-    part: element.getAttribute("data-overview-card")!, state: element.getAttribute("data-state")!, shape: element.getAttribute("data-shape"),
-    count: element.hasAttribute("data-count") ? Number(element.getAttribute("data-count")) : null,
-    memories: element.hasAttribute("data-memories") ? Number(element.getAttribute("data-memories")) : null,
-    rows: element.querySelectorAll("[data-overview-row]").length,
-    bars: [...element.querySelectorAll("ul[aria-label] [role='img'][aria-label]")].map((bar) => Number(/(\d+)\s*$/.exec(bar.getAttribute("aria-label") ?? "")?.[1] ?? Number.NaN)),
-    more: Number(element.getAttribute("data-more") ?? 0),
-  }));
+  const band = root.querySelector("section[aria-label='记忆胶囊的四个数字']");
+  const tiles = [...(band?.querySelectorAll(":scope > div > *") ?? [])].map((element) => {
+    const value = element.querySelector("[data-stat-value]");
+    const number = value ? Number((value.textContent ?? "").replace(/[,\s]/g, "")) : Number.NaN;
+    const label = element.querySelector(".truncate");
+    const note = [...element.querySelectorAll(".text-caption")].filter((node) => node !== label).map((node) => (node.textContent ?? "").replace(/\s+/g, " ").trim()).join(" ");
+    return { label: (label?.textContent ?? "").trim(), value: Number.isFinite(number) ? number : null, note, href: element.getAttribute("href"), loading: element.getAttribute("aria-hidden") === "true" };
+  });
+  const list = root.querySelector("ul[aria-label='最近变化'], ul[aria-label='需要看一眼的记忆']");
   return {
     headline: root.querySelector("[data-headline]")?.textContent?.replace(/\s+/g, " ").trim() ?? null,
-    tabs: [...root.querySelectorAll("[role='tablist'][aria-label='记忆'] [role='tab']")].map((tab) => tab.textContent ?? ""),
-    canvases: root.querySelectorAll("[data-chart]").length, cards,
-    look: (() => { const section = root.querySelector("[data-overview-look]"); return section ? { count: Number(section.getAttribute("data-overview-look")), rows: section.querySelectorAll("[data-overview-row]").length } : null; })(),
+    tabs: [...root.querySelectorAll("nav[aria-label='记忆'] a")].map((link) => link.textContent ?? ""),
+    canvases: root.querySelectorAll("[data-chart]").length, tiles,
+    rows: list ? list.querySelectorAll(":scope > li [data-overview-row]").length : 0,
+    recipe: root.querySelectorAll("[data-empty]").length, recipeButtons: root.querySelectorAll("[data-empty] button").length,
   };
 }
 
@@ -122,19 +126,35 @@ const learned = (id: string, title: string, at: string) => ({
   promotion: { status: "approved", reasons: [], missing: [] }, body: "", createdAt: at, updatedAt: at,
 });
 
-const ACCOUNTS: Array<[string, () => void]> = [
+/** A capsule with enough to draw the relation graph too: twelve memories, three relations. */
+function withGraph() {
+  const doc = livedIn();
+  const extra = Array.from({ length: 8 }, (_unused, index) => memoryMark(`x${index}`, { label: `又一句 ${index}`, at: `2026-10-0${1 + (index % 8)}T02:00:00.000Z` }));
+  return {
+    ...doc, summary: { ...doc.summary, memories: 15 }, nodes: [...doc.nodes, ...extra],
+    facets: { ...doc.facets, aboutYou: [{ id: "preference", label: "偏好", count: 12 }] },
+    edges: [0, 1, 2].map((index) => ({ id: `e${index}`, from: `memory:x${index}`, to: "document:src_a1", type: "rests-on" as const })),
+  };
+}
+
+/** `[name, arrange, tablists, toolbars]`: the relations card's own switch is a tab list and a toolbar of its block's. */
+const ACCOUNTS: Array<[string, () => void, number, number]> = [
   ["the owner's first day", () => {
     reads.map.mockResolvedValue(ownerFirstDay());
     reads.methods.mockResolvedValue([]);
     reads.received.mockResolvedValue([]);
-    reads.preview.mockResolvedValue({ scopes: [], empty: true, tooMany: false, card: null, entries: [] });
-  }],
+  }, 0, 1],
   ["an account that has lived a while", () => {
     reads.map.mockResolvedValue(livedIn());
     reads.methods.mockResolvedValue([learned("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learned("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
     reads.received.mockResolvedValue([receivedPack("a"), receivedPack("b", { enabled: true })]);
-    reads.preview.mockResolvedValue({ scopes: [], empty: false, tooMany: false, card: null, entries: handoverEntries({ methods: 3, standards: 5, background: 12 }) });
-  }],
+  }, 0, 1],
+  ["an account with enough to draw the relations", () => {
+    reads.map.mockResolvedValue(withGraph());
+    reads.methods.mockResolvedValue([learned("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z")]);
+    reads.received.mockResolvedValue([receivedPack("a", { enabled: true })]);
+  // The page has no tab list (the left column's navigation is links); the relations card's own switch is its block's.
+  }, 1, 2],
 ];
 
 beforeEach(() => {
@@ -144,15 +164,15 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
 
-describe.each(ACCOUNTS)("总览 of %s", (_name, arrange) => {
+describe.each(ACCOUNTS)("总览 of %s", (_name, arrange, tablists, toolbars) => {
   beforeEach(arrange);
 
-  it("is a data page of the framework with its band, its sentence and its body in order, and no toolbar", async () => {
+  it("is a data page of the framework with its band, its one toolbar row and its sentence over its body, in order", async () => {
     const { container } = draw();
     await loaded();
     expect(entry).toMatchObject({ template: "T4", budget: "data" });
-    const facts = expectComposed(container, { tablists: 1 });
-    expect(facts.toolbars).toHaveLength(0);
+    const facts = expectComposed(container, { tablists });
+    expect(facts.toolbars).toHaveLength(toolbars);
     expect(facts.chrome).not.toBeNull();
   });
 
@@ -162,19 +182,18 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange) => {
     const pairs = typePairs(container);
     expect(table.budgets.data.typePairs).toBe(5);
     expect(pairs.length, pairs.join(", ")).toBeLessThanOrEqual(table.budgets.data.typePairs);
-    // No rung of the metric sizes: the cards say a number in a sentence, not in a 32 px figure.
-    expect(pairs.some((pair) => pair.startsWith("metric"))).toBe(false);
     expect(pairs.some((pair) => pair.endsWith("/medium"))).toBe(false);
-    // Room to spare: the page, the card headings and the sentence share one pair, and the body, the rows and the legends the other two.
-    expect(pairs).toEqual(["caption/normal", "section/semibold", "title/semibold", "ui/normal"]);
+    // The tiles' figures are the one metric rung the page has; the page's title, the body and the notes are the others (a block's heading and the sentence share 18/600).
+    expect(pairs).toEqual(expect.arrayContaining(["metric/semibold", "title/semibold", "ui/normal"]));
   });
 
-  it("draws one canvas, the growth strip, and everything else in the document", async () => {
+  it("draws the charts it has as canvases and everything else in the document: at most two, and the table is rows", async () => {
     const { container } = draw();
     await loaded();
-    expect([...container.querySelectorAll("[data-chart]")].map((chart) => chart.getAttribute("data-chart"))).toEqual(["growth"]);
-    expect(container.querySelectorAll("canvas").length).toBeLessThanOrEqual(1);
-    expect(container.querySelectorAll("svg[class*='echarts'], svg:not([class])").length).toBeLessThanOrEqual(1);
+    const charts = [...container.querySelectorAll("[data-chart]")].map((chart) => chart.getAttribute("data-chart"));
+    expect(charts.length).toBeLessThanOrEqual(2);
+    expect(charts.every((kind) => kind === "growth" || kind === "relations")).toBe(true);
+    expect(container.querySelectorAll("canvas").length).toBeLessThanOrEqual(2);
   });
 
   it("uses no colour of its own: no inline colour, no arbitrary-value class, no hex", async () => {
@@ -189,7 +208,7 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange) => {
     }
   });
 
-  it("stacks at most the page table's two kinds of section: the cards, and the list of what needs a look", async () => {
+  it("stacks at most the page table's two kinds of section: the numbers and the charts' and table's blocks", async () => {
     const { container } = draw();
     await loaded();
     const shapes = sectionShapes(container);
@@ -197,7 +216,7 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange) => {
     expect(shapes.length, shapes.join(", ")).toBeLessThanOrEqual(entry.shapes!);
   });
 
-  it("is a page the walk's own judge reads as right: the cards in order, the sentence their numbers, the rows their counts", async () => {
+  it("is a page the walk's own judge reads as right: the tiles in order, the sentence their numbers, a table behind them or one recipe", async () => {
     const { container } = draw();
     await loaded();
     const read = probeRead(container);

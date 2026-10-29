@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
+import { claimEvidenceSources, PACKAGE_SOURCE_ARTIFACT_LIMIT } from "@evimed/domain/clinical-evidence";
 import { readCaptureRepairReceipt } from "./agentRuns.mjs";
 import { captureFinishedRun, sourceCapture, stableBytes } from "./resultDeliveryCapture.mjs";
 import { HttpError } from "./security.mjs";
@@ -35,7 +35,7 @@ export class ResultCaptureRepairService {
       if (!Array.isArray(matrix.claims) || matrix.claims.length > 500) throw new HttpError(422, "result_capture_matrix_invalid", "The evidence matrix is invalid.");
       for (const relative of new Set(matrix.claims.flatMap(claim => claimEvidenceSources(claim).map(source => source?.artifactPath)).filter(Boolean))) {
         if (sources.has(relative)) continue;
-        if (sources.size >= 48) throw new HttpError(413, "result_source_capture_limit", "Too many sources for one repair.");
+        if (sources.size >= PACKAGE_SOURCE_ARTIFACT_LIMIT) throw new HttpError(413, "result_source_capture_limit", "Too many sources for one repair.");
         const source = await sourceCapture(project, relative, this.results.maxSnapshotBytes);
         totalBytes += source.bytes.length;
         if (totalBytes > 256 * 1024 * 1024) throw new HttpError(413, "result_capture_repair_too_large", "The repair exceeds its source allowance.");

@@ -9,6 +9,11 @@
  * - **Bounded.** One page of each project's newest documents (a project's whole library is not what a map of what is
  *   remembered is for), at most `MAP_DOCUMENT_PROJECTS` projects, and at most `MAP_DOCUMENT_LOOKUPS` documents a memory names
  *   that are not on those pages.
+ * - **Personal storage is read beside the projects** in a map of the whole account (`isAccountStorageProject`): it is where an
+ *   upload lands unless a project is chosen, so leaving it out would leave a person's own materials off the picture while the
+ *   knowledge base's list shows them. It is not a project: its documents hang from the account, not from a project mark, and it
+ *   has no row among the projects' counts. A map of one project never reads it. Every other internal project is the platform's own
+ *   work and is never read.
  * - **A file the engine compiled is not a document here.** The wiki and graph files mirrored under `knowledge-base/wiki/**` and
  *   `knowledge-base/kg/**` are documents of the knowledge base's ledger (origin `wiki`), and the knowledge-graph source already
  *   draws each of them, as a page or an entity. Counted again as documents, a project of 6 uploads and 36 compiled files read as
@@ -27,8 +32,9 @@
 
 import { SOURCE_KINDS } from "@evimed/domain";
 
+import { LIBRARY_PROJECT_ID, isAccountStorageProject } from "../internalProjects.mjs";
+import { dayOf } from "../memoryTimeline.mjs";
 import { sourceDisplayOf } from "../sourceDisplay.mjs";
-import { bucketsOf } from "./activity.mjs";
 import { excerpt, instant, nodeId } from "./common.mjs";
 
 /** How many projects' documents one read lists. */
@@ -39,6 +45,28 @@ export const MAP_DOCUMENT_PAGE = 100;
 export const MAP_DOCUMENT_LOOKUPS = 30;
 /** How many pages of one project are followed to fill `MAP_DOCUMENT_PAGE` documents once the compiled files are left out. */
 export const MAP_DOCUMENT_PAGES = 4;
+/** How many days the calendar of added documents covers. */
+export const MAP_BUCKET_DAYS = 365;
+
+/**
+ * The days, in a zone, and how many documents were added on each, over the last year: the dashboard's 知识 lane of its change chart.
+ * @param {readonly string[]} added the instants the documents were added at (ISO) @param {string} timeZone @param {Date} now
+ * @returns {{ t: string, document: number }[]}
+ */
+export function documentDays(added, timeZone, now) {
+  const format = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const from = new Date(now.getTime() - MAP_BUCKET_DAYS * 86_400_000).toISOString();
+  /** @type {Map<string, { t: string, document: number }>} */
+  const days = new Map();
+  for (const at of added) {
+    if (at < from || at > now.toISOString()) continue;
+    const t = dayOf(at, format);
+    const bucket = days.get(t) ?? { t, document: 0 };
+    bucket.document += 1;
+    days.set(t, bucket);
+  }
+  return [...days.values()].sort((left, right) => left.t.localeCompare(right.t));
+}
 
 /** Whether a source record is a file the engine compiled and the platform mirrored (a wiki page or a graph entity), not a document. @param {any} item */
 export function isCompiledMirror(item) { return sourceDisplayOf(item).origin === "wiki"; }
@@ -48,7 +76,9 @@ export function documentNode(item) {
   const display = sourceDisplayOf(item);
   return {
     id: nodeId("document", item.id), type: "document", subtype: display.docType, group: display.typeLabel,
-    label: excerpt(display.title, 40), at: instant(item.createdAt), state: "current", projectId: item.projectId ?? null,
+    label: excerpt(display.title, 40), at: instant(item.createdAt), state: "current",
+    // Personal storage is not a project: its documents belong to the account, not to a mark of storage.
+    projectId: isAccountStorageProject(item.projectId) ? null : item.projectId ?? null,
     open: { kind: "page", href: `/app/files/${encodeURIComponent(item.id)}` },
   };
 }
@@ -86,7 +116,8 @@ export function createDocumentsSource({ sources, namedSources = null }) {
     name: "documents",
     applies: () => Boolean(sources) && typeof sources.list === "function",
     async read(request) {
-      const projectIds = (request.projectId ? [request.projectId] : request.projects.map((project) => project.id)).slice(0, MAP_DOCUMENT_PROJECTS);
+      const projectIds = request.projectId ? [request.projectId]
+        : [...request.projects.map((project) => project.id).slice(0, MAP_DOCUMENT_PROJECTS), LIBRARY_PROJECT_ID];
       /** One project's own documents, newest first, and how many of each chip the project holds. @param {string} projectId @returns {Promise<{ projectId: string, items: any[], kinds: Map<string, number> }>} */
       const documentsOf = async (projectId) => {
         /** @type {any[]} */
@@ -116,9 +147,13 @@ export function createDocumentsSource({ sources, namedSources = null }) {
       for (const page of held) for (const [kind, count] of page.kinds) byKind.set(kind, (byKind.get(kind) ?? 0) + count);
       const documentTypes = SOURCE_KINDS.filter((kind) => byKind.has(kind.id)).map((kind) => ({ id: kind.id, label: kind.label, count: /** @type {number} */ (byKind.get(kind.id)) }))
         .sort((left, right) => right.count - left.count);
-      const projectDocuments = held.map((page) => ({ id: page.projectId, count: [...page.kinds.values()].reduce((sum, count) => sum + count, 0) }));
+      const projectDocuments = held.filter((page) => !isAccountStorageProject(page.projectId))
+        .map((page) => ({ id: page.projectId, count: [...page.kinds.values()].reduce((sum, count) => sum + count, 0) }));
       /** @type {import("./common.mjs").MapEdge[]} */
-      const edges = nodes.filter((node) => node.projectId).map((node) => ({ from: node.id, to: nodeId("project", /** @type {string} */ (node.projectId)), type: "belongs-to" }));
+      const edges = nodes.flatMap((node, index) => {
+        if (node.projectId) return [{ from: node.id, to: nodeId("project", node.projectId), type: /** @type {const} */ ("belongs-to") }];
+        return isAccountStorageProject(items[index].projectId) ? [{ from: node.id, to: nodeId("you", "account"), type: /** @type {const} */ ("belongs-to") }] : [];
+      });
 
       // The documents the memories name that are not on a listed page: looked up one by one, a few.
       if (namedSources && typeof sources.get === "function") {
@@ -134,8 +169,8 @@ export function createDocumentsSource({ sources, namedSources = null }) {
         } catch { /* the placeholders stand (principle 19) */ }
       }
       // The days the documents were added, for the growth strip: the newest of each project that the page read.
-      const added = items.map((item) => instant(item.createdAt)).filter((at) => at !== null).map((at) => ({ at: /** @type {string} */ (at), type: "document" }));
-      return { nodes, edges, buckets: bucketsOf(added, request.timeZone, request.now), facets: { documentTypes, projectDocuments } };
+      const added = items.map((item) => instant(item.createdAt)).filter((at) => at !== null);
+      return { nodes, edges, buckets: documentDays(/** @type {string[]} */ (added), request.timeZone, request.now), facets: { documentTypes, projectDocuments } };
     },
   };
 }

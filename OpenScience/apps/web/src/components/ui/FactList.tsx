@@ -32,6 +32,18 @@ function Rows({ rows, ruled }: { rows: readonly Fact[]; ruled: boolean }) {
   );
 }
 
+/**
+ * Component: FactList; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Definition rows plus a disclosure for rows beyond max.
+ * Variants: Configurable first-row count, default eight.
+ * States: Static source rows; native disclosure expands remainder.
+ * Hit area: Only remainder disclosure is interactive.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Values retained; six-rem labels and min-w-0 values share each row.
+ * Theme: Secondary label and main value text with faint dividers.
+ * Responsive: Two-column facts remain at narrow widths; caller owns unbreakable values.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function FactList({ rows, max = 8, ruled = true, className }: {
   rows: readonly Fact[];
   max?: number;

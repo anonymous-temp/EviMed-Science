@@ -42,6 +42,18 @@ export type NotePart = string | NoteNumber;
 export type NoteResult = readonly [NoteNumber, ...NotePart[]] | readonly [string, NoteNumber, ...NotePart[]];
 
 /** The parts of a sentence, its figures as links where they open something. */
+/**
+ * Component: NoteParts; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Fragment of text and numeric spans, links or buttons.
+ * Variants: Number parts may link or invoke onOpen.
+ * States: Static parts; no measurement inference.
+ * Hit area: Links/buttons are intrinsic inline targets.
+ * Keyboard: Native inline links/buttons.
+ * Long content: No truncation; text and numbers remain selectable.
+ * Theme: Underlined link role; static numbers inherit text.
+ * Responsive: Inline flow wraps in surrounding container.
+ * Verification: Note.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function NoteParts({ parts }: { parts: readonly NotePart[] }) {
   return (
     <>
@@ -71,6 +83,18 @@ export type NoteProps = (
   className?: string;
 };
 
+/**
+ * Component: Note; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Sentence with typed numeric result or body plus optional action.
+ * Variants: default/warn; p without action, div with action.
+ * States: Static content; action state belongs to caller.
+ * Hit area: Only supplied action and numeric links are targets.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Sentence retained; action/body layout follows flex wrapping.
+ * Theme: Secondary or warning text and neutral border.
+ * Responsive: Local row wraps; no viewport-sized panel.
+ * Verification: Note.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Note({ action, result, children, tone = "default", className }: NoteProps) {
   const Root = action ? "div" : "p";
   return (

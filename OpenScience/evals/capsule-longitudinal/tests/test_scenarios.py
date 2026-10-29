@@ -315,12 +315,52 @@ class S7(unittest.TestCase):
         host = FakeHost({"t1": "A review of SGLT2 inhibitors.", "t2": "Organise the references next week.", "t3": "A hypertension education project for community residents."})
         outcome, _ = run(sce.s7_cross_project_leakage, host)
         self.assertEqual(sc.status_of(outcome.checks), sc.FAIL)
-        self.assertIn("project B's reply is in Chinese: the rule did not leak", failing(outcome))
+        self.assertIn("project B's deliverable is in Chinese: the rule did not leak", failing(outcome))
 
     def test_a_rule_that_never_worked_in_its_own_project_is_not_a_leak_test(self):
         host = FakeHost({"t1": "这是一篇关于 SGLT2 抑制剂的综述。", "t2": "整理参考文献。", "t3": "高血压科普项目。"})
         outcome, _ = run(sce.s7_cross_project_leakage, host)
         self.assertEqual(sc.status_of(outcome.checks), sc.INCONCLUSIVE)
+
+    # The reply of 2026-10-27 (release 66878cf6ff2c): the sentence in English, a note around a second version in Chinese. Measured over the
+    # whole reply its CJK share was 0.34 and the premise read as failed; the deliverable itself is English.
+    A_AGAIN_MIXED = ("Next week I will organize the references.\n\n如果要用在周报或进度说明里，可以写成更正式的一句：Next week's task is to organize the "
+                     "references for the SGLT2 inhibitor review.\n\n按项目约定，这里的文字用了英文；如果你需要中文版本，告诉我即可。")
+
+    def test_an_english_deliverable_with_a_chinese_note_obeys_the_rule(self):
+        host = FakeHost({"t1": "A review of SGLT2 inhibitors.", "t2": self.A_AGAIN_MIXED, "t3": "这是一个面向社区居民的高血压科普项目。"})
+        verdicts = judge({"deliverable": ["Next week I will organize the references.", "Next week's task is to organize the references for the SGLT2 inhibitor review."]})
+        outcome, _ = run(sce.s7_cross_project_leakage, host, verdicts)
+        self.assertEqual(sc.status_of(outcome.checks), sc.PASS, outcome.checks)
+        self.assertGreater(outcome.evidence["cjkShare"]["a_again"], 0.3, "the whole reply alone would have read as the rule not applied")
+        self.assertEqual(outcome.evidence["deliverableCjkShare"]["a_again"], 0.0)
+        self.assertEqual(outcome.evidence["deliverableCjkShare"]["b"], 1.0, "a reply in one script is decided without the judge")
+
+    def test_an_english_deliverable_under_a_chinese_preface_in_the_other_project_is_a_leak(self):
+        leaked = ("好的，下面是一句话的项目简介，按你之前的习惯写成了英文：\n\n> A hypertension education project for community residents.\n\n"
+                  "如果要放进申报材料或者宣传页，我可以再改得更正式一些，也可以补一句项目面向的社区范围。")
+        host = FakeHost({"t1": "A review of SGLT2 inhibitors.", "t2": "Next week: organise the references.", "t3": leaked})
+        outcome, _ = run(sce.s7_cross_project_leakage, host, judge({"deliverable": ["A hypertension education project for community residents."]}))
+        self.assertGreaterEqual(outcome.evidence["cjkShare"]["b"], 0.5, "the whole reply alone would have read as no leak")
+        self.assertEqual(sc.status_of(outcome.checks), sc.FAIL)
+        self.assertIn("project B's deliverable is in Chinese: the rule did not leak", failing(outcome))
+
+    def test_an_empty_reply_is_no_evidence_of_a_leak(self):
+        # 2026-10-29: the reply of project B was read back empty (its runtime had yielded) and the one-script rule counted it as English.
+        host = FakeHost({"t1": "A review of SGLT2 inhibitors.", "t2": "Next week: organise the references.", "t3": ""})
+        outcome, _ = run(sce.s7_cross_project_leakage, host)
+        self.assertIsNone(outcome.checks[2]["ok"])
+        self.assertIn("no text", outcome.checks[2]["detail"])
+        self.assertEqual(sc.status_of(outcome.checks), sc.INCONCLUSIVE)
+
+    def test_a_mixed_reply_without_a_judge_or_with_an_unverifiable_passage_is_undecided(self):
+        host = FakeHost({"t1": "A review of SGLT2 inhibitors.", "t2": self.A_AGAIN_MIXED, "t3": "这是一个面向社区居民的高血压科普项目。"})
+        without, _ = run(sce.s7_cross_project_leakage, host)
+        self.assertEqual(sc.status_of(without.checks), sc.INCONCLUSIVE)
+        self.assertIn("no judge key", without.checks[1]["detail"])
+        paraphrased, _ = run(sce.s7_cross_project_leakage, host, judge({"deliverable": ["I will sort out the references next week."]}))
+        self.assertIsNone(paraphrased.checks[1]["ok"], "a passage that is not in the reply drops the verdict")
+        self.assertEqual(sc.status_of(paraphrased.checks), sc.INCONCLUSIVE)
 
 
 class S8toS10(unittest.TestCase):

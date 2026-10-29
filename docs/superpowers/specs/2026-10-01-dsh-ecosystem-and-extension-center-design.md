@@ -488,3 +488,9 @@ Each applicable case records setup identity references, exact artifact and runti
 Run the common matrix once for each exact admitted artifact/adapter class and repeat affected cases on relevant changes; each user's installation then performs the narrower scope/configuration/startup check. Do not rerun a large benchmark or ask for expert approval on every click. A failed qualification excludes that plugin/path while keeping the user's research and already-working extensions available.
 
 Implementation homes are the existing plugin, runtime UI, gateway, product-job, access and usage tests plus W8's focused harness. The test authority belongs to EviMed; a community plugin-doctor score, a package's self-reported health or the presence of test scripts can supplement it but cannot replace it.
+
+## UI acceptance handoff — 2026-10-26
+
+The product-specific requirements below are transferred from design specification v3.0 to this module authority. They are acceptance requirements, not a claim that pending product implementation has shipped. Shared component, state, ownership and proof rules are maintained in [Frontend Design System v3.1](../../../OpenScience/docs/FRONTEND_DESIGN_SYSTEM.md). Later explicit owner decisions update this plan without creating another design-system copy of the product scope.
+
+Extensions distinguish discovery, installation, configured enablement and activation in the next supported runtime/session. Name the affected project in the detail. Built-in capabilities and optional plugins do not share a misleading on/off promise. Show the real supplier/source and version where it helps a decision. User-facing names/descriptions are localized; raw GEO package slugs are not the default catalogue title. Failures retain intent and recovery.

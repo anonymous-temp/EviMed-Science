@@ -27,7 +27,10 @@ import { migrateUsageLedger } from "./usagePersistence.mjs";
  * A finished run is one the usage ledger holds a settled kernel request for (`evimed_usage.model_requests`, purpose `kernel`):
  * the ledger is the one record of an account's research that survives its projects, and a request the model answered and the
  * platform priced is work, where a run record in a project folder could be written by nothing. The background purposes
- * (learning, titles, memory extraction, reviews) are the platform's own and do not make an account active.
+ * (learning, titles, memory extraction, reviews) are the platform's own and do not make an account active. A scheduled, LoopX or
+ * acceptance-driver run is `kernel` too: the ledger row carries no marker of an automated run (its purpose is the run's platform route,
+ * `usagePurposeOfRun`, and `automated` is a field of the file-based run ledger, which this count does not join), so such runs still count
+ * towards `minFinishedRuns`; the account's age floor and the keepers' fortnight are what bound a harness that makes accounts.
  *
  * @module capsuleShareTrust
  */
@@ -86,6 +89,30 @@ export async function shareCorroboration({ authorId, snapshotHash }, { database,
   recordCorroborationKeepers("account_too_new", tooNew);
   recordCorroborationKeepers("too_few_runs", tooFewRuns);
   return { corroborated: counted >= minAccounts, keepers: result.rows.length, counted, tooNew, tooFewRuns };
+}
+
+/**
+ * For each account among `userIds` that still exists, whether it counts as an independent voice: at least `minAccountAgeDays` old and
+ * `minFinishedRuns` runs of its own finished — the keepers' rule above, read for named accounts (the promotion of a method to 「大家的做法」
+ * asks it of an author and of the account that corroborates it, `officialPromotion.mjs`). A deleted account is absent from the map.
+ * @param {any} database @param {readonly string[]} userIds
+ * @param {{ minAccountAgeDays?: number, minFinishedRuns?: number, now?: () => number }} [options]
+ * @returns {Promise<Map<string, boolean>>}
+ */
+export async function accountStanding(database, userIds, { minAccountAgeDays = SHARE_CORROBORATION_MIN_ACCOUNT_AGE_DAYS,
+  minFinishedRuns = SHARE_CORROBORATION_MIN_FINISHED_RUNS, now = Date.now } = {}) {
+  const ids = [...new Set(userIds.filter((id) => typeof id === "string" && id))];
+  if (!ids.length) return new Map();
+  await migrateUsageLedger(database);
+  const bornBefore = new Date(now() - minAccountAgeDays * DAY_MS).toISOString();
+  // The runs are counted up to the minimum and no further, as for a keeper.
+  const result = await database.query(`SELECT u.id, u.created_at<=$2::timestamptz AS old_enough,
+      (SELECT count(*)::integer FROM (SELECT m.run_id FROM evimed_usage.model_requests m
+         WHERE m.user_id=u.id AND m.run_id IS NOT NULL AND m.purpose='kernel' AND m.status='settled'
+         GROUP BY m.run_id LIMIT $3::integer) finished) AS runs
+    FROM evimed_control.users u WHERE u.id=ANY($1::text[])`,
+  [ids, bornBefore, Math.max(1, minFinishedRuns)]);
+  return new Map(result.rows.map((/** @type {any} */ row) => [String(row.id), row.old_enough === true && Number(row.runs) >= minFinishedRuns]));
 }
 
 /**

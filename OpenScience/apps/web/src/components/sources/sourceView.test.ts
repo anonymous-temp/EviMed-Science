@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceDisplay, SourceRecord } from "@/lib/sourceClient";
-import { conversationDraft, fileNameOf, highlightParts, isEditableNote, isReading, isUsable, kindIcon, metaLine, originalPathOf, readerMeta, stateLabel } from "./sourceView";
+import { conversationDraft, destinationHint, fileNameOf, highlightParts, isEditableNote, isReading, isUsable, kindIcon, metaLine, originalPathOf, readerMeta, stateLabel } from "./sourceView";
 
 const display = (overrides: Partial<SourceDisplay> = {}): SourceDisplay => ({
   title: "幽门螺杆菌感染处理第六次全国共识报告", gist: null, docType: "review-guideline", typeLabel: "综述或指南", typeShort: "指南", kind: "literature",
@@ -18,13 +18,13 @@ describe("a row's meta line", () => {
     expect(metaLine(source())).toBe("指南 · 18 页 · 上传");
     expect(metaLine(source({}, { pages: null, size: 2_200_000, typeShort: "文档", kind: "document", origin: "drive" }))).toBe("文档 · 2.1 MB · 网盘");
     expect(metaLine(source({}, { typeShort: "网页", kind: "page", origin: "link", site: "nmpa.gov.cn", pages: null }))).toBe("网页 · nmpa.gov.cn · 链接");
-    expect(metaLine(source({}, { typeShort: "数据表", kind: "table", origin: "conversation", pages: null, size: null, shared: true }))).toBe("数据表 · 对话产出 · 所有项目可用");
+    expect(metaLine(source({}, { typeShort: "数据表", kind: "table", origin: "conversation", pages: null, size: null }))).toBe("数据表 · 对话产出");
     expect(metaLine(source({}, { typeShort: "笔记", kind: "note", origin: "note", pages: null, size: null }))).toBe("笔记");
     expect(metaLine(source({}, { origin: "frontier" }))).toBe("指南 · 18 页 · 前沿动态");
   });
 
-  it("leaves 「所有项目可用」 out where every row is shared", () => {
-    expect(metaLine(source({}, { shared: true }), { showShared: false })).toBe("指南 · 18 页 · 上传");
+  it("does not say where the document takes effect: that is the row's own control", () => {
+    expect(metaLine(source({}, { shared: true }))).toBe("指南 · 18 页 · 上传");
   });
 
   it("is never an id, a status word or a model's name", () => {
@@ -38,7 +38,7 @@ describe("a document page's meta line", () => {
   it("says what the document is, how big, how long, where it came from and when", () => {
     expect(readerMeta(source({}, {}, earlier))).toBe("指南 · 2.1 MB · 18 页 · 上传 · 2020-10-03");
     expect(readerMeta(source({}, { typeShort: "网页", kind: "page", origin: "link", site: "nmpa.gov.cn", pages: null, size: 9000 }, earlier))).toBe("网页 · nmpa.gov.cn · 8.8 KB · 链接 · 2020-10-03");
-    expect(readerMeta(source({}, { typeShort: "数据表", kind: "table", origin: "conversation", pages: null, size: 48_000, shared: true }, earlier))).toBe("数据表 · 47 KB · 对话产出 · 所有项目可用 · 2020-10-03");
+    expect(readerMeta(source({}, { typeShort: "数据表", kind: "table", origin: "conversation", pages: null, size: 48_000, shared: true }, earlier))).toBe("数据表 · 47 KB · 对话产出 · 2020-10-03");
   });
 
   it("leaves out what is not known, and is never an id or a status word", () => {
@@ -61,6 +61,9 @@ describe("where a document's original is", () => {
     expect(originalPathOf(source())).toBe("knowledge-base/共识.pdf");
     expect(originalPathOf(source({ outputs: { artifactPath: "knowledge-base/.evimed-derived/src_one/index.md" } }, { origin: "drive" }))).toBe("knowledge-base/.evimed-derived/src_one/index.md");
     expect(originalPathOf(source({ paths: [], outputs: {} }, { origin: "drive" }))).toBeNull();
+    const captured = "knowledge-base/.evimed-revisions/research/paper.pdf";
+    expect(originalPathOf(source({ paths: [captured], outputs: { artifactPath: "knowledge-base/.evimed-derived/src_one/index.md" } }, { origin: "drive" }))).toBe(captured);
+    expect(originalPathOf(source({ paths: ["/remote/paper.pdf"], outputs: { artifactPath: "knowledge-base/.evimed-derived/src_one/index.md" } }, { origin: "drive" }))).toBe("knowledge-base/.evimed-derived/src_one/index.md");
     expect(isEditableNote(source({}, { kind: "note", origin: "note" }))).toBe(true);
     expect(isEditableNote(source({}, { kind: "note", origin: "upload" }))).toBe(false);
     expect(isEditableNote(source())).toBe(false);
@@ -116,5 +119,14 @@ describe("marking what was typed in a line", () => {
     expect(highlightParts("a.b (c) [d]", "(c) [d]")).toEqual([{ text: "a.b ", match: false }, { text: "(c)", match: true }, { text: " ", match: false }, { text: "[d]", match: true }]);
     expect(highlightParts("anything", ".*").map((part) => part.match)).toEqual([false]);
     expect(highlightParts("", "x")).toEqual([{ text: "", match: false }]);
+  });
+});
+
+describe("where a new material is kept, in the words of the hint", () => {
+  it("says what to do, not what the permission model is", () => {
+    for (const hint of [destinationHint(true), destinationHint(false)]) expect(hint).not.toMatch(/权限|权限模型|ACL/);
+    expect(destinationHint(true)).toContain("多人共享的循证 GEO 项目不读我的资料");
+    expect(destinationHint(true)).toContain("所有项目都能用");
+    expect(destinationHint(false)).toBe("先保存到所选项目；之后可以在资料的“生效项目”里，让其他项目也用它。");
   });
 });

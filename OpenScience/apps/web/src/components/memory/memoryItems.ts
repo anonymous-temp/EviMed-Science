@@ -1,10 +1,7 @@
-import { FolderOpen, Radar, UsersRound } from "lucide-react";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import { entryGroup, recordGroup, recordProjectId, selfSection, type MemoryGroup, type SelfSection } from "@/lib/memoryGroups";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
-import { projectLabels, type LabelledProject } from "@/lib/projectNames";
-import type { ScopeGroup } from "@/components/ui/ScopeMenu";
 import { methodTitle, type WebMethod } from "@/lib/methodsClient";
 import { fileSummary, fileTopic, isFileMemory } from "./memoryNative";
 
@@ -81,78 +78,8 @@ export function practiceItems(
   })).filter((item) => !text || matches(`${item.title} ${item.summary}`, text)));
 }
 
-/** Where a project in the dropdown belongs: the researcher's own, a 虚拟临床研究 study, or a 循证 GEO project. */
-export type ProjectKind = "own" | "vcr" | "geo";
-
-export interface ProjectChoice {
-  /** A project's id; null is the facts that name no project the account still has. */
-  id: string | null;
-  name: string;
-  kind: ProjectKind;
-}
-
-/** The choice that holds the facts naming no project the account still has. */
-export const OTHER_PROJECT = "__other";
-
-/**
- * The projects the 项目 tab can show, in the order the dropdown lists them:
- * the researcher's own first, then each module's own group. A project with no
- * facts is still listed (its list says so), because a dropdown that offers only
- * the projects that happen to have memory hides the one a researcher came to
- * look at.
- */
-export function projectChoices(
-  projects: readonly LabelledProject[],
-  { vcr, geo }: { vcr: ReadonlySet<string>; geo: ReadonlySet<string> },
-  facts: readonly FactItem[],
-): ProjectChoice[] {
-  const known = new Set(projects.map((project) => project.id));
-  // Two projects of one name read differently in this dropdown, as in every other (`projectLabels`).
-  const labels = projectLabels(projects);
-  const kindOf = (id: string): ProjectKind => (vcr.has(id) ? "vcr" : geo.has(id) ? "geo" : "own");
-  const order: ProjectKind[] = ["own", "vcr", "geo"];
-  const listed = projects
-    .map((project): ProjectChoice => ({ id: project.id, name: labels.get(project.id) ?? project.name, kind: kindOf(project.id) }))
-    .sort((left, right) => order.indexOf(left.kind) - order.indexOf(right.kind));
-  const orphans = facts.some((fact) => fact.group === "project" && (fact.projectId === null || !known.has(fact.projectId)));
-  return orphans ? [...listed, { id: OTHER_PROJECT, name: "其他", kind: "own" }] : listed;
-}
-
-/** The heading and mark of each group of the project menu: the researcher's own projects need neither a heading nor a new mark. */
-const SCOPE_GROUPS = {
-  own: { heading: undefined, icon: FolderOpen },
-  vcr: { heading: "虚拟临床研究", icon: UsersRound },
-  geo: { heading: "循证 GEO", icon: Radar },
-} as const;
-
-/**
- * The project choices as the header's scope menu groups them (`ScopeMenu`): the researcher's own projects first, then each module's
- * own group under its name, as the sidebar and the knowledge base list them — so two studies with one name are never mistaken for the
- * researcher's own projects. The choice that holds the facts naming no project the account still has is an ordinary entry, 「其他」.
- */
-export function projectScopeGroups(choices: readonly ProjectChoice[]): ScopeGroup[] {
-  const groups: ScopeGroup[] = [];
-  let kind: ProjectKind | null = null;
-  for (const choice of choices) {
-    const { heading, icon } = SCOPE_GROUPS[choice.kind];
-    const entry = { id: choice.id ?? OTHER_PROJECT, label: choice.name, icon };
-    if (choice.kind === kind && groups.length > 0) {
-      const last = groups[groups.length - 1]!;
-      groups[groups.length - 1] = { ...last, choices: [...last.choices, entry] };
-    } else {
-      groups.push({ heading, choices: [entry] });
-      kind = choice.kind;
-    }
-  }
-  return groups;
-}
-
-/** The facts of the project a dropdown names; the ones that name none the account has under 「其他」. */
-export function factsOfProject(facts: readonly FactItem[], projectId: string | null, known: ReadonlySet<string>): FactItem[] {
-  return facts.filter((fact) => fact.group === "project" && (projectId === OTHER_PROJECT
-    ? fact.projectId === null || !known.has(fact.projectId)
-    : fact.projectId === projectId));
-}
+/** What the memories of a project the account no longer has are filed under, wherever it is printed: the lists and the dashboard. */
+export const OTHER_PROJECT_LABEL = "未归入项目";
 
 /** The quiet line under a row: what a file memory says under its topic. A sentence needs none. */
 export function factRowSummary(item: FactItem): string | undefined {

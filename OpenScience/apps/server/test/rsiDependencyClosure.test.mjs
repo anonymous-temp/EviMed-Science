@@ -110,3 +110,18 @@ test('source-bound runtime file declarations hash resources and reject unreviewe
     assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
   } finally { await rm(rootDir, { recursive: true, force: true }) }
 })
+
+// A frontier round that edits one of these files (frontierPersistence.mjs gains DDL every round) fails here by name, not as an
+// opaque campaign_closure_runtime_files_undeclared deep in the campaign tests: re-read the file's filesystem calls, update its
+// `resources` if it reads anything new, then pin the new digest in RSI_DEPENDENCY_PROFILES.
+test('every source-bound runtime file declaration is pinned to the file as it is now', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { RSI_DEPENDENCY_PROFILES } = await import('../src/rsiDependencyClosure.mjs')
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
+  for (const [surface, profile] of Object.entries(RSI_DEPENDENCY_PROFILES)) {
+    for (const [relative, declaration] of Object.entries(profile.runtimeFileDependencies ?? {})) {
+      const digest = createHash('sha256').update(await readFile(path.join(root, relative))).digest('hex')
+      assert.equal(declaration.sourceDigest, digest, `${surface}: ${relative} changed — re-audit its filesystem reads, then pin ${digest}`)
+    }
+  }
+})

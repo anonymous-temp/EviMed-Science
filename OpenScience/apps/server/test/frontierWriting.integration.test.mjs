@@ -78,7 +78,7 @@ function writingEditor(behaviour = {}) {
     owner, available: true, timeZone: "Asia/Shanghai", model: "deepseek-flash",
     leads: /** @type {string[]} */ ([]), briefs: /** @type {Array<{ instructions: string, input: string }>} */ ([]),
     async writeJson(/** @type {string} */ instructions, /** @type {string} */ _input, /** @type {number} */ _max, /** @type {any} */ opts) {
-      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: { insight_zh: null }, error: null };
+      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: {}, error: null };
       this.leads.push(instructions);
       const checked = opts.verify(behaviour.lead ? behaviour.lead(instructions) : { lead_zh: "" });
       return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };

@@ -60,7 +60,12 @@ const sources = {
     return { id, projectId: "project-1", deletedAt: null, payload: { title: TITLES[id], status: "complete", generation: 1 } };
   },
 };
-const library = { async searchScope(userId) { return userId === "user-1" ? [{ sourceId: LIBRARY_DOC, title: "跨项目的抗凝指南" }] : []; } };
+// The library as one project sees it: the entries that apply to it. The document applies to project-1 and to no other project.
+const libraryAsked = [];
+const library = { async searchScope(userId, projectId) {
+  libraryAsked.push([userId, projectId]);
+  return userId === "user-1" && projectId === "project-1" ? [{ sourceId: LIBRARY_DOC, title: "跨项目的抗凝指南" }] : [];
+} };
 
 async function engine() {
   const stub = createOpenVikingStub();
@@ -569,4 +574,26 @@ test("a sessionless shared-context browse is refused while a conversation of the
   assert.equal(selected.status, 200); assert.deepEqual(selected.body.data.entries, []); assert.equal(proved, 1);
   held = false;
   assert.equal((await call({ op: "list", root: "sources" })).status, 200);
+});
+
+test("a library document that applies to one project is listed, read and grepped there and is nothing in a sibling project of the same account", async (t) => {
+  const { resources } = await engine();
+  const { call, ok } = await withGateway(t, { resources });
+  libraryAsked.length = 0;
+  // The engine holds the account's whole library under one root, and both projects' tokens reach that root.
+  assert.deepEqual((await ok({ op: "list", root: "library" })).entries.map((entry) => entry.path), [`${LIBRARY_DOC}.md`]);
+  assert.equal((await ok({ op: "read", root: "library", path: `${LIBRARY_DOC}.md` })).title, "跨项目的抗凝指南");
+  assert.equal((await ok({ op: "grep", root: "library", pattern: "利伐沙班" })).count, 1);
+
+  const sibling = { token: "sibling-project" };
+  assert.deepEqual((await ok({ op: "list", root: "library" }, sibling)).entries, []);
+  assert.deepEqual((await ok({ op: "tree", root: "library" }, sibling)).entries, []);
+  assert.deepEqual((await ok({ op: "overview", root: "library" }, sibling)).documents, []);
+  assert.deepEqual((await ok({ op: "grep", root: "library", pattern: "利伐沙班" }, sibling)).matches, []);
+  const read = await call({ op: "read", root: "library", path: `${LIBRARY_DOC}.md` }, sibling);
+  assert.equal(read.status, 404, "a document that does not apply to the project is not there to read");
+  assert.doesNotMatch(JSON.stringify(read.body), /利伐沙班/);
+  // Each question was asked for the project the token names, never for the account.
+  assert.ok(libraryAsked.some(([, projectId]) => projectId === "project-2"));
+  assert.ok(libraryAsked.every(([userId, projectId]) => userId === "user-1" && ["project-1", "project-2"].includes(projectId)));
 });

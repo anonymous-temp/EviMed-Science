@@ -1,9 +1,8 @@
-import { PlanTab } from "./PlanTab";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { getGeoCluster, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import type { FilterOption } from "@/components/ui/FilterChips";
@@ -18,7 +17,7 @@ import { GEO_VIEW_PARAM } from "../geoTabs";
 import { clusterName } from "../spine/clusterModel";
 import { ClusterLink } from "../spine/ClusterLink";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
-import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_SOURCE_PARAM, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_SOURCE_PARAM, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
 import { routeWord, unavailableWords } from "../spine/actionModel";
 import {
   candidatesOf,
@@ -87,9 +86,19 @@ const KIND_PARAM = "kind";
  * The choices — the view, the engine, the kind of site, the group a site is related to, and the search — are the band's toolbar,
  * and the open site is `?source=<domain>`, so a link from a group or a wrong claim lands on it.
  */
+function SourcePlanEntry({ geoId, selectionRef, sources }: { geoId: string; selectionRef?: string; sources: readonly GeoSourceRow[] }) {
+  const destination = useGeoDestinationPath();
+  const [params] = useSearchParams();
+  const selected = params.get("source");
+  const sourceId = params.get("planSource") ?? sources.find(source => source.id === selected || source.domain === selected)?.id;
+  return <Link className="self-start text-ui text-accent" to={destination(geoId, { tab: "plan" }, {
+    selectionRef:selectionRef ?? params.get("selectionRef"), planSource:sourceId, planUrl:params.get("planUrl"),
+    source:params.get("source"), strategyVersion:params.get("strategyVersion"), targetVersion:params.get("targetVersion"),
+  })}>打开实施方案</Link>;
+}
+
 export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const { state, reload } = useGeoSources(geoId);
-  const [planParams] = useSearchParams();
   const actions = useGeoActions(geoId);
   const clusters = useGeoClusters(geoId);
   const catalog = useGeoQuestionCatalog(geoId);
@@ -97,7 +106,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const sources = (Array.isArray(data?.sources) ? data.sources : []).filter((source) => source && source.domain);
-  if (sources.length === 0) return <><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded /><StepPending geoId={geoId} project={project} step="sources" /><PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl")??undefined} /></>;
+  if (sources.length === 0) return <><GeoAnalysisEntry geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded /><StepPending geoId={geoId} project={project} step="sources" /><SourcePlanEntry geoId={geoId} selectionRef={data.selection?.reference} sources={sources} /></>;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
   const groups = [...new Map([
@@ -114,7 +123,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
           {zh`${linkless.map(engineName).join("、")}的引用只有标题、没有链接，引用了哪些信源测不出`}
         </p>
       )}
-      <PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl") ?? undefined} sourceId={planParams.get("planSource") ?? sources.find(source => source.domain === planParams.get("source") || source.id === planParams.get("source"))?.id} />
+      <SourcePlanEntry geoId={geoId} selectionRef={data.selection?.reference} sources={sources} />
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );
@@ -264,14 +273,16 @@ function SourceList({
   };
   // Pressing the sorted column again turns it over; another column starts from the most.
   const sortBy = (key: string) => change({ sourceSort: key, sourceOrder: sort.key === key && sort.descending ? "asc" : "desc" });
+  // The engine, 只看 and type filters belong to the cited view: in the other a scope value they would show is not this page's to release.
+  const clearFilters = useGeoFilterReset(view === "cited" ? [GEO_ENGINE_PARAM, "only", KIND_PARAM, GEO_CLUSTER_FILTER_PARAM, "sourceSearch"] : [GEO_CLUSTER_FILTER_PARAM, "sourceSearch"]);
   const narrowed = (view === "cited" && (current !== "all" || only !== null || kind !== null)) || cluster !== null;
   const summary = view === "cited"
     ? `${needle ? "匹配 " : ""}${rows.length.toLocaleString("zh-CN")} 个信源`
     : `${needle ? "匹配 " : ""}${places.length.toLocaleString("zh-CN")} 个可投放的地方`;
 
   useGeoToolbar({
+    navigation: [{ kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => change({ [GEO_VIEW_PARAM]: value === "cited" ? null : value }) }],
     filters: [
-      { kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => change({ [GEO_VIEW_PARAM]: value === "cited" ? null : value }) },
       ...(view === "cited" ? [
         // A menu and not a chip for each engine: five chips are most of the band's row, and a row that wraps when a choice adds its
         // mark moves the page under it.
@@ -288,7 +299,7 @@ function SourceList({
       }] : []),
       ...(view === "cited" && kind ? [{ kind: "toggle" as const, label: `类型：${kinds.find((entry) => entry.key === kind || entry.label === kind)?.label ?? kind} ×`, pressed: true, onChange: () => setKindParam(null) }] : []),
     ],
-    onClear: narrowed ? () => change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }) : undefined,
+    onClear: clearFilters,
     search: { label: "搜索信源", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
     summary,
   });
@@ -302,9 +313,9 @@ function SourceList({
     <section aria-label="信源" className="flex flex-col gap-6">
       {view === "cited" && (
         <>
-          <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded />
+          <GeoAnalysisEntry geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded />
           {rows.length === 0 ? (
-            <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={() => change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, sourceSearch: null })}>清除筛选</Button> : undefined}>
+            <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={clearFilters}>清除筛选</Button> : undefined}>
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}
             </Note>
           ) : (

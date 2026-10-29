@@ -1,12 +1,10 @@
 /**
- * 「虚拟临床研究」's notices (build plan 2026-09-28 §10.4). Exactly seven kinds
+ * 「虚拟临床研究」's notices (build plan 2026-09-28 §10.4). Five research kinds
  * reach a person; every other thing a study does is only shown on its page.
  *
  *   1. 研究包完成            info       — a study package finished
  *   2. 不可估计 / 假设冲突    attention  — the method's own diagnosis, or two assumptions that cannot both hold
  *   3. 计算预算需要确认       attention  — the second of the three human stops (§10.1)
- *   4. 有新的匹配候选         info       — pushed to the coordinators, not to everyone
- *   5. 实际入组偏离预测       attention  — the registered forecast and the actual have parted
  *   6. 假设卡有了新证据       info       — the frontier feed or a source-change record bears on a card (flywheel F24, 2026-10-06)
  *   7. 你要的计算算完了       info       — a computation the researcher asked for, in the conversation or with 「让 AI 做」, ended (R10, 2026-10-07)
  *
@@ -20,11 +18,6 @@
  *   the inbox's own idempotency. A key the inbox finds holding different
  *   content is taken as already sent, never as a failure that would stop a
  *   tick.
- * - **Role-scoped delivery is the point of notice 4** (§10.4: 按角色推送给协调员).
- *   New candidates go to the study's recruiters and its lead — a statistician
- *   on the same study does not want a message every time a patient matches.
- *   With no recruiter named, the owner hears it, because a notice nobody gets
- *   is a notice that did not happen.
  * - **「不可估计」 is a finished result, not an error** (plan §3.6). Its notice
  *   says what is missing and what the study can still answer; its severity is
  *   `attention` because a person has to decide, not `safety`, because nothing
@@ -188,13 +181,6 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
   /** @param {string} studyId @param {string} tab @param {string} [item] */
   const source = (studyId, tab, item) => ({ type: "vcr", id: item ? `${studyId}/${tab}/${item}` : `${studyId}/${tab}` });
 
-  /** Who hears about a new candidate: the coordinators and the lead (§10.4). @param {any} study */
-  async function recruiters(study) {
-    const members = (await store.members?.(String(study.id))) ?? [];
-    const named = members.filter((member) => ["recruiter", "site", "lead"].includes(String(member.role))).map((member) => String(member.userId));
-    return named.length ? named : [String(study.userId)];
-  }
-
   const notifier = {
     counts,
 
@@ -245,35 +231,6 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
     },
 
     /**
-     * 4. 有新的匹配候选 — to the coordinators, not to everyone.
-     * @param {any} study @param {{ batchKey: string, candidates: number, needsEvidence?: number }} facts
-     */
-    async newCandidates(study, { batchKey, candidates, needsEvidence = 0 }) {
-      const pending = needsEvidence > 0 ? `，其中 ${needsEvidence} 人还缺证据` : "";
-      return send(study, "new_candidates", {
-        title: `${vcrStudyName(study)}：有 ${candidates} 位新的匹配候选${pending}`,
-        body: "逐人看过之后再决定是否联系；联系之前需要协调员逐人确认。",
-        severity: "info", source: source(String(study.id), "matching"),
-        idempotencyKey: `vcr:${study.id}:candidates:${batchKey}`,
-      }, await recruiters(study));
-    },
-
-    /**
-     * 5. 实际入组偏离预测 — the registered forecast and the actual have parted
-     * by more than the study set.
-     * @param {any} study @param {{ forecastId: string, predicted: number, actual: number, byMonth?: string | null }} facts
-     */
-    accrualOffForecast(study, { forecastId, predicted, actual, byMonth = null }) {
-      const when = byMonth ? `到 ${clip(byMonth, 20)}` : "到目前";
-      return send(study, "accrual_off_forecast", {
-        title: `${vcrStudyName(study)}：实际入组偏离预测`,
-        body: `${when}预测 ${Math.round(predicted)} 例，实际 ${Math.round(actual)} 例。入组模型会用实际数据重新校准，预测与实际对照在试验页上。`,
-        severity: "attention", source: source(String(study.id), "trial"),
-        idempotencyKey: `vcr:${study.id}:accrual:${forecastId}`,
-      });
-    },
-
-    /**
      * 6. 假设卡有了新证据 — a new results item of the frontier feed names a work a card stands on, or one of its sources was
      * retracted, corrected or replaced. To the study's lead: whether a new version follows is told in the sentence, from what
      * the study allows, never promised.
@@ -282,7 +239,7 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
     newEvidence(study, { batchKey, cards, afterFreeze = false, refreshing = false }) {
       const named = cards.slice(0, 3).map((card) => clip(card, 20)).join("、");
       const tail = afterFreeze ? "分析计划已经冻结：新版本会放在冻结的版本旁边，计划本身不动。"
-        : refreshing ? "AI 会读入新证据并生成新版本；旧版本保留。" : "旧版本保留；定义与证据页上能看到是哪些新证据。";
+        : refreshing ? "AI 会读入新证据并生成新版本；旧版本保留。" : "旧版本保留；依据页上能看到是哪些新证据。";
       return send(study, "new_evidence", {
         title: `${vcrStudyName(study)}：${named}有了新证据`,
         body: tail, severity: "info", source: source(String(study.id), "data"),

@@ -8,6 +8,7 @@
 // returning "not on this platform" — a body that only says no reads like a
 // feature that is merely switched off.
 
+import { assertSessionGeneration, sessionGeneration, StaleSessionError } from "./sessionLifecycle";
 import type { FileRoot } from "@ai4s/shared";
 import { hasWebApi, invokeCommand } from "./apiClient";
 
@@ -17,7 +18,10 @@ import { hasWebApi, invokeCommand } from "./apiClient";
  */
 export async function addFilesToWorkspace(targetDir = "", root: FileRoot = "workspace"): Promise<string[]> {
   if (!hasWebApi || typeof document === "undefined") return [];
-  return uploadBrowserFiles(await pickBrowserFiles(), targetDir, root);
+  const owner = sessionGeneration();
+  const files = await pickBrowserFiles();
+  assertSessionGeneration(owner);
+  return uploadBrowserFiles(files, targetDir, root);
 }
 
 /**
@@ -30,9 +34,11 @@ export async function uploadFilesToWorkspace(
   root: FileRoot = "workspace",
   /** The project the files go to, when it is not the tab's own (the knowledge base page adding to the project it lists). */
   projectId?: string,
+  /** Local component lifetime only; never sent to the server. */
+  isCurrent?: () => boolean,
 ): Promise<string[]> {
   if (!hasWebApi) return [];
-  return uploadBrowserFiles(files, targetDir, root, projectId);
+  return uploadBrowserFiles(files, targetDir, root, projectId, isCurrent);
 }
 
 /**
@@ -45,15 +51,22 @@ export async function pickFiles(accept?: string): Promise<File[]> {
   return pickBrowserFiles(accept);
 }
 
-async function uploadBrowserFiles(files: File[], targetDir: string, root: FileRoot, projectId?: string): Promise<string[]> {
+async function uploadBrowserFiles(files: File[], targetDir: string, root: FileRoot, projectId?: string, isCurrent?: () => boolean): Promise<string[]> {
+  const owner = sessionGeneration();
+  const assertCurrent = () => { assertSessionGeneration(owner); if (isCurrent && !isCurrent()) throw new StaleSessionError(); };
   const uploaded: string[] = [];
   const prefix = targetDir.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   for (const file of files) {
+    assertCurrent();
     const data = await fileToBase64(file);
+    assertCurrent();
     const filename = prefix ? `${prefix}/${file.name}` : file.name;
     const args = { root, filename, encoding: "base64", data };
-    uploaded.push(projectId ? await invokeCommand<string>("upload_file", args, { projectId }) : await invokeCommand<string>("upload_file", args));
+    const current = () => owner === sessionGeneration() && (isCurrent?.() ?? true);
+    uploaded.push(projectId ? await invokeCommand<string>("upload_file", args, { projectId, isCurrent: current }) : await invokeCommand<string>("upload_file", args, { isCurrent: current }));
+    assertCurrent();
   }
+  assertCurrent();
   return uploaded;
 }
 

@@ -85,11 +85,12 @@ function resizableViewport(narrow: boolean) {
 async function renderShell() {
   mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
   const router = createMemoryRouter(
-    [{ path: "/app", element: <AppShell />, children: [{ path: "chat", element: <div>页面内容</div> }] }],
+    [{ path: "/app", element: <AppShell />, children: [{ path: "chat", element: <div>页面内容</div> }, { path: "next", element: <h1>新页面</h1> }] }],
     { initialEntries: ["/app/chat"] },
   );
   render(<RouterProvider router={router} />);
   await screen.findByText("页面内容");
+  return router;
 }
 
 const main = () => document.getElementById("main") as HTMLElement;
@@ -160,6 +161,19 @@ describe("the sidebar's focus and the page behind it", () => {
       expect(main()).toHaveAttribute("inert");
       expect(screen.getByRole("link", { name: "新对话" })).toHaveFocus();
       await userEvent.click(screen.getByRole("button", { name: "关闭侧边栏" }));
+      expect(main()).not.toHaveAttribute("inert");
+    });
+
+    it("closes only on an accepted destination, including browser history", async () => {
+      const router = await renderShell();
+      await userEvent.click(screen.getByRole("button", { name: "展开侧边栏" }));
+      await act(() => router.navigate("/app/chat?filter=mine"));
+      expect(main()).toHaveAttribute("inert");
+      await act(() => router.navigate("/app/next"));
+      expect(main()).not.toHaveAttribute("inert");
+      expect(await screen.findByRole("heading", { name: "新页面" })).toHaveFocus();
+      await userEvent.click(screen.getByRole("button", { name: "展开侧边栏" }));
+      await act(() => router.navigate(-1));
       expect(main()).not.toHaveAttribute("inert");
     });
 

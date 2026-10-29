@@ -1,3 +1,4 @@
+import { measurement } from "@/lib/measurement";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Flame } from "lucide-react";
@@ -32,7 +33,7 @@ describe("the markers the walk reads", () => {
 
 describe("StatTile opens what it counts", () => {
   it("makes the number a link to the things counted", () => {
-    render(<MemoryRouter><StatTile label="严重讲错" value={18} unit="条" to="/app/geo/g1/accuracy?severity=high" /></MemoryRouter>);
+    render(<MemoryRouter><StatTile label="严重讲错" reading={measurement(18, "条", "示例读数")} to="/app/geo/g1/accuracy?severity=high" /></MemoryRouter>);
     const link = screen.getByRole("link", { name: "严重讲错 18，查看" });
     expect(link).toHaveAttribute("href", "/app/geo/g1/accuracy?severity=high");
     expect(link).toHaveTextContent("18");
@@ -40,15 +41,15 @@ describe("StatTile opens what it counts", () => {
 
   it("makes it a button that narrows the page in place", async () => {
     const open = vi.fn();
-    render(<StatTile label="需要看一眼" value={4} onOpen={open} />);
+    render(<StatTile label="需要看一眼" reading={measurement(4, "", "示例读数")} onOpen={open} />);
     await userEvent.click(screen.getByRole("button", { name: "需要看一眼 4，查看" }));
     expect(open).toHaveBeenCalledTimes(1);
   });
 
   it("opens nothing for a word that stands in for a number, and is plain text without a target", () => {
-    render(<StatTile label="样本" value="样本不足" placeholder to="/somewhere" />);
+    render(<StatTile label="样本" reading={{ kind: "unmeasured", reason: "样本不足" }} to="/somewhere" />);
     expect(screen.queryByRole("link")).toBeNull();
-    render(<StatTile label="已核对" value={39} />);
+    render(<StatTile label="已核对" reading={measurement(39, "", "示例读数")} />);
     expect(screen.queryByRole("button")).toBeNull();
   });
 });

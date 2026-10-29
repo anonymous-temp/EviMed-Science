@@ -2,7 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { frontierItemDetail } from "@/components/frontier/__fixtures__/frontierItems";
+import { parseFrontierItemDetail } from "@/lib/frontierClient";
+import { frontierItemDetail, rawXPost } from "@/components/frontier/__fixtures__/frontierItems";
 import { pendingFrontierEvents, resetFrontierTracking } from "@/lib/frontierTracking";
 import { FrontierArticlePage } from "./FrontierArticlePage";
 
@@ -12,6 +13,7 @@ const client = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/frontierClient", async (original) => ({ ...(await original<typeof import("@/lib/frontierClient")>()), ...client }));
 
+const detail = (raw: Record<string, unknown>) => parseFrontierItemDetail(raw)!;
 const ID = "a1b2c3d4e5f60718";
 const QUESTIONS = ["这个结果适用于中国患者吗？", "和现有标准治疗比差别在哪？", "安全性数据有哪些？"];
 
@@ -52,33 +54,62 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); resetFrontierTracking(); });
 
-describe("就此提问 on the reading page (c3-ask)", () => {
-  it("sits in the right column under the actions on a wide screen, the questions then 「自己提问…」, each a row that opens something", async () => {
+describe("继续追问 on the reading page (c3-ask; chips at the article's end since 2026-10-27)", () => {
+  it("is the end of the article on a wide screen too, not the right column: the questions as chips, then 「自己提问…」", async () => {
     wide();
     show();
-    const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
-    const block = within(rail).getByRole("region", { name: "就此提问" });
+    const article = await screen.findByRole("article", { name: "正文" });
+    const block = within(article).getByRole("region", { name: "继续追问" });
     expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual([...QUESTIONS, "自己提问…"]);
+    expect(screen.getAllByRole("region", { name: "继续追问" })).toHaveLength(1);
+    // The column no longer has it, and starts at 推荐理由.
+    const rail = screen.getByRole("complementary", { name: "文章操作与推荐" });
+    expect(within(rail).queryByRole("region", { name: /就此提问|继续追问/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("就此提问")).not.toBeInTheDocument();
     const names = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
       ?? (region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent));
-    expect(names).toEqual(["文章操作", "就此提问", "推荐理由", "出处", "专科"]);
-    expect(screen.getAllByRole("region", { name: "就此提问" })).toHaveLength(1);
+    expect(names).toEqual(["推荐理由", "出处", "专科"]);
   });
 
-  it("is at the end of the article on a narrow screen, before the notes (出处 among them)", async () => {
+  it("is chips, not rows: each question one line that wraps with the others, cut where the room is short, its whole text its name", async () => {
+    wide();
+    const long = "这个结果在中国人群中的外推性如何，需要哪些额外证据？";
+    client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: ID, ask: [long, ...QUESTIONS.slice(0, 2)] }), abstract: "Original abstract", abstractZh: null });
+    show();
+    const block = await screen.findByRole("region", { name: "继续追问" });
+    const list = within(block).getByRole("list", { name: "可以问的问题" });
+    expect(list).toHaveClass("flex-wrap");
+    const chip = within(list).getByRole("button", { name: long });
+    // One line, cut with an ellipsis: the chip may not be wider than the line it stands on.
+    expect(chip).toHaveClass("max-w-full", "rounded-full");
+    expect(chip.querySelector(".truncate")).toHaveTextContent(long);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+  });
+
+  it("is at the end of the article on a narrow screen too, in the same place: before the notes (出处 among them)", async () => {
     show();
     const article = await screen.findByRole("article", { name: "正文" });
-    const block = within(article).getByRole("region", { name: "就此提问" });
+    const block = within(article).getByRole("region", { name: "继续追问" });
     expect(within(block).getAllByRole("button")).toHaveLength(4);
     const regions = within(article).getAllByRole("region").map((region) => region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent);
-    expect(regions.indexOf("就此提问")).toBeGreaterThan(-1);
-    expect(regions.indexOf("就此提问")).toBeLessThan(regions.indexOf("推荐理由"));
-    expect(screen.getAllByRole("region", { name: "就此提问" })).toHaveLength(1);
+    expect(regions.indexOf("继续追问")).toBeGreaterThan(-1);
+    expect(regions.indexOf("继续追问")).toBeLessThan(regions.indexOf("推荐理由"));
+    expect(screen.getAllByRole("region", { name: "继续追问" })).toHaveLength(1);
+  });
+
+  it("follows what the AI view says and its 事件后续, and leads the notes", async () => {
+    client.fetchFrontierItem.mockResolvedValue(detail(rawXPost({ id: ID, ask: QUESTIONS })));
+    show();
+    const article = await screen.findByRole("article", { name: "正文" });
+    const followups = within(article).getByRole("region", { name: "事件后续 · 2" });
+    const ask = within(article).getByRole("region", { name: "继续追问" });
+    expect(followups.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(ask.compareDocumentPosition(within(article).getByRole("region", { name: "推荐理由" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("a question opens a new conversation with it as the draft, the item's line under it, the item as its origin, and nothing sent", async () => {
     show();
-    const block = await screen.findByRole("region", { name: "就此提问" });
+    const block = await screen.findByRole("region", { name: "继续追问" });
     await userEvent.click(within(block).getByRole("button", { name: QUESTIONS[1] }));
     expect(screen.getByTestId("probe").textContent?.startsWith("/app/chat|")).toBe(true);
     const intent = intentOf();
@@ -93,7 +124,7 @@ describe("就此提问 on the reading page (c3-ask)", () => {
 
   it("「自己提问…」 opens it with the item's line alone", async () => {
     show();
-    await userEvent.click(within(await screen.findByRole("region", { name: "就此提问" })).getByRole("button", { name: "自己提问…" }));
+    await userEvent.click(within(await screen.findByRole("region", { name: "继续追问" })).getByRole("button", { name: "自己提问…" }));
     const intent = intentOf();
     expect(intent.draft.startsWith(`“口服 PCSK9 抑制剂降低主要心血管事件”`)).toBe(true);
     expect(intent.draft).toContain(`frontier:${ID}`);
@@ -105,15 +136,15 @@ describe("就此提问 on the reading page (c3-ask)", () => {
   it("with no questions written it is the reader's own question alone", async () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: ID }), abstract: "Original abstract", abstractZh: null });
     show();
-    const block = await screen.findByRole("region", { name: "就此提问" });
+    const block = await screen.findByRole("region", { name: "继续追问" });
     expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual(["自己提问…"]);
   });
 
-  it("深入研究 is the same way in: the question that fits the item, the item's line, the item as origin", async () => {
+  it("深入研究 is the same way in, from the title row: the question that fits the item, the item's line, the item as origin", async () => {
     wide();
     show();
-    const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
-    await userEvent.click(within(rail).getByRole("button", { name: "深入研究" }));
+    await screen.findByRole("group", { name: "阅读视图与操作" });
+    await userEvent.click(within(document.querySelector("[data-page-header]") as HTMLElement).getByRole("button", { name: "深入研究" }));
     const intent = intentOf();
     expect(intent.draft.startsWith("这项研究可靠吗？")).toBe(true);
     expect(intent.draft).toContain(`frontier:${ID}`);

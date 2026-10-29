@@ -1,3 +1,5 @@
+import { vcrTimeUnitOf } from "@evimed/domain";
+import { maintenanceAllowsClaims } from "./maintenanceService.mjs";
 import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
 // What a study's compute budget holds a job back for. Three things are counted and a fourth is not:
 //   spent     what finished jobs used (`cpu_seconds_used`), and a stopped job whose use nobody could read, at its whole ceiling;
@@ -133,7 +135,7 @@ import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrId } from "./vcrStoreBase.mjs";
 import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
-import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues } from "./vcrEngineClient.mjs";
+import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues, vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
@@ -177,9 +179,15 @@ export const VCR_RECONSTRUCTION_REFERENCE = Object.freeze({
   kind: "maic_time_to_event_comparator", table: "reconstructed-ipd", bindTo: "pseudoIpdInputId", source: "reconstructed",
 });
 
+/** Each permitted consumer binds the same protected reconstruction to its own exact input key. */
+export const vcrReconstructionReferenceFor = (/** @type {string} */ kind) => kind === VCR_RECONSTRUCTION_REFERENCE.kind
+  ? VCR_RECONSTRUCTION_REFERENCE : kind === "fit_survival_model"
+    ? { ...VCR_RECONSTRUCTION_REFERENCE, kind, bindTo: "inputId" } : null;
 /** @param {string} kind @param {Record<string, any>} entry */
-const isReconstructionReference = (kind, entry) => kind === VCR_RECONSTRUCTION_REFERENCE.kind
-  && entry.table === VCR_RECONSTRUCTION_REFERENCE.table && entry.bindTo === VCR_RECONSTRUCTION_REFERENCE.bindTo;
+const isReconstructionReference = (kind, entry) => {
+  const reference = vcrReconstructionReferenceFor(kind);
+  return !!reference && entry.table === reference.table && entry.bindTo === reference.bindTo;
+};
 
 /**
  * Write the comparator's input id into the scenario for the entries that ask to be bound, after the
@@ -192,18 +200,19 @@ const isReconstructionReference = (kind, entry) => kind === VCR_RECONSTRUCTION_R
  * @returns {{ ok: true, scenario: Record<string, any> } | { ok: false, code: string, message: string, invalid?: Array<{ code: string, field: string, detail: string }> }}
  */
 export function vcrBindReconstruction(kind, scenario, entries, resolved) {
+  const reference = vcrReconstructionReferenceFor(kind);
   let next = scenario;
   for (const [at, entry] of entries.entries()) {
     if (entry.bindTo === undefined) continue;
     if (!isReconstructionReference(kind, entry) || resolved[at]?.valueSource !== VCR_RECONSTRUCTION_REFERENCE.source) {
       return { ok: false, code: "vcr_derived_table_unsupported", message: "这张表不能作为这项计算的比较臂：它必须是由已发表曲线重建出的伪个体数据。" };
     }
-    if (Object.hasOwn(next, VCR_RECONSTRUCTION_REFERENCE.bindTo)) {
+    if (reference && Object.hasOwn(next, reference.bindTo)) {
       return { ok: false, code: "vcr_job_scenario_invalid", message: "The comparator's input is named by the platform.",
-        invalid: [{ code: "scenario_field_unknown", field: `scenario.${VCR_RECONSTRUCTION_REFERENCE.bindTo}`,
+        invalid: [{ code: "scenario_field_unknown", field: `scenario.${reference?.bindTo}`,
           detail: "The comparator's input is named by the platform from the reconstruction result, never by the scenario." }] };
     }
-    next = { ...next, [VCR_RECONSTRUCTION_REFERENCE.bindTo]: resolved[at].id };
+    next = { ...next, [reference?.bindTo ?? ""]: resolved[at].id };
   }
   return { ok: true, scenario: next };
 }
@@ -282,7 +291,7 @@ export function vcrScenarioColumns(scenario) {
   const out = new Set();
   const COLUMN_KEYS = new Set(["treatmentColumn", "outcomeColumn", "weightColumn", "idColumn", "tstrOutcome", "column", "outcome", "target",
     // robustness methods: the prognostic score is a column the engine reads, so it is judged and sealed like any other
-    "prognosticScoreColumn"]);
+    "prognosticScoreColumn", "timeColumn", "statusColumn", "armColumn", "parameterColumn"]);
   const LIST_KEYS = new Set(["covariates", "propensityCovariates", "outcomeCovariates", "predictors", "on"]);
   /** @param {unknown} node @param {number} depth */
   const walk = (node, depth) => {
@@ -291,7 +300,7 @@ export function vcrScenarioColumns(scenario) {
     for (const [key, value] of Object.entries(node)) {
       if (COLUMN_KEYS.has(key) && typeof value === "string") out.add(value);
       else if (LIST_KEYS.has(key) && Array.isArray(value)) { for (const item of value) if (typeof item === "string") out.add(item); }
-      else if (key === "targets" && value && typeof value === "object") { for (const name of Object.keys(value)) out.add(name); }
+      else if (["targets", "covariateEffects"].includes(key) && value && typeof value === "object") { for (const name of Object.keys(value)) out.add(name); }
       else walk(value, depth + 1);
     }
   };
@@ -425,6 +434,8 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
 export function vcrResultKindFor(kind) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) return 'longitudinal';
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
+  if (kind === "fit_survival_model") return "model_fit";
+  if (kind === "apply_prognostic_model") return "model_prediction";
   if (kind === "population_quality") return "population_quality";
   if (["build_cohort", "generate_population", "literature_population", "synthesize_population"].includes(kind)) return "population";
   if (["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind)) return "patient_set";
@@ -454,6 +465,28 @@ export function vcrJobObjectKind(kind) {
   return VCR_SUBJECT_KINDS.includes(filed) ? filed : null;
 }
 
+/** Freeze scientific units from the selected resolved table; caller labels cannot relabel observed values.
+ * @param {string} method @param {Record<string,any>} scenario @param {Record<string,any>[]} inputs
+ */
+export function vcrBindScientificInputUnits(method, scenario, inputs) {
+  if (!["model.prognostic_apply", "model.survival_fit"].includes(method)) return { scenario, detail: null };
+  const selected = inputs.find(entry => entry.id === scenario.inputId);
+  if (!selected || !["observed", "extracted", "calculated", "imputed"].includes(selected.valueSource)) return { scenario,
+    detail: { basis: selected?.valueSource === "synthetic" ? "declared_synthetic_scenario" : "declared_reconstruction_scale", conversion: "none" } };
+  const units = object(selected.columnUnits);
+  if (method === "model.survival_fit") {
+    const timeUnit = vcrTimeUnitOf(units[scenario.timeColumn]);
+    if (!timeUnit || timeUnit !== scenario.timeUnit) throw new HttpError(400, "vcr_model_not_applicable", "The survival time unit is unknown or differs from the frozen snapshot field map; no implicit conversion is applied.");
+    return { scenario, detail: { basis: "frozen_snapshot_field_map", columns: { [scenario.timeColumn]: timeUnit }, conversion: "none" } };
+  }
+  const bound = Object.fromEntries(list(object(scenario.model).terms).map(term => {
+    const observed = units[term.column] ?? "unknown";
+    const sameTimeUnit = vcrTimeUnitOf(observed) && vcrTimeUnitOf(observed) === vcrTimeUnitOf(term.unit);
+    return [term.column, term.transform === "indicator" ? "category" : sameTimeUnit ? term.unit : observed];
+  }));
+  return { scenario: { ...scenario, inputUnits: bound }, detail: { basis: "frozen_snapshot_field_map", columns: bound, conversion: "none" } };
+}
+
 export class VcrJobs {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config?: Record<string, any>, engine?: any,
@@ -461,6 +494,7 @@ export class VcrJobs {
    *   notifier?: { budgetConfirm?: (study: any, job: any) => Promise<unknown> } | null,
    *   dataPlane?: { resolveEngineInputs: (input: Record<string, any>) => Promise<Array<Record<string, any>>> } | null,
    *   engineObserver?: { observe: (answered: boolean, code?: string | null) => void } | null,
+   *   baselineVerifier?: ((input:{userId:string,studyId:string,baselineTable:any[],bindings:any[],correlationSource?:string})=>Promise<any>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    *   `localExecutors` is keyed by method id (`matching.evaluate` is the
    *   matching package's); anything not named there goes to the engine.
@@ -468,7 +502,7 @@ export class VcrJobs {
    *   files an engine may open (`resolveEngineInputs`).
    */
   constructor({ store, config = {}, engine = null, localExecutors = {}, notifier = null, dataPlane = null,
-    engineObserver = null, now = () => new Date(), report = () => {} }) {
+    engineObserver = null, baselineVerifier = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR job queue needs the VCR store.");
     this.store = store;
     this.config = config;
@@ -481,15 +515,17 @@ export class VcrJobs {
     this.engineObserver = engineObserver;
     /** @type {((request: {studyId:string,principal:string,scenario:Record<string,any>,inputs:any[],receiptId?:string}) => Promise<any>) | null} */
     this.curveVerifier = null;
+    this.baselineVerifier = baselineVerifier;
     this.now = now;
     this.report = report;
     this.owner = `vcr-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
     this.counters = { enqueued: 0, deduplicated: 0, claimed: 0, dispatched: 0, succeeded: 0, failed: 0, canceled: 0,
-      awaitingBudget: 0, budgetHeld: 0, partial: 0, resubmitted: 0, exhausted: 0, mismatched: 0, tablesStored: 0 };
+      awaitingBudget: 0, budgetHeld: 0, partial: 0, resubmitted: 0, exhausted: 0, mismatched: 0, tablesStored: 0, finishHookFailed:0, finishHookExhausted:0, finishHookApplied:0, localClaimed:0 };
     /** @type {string | null} */
     this.lastError = null;
     /** @type {Array<(outcome: Record<string, any>) => Promise<unknown> | unknown>} */
     this.finishHooks = [];
+    this.finishHookKeys = new WeakMap();
     /** @type {any[]} rows failed by the claim for having no attempts left, until the worker has told the orchestrator */
     this.reaped = [];
   }
@@ -505,9 +541,70 @@ export class VcrJobs {
    * throws is reported and never undoes the job.
    * @param {(outcome: Record<string, any>) => Promise<unknown> | unknown} hook
    */
-  addFinishHook(hook) {
+  addFinishHook(hook, key = `hook:${this.finishHooks.length}`) {
+    this.finishHookKeys.set(hook,key);
     this.finishHooks.push(hook);
     return this;
+  }
+
+  /** Replay post-commit consumers from immutable executions. A durable lease fences
+   * concurrent finish callbacks, process restarts and completion reconciliation. */
+  async reconcileFinishHooks() {
+    const rows = await this.store.rows(`WITH eligible AS (SELECT id,user_id,finished_at,
+      row_number() OVER (PARTITION BY user_id ORDER BY finished_at,id) AS account_order
+      FROM ${VCR_SCHEMA}.jobs WHERE state IN ('succeeded','failed','canceled')
+      AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true'
+      AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true'
+      AND (finished_at<now()-make_interval(secs=>$2) OR checkpoint->>'completionHooksRunAfter' IS NULL OR (checkpoint->>'completionHooksRunAfter')::timestamptz<=now())
+      AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now()))
+      SELECT id FROM eligible ORDER BY account_order,finished_at,id LIMIT $1`,[this.config.vcrCompletionReconcileBatch ?? 50,Number(this.config.vcrCompletionMaxAgeMs ?? 86400000)/1000]);
+    for (const row of rows) await this.deliverFinishHooks(String(row.id));
+    return rows.length;
+  }
+
+  async deliverFinishHooks(jobId, supplied = null) {
+    const expired=await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=(checkpoint-'completionHooksLeaseUntil') || '{"completionHooksExhausted":true}'::jsonb
+      WHERE id=$1 AND state IN ('succeeded','failed','canceled') AND finished_at<now()-make_interval(secs=>$2)
+      AND COALESCE((checkpoint->>'completionHooksAttempts')::integer,0)>0
+      AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true' AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true'
+      AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now()) RETURNING id`,
+    [jobId,Number(this.config.vcrCompletionMaxAgeMs ?? 86400000)/1000]);
+    if(expired) {this.counters.finishHookExhausted++;this.report('vcr_finish_hooks_exhausted');return;}
+    const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint ||
+      jsonb_build_object('completionHooksLeaseUntil',(now()+make_interval(secs=>$2))::text,
+        'completionHooksAttempts',COALESCE((checkpoint->>'completionHooksAttempts')::integer,0)+1)
+      WHERE id=$1 AND state IN ('succeeded','failed','canceled')
+        AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true'
+        AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true'
+        AND (checkpoint->>'completionHooksRunAfter' IS NULL OR (checkpoint->>'completionHooksRunAfter')::timestamptz<=now())
+        AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now()) RETURNING *`,
+    [jobId,Math.max(1,Number(this.config.vcrCompletionLeaseMs ?? 300000)/1000)]);
+    if (!row) return;
+    const execution = !supplied ? await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.executions WHERE job_id=$1 ORDER BY created_at DESC LIMIT 1`,[jobId]) : null;
+    const done = supplied ?? {action:'finished',state:row.state,job:jobSummaryFromRow(row),
+      result:await this.resultOf(String(row.study_id),jobId),execution,
+      engineResult:object(execution?.receipt).stageOutput ?? null,error:row.error,partial:object(row.error).partial===true};
+    const applied=new Set(list(object(row.checkpoint).completionHooksDone));
+    let failed=false;
+    for (const hook of this.finishHooks) {
+      const key=this.finishHookKeys.get(hook) ?? `hook:${this.finishHooks.indexOf(hook)}`;
+      if (applied.has(key)) continue;
+      try {
+        await hook(done);
+        applied.add(key);
+        await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=jsonb_set(checkpoint,'{completionHooksDone}',$2::jsonb) WHERE id=$1`,[jobId,JSON.stringify([...applied])]);
+      } catch(error) { failed=true;this.counters.finishHookFailed++;this.report(codeOf(error)); }
+    }
+    const attempts=Number(row.checkpoint?.completionHooksAttempts ?? 1);
+    const maxAge=Number(this.config.vcrCompletionMaxAgeMs ?? 86400000);
+    const exhausted=failed && (attempts>=Number(this.config.vcrCompletionMaxAttempts ?? 12)
+      || this.now().getTime()-new Date(row.finished_at ?? row.updated_at ?? this.now()).getTime()>=maxAge);
+    const delay=Math.min(Number(this.config.vcrCompletionRetryMaxMs ?? 900000),Number(this.config.vcrCompletionRetryMs ?? 15000)*2**Math.min(20,Math.max(0,attempts-1)));
+    await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=(checkpoint-'completionHooksLeaseUntil') ||
+      jsonb_build_object('completionHooksApplied',$2::boolean,'completionHooksExhausted',$3::boolean,
+        'completionHooksRunAfter',(now()+make_interval(secs=>$4))::text) WHERE id=$1`,[jobId,!failed,exhausted,failed ? delay/1000 : 0]);
+    if (exhausted) {this.counters.finishHookExhausted++;this.report('vcr_finish_hooks_exhausted');}
+    if (!failed) this.counters.finishHookApplied++;
   }
 
   // --- budget -----------------------------------------------------------------------
@@ -603,11 +700,33 @@ export class VcrJobs {
     const methodVersion = /** @type {Record<string, any>} */ ({...VCR_ENGINE_METHODS,...VCR_LONGITUDINAL_METHODS})[method]?.version ?? "";
     const longitudinal = Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind);
     if (longitudinal && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','Longitudinal jobs freeze owned input references before enqueue.');
-    let scenario = object(input.scenario);
+    let scenario = { ...object(input.scenario) };
+    const patientGenerator = ["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind);
+    if (patientGenerator && !scenario.pairing && object(input.detail).populationId) {
+      scenario = { ...scenario, pairing: { key: `${object(input.detail).populationId}@${object(input.detail).populationVersion}`, replicate: 1 } };
+    }
     const principal = String(input.principal ?? input.userId);
 
     // 1. what a caller may send
     let asked = list(input.inputs);
+    /** @type {Record<string, any>} */
+    let baselineDetail = {};
+    if (kind === "literature_population") {
+      const direct = scenario.baselineBindings;
+      const configured = object(input.detail).baselineBindings;
+      if (!this.baselineVerifier || direct != null && configured != null && canonicalScenarioJson(direct) !== canonicalScenarioJson(configured)) {
+        throw new HttpError(400, "vcr_job_scenario_invalid", "Literature population statistics require exact source bindings; use a scenario population for explicitly assumed distributions.");
+      }
+      const checked = await this.baselineVerifier({ userId: String(input.userId), studyId, correlationSource: scenario.correlationSource,
+        baselineTable: scenario.baselineTable, bindings: direct ?? configured });
+      if (!checked?.ok) throw this.#invalid("vcr_job_scenario_invalid", list(checked?.issues).map(issue => ({
+        code: "vcr_evidence_unverified", field: `baselineBindings.${issue.variable ?? ""}.${issue.field ?? ""}`, detail: String(issue.code ?? "baseline_evidence_unverified") })));
+      const { baselineBindings: _metadata, ...numeric } = scenario;
+      scenario = numeric;
+      asked = [...asked.filter(entry => object(entry).kind !== "evidence"), ...checked.evidenceIds.map(id => ({ kind: "evidence", id }))];
+      baselineDetail = { baselineBindings: checked.bindings, literatureBaseline: { verification: "marginals_source_verified", correlation: "assumed", bindings: checked.bindings,
+        evidenceIds: checked.evidenceIds, scope: "quoted_statistics_only", transportability: "not_validated" } };
+    }
     /** @type {Record<string, any>} */
     let curveDetail = {};
     if (kind === "reconstruct_km") {
@@ -623,8 +742,9 @@ export class VcrJobs {
     // fact ledger server-side and takes no snapshot, though the domain files its kind under the
     // patient-level ones: its input is a frozen as-of, a protocol id and a token of the facts.
     const runsLocally = typeof this.localExecutors[method] === "function";
+    const hasBoundReconstruction = list(input.derived).some(entry => isReconstructionReference(kind, object(entry)));
     const callerIssues = longitudinal && input.internal === true ? []
-      : [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || runsLocally ? undefined : kind })];
+      : [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || hasBoundReconstruction || runsLocally ? undefined : kind })];
     const derivedEntries = list(input.derived).map(object);
     // A caller other than the orchestrator may only point at a reconstruction result for the job that reads one.
     if (derivedEntries.length && input.internal !== true && !derivedEntries.every((entry) => isReconstructionReference(kind, entry))) {
@@ -649,14 +769,23 @@ export class VcrJobs {
       const current = vcrPopulationGenerationInput(population, result, execution);
       if (current?.resultId === generatedDerived.resultId && current?.table === generatedDerived.table) qualityBasis = current;
     }
-    const inputs = [
+    const resolvedInputs = [
       ...await this.#resolveInputs({ studyId, principal, kind, method, scenario, asked }),
       ...resolvedDerived,
       ...(qualityInput ? [qualityInput] : []),
     ];
 
+    const unitBinding = vcrBindScientificInputUnits(method, scenario, resolvedInputs);
+    scenario = unitBinding.scenario;
+    const inputs = resolvedInputs.map(raw => { const { columnUnits: _units, ...entry } = object(raw); return entry; });
     const scenarioHash = vcrScenarioHash(scenario);
-    const seed = Number.isInteger(input.seed) ? Number(input.seed) : vcrSeedFor(scenarioHash);
+    const pairing = patientGenerator ? object(scenario.pairing) : {};
+    const seed = Number.isInteger(input.seed) ? Number(input.seed) : vcrSeedFor(pairing.key
+      ? vcrScenarioHash({ studyId, method, pairingKey: pairing.key, inputHashes: inputs.filter(entry => entry.hash).map(entry => entry.hash) }) : scenarioHash);
+    const randomization = patientGenerator ? { policy: pairing.key ? "common_random_numbers_by_member" : "scenario_seed",
+      pairingKey: pairing.key ?? null, replicate: pairing.replicate ?? 1, seed,
+      seedSource: Number.isInteger(input.seed) ? "explicit" : pairing.key ? "population_or_explicit_pairing_key" : "scenario_hash",
+      replicateStreams: "L'Ecuyer-CMRG nextRNGStream", causalIndividualEffectIdentified: false } : null;
     const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
@@ -697,7 +826,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...curveDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {
@@ -751,6 +880,9 @@ export class VcrJobs {
         const resolved = await this.dataPlane.resolveEngineInputs({
           studyId, snapshotId: String(entry.id), principal, purpose: VCR_JOB_PURPOSE, kind, method,
           endpointType: object(scenario.endpoint).type ?? null, ...(fields.length ? { fields } : {}),
+          ...(["model.prognostic_apply", "model.survival_fit"].includes(method) && typeof scenario.inputId === "string" && scenario.inputId.startsWith(`${entry.id}:`)
+            ? { include: [scenario.inputId.slice(String(entry.id).length + 1)].every(shape => ["subject", "events", "longitudinal"].includes(shape))
+              ? [scenario.inputId.slice(String(entry.id).length + 1)] : ["files"] } : {}),
         });
         out.push(...list(resolved).map((item) => ({ ...object(item) })));
       } else {
@@ -764,16 +896,17 @@ export class VcrJobs {
    * @param {string} studyId @param {string} kind @param {Record<string, any>} scenario @param {unknown} resultId
    */
   async prepareReconstruction(studyId, kind, scenario, resultId) {
+    const reference = vcrReconstructionReferenceFor(kind);
     if (resultId == null) {
       if (kind === VCR_RECONSTRUCTION_REFERENCE.kind && (Object.hasOwn(scenario, "pseudoIpdInputId") || scenario.anchored !== true)) {
         throw new HttpError(400, "vcr_job_scenario_invalid", "Select an owned reconstruction result for the comparator.");
       }
       return { scenario, derived: [], reconstructionResultId: null };
     }
-    if (kind !== VCR_RECONSTRUCTION_REFERENCE.kind || typeof resultId !== "string" || !/^[-a-zA-Z0-9_]+$/.test(resultId)) {
+    if (!reference || typeof resultId !== "string" || !/^[-a-zA-Z0-9_]+$/.test(resultId)) {
       throw new HttpError(400, "vcr_job_scenario_invalid", "A reconstruction result is only supported for the time-to-event comparator.");
     }
-    const entry = { resultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo };
+    const entry = { resultId, table: reference.table, bindTo: reference.bindTo };
     const resolved = await this.#resolveDerived(studyId, entry);
     const bound = vcrBindReconstruction(kind, scenario, [entry], [resolved]);
     if ("code" in bound) throw new HttpError(400, bound.code, bound.message);
@@ -782,19 +915,19 @@ export class VcrJobs {
 
   /** Available owned reconstructions, without paths or patient rows. @param {string} studyId */
   async reconstructionResults(studyId) {
-    const rows = await this.store.rows(`SELECT r.*, c.origin AS curve_origin,
+    const rows = await this.store.rows(`SELECT r.*, e.receipt AS execution_receipt, e.output_hash AS execution_output_hash, c.origin AS curve_origin,
         c.digitization #>> '{calibration,x,unit}' AS curve_time_unit
       FROM ${VCR_SCHEMA}.results r
       JOIN ${VCR_SCHEMA}.executions e ON e.id=r.execution_id AND e.study_id=r.study_id
       JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=r.study_id
       JOIN ${VCR_SCHEMA}.curve_extractions c ON c.id=j.checkpoint->>'curveReceiptId' AND c.study_id=r.study_id
       WHERE r.study_id=$1 AND e.method='evidence.reconstruct_km'
-        AND e.receipt @> '{"signed":true}'::jsonb
         AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.tables) t WHERE t->>'name'='reconstructed-ipd'
           AND t->>'location' LIKE 'derived/%' AND t->>'sha256' ~ '^[a-f0-9]{64}$')
       ORDER BY r.created_at DESC LIMIT 100`, [studyId]);
     const choices = [];
     for (const row of rows) {
+      if (!vcrExecutionReceiptVerified({ receipt: row.execution_receipt, output_hash: row.execution_output_hash })) continue;
       const result = resultFromRow(row);
       const table = list(result.tables).find(candidate => object(candidate).name === VCR_RECONSTRUCTION_REFERENCE.table);
       if (!vcrLocationIsValid(String(table?.location ?? ""))) continue;
@@ -821,13 +954,13 @@ export class VcrJobs {
       throw new HttpError(409, "vcr_derived_table_missing", "上一步的输出表没有存入数据平面：这一步需要它，暂时算不了。");
     }
     const execution = result.executionId
-      ? await this.store.one(`SELECT method, receipt, job_id FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, studyId]) : null;
+      ? await this.store.one(`SELECT method, receipt, output_hash, job_id FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, studyId]) : null;
     const source = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[String(execution?.method ?? "")];
     if (!source) throw new HttpError(400, "vcr_derived_table_unsupported", "这张表不能作为另一项计算的输入。");
     if (entry.bindTo !== undefined) {
       if (source !== VCR_RECONSTRUCTION_REFERENCE.source) throw new HttpError(400, "vcr_derived_table_unsupported", "The comparator requires reconstructed curve data.");
       const producer = execution?.job_id ? await this.store.one(`SELECT scenario, inputs, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1 AND id=$2`, [studyId, execution.job_id]) : null;
-      if (execution?.method !== "evidence.reconstruct_km" || object(execution.receipt).signed !== true
+      if (execution?.method !== "evidence.reconstruct_km" || !vcrExecutionReceiptVerified(execution)
         || !producer?.checkpoint?.curveReceiptId || !producer.checkpoint.curveImageHash || !producer.checkpoint.curvePointsHash || !this.curveVerifier) {
         throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
       }
@@ -892,17 +1025,17 @@ export class VcrJobs {
         await this.#resolveDerived(studyId, qualityBasis); qualityBasisAvailable = true; } catch { qualityBasisAvailable = false; }
     }
     const frozenReconstruction = list(row.inputs).map(object).filter(input => input.valueSource === "reconstructed"
-      && input.id === object(row.scenario).pseudoIpdInputId && String(input.id).endsWith(":reconstructed-ipd"));
+      && input.id === object(row.scenario)[vcrReconstructionReferenceFor(String(row.kind))?.bindTo ?? "pseudoIpdInputId"] && String(input.id).endsWith(":reconstructed-ipd"));
     const reconstructionResultId = object(row.checkpoint).reconstructionResultId
-      ?? (row.kind === VCR_RECONSTRUCTION_REFERENCE.kind && frozenReconstruction.length === 1
+      ?? (vcrReconstructionReferenceFor(String(row.kind)) && frozenReconstruction.length === 1
         ? String(frozenReconstruction[0].id).slice(0, -":reconstructed-ipd".length) : null);
     let reconstructionResultAvailable = null;
     const scenario = { ...object(row.scenario) };
     if (reconstructionResultId) {
-      delete scenario.pseudoIpdInputId;
+      delete scenario[vcrReconstructionReferenceFor(String(row.kind))?.bindTo ?? "pseudoIpdInputId"];
       try {
         const selected = await this.prepareReconstruction(studyId, String(row.kind), scenario, reconstructionResultId);
-        const original = list(row.inputs).find(input => object(input).id === selected.scenario.pseudoIpdInputId);
+        const original = list(row.inputs).find(input => object(input).id === selected.scenario[vcrReconstructionReferenceFor(String(row.kind))?.bindTo ?? "pseudoIpdInputId"]);
         const resolved = await this.#resolveDerived(studyId, selected.derived[0]);
         reconstructionResultAvailable = !!original && object(original).hash === resolved.hash;
       } catch { reconstructionResultAvailable = false; }
@@ -941,16 +1074,24 @@ export class VcrJobs {
    * draft without activating its programme; paused and archived studies wait. A
    * job another worker held that has run out of attempts is failed by name
    * rather than run again.
-   * @param {{ workerId?: string, leaseMs?: number, limit?: number }} [options]
+   * @param {{ workerId?: string, leaseMs?: number, limit?: number, lane?: string }} [options]
    */
-  async claim({ workerId = this.owner, leaseMs = this.leaseMs, limit = 1 } = {}) {
-    await this.reconcileStoppedEngineWork();
+  async claim({ workerId = this.owner, leaseMs = this.leaseMs, limit = 1, lane = 'all' } = {}) {
+    if (lane === 'all') return [...await this.claim({workerId,leaseMs,limit,lane:'local'}), ...await this.claim({workerId,leaseMs,limit,lane:'engine'})];
+    const localMethods = Object.keys(this.localExecutors).filter(method => typeof this.localExecutors[method] === 'function');
+    if (lane === 'local' && !localMethods.length) return [];
+    if (lane === 'engine') await this.reconcileStoppedEngineWork();
     const rows = await this.store.transaction(async (client) => {
       const interrupted = (await client.query(`SELECT id FROM ${VCR_SCHEMA}.jobs WHERE state='queued'
         AND checkpoint ? 'engineJobId' AND COALESCE(checkpoint->>'engineStopped','false') <> 'true'
         ORDER BY created_at LIMIT 1`)).rows[0];
       const resumingId = interrupted ? String(interrupted.id) : null;
-      if (!(await heavyWorkAdmission(client, "compute", resumingId))) return [];
+      if (lane === 'engine') {
+        if (!(await heavyWorkAdmission(client, "compute", resumingId))) return [];
+      } else {
+        const product = await client.query("SELECT to_regclass('evimed_product.jobs') AS relation");
+        if (product.rows[0]?.relation && !(await maintenanceAllowsClaims(client))) return [];
+      }
       await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-job-claim'))");
       const exhausted = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
         SET state = 'failed', lease_owner = NULL, lease_until = NULL, finished_at = now(), updated_at = now(),
@@ -962,16 +1103,23 @@ export class VcrJobs {
       // or a sibling that has finished since) goes back to the queue before anything is taken from it.
       await this.#releaseFitting(client);
       const running = Number((await client.query(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
-        WHERE state = 'running' AND (lease_until IS NULL OR lease_until > now())`)).rows[0]?.n ?? 0);
-      const free = Math.max(0, this.maxConcurrent - running);
+        WHERE state = 'running' AND (lease_until IS NULL OR lease_until > now())
+          AND (method=ANY($1::text[]))=$2`, [localMethods,lane==='local'])).rows[0]?.n ?? 0);
+      const capacity = lane === 'local' ? Math.max(1,Math.min(4,Number(this.config.vcrLocalConcurrency ?? 2))) : this.maxConcurrent;
+      const free = Math.max(0, capacity - running);
       if (!free) return [];
       const take = Math.min(free, Math.max(1, limit));
-      const picked = await client.query(`SELECT j.id FROM ${VCR_SCHEMA}.jobs j
-        JOIN ${VCR_SCHEMA}.studies s ON s.id = j.study_id AND s.deleted_at IS NULL AND s.status IN ('draft', 'active')
-        WHERE ($2::text IS NULL OR j.id=$2) AND ((j.state = 'queued' AND j.run_after <= now())
-           OR (j.state = 'running' AND j.lease_until IS NOT NULL AND j.lease_until < now() AND j.attempts < j.max_attempts))
-        ORDER BY CASE WHEN j.state='running' OR j.checkpoint ? 'engineJobId' THEN 0 ELSE 1 END,
-          j.run_after, j.created_at LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take, resumingId]);
+      const picked = await client.query(`WITH eligible AS (
+        SELECT j.id,j.user_id,j.state,j.checkpoint,j.run_after,j.created_at,
+          row_number() OVER (PARTITION BY j.user_id ORDER BY j.run_after,j.created_at,j.id) AS account_order
+        FROM ${VCR_SCHEMA}.jobs j JOIN ${VCR_SCHEMA}.studies s ON s.id=j.study_id AND s.deleted_at IS NULL AND s.status IN ('draft','active')
+        WHERE (j.method=ANY($3::text[]))=$4 AND ($4 OR $2::text IS NULL OR j.id=$2)
+          AND ((j.state='queued' AND j.run_after<=now()) OR (j.state='running' AND j.lease_until<now() AND j.attempts<j.max_attempts))
+          AND (SELECT count(*) FROM ${VCR_SCHEMA}.jobs r WHERE r.user_id=j.user_id AND r.state='running'
+            AND (r.lease_until IS NULL OR r.lease_until>now()) AND (r.method=ANY($3::text[]))=$4)<$5)
+        SELECT j.id FROM ${VCR_SCHEMA}.jobs j JOIN eligible e ON e.id=j.id WHERE e.account_order<=$5
+        ORDER BY e.account_order, CASE WHEN e.state='running' OR e.checkpoint ? 'engineJobId' THEN 0 ELSE 1 END,e.run_after,e.created_at
+        LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take,resumingId,localMethods,lane==='local',lane==='local' ? 1 : capacity]);
       if (!picked.rows.length) return [];
       const ids = picked.rows.map((/** @type {any} */ row) => String(row.id));
       const claimed = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
@@ -981,6 +1129,7 @@ export class VcrJobs {
       return claimed.rows;
     });
     this.counters.claimed += rows.length;
+    if (lane === 'local') this.counters.localClaimed += rows.length;
     this.counters.exhausted += this.reaped.length;
     return rows.map((row) => ({ ...jobSummaryFromRow(row), leaseOwner: String(row.lease_owner) }));
   }
@@ -1068,15 +1217,15 @@ export class VcrJobs {
    * the engine is told afterwards and a failure to reach it does not un-cancel
    * anything (AC-38). What the engine had computed is fetched later
    * (`recoverCanceled`).
-   * @param {string} studyId @param {string} jobId @param {{ actor?: string }} [options]
+   * @param {string} studyId @param {string} jobId @param {{ actor?: string, rootSessionId?: string | null }} [options]
    */
-  async cancel(studyId, jobId, { actor = "" } = {}) {
-    const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
+  async cancel(studyId, jobId, { actor = "", rootSessionId = null } = {}) {
+    const row=await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
       SET state = 'canceled', cancel_requested = true, finished_at = now(), updated_at = now(),
           lease_owner = NULL, lease_until = NULL,
-          error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_canceled', 'actor', $3::text)
+          error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_canceled', 'actor', $3::text, 'rootSessionId', $5::text)
       WHERE study_id = $1 AND id = $2 AND state = ANY($4::text[]) RETURNING *`,
-    [studyId, jobId, String(actor), [...VCR_JOB_OPEN_STATES]]);
+    [studyId, jobId, String(actor), [...VCR_JOB_OPEN_STATES],rootSessionId]);
     if (!row) {
       const existing = await this.store.job(studyId, jobId);
       if (!existing) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
@@ -1091,9 +1240,7 @@ export class VcrJobs {
     const job = jobSummaryFromRow(row);
     // Whoever cancelled, the module that owns the object hears of it: a cancelled
     // job must not leave its step reading 「进行中」 for ever.
-    for (const hook of this.finishHooks) {
-      try { await hook({ action: "finished", state: "canceled", job, result: null, canceled: true }); } catch (error) { this.report(codeOf(error)); }
-    }
+    await this.deliverFinishHooks(jobId, { action:'finished',state:'canceled',job,result:null,canceled:true });
     return { job, canceled: true };
   }
 
@@ -1203,7 +1350,7 @@ export class VcrJobs {
     return this.finish(String(row.id), {
       status: ended, result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner, leaseAttempt: Number(row.attempts),
       verifiedStage: JSON.parse(vcrResultOutputPayload(result)),
-      outputHash: vcrComputedOutputHash(result),
+      outputHash: vcrComputedOutputHash(result), hashVerified:true,
       // A run the engine refused or stopped says why in its issues: the reason it
       // names is the job's own error, not a bare 「failed」 (a partial result
       // that a spent CPU budget cut short keeps its numbers *and* says so).
@@ -1514,7 +1661,7 @@ export class VcrJobs {
    *
    * @param {string} jobId
    * @param {{ status: string, result?: Record<string, any> | null, error?: Record<string, any> | null, signed?: boolean,
-   *   local?: boolean, verifiedStage?: Record<string, any>, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, leaseAttempt?: number | null, outputHash?: string | null }} outcome
+   *   local?: boolean, verifiedStage?: Record<string, any>, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, leaseAttempt?: number | null, outputHash?: string | null, hashVerified?: boolean }} outcome
    */
   async finish(jobId, outcome) {
     const row = await this.#row(jobId);
@@ -1558,6 +1705,7 @@ export class VcrJobs {
           replicates: result.replicates === undefined ? (row.replicates == null ? null : Number(row.replicates)) : result.replicates,
           outputHash: outcome.outputHash ?? result?.manifest?.outputHash ?? null,
           receipt: { signed: outcome.signed === true, local: outcome.local === true, status,
+            ...(outcome.hashVerified === true ? {hashVerified:true,outputHash:outcome.outputHash} : {}),
             ...(outcome.verifiedStage ? { stageVerified: true, stageOutput: outcome.verifiedStage } : {}),
             ...(detail.engineJobId ? { engineJobId: String(detail.engineJobId) } : {}), ...(partial ? { partial: true } : {}) },
           cpuSeconds: Number(outcome.cpuSeconds ?? result?.manifest?.cpuSeconds ?? 0),
@@ -1577,7 +1725,9 @@ export class VcrJobs {
           conclusion: complete ? (status === "not_estimable" ? "not_estimable" : (result.conclusion ?? "estimable")) : "limited",
           notEstimableRule: result.notEstimableRule ?? null,
           counts: object(result.counts), measures: sourced,
-          diagnostics: { ...object(result.diagnostics), ...(partial ? { partial: true, ...(status === "canceled" ? { canceled: true } : {}) } : {}),
+          diagnostics: { ...object(result.diagnostics), ...(detail.sourceModel ? { sourceModel: detail.sourceModel } : {}),
+            ...(detail.populationId ? { populationSelection: { populationId: detail.populationId, populationVersion: detail.populationVersion } } : {}),
+            ...(detail.modelDesign ? { modelDesign: detail.modelDesign } : {}), ...(detail.inputUnitBinding ? { inputUnitBinding: detail.inputUnitBinding } : {}), ...(partial ? { partial: true, ...(status === "canceled" ? { canceled: true } : {}) } : {}),
             ...(assumedInputs ? { inputsAssumed: true } : {}),
             // The unit the scenario's times were stated in and where it came from (stated, taken from its evidence, or assumed to be
             // months), frozen with the job by the orchestrator: what the numbers of a result are in, said by the result. (The engine's
@@ -1648,9 +1798,7 @@ export class VcrJobs {
     if (partial) this.counters.partial += 1;
     const done = { action: "finished", state, job: jobSummaryFromRow(finished), result: recorded, execution, partial,
       engineResult: result, error: reason };
-    for (const hook of this.finishHooks) {
-      try { await hook(done); } catch (error) { this.report(codeOf(error)); }
-    }
+    await this.deliverFinishHooks(jobId, done);
     return done;
   }
 
@@ -1720,7 +1868,7 @@ export class VcrJobs {
         jobId: String(row.id), studyId: String(row.study_id), userId: String(row.user_id), method: String(row.method),
         methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""), inputs: list(row.inputs),
         environment: object(result.manifest), seed: Number(result.seed ?? row.seed ?? 0), replicates: result.replicates ?? null,
-        outputHash: result?.manifest?.outputHash ?? null, receipt: { signed, canceled: true, partial: true, status: "canceled",
+        outputHash: result?.manifest?.outputHash ?? null, receipt: { signed, hashVerified:true,outputHash:vcrComputedOutputHash(result),canceled: true, partial: true, status: "canceled",
           stageVerified: true, stageOutput: JSON.parse(vcrResultOutputPayload(result)) },
         cpuSeconds: Number(result?.manifest?.cpuSeconds ?? 0), startedAt: result?.manifest?.startedAt ?? null,
         finishedAt: result?.manifest?.finishedAt ?? this.now().toISOString(),
@@ -1735,7 +1883,7 @@ export class VcrJobs {
       const updated = (await client.query(`UPDATE ${VCR_SCHEMA}.executions SET receipt=receipt || $2::jsonb WHERE id=$1 RETURNING receipt`,
         [execution.id, JSON.stringify(proof)])).rows[0];
       execution.receipt = updated.receipt;
-      await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('partial', true),
+      await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint-'completionOutboxRecorded'-'completionHooksApplied'-'completionHooksDone'-'completionHooksAttempts'-'completionHooksExhausted'-'completionHooksRunAfter',error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('partial', true),
         cpu_seconds_used = GREATEST(cpu_seconds_used, $2::numeric) WHERE id = $1`, [String(row.id), Number(result?.manifest?.cpuSeconds ?? 0)]);
       this.counters.partial += 1;
       return { job: jobSummaryFromRow(locked), result: recorded, execution };

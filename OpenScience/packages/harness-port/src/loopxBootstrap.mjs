@@ -32,7 +32,7 @@ export async function registerHostedLoopx(ctx, config) {
     text: 'Use LoopX for sustained goals that benefit from checkpoints and automatic continuation across turns. Keep ordinary single-turn questions lightweight. When using LoopX, follow the complete guided initialization packet, including thread binding. Before claiming automatic continuation is ready, read resolve-agent-thread for deepseek-harness-native and the exact $DSH_SESSION_ID; repair a missing binding with the returned CLI commands. A goal becoming stopped during work records a pause: finish the current checkpoint without resuming it. Resume only after a new user request or GoalBar Start; an earlier request to keep working does not override a later pause. LoopX owns goal scheduling; EviMed owns research artifacts and their provenance. Reuse EviMed tools for clinical calculations, evidence and research memory; LoopX records references to those results.',
   }))
   ctx.effect(() => ctx.commands.register({
-    name: 'loopx-init', description: '检查长任务工具是否可用', recordInput: false,
+    name: 'loopx-init', description: '诊断：检查长任务工具是否可用', recordInput: false,
     /** @param {{rawInput:string, signal?:AbortSignal}} invocation */
     async handler(invocation) {
       if (invocation.rawInput.trim()) return { kind: 'error', text: 'Usage: /loopx-init' }

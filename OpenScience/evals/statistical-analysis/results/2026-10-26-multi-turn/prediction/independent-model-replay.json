@@ -1,0 +1,67 @@
+{
+  "passed": true,
+  "checks": [
+    "source-labels",
+    "source-record-identities",
+    "predictor-exclusions",
+    "training-only-scaler",
+    "saved-model-prediction-replay"
+  ],
+  "metrics": {
+    "n": 171,
+    "events": 64,
+    "auc": 0.9932827102803738,
+    "averagePrecision": 0.9919386386717008,
+    "brier": 0.021578374950432463,
+    "calibration": {
+      "intercept": -0.00278112193014381,
+      "slope": 1.153805450031038,
+      "epsilon": 1e-12,
+      "boundaryProbabilities": 0,
+      "clippedProbabilities": 0,
+      "interpretation": "clipped-logit diagnostic; not an unclipped calibration certification"
+    },
+    "threshold0.5": {
+      "tp": 62,
+      "fn": 2,
+      "fp": 1,
+      "tn": 106
+    },
+    "threshold0.3": {
+      "tp": 62,
+      "fn": 2,
+      "fp": 6,
+      "tn": 101
+    }
+  },
+  "inputs": [
+    {
+      "path": "/workspace/data/breast-cancer.csv",
+      "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+      "bytes": 123562
+    },
+    {
+      "path": "/workspace/deliverables/statistical-analysis-package/predictions.csv",
+      "sha256": "f268e889335908395d94011d126052f6adf3767e7799f5d147454e2060972f79",
+      "bytes": 31322
+    },
+    {
+      "path": "/workspace/deliverables/statistical-analysis-package/fitted-model.joblib",
+      "sha256": "06691deb45df2aea8538b9623d430712c48d50603e1e8950a4a69a6eb32ed1e6",
+      "bytes": 4423
+    },
+    {
+      "path": "/audit/replay.py",
+      "sha256": "17d8d7668a2912a9b9a02c92f63eb350caf9043ad895d25c56acd7097d701425",
+      "bytes": 3962
+    }
+  ],
+  "versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pandas": "2.2.3",
+    "scikit-learn": "1.6.1",
+    "statsmodels": "0.14.6",
+    "joblib": "1.6.0"
+  }
+}

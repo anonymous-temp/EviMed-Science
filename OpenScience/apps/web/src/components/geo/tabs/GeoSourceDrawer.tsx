@@ -1,3 +1,4 @@
+import { geoAnalysisSearch } from "../geoAnalysisMode";
 import { useLocation, useNavigate } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, X } from "lucide-react";
@@ -86,9 +87,10 @@ export function GeoSourceDrawer({
     onClose();
   };
   const showPlan = (url?:string) => {
-    const params = new URLSearchParams(location.search); params.set("planSource", source.id); params.delete("source"); params.delete("strategyVersion");
+    const params = new URLSearchParams(geoAnalysisSearch(location.search, null)); params.set("planSource", source.id); params.delete("source"); params.delete("strategyVersion"); params.delete("analysis");
+    if (selectionRef) params.set("selectionRef", selectionRef);
     if (url) params.set("planUrl", url); else params.delete("planUrl");
-    onClose(); navigate(`${location.pathname}?${params}#implementation-plan`);
+    onClose(); navigate(`/app/geo/${encodeURIComponent(geoId)}/plan?${params}#implementation-plan`);
   };
   // An exact source action may address a record outside the bounded catalogue list.
   // Show its normal loading/error state until the authorized detail supplies the record.

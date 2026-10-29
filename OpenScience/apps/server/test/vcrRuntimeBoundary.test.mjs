@@ -51,6 +51,7 @@ const resultRow = {
 
 /** A store double answering every read the service's runtime half makes. */
 const store = {
+  async getStudy(userId,id){return userId===study.userId && id===study.id ? study : null;},
   async latestDefinition() { return { id: "def_1", version: 1, pico: {}, estimand: {}, endpointType: "time_to_event", intendedUse: "exploratory" }; },
   async definitionVersions() { return [{ version: 1, createdAt: AT }]; },
   async staleMarks() { return []; },
@@ -95,6 +96,7 @@ function service(packages = {}) {
   });
   // The ceiling is the page's own computation over a bundle of a dozen more reads than this double answers;
   // `vcrEvidenceMatching.integration.test.mjs` runs the real one over the real stores.
+  built.attach({modelSources:{async preview(){return{sourceId:'src_model',counts:{realPatients:6}};}}});
   built.ceilingOf = async () => ({ ceiling: "design_support", requested: "exploratory", withinCeiling: true, reasons: [] });
   return built;
 }
@@ -102,7 +104,7 @@ function service(packages = {}) {
 test("every `what` a run may read leaves through the boundary: no head count below the floor survives in any shape the stores emit", async () => {
   const seen = [];
   for (const what of VCR_READ_WHATS) {
-    const answer = await service().runtimeRead(study, what, what === "snapshot_profile" ? { snapshotId: "snp_1" } : { registryId: "NCT02296125" });
+    const answer = await service().runtimeRead(study, what, what === "snapshot_profile" ? { snapshotId: "snp_1" } : what==="model_source" ? {sourceId:"src_model"} : what==="generated_records" ? {id:"res_1"} : { registryId: "NCT02296125" });
     seen.push(what);
     // The three reads of another trial's published figures (an extracted value and its sample size, a registry
     // record's enrolment and site count) are not this study's people: the boundary leaves them whole, by `what`,
@@ -113,6 +115,14 @@ test("every `what` a run may read leaves through the boundary: no head count bel
     assert.deepEqual(small, [], `${what} carried a small count: ${JSON.stringify(answer).slice(0, 300)}`);
   }
   assert.deepEqual(seen, [...VCR_READ_WHATS], "the walk read every `what`");
+});
+
+test("a study-only patient-context read cannot fall through to a registry record without native invocation proof", async () => {
+  let registryReads = 0;
+  const read = await service({ evidence: { async registryRecord() { registryReads++; return { record: { patient: "unrelated" } }; } } })
+    .runtimeRead(study, "patient_context", { registryId: "NCT02296125" });
+  assert.deepEqual(read, { candidates: [], nextBeforeSeq: null });
+  assert.equal(registryReads, 0);
 });
 
 test("the model analysis block a run reads for a model document passes the same boundary: a small people-count in a tabulated result is hidden", async () => {
@@ -225,12 +235,13 @@ function response() {
 }
 
 test("the answer to a simulate status passes the boundary too: a run does not read a small arm of its own simulation", async () => {
-  const runtimeManager = { assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_1" }) };
+  const runtimeManager = { boundedRuntimeScope:()=>({runId:'boundary-dispatch'}),assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_1" }) };
   const jobs = {
     async get() { return { id: "job_1", state: "succeeded", method: "design.simulate", progress: {}, cpuSecondsUsed: 1, error: null }; },
   };
   const gatewayStore = {
     async studyByControlProject() { return study; },
+    async studyByRuntimeDispatch(userId,projectId,dispatchId){return userId===study.userId && projectId===study.projectId && dispatchId==='boundary-dispatch' ? study : null;},
     async one(sql) { return sql.includes("executions") ? { id: "exe_1" } : { checkpoint: {} }; },
     async allResults() { return [resultRow]; },
   };
@@ -266,9 +277,10 @@ test("a run is never told where a file lives or which inputs a job hashed", asyn
  * @param {any} svc @param {Record<string, any>} body
  */
 async function gatewayRead(svc, body) {
-  const runtimeManager = { assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_1" }) };
+  const runtimeManager = { boundedRuntimeScope:()=>({runId:'boundary-dispatch'}),assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_1" }) };
   const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:1/x" }, runtimeManager,
-    { vcr: { service: svc, store: { async studyByControlProject() { return study; } } } });
+    { vcr: { service: svc, store: { async studyByControlProject() { return study; },
+    async studyByRuntimeDispatch(userId,projectId,dispatchId){return userId===study.userId && projectId===study.projectId && dispatchId==='boundary-dispatch' ? study : null;} } } });
   const res = response();
   await handler(request("/internal/vcr/v1/read", body), res);
   return res;
@@ -368,10 +380,11 @@ test("C3-04 a small cohort's size does not leave as a named measure, at any dept
 });
 
 test("C3-12 a service without the boundary is a wiring fault: a simulate status is refused, never answered raw", async () => {
-  const runtimeManager = { assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_1" }) };
+  const runtimeManager = { boundedRuntimeScope:()=>({runId:'boundary-dispatch'}),assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_1" }) };
   const jobs = { async get() { return { id: "job_1", state: "succeeded", method: "design.simulate", progress: {}, cpuSecondsUsed: 1, error: null }; } };
   const gatewayStore = {
     async studyByControlProject() { return study; },
+    async studyByRuntimeDispatch(userId,projectId,dispatchId){return userId===study.userId && projectId===study.projectId && dispatchId==='boundary-dispatch' ? study : null;},
     async one(sql) { return sql.includes("executions") ? { id: "exe_1" } : { checkpoint: {} }; },
     async allResults() { return [resultRow]; },
   };

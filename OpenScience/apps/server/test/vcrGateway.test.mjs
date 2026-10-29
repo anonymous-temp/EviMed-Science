@@ -51,7 +51,7 @@ const DESIGN_C = { id: "scn_c", version: 3, label: "C 1:1 序贯设计", design:
   configuration: { design: { nTreat: 90, nControl: 90, allocation: 0.5, informationRates: [0.5, 1] }, truth: { hazardRatio: 0.7 } } };
 
 const config = { vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" };
-const runtimeManager = { assertActiveModelGatewayToken: (/** @type {string} */ token) => {
+const runtimeManager = { boundedRuntimeScope: () => ({runId:'fixture-dispatch'}), assertActiveModelGatewayToken: (/** @type {string} */ token) => {
   if (token !== "token") throw new Error("bad token");
   return { userId: "u1", projectId: "prj_1" };
 } };
@@ -73,6 +73,7 @@ function fixture(overrides = {}) {
     async adoptModel(_user, input) { calls.push(["adopt", input.name]); return { id: "mdl_1" }; },
   };
   const store = {
+    async studyByRuntimeDispatch() { return study; },
     async studyByControlProject(userId, projectId) {
       return userId === "u1" && projectId === "prj_1" ? study : null;
     },
@@ -163,14 +164,14 @@ test("a missing or invalid token is 401; the module off is a named 503", async (
   assert.equal(res.json().code, "vcr_disabled");
 });
 
-test("a conversation outside a study is a named 404, not an error", async () => {
+test("a conversation without a study or native proof is a named refusal", async () => {
   const outside = createVcrGatewayHandler(config, {
     assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "other" }),
   }, { vcr: fixture().vcr });
   const res = response();
   await outside(request("/internal/vcr/v1/read", { what: "study" }), res);
-  assert.equal(res.status, 404);
-  assert.equal(res.json().code, "vcr_no_study");
+  assert.equal(res.status, 403);
+  assert.equal(res.json().code, "vcr_invocation_unavailable");
 });
 
 test("read and write vocabularies are closed, and the filter fields are too", async () => {
@@ -519,7 +520,7 @@ test("which run is calling is the runtime's reservation, never a field of the re
   // The researcher's own open runtime is reserved for nothing: the study's run slot alone says which export.
   const open = exportRunFixture({ kind: "simulation_report" });
   await writeReport(open.handler, { template: "方法与局限。" });
-  assert.deepEqual(open.asked, [["std_1", { runtimeRunId: null }]]);
+  assert.deepEqual(open.asked, [["std_1", { runtimeRunId: "fixture-dispatch" }]]);
 
   // A field of the request cannot say it: the item's fields are closed.
   const forged = await writeReport(open.handler, { template: "方法与局限。", exportId: "exp_other" });
@@ -1211,4 +1212,14 @@ test("a defect in the metadata no verdict reads costs that metadata, never the q
     assert.equal(refused.saved.length, 0, JSON.stringify(defect));
     assert.equal(result.issues[0].field, "clinical", JSON.stringify(defect));
   }
+});
+test('native model calculations require the exact immutable string model version',async()=>{
+ const base=fixture();const seen=[];
+ base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
+ base.vcr.store.trialScenarios=async()=>[DESIGN_A];
+ const handler=createVcrGatewayHandler(config,runtimeManager,{vcr:base.vcr});
+ const body={action:'start',kind:'design_simulation',scenario:{design:{kind:'two_arm_fixed'}},modelId:'mdl_source',modelVersion:'1.0.0'};
+ const success=response();await handler(request('/internal/vcr/v1/simulate',body),success);assert.equal(success.status,200);assert.equal(seen.length,1);
+ const stale=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:'1.0.1'}),stale);assert.equal(stale.status,409);assert.equal(stale.json().code,'vcr_model_version_changed');
+ const invalid=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:1}),invalid);assert.equal(invalid.status,400);
 });

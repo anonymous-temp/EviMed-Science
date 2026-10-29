@@ -1,0 +1,68 @@
+{
+ "case": "html-list/uni-tsinghua-med-research",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-26T13:06:21+00:00",
+ "note": null,
+ "source": {
+  "id": "uni-tsinghua-med-research",
+  "name": "清华大学医学院 科研动态",
+  "homepage": "https://www.med.tsinghua.edu.cn/",
+  "lane": "research",
+  "source_type": "evidence-body",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "清华大学医学院",
+  "launch_tier": "P2",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.med.tsinghua.edu.cn/yj/kydt.htm",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.med.tsinghua.edu.cn"
+   ],
+   "selectors": {
+    "item": "div.newlist ul li",
+    "title": "h3",
+    "link": "a@href",
+    "date": "div.con span",
+    "summary": "h4"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-26T13:06:19+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.med.tsinghua.edu.cn/yj/kydt.htm",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.med.tsinghua.edu.cn/yj/kydt.htm",
+   "headers": {
+    "content-type": "text/html",
+    "last-modified": "Thu, 15 Oct 2026 09:20:54 GMT"
+   },
+   "fetched_at": "2026-10-26T13:06:21+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 63889,
+   "sha256": "7e419dae22da3bfd4ab4f4f9ffdfe00dee52e098608bf7004e02c6e02669dbe8"
+  }
+ ]
+}

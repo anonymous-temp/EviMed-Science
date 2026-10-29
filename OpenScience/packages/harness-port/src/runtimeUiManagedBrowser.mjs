@@ -2,7 +2,7 @@
 
 /** @param {string} code @returns {any} */
 export function managedBrowserError(code) {
-  /** @type {Record<string,string>} */ const messages = { managed_browser_action_unknown: '该操作结果尚不确定，不会自动重复。请重新加载页面。', managed_browser_not_found: '页面已过期，请明确重新加载或恢复。', managed_browser_busy: '浏览器暂时繁忙，请稍后重试。', managed_browser_invalid: '浏览器请求无效。', managed_browser_sequence_conflict: '页面操作状态已改变，请重新加载。', managed_browser_unavailable: '托管浏览器暂不可用，可在系统浏览器中打开。' };
+  /** @type {Record<string,string>} */ const messages = { managed_browser_action_unknown: '该操作结果尚不确定，不会自动重复。请重新加载页面。', managed_browser_not_found: '页面已过期，请明确重新加载或恢复。', managed_browser_busy: '浏览器暂时繁忙，请稍后重试。', managed_browser_invalid: '浏览器请求无效。', managed_browser_sequence_conflict: '页面操作状态已改变，请重新加载。', managed_browser_unavailable: '托管浏览器暂不可用，可在系统浏览器中打开。', managed_browser_page_failed: '页面无法打开，可在系统浏览器中打开。' };
   const known = Object.hasOwn(messages, code) ? code : 'managed_browser_unavailable';
   return Object.assign(new Error(messages[known]), { code: known });
 }
@@ -77,10 +77,15 @@ export function createManagedBrowserController(options) {
   const observe = (/** @type {any} */ reply) => {
     const value = reply?.state;if (value?.viewport) reportedViewport = value.viewport;if (!value || typeof value !== 'object') throw managedBrowserError('managed_browser_unavailable');
     const parsed = value.url && value.url !== 'about:blank' ? managedBrowserTarget(value.url) : null;
-    const target = value.url === 'about:blank' ? undefined : parsed?.ok ? { ...parsed.target, title: String(value.title || parsed.target.title).slice(0,200) } : state.frame.target;
+    // A blank page is not an empty address (2026-10-27): the `open` reply is always blank, and so is the reply of a navigation
+    // that never committed. While the address is still the one the person asked for, or the reply carries the reason it did
+    // not load, the target stays -- it is what the address bar shows, what 「在系统浏览器中打开」 opens and what Reload retries.
+    const requested = value.url === 'about:blank' && (state.frame.address === 'requested' || Boolean(value.error));
+    const target = value.url === 'about:blank' ? (requested ? state.frame.target : undefined) : parsed?.ok ? { ...parsed.target, title: String(value.title || parsed.target.title).slice(0,200) } : state.frame.target;
     retired = Boolean(value.error);
-    emit({ ...state, restoreTarget: undefined, frame: { target, address: target ? 'observed' : 'empty', loading: value.loading === true, canGoBack: value.canGoBack === true, canGoForward: value.canGoForward === true, error: value.error ? { code: -1, description: managedBrowserError(value.error.code).message } : undefined, sandboxEnabled: undefined } });
-    if (target) {
+    emit({ ...state, restoreTarget: undefined, frame: { target, address: target ? (requested ? state.frame.address : 'observed') : 'empty', loading: value.loading === true, canGoBack: value.canGoBack === true, canGoForward: value.canGoForward === true, error: value.error ? { code: -1, description: managedBrowserError(value.error.code).message } : undefined, sandboxEnabled: undefined } });
+    // The open reply is a page that has not loaded yet: nothing is saved or checkpointed for it until the navigation answers.
+    if (target && !(requested && !value.error)) {
       saved = target;const checkpoint = { entries: [target], index: 0, request: { target, revision: state.addressRevision }, navigation: { status: 'known', revision: state.addressRevision }, failure: undefined };
       const identity = JSON.stringify(checkpoint);if (identity !== persisted) { persisted = identity;actions?.replace(options.nativeTabId ?? tabId, checkpoint); }
     }
@@ -168,7 +173,11 @@ export function mountManagedBrowserViewport(controller, target, request) {
   const container = target.document?.getElementById(request.viewportId);
   if (!container) return () => {};
   const image = target.document.createElement('img');image.alt = '托管浏览器页面';image.draggable = false;image.tabIndex = 0;
-  Object.assign(image.style, { width: '100%', height: '100%', objectFit: 'contain', display: 'block', outlineOffset: '-2px' });
+  Object.assign(image.style, { width: '100%', height: '100%', objectFit: 'contain', display: 'none', outlineOffset: '-2px' });
+  // No frame, no image (2026-10-27): an <img> without a source is drawn as a broken-image icon at full size, over the words
+  // the chrome shows for an empty page. `display` is set beside `hidden` because an inline display outranks the attribute.
+  image.hidden = true;
+  const showImage = (/** @type {boolean} */ visible) => { image.hidden = !visible;image.style.display = visible ? 'block' : 'none'; };
   const surface = target.document.createElement('div');Object.assign(surface.style,{position:'relative',width:'100%',height:'100%'});surface.appendChild(image);container.appendChild(surface);
   const input = target.document.createElement('textarea');input.setAttribute('aria-label','网页文本输入');input.tabIndex = -1;input.autocomplete='off';input.spellcheck=false;Object.assign(input.style,{position:'absolute',width:'1px',height:'1px',opacity:'0',padding:'0',border:'0',resize:'none'});surface.appendChild(input);
   let composing = false, requestedSize = '';
@@ -185,7 +194,7 @@ export function mountManagedBrowserViewport(controller, target, request) {
     if (!mounted || target.document.hidden) { if (mounted) timer = target.setTimeout(poll, 1000);return; }
     await controller.snapshot(() => mounted && !target.document.hidden);
     if (!mounted) return;
-    const frame = controller.frame();if (frame) { image.src = 'data:image/jpeg;base64,' + frame.dataBase64;const desired = size(),key = desired.width+'x'+desired.height;if (container.clientWidth>0&&container.clientHeight>0&&(desired.width!==frame.width||desired.height!==frame.height)&&requestedSize!==key) {requestedSize=key;invoke({type:'resize',...desired});} }else image.removeAttribute('src');
+    const frame = controller.frame();showImage(Boolean(frame));if (frame) { image.src = 'data:image/jpeg;base64,' + frame.dataBase64;const desired = size(),key = desired.width+'x'+desired.height;if (container.clientWidth>0&&container.clientHeight>0&&(desired.width!==frame.width||desired.height!==frame.height)&&requestedSize!==key) {requestedSize=key;invoke({type:'resize',...desired});} }else image.removeAttribute('src');
     timer = target.setTimeout(poll, 500);
   };
   const click = (/** @type {any} */ event) => { const frame = controller.frame();if (!frame) return;const point = managedBrowserPoint(image.getBoundingClientRect(), frame, event.clientX, event.clientY);if (point) { flushText();const box=surface.getBoundingClientRect();input.style.left=Math.max(0,event.clientX-box.left)+'px';input.style.top=Math.max(0,event.clientY-box.top)+'px';input.focus({preventScroll:true});invoke({ type: 'click', ...point, button: ['left','middle','right'][event.button] ?? 'left' },{width:frame.width,height:frame.height}); } };

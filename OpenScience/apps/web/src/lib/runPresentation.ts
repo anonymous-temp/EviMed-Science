@@ -1,6 +1,6 @@
 import { errorCodeMessage, runOutcomeKind } from "@evimed/domain";
 import type { WebAgentRun, WebAgentRunStatus } from "@/lib/apiClient";
-import { formatDate, formatDay } from "@/lib/format";
+import { formatDate, formatDay, formatRelativeTime } from "@/lib/format";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 
 export const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
@@ -112,32 +112,33 @@ export function runMoment(run: Pick<WebAgentRun, "startedAt" | "finishedAt">): n
   return Number.isNaN(at) ? 0 : at;
 }
 
-/**
- * How long ago, in the words the lists use: 刚刚 / N 分钟前 / N 小时前, then a
- * date — 9月20日 this year, 2025-09-20 before (spec §14.3–§14.4; it used to be
- * Intl's zh-CN default, 9/20 and 2025/9/20, which the spec rules out). The
- * single implementation — the sidebar and the ledger each had one.
- */
+/** Legacy call boundary; display policy is owned by formatRelativeTime. */
 export function relativeTime(ms: number, now = Date.now()): string {
-  if (!ms) return "";
-  const seconds = Math.max(0, Math.floor((now - ms) / 1000));
-  if (seconds < 60) return "刚刚";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时前`;
-  return formatDay(formatDate(ms, "iso"), new Date(now));
+  return ms ? formatRelativeTime(ms, new Date(now)) : "";
 }
 
 /**
- * A list's time column: 刚刚 / N 分钟 / N 小时, then the day as `relativeTime`
- * writes it — the sidebar's one-line rows have room for no more.
+ * The time of a narrow column, in Beijing time: the elapsed time under a day (`ago` adds the 「前」), then the calendar day —
+ * `9月25日` this year, `2025-09-25` before. A column of 64–96 px has no room for the long stamp `relativeTime` writes after a
+ * day; the exact instant belongs in the cell's tooltip (`formatDateTime`).
  */
-export function compactTime(ms: number, now = Date.now()): string {
+function elapsedOrDay(ms: number, now: number, ago: "" | "前"): string {
   if (!ms) return "";
   const seconds = Math.max(0, Math.floor((now - ms) / 1000));
   if (seconds < 60) return "刚刚";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟${ago}`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时${ago}`;
   return formatDay(formatDate(ms, "iso"), new Date(now));
+}
+
+/** A one-line list's time column (the sidebar): 刚刚 / N 分钟 / N 小时, then the day. */
+export function compactTime(ms: number, now = Date.now()): string {
+  return elapsedOrDay(ms, now, "");
+}
+
+/** A fixed-width time column (a table of steps): 刚刚 / N 分钟前 / N 小时前, then the day. */
+export function columnTime(ms: number, now = Date.now()): string {
+  return elapsedOrDay(ms, now, "前");
 }
 
 /**

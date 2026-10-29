@@ -41,6 +41,37 @@ describe("opening the exact GEO native descriptor",()=>{
     await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/historical"));
     expect(mocks.open).toHaveBeenCalledWith("geo-owned",{kind:"session",sessionId:"historical"});
   });
+  it("opens the project's own conversation as the primary, so a kernel that lost it is repaired rather than refused, and accepts the session that stands",async()=>{
+    mocks.open.mockImplementation(async()=>descriptor("replacement-root"));
+    setup({...target,sessionId:"dead-root",primarySessionId:"dead-root"},undefined,"/app/geo/geo-owned/overview?session=dead-root");
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/replacement-root"));
+    expect(mocks.open).toHaveBeenCalledTimes(1);
+    expect(mocks.open).toHaveBeenCalledWith("geo-owned",{kind:"primary"});
+    expect(current().intent).toMatchObject({kind:"open",sessionId:"replacement-root"});
+  });
+  it("opens the project's own conversation as the primary when only the page holds it",async()=>{
+    setup({...target,sessionId:"native-root",primarySessionId:"native-root"});
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/native-root"));
+    expect(mocks.open).toHaveBeenCalledWith("geo-owned",{kind:"primary"});
+  });
+  it("keeps an addressed conversation exact beside a project primary, and refuses it when the server answers another",async()=>{
+    setup({...target,sessionId:"historical",primarySessionId:"native-root"},undefined,"/app/geo/geo-owned/overview?session=other");
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/other"));
+    expect(mocks.open).toHaveBeenCalledWith("geo-owned",{kind:"session",sessionId:"other"});
+    mocks.open.mockResolvedValueOnce(descriptor("swapped"));
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(screen.getByTestId("result")).toHaveTextContent("false"));
+  });
+  it("never turns a versioned handling attempt or a planning reference into the primary open",async()=>{
+    const geoPlanContext={referenceId:`gpc_${"a".repeat(64)}`};
+    setup({...target,sessionId:"native-root",primarySessionId:"native-root",geoPlanContext});
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/native-root"));
+    expect(mocks.open).toHaveBeenCalledWith("geo-owned",{kind:"session",sessionId:"native-root"});
+  });
   it("preserves selected planning and result references until native submission",async()=>{
     const geoPlanContext={referenceId:`gpc_${"a".repeat(64)}`},resultRevision={referenceId:`rr_${"b".repeat(64)}`};
     setup({...target,sessionId:"historical",geoPlanContext,resultRevision},"Review this article");

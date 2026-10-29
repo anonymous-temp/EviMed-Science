@@ -2,11 +2,14 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
-import { TaskDialog } from "@/components/autopilot/TaskDialog";
+import { NewTaskPane, type NewTaskDraft } from "@/components/autopilot/NewTaskPane";
 import { EvolutionOpportunities } from "./EvolutionOpportunities";
 
 const client = vi.hoisted(() => ({ useEvolutionAccess: vi.fn(), listEvolutionOpportunities: vi.fn(), adoptEvolutionOpportunity: vi.fn() }));
 vi.mock("@/lib/evolutionClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evolutionClient")>()), ...client }));
+const autopilot = vi.hoisted(() => ({ createAgenda: vi.fn(), startAgenda: vi.fn(), updateAgenda: vi.fn(), getAgenda: vi.fn() }));
+vi.mock("@/lib/autopilotClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/autopilotClient")>()), ...autopilot }));
+vi.mock("@/lib/sourceList", () => ({ listAllSources: vi.fn() }));
 
 const opportunity = (id: string, title: string, description?: string) => ({ id, revision: 1, payload: { title, description, projectId: "project-one", origin: "evolution" } });
 
@@ -30,26 +33,43 @@ describe("研究机会, a group of the scheduled tasks", () => {
     expect(client.adoptEvolutionOpportunity).toHaveBeenCalledWith("project-one", "op-1");
   });
 
-  it("locks draft creation and templates while adopting an opportunity", async () => {
+  // Creating a task is the page's new-task pane since 2026-10-28 (the dialog only edits), and the opportunities sit under its form.
+  it("locks draft creation and the examples while adopting an opportunity", async () => {
     client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
     let finish!: (value: { id: string }) => void;
     client.adoptEvolutionOpportunity.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const busy = vi.fn(); const adopted = vi.fn();
-    render(<MemoryRouter><TaskDialog projectId="project-one" showBudgets={false} saving={false} onBusyChange={busy} onClose={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={adopted} /></MemoryRouter>);
-    await userEvent.type(screen.getByLabelText("任务指令"), "不要同时创建第二项任务");
+    const drafts: NewTaskDraft[] = []; const adopted = vi.fn();
+    render(<MemoryRouter><NewTaskPane projectId="project-one" examples onChooseExample={() => {}} onDraftChange={draft => drafts.push(draft)} onRecorded={() => {}} onSaved={() => {}} onAdopted={adopted} /></MemoryRouter>);
     await userEvent.click(await screen.findByRole("button", { name: "创建研究议程" }));
+    await userEvent.type(screen.getByLabelText("任务指令"), "不要同时创建第二项任务");
+    expect(screen.getByLabelText("任务指令")).toHaveValue("");
     expect(screen.getByRole("button", { name: "创建并启用" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "行业要闻日报" })).toBeDisabled();
-    expect(busy).toHaveBeenLastCalledWith(true);
+    expect(drafts.at(-1)?.locked).toBe(true);
     await act(async () => { finish({ id: "adopted-task" }); });
     expect(adopted).toHaveBeenCalledWith("adopted-task");
-    expect(busy).toHaveBeenLastCalledWith(false);
+    expect(drafts.at(-1)?.locked).toBe(false);
+  });
+  it("preserves a dirty task draft instead of replacing it with an opportunity", async () => {
+    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
+    render(<MemoryRouter><NewTaskPane projectId="project-one" onChooseExample={() => {}} onDraftChange={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={() => {}} /></MemoryRouter>);
+    await userEvent.type(screen.getByLabelText("任务指令"), "保留这个未保存的任务");
+    const adopt = await screen.findByRole("button", { name: "创建研究议程" });
+    expect(adopt).toBeDisabled();
+    await userEvent.click(adopt);
+    expect(client.adoptEvolutionOpportunity).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("任务指令")).toHaveValue("保留这个未保存的任务");
   });
   it("does not allow adoption while a form save is pending", async () => {
     client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
-    render(<MemoryRouter><TaskDialog projectId="project-one" showBudgets={false} saving onBusyChange={() => {}} onClose={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={() => {}} /></MemoryRouter>);
+    autopilot.createAgenda.mockImplementationOnce(() => new Promise(() => {}));
+    render(<MemoryRouter><NewTaskPane projectId="project-one" onChooseExample={() => {}} onDraftChange={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={() => {}} /></MemoryRouter>);
+    await screen.findByRole("button", { name: "创建研究议程" });
+    await userEvent.type(screen.getByLabelText("任务指令"), "每天一份简报");
+    await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
     const action = await screen.findByRole("button", { name: "创建研究议程" });
-    expect(action).toBeDisabled(); await userEvent.click(action);
+    await waitFor(() => expect(action).toBeDisabled());
+    await userEvent.click(action);
     expect(client.adoptEvolutionOpportunity).not.toHaveBeenCalled();
   });
 

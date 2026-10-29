@@ -24,7 +24,7 @@ export function ConversationLink({ projectId, sessionId, children }: { projectId
     void useProjectStore.getState().select(projectId, land).catch(() => toast.error("原始研究暂不可用"));
   };
   return (
-    <button type="button" onClick={open} className="max-w-measure text-left text-ui text-accent hover:underline">
+    <button type="button" onClick={open} className="max-w-measure rounded text-left text-ui text-accent underline underline-offset-4 hover:decoration-2">
       {children}
     </button>
   );

@@ -20,6 +20,18 @@ export interface SegmentedControlOption<T extends string> {
   label: ReactNode;
 }
 
+/**
+ * Component: SegmentedControl; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named radiogroup of native buttons carrying radio semantics.
+ * Variants: sm/md.
+ * States: Controlled value; selected button is the Tab stop.
+ * Hit area: Token h-sm/h-control group; padded segment buttons.
+ * Keyboard: Arrows/Home/End select and focus; native Space/Enter activates.
+ * Long content: Labels retained; no overflow scroller supplied.
+ * Theme: Neutral surface and selected border ring.
+ * Responsive: Intrinsic inline group; caller bounds option count/width.
+ * Verification: SegmentedControl.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function SegmentedControl<T extends string>({
   value,
   onChange,

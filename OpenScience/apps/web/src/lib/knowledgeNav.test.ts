@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { knowledgeNodeAddress, knowledgePath, legacySourceParam, listPath, readKnowledgeAddress, readListState, readReaderView, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam } from "./knowledgeNav";
+import { knowledgeNodeAddress, knowledgePath, legacySourceParam, listPath, readKnowledgeAddress, readListState, readReaderView, readerPath, recallListPosition, rememberListPosition, stateForView, viewOf } from "./knowledgeNav";
 
 const params = (search: string) => new URLSearchParams(search);
 const none = { scope: null, kind: null, q: "" } as const;
@@ -9,7 +9,8 @@ describe("the knowledge base's address", () => {
     expect(listPath(none)).toBe("/app/files");
     expect(listPath({ scope: "paper-1", kind: "table", q: "疳证" })).toBe("/app/files?scope=paper-1&kind=table&q=%E7%96%B3%E8%AF%81");
     expect(readListState(params("scope=paper-1&kind=table&q=%E7%96%B3%E8%AF%81"))).toEqual({ scope: "paper-1", kind: "table", q: "疳证" });
-    expect(readListState(params("scope=shared"))).toEqual({ scope: "shared", kind: null, q: "" });
+    // An address from before the page listed every document may say `shared`: the documents are the account's now, so it names no project.
+    expect(readListState(params("scope=shared"))).toEqual(none);
     expect(readListState(params(""))).toEqual(none);
   });
 
@@ -19,35 +20,34 @@ describe("the knowledge base's address", () => {
     expect(readListState(params("kind=literature&kind=table")).kind).toBe("literature");
   });
 
-  it("writes the list of delivered files as a view of its own, which is not a type and belongs to a project", () => {
+  it("writes the list of delivered files as a view of its own, which is not a type", () => {
     expect(listPath({ scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files?scope=paper-1&view=outputs");
-    expect(listPath({ scope: null, kind: "table", q: "疳证", view: "outputs" })).toBe("/app/files?view=outputs&q=%E7%96%B3%E8%AF%81");
-    expect(readListState(params("view=outputs&q=a"))).toEqual({ scope: null, kind: null, q: "a", view: "outputs" });
-    // A type beside the view is not read, and the shared documents have no delivered files to be a view of.
-    expect(readListState(params("view=outputs&kind=table")).kind).toBeNull();
-    expect(readListState(params("scope=shared&view=outputs"))).toEqual({ scope: "shared", kind: null, q: "" });
+    expect(listPath({ scope: "default", kind: "table", q: "疳证", view: "outputs" })).toBe("/app/files?scope=default&view=outputs&q=%E7%96%B3%E8%AF%81");
+    expect(readListState(params("scope=default&view=outputs&q=a"))).toEqual({ scope: "default", kind: null, q: "a", view: "outputs" });
+    // A type beside the view is not read; a project left out is the sidebar's, which the page resolves.
+    expect(readListState(params("scope=default&view=outputs&kind=table")).kind).toBeNull();
+    expect(readListState(params("view=outputs"))).toEqual({ scope: null, kind: null, q: "", view: "outputs" });
     expect(readListState(params("view=elsewhere"))).toEqual(none);
     expect(readerPath("src_abc", { scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files/src_abc?scope=paper-1&view=outputs");
   });
 
   it("writes the graph as a view of the 知识页, with the mark in focus and how far it reaches, and reads it back as untrusted", () => {
     expect(listPath({ scope: "paper-1", kind: "wiki", q: "", view: "graph" })).toBe("/app/files?scope=paper-1&kind=wiki&view=graph");
-    expect(listPath({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 }))
-      .toBe("/app/files?kind=wiki&view=graph&graph=kg&focus=trial-rocket-af&depth=2");
-    expect(readListState(params("view=graph&graph=kg&focus=trial-rocket-af&depth=2")))
-      .toEqual({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 });
+    expect(listPath({ scope: "default", kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 }))
+      .toBe("/app/files?scope=default&kind=wiki&view=graph&graph=kg&focus=trial-rocket-af&depth=2");
+    expect(readListState(params("scope=default&view=graph&graph=kg&focus=trial-rocket-af&depth=2")))
+      .toEqual({ scope: "default", kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 });
     // The graph is always of the 知识页, wiki unless said otherwise, and a depth means something only beside a focus.
-    expect(readListState(params("view=graph&kind=table&graph=odd&depth=2"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph" });
-    expect(readListState(params("view=graph&focus=a&depth=9"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph", focus: "a" });
-    // The shared documents have no pages to draw.
-    expect(readListState(params("scope=shared&view=graph"))).toEqual({ scope: "shared", kind: null, q: "" });
-    expect(readerPath("src_abc", { scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "x", depth: 3 })).toBe("/app/files/src_abc?kind=wiki&view=graph&graph=kg&focus=x&depth=3");
+    expect(readListState(params("scope=default&view=graph&kind=table&graph=odd&depth=2"))).toEqual({ scope: "default", kind: "wiki", q: "", view: "graph" });
+    expect(readListState(params("scope=default&view=graph&focus=a&depth=9"))).toEqual({ scope: "default", kind: "wiki", q: "", view: "graph", focus: "a" });
+    expect(readListState(params("view=graph"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph" });
+    expect(readerPath("src_abc", { scope: "default", kind: "wiki", q: "", view: "graph", graph: "kg", focus: "x", depth: 3 })).toBe("/app/files/src_abc?scope=default&kind=wiki&view=graph&graph=kg&focus=x&depth=3");
   });
 
   it("puts a document at its own address, carrying the list it was opened from and what it shows", () => {
     expect(readerPath("src_abc", none)).toBe("/app/files/src_abc");
-    expect(readerPath("src_abc", { scope: "shared", kind: "literature", q: "共识" }, { tab: "original", page: 5 }))
-      .toBe("/app/files/src_abc?scope=shared&kind=literature&q=%E5%85%B1%E8%AF%86&tab=original&page=5");
+    expect(readerPath("src_abc", { scope: null, kind: "literature", q: "共识" }, { tab: "original", page: 5 }))
+      .toBe("/app/files/src_abc?kind=literature&q=%E5%85%B1%E8%AF%86&tab=original&page=5");
     // An id is one path segment: it cannot carry a path, however it is spelled.
     expect(readerPath("../etc/passwd", none)).toBe("/app/files/..%2Fetc%2Fpasswd");
   });
@@ -70,13 +70,17 @@ describe("the knowledge base's address", () => {
     expect(legacySourceParam(params("tab=sources"))).toBeNull();
   });
 
-  it("turns a list state into a scope and back, with the tab's own project standing for none", () => {
-    expect(scopeOf(none, "default")).toEqual({ kind: "project", projectId: "default" });
-    expect(scopeOf({ ...none, scope: "paper-1" }, "default")).toEqual({ kind: "project", projectId: "paper-1" });
-    expect(scopeOf({ ...none, scope: "shared" }, "default")).toEqual({ kind: "shared" });
-    expect(scopeParam({ kind: "project", projectId: "default" }, "default")).toBeNull();
-    expect(scopeParam({ kind: "project", projectId: "paper-1" }, "default")).toBe("paper-1");
-    expect(scopeParam({ kind: "shared" }, "default")).toBe("shared");
+  it("names the view an address is at, and moves between views keeping the project only where the view is a project's", () => {
+    expect(viewOf(none)).toBe("documents");
+    expect(viewOf({ ...none, kind: "table" })).toBe("documents");
+    expect(viewOf({ ...none, kind: "wiki" })).toBe("pages");
+    expect(viewOf({ ...none, kind: "wiki", view: "graph" })).toBe("graph");
+    expect(viewOf({ ...none, view: "outputs" })).toBe("outputs");
+    const inProject = { scope: "paper-1", kind: "wiki", q: "疳证" } as const;
+    expect(stateForView(inProject, "documents")).toEqual({ scope: null, kind: null, q: "疳证" });
+    expect(stateForView({ ...none, q: "a" }, "pages")).toEqual({ scope: null, kind: "wiki", q: "a" });
+    expect(stateForView(inProject, "graph")).toEqual({ scope: "paper-1", kind: "wiki", q: "疳证", view: "graph" });
+    expect(stateForView(inProject, "outputs")).toEqual({ scope: "paper-1", kind: null, q: "疳证", view: "outputs" });
   });
 });
 

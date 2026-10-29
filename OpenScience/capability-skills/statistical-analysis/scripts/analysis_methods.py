@@ -321,11 +321,13 @@ def contingency_test(table: Any, *, correct_zero_cells: bool = False, family_siz
     """Association in a table of counts; rows are groups, columns outcomes (the event is the first column).
 
     A 2 x 2 table also gets the odds ratio (Woolf interval and the conditional estimate with its exact
-    interval), the risk ratio (Katz interval), the risk difference (Wald interval), Pearson's chi-square
+    interval), the risk ratio (Katz interval), the risk difference (Newcombe interval from Wilson scores), Pearson's chi-square
     (and Yates'), and Fisher's exact p value. A table with a zero cell is given no ratio unless
     `correct_zero_cells=True` adds 0.5 to every cell (and says so); the tests that do not need a ratio still run.
     """
     method = "contingency_test"
+    if not isinstance(level, (int, float)) or not math.isfinite(level) or not 0 < level < 1:
+        return _declined(method, label, "invalid_confidence_level")
     try:
         counts = np.asarray(table, dtype=float)
     except (TypeError, ValueError):
@@ -380,8 +382,15 @@ def contingency_test(table: Any, *, correct_zero_cells: bool = False, family_siz
     else:
         values.update(oddsRatio=None, oddsRatioInterval=None, riskRatio=None, riskRatioInterval=None)
     p1, p2 = counts[0, 0] / counts[0].sum(), counts[1, 0] / counts[1].sum()
-    se_rd = math.sqrt(p1 * (1 - p1) / counts[0].sum() + p2 * (1 - p2) / counts[1].sum())
-    values.update(riskDifference=float(p1 - p2), riskDifferenceInterval=[float(p1 - p2 - z * se_rd), float(p1 - p2 + z * se_rd)])
+    # Reuse the installed implementation; the interval uses original counts,
+    # even when the caller requested a continuity correction for the ratios.
+    from statsmodels.stats.proportion import confint_proportions_2indep
+    rd_interval = confint_proportions_2indep(
+        counts[0, 0], counts[0].sum(), counts[1, 0], counts[1].sum(),
+        compare="diff", method="newcomb", alpha=1 - level,
+    )
+    values.update(riskDifference=float(p1 - p2), riskDifferenceInterval=[float(bound) for bound in rd_interval],
+                  riskDifferenceIntervalMethod="newcombe-wilson")
     p_value = values["fisherP"] if values["primaryTest"] == "fisher_exact" else values["pearsonP"]
     return _entry(method, label, status="complete" if values["oddsRatio"] is not None else "partial",
                   estimand="odds ratio of the event, first row against second (rows are groups, the event is the first column)", n=n,

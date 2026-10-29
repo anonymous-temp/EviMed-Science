@@ -68,10 +68,13 @@ test('maintenance admission is checked both before and inside the online queue c
   allowed = true; await worker.tick(); assert.equal(claimed, 1);
   await worker.close();
 });
-test('production server composes only serving evolution and declares dedicated online queues', async () => {
+test('production server composes evolution through the one serving switch and declares dedicated online queues', async () => {
   const code = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(code, /import\s*\{\s*createEvolution\s*\}|evolution\.model\(|evolution\.loops|evolution\.budgeted\(|evolution\.runtimeSession/);
-  assert.match(code, /createEvolutionServing\(/);
+  // Neither composition is built directly: the switch (evolutionMode.mjs) decides, and the members only the full composition has are
+  // reached through `experimental`, inside the blocks that serving skips.
+  assert.doesNotMatch(code, /import\s*\{\s*createEvolution(?:Serving)?\s*\}|createEvolution(?:Serving)?\(/);
+  assert.match(code, /composeEvolution\(/);
+  assert.doesNotMatch(code, /evolution\.model\(|evolution\.loops|evolution\.budgeted\(|evolution\.runtimeSession/);
   assert.ok(PRODUCT_JOB_KINDS.includes('rsi-incident-export'));
   assert.ok(PRODUCT_JOB_KINDS.includes('rsi-bundle-poll'));
 });
@@ -116,7 +119,7 @@ function pollerFixture() {
   const documents = memoryDocuments(), jobs = memoryJobs(), reads = [], said = [];
   const keys = ['a', 'b', 'c', 'd'].map(ch => `rsi/v1/bundles/${ch.repeat(64)}.json`).concat('rsi/v1/bundles/not-a-digest.json');
   const outcomes = {
-    a: () => { throw new HttpError(409, 'campaign_replay_or_surface_busy', 'Campaign activation refused.'); },
+    a: () => { throw new HttpError(409, 'campaign_replayed', 'Campaign activation refused.'); },
     b: () => ({ state: 'rejected', issues: ['campaign_signature_invalid'] }),
     c: () => { throw new Error('connection reset'); },
     d: () => ({ state: 'exposed' }),
@@ -129,7 +132,7 @@ function pollerFixture() {
 test('one refused or conflicting bundle never holds the queue, a decided key is never read again, and the poll chain cannot fork', async () => {
   const f = pollerFixture();
   assert.deepEqual((await f.poller.poll({}, { id: 'job-1' })).outcomes, { rejected: 2, retrying: 1, imported: 1, ignored: 1 });
-  assert.deepEqual([f.intake('a').state, f.intake('a').reason, f.intake('a').digest, f.intake('a').objectKey], ['rejected', 'campaign_replay_or_surface_busy', 'a'.repeat(64), `rsi/v1/bundles/${'a'.repeat(64)}.json`]);
+  assert.deepEqual([f.intake('a').state, f.intake('a').reason, f.intake('a').digest, f.intake('a').objectKey], ['rejected', 'campaign_replayed', 'a'.repeat(64), `rsi/v1/bundles/${'a'.repeat(64)}.json`]);
   assert.deepEqual([f.intake('b').state, f.intake('b').reason], ['rejected', 'campaign_signature_invalid']);
   assert.deepEqual([f.intake('c').state, f.intake('c').lastCode, f.intake('c').attempts], ['retrying', 'campaign_import_failed', 1]);
   assert.equal(f.intake('d').state, 'imported');
@@ -146,6 +149,36 @@ test('one refused or conflicting bundle never holds the queue, a decided key is 
   await f.poller.poll({}, { id: 'job-3' });
   assert.deepEqual(f.reads, []);
   assert.ok(f.said.includes('rsi_online_bundle_key_invalid'));
+});
+
+/** A poller over bundles whose unverified payload carries a manifest time, as a signed envelope does. @param {Record<string, string|null>} created */
+function orderedPollerFixture(created, importBundle) {
+  const documents = memoryDocuments(), jobs = memoryJobs(), reads = [];
+  const keys = Object.keys(created).map(ch => `rsi/v1/bundles/${ch.repeat(64)}.json`);
+  const transport = { listBundles: async () => ({ keys, cursor: null }),
+    readBundle: async digest => { reads.push(digest[0]); return { bytes: Buffer.from(JSON.stringify({ k: digest[0], payload: JSON.stringify({ manifest: created[digest[0]] ? { createdAt: created[digest[0]] } : {} }) })) }; } };
+  const poller = createRsiBundlePoller({ transport, importer: { importBundle }, documents, owner: 'publisher', jobs, jobOwner: 'publisher', projectId: 'evidence', configured: () => true });
+  return { poller, reads, intake: ch => documents.rows.get(`publisher:rsi-bundle-intake-${ch.repeat(64)}`)?.payload };
+}
+test('bundles are imported oldest manifest first, whatever their keys sort as, and each bundle is read once', async () => {
+  const order = [];
+  const f = orderedPollerFixture({ a: '2026-10-26T03:00:00Z', b: '2026-10-26T01:00:00Z', c: null, d: '2026-10-26T02:00:00Z' }, async envelope => { order.push(envelope.k); return { state: 'exposed' }; });
+  await f.poller.poll({}, { id: 'job-1' });
+  assert.deepEqual(order, ['b', 'd', 'a', 'c'], 'by createdAt; the one with no readable time comes last');
+  assert.deepEqual([...f.reads].sort(), ['a', 'b', 'c', 'd'], 'the bytes read to order a page are the bytes imported');
+});
+test('a surface held by an active campaign makes a bundle wait, uncounted and undecided, while a replayed campaign stays terminal', async () => {
+  let busy = true;
+  const f = orderedPollerFixture({ a: '2026-10-26T01:00:00Z', b: '2026-10-26T02:00:00Z' }, async envelope => {
+    if (envelope.k === 'b') throw new HttpError(409, 'campaign_replayed', 'Campaign activation refused.');
+    return busy ? { state: 'waiting', reason: 'campaign_surface_busy' } : { state: 'exposed' };
+  });
+  for (let poll = 0; poll < 5; poll++) assert.deepEqual((await f.poller.poll({}, { id: `job-${poll}` })).outcomes, { waiting: 1, rejected: 1 }, `poll ${poll}`);
+  assert.equal(f.intake('a'), undefined, 'a waiting bundle leaves no decision and spends no attempt, however long it waits (its own expiry ends it)');
+  assert.deepEqual([f.intake('b').state, f.intake('b').reason], ['rejected', 'campaign_replayed']);
+  busy = false;
+  assert.deepEqual((await f.poller.poll({}, { id: 'job-last' })).outcomes, { imported: 1, rejected: 1 });
+  assert.equal(f.intake('a').state, 'imported');
 });
 
 test('a permanent extraction failure ends its job instead of retrying and paying the model again', async () => {

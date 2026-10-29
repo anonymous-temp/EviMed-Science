@@ -10,7 +10,9 @@ description: |
   piece of code. Each line says what kind of task and which part of the project it was about,
   in the user's own terms and a few words, and the date ("给第 2 章补参考文献", "整理 Q3 渠道数据"). Never
   the content of the work: no numbers, results or conclusions from it, no text of a document, no
-  file path, no name of another person. Skip a plain question, small talk, anything asked
+  file path, no name of another person. Name material the user pasted or a case they brought by its
+  kind only: "总结一篇论文摘要", "整理一份病例", "梳理审稿意见" — never what it says (no drug, finding,
+  score, value, diagnosis or outcome from it), because the material stays in the conversation. Skip a plain question, small talk, anything asked
   outside a named project, and a request the assistant only discussed.
   The lines REPLACE each other, they do not pile up: put this conversation's line first and
   drop the oldest line when there would be a fourth. When one conversation did several tasks,

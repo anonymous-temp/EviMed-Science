@@ -82,7 +82,7 @@ export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
-  "action_choices", "read_selections",
+  "action_choices", "read_selections", "probe_requests", "social_jobs",
 ]);
 
 /**
@@ -830,6 +830,39 @@ CREATE TABLE IF NOT EXISTS evimed_geo.action_choices (
   updated_at     timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (geo_project_id, action_key)
 );
+
+-- The tasks the probe host accepted for a project's runtime (geoProbeRequests.mjs): the host's own id, kept with the ask it answers, so a
+-- task that outlives the tool's deadline is read later by that id and never asked a second time. Scoped to the account and to the
+-- control-plane project whose runtime asked (not necessarily a GEO project), so no other account or project reads it. Pruned after
+-- OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS, and removed with the project or the account.
+CREATE TABLE IF NOT EXISTS evimed_geo.probe_requests (
+  request_id  text PRIMARY KEY,
+  user_id     text NOT NULL,
+  project_id  text NOT NULL,
+  question    text NOT NULL,
+  providers   jsonb NOT NULL,
+  deep        smallint NOT NULL DEFAULT 0,
+  new_chat    smallint NOT NULL DEFAULT 1,
+  accepted_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_probe_requests_owner_idx ON evimed_geo.probe_requests (user_id, project_id);
+CREATE INDEX IF NOT EXISTS geo_probe_requests_age_idx ON evimed_geo.probe_requests (accepted_at);
+
+-- The social collector's jobs a person's project started (\`socialCrawlClient.mjs\`, \`geoSocialJobs.mjs\`): the id of a job accepted but not
+-- yet read to its end, so the same user and project can read on later and no one else can. Keyed by the control-plane project, not
+-- by a GEO project: the social search answers in any conversation of an account the module is open to. Kept a day.
+CREATE TABLE IF NOT EXISTS evimed_geo.social_jobs (
+  user_id      text NOT NULL,
+  project_id   text NOT NULL,
+  job_id       text NOT NULL,
+  query        text NOT NULL,
+  platforms    text[] NOT NULL,
+  sort         text NOT NULL,
+  result_limit integer NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, project_id, job_id)
+);
+CREATE INDEX IF NOT EXISTS geo_social_jobs_age_idx ON evimed_geo.social_jobs (created_at);
 `;
 }
 

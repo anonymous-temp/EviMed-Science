@@ -50,7 +50,7 @@ describe("运维", () => {
     const user = userEvent.setup();
     mocks.fetchWebMe.mockRejectedValueOnce(new Error("network")).mockResolvedValue(me(true));
     open();
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(screen.queryByText("运维分区")).not.toBeInTheDocument();
     await user.click(within(alert).getByRole("button", { name: "重试" }));
     expect(await screen.findByText("运维分区")).toBeInTheDocument();

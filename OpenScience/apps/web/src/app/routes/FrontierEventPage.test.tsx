@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,6 +51,16 @@ function Probe() {
   return <div data-testid="location" data-origin={intent?.originReference ? `${intent.originReference.kind}:${intent.originReference.id}` : undefined}>{location.pathname}{location.search}{intent?.draft ? `|${intent.draft}` : ""}</div>;
 }
 
+/** The rows of the timeline, in the order of the page. */
+const timelineRows = () => Array.from(document.querySelectorAll<HTMLElement>("[data-event-timeline] li"));
+/** A window from 1024 px: the record in the right column. jsdom matches no query otherwise, which is the narrow page. */
+function wide() {
+  vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+    matches: query === "(min-width: 1024px)", media: query, onchange: null,
+    addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
+  }) as unknown as MediaQueryList);
+}
+
 function renderEvent(id = "ev1", search = "") {
   return render(
     <MemoryRouter initialEntries={[`/app/frontier/events/${id}${search}`]}>
@@ -75,12 +85,27 @@ describe("an event", () => {
     const title = await screen.findByRole("heading", { level: 1, name: "不饱和磷脂多层多囊脂质体实现亲水药物超缓释" });
     expect(screen.getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier");
     expect(title.closest("header")).toContainElement(screen.getByRole("button", { name: "深入研究" }));
-    // The line of facts is the first thing in the page body, directly under the header.
+    // The line of facts is the first thing in the page body, directly under the header. How many reports and from how many sources is the
+    // record's, so the line does not say it twice.
     const facts = title.closest("header")!.nextElementSibling!.firstElementChild!;
-    expect(facts).toHaveTextContent("2 家机构报道·3 小时前更新药学");
+    expect(facts).toHaveTextContent("3 小时前更新药学");
+    expect(facts).not.toHaveTextContent("机构");
     expect(within(facts as HTMLElement).getByText("药学")).toHaveClass("rounded-tag");
     // No explanation under any heading: the old cards each said how they were made.
     for (const gone of ["由多篇报道综合", "当事方自己的说法", "最新在前", "仍在发展", "篇报道"]) expect(document.body).not.toHaveTextContent(gone);
+  });
+
+  it("says in the line of facts what the record does not: the studies the reports were tied to, and those not yet", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ counts: { reports: 5, institutions: 4, studies: 2, unlinkedReports: 1 } }));
+    renderEvent();
+    const title = await screen.findByRole("heading", { level: 1, name: event().title });
+    const facts = title.closest("header")!.nextElementSibling!.firstElementChild!;
+    expect(facts).toHaveTextContent("2 项已识别研究（1 篇尚未关联研究）·3 小时前更新药学");
+    cleanup();
+    client.fetchFrontierEvent.mockResolvedValue(event({ counts: { reports: 5, institutions: 4, studies: 0, unlinkedReports: 5 } }));
+    renderEvent();
+    const again = await screen.findByRole("heading", { level: 1, name: event().title });
+    expect(again.closest("header")!.nextElementSibling!.firstElementChild!).toHaveTextContent(/^3 小时前更新药学$/);
   });
 
   it("says what is known, and the latest turn", async () => {
@@ -90,20 +115,22 @@ describe("an event", () => {
     expect(digest).toHaveTextContent("最新缓释脂质体注射剂在大鼠中实现持续 2 至 3 周神经阻滞 · 3 小时前");
   });
 
-  it("puts the parties' own texts first under 「一手材料」, then the other reports, each newest first, and no filter below ten", async () => {
+  it("puts the parties' own texts first under 「一手材料」, then the other reports on the timeline, each newest first, and no filter below ten", async () => {
     renderEvent();
     const primary = await screen.findByRole("list", { name: "一手材料" });
-    const others = screen.getByRole("list", { name: "其他报道" });
+    const others = timelineRows();
     const first = within(primary).getAllByRole("listitem");
     expect(first.map((row) => row.querySelector("p")?.textContent)).toEqual(["一手来源：不饱和磷脂脂质体原文"]);
-    expect(within(others).getAllByRole("listitem").map((row) => row.querySelector("p")?.textContent)).toEqual(["缓释脂质体注射剂在大鼠中实现持续神经阻滞"]);
-    // 一手材料 is the first thing under 概要.
+    expect(others.map((row) => row.querySelector("p")?.textContent)).toEqual(["缓释脂质体注射剂在大鼠中实现持续神经阻滞"]);
+    // The record leads the page (a strip below 1024 px), then 概要; 一手材料 is the first thing under it, and the timeline follows.
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
-    expect(headings.slice(0, 3)).toEqual(["概要", "一手材料", "其他报道"]);
+    expect(headings.slice(0, 4)).toEqual(["事件记录（北京时间）", "概要", "一手材料", "报道时间线"]);
     expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).parentElement).toHaveTextContent("一手材料1");
     expect(first[0].querySelector(".bg-accent")).not.toBeNull();
-    expect(within(others).getByRole("listitem").querySelector(".bg-accent")).toBeNull();
+    expect(others[0].querySelector(".bg-accent")).toBeNull();
     expect(first[0]).toHaveTextContent("自然-生物医学工程·期刊·5 小时前·原文");
+    // On the timeline the day is the heading above a row, so a row says the clock (Beijing time) and not how long ago.
+    expect(others[0]).toHaveTextContent(/^缓释脂质体注射剂在大鼠中实现持续神经阻滞Medical Xpress·媒体·\d{2}:\d{2}·原文 ↗$/);
     expect(within(first[0]).getByRole("link", { name: "原文" })).toHaveAttribute("href", "https://www.nature.com/x");
     expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
@@ -111,37 +138,72 @@ describe("an event", () => {
     expect(screen.getByRole("link", { name: "同类缓释制剂的早先报道" })).toHaveAttribute("href", "/app/frontier/events/ev0");
   });
 
-  it("names the group 「报道」 when nobody's own text is among the reports, and says 「暂无」 in the strip", async () => {
+  it("is the timeline alone when nobody's own text is among the reports, and says 「暂无」 in the record", async () => {
     const reports = event().items.map((item) => ({ ...item, role: "report" as const }));
     client.fetchFrontierEvent.mockResolvedValue(event({ items: reports, hasPrimary: false, primary: null }));
     renderEvent();
-    const heading = await screen.findByRole("heading", { level: 2, name: "报道" });
-    expect(heading.parentElement).toHaveTextContent("报道2");
-    // The strip says nobody's own text is among them; the group does not say it a second time.
+    const heading = await screen.findByRole("heading", { level: 2, name: "报道时间线" });
+    expect(heading.parentElement).toHaveTextContent("报道时间线2");
+    // The record says nobody's own text is among them; the timeline does not say it a second time.
     expect(screen.queryByText("暂无一手材料，以下均为转述报道。")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /一手材料/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /其他报道/ })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "报道" })).getAllByRole("listitem")).toHaveLength(2);
-    const side = screen.getByRole("complementary", { name: "热度与来源" });
+    expect(timelineRows()).toHaveLength(2);
+    const side = screen.getByRole("complementary", { name: "事件记录" });
     expect(within(side).getAllByRole("definition").at(-1)).toHaveTextContent("暂无");
   });
 
-  it("carries the heat, its trend and where the reports come from in a strip above the summary", async () => {
+  it("carries the heat, its trend and the event's record in a strip above the summary: first report, last update, how many reports and sources", async () => {
     renderEvent();
-    const side = await screen.findByRole("complementary", { name: "热度与来源" });
+    const side = await screen.findByRole("complementary", { name: "事件记录" });
     expect(side).toHaveTextContent("38热度");
     expect(side.querySelector("svg[data-sparkline] path")).not.toBeNull();
     const facts = within(side).getAllByRole("definition").map((entry) => entry.textContent);
-    expect(within(side).getAllByRole("term").map((entry) => entry.textContent)).toEqual(["机构", "首报", "一手材料"]);
-    expect(facts).toEqual(["期刊 1 · 媒体 1", "9月22日 18:01", "有论文原文"]);
+    expect(within(side).getAllByRole("term").map((entry) => entry.textContent)).toEqual(["最早报道", "最近更新", "报道", "来源", "一手材料"]);
+    // 18:01 in Beijing is 10:01 UTC: the clock is Beijing's whatever zone the machine is in.
+    expect(facts[0]).toBe("9月22日 18:01");
+    expect(facts[1]).toMatch(/^\d{1,2}月\d{1,2}日 \d{2}:\d{2}$/);
+    expect(facts.slice(2)).toEqual(["2 篇", "2 家（期刊 1 · 媒体 1）", "有论文原文"]);
+    // The zone is said once, in the heading: both times are in it.
+    expect(within(side).getByRole("heading", { level: 2 })).toHaveTextContent("事件记录（北京时间）");
+    expect(document.body.textContent?.match(/北京时间/g)).toHaveLength(1);
   });
 
-  it("keeps the strip honest on a server that sends no heat yet", async () => {
+  it("keeps the record honest on a server that sends no heat or counts yet", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ heat: undefined, trend: undefined, institutions72h: undefined, primary: undefined, hasPrimary: undefined, sourceCount72h: 7 }));
     renderEvent();
-    const side = await screen.findByRole("complementary", { name: "热度与来源" });
+    const side = await screen.findByRole("complementary", { name: "事件记录" });
     expect(side).not.toHaveTextContent("热度");
-    expect(within(side).getAllByRole("definition").map((entry) => entry.textContent)).toEqual(["7 家", "9月22日 18:01", "有一手材料"]);
+    expect(within(side).getAllByRole("definition").map((entry) => entry.textContent)).toEqual(["9月22日 18:01", expect.stringMatching(/^\d{1,2}月\d{1,2}日 \d{2}:\d{2}$/), "2 篇", "7 家", "有一手材料"]);
+  });
+
+  it("counts by the event's own counts where the server sends them, and says the kinds only where they add up to the sources", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ counts: { reports: 9, institutions: 5, studies: 1, unlinkedReports: 0 } }));
+    renderEvent();
+    const side = await screen.findByRole("complementary", { name: "事件记录" });
+    expect(within(side).getAllByRole("definition").slice(2).map((entry) => entry.textContent)).toEqual(["9 篇", "5 家", "有论文原文"]);
+  });
+
+  it("leaves a time out of the record that the event does not have, and says no zone for none", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ firstAt: null, lastAt: null }));
+    renderEvent();
+    const side = await screen.findByRole("complementary", { name: "事件记录" });
+    expect(within(side).getAllByRole("term").map((entry) => entry.textContent)).toEqual(["报道", "来源", "一手材料"]);
+    expect(within(side).getByRole("heading", { level: 2 })).toHaveTextContent(/^事件记录$/);
+  });
+
+  it("stands in the right column from 1024 px — the shell's own aside, once, with the title's column to its left", async () => {
+    wide();
+    const { container } = renderEvent();
+    const side = await screen.findByRole("complementary", { name: "事件记录" });
+    expect(container.querySelectorAll("aside")).toHaveLength(1);
+    expect(side).toHaveTextContent("事件记录（北京时间）");
+    expect(side).toHaveTextContent("38热度");
+    expect(within(side).getAllByRole("term").map((entry) => entry.textContent)).toEqual(["最早报道", "最近更新", "报道", "来源", "一手材料"]);
+    expect(screen.getByRole("heading", { level: 1 }).compareDocumentPosition(side) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // It is beside the page and not above the summary.
+    expect(side.compareDocumentPosition(screen.getByRole("heading", { level: 2, name: "概要" })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    vi.restoreAllMocks();
   });
 
   it("says there is no digest yet rather than inventing one", async () => {
@@ -253,15 +315,15 @@ describe("an event with many reports", () => {
     renderEvent();
     await userEvent.click(await screen.findByRole("button", { name: "全部来源" }));
     expect((await screen.findAllByRole("menuitemradio")).map((entry) => entry.textContent)).toEqual(["全部来源", "期刊", "媒体"]);
-    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道11");
+    expect(screen.getByRole("heading", { level: 2, name: "报道时间线" }).parentElement).toHaveTextContent("报道时间线11");
     await userEvent.click(screen.getByRole("menuitemradio", { name: "期刊" }));
     // 12 reports: journals are 0, 3, 6, 9; the first one is the primary.
     expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).parentElement).toHaveTextContent("一手材料1");
-    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道3");
-    expect(within(screen.getByRole("list", { name: "其他报道" })).getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByRole("heading", { level: 2, name: "报道时间线" }).parentElement).toHaveTextContent("报道时间线3");
+    expect(timelineRows()).toHaveLength(3);
     await userEvent.click(screen.getByRole("button", { name: "全部来源：期刊" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "全部来源" }));
-    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道11");
+    expect(screen.getByRole("heading", { level: 2, name: "报道时间线" }).parentElement).toHaveTextContent("报道时间线11");
   });
 
   it("hides a group the chosen kind has nothing in — except the one that holds the filter, which stays with its count of nothing", async () => {
@@ -273,7 +335,7 @@ describe("an event with many reports", () => {
     const first = screen.getByRole("heading", { level: 2, name: "一手材料" });
     expect(first.parentElement).toHaveTextContent("一手材料0");
     expect(first.closest("section")).toContainElement(screen.getByRole("button", { name: "全部来源：媒体" }));
-    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道8");
+    expect(screen.getByRole("heading", { level: 2, name: "报道时间线" }).parentElement).toHaveTextContent("报道时间线8");
     await userEvent.click(screen.getByRole("button", { name: "全部来源：媒体" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "全部来源" }));
     expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).parentElement).toHaveTextContent("一手材料1");
@@ -289,13 +351,13 @@ describe("an event with many reports", () => {
   it("offers no menu when all the reports are of one kind", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12).map((item) => ({ ...item, sourceTypeLabel: "媒体" })) }));
     renderEvent();
-    await screen.findByRole("heading", { level: 2, name: "其他报道" });
+    await screen.findByRole("heading", { level: 2, name: "报道时间线" });
     expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
   });
 });
 
 describe("the order of the reports", () => {
-  const reportTitles = () => Array.from(document.querySelectorAll("#event-reports > li")).map((row) => row.querySelector("a")?.textContent);
+  const reportTitles = () => timelineRows().map((row) => row.querySelector("a")?.textContent);
   it("reads newest first, then oldest first on 最早 — asked of the server and kept in the address — and back", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: [
       { ...frontierItem({ id: "a", title: "最早的报道", timelineAt: ago(30) }), role: "report" },
@@ -303,7 +365,7 @@ describe("the order of the reports", () => {
       { ...frontierItem({ id: "c", title: "中间的报道", timelineAt: ago(10) }), role: "report" },
     ] }));
     renderEvent();
-    await screen.findByRole("heading", { level: 2, name: "报道" });
+    await screen.findByRole("heading", { level: 2, name: "报道时间线" });
     expect(reportTitles()).toEqual(["最新的报道", "中间的报道", "最早的报道"]);
     const order = screen.getByRole("group", { name: "报道顺序" });
     expect(within(order).getByRole("button", { name: "最新" })).toHaveAttribute("aria-pressed", "true");
@@ -324,6 +386,77 @@ describe("the order of the reports", () => {
     await screen.findByRole("heading", { level: 1 });
     expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev1", "asc");
     expect(within(screen.getByRole("group", { name: "报道顺序" })).getByRole("button", { name: "最早" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("the timeline by Beijing day", () => {
+  /** [id, title, the moment it stands at]: three Beijing days, and a report that is another UTC day than the one beside it. */
+  const reports = (extra: Array<ReturnType<typeof report>> = []) => [
+    report("a", "凌晨的报道", "2026-03-13T17:30:00.000Z"), // 3月14日 01:30 in Beijing, the 13th in UTC
+    report("b", "上午的报道", "2026-03-14T02:00:00.000Z"), // 3月14日 10:00
+    report("c", "次日的报道", "2026-03-15T03:00:00.000Z"), // 3月15日 11:00
+    report("d", "夜里的报道", "2026-03-15T16:30:00.000Z"), // 3月16日 00:30 in Beijing, the 15th in UTC
+    ...extra,
+  ];
+  function report(id: string, title: string, timelineAt: string, over: Record<string, unknown> = {}) {
+    return { ...frontierItem({ id, title, timelineAt, source: { id: `s-${id}`, name: `来源 ${id}` }, sourceType: "media", sourceTypeLabel: "媒体", selected: false, ...over }), role: "report" as const };
+  }
+  const days = () => Array.from(document.querySelectorAll<HTMLElement>("[data-event-timeline] > section")).map((section) => ({
+    heading: section.querySelector("h3")?.firstChild?.textContent,
+    rows: Array.from(section.querySelectorAll("li p")).map((row) => row.textContent),
+  }));
+
+  it("groups the reports by the day they stand at in Beijing — not by UTC's, not by the browser's — newest day first", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: reports(), hasPrimary: false, primary: null }));
+    renderEvent();
+    await screen.findByRole("heading", { level: 2, name: "报道时间线" });
+    expect(days()).toEqual([
+      { heading: "3月16日 周一", rows: ["夜里的报道"] },
+      { heading: "3月15日 周日", rows: ["次日的报道"] },
+      { heading: "3月14日 周六", rows: ["上午的报道", "凌晨的报道"] },
+    ]);
+    // The heading is the day, and it says how many reports the day holds.
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["3月16日 周一1 篇", "3月15日 周日1 篇", "3月14日 周六2 篇"]);
+    expect(screen.getByRole("heading", { level: 2, name: "报道时间线" }).parentElement).toHaveTextContent("报道时间线4");
+  });
+
+  it("says each row's clock in Beijing time, and no clock for a source that stated only its day", async () => {
+    const dayOnly = report("e", "只有日期的报道", "2026-03-14T15:59:59.999Z", { datePrecision: "day" }); // the 14th's last millisecond in Beijing
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: [...reports(), dayOnly], hasPrimary: false, primary: null }));
+    renderEvent();
+    await screen.findByRole("heading", { level: 2, name: "报道时间线" });
+    const row = (title: string) => timelineRows().find((entry) => entry.querySelector("p")?.textContent === title)!;
+    expect(row("凌晨的报道")).toHaveTextContent("来源 a·媒体·01:30·原文");
+    expect(row("夜里的报道")).toHaveTextContent("来源 d·媒体·00:30·原文");
+    expect(row("只有日期的报道")).toHaveTextContent(/^只有日期的报道来源 e·媒体·原文 ↗$/);
+    expect(days().find((entry) => entry.heading === "3月14日 周六")?.rows).toContain("只有日期的报道");
+  });
+
+  it("reads the oldest day first on 最早, the days and the rows inside them both", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: reports(), hasPrimary: false, primary: null }));
+    renderEvent("ev1", "?order=asc");
+    await screen.findByRole("heading", { level: 2, name: "报道时间线" });
+    expect(days()).toEqual([
+      { heading: "3月14日 周六", rows: ["凌晨的报道", "上午的报道"] },
+      { heading: "3月15日 周日", rows: ["次日的报道"] },
+      { heading: "3月16日 周一", rows: ["夜里的报道"] },
+    ]);
+  });
+
+  it("leaves the parties' own texts out of the days: they are the group above, with the day gone from their rows", async () => {
+    const own = { ...report("p", "论文原文", "2026-03-15T03:00:00.000Z"), role: "primary" as const };
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: [own, ...reports()] }));
+    renderEvent();
+    await screen.findByRole("list", { name: "一手材料" });
+    expect(days().flatMap((entry) => entry.rows)).not.toContain("论文原文");
+    expect(days().map((entry) => entry.heading)).toEqual(["3月16日 周一", "3月15日 周日", "3月14日 周六"]);
+  });
+
+  it("opens a report from its day through the addressed reader, as it did", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: reports(), hasPrimary: false, primary: null }));
+    renderEvent();
+    await screen.findByRole("heading", { level: 2, name: "报道时间线" });
+    expect(within(screen.getAllByRole("list", { name: "3月15日 周日的报道" })[0]).getByRole("link", { name: "次日的报道" })).toHaveAttribute("href", "/app/frontier/items/c");
   });
 });
 
@@ -355,8 +488,8 @@ describe("tracking (G12, 2026-10-25)", () => {
     // Public ids as the server makes them (the validator refuses any other shape).
     client.fetchFrontierEvent.mockResolvedValue({ ...base, items: [{ ...base.items[0], id: "a1b2c3d4e5f60718" }, { ...base.items[1], id: "0f1e2d3c4b5a6978" }] });
     renderEvent();
-    const others = await screen.findByRole("list", { name: "其他报道" });
-    await user.click(within(others).getByRole("link", { name: "缓释脂质体注射剂在大鼠中实现持续神经阻滞" }));
+    await screen.findByRole("list", { name: "一手材料" });
+    await user.click(within(document.querySelector<HTMLElement>("[data-event-timeline]")!).getByRole("link", { name: "缓释脂质体注射剂在大鼠中实现持续神经阻滞" }));
     const opens = pendingFrontierEvents().filter((entry) => entry.type === "open");
     // The parties' own text is first on the page, so the other report is the second entry of the list.
     expect(opens.map((entry) => [entry.item, entry.surface, entry.position, entry.list])).toEqual([["0f1e2d3c4b5a6978", "event", 1, null]]);

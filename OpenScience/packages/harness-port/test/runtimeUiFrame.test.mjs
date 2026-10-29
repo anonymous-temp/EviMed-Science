@@ -16,7 +16,7 @@ import { FRAME_BODIES, FRAME_SWITCHABLE_BODIES, FRAME_VOCABULARY, partsSource, r
 import { KIT_PARTS, createFrameKit } from '../src/runtimeUiKit.mjs';
 import { GEOMETRY_KERNEL_PIN } from '../src/runtimeUiShell.mjs';
 import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from '../src/runtimeUiSlots.mjs';
-import { fakeCtx, fakeTarget, kernelSlots, realReact } from './helpers/frameFakes.mjs';
+import { fakeCtx, fakeTarget, kernelSlots, realReact, renderStatic } from './helpers/frameFakes.mjs';
 
 /** The services every hosted page provides, as recording fakes. */
 function services() {
@@ -161,6 +161,22 @@ test('a body the control plane switched off is skipped, and the bridge is not sw
   assert.equal(target.document.head.children.filter((/** @type {any} */ node) => 'data-evimed-shell' in node.attributes).length, 0);
   assert.ok(!ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'sidebar'));
   assert.ok(target.__EVIMED_SHELL__, 'the bridge was skipped with the shell');
+});
+
+test('with the theme disabled, shell marks fall back to native theme text instead of black', () => {
+  let overrides = 0;
+  const ctx = fakeCtx({ ...services(), theme: { overrideTokens: () => { overrides += 1; return () => {}; } } });
+  const { plugin } = loadClient({ off: ['theme'] });
+  plugin.apply(ctx, {});
+  assert.equal(overrides, 0, 'the supported theme-off switch disables token injection');
+  for (const slot of ['sidebar.brand.mark', 'conversation.hero.brand.mark']) {
+    const occupant = ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === slot && entry.component !== 'shipped');
+    assert.ok(occupant, `the shell still occupies ${slot}`);
+    const mark = renderStatic(occupant.component);
+    assert.ok(mark.includes('fill:var(--dsw-specific-brand-ink, var(--dsw-alias-label-primary, currentColor))'),
+      'without the product token the mark follows native light/dark text, then inherited text');
+  }
+  ctx.dispose();
 });
 
 test('a body that throws while starting is logged and the others still start', () => {

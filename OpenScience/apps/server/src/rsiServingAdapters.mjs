@@ -30,8 +30,8 @@ export function parseRsiPolicyCandidate(surface, files) {
   return policy
 }
 /** Immutable inactive versions and phase-specific durable publication receipts. Candidate code is never imported.
- * @param {{config:any,service:any,documents?:any,database:any,supply?:any,store?:any,runtimeManager?:any,sourceChanges?:any,publicationOwnerId?:string,report?:(code:string)=>void}} dependencies */
-export function createRsiServingAdapters({ config, service, database, documents = new ProductDocuments(database), publicationOwnerId = PLATFORM_PUBLISHER_USER_ID, report = () => {} }) {
+ * @param {{config:any,service:any,documents?:any,database:any,supply?:any,store?:any,runtimeManager?:any,sourceChanges?:any,publicationOwnerId?:string,report?:(code:string)=>void,computeClosure?:typeof computeRsiDependencyClosure}} dependencies */
+export function createRsiServingAdapters({ config, service, database, documents = new ProductDocuments(database), publicationOwnerId = PLATFORM_PUBLISHER_USER_ID, report = () => {}, computeClosure = computeRsiDependencyClosure }) {
   let importer = /** @type {any} */ (null)
   let observationReporter = /** @type {any} */ (null)
   /** @type {Record<string, number>} closed failure code -> count */
@@ -74,13 +74,29 @@ export function createRsiServingAdapters({ config, service, database, documents 
     }
     return { revisionId: `default:${rsiDigest(base)}`, policy: base }
   }
+  /** @type {Map<string, Promise<any>>} */
+  const closures = new Map()
+  /** The dependency closure of a surface, computed once per process: the image is immutable while a process runs, and computing it parses
+   * the lockfile in one synchronous stretch (about 300 ms) that every policy read would otherwise repeat inside the activation fence.
+   * A closure that did not qualify may be a transient read, so it is computed again at the next call.
+   * @param {string} surface */
+  async function closureFor(surface) {
+    const known = closures.get(surface)
+    if (known) return known
+    const computing = computeClosure({ rootDir: path.resolve(rootDir), surface, settings: { model: config.frontierModel ?? config.deepseekModel, provider: 'deepseek' } })
+    closures.set(surface, computing)
+    try {
+      const closure = await computing
+      if (!closure?.qualified && closures.get(surface) === computing) closures.delete(surface)
+      return closure
+    } catch (error) { if (closures.get(surface) === computing) closures.delete(surface); throw error }
+  }
   /** @param {string} surface @param {any} client */
   async function currentTarget(surface, client) {
     return fenced(client, async transactionClient => {
       const component = components[surface]
       if (!component) return { surface, qualified: false, dependencyDigest: null, baselineRevision: null, issues: ['campaign_serving_scope_unsupported'] }
-      const closure = await computeRsiDependencyClosure({ rootDir: path.resolve(rootDir), surface,
-        settings: { model: config.frontierModel ?? config.deepseekModel, provider: 'deepseek' } })
+      const closure = await closureFor(surface)
       const baseline = await incumbent(component[0], transactionClient)
       return { surface, ...closure, baselineRevision: baseline.revisionId }
     })

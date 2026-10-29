@@ -69,7 +69,7 @@ it('loads an exact source id without inventing a source row and preserves 404 re
  render(<MemoryRouter><GeoSourceDrawer geoId="g" project={geoProject()} source={{id:'source-2001'}} engine="all" selectionRef="tail-exact" focus={null} onClose={()=>{}}/></MemoryRouter>);
  expect(screen.getByRole('status')).toHaveTextContent('正在读取引用它的回答');
  expect(screen.queryByRole('button',{name:'在对话中处理'})).toBeNull();
- expect(await screen.findByRole('alert')).toBeVisible();expect(screen.getByRole('dialog',{name:'信源'})).toBeVisible();
+ expect(await screen.findByRole('note')).toBeVisible();expect(screen.getByRole('dialog',{name:'信源'})).toBeVisible();
  await userEvent.click(screen.getByRole('button',{name:'重试'}));
  expect(await screen.findByRole('dialog',{name:'Registered source 2001'})).toBeVisible();
  expect(client.getGeoSource).toHaveBeenNthCalledWith(1,'g','source-2001',{selectionRef:'tail-exact'});

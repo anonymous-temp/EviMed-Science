@@ -361,6 +361,7 @@ services:
       OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY:-1}
       OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY:-2}
       OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED: ${OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED:-false}
+      OPEN_SCIENCE_EVOLUTION_SERVING_ONLY: ${OPEN_SCIENCE_EVOLUTION_SERVING_ONLY:-false}
       OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS: ${OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS:-3}
       OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR: ${OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR:-1}
       OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW: ${OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW:-22:00-07:00}
@@ -424,16 +425,13 @@ services:
       # capsule profile, the recall tool and API. Value-less: unset follows
       # OPEN_SCIENCE_MEMORY_ENABLED (config.mjs), so the default stays on.
       OPEN_SCIENCE_MEMORY_RECALL_ENABLED:
-      # 记忆地图: the read-only map of what is remembered (unset follows OPEN_SCIENCE_MEMORY_ENABLED), and the topics a model groups
-      # an account's memories into for its 主题 view (switch, groupings per account per day, memories needed before there is anything
-      # to group).
+      # The memory dashboard's document (总览): the read-only map of what is remembered (unset follows OPEN_SCIENCE_MEMORY_ENABLED), and
+      # the topics a model groups an account's memories into (switch, groupings per account per day, memories needed before there is
+      # anything to group).
       OPEN_SCIENCE_MEMORY_MAP_ENABLED: ${OPEN_SCIENCE_MEMORY_MAP_ENABLED:-}
       OPEN_SCIENCE_MEMORY_TOPICS_ENABLED: ${OPEN_SCIENCE_MEMORY_TOPICS_ENABLED:-true}
       OPEN_SCIENCE_MEMORY_TOPICS_DAILY_RUNS: ${OPEN_SCIENCE_MEMORY_TOPICS_DAILY_RUNS:-4}
       OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES: ${OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES:-12}
-      # The map's 「在做什么」 radar: one Flash call per finished conversation says what kind of work it was (switch, calls per account per day).
-      OPEN_SCIENCE_TASK_TYPE_ENABLED: ${OPEN_SCIENCE_TASK_TYPE_ENABLED:-true}
-      OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS: ${OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS:-60}
       # Publishes an account's memory to whoever holds one of its API keys;
       # off unless a deployment decides otherwise (docs/AGENT_MEMORY_API.md).
       OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:
@@ -494,6 +492,7 @@ services:
       OPEN_SCIENCE_RUN_MAX_STEPS:
       OPEN_SCIENCE_RUN_MAX_TOKENS:
       OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW:
+      OPEN_SCIENCE_RUNTIME_MAX_OUTPUT_TOKENS:
       OPEN_SCIENCE_DELIVERY_ATTEMPT_LIMIT:
       OPEN_SCIENCE_EVIDENCE_STALE_MINUTES:
       OPEN_SCIENCE_SCREENING_BATCH_SIZE:
@@ -526,6 +525,8 @@ services:
       OPEN_SCIENCE_KNOWLEDGE_PAGES_TASK_TIMEOUT_MS:
       OPEN_SCIENCE_KNOWLEDGE_GRAPH_ENABLED:
       OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS:
+      # Whether a project's Compile also reads the account's personal library (off: the project's own materials only).
+      OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY:
       # Whether each readable document's summary and key claims are still written into the capsule's `sources` layer.
       OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED:
       # What the internal source-understanding runs may spend (CNY; 0 = no cap).
@@ -757,6 +758,9 @@ services:
       # A person's general method may join the platform's pack 「大家的做法」 after an independent re-check (2026-10-25): the switch (on) and the methods re-checked in a day (3).
       OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED:
       OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY:
+      # An account is a voice for a method of everyone's only when it is this many days old (14) and has finished this many runs of its own (3).
+      OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS:
+      OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS:
       # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
       OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
       # The most the judging of readers' challenges may spend in a day.
@@ -809,8 +813,13 @@ services:
       OPEN_SCIENCE_GEO_VALUE_PRUNE_PER_TICK:
       OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK:
       OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE:
+      OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES:
+      OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS:
       OPEN_SCIENCE_GEO_SOCIAL_URL:
+      OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE: /run/secrets/geo-social-api-key
+      OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT:
       OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
+      OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS:
       OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
       OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS:
       OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED:
@@ -833,6 +842,17 @@ services:
       OPEN_SCIENCE_VCR_PROVIDER_AGREEMENTS:
       OPEN_SCIENCE_VCR_PROVIDER_AGREEMENT_REFERENCE:
       OPEN_SCIENCE_VCR_CLINICAL_STUDY_IDS:
+      OPEN_SCIENCE_VCR_LOCAL_CONCURRENCY:
+      OPEN_SCIENCE_VCR_COMPLETION_INTERVAL_MS:
+      OPEN_SCIENCE_VCR_COMPLETION_BATCH:
+      OPEN_SCIENCE_VCR_COMPLETION_RECONCILE_BATCH:
+      OPEN_SCIENCE_VCR_COMPLETION_LEASE_MS:
+      OPEN_SCIENCE_VCR_COMPLETION_RETRY_MS:
+      OPEN_SCIENCE_VCR_COMPLETION_RETRY_MAX_MS:
+      OPEN_SCIENCE_VCR_COMPLETION_MAX_ATTEMPTS:
+      OPEN_SCIENCE_VCR_COMPLETION_MAX_AGE_MS:
+      OPEN_SCIENCE_VCR_COMPLETION_RETENTION_MS:
+      OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS:
       OPEN_SCIENCE_VCR_POLL_MS:
       OPEN_SCIENCE_VCR_LEASE_MS:
       OPEN_SCIENCE_VCR_DRAFT_TTL_MINUTES: ${OPEN_SCIENCE_VCR_DRAFT_TTL_MINUTES:-60}
@@ -853,6 +873,27 @@ services:
       # is optional, with job/input identity and output hashes checked always.
       OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
       OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:+/run/secrets/vcr-engine-receipt-key}
+      # The research-database connector (a project's own PostgreSQL, read as a snapshot): it exists only when BOTH are
+      # set. The allowlist is comma-separated host:port=IPv4 entries (the only addresses the control plane will dial);
+      # the keyring is an owner-only JSON file mounted read-only below (/dev/null where the deployment has none, which
+      # leaves the connector off, as an unset path does).
+      OPEN_SCIENCE_RESEARCH_DB_ALLOW: ${OPEN_SCIENCE_RESEARCH_DB_ALLOW:-}
+      OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE: ${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:+/run/secrets/research-db-keyring}
+      # Operator-owned CA certificates, one `<host>.pem` per database whose chain does not end in a public authority (a cloud
+      # provider's own root, a self-signed certificate); /dev/null where there are none, which reads as no directory. The
+      # limits below are value-less: unset, the connector's own defaults (researchDbConfig.mjs, each with its reason).
+      OPEN_SCIENCE_RESEARCH_DB_CA_DIR: ${OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR:+/run/evimed/research-db-ca}
+      OPEN_SCIENCE_RESEARCH_DB_MAX_ROWS:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_COLUMNS:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_CELL_BYTES:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_BYTES:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_TABLES:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_CONCURRENT:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_PER_USER:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_CONNECTIONS:
+      OPEN_SCIENCE_RESEARCH_DB_CONNECTION_MS:
+      OPEN_SCIENCE_RESEARCH_DB_READ_MS:
+      OPEN_SCIENCE_RESEARCH_DB_WIRE_BYTES:
       OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
       OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
       OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
@@ -1113,6 +1154,7 @@ services:
       OPEN_SCIENCE_KB_INDEX_RECONCILE_MS: ${OPEN_SCIENCE_KB_INDEX_RECONCILE_MS:-60000}
       OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS: ${OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_LIBRARY_MAX_ITEMS: ${OPEN_SCIENCE_LIBRARY_MAX_ITEMS:-1000}
+      OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES: ${OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES:-536870912}
       # The GEO probe channel: what the consumer LLM front-ends actually answer.
       # Empty disables it and `geo_visibility_probe` refuses with a stated
       # reason, which is the right answer for a deployment that cannot measure
@@ -1342,6 +1384,11 @@ services:
         source: ${OPEN_SCIENCE_TYPESAFE_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/typesafe-api-key
         read_only: true
+      # Social collector credential belongs only to the control plane.
+      - type: bind
+        source: ${OPEN_SCIENCE_GEO_SOCIAL_API_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/geo-social-api-key
+        read_only: true
       # The media marketplace's key (owner-only, like the others). Optional: a
       # deployment without one binds /dev/null and no order leaves the host.
       - type: bind
@@ -1359,6 +1406,19 @@ services:
         source: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/vcr-engine-receipt-key
         read_only: true
+      # The research-database keyring (JSON `{activeId, keys}`, 32-byte base64 keys named by their SHA-256): owned by the
+      # web user, mode 0600. It is read by the web service alone and is not derived from any other secret.
+      - type: bind
+        source: ${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:-/dev/null}
+        target: /run/secrets/research-db-keyring
+        read_only: true
+      # The research-database CA directory (public certificates only, `<host>.pem`): read-only, owned by the operator.
+      - type: bind
+        source: ${OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR:-/dev/null}
+        target: /run/evimed/research-db-ca
+        read_only: true
+        bind:
+          create_host_path: false
       # Root-owned 0644 evidence from import-vcr-method-validation.mjs --install.
       # Never shared with the engine or a project runtime; unset stays unmeasured.
       - type: bind
@@ -2275,6 +2335,7 @@ services:
       OPEN_SCIENCE_RUN_MAX_STEPS:
       OPEN_SCIENCE_RUN_MAX_TOKENS:
       OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW:
+      OPEN_SCIENCE_RUNTIME_MAX_OUTPUT_TOKENS:
       OPEN_SCIENCE_DELIVERY_ATTEMPT_LIMIT:
       OPEN_SCIENCE_EVIDENCE_STALE_MINUTES:
       OPEN_SCIENCE_SCREENING_BATCH_SIZE:

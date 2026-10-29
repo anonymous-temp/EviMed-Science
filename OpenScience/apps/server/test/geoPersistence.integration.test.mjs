@@ -16,6 +16,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GEO_SCHEMA, GEO_TABLES, migrateGeo } from "../src/geoPersistence.mjs";
 import { geoScreenshotFile } from "../src/geoScreenshots.mjs";
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "../src/geoStore.mjs";
+import { GeoProbeRequests } from "../src/geoProbeRequests.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -288,4 +289,49 @@ test("every GEO read runs under the store's statement timeout", options, async (
   assert.ok(Date.now() - started < 2_500);
   assert.deepEqual((await store.query("SELECT 1 AS one")).rows, [{ one: 1 }]);
   assert.throws(() => new GeoStore({ database, statementTimeoutMs: 0 }), TypeError);
+});
+
+test("the probe tasks a runtime was given are read back only by the account and project that asked, expire, and go with the project or the account", options, async () => {
+  const database = open();
+  await migrateGeo(database);
+  let at = new Date("2026-10-28T00:00:00Z");
+  const requests = new GeoProbeRequests(database, { keepHours: 24, now: () => at });
+  const [alice, bob] = [own("alice-probe"), own("bob-probe")];
+  const id = (/** @type {string} */ digit) => digit.repeat(32);
+  const task = (/** @type {string} */ digit, /** @type {string} */ userId, /** @type {string} */ projectId, extra = {}) =>
+    ({ requestId: id(digit), userId, projectId, question: "速效救心丸可以长期服用吗？", providers: ["deepseek", "kimi"], deep: /** @type {0 | 1} */ (0), newChat: /** @type {0 | 1} */ (1), ...extra });
+  const count = async (/** @type {string} */ where = "true") => Number((await database.query(`SELECT count(*)::integer AS n FROM evimed_geo.probe_requests WHERE ${where}`)).rows[0].n);
+
+  await requests.record(task("a", alice, "p-one"));
+  assert.deepEqual(await requests.lookup({ requestId: id("a"), userId: alice, projectId: "p-one" }),
+    { requestId: id("a"), question: "速效救心丸可以长期服用吗？", providers: ["deepseek", "kimi"], deep: 0, newChat: 1, acceptedAt: "2026-10-28T00:00:00.000Z" });
+  // Another account's, and another project's, is no more found than an id never accepted.
+  assert.equal(await requests.lookup({ requestId: id("a"), userId: bob, projectId: "p-one" }), null);
+  assert.equal(await requests.lookup({ requestId: id("a"), userId: alice, projectId: "p-two" }), null);
+  assert.equal(await requests.lookup({ requestId: id("b"), userId: alice, projectId: "p-one" }), null);
+  // The same id again keeps the first row: a task is recorded for whoever it was accepted for.
+  await requests.record(task("a", bob, "p-one", { question: "another" }));
+  assert.equal((await requests.lookup({ requestId: id("a"), userId: alice, projectId: "p-one" }))?.question, "速效救心丸可以长期服用吗？");
+  assert.equal(await requests.lookup({ requestId: id("a"), userId: bob, projectId: "p-one" }), null);
+
+  // Past the retention a row is not found, and the next one recorded sweeps it away.
+  at = new Date("2026-10-29T00:00:01Z");
+  assert.equal(await requests.lookup({ requestId: id("a"), userId: alice, projectId: "p-one" }), null);
+  assert.equal(await count(`user_id = '${alice}'`), 1);
+  await requests.record(task("c", alice, "p-one"));
+  assert.equal(await count(`request_id = '${id("a")}'`), 0, "the expired row was pruned");
+  assert.equal((await requests.lookup({ requestId: id("c"), userId: alice, projectId: "p-one" }))?.requestId, id("c"));
+
+  // The runtime's project need not be a GEO project: its deletion still takes its tasks, and only its own.
+  await requests.record(task("d", alice, "p-two"));
+  await requests.record(task("e", bob, "p-one"));
+  assert.deepEqual(await database.transaction((client) => deleteGeoProjectRows(client, alice, "p-one")), { projects: 0, screenshots: [] });
+  assert.equal(await requests.lookup({ requestId: id("c"), userId: alice, projectId: "p-one" }), null);
+  assert.ok(await requests.lookup({ requestId: id("d"), userId: alice, projectId: "p-two" }), "another project of the account keeps its tasks");
+  assert.ok(await requests.lookup({ requestId: id("e"), userId: bob, projectId: "p-one" }), "another account keeps its tasks");
+  // An account's deletion takes all of its tasks.
+  await database.transaction((client) => deleteGeoUserRows(client, alice));
+  assert.equal(await count(`user_id = '${alice}'`), 0);
+  assert.equal(await count(`user_id = '${bob}'`), 1);
+  assert.throws(() => new GeoProbeRequests(/** @type {any} */ (null)), TypeError);
 });

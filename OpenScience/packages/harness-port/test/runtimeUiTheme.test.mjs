@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
-import { apply, BODY, evimedFontFaces, evimedThemeTokens, THEME_LAYER_SOURCE } from '../src/runtimeUiTheme.mjs';
+import { apply, BODY, fieldFocusStylesheet, evimedFontFaces, evimedThemeTokens, THEME_LAYER_SOURCE } from '../src/runtimeUiTheme.mjs';
 import { fakeCtx, fakeTarget, kitFor } from './helpers/frameFakes.mjs';
 import { CJK_PUNCT_FACES } from '@evimed/design-tokens'
 import { cjkPunctFontFaceCss } from '@evimed/design-tokens/css'
@@ -285,7 +285,7 @@ test('the font faces taken from the vocabulary are local @font-face rules and no
   const target = fakeTarget();
   const kit = kitFor(ctx, target);
   apply(ctx, {}, target, undefined, { ...kit, vocabulary: { ...kit.vocabulary, fontFaces: '' } });
-  assert.equal(target.document.head.children.length, 0);
+  assert.equal(target.document.head.children.filter((/** @type {any} */ node) => 'data-evimed-fonts' in node.attributes).length, 0);
 });
 
 test('outside a frame, or without a theme service, the body does nothing', () => {
@@ -294,9 +294,30 @@ test('outside a frame, or without a theme service, the body does nothing', () =>
   const outside = fakeTarget({ framed: false });
   apply(plain, {}, outside, undefined, kitFor(plain, outside));
   assert.equal(plain.theme.layers.size, 0);
+  assert.equal(outside.document.head.children.length, 0);
   const bare = fakeCtx();
   const target = fakeTarget();
   assert.doesNotThrow(() => apply(bare, {}, target, undefined, kitFor(bare, target)));
+  assert.equal(target.document.head.children.filter((/** @type {any} */ node) => 'data-evimed-field-focus' in node.attributes).length, 0);
   assert.equal(BODY.name, 'theme');
   assert.deepEqual([...BODY.inject], [], 'the theme service is optional; requiring it would park the whole plugin');
+});
+
+
+test('field focus belongs to the theme lifecycle and serializes without imports', () => {
+  const ctx = fakeCtx();
+  ctx.theme = themeRuntime(ctx);
+  const target = fakeTarget();
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  const styles = target.document.head.children.filter((/** @type {any} */ node) => 'data-evimed-field-focus' in node.attributes);
+  assert.equal(styles.length, 1);
+  assert.equal(styles[0].textContent, fieldFocusStylesheet());
+  assert.doesNotMatch(fieldFocusStylesheet(), /box-shadow|border:|dsw-focus-ring-color/);
+  assert.match(fieldFocusStylesheet(), /Highlight !important/);
+  // The ring has a colour whatever the theme body defines: identity ink, else the native primary text, else the system highlight.
+  assert.match(fieldFocusStylesheet(), /outline: 2px solid var\(--dsw-specific-brand-ink, var\(--dsw-alias-label-primary, Highlight\)\) !important;/);
+  const serialized = Function(`${BODY.parts.map((part) => part.toString()).join('\n')}\nreturn fieldFocusStylesheet();`)();
+  assert.equal(serialized, fieldFocusStylesheet());
+  ctx.dispose();
+  assert.equal(target.document.head.children.length, 0);
 });

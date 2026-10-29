@@ -7,8 +7,6 @@ import {
   frontierErrorMessage,
   type FrontierBody,
   type FrontierBrief,
-  type FrontierInsight,
-  type FrontierInsightRef,
   type FrontierItem,
   type FrontierItemDetail,
   type FrontierMedia,
@@ -39,6 +37,7 @@ import {
   SCORE_LABEL,
   dateClock,
   evidenceTag,
+  industryKindTag,
   isSocialItem,
   originalLinkLabel,
   sameAddress,
@@ -54,15 +53,18 @@ import {
 /*
  * The article reader's blocks (owner, 2026-10-22: the reader reads like AIHOT's detail page — AI 导读, 推荐理由 with AI 评分, the full
  * text with its AI translation and a 中文 / 原文 switch, the pictures, the quoted post, 专科 and 标签, 事件后续; later that evening the
- * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supports one, and a full text with its sections;
+ * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supported one (deleted 2026-10-27, below), and a full text with its sections;
  * 2026-10-23 the right column of actions and notes, a text that reads its addresses, lists and quotes, and a reading size).
  * The shapes follow AIHOT's `routes/item.tsx` and `features/item/*` (MIT). The type is EviMed's, set again on 2026-10-26 (owner:
  * 「字体大小 间距啥的都再处理处理」 — the three AI blocks were 20, 16 and 18 px side by side on a wide screen): the title in the sans at 24 / 600,
- * balanced; the 导读 at 18 and the 要点 and 解读 at 16 at every width, all at 1.8 and in one 640 px measure (about 36 characters); the
+ * balanced; the 导读 at 18 and the 要点 at 16 at every width, all at 1.8 and in one 640 px measure (about 36 characters); the
  * interface at 14 and every block's label at 12, all 400 — a block is named by its colour, not a weight. The text itself is a view of
- * its own (owner, 2026-10-26: 「查看正文，在右上角地方啥的就行了，不要再弄到 AI 解读的下边去了」): 「查看正文」 at the head of the right
- * column swaps the AI blocks for the whole text, at 16 and 18 from 1280 px, with one 600 in it — the run-in heading of a structured
- * abstract's paragraph (「Background:」), as a journal sets it.
+ * its own (owner, 2026-10-26: 「查看正文，在右上角地方啥的就行了，不要再弄到 AI 解读的下边去了」): the second option of the toolbar's
+ * 「AI 导读 | 查看正文」 swaps the AI blocks for the whole text, at 16 and 18 from 1280 px, with one 600 in it — the run-in heading of a
+ * structured abstract's paragraph (「Background:」), as a journal sets it. On 2026-10-27 (owner, after the box of five controls in the
+ * column's corner and a 「就此提问」 list under it) the actions became one toolbar row under the title, the right column starts at 推荐理由,
+ * and the questions are the chips of 「继续追问」 at the article's end; and 「AI 解读」 was deleted with its pipeline step and its field of
+ * the item API (owner: it said again what the 导读 and the 要点 say, in a third block).
  *
  * Every block is drawn from what the server sent and only that: a field it could not fill is null and its block is not on the page.
  */
@@ -180,6 +182,8 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
   const evidence = bylineEvidence(item);
   // What the item is (ct-write 2026-10-24): its genre, except a safety alert's, which 「安全警示」 says already.
   const genre = item.safetyAlert && item.genre === "safety" ? null : item.genreLabel;
+  // 行业动态 says its kind beside the genre (c5-biz 2026-10-26).
+  const kind = industryKindTag(item);
   const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
   const parts = [
     <span key="name" className="text-text">{name}</span>,
@@ -202,6 +206,7 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
       ))}
       {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
       {genre && <Tag>{genre}</Tag>}
+      {kind && <Tag>{kind}</Tag>}
       {evidence && <Tag>{evidence}</Tag>}
       {item.practice && <Tag tone="accent">{PRACTICE_LABEL}</Tag>}
     </div>
@@ -220,16 +225,18 @@ export function bylineEvidence(item: FrontierItem): string | null {
   return item.evidenceType && GENRE_SAYS_EVIDENCE.has(item.evidenceType) ? null : evidenceTag(item);
 }
 
-/** The name of a block the model wrote (「AI 导读」, 「AI 解读」): in the accent, where every other block names itself in grey. */
+/** The name of a block the model wrote (「AI 导读」, 「AI 要点」): in the accent, where every other block names itself in grey. */
 const AI_LABEL = "text-caption text-accent";
 
 /**
  * 「AI 导读」: one paragraph, answer first, a size above the 要点 (18 at every width, at 1.8) — the first thing read, and plainly not the
  * article.
  */
-export function ReaderLead({ text, className }: { text: string; className?: string }) {
+export function ReaderLead({ text, className, named = false }: { text: string; className?: string; named?: boolean }) {
+  // `named`: the toolbar's 「AI 导读」 tab already names this view right above it (owner, 2026-10-27: the same words twice read as
+  // two things), so the heading is for a screen reader only.
   return (
-    <Block label="AI 导读" labelClassName={AI_LABEL} className={className}>
+    <Block label="AI 导读" labelClassName={named ? "sr-only" : AI_LABEL} className={className}>
       <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-pretty text-reading-lg text-text">{text}</p>
     </Block>
   );
@@ -238,115 +245,57 @@ export function ReaderLead({ text, className }: { text: string; className?: stri
 const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
 
 /**
- * 「AI 要点」 (ct-write 2026-10-24): under the 导读, the item's facts as the fields its genre is read by — a paper's 研究问题, 设计与对象,
- * 主要结果, 安全性, 局限; a policy's 发文机关与文号, 核心内容, 适用对象, 时间节点; a deal's 事件, 交易与金额, 资产与阶段 — one label and its
- * sentence (or its few items) per row, the label in the block-label grey and the words at the reading size. The source's own words
- * (作者结论, 推荐意见, 警示原文 …) close it as a quotation, the original as written and its Chinese under it; a reading of another report
- * opens with 「解读的研究」, which is that report's article.
+ * 「AI 要点」 (ct-write 2026-10-24; a soft panel since 2026-10-27, owner: the old one was a table of ruled rows with the label in a
+ * column of its own and the words beside it): under the 导读, the item's facts as the fields its genre is read by — a paper's 研究问题,
+ * 设计与对象, 主要结果, 安全性, 局限; a policy's 发文机关与文号, 核心内容, 适用对象, 时间节点; a deal's 事件, 交易与金额, 资产与阶段.
+ * One rounded panel on the page's one grey step (`surface-1`, no border), the fields stacked — the label as a caption over its words
+ * at the reading size, a faint rule between two fields — with a few items as compact bullets whose marks are the accent, and the numbers
+ * tabular. The source's own words (作者结论, 推荐意见, 警示原文 …) close the panel as a quotation with a thin rule at its left, the
+ * original as written and its Chinese under it; a reading of another report opens with 「解读的研究」, which is that report's article.
  */
 export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; item: FrontierItemDetail; className?: string }) {
   const origin = useFrontierOrigin();
   const location = useLocation();
   const state = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: item.title } };
   const quoteLang = brief.quote && brief.quote.zh && item.lang !== "und" ? item.lang : undefined;
-  // The report a reading reads, as its own article, with the reading's own words about it under the link: one row, not two.
+  // The report a reading reads, as its own article, with the reading's own words about it under the link: one field, not two.
   const subject = brief.about ? brief.points.find((point) => point.key === "subject") ?? null : null;
   const points = subject ? brief.points.filter((point) => point !== subject) : brief.points;
+  const fields = Boolean(brief.about) || points.length > 0;
   return (
     <Block label="AI 要点" labelClassName={AI_LABEL} className={className}>
-      <dl data-prose="" className="max-w-measure-body">
-        {brief.about && (
-          <div className="grid gap-x-4 gap-y-0.5 border-b border-faint py-3 first:pt-0 sm:grid-cols-[6rem_1fr]">
-            <dt className="text-caption text-text-3 sm:pt-1">解读的研究</dt>
-            <dd className="min-w-0 break-words text-reading text-text">
-              <Link to={articlePath(brief.about.publicId)} state={state} className="rounded text-link hover:underline">《{brief.about.title}》</Link>
-              {subject?.text && <p className="mt-1 text-text-2">{subject.text}</p>}
-            </dd>
-          </div>
-        )}
-        {points.map((point) => (
-          <div key={point.key} className="grid gap-x-4 gap-y-0.5 border-b border-faint py-3 first:pt-0 last:border-b-0 sm:grid-cols-[6rem_1fr]">
-            <dt className="text-caption text-text-3 sm:pt-1">{point.label}</dt>
-            <dd className="min-w-0 break-words text-reading text-text">
-              {point.text ?? (point.items.length === 1 ? point.items[0] : (
-                <ul className="list-disc space-y-1 pl-5">{point.items.map((entry, index) => <li key={index}>{entry}</li>)}</ul>
-              ))}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {brief.quote && (
-        <figure className="mt-4 max-w-measure-body border-l-2 border-border pl-4">
-          <figcaption className="text-caption text-text-3">{brief.quote.label}</figcaption>
-          <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
-          {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
-        </figure>
-      )}
-    </Block>
-  );
-}
-
-/** A piece of the 解读's paragraph: its own words, or a report it cites. */
-export type InsightPart = string | FrontierInsightRef;
-
-/**
- * The 解读's paragraph as words and citations: `[n]` (ASCII brackets, n from 1) that names one of its refs is that ref; one that names
- * none stays the words it is, so a number the server sent no report for is never a dead link.
- */
-export function insightParts(text: string, refs: readonly FrontierInsightRef[]): InsightPart[] {
-  const byNumber = new Map(refs.map((ref) => [ref.n, ref]));
-  const parts: InsightPart[] = [];
-  let rest = 0;
-  for (const match of text.matchAll(/\[(\d{1,2})\]/g)) {
-    const ref = byNumber.get(Number(match[1]));
-    if (!ref) continue;
-    if (match.index > rest) parts.push(text.slice(rest, match.index));
-    parts.push(ref);
-    rest = match.index + match[0].length;
-  }
-  if (rest < text.length) parts.push(text.slice(rest));
-  return parts;
-}
-
-/**
- * 「AI 解读」: what the item means, in one paragraph, for an item whose material supports it — most have none and the block is not
- * there. A report it relies on is a small superscript link to its own article, named by its title for a screen reader; under the
- * paragraph the reports it cites, one row each — title, who published it, how long ago — each opening its article, whose way back
- * returns here.
- */
-export function ReaderInsight({ insight, item, className }: { insight: FrontierInsight; item: FrontierItemDetail; className?: string }) {
-  const origin = useFrontierOrigin();
-  const location = useLocation();
-  const state = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: item.title } };
-  const parts = insightParts(insight.text, insight.refs);
-  const cited = insight.refs.filter((ref) => parts.includes(ref));
-  return (
-    <Block label="AI 解读" labelClassName={AI_LABEL} className={className}>
-      <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-pretty text-reading text-text">
-        {parts.map((part, index) => (typeof part === "string" ? part : (
-          <sup key={index} className="text-caption leading-none">
-            {/* One line of 12 px text with the page's corner: the look of the quoted post's 「原文」, so a citation is not a kind of
-              * control of its own beside the reader's others (the release walk counts them; a post with all its blocks has 9). The
-              * size is the sup's own: the base sheet's 75% of a 16 px paragraph is 12 px, and the scale's 12 says so. */}
-            <Link to={articlePath(part.publicId)} state={state} aria-label={part.title}
-              className="inline-block rounded px-px leading-none tabular-nums text-link hover:underline">[{part.n}]</Link>
-          </sup>
-        )))}
-      </p>
-      {cited.length > 0 && (
-        <List label="解读引用的报道" className="mt-3 max-w-measure-body">
-          {cited.map((ref) => (
-            <ListRow
-              key={ref.n}
-              to={articlePath(ref.publicId)}
-              state={state}
-              title={ref.title}
-              leading={<span className="w-5 text-caption tabular-nums text-text-3">{ref.n}</span>}
-              meta={[ref.source, sinceText(ref.at)].filter(Boolean).join(" · ") || undefined}
-            />
+      <div data-prose="" className="max-w-measure-body rounded-card bg-surface-1 px-5">
+        {/* One rule for the page (owner, 2026-10-27; the walk counts border kinds): the panel's dividers are the hairline the right
+            column's blocks and the ruled sections use, and the quote has no rule of its own — its label sets it apart. */}
+        <dl className="divide-y divide-border">
+          {brief.about && (
+            <div className="py-4">
+              <dt className={LABEL}>解读的研究</dt>
+              <dd className="mt-1 min-w-0 break-words text-reading tabular-nums text-text">
+                <Link to={articlePath(brief.about.publicId)} state={state} className="rounded text-link hover:underline">《{brief.about.title}》</Link>
+                {subject?.text && <p className="mt-1 text-text-2">{subject.text}</p>}
+              </dd>
+            </div>
+          )}
+          {points.map((point) => (
+            <div key={point.key} className="py-4">
+              <dt className={LABEL}>{point.label}</dt>
+              <dd className="mt-1 min-w-0 break-words text-reading tabular-nums text-text">
+                {point.text ?? (point.items.length === 1 ? point.items[0] : (
+                  <ul className="list-disc space-y-1 pl-5 marker:text-accent">{point.items.map((entry, index) => <li key={index}>{entry}</li>)}</ul>
+                ))}
+              </dd>
+            </div>
           ))}
-        </List>
-      )}
+        </dl>
+        {brief.quote && (
+          <figure className={cn("py-4", fields && "border-t border-border")}>
+            <figcaption className={LABEL}>{brief.quote.label}</figcaption>
+            <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
+            {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
+          </figure>
+        )}
+      </div>
     </Block>
   );
 }
@@ -797,7 +746,8 @@ const hasVerdict = (item: FrontierItemDetail) => !item.sameEvent && Boolean(item
 function RailBlock({ label, children }: { label: string; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="border-t border-border pt-3.5">
+    // The column's first block stands on the back row's line: no rule over it (the actions that used to head the column are the toolbar's).
+    <section aria-labelledby={id} className="border-t border-border pt-3.5 first:border-t-0 first:pt-0">
       <h2 id={id} className={LABEL}>{label}</h2>
       <div className="mt-2.5">{children}</div>
     </section>
@@ -857,11 +807,11 @@ export function ReaderNotes({ item, reports, outline }: { item: FrontierItemDeta
   );
 }
 
-/** The switch between the AI blocks and the text: what the button says, whether the text is open, and how to change it. */
+/** The switch between the AI blocks and the text: what the text's option says, whether the text is open, and how to change it. */
 export interface ReaderViewSwitch {
   /**
-   * 「查看正文」「查看摘要」「查看全文」: by what the text is (`readerTextKind`). The button names what it opens — 「AI 解读」 while the
-   * text is open — and carries no pressed state, which would say the opposite of its label (c4 review).
+   * 「查看正文」「查看摘要」「查看全文」: by what the text is (`readerTextKind`). It is the second option of the toolbar's switch beside
+   * 「AI 导读」, and the bottom bar's button names what it opens — 「AI 导读」 while the text is open.
    */
   label: string;
   text: boolean;
@@ -869,71 +819,82 @@ export interface ReaderViewSwitch {
 }
 
 /**
- * The right column's head (owner, 2026-10-26: 「查看正文，在右上角」): the two ways to the text side by side — 「查看正文」, which swaps
- * the AI blocks for the whole text (and reads 「AI 解读」 while it is open), and 「打开原文 ↗」, the publisher's page (a post's 「在 X 查看原帖
- * ↗」 alone, where the post is on the page already) — then 「深入研究」, the page's one primary button, with ☆ and ⋯ beside it. Its top is
- * the back row's.
+ * The reader's actions, at the right end of the page's one toolbar row (owner, 2026-10-27: the box in the column's top corner held five
+ * controls in two rows and a switch; the row is 「AI 导读 | 查看正文」 at the left and these at the right): 「打开原文 ↗」, the publisher's
+ * page (a post's 「在 X 查看原帖 ↗」, where the post is on the page already), ☆ and ⋯; 「深入研究」, the page's one primary button, is
+ * the title row's (`ReaderResearch`).
+ * The row stands in the band above the text, so ☆ and ⋯ act on the article and not on a list in its text (the walk's
+ * control-after-content read the old rail's ☆ as the text's list control, 2026-10-24).
  */
-export function ReaderActions({ item, more, onStar, onResearch, view }: {
+export function ReaderActions({ item, more, onStar }: {
   item: FrontierItem;
   more: MenuEntry[];
   onStar: () => void;
-  onResearch: () => void;
-  view?: ReaderViewSwitch | null;
 }) {
   const starred = item.state.starred;
-  // A section of its own: ☆ and ⋯ act on the article, not on a list in its text that comes before them in the document (the walk's
-  // control-after-content read the rail's ☆ as the text's list control, 2026-10-24).
   return (
-    <section aria-label="文章操作" className="space-y-2">
-      <div className="flex items-center gap-2">
-        {view && (
-          <Button variant="secondary" className="min-w-0 flex-1" onClick={view.onToggle}>
-            {view.text ? <Sparkles size={16} aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />}
-            <span className="truncate">{view.text ? "AI 解读" : view.label}</span>
-          </Button>
-        )}
-        <a href={item.url} {...EXTERNAL} className={buttonClasses({ variant: "secondary", className: "min-w-0 flex-1" })}>
-          <span className="truncate">{originalLinkLabel(item)}</span><ArrowUpRight size={16} aria-hidden="true" />
-        </a>
-      </div>
-      <div className="flex items-center gap-1">
-        <Button variant="primary" className="min-w-0 flex-1" onClick={onResearch}>
-          <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">深入研究</span>
-        </Button>
-        <IconButton icon={Star} label="收藏" aria-pressed={starred} className={starred ? "text-accent [&_svg]:fill-current" : undefined} onClick={onStar} />
-        <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
-      </div>
-    </section>
+    <div role="group" aria-label="文章操作" className="flex items-center gap-1">
+      <a href={item.url} {...EXTERNAL} className={buttonClasses({ variant: "secondary" })}>
+        <span className="truncate">{originalLinkLabel(item)}</span><ArrowUpRight size={16} aria-hidden="true" />
+      </a>
+      <IconButton icon={Star} label="收藏" aria-pressed={starred} className={starred ? "text-accent [&_svg]:fill-current" : undefined} onClick={onStar} />
+      <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
+    </div>
   );
 }
 
 /**
- * 「就此提问」 (c3-ask): the questions a reader of this item would put to the assistant, each a row that opens the conversation with the
- * question as a draft and the item as its origin, and 「自己提问…」, which opens it with the item alone. In the right column under the
- * actions on a wide screen, and at the end of the article on a narrow one. The questions are the server's; with none the block is the
- * reader's own question alone.
+ * 「深入研究」, the reader's one primary action, in the title's row (the header's `actions`) as on every page: the walk's
+ * primary-action rule read it at 148 px in the toolbar row under the title (fixture walk, 2026-10-27).
  */
-export function ReaderAsk({ questions, onAsk, layout, className }: {
+export function ReaderResearch({ onResearch }: { onResearch: () => void }) {
+  return (
+    <Button variant="primary" onClick={onResearch}>
+      <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">深入研究</span>
+    </Button>
+  );
+}
+
+/** One question of 「继续追问」: a chip that holds one line, cut with 「…」 where the room is short, its whole text on hover. */
+function AskChip({ text, onAsk }: { text: string; onAsk: () => void }) {
+  return (
+    <Tooltip content={text} kind="label" whenTruncated>
+      <button type="button" onClick={onAsk} className={cn(filterChipClasses({ selected: true }), "min-w-0 max-w-full shrink")}>
+        <span className="truncate">{text}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * 「继续追问」 (c3-ask; a block of the article since 2026-10-27, after it was a 「就此提问」 list of rows in the right column): the
+ * questions a reader of this item would put to the assistant, each a chip that opens the conversation with the question as a draft and
+ * the item as its origin, and 「自己提问…」, which opens it with the item alone. At the end of the article, after what the AI view says
+ * and its 事件后续, at every width. The questions are the server's; with none the block is the reader's own question alone.
+ */
+export function ReaderAsk({ questions, onAsk, className }: {
   questions: readonly string[];
   /** A question of the item's, or null for the reader's own. */
   onAsk: (question: string | null) => void;
-  layout: "rail" | "article";
   className?: string;
 }) {
-  return layout === "rail"
-    ? <RailBlock label="就此提问"><AskRows questions={questions} onAsk={onAsk} flush /></RailBlock>
-    : <Block ruled label="就此提问" className={className}><AskRows questions={questions} onAsk={onAsk} /></Block>;
+  return (
+    <Block ruled label="继续追问" className={className}>
+      <ul aria-label="可以问的问题" className="flex flex-wrap gap-2">
+        {questions.map((question) => <li key={question} className="flex min-w-0 max-w-full"><AskChip text={question} onAsk={() => onAsk(question)} /></li>)}
+        <li className="flex"><AskChip text="自己提问…" onAsk={() => onAsk(null)} /></li>
+      </ul>
+    </Block>
+  );
 }
 
 /**
  * The rows of 就此提问 without a heading, for a page that sets its own (the event page's 「概要」 and 「一手材料」 are section headings):
- * each question opens the conversation with it as the draft, and 「自己提问…」 with the item alone. `flush` lets the rows' own padding
- * hang outside the column so their text lines up with the heading above (the right column's).
+ * each question opens the conversation with it as the draft, and 「自己提问…」 with the item alone.
  */
-export function AskRows({ questions, onAsk, flush = false }: { questions: readonly string[]; onAsk: (question: string | null) => void; flush?: boolean }) {
+export function AskRows({ questions, onAsk }: { questions: readonly string[]; onAsk: (question: string | null) => void }) {
   return (
-    <List divided label="可以问的问题" className={flush ? "-mx-2" : undefined}>
+    <List divided label="可以问的问题">
       {questions.map((question) => <ListRow key={question} title={question} onOpen={() => onAsk(question)} />)}
       <ListRow title={<span className="text-text-2">自己提问…</span>} onOpen={() => onAsk(null)} />
     </List>
@@ -966,7 +927,7 @@ const BAR_TOOL = "flex flex-col items-center justify-center gap-0.5 rounded text
 
 /**
  * Below 1024 px the article's own bar at the window's bottom (AIHOT `ReaderTools`, MIT): 收藏, the switch to the text (「正文」, then
- * 「AI 解读」) where there is one, 深入研究, the way to the original and ⋯. It steps aside while the reader scrolls down through the text
+ * 「AI 导读」) where there is one, 深入研究, the way to the original and ⋯. It steps aside while the reader scrolls down through the text
  * and comes back on the way up and at either end.
  */
 export function ReaderBar({ item, more, onStar, onResearch, view }: {
@@ -994,7 +955,7 @@ export function ReaderBar({ item, more, onStar, onResearch, view }: {
         </button>
         {view && (
           <button type="button" onClick={view.onToggle} className={BAR_TOOL}>
-            {view.text ? <Sparkles size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}{view.text ? "AI 解读" : view.label.replace(/^查看/, "")}
+            {view.text ? <Sparkles size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}{view.text ? "AI 导读" : view.label.replace(/^查看/, "")}
           </button>
         )}
         <button type="button" onClick={onResearch} className={BAR_TOOL}>

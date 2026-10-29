@@ -33,6 +33,7 @@ import {
   parseReferenceEntry,
   referenceIdentifiers,
   referenceListBounds,
+  reportLanguage,
 } from '@evimed/domain/clinical-evidence'
 
 /** The clinical contract's two files, as the contract registry names them. */
@@ -54,8 +55,19 @@ export const CLAIM_BATCH_LIMIT = 60
 /** The claim-id shape the gate accepts. */
 const CLAIM_ID = /^CLM-(\d{3,6})$/
 
-/** The heading a rebuilt reference list gets when the report had none. */
-const DEFAULT_REFERENCE_HEADING = '## 参考文献'
+/**
+ * The heading a rebuilt reference list gets when the report had none: in the report's own language. It was always
+ * `## 参考文献`, so an English review the person asked for in English ended under a Chinese heading (2026-10-27).
+ * The language is the gate's own (`reportLanguage`, which counts Han characters outside code, tables, comments and
+ * addresses against Latin letters at a share of 0.2): this file used to keep a second rule with a different threshold
+ * (Han >= Latin), so a report the gate read as Chinese could be given an English heading and be told its sections
+ * were in two languages (2026-10-28).
+ * @param {string} prose
+ * @returns {string}
+ */
+export function defaultReferenceHeading(prose) {
+  return reportLanguage(prose) === 'en' ? '## References' : '## 参考文献'
+}
 
 /**
  * A matrix read from disk: `{ claims: [...] }` with every other root field
@@ -314,7 +326,7 @@ export function renderClinicalReport({ reportText, matrix = null }) {
     // Offsets moved with the rewritten citations before the list; the list
     // holds none of them, so it is found again rather than recomputed.
     const proseBounds = referenceListBounds(prose)
-    const heading = bounds ? text.slice(bounds.headingStart, bounds.headingEnd) : DEFAULT_REFERENCE_HEADING
+    const heading = bounds ? text.slice(bounds.headingStart, bounds.headingEnd) : defaultReferenceHeading(prose)
     const section = [heading, '', ...preface, ...(preface.length ? [''] : []), ...lines, ''].join('\n')
     if (proseBounds) {
       const tail = prose.slice(proseBounds.end)

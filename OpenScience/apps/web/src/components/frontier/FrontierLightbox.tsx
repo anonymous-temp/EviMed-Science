@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { trapTab } from "@/lib/focusTrap";
+import { isTopFocusLayer, registerFocusLayer, trapTab } from "@/lib/focusTrap";
 import { IconButton } from "@/components/ui/IconButton";
 import type { FrontierMedia } from "@/lib/frontierClient";
 
@@ -24,8 +24,10 @@ export function FrontierLightbox({ media, index, onIndex, onClose }: {
   useEffect(() => {
     if (!open) return undefined;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const unregister = registerFocusLayer(panel.current);
     panel.current?.focus();
     const key = (event: KeyboardEvent) => {
+      if (!isTopFocusLayer(panel.current)) return;
       const { index: at, count, onIndex: go, onClose: close } = state.current;
       if (event.key === "Escape") { event.stopPropagation(); close(); return; }
       if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && at !== null && count > 1) {
@@ -36,7 +38,7 @@ export function FrontierLightbox({ media, index, onIndex, onClose }: {
       trapTab(panel.current, event);
     };
     document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("keydown", key); trigger?.focus(); };
+    return () => { unregister(); document.removeEventListener("keydown", key); trigger?.focus(); };
   }, [open]);
 
   if (!open || index === null) return null;

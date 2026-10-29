@@ -1,0 +1,3 @@
+# Frozen acceptance inputs are hashed as bytes, including their line endings.
+OpenScience/evals/statistical-analysis/live/fixtures/* -text
+OpenScience/evals/statistical-analysis/live/fixtures/*.csv whitespace=cr-at-eol

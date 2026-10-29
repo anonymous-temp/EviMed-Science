@@ -1,3 +1,4 @@
+import { InlineAlert } from "@/components/ui/InlineAlert";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { LogOut } from "lucide-react";
@@ -34,6 +35,8 @@ interface WebAccount {
  */
 export function AccountSection() {
   const navigate = useNavigate();
+  const [readError, setReadError] = useState<string | null>(null);
+  const [readAttempt, setReadAttempt] = useState(0);
   const [account, setAccount] = useState<WebAccount | null>(null);
   const [busy, setBusy] = useState<"export" | "logout" | "delete" | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -46,10 +49,10 @@ export function AccountSection() {
   useEffect(() => {
     let active = true;
     fetchWebMe()
-      .then((me) => { if (active) setAccount(me?.user ?? null); })
-      .catch((error) => { if (active) toast.error(`无法读取账户：${webErrorMessage(error)}`); });
+      .then((me) => { if (active) { setAccount(me?.user ?? null); setReadError(null); } })
+      .catch((error) => { if (active) setReadError(`无法读取账户：${webErrorMessage(error)}`); });
     return () => { active = false; };
-  }, []);
+  }, [readAttempt]);
 
   const leave = () => navigate("/login", { replace: true });
 
@@ -98,8 +101,9 @@ export function AccountSection() {
 
   return (
     <div className="space-y-8">
+      {readError && <InlineAlert onRetry={() => setReadAttempt(attempt => attempt + 1)}>{readError}</InlineAlert>}
       <Panel title="账户">
-        <PanelRow label="用户名" control={account ? account.name || account.id : undefined} />
+        <PanelRow label="用户名" control={account ? account.name || account.id : readError ? "读取失败" : "正在读取"} />
         <PasswordRow />
         <PanelRow
           label="退出登录"

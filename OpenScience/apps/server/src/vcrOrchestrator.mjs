@@ -72,6 +72,7 @@ import { HttpError, randomId } from "./security.mjs";
 import { readVcrReviewExportProof } from "./vcrReview.mjs";
 import { studyReviewDigest } from "./studyReview.mjs";
 import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
+import { vcrModelDesignBinding, readVcrModelDesignResult } from "./vcrModelDesign.mjs";
 import { isModelDocumentKind } from "./vcrModelDocuments.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
@@ -124,8 +125,6 @@ const TERMINAL_DISPATCH = new Set(["vcr_unavailable", "vcr_study_not_found", "pr
 /** Runs: two tries a key, a claim that stalls for ten minutes is retried. */
 export const VCR_RUN_RULES = Object.freeze({ attempts: 2, staleClaimMinutes: 10, studiesPerTick: 200, noticesPerTick: 20 });
 
-/** How far actual accrual may drift from the registered forecast before a person hears about it. */
-export const VCR_ACCRUAL_TOLERANCE = 0.2;
 
 /** @param {unknown} error */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "vcr_orchestrator_failed");
@@ -380,7 +379,7 @@ export function vcrProgramSteps(steps, purpose = "programme") {
     return [step, { ...entry, requested: entry.requested === true || entry.status === "queued" }];
   }));
   if (VCR_STEPS.some((step) => out[step].requested)) return out;
-  if (purpose !== "calculation" && FINISHED.has(out.definition.status)) for (const step of VCR_STEPS) out[step].requested = true;
+  if (purpose === "programme" && FINISHED.has(out.definition.status)) for (const step of VCR_STEPS) out[step].requested = true;
   return out;
 }
 
@@ -544,7 +543,7 @@ const isObject = (value) => value !== null && typeof value === "object" && !Arra
  * and they are the only keys allowed to be dropped without a word.
  */
 export const VCR_NON_ENGINE_KEYS = Object.freeze([
-  "label", "name", "note", "notes", "cost", "comparability", "e10", "snapshotId", "method", "jobKind", "evidenceWindow", "protocol", "simonSelection",
+  "label", "name", "note", "notes", "cost", "comparability", "e10", "snapshotId", "method", "jobKind", "evidenceWindow", "protocol", "simonSelection", "baselineBindings", "modelResultId", "modelResultVersion", "modelParameterQuantile",
 ]);
 
 /**
@@ -736,8 +735,8 @@ const ROUTE_GAPS = Object.freeze(/** @type {Record<string, { title: string, deta
   },
   model_comparator: {
     title: "适用于该人群的结局模型",
-    detail: "模型预测比较器要一个声明了适用范围的结局模型；当前版本的引擎里只有按情景参数生成的参考仿真器，它给出的是设定值，不是对该人群的预测。",
-    answers: "有了带验证的数据模型之后，这条路线才能给出预测的对照分布及不确定性。",
+    detail: "需要目标人群的基线数据、来源已绑定的预后方程及明确时间范围；预测基准不等于观察到的外部对照。",
+    answers: "满足输入后可得到控制条件下的预测基准；治疗效果仍需独立设计和证据。",
   },
 }));
 
@@ -752,9 +751,6 @@ function routeVerdict(route, dataTier) {
   const option = vcrRouteOptions(dataTier).find((entry) => entry.route === route);
   const gap = ROUTE_GAPS[route];
   if (!gap) return null;
-  if (route === "model_comparator") {
-    return { rule: "route_unavailable_in_version", reason: "model_comparator_unavailable", gaps: [gap] };
-  }
   if (option && !option.available) {
     return { rule: "data_tier_insufficient", reason: "data_tier_insufficient", gaps: [{ ...gap,
       detail: `${gap.detail}这个研究的数据档位是 ${dataTier}，这条路线最低要 ${option.minimumTier}。` }] };
@@ -1082,6 +1078,7 @@ function forecastPlan(model, row, forecast) {
  * @param {{ study: Record<string, any>, definition: Record<string, any> | null, assumptions: readonly Record<string, any>[],
  *   populations?: readonly Record<string, any>[], scenarios?: readonly Record<string, any>[], grid?: Record<string, any> | null,
  *   analytic?: Record<string, any> | null, analyticJob?: Record<string, any> | null, models?: readonly Record<string, any>[],
+ *   modelResult?: Record<string,any> | null,
  *   forecast?: { providers?: readonly Record<string, any>[], histories?: readonly Record<string, any>[] } | null }} context
  * @returns {VcrPlan}
  */
@@ -1090,6 +1087,7 @@ export function vcrBuildStages(item, context) {
   const definition = context.definition;
   const cards = context.assumptions ?? [];
   const endpointDefault = object(definition).endpointType ?? null;
+  let modelDesign = null;
 
   /**
    * @param {string} jobKind @param {Record<string, any>} candidate @param {Partial<VcrStage> & { endpoint?: string | null, bindAll?: boolean, cards?: readonly Record<string, any>[] }} [options]
@@ -1132,7 +1130,7 @@ export function vcrBuildStages(item, context) {
     return { built: /** @type {VcrStage} */ ({
       stage: options.stage ?? null, jobKind, scenario, keepTables: options.keepTables ?? [], derived: options.derived ?? [],
       snapshot: options.snapshot ?? VCR_PATIENT_LEVEL_JOB_KINDS.includes(jobKind), after: options.after ?? null, bound: used,
-      detail: { ...(options.detail ?? {}), ...(curveReceiptId !== undefined ? { curveReceiptId } : {}), ...(timeUnitBasis ? { timeUnitBasis } : {}) },
+      detail: { ...(modelDesign ? { modelDesign } : {}), ...(options.detail ?? {}), ...(curveReceiptId !== undefined ? { curveReceiptId } : {}), ...(timeUnitBasis ? { timeUnitBasis } : {}) },
     }), unknown };
   };
   /** @param {Array<{ built: VcrStage, unknown: string[] }>} built @returns {VcrPlan} */
@@ -1184,12 +1182,49 @@ export function vcrBuildStages(item, context) {
   };
   // --- end robustness methods ---
 
+  /** A published equation must consume the requested cohort and preserve the requested endpoint.
+   * @param {any} model @param {any} request @param {string|null} populationId @param {string|null} requestedEndpoint
+   * @returns {VcrPlan}
+   */
+  const prognosticPlan = (model, request, populationId, requestedEndpoint) => {
+    const expected = object(object(model.card).executionSpec).scenario;
+    const endpoint = object(expected?.endpoint).type;
+    if (Object.entries(object(request.endpoint)).some(([key, value]) => !Object.hasOwn(object(expected?.endpoint), key) || !isDeepStrictEqual(object(expected?.endpoint)[key], value))
+      || request.sourceCondition && request.sourceCondition !== expected?.sourceCondition
+      || request.model && !isDeepStrictEqual(request.model, expected?.model)) return { ok: false, refused: {
+        code: "vcr_model_not_applicable", message: "请求的预测跨度、单位、来源条件或方程与所选模型版本不同。" } };
+    if (requestedEndpoint && requestedEndpoint !== endpoint) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "请求终点与所选预后方程不同；不会替换终点后计算。" } };
+    const population = populationId ? (context.populations ?? []).find(candidate => candidate.id === populationId) : null;
+    if (populationId && !population) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "选定的人群版本不可用；不会改用整个快照。" } };
+    const issues = vcrModelApplicabilityIssues(model, { endpointType: endpoint, variables: vcrPopulationVariables(population) });
+    if (issues.length) return { ok: false, refused: { code: "vcr_model_not_applicable", paths: issues.map(issue => issue.field), message: "所选模型未覆盖目标队列的终点或变量范围。" } };
+    const definedRules = population?.kind === "real" ? population.definition?.rules : null;
+    if (definedRules && request.cohortRules && !isDeepStrictEqual(definedRules, request.cohortRules)) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "请求筛选条件与选定队列版本不同；先保存对应队列版本。" } };
+    /** @type {Record<string, any>} */
+    const target = { ...object(expected), ...(request.inputId ? { inputId: request.inputId } : {}),
+      idColumn: request.idColumn ?? "USUBJID", inputUnits: request.inputUnits ?? {},
+      ...((definedRules ?? request.cohortRules) ? { cohortRules: definedRules ?? request.cohortRules } : {}) };
+    /** @type {VcrStage["derived"]} */ const derived = [];
+    if (population && population.kind !== "real") {
+      if (!population.resultId) return { ok: false, waiting: "population_pending" };
+      const table = population.kind === "empirical_synthetic" ? "synthetic-population" : "population";
+      const inputId = `${population.resultId}:${table}`;
+      if (request.inputId && request.inputId !== inputId) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "输入表与选定合成人群版本不同。" } };
+      target.inputId = inputId; target.idColumn = "__generated_patient_id";
+      derived.push({ from: "object", table });
+    }
+    return finish([stage("apply_prognostic_model", target, { snapshot: derived.length === 0, derived, bindAll: false,
+      keepTables: ["prognostic-predictions"], detail: { modelId: model.id, modelVersion: model.version,
+        populationId, populationVersion: population?.version ?? null, predictiveBenchmark: true } })]);
+  };
+
   if (item.kind === "population") {
     const jobKind = vcrJobKindFor("population", row);
     const kind = String(row.kind);
     return finish([stage(jobKind, { ...object(row.definition) }, {
       // Kept in the data plane: what the next step reads, and what the researcher downloads of a generated table.
       bindAll: false, keepTables: kind === "scenario" || kind === "literature" ? ["population"] : kind === "empirical_synthetic" ? ["synthetic-population"] : [],
+      ...(kind === "literature" ? { detail: { baselineBindings: row.definition?.baselineBindings ?? [] } } : {}),
     })]);
   }
 
@@ -1199,6 +1234,9 @@ export function vcrBuildStages(item, context) {
     if (!type) return { ok: false, refused: { code: "vcr_scenario_endpoint_missing", message: "虚拟患者集要知道终点类型：先写研究定义，或在场景里写 endpoint.type。" } };
     scenario.endpoint = { ...object(scenario.endpoint), type };
     const jobKind = patientKindOf(scenario, type);
+    let resolvedModelId = row.modelId ?? null;
+    let resolvedModelVersion = row.modelVersion ?? null;
+    let patientCards = cards;
     // A model answers only for what it declares it covers. A patient set that names a model
     // the study is outside of is refused before any job is queued, with what fell outside
     // (the reference simulators declare an endpoint and nothing else, so they pass).
@@ -1209,6 +1247,7 @@ export function vcrBuildStages(item, context) {
       const matches = exact.length ? exact : models.filter((model) => model.name === row.modelId && (!row.modelVersion || model.version === row.modelVersion));
       const named = matches.length === 1 ? matches[0] : null;
       if (!named) return { ok: false, refused: { code: "vcr_model_not_found", message: "选定模型的确切版本已不可用；这一步不使用替代模型，其他研究结果继续保留。" } };
+      resolvedModelId = named.id; resolvedModelVersion = named.version;
       // A model of the event-history call shape is not a generator's: the longitudinal forecast path runs it (G12).
       const shape = vcrModelInterfaceOf(named);
       if (shape !== null && VCR_FORECAST_MODEL_INTERFACES.includes(shape)) return forecastPlan(named, row, context.forecast);
@@ -1217,6 +1256,22 @@ export function vcrBuildStages(item, context) {
         const word = /** @type {Record<string, string>} */ (VCR_MODEL_INTERFACE_LABELS_ZH)[shape] ?? shape;
         return { ok: false, refused: { code: "vcr_model_interface_not_hosted",
           message: `模型「${named.name}」用的是「${word}」接口：这个部署还没有接入能执行这类接口的模型包，这一步不用替代模型，其他研究结果继续保留。` } };
+      }
+      const spec = object(object(named.card).executionSpec);
+      if (spec.method === "model.prognostic_apply") return prognosticPlan(named, scenario, row.populationId ?? null, String(type));
+      if (named.userId && !spec.method) return { ok: false, refused: { code: "vcr_model_not_applicable",
+        message: "该模型尚无可执行的来源绑定规格；已保存模型资料，但不会用参考仿真器替代它。" } };
+      if (spec.method && spec.method !== VCR_JOB_METHODS[jobKind]) return { ok: false, refused: { code: "vcr_model_not_applicable",
+        message: "所选模型的执行方式与请求的患者场景不一致；请保留原模型并调整请求。" } };
+      if (spec.method) {
+        const expected = object(spec.scenario);
+        const lockedPaths = new Set(list(spec.sourceParameters).map(parameter => parameter.field));
+        if (object(expected.truth).controlDistribution) lockedPaths.add("truth.controlMedian");
+        patientCards = cards.filter(card => {
+          const binding = VCR_ASSUMPTION_BINDINGS.find(rule => rule.endpoint === type && rule.match.test(String(card.key)));
+          return !binding || !lockedPaths.has(binding.path.join("."));
+        });
+        Object.assign(scenario, { ...expected, ...scenario, truth: { ...object(scenario.truth), ...object(expected.truth) } });
       }
       const population = row.populationId ? (context.populations ?? []).find((entry) => entry.id === row.populationId) : null;
       const issues = named ? vcrModelApplicabilityIssues(named, { endpointType: String(type), variables: vcrPopulationVariables(population) }) : [];
@@ -1227,14 +1282,22 @@ export function vcrBuildStages(item, context) {
     }
     /** @type {VcrStage["derived"]} */
     const derived = [];
+    let selectedPopulation = null;
     if (row.populationId) {
       const population = (context.populations ?? []).find((entry) => entry.id === row.populationId);
       if (!population?.resultId) return { ok: false, waiting: "population_pending" };
-      derived.push({ from: "object", table: "population" });
+      selectedPopulation = population;
+      if (population.kind === "real") {
+        const rules = object(population.definition).rules;
+        if (rules && scenario.cohortRules && !isDeepStrictEqual(rules, scenario.cohortRules)) return { ok: false, refused: {
+          code: "vcr_model_not_applicable", message: "请求条件与选定队列版本不同；先保存对应队列版本。" } };
+        if (rules) scenario.cohortRules = rules;
+      } else derived.push({ from: "object", table: population.kind === "empirical_synthetic" ? "synthetic-population" : "population" });
     }
     // The trajectory model's `effect` is a change per time unit, not the difference an outcome card holds: no card is bound into it.
-    const built = stage(jobKind, scenario, { endpoint: String(type), derived, keepTables: ["virtual-patients"], snapshot: false,
-      bindAll: jobKind !== "generate_patients_longitudinal", detail: { modelId: row.modelId ?? null, modelVersion: row.modelVersion ?? null } });
+    const built = stage(jobKind, scenario, { endpoint: String(type), derived, keepTables: ["virtual-patients"], snapshot: selectedPopulation?.kind === "real",
+      bindAll: jobKind !== "generate_patients_longitudinal", cards: patientCards, detail: { modelId: resolvedModelId, modelVersion: resolvedModelVersion,
+        populationId: selectedPopulation?.id ?? null, populationVersion: selectedPopulation?.version ?? null } });
     return finish([built]);
   }
 
@@ -1271,6 +1334,15 @@ export function vcrBuildStages(item, context) {
           derived: [{ from: "stage", stage: "reconstruct", table: "reconstructed-ipd" }] }));
       }
       return finish(stages);
+    }
+    if (route === "model_comparator") {
+      const model = (context.models ?? []).find(candidate => candidate.id === configuration.modelId && candidate.version === configuration.modelVersion);
+      const spec = object(object(model?.card).executionSpec);
+      if (!model || spec.method !== "model.prognostic_apply") return { ok: false, unavailable: {
+        rule: "route_unavailable_in_version", reason: "model_comparator_unavailable", gaps: [ROUTE_GAPS.model_comparator] } };
+      if (object(object(spec.scenario).model).family === "cox" && !object(object(spec.scenario).model).baseline) return { ok: false, refused: {
+        code: "vcr_model_not_applicable", message: "该 Cox 方程没有基线生存率，只能给出相对评分，不能作为绝对结局基准。" } };
+      return prognosticPlan(model, configuration, configuration.populationId ?? null, type ?? null);
     }
     if (route === "hybrid_control") return finish([stage("map_prior", configuration, { bindAll: false })]);
     if (route === "prognostic_adjustment") {
@@ -1311,10 +1383,21 @@ export function vcrBuildStages(item, context) {
     const configuration = object(row.configuration);
     const type = String(row.endpointType);
     const design = { ...object(configuration.design), kind: row.design };
-    const base = /** @type {Record<string, any>} */ ({ ...configuration, design, endpoint: { ...object(configuration.endpoint), type } });
-    const used = list(row.assumptionIds).length
+    let base = /** @type {Record<string, any>} */ ({ ...configuration, design, endpoint: { ...object(configuration.endpoint), type } });
+    /** @type {string[]} */ let lockedPaths = [];
+    if (configuration.modelResultId) {
+      if (!context.modelResult || context.modelResult.id !== configuration.modelResultId || context.modelResult.version !== configuration.modelResultVersion) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "选择本研究已保存的确切模型结果版本。" } };
+      try {
+        const binding = vcrModelDesignBinding(context.modelResult, base, configuration.modelParameterQuantile ?? "p50");
+        base = binding.scenario; modelDesign = binding.provenance; lockedPaths = binding.lockedPaths;
+      } catch (error) { return { ok: false, refused: { code: "vcr_model_not_applicable", message: String(error.message) } }; }
+    }
+    const used = (list(row.assumptionIds).length
       ? cards.filter((card) => list(row.assumptionIds).includes(card.key) || list(row.assumptionIds).includes(card.id))
-      : cards;
+      : cards).filter(card => {
+        const binding = VCR_ASSUMPTION_BINDINGS.find(rule => rule.endpoint === type && rule.match.test(String(card.key)));
+        return !binding || !lockedPaths.includes(binding.path.join("."));
+      });
     /** @param {string} method */
     const supports = (method) => Boolean(/** @type {Record<string, Record<string, readonly string[]>>} */ (VCR_DESIGN_SUPPORT)[method]?.[String(row.design)]?.includes(type));
     /** @type {Array<{ built: VcrStage, unknown: string[] }>} */
@@ -1379,7 +1462,7 @@ export function vcrBuildStages(item, context) {
         // does for the fixed-sample stages (a continuous design's assurance used to be
         // computed on a standard deviation of 1 or refused for want of a `truth`).
         stages.push(stage("assurance", assuranceBase, { stage: "assurance", endpoint: type, cards: used, snapshot: false,
-          after: type === "time_to_event" && !configuration.design?.events ? "analytic" : null }));
+          after: type === "time_to_event" && !configuration.design?.events ? "analytic" : null, detail: { priorAssumption: { key: prior.key, version: prior.version } } }));
       }
     }
     return finish(stages);
@@ -1388,10 +1471,23 @@ export function vcrBuildStages(item, context) {
   if (item.kind === "design_grid") {
     const dimensions = object(row.dimensions);
     const first = context.scenarios?.[0] ? object(context.scenarios[0].configuration) : {};
-    const baseConfig = isObject(dimensions.base) ? dimensions.base : first;
+    let baseConfig = isObject(dimensions.base) ? dimensions.base : first;
     const type = object(baseConfig.endpoint).type ?? (context.scenarios?.[0]?.endpointType ?? endpointDefault);
     const designs = list(dimensions.designs).map((entry) => stripLabels(entry));
-    const truths = list(row.truthScenarios).map((entry) => stripLabels(entry));
+    let truths = list(row.truthScenarios).map((entry) => stripLabels(entry));
+    if (baseConfig.modelResultId) {
+      if (!context.modelResult || context.modelResult.id !== baseConfig.modelResultId || context.modelResult.version !== baseConfig.modelResultVersion || baseConfig.modelParameterQuantile !== "all") return { ok: false, refused: { code: "vcr_model_not_applicable", message: "模型参数网格须指定已保存结果的确切版本与 all 分位情景。" } };
+      try {
+        const declared = truths.length ? truths : [{}];
+        const variants = declared.flatMap((truth, truthIndex) => ["p10", "p50", "p90"].map(quantile => {
+          const variant = vcrModelDesignBinding(context.modelResult, { ...baseConfig, endpoint: { ...object(baseConfig.endpoint), type }, truth: { ...object(baseConfig.truth), ...truth } }, quantile);
+          return { ...variant, provenance: { ...variant.provenance, truthIndex, truthLabel: list(row.truthScenarios)[truthIndex]?.label ?? list(row.truthScenarios)[truthIndex]?.name ?? null } };
+        }));
+        truths = variants.map(variant => variant.scenario.truth);
+        baseConfig = variants[0].scenario;
+        modelDesign = { ...variants[0].provenance, quantile: "all", scenarios: variants.map(variant => variant.provenance) };
+      } catch (error) { return { ok: false, refused: { code: "vcr_model_not_applicable", message: String(error.message) } }; }
+    }
     if (!designs.length || !truths.length) {
       return { ok: false, refused: { code: "vcr_scenario_grid_empty", message: "设计网格要写明设计列表（dimensions.designs）和真值情景列表（truthScenarios）。" } };
     }
@@ -1404,7 +1500,7 @@ export function vcrBuildStages(item, context) {
       return { ok: false, refused: { code: "vcr_job_scenario_invalid", paths: [`${where}.${inherited.key}`],
         message: `设计网格里第 ${inherited.index + 1} 个${what}没有写 ${inherited.key}，而第 1 个写了：引擎把第 1 个${what}当作各格共同的底，第 ${inherited.index + 1} 格会带着第 1 个的 ${inherited.key} 去算，格子的标签和算出来的数字就对不上。每个${what}都写全它用到的键，或者把各格共用的键放进 dimensions.base。` } };
     }
-    return finish([stage("design_grid", candidate, { endpoint: type, snapshot: false })]);
+    return finish([stage("design_grid", candidate, { endpoint: type, snapshot: false, ...(modelDesign ? { bindAll: false } : {}) })]);
   }
 
   return { ok: false, refused: { code: "vcr_object_unknown", message: `不认识的对象：${item.kind}` } };
@@ -1570,10 +1666,11 @@ export class VcrOrchestrator {
    *   briefFor?: ((input: { study: any, key: string, scope: string[], detail: Record<string, any>,
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
    *   longitudinal?: { providers: { list: () => Promise<any[]> }, prepare: (study: any, request: any, actor: string, extra?: Record<string, any>) => Promise<{ job: any }> } | null,
+   *   modelExecution?: ((study:any, modelId:string, kind:string, scenario:any) => Promise<any>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
   constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, queueReviews = null, dispatchRun = null,
-    briefFor = null, longitudinal = null, now = () => new Date(), report = () => {} }) {
+    briefFor = null, longitudinal = null, modelExecution = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR orchestrator needs the VCR store.");
     if (!jobs) throw new TypeError("The VCR orchestrator needs the VCR job queue.");
     this.store = store;
@@ -1588,15 +1685,17 @@ export class VcrOrchestrator {
     // The longitudinal forecast path: a patient set that names an event-history model is run there (G12). Absent, that step says
     // the forecast service is not connected, in the platform's own sentence, and nothing else waits for it.
     this.longitudinal = longitudinal;
+    this.modelExecution = modelExecution;
     this.now = now;
     this.report = report;
     this.owner = `vcr-${process.pid}-${randomId().slice(0, 12)}`;
     // A cancel reaches the module from the routes and from the runtime's own tool;
     // a job finished by the worker is told to the orchestrator by the worker.
     if (typeof this.jobs.addFinishHook === "function") {
+      this.durableJobFinishes = true;
       this.jobs.addFinishHook(async (/** @type {any} */ outcome) => {
-        if (outcome?.state === "canceled" && outcome.job) await this.onJobFinished({ job: outcome.job, result: null });
-      });
+        if (outcome?.job) await this.onJobFinished({...outcome,job:outcome.job,result:outcome.result ?? null});
+      },'orchestrator');
     }
     this.leaseSeconds = Math.max(60, Math.round(Number(config.vcrLeaseMs ?? 900_000) / 1000));
     /** @type {Map<string, Promise<unknown>>} one advance per study at a time, in this process */
@@ -2357,7 +2456,8 @@ export class VcrOrchestrator {
     }
     // The model library, read only when a patient set names a model (whether the model
     // covers the study is decided before a job is queued).
-    const models = patientSets[0]?.modelId ? await this.store.models(String(study.userId)) : [];
+    const models = patientSets.some(set => set.modelId) || comparators.some(row => object(row.configuration).modelId)
+      ? await this.store.models(String(study.userId)) : [];
     // The providers the deployment configured and the newest frozen history, read only when a model of the event-history shape is
     // named: no provider, no history and no longitudinal module are each an answer the plan gives for that step alone.
     const forecast = models.some((model) => VCR_FORECAST_MODEL_INTERFACES.includes(String(vcrModelInterfaceOf(model))))
@@ -2570,8 +2670,17 @@ export class VcrOrchestrator {
     const analytic = item.kind === "trial_scenario" ? (item.row.design === "simon_two_stage"
       ? analyticJob ? await this.jobs.resultOf(study.id, analyticJob.id) : null
       : await this.store.currentResultOf(study.id, "trial_scenario", item.row.id)) : null;
+    const modelResultId = object(item.row.configuration).modelResultId ?? object(item.row.dimensions?.base).modelResultId;
+    let modelResult = null;
+    if (modelResultId) {
+      try { modelResult = await readVcrModelDesignResult(this.store, study.id, String(modelResultId)); }
+      catch (error) {
+        await this.#claim(study, `job:${node}`, "job", "failed", { step: item.step, detail: { node, error: codeOf(error), message: String(error.message) } });
+        return [];
+      }
+    }
     const plan = vcrBuildStages(item, { study, definition: read.definition, assumptions: read.assumptions, populations: read.populations,
-      scenarios: read.scenarios, grid: read.grid, analytic, analyticJob, models: read.models, forecast: read.forecast });
+      scenarios: read.scenarios, grid: read.grid, analytic, analyticJob, models: read.models, forecast: read.forecast, modelResult });
     // A forecast step declined for want of the service or the history is asked again once the plan has it: nothing else about the
     // patient set moved, so nothing else would wake it (a provider configured, or a history frozen, after the patient set was written).
     if (plan.ok === true && marks.some((mark) => mark.key === `job:${node}` && mark.state === "skipped"
@@ -2675,7 +2784,7 @@ export class VcrOrchestrator {
     for (const entry of stage.derived) {
       const resultId = entry.from === "stage"
         ? String(object((await this.#mark(study.id, `job:${node}#${entry.stage}`))?.detail).resultId ?? "")
-        : String(read.populations.find((population) => population.id === item.row.populationId)?.resultId ?? "");
+        : String(read.populations.find((population) => population.id === (stage.detail.populationId ?? item.row.populationId ?? item.row.configuration?.populationId))?.resultId ?? "");
       if (!resultId) return { stop: true };
       derived.push({ resultId, table: entry.table, ...(entry.bindTo ? { bindTo: entry.bindTo } : {}) });
     }
@@ -2698,6 +2807,7 @@ export class VcrOrchestrator {
       // guess from the method: a literature control computed by `reconstruct_km`
       // and then `rmst` is still the comparator's result, and each of N designs
       // is its own subject, so N designs are N current results.
+      /** @type {Record<string, any>} */
       const detail = { node, step: item.step, stage: stage.stage, plannedStages: planned, resultKind: VCR_OBJECT_RESULT_KINDS[item.kind] ?? null,
         subjectId: item.row.id, supersedes: line, keepTables: stage.keepTables, bound: stage.bound,
         // Whose computation this is, for the notice that tells the researcher it is done: the programme's recomputation after a
@@ -2707,6 +2817,15 @@ export class VcrOrchestrator {
         // A hybrid control's historical counts are evidence only when verified extractions say so.
         ...(stage.jobKind === "map_prior" && !(await this.#historicalIsVerified(study, stage.scenario)) ? { inputsAssumed: true } : {}),
         ...stage.detail };
+      if (detail.modelId && stage.jobKind !== "forecast_trajectories") {
+        const chosen = read.models.find(model => model.id === detail.modelId || model.name === detail.modelId);
+        if (chosen?.card?.executionSpec) {
+          if (!this.modelExecution) throw new HttpError(503, "vcr_unavailable", "Model source verification is unavailable.");
+          const sourceModel = await this.modelExecution(study, String(chosen.id), stage.jobKind, stage.scenario);
+          if (sourceModel.version !== detail.modelVersion) throw new HttpError(409, "vcr_model_version_changed", "The selected model version changed.");
+          Object.assign(detail, { sourceModel });
+        }
+      }
       // A forecast is not an engine job: the longitudinal module freezes the history and the provider it reads (their hashes are the
       // job's inputs) and is the one that queues it. Filed as a longitudinal record, not as the patient set's table, so it carries
       // neither the object's result kind nor its subject, and supersedes nothing.
@@ -2803,9 +2922,9 @@ export class VcrOrchestrator {
   async #freeze(item, stage, read) {
     /** @type {Array<Record<string, any>>} */
     const inputs = [];
-    const used = item.kind === "trial_scenario" && list(item.row.assumptionIds).length
-      ? read.assumptions.filter((assumption) => list(item.row.assumptionIds).includes(assumption.key) || list(item.row.assumptionIds).includes(assumption.id))
-      : read.assumptions;
+    const bound = new Set([...stage.bound, ...(stage.detail.priorAssumption ? [stage.detail.priorAssumption] : [])]
+      .map(assumption => `${assumption.key}@${assumption.version}`));
+    const used = read.assumptions.filter(assumption => bound.has(`${assumption.key}@${assumption.version}`));
     for (const assumption of used) {
       let id;
       try { id = vcrAssumptionNode(assumption.key, assumption.version); } catch { continue; }
@@ -2820,23 +2939,26 @@ export class VcrOrchestrator {
       inputs.push({ kind: "study_definition", id: lineageNode("study_definition", read.definition.id, read.definition.version),
         value: { estimand: read.definition.estimand, endpointType: read.definition.endpointType } });
     }
-    if (item.kind !== "population" && read.population) {
-      inputs.push({ kind: "population", id: lineageNode("population", read.population.id, read.population.version),
-        value: { kind: read.population.kind, counts: read.population.counts } });
+    const selectedPopulation = read.populations.find(row => row.id === (stage.detail.populationId ?? item.row.populationId ?? item.row.configuration?.populationId)) ?? read.population;
+    if (item.kind !== "population" && selectedPopulation) {
+      inputs.push({ kind: "population", id: lineageNode("population", selectedPopulation.id, selectedPopulation.version),
+        value: { kind: selectedPopulation.kind, counts: selectedPopulation.counts } });
     }
     if (item.kind === "trial_scenario" && read.comparator) {
       inputs.push({ kind: "comparator_design", id: lineageNode("comparator_design", read.comparator.id, read.comparator.version),
         value: { route: read.comparator.route, estimand: read.comparator.estimand } });
     }
+    if (stage.detail.modelDesign) {
+      const source = stage.detail.modelDesign;
+      inputs.push({ kind: "evidence", id: lineageNode("result", source.resultId, source.resultVersion), value: source });
+    }
     if (stage.detail.analyticSource) {
       const source = stage.detail.analyticSource;
       inputs.push({ kind: "evidence", id: lineageNode("result", source.resultId, source.resultVersion), value: source });
     }
-    const named = stage.snapshot ? (this.#snapshotIdOf(item) ?? read.population?.snapshotId ?? null) : null;
+    const named = stage.snapshot ? (selectedPopulation?.snapshotId ?? this.#snapshotIdOf(item) ?? null) : null;
     if (named) {
-      const newest = await this.store.one(`SELECT id FROM ${VCR_SCHEMA}.snapshots
-        WHERE source_id = (SELECT source_id FROM ${VCR_SCHEMA}.snapshots WHERE id = $1) ORDER BY version DESC LIMIT 1`, [String(named)]);
-      inputs.push({ kind: "snapshot", id: String(newest?.id ?? named) });
+      inputs.push({ kind: "snapshot", id: String(named) });
     }
     return inputs;
   }
@@ -2980,37 +3102,46 @@ export class VcrOrchestrator {
    */
   async #landResult(study, job, result, node) {
     if (job.kind === "population_quality") return;
-    const parsed = parseLineageNode(node);
-    if (!parsed) return;
-    const table = { population: "populations", patient_set: "patient_sets", comparator_design: "comparator_designs", trial_scenario: "trial_scenarios" }[parsed.kind];
-    if (table) {
-      const gaps = list(object(result.diagnostics).gaps).length ? list(object(result.diagnostics).gaps)
-        : (result.conclusion === "not_estimable" ? vcrGapsForRule(String(result.notEstimableRule ?? "")) : []);
-      await this.store.attachResult(table, parsed.id, result.id, table === "comparator_designs" ? { conclusion: result.conclusion, gapList: gaps } : {});
-    } else if (parsed.kind === "design_grid") {
-      // The engine numbers a grid's designs and truths from 1 (it is R's, and its own long table
-      // says design 2, truth 1 of the second design under the first truth); a cell is kept as
-      // the engine numbered it, and the page reads it as that — a 0 is not a cell of this grid.
-      const cells = list(object(result.diagnostics).cells).map(object)
-        .filter((cell) => Number.isInteger(cell.designIndex) && Number.isInteger(cell.truthIndex) && cell.designIndex >= 1 && cell.truthIndex >= 1);
-      if (cells.length) await this.store.attachGridCells(parsed.id, cells.map((cell) => ({ designIndex: cell.designIndex, truthIndex: cell.truthIndex,
-        status: cell.status, measures: list(cell.measures) })));
-    }
-    await this.store.addEdges(job.studyId, [{ from: node, to: lineageNode("result", result.id, result.version), cost: "light" }]);
-    const changedAfterFreeze = await this.store.one(`SELECT 1 FROM ${VCR_SCHEMA}.stale_marks s
-      JOIN ${VCR_SCHEMA}.jobs j ON j.id=$3 WHERE s.study_id=$1 AND s.node=$2 AND s.cleared_at IS NULL AND s.marked_at>j.created_at LIMIT 1`,
-    [job.studyId, node, job.id]);
-    if (changedAfterFreeze) return;
-    // The stale marks of an object clear once nothing of it is still computing:
-    // its own, its earlier results', and — when nothing downstream is left
-    // stale — the superseded inputs they were marked for.
-    const open = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
-      WHERE study_id = $1 AND state IN ('queued', 'running', 'awaiting_budget') AND checkpoint ->> 'node' = $2`, [job.studyId, node]))?.n ?? 0);
-    if (open) return;
-    await this.store.clearStale(job.studyId, [node]);
-    await this.store.query(`UPDATE ${VCR_SCHEMA}.schedule_marks SET state = 'done', done_at = now(), updated_at = now()
-      WHERE study_id = $1 AND kind = 'recompute' AND key = $2 AND state <> 'done'`, [job.studyId, `recompute:${node}`]);
-    await this.#settleUpstream(job.studyId);
+    return this.store.transaction(client=>this.store.database.withTransactionClient(client,async()=>{
+      // Lock the immutable result generation while repairing its observer state.
+      // A newer commit cannot be overwritten by an older durable callback.
+      const current=(await client.query(`SELECT superseded_by FROM ${VCR_SCHEMA}.results WHERE study_id=$1 AND id=$2 FOR SHARE`,[study.id,result.id])).rows[0];
+      if(!current || current.superseded_by){
+        if(current) await this.store.addEdges(job.studyId,[{from:node,to:lineageNode('result',result.id,result.version),cost:'light'}]);
+        return;
+      }
+      const parsed = parseLineageNode(node);
+      if (!parsed) return;
+      const table = { population: "populations", patient_set: "patient_sets", comparator_design: "comparator_designs", trial_scenario: "trial_scenarios" }[parsed.kind];
+      if (table) {
+        const gaps = list(object(result.diagnostics).gaps).length ? list(object(result.diagnostics).gaps)
+          : (result.conclusion === "not_estimable" ? vcrGapsForRule(String(result.notEstimableRule ?? "")) : []);
+        await this.store.attachResult(table, parsed.id, result.id, table === "comparator_designs" ? { conclusion: result.conclusion, gapList: gaps } : {});
+      } else if (parsed.kind === "design_grid") {
+        // The engine numbers a grid's designs and truths from 1 (it is R's, and its own long table
+        // says design 2, truth 1 of the second design under the first truth); a cell is kept as
+        // the engine numbered it, and the page reads it as that — a 0 is not a cell of this grid.
+        const cells = list(object(result.diagnostics).cells).map(object)
+          .filter((cell) => Number.isInteger(cell.designIndex) && Number.isInteger(cell.truthIndex) && cell.designIndex >= 1 && cell.truthIndex >= 1);
+        if (cells.length) await this.store.attachGridCells(parsed.id, cells.map((cell) => ({ designIndex: cell.designIndex, truthIndex: cell.truthIndex,
+          status: cell.status, measures: list(cell.measures) })));
+      }
+      await this.store.addEdges(job.studyId, [{ from: node, to: lineageNode("result", result.id, result.version), cost: "light" }]);
+      const changedAfterFreeze = await this.store.one(`SELECT 1 FROM ${VCR_SCHEMA}.stale_marks s
+        JOIN ${VCR_SCHEMA}.jobs j ON j.id=$3 WHERE s.study_id=$1 AND s.node=$2 AND s.cleared_at IS NULL AND s.marked_at>j.created_at LIMIT 1`,
+      [job.studyId, node, job.id]);
+      if (changedAfterFreeze) return;
+      // The stale marks of an object clear once nothing of it is still computing:
+      // its own, its earlier results', and — when nothing downstream is left
+      // stale — the superseded inputs they were marked for.
+      const open = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
+        WHERE study_id = $1 AND state IN ('queued', 'running', 'awaiting_budget') AND checkpoint ->> 'node' = $2`, [job.studyId, node]))?.n ?? 0);
+      if (open) return;
+      await this.store.clearStale(job.studyId, [node]);
+      await this.store.query(`UPDATE ${VCR_SCHEMA}.schedule_marks SET state = 'done', done_at = now(), updated_at = now()
+        WHERE study_id = $1 AND kind = 'recompute' AND key = $2 AND state <> 'done'`, [job.studyId, `recompute:${node}`]);
+      await this.#settleUpstream(job.studyId);
+    }));
   }
 
   /**
@@ -3063,7 +3194,7 @@ export class VcrOrchestrator {
    * @param {any} study @param {any} job @param {any} result
    */
   async #registerForecasts(study, job, result) {
-    if (!["design_simulation", "accrual_forecast"].includes(String(job.kind))) return;
+    if (job.kind !== "design_simulation") return;
     const claimed = await this.#claim(study, `forecast:${job.id}`, "notice", "done", { detail: { jobId: job.id } });
     if (!claimed) return;
     const measures = list(result.measures).map(object);
@@ -3073,51 +3204,6 @@ export class VcrOrchestrator {
         measures: Object.fromEntries(measures.filter((measure) => keep.includes(String(measure.name))).map((measure) => [String(measure.name), { value: measure.value, mcse: measure.mcse ?? null }])) };
       if (Object.keys(prediction.measures).length) await this.store.registerForecast({ studyId: study.id, userId: study.userId, kind: "trial", prediction, at: this.now() });
       return;
-    }
-    const frozen = await this.store.one(`SELECT scenario FROM ${VCR_SCHEMA}.jobs WHERE id = $1`, [String(job.id)]);
-    const scenario = object(frozen?.scenario);
-    const sites = list(scenario.sites).map(object);
-    const lastPatient = measures.find((measure) => measure.name === "last_patient_in_months");
-    if (!lastPatient || !sites.length) return;
-    await this.store.registerForecast({
-      studyId: study.id, userId: study.userId, kind: "accrual", at: this.now(),
-      prediction: {
-        resultId: result.id, measure: "last_patient_in_months", median: lastPatient.value,
-        low: object(lastPatient.interval).low ?? null, high: object(lastPatient.interval).high ?? null, target: scenario.target ?? null,
-        // The shape the accrual backtest reads (`accrualBacktestSlices`): the measure with its prediction interval.
-        measures: [{ name: "last_patient_in_months", value: lastPatient.value, unit: "months", interval: lastPatient.interval ?? null }],
-        interval: lastPatient.interval ?? null,
-        // What the forecast's own rate posteriors say the enrolment should be at
-        // any later month — closed form over the frozen sites, so the comparison
-        // with what actually happened needs no second simulation.
-        baseline: sites.reduce((total, site) => total + Number(site.enrolled ?? 0), 0),
-        sites: sites.map((site) => ({ rate: Number(site.alpha) / Number(site.beta), start: Number(site.startTime ?? 0) })),
-      },
-    });
-  }
-
-  /**
-   * Hold each registered accrual forecast against the enrolment that actually
-   * happened. Only when the study keeps referrals at all: with none, an
-   * enrolment of zero would read as a forecast missed by all of it.
-   * @param {any} study
-   */
-  async #compareForecasts(study) {
-    const forecasts = (await this.store.forecasts(study.id)).filter((forecast) => forecast.kind === "accrual" && Array.isArray(object(forecast.prediction).sites));
-    if (!forecasts.length) return;
-    const kept = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.referrals WHERE study_id = $1`, [study.id]))?.n ?? 0);
-    if (!kept) return;
-    const actual = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.referrals
-      WHERE study_id = $1 AND state = 'enrolled' AND enrolled_on IS NOT NULL`, [study.id]))?.n ?? 0);
-    for (const forecast of forecasts) {
-      const prediction = object(forecast.prediction);
-      const months = (this.now().getTime() - Date.parse(String(forecast.createdAt))) / (30.4375 * 86_400_000);
-      if (!(months >= 1)) continue;
-      const expected = Number(prediction.baseline ?? 0) + list(prediction.sites).map(object)
-        .reduce((total, site) => total + Number(site.rate) * Math.max(0, months - Number(site.start ?? 0)), 0);
-      const predicted = Math.round(Number.isFinite(Number(prediction.target)) ? Math.min(Number(prediction.target), expected) : expected);
-      if (object(forecast.actual).enrolled === actual && object(forecast.actual).predictedEnrolled === predicted) continue;
-      await this.store.compareForecast(forecast.id, { enrolled: actual, predictedEnrolled: predicted, elapsedMonths: Math.round(months * 10) / 10, asOf: this.now().toISOString() });
     }
   }
 
@@ -3678,19 +3764,6 @@ export class VcrOrchestrator {
       await this.#notice(study, `notice:conflict:${id}`, () => (this.notifier.assumptionConflict
         ? this.notifier.assumptionConflict(study, { conflictId: id, code: conflict.code, keys: conflict.keys, detail: conflict.detail })
         : this.notifier.notEstimable?.(study, { resultId: id, rule: null, what: "关键假设", gaps: [conflict.detail] })));
-    }
-    await this.#compareForecasts(study);
-    const tolerance = Number(object(study.budget).accrualTolerance ?? VCR_ACCRUAL_TOLERANCE);
-    for (const forecast of (await this.store.forecasts(study.id)).filter((row) => row.actual && row.comparedAt)) {
-      const predicted = Number(object(forecast.actual).predictedEnrolled ?? object(forecast.prediction).enrolled ?? object(forecast.prediction).value);
-      const actual = Number(object(forecast.actual).enrolled ?? object(forecast.actual).value);
-      if (!Number.isFinite(predicted) || !Number.isFinite(actual) || predicted <= 0) continue;
-      if (Math.abs(actual - predicted) / predicted <= tolerance) continue;
-      // Once per forecast, however many times it is compared afterwards: the
-      // deviation is a fact about the prediction, not about the day it was checked.
-      await this.#notice(study, `notice:accrual:${forecast.id}`, () => this.notifier.accrualOffForecast?.(study, {
-        forecastId: forecast.id, predicted, actual, byMonth: object(forecast.actual).asOf ?? null,
-      }));
     }
   }
 }

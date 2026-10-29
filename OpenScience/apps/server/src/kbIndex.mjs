@@ -1,3 +1,4 @@
+import { ownedSourceProjectSql } from "./internalProjects.mjs";
 import path from "node:path";
 import { sourceOriginOf, workspaceLayout } from "@evimed/domain";
 import { KB_INDEX_METHOD, chunkDocument, embeddingInputReceipt, embeddingText, estimateTokens, passageQuery, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
@@ -162,7 +163,7 @@ export class KnowledgeBaseIndex {
    * run may search (`searchScope`), which index documents those copies are
    * searched through (`heldIndexKeys` — kept when no project names them any
    * more), and a convergence pass over its copies (`syncCopies`).
-   * @param {{ searchScope: (userId: string) => Promise<any[]>, heldIndexKeys: (userId: string | null) => Promise<{ userId: string, sha256: string, parserRevision: string, textSha256: string }[]>, syncCopies: (options: { userId?: string | null }) => Promise<any> } | null} library
+   * @param {{ searchScope: (userId: string, projectId: string) => Promise<any[]>, accountScope: (userId: string) => Promise<any[]>, heldIndexKeys: (userId: string | null) => Promise<{ userId: string, sha256: string, parserRevision: string, textSha256: string }[]>, syncCopies: (options: { userId?: string | null }) => Promise<any> } | null} library
    */
   useLibrary(library) { this.library = library; return this; }
 
@@ -497,7 +498,8 @@ export class KnowledgeBaseIndex {
       };
     });
     /** @type {any[]} */
-    const library = includeLibrary && this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
+    // The library answers for this project: only the entries that apply to it (`libraryScope.mjs`).
+    const library = includeLibrary && this.library ? (await this.library.searchScope(userId, projectId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
     const wanted = sourceIds === null ? null : new Set(sourceIds);
     /** @param {{ sourceId: string }} entry */
     const named = (entry) => !wanted || wanted.has(entry.sourceId);
@@ -527,21 +529,23 @@ export class KnowledgeBaseIndex {
    * What it returns is by document content (`sha256`): the list says which rows hold those bytes, and a document the index
    * has not indexed yet is simply not there — the list's own search still finds it by its name and summary.
    *
-   * @param {{ userId: string, projectId: string | null, shared: boolean, q: string, acceptSource?: ((source:any)=>Promise<boolean>) | null }} request
+   * @param {{ userId: string, projectId: string | null, shared: boolean, all?: boolean, q: string, acceptSource?: ((source:any)=>Promise<boolean>) | null }} request
    * @returns {Promise<{ shas: string[], bySha: Record<string, { page: number | null, snippet: string, start: number, end: number }[]> } | null>}
    */
-  async passages({ userId, projectId, shared, q, acceptSource = null }) {
+  async passages({ userId, projectId, shared, all = false, q, acceptSource = null }) {
     const query = passageQuery(q);
     if (!query || !userId) return null;
     await this.ready();
     /** @type {{ sha256: string, parserRevision: string, textSha256: string }[]} */
     let documents = [];
     if (shared) {
-      documents = (this.library ? await this.library.searchScope(userId) : [])
+      // The page that lists the account's own library is the account's, not a run's: every entry.
+      documents = (this.library ? await this.library.accountScope(userId) : [])
         .filter((/** @type {any} */ entry) => entry.searchable && entry.sha256 && entry.parserRevision && entry.textSha256);
-    } else if (projectId) {
-      const rows = (await this.database.query(`SELECT id, payload, revision FROM evimed_product.documents
-        WHERE user_id=$1 AND project_id=$2 AND kind='source' AND deleted_at IS NULL`, [userId, projectId])).rows;
+    } else if (projectId || all) {
+      const rows = (await this.database.query(`SELECT id, project_id, payload, revision FROM evimed_product.documents
+        WHERE user_id=$1 AND ${all ? ownedSourceProjectSql('documents', this.sources?.measurementAccounts?.includes(userId) ?? false) : 'project_id=$2'} AND kind='source' AND deleted_at IS NULL
+          AND coalesce(payload->'publication'->>'current','true') <> 'false'`, all ? [userId] : [userId, projectId])).rows;
       const admitted = [];
       for (const row of rows) if (!acceptSource || await acceptSource({ id: row.id, kind: 'source', userId, projectId,
         revision: row.revision, payload: row.payload, deletedAt: null }) === true) admitted.push(row);

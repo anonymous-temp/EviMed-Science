@@ -35,6 +35,18 @@ export function isSeverityLevel(value: string | null | undefined): value is Seve
   return value === "S0" || value === "S1" || value === "S2" || value === "S3" || value === "S4";
 }
 
+/**
+ * Component: SeverityBadge; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Static grade plus visible or screen-reader severity wording.
+ * Variants: S0-S4; optional visible label.
+ * States: Supplied severity only; no action.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Grade fixed; label text retained with no truncation.
+ * Theme: Closed severity palette; shared foreground role.
+ * Responsive: Inline nonshrinking badge; parent owns long labels.
+ * Verification: Marks.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function SeverityBadge({
   level,
   label,

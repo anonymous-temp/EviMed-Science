@@ -109,7 +109,7 @@ test('one account cannot retire a tool for everyone; distinct accounts raise a d
   assert.equal(proposals.length, 1);
   const [proposal] = proposals;
   assert.deepEqual({ category: proposal.category, recommended: proposal.recommended, conservative: proposal.conservative, directional: proposal.directional, paths: proposal.attemptedPaths.length },
-    { category: 'tool-retire', recommended: 'retire', conservative: 'retire', directional: true, paths: 2 }, 'unanswered, a harm alarm takes the protective option');
+    { category: 'tool-retire', recommended: 'retire', conservative: 'keep', directional: true, paths: 2 }, 'without the serving cutover the card keeps the conservative option it always named');
   assert.doesNotMatch(proposal.title + proposal.body, /one-account|account|llr|harm|digest/i, 'the card speaks to a reader, not in internal state');
   const review = await f.service.get(proposal.subjectId);
   assert.equal(review.payload.kind, 'sequential-harm');
@@ -205,4 +205,17 @@ test('a record written before runs had their own is moved once, and its unattrib
   assert.equal(row.payload.usage.harm.trials.length, 0);
   assert.equal(row.payload.status, 'active');
   assert.equal((await maintenance.observationOf('tool', 'old-2')).outcome, 'rejected');
+});
+
+test('under the serving cutover an unanswered harm alarm names the protective retirement; without it the stored option stands', async () => {
+  const conservativeOf = async serving => {
+    const f = evolutionServiceFixture(), proposals = [];
+    if (serving) f.service.config = { ...f.service.config, evolutionServingOnly: true };
+    const maintenance = await tool(f, { proposeReview: async input => proposals.push(input) });
+    for (const account of ['a', 'b', 'c', 'd']) await use(f, maintenance, account, `first-${account}`, 'rejected');
+    assert.equal(proposals.length, 1);
+    return proposals[0].conservative;
+  };
+  assert.equal(await conservativeOf(true), 'retire');
+  assert.equal(await conservativeOf(false), 'keep');
 });

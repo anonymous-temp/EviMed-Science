@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "statistical-analysis",
-  "note": "Three public-data numerical briefs. Supply only inputs and follow-up prompts to a live run. Fixtures contain source data; expected.json and reference scripts stay exclusively with the evaluator. Offline reference success is not live capability acceptance.",
+  "note": "Eight public-data briefs: three numerical controls, three goal-driven multi-turn agent scenarios, and two continuation scenarios (statistics-007, 008) that specify the cached-state and report-population guidance. Only the inputs and follow-up prompts reach a live run. Expected values and evaluator scripts remain outside its workspace. Adding briefs or passing offline tests does not constitute live agent acceptance.",
   "briefs": [
     {
       "id": "statistics-001-wdbc-group-comparison",
@@ -12,9 +12,22 @@
         "analysisQuestion": "Profile the supplied Wisconsin Diagnostic Breast Cancer dataset. Explain the target coding, then compare mean radius between malignant and benign tumors. Report denominators, malignant-minus-benign mean difference with a 95% confidence interval and a justified independent-sample test. Include a reproducible Python script.",
         "outputLanguage": "en"
       },
-      "fixtures": [{"source": "fixtures/breast-cancer.csv", "destination": "data/breast-cancer.csv"}],
-      "mustDo": ["Verify target coding against the source dictionary: zero malignant and one benign.", "Execute the comparison with independent tumors as units, appropriate uncertainty and correct direction.", "Keep executed code and traceable numerical outputs."],
-      "mustNotDo": ["Treat the serialized index as a biological measurement.", "Describe benign tumors as healthy controls or infer treatment recommendations.", "Invent unavailable numerical results."],
+      "fixtures": [
+        {
+          "source": "fixtures/breast-cancer.csv",
+          "destination": "data/breast-cancer.csv"
+        }
+      ],
+      "mustDo": [
+        "Verify target coding against the source dictionary: zero malignant and one benign.",
+        "Execute the comparison with independent tumors as units, appropriate uncertainty and correct direction.",
+        "Keep executed code and traceable numerical outputs."
+      ],
+      "mustNotDo": [
+        "Treat the serialized index as a biological measurement.",
+        "Describe benign tumors as healthy controls or infer treatment recommendations.",
+        "Invent unavailable numerical results."
+      ],
       "gradedOn": "Full-precision numerical agreement with independent Welch references; coding, denominators, uncertainty, reproducibility and proportional interpretation. Continuous tolerance 1e-8, tiny p relative tolerance 1e-6; displayed values are graded at their stated rounding."
     },
     {
@@ -26,10 +39,27 @@
         "analysisQuestion": "Use sklearn train_test_split with test_size=0.2 and random_state=42. Fit min-max scaling of mean radius on the training rows only, apply it to both splits, and fit OLS of breast_cancer_yn on the transformed mean radius in the training split. Report the slope and preserve the split and fitted transform for follow-ups. This is a benchmark reproduction with a binary outcome; explain that limitation.",
         "outputLanguage": "en"
       },
-      "fixtures": [{"source": "fixtures/breast-cancer.csv", "destination": "data/breast-cancer.csv"}],
-      "followUps": ["Using the same training split, standardize mean area fitted on training rows only. Apply it to both splits, fit OLS of the same target on standardized area in the training rows, and report the slope. Preserve this fitted state.", "On the full transformed dataset from our prior turns, report malignant-minus-benign mean area, the fifth largest mean radius, and the count of radius values outside 1.5 times the IQR.", "Explain which fitted state would need checking or recomputation if I supply additional patients; do not fabricate the additional data."],
-      "mustDo": ["Persist training indices, fitted scaling parameters and source fingerprints.", "Compute later answers in the prior transformed units.", "Explain OLS's binary-response limitations without refusing the benchmark computation."],
-      "mustNotDo": ["Fit preprocessing on the full data.", "Resplit or silently report raw-unit answers on follow-up.", "Treat the evaluator's expected values as input data."],
+      "fixtures": [
+        {
+          "source": "fixtures/breast-cancer.csv",
+          "destination": "data/breast-cancer.csv"
+        }
+      ],
+      "followUps": [
+        "Using the same training split, standardize mean area fitted on training rows only. Apply it to both splits, fit OLS of the same target on standardized area in the training rows, and report the slope. Preserve this fitted state.",
+        "On the full transformed dataset from our prior turns, report malignant-minus-benign mean area, the fifth largest mean radius, and the count of radius values outside 1.5 times the IQR.",
+        "Explain which fitted state would need checking or recomputation if I supply additional patients; do not fabricate the additional data."
+      ],
+      "mustDo": [
+        "Persist training indices, fitted scaling parameters and source fingerprints.",
+        "Compute later answers in the prior transformed units.",
+        "Explain OLS's binary-response limitations without refusing the benchmark computation."
+      ],
+      "mustNotDo": [
+        "Fit preprocessing on the full data.",
+        "Resplit or silently report raw-unit answers on follow-up.",
+        "Treat the evaluator's expected values as input data."
+      ],
       "gradedOn": "Agreement with source-derived sequential references to the specified three decimals, plus training-only state provenance and continuity. Supplemental-data execution is additionally covered by the runner regression tests."
     },
     {
@@ -41,11 +71,189 @@
         "analysisQuestion": "Using the supplied NCCTG advanced lung cancer data, estimate overall Kaplan-Meier median survival and fit an exploratory Cox model adjusted for age and sex using Efron ties. Explain censoring and sex coding, denominators, hazard ratios and 95% confidence intervals, and assess the proportional-hazards assumption without treating a nonsignificant diagnostic as proof. Use native R.",
         "outputLanguage": "en"
       },
-      "fixtures": [{"source": "fixtures/lung.csv", "destination": "data/lung.csv"}],
-      "followUps": ["Keep the completed KM and Cox results. If an optional additional method requires an unavailable package, document that method's limitation while retaining the completed analyses and their code."],
-      "mustDo": ["Use status equal to two for deaths, with one censored; sex one male and two female.", "Execute native survival::survfit, coxph and a proportional-hazards diagnostic.", "Report observed R and survival package versions."],
-      "mustNotDo": ["Treat the original publication's complete analysis as reproduced by this reanalysis.", "Claim a failed optional method ran or discard completed results.", "Interpret a nonsignificant assumption test as proof of proportional hazards."],
+      "fixtures": [
+        {
+          "source": "fixtures/lung.csv",
+          "destination": "data/lung.csv"
+        }
+      ],
+      "followUps": [
+        "Keep the completed KM and Cox results. If an optional additional method requires an unavailable package, document that method's limitation while retaining the completed analyses and their code."
+      ],
+      "mustDo": [
+        "Use status equal to two for deaths, with one censored; sex one male and two female.",
+        "Execute native survival::survfit, coxph and a proportional-hazards diagnostic.",
+        "Report observed R and survival package versions."
+      ],
+      "mustNotDo": [
+        "Treat the original publication's complete analysis as reproduced by this reanalysis.",
+        "Claim a failed optional method ran or discard completed results.",
+        "Interpret a nonsignificant assumption test as proof of proportional hazards."
+      ],
       "gradedOn": "Counts and KM median exact, HR and CI absolute tolerance 5e-6, p absolute tolerance 1e-7, with correct coding and interpretation. References are generated by reference_survival.R from the frozen CSV."
+    },
+    {
+      "id": "statistics-004-goal-driven-comparison",
+      "title": "Choose and execute a method from the research question",
+      "why": "The agent should own method selection and execution, not ask the researcher to select a test.",
+      "inputs": {
+        "datasetPath": "data/breast-cancer.csv",
+        "analysisQuestion": "请帮我看这份乳腺肿瘤数据，恶性和良性两组的平均半径有多大差别？给我实际分析结果、差异的不确定性和可以复现的代码，不用让我选统计方法。",
+        "outputLanguage": "zh"
+      },
+      "fixtures": [
+        {
+          "source": "fixtures/breast-cancer.csv",
+          "destination": "data/breast-cancer.csv"
+        }
+      ],
+      "mustDo": [
+        "Inspect real coding and independent tumor units.",
+        "Choose and execute a justified comparison.",
+        "Report the malignant-minus-benign effect, uncertainty and denominator."
+      ],
+      "mustNotDo": [
+        "Return only a plan or unused script.",
+        "Force the researcher to select an algorithm.",
+        "Run an exhaustive unrelated test battery or claim a treatment effect."
+      ],
+      "gradedOn": "Independent WDBC reference numbers in expected.json, executed-file evidence, proportional task completion and no unnecessary method-selection question."
+    },
+    {
+      "id": "statistics-005-goal-driven-prediction",
+      "title": "Turn a prediction goal into a leakage-aware executed pipeline",
+      "why": "A model trained on all patients and scored on those same patients is not evidence of generalization.",
+      "inputs": {
+        "datasetPath": "data/breast-cancer.csv",
+        "analysisQuestion": "能用这份数据建立一个估计肿瘤恶性概率的模型吗？请先做一个可解释的基线，检查它在未参与拟合的数据上是否可靠，解释结果和局限，保留代码。",
+        "outputLanguage": "zh"
+      },
+      "fixtures": [
+        {
+          "source": "fixtures/breast-cancer.csv",
+          "destination": "data/breast-cancer.csv"
+        }
+      ],
+      "mustDo": [
+        "Verify source coding (0=malignant, 1=benign); explicitly model malignant as the event or select the probability for source class 0. Evaluate all metrics against the same malignant-positive outcome.",
+        "Choose a defensible split and preserve its indices or seed with the input hash.",
+        "Fit all learned preprocessing and the model on training data only.",
+        "Evaluate held-out probability calibration as well as discrimination.",
+        "State that this is exploratory model evaluation, not clinical deployment validation."
+      ],
+      "mustNotDo": [
+        "Leak target or serialized row index into predictors.",
+        "Tune thresholds or hyperparameters on the held-out test data.",
+        "Declare clinical validity from one dataset or an AUC alone.",
+        "Call the probability of source class 1 a malignant probability, even if metrics against that reversed target are excellent."
+      ],
+      "gradedOn": "Planned evaluator criteria (not yet an implemented automatic judge): independently replay code and check train/test separation, source coding and malignant-positive probability selection, prediction bounds, stored predictions versus discrimination/calibration metrics, and interpretation. No fixed AUC threshold or mandatory algorithm. The runner retains each turn and artifacts; a reviewer must apply these criteria until a frozen replay judge is implemented."
+    },
+    {
+      "id": "statistics-006-followup-unit-correction",
+      "title": "Reuse analysis state while applying a unit correction",
+      "why": "Follow-up reasoning should preserve observations and only transform affected quantities.",
+      "inputs": {
+        "datasetPath": "data/breast-cancer.csv",
+        "analysisQuestion": "比较恶性和良性肿瘤的平均半径，先按原数据单位报告，并保存分析代码和结果。",
+        "outputLanguage": "zh"
+      },
+      "fixtures": [
+        {
+          "source": "fixtures/breast-cancer.csv",
+          "destination": "data/breast-cancer.csv"
+        }
+      ],
+      "followUps": [
+        "把平均半径从毫米改成厘米，沿用刚才的同一批数据和组别。更新均值差和区间，并说明检验统计量或P值是否应该改变；不要重新分组。"
+      ],
+      "mustDo": [
+        "Reuse the same input fingerprint and group coding.",
+        "Convert effect and interval endpoints by 0.1 while leaving t, degrees of freedom and p unchanged within tolerance.",
+        "Keep the original result and record the new unit transformation."
+      ],
+      "mustNotDo": [
+        "Treat the new unit as new patients.",
+        "Divide a p value or t statistic by ten.",
+        "Overwrite the source CSV or silently change the comparison direction."
+      ],
+      "gradedOn": "Reference criteria: first answer agrees with frozen WDBC expected.json; follow-up effect and interval scale by 0.1, t/df/p and group counts remain unchanged. A dedicated replay judge is planned, not implemented; the runner captures both turns for independent review."
+    },
+    {
+      "id": "statistics-007-resume-cached-analysis",
+      "title": "Resume a delivered analysis and convert units from its cached results",
+      "why": "A unit-only follow-up answered by rerunning the packaged pipeline wastes work and can silently change the delivered result. The answer comes from the executed estimates, and the delivered state stays untouched.",
+      "inputs": {
+        "datasetPath": "data/prior-analysis.zip",
+        "priorAnalysisPath": "data/prior-analysis.zip",
+        "analysisQuestion": "data/prior-analysis.zip 是上一轮已经实际执行完成的模拟研究分析包。请在当前项目中恢复它，读取已有报告、数值结果和记录，用两句话告诉我当前 B 组相对 A 组的平均差异和区间。请沿用已完成的计算，这一轮不需要重跑。",
+        "outputLanguage": "zh"
+      },
+      "fixtures": [
+        {
+          "source": "live/fixtures/prior-analysis.zip",
+          "destination": "data/prior-analysis.zip"
+        }
+      ],
+      "followUps": [
+        "保持刚才同一批数据、分组和已经算好的估计，现在把报告单位从毫米改成厘米。请只做必要的换算和报告更新，原始结果保留，告诉我均值差、95%区间和哪些量不变。"
+      ],
+      "mustDo": [
+        "Restore the package and read its executed estimates, report and records before answering.",
+        "Convert the cached estimate and interval endpoints by the stated factor and say which quantities change and which do not.",
+        "Verify the converted values against the cached ones, allowing for the rounding of the stored values.",
+        "Write the conversion as new files and leave the delivered results, fitted state, receipts and input files byte-identical."
+      ],
+      "mustNotDo": [
+        "Run the packaged pipeline (including any run_all entry point), refit a model or rerun bootstrap or cross-validation for a unit-only change.",
+        "Rebuild provenance, refresh timestamps or revalidate the whole package to clear an advisory notice.",
+        "Fabricate a successful execution receipt or run unrelated skills to make a notice disappear."
+      ],
+      "gradedOn": "Reference criteria: the reported difference and interval equal the cached ones, scaled by 0.1 within the rounding of the stored values; every archive file is byte-identical in the snapshots before and after the continuation, and the transcript shows no execution of the original analysis. A successful shell call is not evidence of reuse: only the independent state verdict (snapshot comparison with the supplied archive) establishes it."
+    },
+    {
+      "id": "statistics-008-report-population-reconciliation",
+      "title": "Reconcile a prior report's denominators and predictive values by population",
+      "why": "A report that explains a held-out positive predictive value with the whole-data event proportion mixes populations. Every percentage must be recomputed from the numerator and denominator of the population it names.",
+      "inputs": {
+        "datasetPath": "data/breast-cancer.csv",
+        "priorAnalysisPath": "data/prior-statistical-report.md",
+        "analysisQuestion": "请复核这份已有的统计分析报告：data/prior-statistical-report.md，配套结果和逐条预测是 data/prior-analysis-results.json、data/prior-predictions.csv，原始数据及字典也在 data/ 下。重点核对每个结论实际用的是哪一批人、分母和百分比是否匹配，以及PPV的解释。发现不一致请更正并交付修订后的统计分析报告和可复核的更正记录，保留正确结果，不要重新拟合模型，也不要添加无关分析。",
+        "outputLanguage": "zh"
+      },
+      "fixtures": [
+        {
+          "source": "live/fixtures/breast-cancer.csv",
+          "destination": "data/breast-cancer.csv"
+        },
+        {
+          "source": "live/fixtures/wdbc-dictionary.md",
+          "destination": "data/wdbc-dictionary.md"
+        },
+        {
+          "source": "live/fixtures/prior-statistical-report.md",
+          "destination": "data/prior-statistical-report.md"
+        },
+        {
+          "source": "live/fixtures/prior-analysis-results.json",
+          "destination": "data/prior-analysis-results.json"
+        },
+        {
+          "source": "live/fixtures/prior-predictions.csv",
+          "destination": "data/prior-predictions.csv"
+        }
+      ],
+      "mustDo": [
+        "State for each conclusion which population it used (whole data, training set, held-out set or complete cases) and recompute its percentage from that population's numerator and denominator.",
+        "Read a positive predictive value as true positives among predicted positives, distinct from sensitivity.",
+        "Correct every inconsistent statement in a revised report and deliver a reviewable correction record, keeping the results that were right."
+      ],
+      "mustNotDo": [
+        "Explain a held-out predictive value with the whole-data event proportion as though the populations were the same.",
+        "Refit the model or add unrelated analyses.",
+        "Change a correct result to match the prior wording."
+      ],
+      "gradedOn": "Reference criteria: whole-data, training and held-out counts recomputed from the supplied source rows and predictions (evaluator-owned bindings, never in the workspace); the revised report and correction record name the population of each percentage; no classifier is refitted."
     }
   ]
 }

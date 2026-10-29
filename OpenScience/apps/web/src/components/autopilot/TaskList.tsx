@@ -14,7 +14,7 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/cn";
 import { TaskGroup } from "./TaskGroup";
-import { activeAgenda, cancellationPending, cancellationRetryLabel, inFlight, rowLine, TASK_GROUPS, taskGroupOf, lastRunLine } from "./taskPresentation";
+import { activeAgenda, cancellationPending, cancellationRetryLabel, inFlight, rowLine, sortGroup, TASK_GROUPS, taskGroupOf, lastRunLine } from "./taskPresentation";
 
 /** What a row's 「⋯」 does to its task; the page decides how (a confirmation, a request, a dialog). */
 export interface TaskRowActions {
@@ -28,13 +28,15 @@ export interface TaskRowActions {
 /**
  * The tasks of the project, as one column of the page (the whole page when there is no room for a conversation beside it).
  *
- * The header is the page's heading and one quiet 「新建」 icon button; under it, a search box and the groups 即将执行 / 已暂停 / 已完成,
- * a group with nothing in it not drawn. A row is the task's name and one line — when it runs next and how often, that it is running,
+ * The header is the page's heading and one quiet 「新建」 icon button, which opens the new-task form beside the list; under it, a search
+ * box and the groups 即将执行 / 已暂停 / 已完成, a group with nothing in it not drawn — and, with no task at all, the examples to start one from. A row is the task's name and one line — when it runs next and how often, that it is running,
  * why it stopped — and its 「⋯」, always visible. It is a link: it opens the task's page, and the open task's row is marked.
  */
-export function TaskList({ agendas, available = true, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, firstRun, actionNotice }: {
+export function TaskList({ agendas, available = true, createLocked = false, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, empty, actionNotice }: {
   agendas: AgendaRecord[] | null;
   available?: boolean;
+  /** The new-task form is saving: 新建 would make it again and lose the activation that has not run yet, so it waits. */
+  createLocked?: boolean;
   actionNotice?: ReactNode;
   /** The project's newest executions: which tasks are running now. */
   episodes: readonly EpisodeRecord[];
@@ -50,18 +52,17 @@ export function TaskList({ agendas, available = true, episodes, selectedId, sear
   /** The list is the page: it keeps to the list column's measure instead of the width of its container. */
   singleColumn: boolean;
   /**
-   * What the list says when the project has no task at all: what a scheduled task is and the one button to make the first. Drawn
-   * only where the list is the page; beside a conversation pane the pane says it, and the list stays quiet.
+   * What the list says when the project has no task at all: the examples a first one can start from (`TaskExamples`). Without it
+   * the list says in one line that there is none (the page that cannot make one).
    */
-  firstRun?: ReactNode;
+  empty?: ReactNode;
 }) {
   const needle = search.trim().toLocaleLowerCase();
   const visible = (agendas ?? []).filter(agenda => !agenda.payload.archivedAt
     && `${agenda.payload.title}\n${agenda.payload.prompt ?? agenda.payload.topics.join(" ")}`.toLocaleLowerCase().includes(needle));
   const running = new Set(episodes.filter(inFlight).map(episode => episode.payload.agendaId));
   const now = new Date();
-  const groups = TASK_GROUPS.map(([key, label]) => [!available && key === "upcoming" ? "定时计划" : label, visible.filter(agenda => taskGroupOf(agenda) === key)
-    .sort((a, b) => key === "upcoming" ? (a.payload.nextRunAt ?? "z").localeCompare(b.payload.nextRunAt ?? "z") : a.payload.title.localeCompare(b.payload.title, "zh-CN"))] as const)
+  const groups = TASK_GROUPS.map(([key, label]) => [!available && key === "upcoming" ? "定时计划" : label, sortGroup(key, visible.filter(agenda => taskGroupOf(agenda) === key))] as const)
     .filter(([, items]) => items.length > 0);
   const row = (agenda: AgendaRecord) => {
     const open = agenda.id === selectedId;
@@ -91,18 +92,20 @@ export function TaskList({ agendas, available = true, episodes, selectedId, sear
       title="定时任务"
       documentTitle={false}
       scope={<span className="block max-w-56 truncate text-caption text-text-3"><span>当前项目</span>{projectName ? <><span> · </span><span>{projectName}</span></> : null}</span>}
-      actions={<IconButton icon={Plus} label="新建" disabled={!available} onClick={onCreate} />}
+      actions={<IconButton icon={Plus} label="新建" disabled={!available || createLocked} onClick={onCreate} />}
       className={cn("shrink-0 pb-3 pt-5", inset && "px-4")}
     />
     {/* A search box over nothing to search is not drawn. */}
     {(agendas?.length ?? 0) > 0 && <div className={cn("shrink-0 pb-3", inset && "px-4")}><SearchInput label="搜索任务" value={search} onChange={event => onSearch(event.target.value)} onClear={() => onSearch("")} className="w-full" /></div>}
-    <div className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto pb-6", inset && "px-2")}>
+    {/* Beside a conversation the column's blocks stand where its title does (16 px in), so the page has one left edge in every state; the rows'
+        own ground hangs 8 px outside it (`TaskGroup`). Where the list is the page it stands as the page does, and its words are 8 px in. */}
+    <div className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto pb-6", inset && "px-4")}>
       {actionNotice}
-      {error && <LoadError message={error} onRetry={onRetry} className={cn(inset && "mx-2")} />}
+      {error && <LoadError message={error} onRetry={onRetry} />}
       {agendas === null ? <FilesSkeleton /> : <>
-        {groups.map(([label, items]) => <TaskGroup key={label} label={label}><List>{items.map(row)}</List></TaskGroup>)}
-        {visible.length === 0 && !error && (search.trim() ? <p className="px-2 text-ui text-text-3">没有匹配的任务</p>
-          : firstRun !== undefined ? firstRun : <p className="px-2 text-ui text-text-3">还没有定时任务</p>)}
+        {groups.map(([label, items]) => <TaskGroup key={label} label={label} bleed={inset}><List>{items.map(row)}</List></TaskGroup>)}
+        {visible.length === 0 && !error && (search.trim() ? <p className={cn("text-ui text-text-3", !inset && "px-2")}>没有匹配的任务</p>
+          : empty ?? <p className={cn("text-ui text-text-3", !inset && "px-2")}>还没有定时任务</p>)}
       </>}
     </div>
   </div>;

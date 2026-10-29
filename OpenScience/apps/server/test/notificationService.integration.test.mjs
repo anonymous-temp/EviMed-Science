@@ -344,3 +344,17 @@ test("default notice timestamps use the binding column's millisecond precision",
   assert.ok(Date.parse(notice.createdAt) >= new Date(binding).getTime());
   assert.equal(notice.createdAt, "2026-01-01T00:00:00.001Z");
 });
+
+test("a notice for an account that no longer exists is refused by name and writes nothing", options, async () => {
+  const gone = `notice_gone_${randomUUID()}`;
+  const before = service.unknownRecipients;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await assert.rejects(service.create(gone, { noticeType: "notify", title: "Operator notice", body: "Nobody is here." }),
+      { code: "notification_recipient_unknown" });
+  }
+  assert.equal(service.unknownRecipients, before + 2);
+  assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_inbox.notifications WHERE user_id=$1", [gone])).rows[0].n, 0);
+  assert.equal((await service.health()).unknownRecipients, before + 2);
+  // The account that exists is unaffected.
+  assert.ok((await service.create(owner, { noticeType: "notify", title: "Still delivered", body: "Here." })).id);
+});

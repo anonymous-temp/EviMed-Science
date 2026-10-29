@@ -47,7 +47,7 @@ describe("the chooser of a zone for a feed item", () => {
     expect(screen.queryByRole("button", { name: "申请选题" })).not.toBeInTheDocument();
     const facts = expectComposed(container, { tablists: 0, stepRail: false, toolbar: true });
     expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" })).toBeInTheDocument();
-    // 新建专区 is in the header's menu, with nothing else beside it.
-    expect(within(container.querySelector("[data-page-header]") as HTMLElement).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["更多操作"]);
+    // The permitted creation action is directly available in the header.
+    expect(within(container.querySelector("[data-page-header]") as HTMLElement).getByRole("button", { name: "新建专区" })).toBeEnabled();
   });
 });

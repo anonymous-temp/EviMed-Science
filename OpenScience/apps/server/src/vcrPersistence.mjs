@@ -42,7 +42,7 @@ import {
   VCR_CRITERION_TYPES, VCR_DATA_TIERS, VCR_ELIGIBILITY_SUMMARIES, VCR_ENDPOINT_TYPES, VCR_ENROLLMENT_KINDS,
   VCR_EXPORT_KINDS, VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_STATES, VCR_MEMBER_ROLES,
   VCR_MISSING_REASONS, VCR_MODEL_RISKS, VCR_MODEL_TIERS, VCR_POOLING_METHODS, VCR_POPULATION_KINDS,
-  VCR_RATINGS, VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
+  VCR_RATINGS, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
   VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES, PLATFORM_PUBLISHER_USER_ID,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
@@ -84,10 +84,10 @@ export const VCR_TABLES = Object.freeze([
   "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids",
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
-  "jobs", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "derived_marks", "matching_candidates", "matching_producers",
+  "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments",
-  "referrals", "referral_events", "sites", "followup_episodes",
+  "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
   "precedent_candidates", "evidence_signals", "frontier_scans", "platform_packs", "pack_promotions",
@@ -113,6 +113,25 @@ function inList(words) {
     if (!/^[A-Za-z0-9_-]+$/.test(word)) throw new TypeError(`A VCR vocabulary word cannot be spliced into SQL: ${JSON.stringify(word)}`);
   }
   return `(${words.map((word) => `'${word}'`).join(", ")})`;
+}
+
+/**
+ * A role list held by a NOT VALID check beside the column's own (the retired recruitment roles may still sit in old rows):
+ * replaced only when its words differ from the declared ones, and always NOT VALID, so a second migration touches nothing and
+ * the generic vocabulary refresh finds it current. Words are compared in C collation, the order JavaScript's sort gives them.
+ * @param {string} table @param {string} name @param {string} check the CHECK body @param {readonly string[]} words
+ */
+function activeWordsCheck(table, name, check, words) {
+  inList(words);
+  const sorted = [...new Set(words)].sort().map((word) => `'${word}'`).join(", ");
+  return `DO $$ DECLARE held text; BEGIN
+  SELECT pg_get_constraintdef(oid) INTO held FROM pg_constraint WHERE conname = '${name}' AND conrelid = 'evimed_vcr.${table}'::regclass;
+  IF held IS NULL OR (SELECT array_agg(DISTINCT (m[1] COLLATE "C") ORDER BY (m[1] COLLATE "C")) FROM regexp_matches(held, '''([^'']*)''', 'g') AS m)
+      IS DISTINCT FROM ARRAY[${sorted}]::text[] THEN
+    ALTER TABLE evimed_vcr.${table} DROP CONSTRAINT IF EXISTS ${name};
+    ALTER TABLE evimed_vcr.${table} ADD CONSTRAINT ${name} CHECK (${check}) NOT VALID;
+  END IF;
+END $$;`;
 }
 
 /** The whole schema. */
@@ -148,11 +167,16 @@ CREATE INDEX IF NOT EXISTS vcr_studies_user_idx ON evimed_vcr.studies (user_id, 
 -- NULL means not tagged yet — the vocabulary could not tag when the study was
 -- written — and a pass over those rows tags them.
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS entity_keys text[];
-ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'programme' CHECK (purpose IN ('programme', 'calculation'));
+ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'programme' CHECK (purpose IN ('programme', 'calculation', 'task'));
 -- The conversation the study was opened with (the one bound to its first capability): the page's 「对话」 opens it, not whichever
 -- background run's conversation is newest. NULL for a study made before this column; the route then falls back to the oldest
 -- conversation bound to the study's first capability.
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS conversation_session_id text;
+ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'project' CHECK (scope IN ('project', 'conversation'));
+ALTER TABLE evimed_vcr.studies DROP CONSTRAINT IF EXISTS studies_user_id_project_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_studies_project_scope_idx ON evimed_vcr.studies (user_id, project_id) WHERE scope = 'project';
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_studies_conversation_scope_idx ON evimed_vcr.studies (user_id, project_id, conversation_session_id) WHERE scope = 'conversation';
+
 -- A study nobody has spoken to yet is a draft (see VCR_STUDY_STATUSES). A database that predates the state has a CHECK without it.
 DO $$
 BEGIN
@@ -176,6 +200,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.members (
   PRIMARY KEY (study_id, user_id, role)
 );
 CREATE INDEX IF NOT EXISTS vcr_members_user_idx ON evimed_vcr.members (user_id);
+${activeWordsCheck("members", "vcr_members_active_roles", `role IN ${inList(VCR_MEMBER_ROLES)}`, VCR_MEMBER_ROLES)}
 
 -- The research question as an object: PICO, the estimand's five attributes,
 -- the primary endpoint and its type, the intended use. Versioned; everything
@@ -518,6 +543,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.grants (
   revoked_at    timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
+${activeWordsCheck("grants", "vcr_grants_active_roles", `revoked_at IS NOT NULL OR role IS NULL OR role IN ${inList(VCR_MEMBER_ROLES)}`, VCR_MEMBER_ROLES)}
 CREATE INDEX IF NOT EXISTS vcr_grants_source_idx ON evimed_vcr.grants (source_id) WHERE revoked_at IS NULL;
 
 -- A frozen, hashed view of a source. Immutable: a correction makes a new one.
@@ -877,6 +903,27 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.jobs (
   UNIQUE (user_id, idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS vcr_jobs_claim_idx ON evimed_vcr.jobs (state, run_after) WHERE state IN ('queued', 'running');
+CREATE TABLE IF NOT EXISTS evimed_vcr.conversation_completions (
+  id text PRIMARY KEY,
+  study_id text REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  job_id text REFERENCES evimed_vcr.jobs(id) ON DELETE CASCADE,
+  user_id text NOT NULL, project_id text NOT NULL, root_session_id text NOT NULL,
+  result_key text NOT NULL, dispatch_id text NOT NULL UNIQUE, fingerprint text NOT NULL,
+  payload jsonb NOT NULL, state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','delivered','unavailable')),
+  dispatch_generation integer NOT NULL DEFAULT 0,
+  attempts integer NOT NULL DEFAULT 0, last_error text, lease_until timestamptz, run_after timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE (job_id,result_key)
+);
+ALTER TABLE evimed_vcr.conversation_completions ADD COLUMN IF NOT EXISTS dispatch_generation integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN study_id DROP NOT NULL;
+ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN job_id DROP NOT NULL;
+
+CREATE INDEX IF NOT EXISTS vcr_completion_pending_idx ON evimed_vcr.conversation_completions (run_after,user_id,created_at) WHERE state='pending';
+CREATE INDEX IF NOT EXISTS vcr_completion_retention_idx ON evimed_vcr.conversation_completions (updated_at) WHERE state<>'pending';
+CREATE INDEX IF NOT EXISTS vcr_completion_replay_idx ON evimed_vcr.conversation_completions ((payload->>'replayId'),(payload->>'resultId'));
+CREATE INDEX IF NOT EXISTS vcr_jobs_unrecorded_completion_idx ON evimed_vcr.jobs (finished_at,user_id) WHERE state IN ('succeeded','failed','canceled') AND checkpoint ? 'conversationOrigin' AND COALESCE(checkpoint->>'completionOutboxRecorded','false')<>'true';
+CREATE INDEX IF NOT EXISTS vcr_jobs_unapplied_hooks_idx ON evimed_vcr.jobs (finished_at,user_id) WHERE state IN ('succeeded','failed','canceled') AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true' AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true';
+CREATE INDEX IF NOT EXISTS vcr_jobs_completion_idx ON evimed_vcr.jobs (finished_at,user_id) WHERE state IN ('succeeded','failed','canceled');
 CREATE INDEX IF NOT EXISTS vcr_jobs_study_idx ON evimed_vcr.jobs (study_id, created_at DESC);
 
 -- What a finished job actually ran: inputs, environment, seed, hashes.
@@ -900,6 +947,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.executions (
   finished_at    timestamptz,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS vcr_executions_job_idx ON evimed_vcr.executions (job_id);
 CREATE INDEX IF NOT EXISTS vcr_executions_study_idx ON evimed_vcr.executions (study_id, created_at DESC);
 
 -- A result is immutable and superseded, never updated (plan §3.4). The four
@@ -924,6 +972,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.results (
   superseded_by   text,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS vcr_results_execution_idx ON evimed_vcr.results (execution_id);
 CREATE INDEX IF NOT EXISTS vcr_results_study_idx ON evimed_vcr.results (study_id, kind, created_at DESC);
 
 -- A prediction registered before the outcome it predicts, with the timestamp
@@ -1207,73 +1256,6 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_judgments (
 ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS candidate_trial_id text;
 CREATE INDEX IF NOT EXISTS vcr_language_candidate_idx ON evimed_vcr.language_judgments
   (study_id, candidate_trial_id, subject_key, criterion_key, created_at DESC) WHERE candidate_trial_id IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS evimed_vcr.sites (
-  id             text PRIMARY KEY,
-  study_id       text REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  user_id        text NOT NULL,
-  name           text NOT NULL,
-  capability     jsonb NOT NULL DEFAULT '{}'::jsonb,
-  capacity       jsonb NOT NULL DEFAULT '{}'::jsonb,
-  competing      jsonb NOT NULL DEFAULT '[]'::jsonb,
-  contacts       jsonb NOT NULL DEFAULT '[]'::jsonb,
-  activated_on   date,
-  accrual_prior  jsonb NOT NULL DEFAULT '{}'::jsonb,
-  verified_at    timestamptz,
-  created_at     timestamptz NOT NULL DEFAULT now(),
-  updated_at     timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS evimed_vcr.referrals (
-  id             text PRIMARY KEY,
-  study_id       text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  assessment_id  text REFERENCES evimed_vcr.matching_assessments(id) ON DELETE SET NULL,
-  site_id        text REFERENCES evimed_vcr.sites(id) ON DELETE SET NULL,
-  user_id        text NOT NULL,
-  subject_key    text NOT NULL,
-  state          text NOT NULL DEFAULT 'candidate' CHECK (state IN ${inList(VCR_REFERRAL_STATES)}),
-  contact_approved_by text,
-  contact_approved_at timestamptz,
-  screen_fail_criterion_id text REFERENCES evimed_vcr.criteria(id) ON DELETE SET NULL,
-  screen_fail_reason text,
-  enrolled_on    date,
-  created_at     timestamptz NOT NULL DEFAULT now(),
-  updated_at     timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS vcr_referrals_state_idx ON evimed_vcr.referrals (study_id, state, updated_at DESC);
-
--- One live referral per subject and study. screen_failed is terminal and a
--- second attempt on the same protocol is a NEW referral (plan §7.2), so the
--- funnel's denominators stay countable: the old table-level UNIQUE turned that
--- second attempt into an overwrite of the failed one.
-ALTER TABLE evimed_vcr.referrals DROP CONSTRAINT IF EXISTS referrals_study_id_subject_key_key;
-CREATE UNIQUE INDEX IF NOT EXISTS vcr_referrals_live_subject
-  ON evimed_vcr.referrals (study_id, subject_key) WHERE state <> 'screen_failed';
-
--- The first human stop, held by the schema as well as by the policy (plan
--- §10.1, AC-18): a referral at or past 'contacted' has a named approver. NOT
--- VALID so a database that predates it migrates; every new write is checked.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'vcr_referrals_contact_needs_approval' AND conrelid = 'evimed_vcr.referrals'::regclass) THEN
-    ALTER TABLE evimed_vcr.referrals ADD CONSTRAINT vcr_referrals_contact_needs_approval
-      CHECK (state NOT IN ${inList(VCR_REFERRAL_STATES.slice(VCR_REFERRAL_STATES.indexOf("contacted"), VCR_REFERRAL_STATES.indexOf("screen_failed") + 1))}
-        OR contact_approved_by IS NOT NULL) NOT VALID;
-  END IF;
-END $$;
-
-CREATE TABLE IF NOT EXISTS evimed_vcr.referral_events (
-  id          text PRIMARY KEY,
-  referral_id text NOT NULL REFERENCES evimed_vcr.referrals(id) ON DELETE CASCADE,
-  user_id     text NOT NULL,
-  from_state  text CHECK (from_state IS NULL OR from_state IN ${inList(VCR_REFERRAL_STATES)}),
-  to_state    text NOT NULL CHECK (to_state IN ${inList(VCR_REFERRAL_STATES)}),
-  actor       text NOT NULL DEFAULT '',
-  note        text NOT NULL DEFAULT '',
-  occurred_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS vcr_referral_events_idx ON evimed_vcr.referral_events (referral_id, occurred_at);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.followup_episodes (
   id            text PRIMARY KEY,

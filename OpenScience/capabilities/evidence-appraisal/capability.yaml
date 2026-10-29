@@ -112,6 +112,7 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
+  listed: false
   title: "证据质量评价"
   category: "临床证据"
   description: "逐篇评价你手上一组研究的偏倚风险，并按结局汇总证据确定性。"

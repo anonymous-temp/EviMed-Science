@@ -53,9 +53,11 @@ export function createRsiAuthorizedTranscriptReader({ store, agentRuns, agreemen
 }
 
 const BUNDLE_KEY = /^rsi\/v1\/bundles\/([a-f0-9]{64})\.json$/;
+/** How much of one page's bundles the poll holds between ordering them and importing them. */
+const PREFETCH_BYTES = 16 * 1024 * 1024;
 const CLOSED_CODE = /^(?:campaign|rsi)_[a-z0-9_]{1,80}$/;
 /** Refusals that belong to the bundle's bytes or to a decided campaign: the same object key can never import. */
-const TERMINAL_BUNDLE_CODES = new Set(['campaign_bundle_identity_conflict', 'campaign_replay_or_surface_busy', 'campaign_target_changed',
+const TERMINAL_BUNDLE_CODES = new Set(['campaign_bundle_identity_conflict', 'campaign_replayed', 'campaign_target_changed',
   'campaign_candidate_digest_changed', 'campaign_installed_identity_conflict', 'campaign_envelope_invalid',
   'rsi_oss_object_unbounded', 'rsi_oss_object_changed', 'rsi_oss_digest_invalid']);
 /** A refusal that may clear without new bytes (the deployment's trust files being replaced). */
@@ -65,20 +67,21 @@ const closedCode = error => [error?.code, error?.message].find(value => typeof v
 
 /** One bundle never holds the queue: each object key is decided once (imported or rejected, with a closed reason, its key
  * and digest) in a durable intake record, a key already decided is skipped without reading its bytes, an undecided failure
- * is retried a bounded number of times, and the next page is queued whatever happened to this one. The successor's key is
+ * is retried a bounded number of times, a bundle the importer says must wait (no binding yet, or an active campaign holds its
+ * surface) is neither decided nor counted and is met again at the next poll, and the next page is queued whatever happened to this one. The successor's key is
  * derived from the running job, so a re-run of the job names the same successor and the chain cannot fork.
  * @param {any} dependencies */
 export function createRsiBundlePoller({ transport, importer, documents, owner, jobs, jobOwner, projectId, configured, report = () => {}, maxAttempts = 3, delayMs = 60000, now = () => new Date() }) {
   const intakeId = (/** @type {string} */ digest) => `rsi-bundle-intake-${digest}`;
-  /** @param {string} objectKey */
-  async function intake(objectKey) {
+  /** @param {string} objectKey @param {Map<string, any>} [prefetched] bundles already read for this page, by digest */
+  async function intake(objectKey, prefetched) {
     const digest = BUNDLE_KEY.exec(objectKey)?.[1];
     if (!digest) { report('rsi_online_bundle_key_invalid'); return { objectKey, state: 'ignored', reason: 'rsi_online_bundle_key_invalid' }; }
     const previous = await documents.get(owner, 'knowledge', intakeId(digest));
     if (['imported', 'rejected'].includes(previous?.payload.state)) return { objectKey, state: previous.payload.state, seen: true };
     let outcome = null, code = null;
     try {
-      const stored = await transport.readBundle(digest);
+      const stored = prefetched?.get(digest) ?? await transport.readBundle(digest);
       if (!stored) return { objectKey, state: 'missing' };
       let envelope = null;
       try { envelope = JSON.parse(stored.bytes.toString('utf8')); } catch { code = 'campaign_envelope_invalid'; }
@@ -97,15 +100,41 @@ export function createRsiBundlePoller({ transport, importer, documents, owner, j
       decidedAt: now().toISOString() }, { expectedRevision: previous?.revision ?? 0 });
     return { objectKey, state, reason: code };
   }
+  /** Oldest campaign first, so when two bundles ask for one surface the earlier is the one that takes it and the later waits (a key is a
+   * digest and says nothing of age). The time is read from the still-unverified payload for this ordering only; everything that decides
+   * is read from the verified manifest by the importer. A bundle whose time cannot be read is ordered last and met by `intake` as before.
+   * The bytes read here are kept for `intake` while a page holds at most PREFETCH_BYTES of them, and read again past that.
+   * @param {string[]} keys @param {Map<string, any>} prefetched */
+  async function inCreationOrder(keys, prefetched) {
+    let kept = 0;
+    /** @type {{objectKey:string,createdAt:number}[]} */
+    const stamped = [];
+    for (const objectKey of keys) {
+      let createdAt = Number.POSITIVE_INFINITY;
+      const digest = BUNDLE_KEY.exec(objectKey)?.[1];
+      if (digest) {
+        try {
+          const previous = await documents.get(owner, 'knowledge', intakeId(digest));
+          const stored = ['imported', 'rejected'].includes(previous?.payload.state) ? null : await transport.readBundle(digest);
+          if (stored && kept + stored.bytes.length <= PREFETCH_BYTES) { prefetched.set(digest, stored); kept += stored.bytes.length; }
+          const created = stored ? Date.parse(JSON.parse(JSON.parse(stored.bytes.toString('utf8')).payload).manifest.createdAt) : Number.NaN;
+          if (Number.isFinite(created)) createdAt = created;
+        } catch { /* unreadable here: ordered last, then decided or retried by intake with its closed code */ }
+      }
+      stamped.push({ objectKey, createdAt });
+    }
+    return stamped.sort((a, b) => a.createdAt === b.createdAt ? (a.objectKey < b.objectKey ? -1 : a.objectKey > b.objectKey ? 1 : 0) : a.createdAt < b.createdAt ? -1 : 1).map(item => item.objectKey);
+  }
   /** @param {{cursor?:string}} [input] @param {{id?:string}|null} [job] */
   async function poll({ cursor } = {}, job = null) {
     if (!configured()) return { state: 'waiting' };
     const page = await transport.listBundles(cursor);
     /** @type {Record<string, number>} */
     const outcomes = {};
-    for (const key of page.keys) {
+    const prefetched = new Map();
+    for (const key of await inCreationOrder(page.keys, prefetched)) {
       let state;
-      try { state = (await intake(key)).state; } catch { report('rsi_online_bundle_intake_failed'); state = 'error'; }
+      try { state = (await intake(key, prefetched)).state; } catch { report('rsi_online_bundle_intake_failed'); state = 'error'; }
       outcomes[state] = (outcomes[state] ?? 0) + 1;
     }
     if (job?.id) {

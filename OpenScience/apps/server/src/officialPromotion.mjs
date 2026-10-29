@@ -17,14 +17,20 @@
  *   unpublished result — and names its class from a closed list; an answer that is not that shape is dropped, never softened. (3) A model of an
  *   independent family (the Jev judge port, site J23) is asked whether the method carries harmful or manipulative instructions. (4) The author
  *   rule: the account is established — three published evidence cards that each carry a ✓ — or its method is corroborated by another account's
- *   method of the same scope and class that also passed the first two gates. (5) The independent re-check: a model of another family (the review
+ *   method of the same scope and class that also passed the first two gates, where both accounts are in standing (`standing`: at least
+ *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS` old with `…_MIN_FINISHED_RUNS` runs of their own). (5) The independent re-check: a model of another family (the review
  *   provider, which must not be DeepSeek) answers the same question about the text alone, with the same class, and the code field checks pass
  *   again against the source account's facts as they are now.
  * - **The harm check cannot hurt the author, and it never blocks anything it could not answer.** A method the judge settles as harmful is not
  *   promoted, counted and written to the security ledger by the entry's id and never the account; the person's own method is another record,
- *   untouched, and keeps serving them. A judge that is not composed, not calibrated for its prompt, off, over budget, unavailable or unsure flags
- *   nothing and the method goes on as it would have; the skipped check is counted by its reason. (J23 ships uncalibrated, so until an operator
- *   measures it the check is skipped and says so.) Which model capability would make it deletable: a base model that could be trusted not to
+ *   untouched, and keeps serving them. A judge that is not composed, not calibrated for its prompt, off, over budget or unavailable flags
+ *   nothing and the method goes on as it would have; the skipped check is counted by its reason. A judge that answers but is unsure is not a judge
+ *   that cleared the method, and what is promoted is read by everyone: the method waits (`judge_pending`, keeping its general verdict), is asked
+ *   again about harm alone no sooner than `PROMOTION_HARM_RETRY_MS` later, and after `PROMOTION_HARM_ATTEMPTS` unsure answers is refused
+ *   (`harm_uncertain`). That is this promotion's rule only; it is no delivery gate and the person's own method is untouched. (J23 has been calibrated since 2026-10-27: its pin
+ *   in `deps-version.json` binds the prompt it was measured on, 91 of 91 settled answers right in each of two passes over 92 invented methods, 35 of them
+ *   harmful, in `evals/judge-sites/J23/`. A method the judge's request builder refuses, because its text holds a token, a credential-shaped assignment
+ *   or a private address, is skipped as `judge_invalid_input` and goes on, which the measurement did not cover.) Which model capability would make it deletable: a base model that could be trusted not to
  *   follow a poisoned method at all.
  * - **A method that drew on someone else's pack is not promoted, and is not a second voice.** A run that used a received pack no other account had
  *   vouched for (`guestMarkedRuns`) taught nothing the platform may repeat: shared text from a new author must not be able to reach everyone by
@@ -33,7 +39,16 @@
  *   review provider is one family with the judge): a method is not considered at all, so a deployment without one spends nothing here.
  * - **Provenance is internal, and short.** Until a decision the record holds what the re-check needs (the account, the method, its project); once
  *   the method is in the pack it holds a one-way contributor key and nothing else, and no notice anywhere names an account — not when a method is
- *   taken, not when it is stopped. The pack holds the text and nothing more.
+ *   taken, not when it is stopped. The pack holds the text and nothing more. The ledger saves every write of a record as a revision, so the write
+ *   that lets go of the text and the account (a refusal, an activation, an operator's withdrawal) deletes the revisions before it in the same
+ *   transaction (`dropEarlierRevisions`); without that the publisher's history would keep them after the account itself was deleted.
+ * - **A voice is an account in standing, and it must still be one when the method is re-checked.** Accounts register themselves, and on
+ *   2026-10-27 two that an acceptance harness had made minutes apart corroborated each other and put a test conversation's method on every
+ *   account's shelf. So a method waits (`awaiting_corroboration`) until its author is in standing and another author in standing taught the same
+ *   kind of method; the wait is re-read every tick and ends after `AWAITING_CORROBORATION_DAYS`, and a waiting or candidate method whose author's
+ *   account is gone is refused at once (`author_gone`), keeping no text — in whatever status it still holds its text (judging, waiting or candidate),
+ *   before a model is asked about it. The account that corroborated a method is kept on its record, internally, until the decision, and is asked
+ *   again at the re-check: with no voice left in standing the method waits again, it is not refused.
  * - **It is bounded.** At most `perDay` methods are re-checked and activated a day, and the pack holds at most `SHARED_PRACTICES_LIMIT` methods: a
  *   newer one takes the place of the oldest.
  *
@@ -55,9 +70,16 @@ export const PROMOTION_FIELD_CHECKS = Object.freeze(["has_attachments", "identif
 /** How long a method's text may be to leave its account: name, description and body together, in characters. */
 export const PROMOTION_TEXT_LIMITS = Object.freeze({ min: 80, max: 6_000 });
 export const PROMOTION_JUDGE_ATTEMPTS = 3;
+/** How many times the harm judge may be unsure of one method before it is refused (`harm_uncertain`), and how long a method waits between two. */
+export const PROMOTION_HARM_ATTEMPTS = 3;
+export const PROMOTION_HARM_RETRY_MS = 3_600_000;
+/** The statuses of a record that still holds its text and its author's account: a decision, or the author's account going, ends them. */
+const HOLDING_STATUSES = Object.freeze(["judge_pending", "awaiting_corroboration", "candidate"]);
 export const PROMOTION_DEFAULT_PER_DAY = 3;
 /** The most methods the pack of everyone's holds: a newer one takes the place of the oldest. */
 export const SHARED_PRACTICES_LIMIT = 60;
+/** How long a method waits for its author to be in standing and for a second account (the learning window's ninety days). */
+export const AWAITING_CORROBORATION_DAYS = 90;
 const PAGE = 100;
 
 /** Identifier formats: DOI, PMID/PMCID, registry numbers, addresses, e-mail, paths. Format checks, not prose. */
@@ -166,15 +188,22 @@ export function promotionJudgeMessages({ text, scopeId }) {
  *   review?: ((input: { text: string, scopeId: string }) => Promise<any>) | null,
  *   harm?: ((input: { text: string, scopeId: string }) => Promise<any>) | null,
  *   established: (userIds: string[]) => Promise<Set<string>>,
+ *   standing?: ((userIds: string[]) => Promise<Map<string, boolean>>) | null,
  *   recentGuestRun?: ((userId: string, runId: string | null) => Promise<boolean>) | null,
  *   perDay?: number, now?: () => Date, report?: ((code: string) => void) | null,
  *   audit?: ((event: string, detail: { code: string, detail: string }) => Promise<unknown> | unknown) | null }} options
  *   `documents` is the product ledger and the records are the publisher account's (`officialPacks.publisherId`); `officialPacks` publishes the pack when a
  *   method joins it. `review` is the independent family's reading and absent when there is none, which turns the whole path off. `harm` asks the judge port
  *   (`judgeService.judge("J23", …)`) and answers with its result as it is (`{ outcome, value, code }`); absent, no method is checked and the skip is counted.
+ *   `standing` answers, for the accounts that still exist among those named, whether each is a voice (`accountStanding` in `capsuleShareTrust.mjs`); a
+ *   deployment that composes this path passes it, and its absence (unit tests of the other gates) counts every named account as existing and in standing.
  */
-export function createOfficialPromotion({ documents, officialPacks, facts, judge, review = null, harm = null, established, recentGuestRun = null, perDay = PROMOTION_DEFAULT_PER_DAY,
-  now = () => new Date(), report = null, audit = null }) {
+export function createOfficialPromotion({ documents, officialPacks, facts, judge, review = null, harm = null, established, standing = null, recentGuestRun = null,
+  perDay = PROMOTION_DEFAULT_PER_DAY, now = () => new Date(), report = null, audit = null }) {
+  /** @param {string[]} userIds @returns {Promise<Map<string, boolean>>} */
+  const standingOf = async (userIds) => (standing ? standing(userIds) : new Map(userIds.map((id) => [id, true])));
+  /** The author an undecided record still names (a decided one names none). @param {any} row */
+  const authorOf = (row) => String(row?.payload?.derivedFrom?.userId ?? "");
   const publisher = () => String(officialPacks?.publisherId ?? "");
   const counters = {
     considered: 0,
@@ -214,8 +243,12 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     // A rejected method keeps no text and names no account, whichever gate refused it: nothing about what was refused stays outside the
     // account for longer than the decision (the account's own deletion and reset never reach the publisher's records).
     const forgotten = patch.status === "rejected" ? { text: null, derivedFrom: null } : {};
+    // Every write saves the whole row as a revision, so blanking the current row forgets nothing while the revisions before it still hold the
+    // text and the account: the write that blanks them deletes those, in its own transaction (a rejection, and an activation, after which the
+    // record holds a contributor key and nothing else).
+    const dropEarlierRevisions = patch.status === "rejected" || patch.derivedFrom === null;
     for (let attempt = 0, current = row; attempt < 3; attempt += 1) {
-      try { return await documents.put(publisher(), "preferences", current.id, { ...current.payload, ...patch, ...forgotten, updatedAt: now().toISOString() }, { expectedRevision: current.revision }); }
+      try { return await documents.put(publisher(), "preferences", current.id, { ...current.payload, ...patch, ...forgotten, updatedAt: now().toISOString() }, { expectedRevision: current.revision, dropEarlierRevisions }); }
       catch (error) {
         if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 2) throw error;
         current = await get(current.id) ?? current;
@@ -234,32 +267,47 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   /** The method as the judges are shown it: its text and the kind of work it is for, and nothing of an account. @param {ReturnType<typeof promotionText>} text */
   const shown = (text) => `${text.name}\n${text.description}\n${text.whenToUse}\n\n${text.body}`;
 
-  /** Whether another account's method of this scope and class that passed the first two gates stands beside this one. @param {any} row */
-  async function corroborated(row) {
+  /**
+   * The accounts whose method of this scope and class passed the first two gates beside this one, both authors in standing: empty when the method
+   * is not corroborated. The accounts are kept on the record (until its decision) so that the re-check can ask whether they are still in standing.
+   * @param {any} row
+   * @returns {Promise<string[]>}
+   */
+  async function corroborators(row) {
     const own = row.payload.contributor;
     const peers = (await all()).filter((other) => other.id !== row.id && other.payload.scopeId === row.payload.scopeId && other.payload.lessonClass === row.payload.lessonClass
       && other.payload.contributor !== own && ["awaiting_corroboration", "candidate"].includes(other.payload.status));
     // Two accounts arriving at a method of one kind independently. A method already in the pack is not a voice for the next one: if it
     // were, the first promotion of a scope and class would let every later method of that pair through on the model's word alone.
-    return peers.length > 0;
+    if (!peers.length) return [];
+    // Each a voice: two accounts registered minutes apart are one harness, not two people.
+    const known = await standingOf([authorOf(row), ...peers.map(authorOf)].filter(Boolean));
+    if (known.get(authorOf(row)) !== true) return [];
+    return [...new Set(peers.map(authorOf).filter((id) => id && known.get(id) === true))];
   }
+  /** The record's internal account list with the voices that corroborated it. @param {any} row @param {string[]} voices */
+  const withVoices = (row, voices) => ({ derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: voices } });
 
   /** After a method passed the first two gates: promote it, and any waiting method it corroborates. @param {any} row */
   async function settleAuthor(row) {
     const userId = String(row.payload.derivedFrom.userId);
     const trusted = (await established([userId])).has(userId);
-    if (trusted || await corroborated(row)) await update(row, { status: counted("candidate"), promotedBy: trusted ? "established_author" : "corroborated" });
+    const voices = trusted ? [] : await corroborators(row);
+    if (trusted) await update(row, { status: counted("candidate"), promotedBy: "established_author" });
+    else if (voices.length) await update(row, { status: counted("candidate"), promotedBy: "corroborated", ...withVoices(row, voices) });
     else await update(row, { status: counted("awaiting_corroboration") });
     for (const other of (await all()).filter((candidate) => candidate.id !== row.id && candidate.payload.status === "awaiting_corroboration"
       && candidate.payload.scopeId === row.payload.scopeId && candidate.payload.lessonClass === row.payload.lessonClass)) {
-      if (await corroborated(other)) await update(other, { status: counted("candidate"), promotedBy: "corroborated" });
+      const heard = await corroborators(other);
+      if (heard.length) await update(other, { status: counted("candidate"), promotedBy: "corroborated", ...withVoices(other, heard) });
     }
   }
 
   /**
    * The independent-family harm check of one method. It answers `flagged` only when the judge settled that the method carries harmful or manipulative
-   * instructions; every other outcome — clear, unsure, no judge, no calibration, a failure — lets the method go on as it would have, and is counted.
-   * Never throws: the check is advice about promotion, not a step the method depends on.
+   * instructions, and `uncertain` when the judge was unsure (the method waits and is asked again, `judgeRow`); every other outcome — clear, no judge, no
+   * calibration, a failure — lets the method go on as it would have, and is counted. Never throws: the check is advice about promotion, not a step the
+   * method depends on.
    * @param {any} row
    * @returns {Promise<{ flagged: boolean, outcome: "clear" | "flagged" | "uncertain" | "skipped", code?: string }>}
    */
@@ -290,21 +338,41 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     return skipped(result?.code ?? "harm_check_unanswered");
   }
 
-  /** Run the model's gate over a stored method. @param {any} row */
-  async function judgeRow(row) {
-    const attempts = Number(row.payload.judgeAttempts ?? 0) + 1;
+  /**
+   * The model gate over one stored method: its verdict (a method that is general, with its class), or the record as the gate's refusal — or its
+   * retry, when the judge failed and has attempts left — left it.
+   * @param {any} row @param {number} attempts this attempt's number
+   * @returns {Promise<{ verdict: { general: true, lessonClass: string } } | { settled: any }>}
+   */
+  async function askGeneral(row, attempts) {
     let verdict = null;
     try {
       verdict = verdictOf(await judge({ text: shown(row.payload.text), scopeId: row.payload.scopeId }));
     } catch (error) {
       counters.failures += 1;
       report?.(typeof /** @type {any} */ (error)?.code === "string" ? `official_promotion_${/** @type {any} */ (error).code}` : "official_promotion_judge_failed");
-      if (attempts < PROMOTION_JUDGE_ATTEMPTS) return update(row, { status: "judge_pending", judgeAttempts: attempts });
+      if (attempts < PROMOTION_JUDGE_ATTEMPTS) return { settled: await update(row, { status: "judge_pending", judgeAttempts: attempts }) };
       rejectedFor("judge_unavailable");
-      return update(row, { status: counted("rejected"), reason: ["judge_unavailable"], judgeAttempts: attempts });
+      return { settled: await update(row, { status: counted("rejected"), reason: ["judge_unavailable"], judgeAttempts: attempts }) };
     }
-    if (!verdict) { rejectedFor("judge_invalid"); return update(row, { status: counted("rejected"), reason: ["judge_invalid"], judgeAttempts: attempts }); }
-    if (!verdict.general) { rejectedFor("not_general"); return update(row, { status: counted("rejected"), reason: ["not_general"], judgeAttempts: attempts }); }
+    if (!verdict) { rejectedFor("judge_invalid"); return { settled: await update(row, { status: counted("rejected"), reason: ["judge_invalid"], judgeAttempts: attempts }) }; }
+    if (!verdict.general) { rejectedFor("not_general"); return { settled: await update(row, { status: counted("rejected"), reason: ["not_general"], judgeAttempts: attempts }) }; }
+    return { verdict };
+  }
+
+  /** Run the model's gates over a stored method. @param {any} row */
+  async function judgeRow(row) {
+    // A method the harm judge could not settle already has its general verdict, stored with the wait: only the harm check is asked again.
+    const heldClass = Number(row.payload.harmAttempts ?? 0) > 0 && PROMOTION_CLASSES.includes(row.payload.lessonClass) ? String(row.payload.lessonClass) : null;
+    const attempts = heldClass ? Number(row.payload.judgeAttempts ?? 0) : Number(row.payload.judgeAttempts ?? 0) + 1;
+    /** @type {{ general: true, lessonClass: string }} */
+    let verdict;
+    if (heldClass) verdict = { general: true, lessonClass: heldClass };
+    else {
+      const asked = await askGeneral(row, attempts);
+      if ("settled" in asked) return asked.settled;
+      verdict = asked.verdict;
+    }
     // Before the method can be promoted, corroborate another's, or be shown to anyone: an independent family's reading of what it tells a reader to do.
     const harmed = await harmCheck(row);
     const harmChecked = { outcome: harmed.outcome, ...(harmed.code ? { code: harmed.code } : {}), at: now().toISOString() };
@@ -313,6 +381,17 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
       // The entry's id (a hash), never the account.
       try { await audit?.("learning.official_promotion.harm_flagged", { code: "harm_flagged", detail: `scope=${row.payload.scopeId} entry=${row.id}` }); } catch { /* the ledger is a record of the decision, not a step in it */ }
       return update(row, { status: counted("rejected"), reason: ["harm_flagged"], lessonClass: verdict.lessonClass, harmChecked, judgeAttempts: attempts });
+    }
+    if (harmed.outcome === "uncertain") {
+      // A judge that is unsure is not a judge that cleared the method, and a method that goes to everyone is read by everyone: it waits and is asked
+      // again at a later pass (`PROMOTION_HARM_RETRY_MS` apart), and after `PROMOTION_HARM_ATTEMPTS` unsure answers it is refused. Only for this
+      // promotion: the person's own method is another record and keeps serving them.
+      const harmAttempts = Number(row.payload.harmAttempts ?? 0) + 1;
+      if (harmAttempts >= PROMOTION_HARM_ATTEMPTS) {
+        rejectedFor("harm_uncertain");
+        return update(row, { status: counted("rejected"), reason: ["harm_uncertain"], lessonClass: verdict.lessonClass, harmChecked, judgeAttempts: attempts, harmAttempts });
+      }
+      return update(row, { status: "judge_pending", lessonClass: verdict.lessonClass, harmChecked, judgeAttempts: attempts, harmAttempts });
     }
     const judged = await update(row, { lessonClass: verdict.lessonClass, judgedAt: now().toISOString(), judgeAttempts: attempts, harmChecked });
     await settleAuthor(judged);
@@ -383,6 +462,25 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   async function recheck(row) {
     const payload = row.payload;
     if (!review) return null;
+    // The author is still an account, and — for a method that came in on another account's word — still in standing: a harness that deletes its
+    // accounts at the end of a run leaves nothing behind that the platform repeats to everyone.
+    const author = authorOf(row);
+    const known = await standingOf(author ? [author] : []);
+    if (!known.has(author) || (payload.promotedBy !== "established_author" && known.get(author) !== true)) {
+      const reason = known.has(author) ? "author_not_in_standing" : "author_gone";
+      rejectedFor(reason);
+      return update(row, { status: counted("rejected"), reason: [reason] });
+    }
+    // The same for the account that corroborated it: a method that came in on another account's word needs that account in standing still. With
+    // none left (deleted, or not a voice any more) it is not refused — it did nothing wrong — but waits again for a voice, as it did before. A record
+    // from before the accounts were kept on it names none and is judged on its author alone.
+    const voices = Array.isArray(payload.derivedFrom?.corroboratedBy) ? payload.derivedFrom.corroboratedBy.map(String) : [];
+    if (payload.promotedBy === "corroborated" && voices.length) {
+      const heard = await standingOf(voices);
+      if (!voices.some((id) => heard.get(id) === true)) {
+        return update(row, { status: counted("awaiting_corroboration"), promotedBy: null, derivedFrom: { ...payload.derivedFrom, corroboratedBy: [] } });
+      }
+    }
     const answer = await review({ text: shown(payload.text), scopeId: payload.scopeId });
     const independent = answer?.independent === true;
     const sameClass = answer?.general === true && answer?.class === payload.lessonClass;
@@ -415,11 +513,62 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     }
   }
 
-  /** One pass: judge what is waiting for a judge and re-check candidates within the day's bound. */
+  /**
+   * The records that still hold a method's text, read again for their author: one whose account is gone is refused at once (`author_gone`), whatever
+   * its status — before the judge is asked about it or the day's re-check reaches it — and keeps no text. @returns {Promise<number>} how many were refused
+   */
+  async function voidGoneAuthors() {
+    const holding = (await all()).filter((row) => HOLDING_STATUSES.includes(row.payload.status));
+    if (!holding.length) return 0;
+    const known = await standingOf([...new Set(holding.map(authorOf).filter(Boolean))]);
+    let voided = 0;
+    for (const row of holding) {
+      if (known.has(authorOf(row))) continue;
+      rejectedFor("author_gone");
+      await update(row, { status: counted("rejected"), reason: ["author_gone"] });
+      voided += 1;
+    }
+    return voided;
+  }
+
+  /**
+   * The methods waiting for a second account, read again: one that waited past `AWAITING_CORROBORATION_DAYS` is refused, and one whose author is now
+   * in standing beside another author in standing is a candidate. A refusal keeps no text. @returns {Promise<number>} how many became candidates
+   */
+  async function rereadWaiting() {
+    const waiting = (await all()).filter((row) => row.payload.status === "awaiting_corroboration").slice(0, PAGE);
+    const oldest = now().getTime() - AWAITING_CORROBORATION_DAYS * 86_400_000;
+    let promoted = 0;
+    for (const row of waiting) {
+      if (Date.parse(row.payload.judgedAt ?? row.payload.createdAt ?? "") < oldest) {
+        rejectedFor("corroboration_expired");
+        await update(row, { status: counted("rejected"), reason: ["corroboration_expired"] });
+        continue;
+      }
+      const voices = await corroborators(row);
+      if (voices.length) { await update(row, { status: counted("candidate"), promotedBy: "corroborated", ...withVoices(row, voices) }); promoted += 1; }
+    }
+    return promoted;
+  }
+
+  /** What the pack of everyone's holds, as one digest of its active records: a change the server did not make (an operator's withdrawal) is published. */
+  let activeDigest = /** @type {string | null} */ (null);
+  async function publishIfChanged() {
+    const digest = sha((await all()).filter((row) => row.payload.status === "active").map((row) => `${row.id}:${row.payload.method?.sha ?? ""}`).sort());
+    if (activeDigest !== null && digest !== activeDigest) await officialPacks?.publishAll();
+    activeDigest = digest;
+  }
+
+  /** One pass: judge what is waiting for a judge, read the waiting methods again, and re-check candidates within the day's bound. */
   async function tick() {
-    const result = { judged: 0, rechecked: 0 };
+    const result = { judged: 0, rechecked: 0, corroborated: 0 };
     try {
-      for (const row of (await all()).slice(0, PAGE).filter((candidate) => candidate.payload.status === "judge_pending")) { await judgeRow(row); result.judged += 1; }
+      await voidGoneAuthors();
+      // A method the harm judge was unsure of is asked again no sooner than `PROMOTION_HARM_RETRY_MS` after the last answer.
+      const retryAfter = now().getTime() - PROMOTION_HARM_RETRY_MS;
+      for (const row of (await all()).slice(0, PAGE).filter((candidate) => candidate.payload.status === "judge_pending"
+        && !(Number(candidate.payload.harmAttempts ?? 0) > 0 && Date.parse(candidate.payload.harmChecked?.at ?? "") > retryAfter))) { await judgeRow(row); result.judged += 1; }
+      result.corroborated = await rereadWaiting();
       if (review) {
         let room = perDay - await takenToday();
         for (const row of (await all()).filter((candidate) => candidate.payload.status === "candidate")) {
@@ -433,6 +582,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
           }
         }
       }
+      await publishIfChanged();
     } catch (error) {
       counters.failures += 1;
       report?.(typeof /** @type {any} */ (error)?.code === "string" ? `official_promotion_${/** @type {any} */ (error).code}` : "official_promotion_tick_failed");
@@ -442,6 +592,30 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
 
   return { consider, tick, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, harmChecks: { ...counters.harmChecks },
     harmSkippedBy: { ...counters.harmSkippedBy }, perDay, reviewConfigured: Boolean(review) }) };
+}
+
+/**
+ * An operator takes one method out of the pack of everyone's (`scripts/ops/official-packs.mjs --withdraw`): its record is refused with the reason
+ * `operator_withdrawn` and keeps neither its text nor its method, so nothing of it can come back by a restore; the running server's promotion tick sees the
+ * pack's active set change and publishes it again, which takes the method — or the whole pack, when it was the last — off every shelf.
+ * @param {any} documents @param {string} publisherId @param {string} key the method's key in the pack (`official:shared-practices:<method>`)
+ * @param {{ now?: () => Date }} [options]
+ * @returns {Promise<{ withdrawn: boolean, id?: string }>}
+ */
+export async function withdrawPromoted(documents, publisherId, key, { now = () => new Date() } = {}) {
+  /** @type {string | null} */ let cursor = null;
+  for (let pages = 0; pages < 20; pages += 1) {
+    const page = await documents.list(publisherId, "preferences", { limit: PAGE, cursor, filter: { recordType: OFFICIAL_PROMOTED_RECORD } });
+    const row = page.items.find((/** @type {any} */ item) => item.payload.status === "active" && item.payload.method?.key === key);
+    if (row) {
+      await documents.put(publisherId, "preferences", row.id, { ...row.payload, status: "rejected", reason: ["operator_withdrawn"], method: null, text: null, derivedFrom: null,
+        withdrawnAt: now().toISOString(), updatedAt: now().toISOString() }, { expectedRevision: row.revision, dropEarlierRevisions: true });
+      return { withdrawn: true, id: row.id };
+    }
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return { withdrawn: false };
 }
 
 /**
@@ -460,7 +634,7 @@ export function officialPromotionMetricFamilies(stats) {
     { name: "open_science_official_promotion_skipped_no_reviewer_total", type: "counter", help: "Methods not considered at all because no independent reviewer of another model family is configured.", series: [{ value: stats.skippedNoReviewer }] },
     { name: "open_science_official_promotion_reviewer_configured", type: "gauge", help: "1 when an independent reviewer of another model family is configured; 0 means no method can join the pack.", series: [{ value: stats.reviewConfigured ? 1 : 0 }] },
     { name: "open_science_official_promotion_harm_checks_total", type: "counter",
-      help: "Harm checks of a method before it can be promoted, by outcome: clear, flagged (not promoted; the person's own method is untouched), uncertain (the judge was unsure) or skipped (no answer; the reasons are the next family).",
+      help: "Harm checks of a method before it can be promoted, by outcome: clear, flagged (not promoted; the person's own method is untouched), uncertain (the judge was unsure: the method waits and is asked again, and is refused as harm_uncertain after the attempts) or skipped (no answer; the reasons are the next family).",
       series: ["clear", "flagged", "uncertain", "skipped"].map((outcome) => ({ value: stats.harmChecks?.[outcome] ?? 0, labels: { outcome } })) },
     { name: "open_science_official_promotion_harm_check_skipped_total", type: "counter",
       help: "Why a harm check gave no answer and the method went on unchecked: the judge not composed, unconfigured or not calibrated for its prompt, disabled, busy, over budget, timed out or failed.",

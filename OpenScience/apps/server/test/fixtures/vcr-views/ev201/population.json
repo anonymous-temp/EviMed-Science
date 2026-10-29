@@ -1,10 +1,19 @@
 {
   "version": "人群 v2（方案 v1）",
+  "selection": {
+    "objectId": "pop_1",
+    "version": 2,
+    "resultId": "res_11",
+    "resultVersion": 1
+  },
   "kind": "真实队列",
   "name": "合作方候选人 v2",
   "versions": [
     {
       "id": "pop_1",
+      "version": 2,
+      "resultId": "res_11",
+      "resultVersion": 1,
       "generationInput": null,
       "label": "人群 v2",
       "stale": true,
@@ -14,6 +23,7 @@
     },
     {
       "id": "pop_2",
+      "version": 1,
       "generationInput": null,
       "label": "人群 v1",
       "stale": false,

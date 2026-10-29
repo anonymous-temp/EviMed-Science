@@ -1,5 +1,5 @@
 import type { GeoConversationScope } from "./geoNativeClient";
-import { conversationReference } from "@evimed/domain";
+import { conversationReference, vcrObjectReference } from "@evimed/domain";
 import { getWebProjectId } from "./apiClient";
 
 /** One explicit request to the native session surface; a draft never submits. */
@@ -9,11 +9,23 @@ export interface RuntimeUiIntent {
   requestId: string;
   sessionId: string;
   draft?: string;
+  restoreDraft?: boolean;
   originReference?: NonNullable<ReturnType<typeof conversationReference>>;
   references?: Array<{ id: string; title: string }>;
   resultRevision?: { referenceId: string };
+  vcrReference?: VcrObjectSelection;
   geoPlanContext?: { referenceId: string };
   scope?: GeoConversationScope;
+}
+
+export interface VcrObjectSelection {
+  studyId?: string;
+  kind: "population" | "patient_set" | "comparator" | "trial_scenario" | "model" | "step";
+  objectId: string;
+  version?: number | string;
+  resultId?: string;
+  resultVersion?: number;
+  compareTo?: { objectId: string; version: number | string; resultId?: string; resultVersion?: number };
 }
 
 /**
@@ -45,11 +57,13 @@ export function runtimeUiIntentFromState(state: unknown, projectId: string): Run
   if (intent.geoPlanContext && (Object.keys(intent.geoPlanContext).length !== 1 || !/^gpc_[a-f0-9]{64}$/.test(intent.geoPlanContext.referenceId))) return null;
   if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== "string"
     || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId))) return null;
+  if (intent.restoreDraft !== undefined && typeof intent.restoreDraft !== "boolean") return null;
+  if (intent.vcrReference && (!intent.draft || !vcrObjectReference(intent.vcrReference))) return null;
   if (intent.originReference && !conversationReference(intent.originReference)) return null;
   if (intent.references && (!Array.isArray(intent.references) || intent.references.length > 50
     || intent.references.some(ref => !ref || typeof ref.id !== "string" || !/^src_[a-f0-9]{32}$/.test(ref.id)
       || typeof ref.title !== "string" || ref.title.length > 300))) return null;
-  return intent;
+  return intent.vcrReference ? { ...intent, vcrReference: vcrObjectReference(intent.vcrReference) as VcrObjectSelection } : intent;
 }
 
 /** A history entry's project is a routing hint; project selection must still prove ownership. */

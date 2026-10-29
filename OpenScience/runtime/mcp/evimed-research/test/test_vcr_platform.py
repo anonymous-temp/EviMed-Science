@@ -124,7 +124,7 @@ class _Gateway(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802 - http.server naming
         body = self.rfile.read(int(self.headers.get("content-length") or 0))
-        type(self).seen.append({"path": self.path, "authorization": self.headers.get("authorization"), "body": json.loads(body)})
+        type(self).seen.append({"path": self.path, "authorization": self.headers.get("authorization"), "execution_context": self.headers.get("X-EviMed-Execution-Context"), "body": json.loads(body)})
         operation = self.path.rsplit("/", 1)[-1]
         answer = type(self).answers.get(operation, (404, {"error": "Not found.", "code": "not_found"}))
         # A list is a scripted sequence: each request takes the next answer, and the last one stays.
@@ -170,6 +170,19 @@ class _GatewayCase(unittest.TestCase):
         self.server = load_server()
 
 
+class NativeVcrContextTests(_GatewayCase):
+    def test_server_preserves_native_context_and_does_not_reuse_it_on_the_next_call(self):
+        server = load_server()
+        context = {"v": 1, "sessionId": "native", "callId": "call", "rootCallId": "root-call", "provider": "deepseek-official", "model": "deepseek-v4-pro"}
+        _Gateway.answers["read"] = (200, {"data": {"what": "study", "available": True}})
+        answer = server.call_tool("vcr_read", {"what": "study", "__evimed_execution_context": context})
+        self.assertEqual(answer["status"], "success")
+        self.assertEqual(json.loads(_Gateway.seen[-1]["execution_context"]), context)
+        self.assertNotIn("__evimed_execution_context", _Gateway.seen[-1]["body"])
+        server.call_tool("vcr_read", {"what": "study"})
+        self.assertIsNone(_Gateway.seen[-1]["execution_context"])
+
+
 class VcrToolDefinitionTests(unittest.TestCase):
     def test_six_tools_with_closed_schemas(self):
         definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
@@ -193,7 +206,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
         self.assertLess(len(description), 1700, "the shapes live in the shape action, not here")
-        for fragment in ("action shape", "never guess a key", "refused by the field's path", "kind:'snapshot'", "vcr-analysis skill"):
+        for fragment in ("action=shape", "do not guess keys", "outlive this turn", "modelVersion"):
             self.assertIn(fragment, description)
         for typed in ("accrual?", "dropoutAnnual", "design_simulation {", "truth{", "[time_to_event]", "isNull", "dropoutRate"):
             self.assertNotIn(typed, description, "a hand-typed shape is what drifted")
@@ -204,10 +217,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
 
     def test_write_points_at_the_shape_action_and_names_real_kinds(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_write"]["description"]
-        self.assertIn("action shape", description)
-        for kind in ("design_analytic", "design_simulation", "generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_population"):
-            self.assertIn(kind, description)
-            self.assertIn(kind, vcr_platform.JOB_KINDS)
+        self.assertIn("action=shape", description)
+        self.assertIn("workflow skill", description)
         for name, kinds in vcr_platform.OBJECT_SHAPES.items():
             self.assertTrue(set(kinds) <= set(vcr_platform.JOB_KINDS), "%s: %s" % (name, sorted(set(kinds) - set(vcr_platform.JOB_KINDS))))
 
@@ -292,16 +303,17 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual((match["runStates"], match["keys"]), ([], []))
         self.assertTrue(any("empty scenario" in note for note in match["notes"]))
         accrual = vcr_platform.shape({"kind": "accrual_forecast"})["data"]
-        self.assertEqual(accrual["runStates"], ["target", "eventTarget", "eventHazard", "byTimes"])
-        self.assertEqual([line.split(":", 1)[0] for line in accrual["keys"]], ["target", "eventTarget", "eventHazard", "byTimes"])
+        self.assertNotIn("runStates", accrual)
+        self.assertNotIn("builtByPlatform", accrual)
+        self.assertTrue({"sites", "target", "eventTarget", "eventHazard", "screenFailure", "byTimes"} <= {line.split(":", 1)[0] for line in accrual["keys"]})
         # An event target is counted among every patient, enrolled and still to enrol, and the shape says what happens beyond them.
         self.assertTrue(any("eventTarget counts events among every patient the forecast follows" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
 
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]
         self.assertIn("matching", description)
-        self.assertIn("subjectKey", description)
-        self.assertIn("pseudonym", description)
+        self.assertIn("patient_context", description)
+        self.assertIn("messageSeq", description)
 
     def test_evidence_pool_names_a_parameter_and_never_takes_numbers(self):
         properties = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["evidence_pool"]["inputSchema"]["properties"]

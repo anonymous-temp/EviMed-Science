@@ -284,6 +284,10 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "geo_response_invalid",
   "geo_response_too_large",
   "social_posts_unconfigured",
+  // A job the run asked to read on that is not there (aged out, or never this project's) or whose record could not be read: the
+  // run searches again or goes on without it.
+  "social_posts_job_unknown",
+  "social_posts_job_unavailable",
   // 「虚拟临床研究」's runtime tools (vcr_platform.py → vcrGateway.mjs) not
   // answering, read exactly like GEO's: the module off or not open to this
   // account, a conversation outside a study, an outage. The run records that
@@ -440,6 +444,15 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // that stayed silent.
   "geo_probe_disabled",
   "geo_probe_gateway_rate_limited",
+  // A task the host accepted whose answers could not be read afterwards (it is paid for and is never asked a second time), and a read of a
+  // request id this project never had accepted or whose record has expired: limitations the report states, never a vendor that stayed silent.
+  "geo_probe_result_unavailable",
+  "geo_probe_request_unknown",
+  // A task still running when the call's deadline passed (its request id comes back to be read on), and a screenshot whose name has
+  // expired or is not one the probe host gave: the answer stands without it.
+  "geo_probe_result_pending",
+  "geo_probe_screenshot_expired",
+  "geo_probe_screenshot_invalid",
   // The private evidence API is not configured for this deployment. It is host
   // configuration, like the Unpaywall case above, and the keyless public
   // sources are what the tool falls back to — failing a run over it would
@@ -681,6 +694,8 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",
   "social_posts_limit_invalid",
+  "social_posts_request_invalid",
+  "social_posts_job_invalid",
   // And 「虚拟临床研究」's, on the same line: a `what` outside the vocabulary, a
   // filter or payload the gateway cannot read, a simulate action that is not
   // start or status. A single invalid item of a write is again not one of
@@ -816,6 +831,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "geo_probe_screenshot_name_invalid",
   "geo_probe_request_invalid",
   "geo_probe_request_too_large",
+  "geo_probe_request_id_invalid",
 ]);
 
 /**
@@ -1031,6 +1047,8 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   'runtime_monitor_timeout',
   'runtime_monitor_failed',
   'runtime_prompt_rejected',
+  'runtime_prompt_admission_busy',
+  'runtime_prompt_admission_invalid',
   'runtime_prompt_lost',
   // Manufactured by `sanitizeErrorCode` for a code that is not a well-formed
   // identifier. The system invents it for itself, so it has to be able to
@@ -1286,11 +1304,17 @@ const sourceIntakeErrorCodes = Object.freeze([
   'knowledge_compile_failed',
   'knowledge_compile_cancelled',
   'knowledge_compile_misplaced',
+  // Personal storage is where an account keeps its own materials, not a project, so it has no pages to compile.
+  'knowledge_storage_project',
+  // A save, a copy or a retry that was chosen on a version of the document that has moved on since (a note edited elsewhere,
+  // a document replaced); the page reloads and the person chooses again.
+  'source_revision_conflict',
   // 连接网盘 (`openListClient.mjs`): OpenList's own refusals, named so the
   // browse toast says what happened rather than a bare 502. No storage covers
   // the account's namespace; the deployment's credential was not accepted.
   'openlist_storage_missing',
   'openlist_credential_rejected',
+  'openlist_permission_denied',
 ])
 
 /**
@@ -1345,6 +1369,9 @@ const libraryErrorCodes = Object.freeze([
   'library_understanding_missing',
   'library_capsule_unavailable',
   'library_publish_busy',
+  // 「适用的项目」 of a document (2026-10-28): the list is not "all" or ids, or names a project a document cannot be sent to.
+  'library_projects_invalid',
+  'library_project_invalid',
 ])
 
 /**
@@ -1434,7 +1461,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_export_not_found',
   'vcr_model_invalid',
   'vcr_member_role_invalid',
-  'vcr_referral_not_found',
+  'vcr_recruitment_retired',
   'vcr_forbidden',
   'vcr_unavailable',
   'vcr_action_invalid',
@@ -1534,6 +1561,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
+  'vcr_task_context_deleted', 'vcr_completion_canceled', 'vcr_completion_disclosed', 'vcr_completion_notice_failed', 'vcr_completion_observed', 'vcr_completion_exhausted', 'vcr_finish_hooks_exhausted', 'vcr_completion_origin_invalid', 'vcr_completion_origin_unavailable', 'vcr_completion_unavailable', 'vcr_invocation_unavailable', 'vcr_job_advance_failed', 'vcr_model_version_changed', 'vcr_patient_context_invalid', 'vcr_object_reference_invalid',
   'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
   'registry_reported_not_site_confirmed',
   'vcr_clinical_fact_invalid',
@@ -1575,7 +1603,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
-  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_referral_create_failed',
+  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
@@ -1607,23 +1635,6 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // the engine channel and its jobs
   'vcr_engine_job_remove_failed',
   'vcr_engine_result_mismatch',
-  // the referral ledger and its contact stop
-  'vcr_referral_state_unknown',
-  'vcr_referral_transition_invalid',
-  'vcr_referral_transition_refused',
-  'vcr_referral_role_forbidden',
-  'vcr_referrals_contact_needs_approval',
-  'vcr_contact_not_approved',
-  'vcr_contact_role_forbidden',
-  'vcr_contact_approval_not_per_person',
-  'vcr_screen_failure_needs_criterion',
-  'vcr_enrollment_needs_date',
-  'vcr_exit_field_not_derivable',
-  'vcr_exit_date_rewritten',
-  'vcr_exit_reason_rewritten',
-  'vcr_followup_kind_unknown',
-  'vcr_restricted_field_not_marked',
-  'vcr_site_not_found',
   'vcr_model_exists',
   // the module's own health
   'vcr_migration_failed',
@@ -1977,7 +1988,36 @@ export const EXTENSION_ERROR_CODES = Object.freeze([
   'skill_platform_not_found', 'skill_platform_not_copyable', 'skill_platform_unreadable',
 ])
 
-export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown']);
+/**
+ * What the research-database connector answers with (`apps/server/src/researchDb*.mjs`, 2026-10-29): a project's own
+ * PostgreSQL, read as a snapshot into a CSV source. Each names the one operation it stopped -- saving a credential,
+ * listing tables, importing one -- and never a verdict on a run. The three connection failures are told apart on purpose
+ * (a certificate, a login, a network): they have three different remedies and the person or their database
+ * administrator is the one who applies each. The two keyring codes are the operator's.
+ */
+export const RESEARCH_DB_ERROR_MESSAGES_ZH = Object.freeze({
+  research_db_unavailable: '研究数据库连接暂时不可用，请稍后再试。',
+  research_db_network_denied: '这个数据库地址还没有开通访问，请联系平台管理员开通。',
+  research_db_tls_failed: '数据库的加密连接没有建立：证书不被信任、已过期或与地址不符。请数据库管理员确认证书；如果是云数据库或自签证书，请平台管理员配置它的根证书。',
+  research_db_login_failed: '数据库拒绝了这个账号：请核对用户名、密码和数据库名，以及该账号是否允许从这里连接。',
+  research_db_unreachable: '连不上这个数据库：地址或端口没有响应。请确认数据库在运行，并且防火墙已允许平台访问。',
+  research_db_login_too_privileged: '这个数据库账号权限过高（超级用户或可绕过行级安全），平台不会用它读取数据。请改用一个只读账号。',
+  research_db_selection_invalid: '这张表或这些列暂不支持导入，请换一张表或减少列。',
+  research_db_busy: '另一项数据导入正在进行，请稍后再试。',
+  research_db_connection_invalid: '数据库连接信息不完整或格式不对，请核对后再保存。',
+  research_db_connection_limit: '这个项目保存的数据库连接已达上限，请先删除不再用的连接。',
+  research_db_connection_missing: '没有找到这个数据库连接，可能已被删除。',
+  research_db_connection_revoked: '这次请求保存的连接已被删除，请重新添加。',
+  research_db_connection_unavailable: '这个数据库连接的凭据现在读不出来，请删除后重新添加。',
+  research_db_request_conflict: '这个请求编号已用于另一个不同的请求，请刷新页面后重试。',
+  research_db_request_invalid: '请求缺少有效的编号，请刷新页面后重试。',
+  research_db_payload_invalid: '这次提交的内容不对，请刷新页面后重试。',
+  research_db_staging_unavailable: '数据库快照的暂存记录读不出来，这次导入没有完成，请重试。',
+  research_db_keyring_unavailable: '研究数据库的凭据密钥读不出来，连接功能暂停。请联系平台管理员。',
+  research_db_keyring_incomplete: '研究数据库的凭据密钥缺少已保存连接所用的版本，连接功能暂停。请联系平台管理员补回密钥。',
+})
+
+export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown','managed_browser_page_failed']);
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...Object.keys(EVOLUTION_ERROR_MESSAGES),
@@ -2017,6 +2057,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
+  ...Object.keys(RESEARCH_DB_ERROR_MESSAGES_ZH),
 ])])
 
 /**
@@ -2112,6 +2153,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   ...EVIDENCE_CARD_ERROR_MESSAGES_ZH,
   ...EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
   ...EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH,
+  // The research-database connector's refusals: one operation each, and a connection failure says which of three it is.
+  ...RESEARCH_DB_ERROR_MESSAGES_ZH,
   // Why a data-semantics check could not read a table. The check is reported as
   // not run; the other checks and the analysis go on.
   file_unreadable: '这个数据文件没能读取，对应的数据检查未执行；其他检查和分析不受影响。',
@@ -2124,6 +2167,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   managed_browser_busy: '浏览器正在处理操作，请稍后重试。',
   managed_browser_unavailable: '浏览器暂时无法连接，可稍后重试。',
   managed_browser_action_unknown: '本次操作结果尚未确认，请先查看页面再继续。',
+  managed_browser_page_failed: '页面无法打开，可在系统浏览器中打开。',
 
   extension_contract_invalid: '提交的内容格式不正确，请检查后重新提交。',
   extension_proof_untrusted: '这个扩展尚未取得平台可核对的兼容记录。',
@@ -2290,8 +2334,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_export_kind_invalid: '没有这种导出；可选研究包、CDE 沟通交流资料包、模拟报告、系统验证文档包。',
   vcr_export_not_found: '找不到这次导出，可能已被清理；重新导出即可。',
   vcr_model_invalid: '模型卡填得不完整：要有名字、版本和层级。',
-  vcr_member_role_invalid: '成员角色只能选研究负责人、临床复核、统计复核、数据管理、招募协调员、中心或只读查看者。',
-  vcr_referral_not_found: '找不到这条转诊记录。',
+  vcr_member_role_invalid: '可添加角色为研究负责人、临床复核、统计复核、数据管理或只读查看者；旧版角色只支持移除。',
+  vcr_recruitment_retired: '该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。',
   vcr_pack_not_found: '找不到这份知识包，或它不属于你的账号；刷新知识包列表后重选。',
   vcr_pack_invalid: '这份知识包不符合规定的结构，没有保存；按提示的字段修改后再写。',
   vcr_definition_not_found: '人群定义库里没有这条定义或这个版本，或它不属于你的账号；刷新定义库后重选。',
@@ -2327,6 +2371,21 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_not_found: '所选模型的这个版本不可用，请从模型库选择确切的模型版本；其他研究继续。',
   registry_unsupported: '本部署尚未接入这个注册库，不把未查询当成没有记录。',
   registry_terms_forbid_commercial_use: '这个注册库的使用条款禁止商业使用，所以不接入；它没有被查询，不等于没有记录。',
+  vcr_completion_origin_invalid: '这项结果的原始对话标识不完整，无法自动续接；已保存的结果仍可查看。',
+  vcr_completion_origin_unavailable: '这项结果的原始对话暂不可用，自动续接等待恢复；已保存的结果仍可查看。',
+  vcr_completion_unavailable: '结果续接服务暂不可用；计算结果仍保留在研究中。',
+  vcr_invocation_unavailable: '这次工具调用没有可核对的当前对话来源，请从原对话重新发起。',
+  vcr_job_advance_failed: '计算已结束，但结果关联尚未完成，系统会重试；不要重复提交计算。',
+  vcr_object_reference_invalid: '选定的研究对象或版本已不可用，请重新打开结果后选择。',
+  vcr_model_version_changed: '所选模型版本已变化，请读取确切版本后重新配置；已有结果保留。',
+  vcr_task_context_deleted: '这段对话的研究资料已删除，请新开对话继续研究。',
+  vcr_completion_canceled: '已按你的停止请求结束自动续接，计算结果仍可查看。',
+  vcr_completion_disclosed: '计算结果已保存，可在原对话中查看。',
+  vcr_completion_notice_failed: '结果通知暂未送达，请稍后查看原对话。',
+  vcr_completion_observed: '计算结果已在原对话读取。',
+  vcr_completion_exhausted: '计算结果已保存，请在原对话中查看。',
+  vcr_finish_hooks_exhausted: '计算结果已保存，部分后续整理未能完成。',
+  vcr_patient_context_invalid: '请选择当前对话中的原始用户消息或本项目的已上传资料，不能把改写内容作为患者原始记录。',
   vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
   vcr_evidence_source_is_card: '证据条目的出处写成了证据卡的页面，没有保存；卡只是线索，去读它列出的原始来源，再按原文写这一条。',
   vcr_number_format_unknown: '报告里引用的数字格式不认识；改用平台支持的写法。',
@@ -2369,7 +2428,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_data_plane_not_configured: '本部署没有配置数据平面；T0（公开资料）的步骤照常。',
   vcr_data_plane_unconfigured: '本部署未接入数据平面；T0（公开资料）的全部步骤照常。',
   vcr_evidence_unavailable: '证据模块在本部署里还没有接入。',
-  vcr_matching_unavailable: '匹配与招募在本部署里还没有开放。',
+  vcr_matching_unavailable: '暂时无法进行患者匹配；请先保留患者资料与方案，恢复后重试。',
   vcr_access_unavailable: '数据访问的权限检查这次没能完成，已按不允许处理；稍后再试。',
   // Members and access to data.
   vcr_member_role_unknown: '这个角色不在研究成员的角色里；换一个再加。',
@@ -2395,23 +2454,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_data_plane_location_outside: '数据平面的存放目录不在允许的位置。',
   vcr_data_plane_location_runtime_readable: '数据平面目录不能放在运行时读得到的位置；请改到运行时看不到的目录。',
   vcr_snapshot_profile_failed: '这个数据快照的概况没能生成；快照本身没有受影响，可以重试。',
-  // The referral ledger and its contact stop.
-  vcr_referral_state_unknown: '转诊状态不在允许的范围内。',
-  vcr_referral_transition_invalid: '转诊状态不能这样变化；按顺序一步步推进。',
-  vcr_referral_transition_refused: '这次转诊状态变更被拒绝，原因见提示。',
-  vcr_referral_role_forbidden: '你的角色不能做这一步转诊操作。',
-  vcr_referrals_contact_needs_approval: '联系状态必须有具名的确认人才能保存。',
-  vcr_contact_not_approved: '联系患者之前要由协调员逐人确认，这一位还没有确认。',
-  vcr_contact_role_forbidden: '你的角色在这个研究里不能联系患者。',
-  vcr_contact_approval_not_per_person: '联系确认必须逐人进行，不接受批量确认。',
-  vcr_screen_failure_needs_criterion: '筛选失败要写明不满足的是哪一条入排标准。',
-  vcr_enrollment_needs_date: '入组要写明入组日期。',
-  vcr_exit_field_not_derivable: '试验期间的这个字段不可见，也不能从出组记录推出；出组日期与原因照原样保留。',
-  vcr_exit_date_rewritten: '出组日期已经记录，不能改写；需要更正请新增一条说明。',
-  vcr_exit_reason_rewritten: '出组原因已经记录，不能改写；需要更正请新增一条说明。',
-  vcr_followup_kind_unknown: '随访类型只能是常规诊疗观察、研究专属随访或出组后观察。',
-  vcr_restricted_field_not_marked: '试验期间受限的字段要标明缺失原因，不能留空。',
-  vcr_site_not_found: '找不到这个中心。',
   vcr_model_exists: '这个名字和版本的模型已经存在；换一个名字或版本。',
   // The module's own health (an operator reads these).
   vcr_migration_failed: '虚拟临床研究的数据表升级失败，模块已停用；请联系管理员。',
@@ -2474,7 +2516,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_assessment_save_failed: '匹配评估没有保存成功，下一轮会重试。',
   vcr_evaluation_failed: '匹配判定在这位受试者上出错，其余照常。',
   vcr_recheck_failed: '到期复评没有完成，下一轮会重试。',
-  vcr_referral_create_failed: '转诊记录没有生成成功，下一轮会重试。',
   vcr_derived_table_missing: '这项计算需要的派生数据表不存在。',
   vcr_derived_table_unsupported: '这种派生数据表不能作为这项计算的输入。',
   vcr_engine_table_invalid: '统计引擎返回的数据表与它的记录对不上，已拒绝。',
@@ -2635,6 +2676,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // is refused before the turn is accepted, but this file cannot promise what
   // the gateway did or did not charge, and a sentence that promises it would be
   // one more thing the product says without guaranteeing.
+  runtime_prompt_admission_busy: '该对话正在接收输入，请稍后重试。',
+  runtime_prompt_admission_invalid: '本部署的对话接入配置不可用，请联系管理员。',
   runtime_prompt_rejected: '运行时拒绝了这次提问，任务没有开始。稍后重试；反复出现请联系管理员。',
   runtime_prompt_lost:
     '这次提问没有送达运行时：等了很久，运行时的记录里始终没有它，任务从未开始。'
@@ -2804,6 +2847,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   knowledge_compile_misplaced: '这一轮整理把图谱写到了错误的位置，已清理，图谱保持上一轮的样子；可以再点一次“重新整理”。',
   openlist_storage_missing: '这个账户还没有接入网盘，无法从网盘导入。可以先直接上传文件。',
   openlist_credential_rejected: '网盘服务没有接受这个部署的凭据，暂时无法浏览网盘。请联系管理员。',
+  openlist_permission_denied: '网盘不允许这个账户访问它的目录，暂时无法浏览网盘。请联系管理员。',
+  knowledge_storage_project: '个人资料只是存放资料的地方，不整理成知识页；知识页在项目里整理。',
+  source_revision_conflict: '这份资料刚刚有了新的内容。刷新知识库后再试。',
   library_unavailable: '个人资料库暂时不可用，稍后再试。',
   library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
@@ -2828,6 +2874,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_understanding_missing: '这份资料还没有资料理解结果。分析深度为“结构化”或“深度”的资料理解完成后，才能发布到记忆胶囊。',
   library_capsule_unavailable: '账户的主要胶囊是别人分享来的，资料只会写进你自己的胶囊。先把自己的胶囊设为主要胶囊，再发布。',
   library_publish_busy: '资料库正有一次发布到记忆胶囊的操作在进行，等它完成后再试。',
+  library_projects_invalid: '适用项目的选择不完整：选“所有项目”，或勾选具体的项目，刷新页面后再试。',
+  library_project_invalid: '这个项目不能用来放资料：它可能已删除、已归档，或是循证 GEO、虚拟临床研究这类专门的项目。换一个普通项目再试。',
   capsule_export_empty: '还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。',
   capsule_recipient_unknown: '要分享给的账号不在这个平台上，请核对账号名。',
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
@@ -3250,6 +3298,8 @@ export function errorCodeOutcome(code) {
   if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
   // Keeping a card current refuses one operation on one card (a challenge, a switch), never a run.
   if (Object.hasOwn(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH, text)) return 'upstream'
+  // The research-database connector refuses one listing, one credential or one import, never a run.
+  if (Object.hasOwn(RESEARCH_DB_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
@@ -3351,7 +3401,9 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
   ])
   // A ceiling the reader can raise or wait out: shown to them, on the run it stopped.
   claim('person', ['runtime_spend_limit_reached'])
-  claim('operator', [...keys(READINESS_ERROR_MESSAGES_ZH), ...keys(EVOLUTION_ERROR_MESSAGES), ...EVIDENCE_PROGRAMME_ERROR_CODES])
+  claim('operator', [...keys(READINESS_ERROR_MESSAGES_ZH), ...keys(EVOLUTION_ERROR_MESSAGES), ...EVIDENCE_PROGRAMME_ERROR_CODES,
+    // The connector's credential keys are the deployment's: the person cannot mend a keyring.
+    'research_db_keyring_unavailable', 'research_db_keyring_incomplete'])
   claim('run', [
     ...RUNTIME_ERROR_CODES, ...RUN_VERDICT_ERROR_CODES, ...SOCKET_TOOL_ERROR_CODES,
     ...repairableEvidencePackageErrorCodes, ...recoverableEvidenceSourceErrorCodes, ...terminalEvidenceSourceErrorCodes,
@@ -3364,7 +3416,7 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,
     ...EVIMED_CREDITS_ROUTE_ERROR_CODES, ...EVIDENCE_PUBLIC_ERROR_CODES, ...EVIDENCE_FLYWHEEL_ERROR_CODES,
     ...keys(DOCUMENT_EXPORT_ERROR_MESSAGES), ...keys(SOURCE_CHANGE_ERROR_MESSAGES), ...keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
-    ...keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
+    ...keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH), ...keys(RESEARCH_DB_ERROR_MESSAGES_ZH),
     // What the control plane refused on a page or a ceiling the reader meets: the engine and the map of memory, the holds on
     // a project's runtime, the limits of an account (the gateway's and the independent check's own codes are the run's).
     ...CONTROL_PLANE_ERROR_CODES,

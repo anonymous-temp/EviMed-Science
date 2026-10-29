@@ -1,3 +1,5 @@
+import { VCR_PREDICTION_LIMIT_LABELS_ZH } from "@evimed/domain";
+import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState, type ReactNode } from "react";
 import { ChevronLeft, CircleCheck, Info } from "lucide-react";
 import { VCR_COMPARATOR_ROUTE_LABELS_ZH } from "@evimed/domain";
@@ -71,7 +73,7 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
   // so they do not count as a result.
   const prior = data.prior ?? [];
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
-    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict;
+    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark;
   // The route in view: the one the study uses until the reader presses another. On a narrow page the record replaces the list.
   const used = data.routes.find((route) => route.selected)?.route ?? data.routes[0]?.route ?? null;
   const [looking, setLooking] = useState<string | null>(null);
@@ -158,6 +160,9 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
 function UsedRoute({ data }: { data: ComparatorData }) {
   const frame = useStudyFrame();
   const prior = data.prior ?? [];
+  const [comparing, setComparing] = useState(false);
+  const assessmentDraft = `${VCR_ASSESS_COMPARABILITY_DRAFT} 请限定于当前保存的对照${data.selection?.version ? `（版本 ${data.selection.version}）` : ""}及其证据，逐项解释差异和缺失条件。`;
+  const selection = data.selection ? { kind: "comparator" as const, studyId: frame?.studyId, objectId: data.selection.id, version: data.selection.version ?? undefined, ...(data.selection.resultId ? { resultId: data.selection.resultId, resultVersion: data.selection.resultVersion ?? undefined } : {}) } : undefined;
   // The server's own sentence about where the estimate holds ends in a pointer to the band beside it; the band is the statement.
   const estimand = data.estimand && data.estimand.rows.length > 0 ? data.estimand : null;
 
@@ -215,6 +220,10 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
   return (
     <>
+      {frame && <Button variant="text" size="sm" onClick={() => setComparing(true)}>比较版本</Button>}
+      {comparing && frame && <VcrVersionComparison studyId={frame.studyId} kind="comparator" versions={data.versions ?? []} onClose={() => setComparing(false)} />}
+
+      {data.predictionBenchmark && <PredictionBenchmark data={data.predictionBenchmark} />}
       {estimandRows.length > 0 && (
         <Section title="估计目标" toolbar={estimand?.source ? <SourceTag source={estimand.source} /> : undefined}>
           <FactList rows={estimandRows} />
@@ -225,7 +234,7 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
       {data.dimensions.length > 0 && (
         <Section title="可比性">
-          <DimensionBand dimensions={data.dimensions} onAssess={frame ? () => frame.openChat(VCR_ASSESS_COMPARABILITY_DRAFT) : null} />
+          <DimensionBand dimensions={data.dimensions} onAssess={frame ? () => frame.openChat(assessmentDraft, selection) : null} />
         </Section>
       )}
 
@@ -251,6 +260,25 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       {data.methods && data.methods.length > 0 && <Methods methods={data.methods} />}
     </>
   );
+}
+
+function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predictionBenchmark"]> }) {
+  const condition = ({ control: "对照条件", natural_history: "自然病程", standard_care: "标准治疗" } as Record<string, string>)[data.sourceCondition ?? ""] ?? data.sourceCondition;
+  const endpoint = data.endpoint;
+  const endpointType = ({ continuous: "连续结局", binary: "二分类结局", time_to_event: "时间结局" } as Record<string, string>)[endpoint?.type ?? ""] ?? endpoint?.type;
+  const unit = ({ days: "天", weeks: "周", months: "月", years: "年" } as Record<string, string>)[endpoint?.timeUnit ?? ""] ?? endpoint?.timeUnit;
+  return <Section title="模型预测基准">
+    <FactList rows={[
+      ...(condition ? [{ label: "模型条件", value: condition }] : []),
+      ...(endpoint ? [{ label: "预测终点", value: [endpointType, endpoint.horizon !== null ? `${endpoint.horizon} ${unit ?? ""}` : null].filter(Boolean).join(" · ") }] : []),
+      ...(data.mean ? [{ label: "人群预测均值", value: <VcrNumber label="人群预测均值" value={data.mean} /> }] : []),
+      ...(data.outcomeSd ? [{ label: "预测结局标准差", value: <VcrNumber label="预测结局标准差" value={data.outcomeSd} /> }] : []),
+      ...(data.relativeScore ? [{ label: "平均相对预后评分", value: <VcrNumber label="平均相对预后评分" value={data.relativeScore} /> }] : []),
+      ...(!data.absoluteRiskAvailable ? [{ label: "绝对风险", value: "未提供适用的基线风险；只报告可支持的相对预测量。" }] : []),
+      { label: "解释范围", value: "模型条件下的预测基准，不识别治疗效果。" },
+      ...data.limits.map(limit => ({ label: "局限", value: <>{(VCR_PREDICTION_LIMIT_LABELS_ZH as Record<string, string>)[limit.code] ?? VCR_PREDICTION_LIMIT_LABELS_ZH.unknown}{limit.source && <Disclosure summary="查看来源说明"><span data-prose="">{limit.source}</span></Disclosure>}</> })),
+    ]} />
+  </Section>;
 }
 
 /** A route that is not the one in use: what it is, what it would need and where that is brought in. */

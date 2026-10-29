@@ -775,6 +775,8 @@ flowchart TB
 
 输出 JSON：`title_zh`、`summary_zh`、`lane`、`specialties`、`evidence_type`、`entities{drugs, trials, orgs, diseases}`、`scores{impact, novelty, relevance}`、`flags`。
 
+**行业动态的类别（c5-biz，2026-10-26）。** 编辑的输出另有 `industry_kind`，只对题材为 `industry` 的条目有意义；词表是 `@evimed/domain` 的 `FRONTIER_INDUSTRY_KINDS`（`deal` 交易与授权、`financing` 融资与上市、`people` 人事与组织、`operations` 公司经营、`pipeline` 研发管线、`other` 其他，中文标签在 `FRONTIER_INDUSTRY_KIND_LABELS_ZH`）。`verifyEdit` 只保留词表内的键，其余记为空，从不因它使整个答案失败，代码也不猜；`frontierIndustryKindDecision` 仅当最终题材是 `industry` 时才存（列 `items.industry_kind`），未经新编辑重新打标的条目保留先前的编辑或回填给的类别。存量用 `node scripts/ops/frontier-rewrite.mjs --steps kind --days 30`：报告不调用模型，`--apply` 才写；它在默认步骤里、次序在 `genre` 之后；对 `genre = 'industry' AND industry_kind IS NULL` 的已发布条目，每次调用 10 条（`FRONTIER_INDUSTRY_KIND_BATCH`，来源、标题与开头的几句），以"仍是行业动态且尚无类别"为条件比较后设置，写一行 `item_changes` 并每批递增一次内容版本；词表外的答案丢弃、下次运行再问。预算不再为 `ok` 时**整个运行**停止（后面的步骤也没有跑），续跑方式是用同一个 `--days` 再运行一次，每一步只选它仍欠的条目；不要用 `--since <resumeFrom>`，那会让没跑的步骤永远覆盖不到它之前的日子。
+
 提示词里的规则（**这一段所列的只在提示里，没有代码强制**）：只写来源里有的事实；不增删药物的盐、酯、剂型，没把握就保留原名；意向性治疗（ITT）的主要结果要带置信区间并写明分析集；发表状态只在来源写明时才说；研究方案的目的不是结果；不用感叹号和营销语、不写"本文""据悉"；`title_zh` ≤40 字、陈述句；`summary_zh` 2–3 句、≤120 字，输入写"正文：无"时留空；摘要的**最后一句要说这件事对实践或研究意味着什么**；仅当来源明确是公司发布且未发表的初步结果时才给 `press-release` 标记。另有三条在提示里和代码里**同时**存在：不得含链接（`verifyEdit` 校验）、阿拉伯数字照抄（数字复核校验）、中文来源的标题照抄（代码直接复制原标题，不采用模型给的）。
 
 代码校验（`verifyEdit`）：
@@ -991,7 +993,7 @@ flowchart TB
 | `GET /for-you` | 与我相关 |
 | `GET /hot?window=current\|week\|month` | 热榜 |
 | `GET /events/:id` | 事件页；被合并事件的旧 id 返回 **308**（相对 `Location`） |
-| `GET /dailies[?limit]`、`/dailies/:YYYY-MM-DD` | 日报；`limit` 1–60，默认 30 |
+| `GET /dailies[?limit][&before=YYYY-MM-DD]`、`/dailies/:YYYY-MM-DD` | 日报；`limit` 1–60，默认 30；`before` 是真实的日历日，**不含**该日，只读它之前的期次（日报存档的下一页，网页每次读 60 期、不够则接着读更早的）；不是日历日则 400 `frontier_query_invalid` |
 | `GET /weeklies[?limit]`、`/weeklies/:周一日期` | 周刊 |
 | `GET /sources` | 信源列表；运营者看全部，读者只看启用且未退役的；按角色缓存 60 秒 |
 | `GET /follows`、`POST /follows`、`DELETE /follows/:id` | 关注与屏蔽（5.5 节） |
@@ -1005,6 +1007,7 @@ flowchart TB
 | `view` | `selected`（默认）、`all` |
 | `by` | `timeline`（默认）、`published` |
 | `lane`、`specialty` | 八个栏目之一、二十一个专科之一 |
+| `industryKind` | 行业动态的类别之一：`deal`、`financing`、`people`、`operations`、`pipeline`、`other`（c5-biz，2026-10-26）；意味着题材为 `industry`（条件里重述了题材，题材后来变了的条目带着旧类别也不会被读出）；列表之外的取值 400 `frontier_query_invalid`；是列表游标指纹、ETag 与三份缓存的一部分，游标不跨类别携带。网页的「筛选」只提供前五个，`other` 是条目有、列表不请求的类别 |
 | `window` | `24h`、`3d`、`7d`、`30d` |
 | `q` | ≤200 字符 |
 | `starred`、`safety` | `1` / `0` |
@@ -1780,7 +1783,7 @@ node evals/frontier-editing/run_eval.mjs --runs 3 --key-file <你的模型密钥
 |:--|:--|
 | `sources` | `id`（PK）及登记表列；`plugin_health, last_ok_at, last_new_entry_at, entries_7d, selected_30d, registry_sha256, mirrored_at, enabled, retired_at` |
 | `entries` | `plugin_entry_id, plugin_seq, revision`（`UNIQUE(plugin_entry_id, revision)`）、`source_id, url, canonical_url, doi, pmid, registry_ids[], title_raw, summary_raw, facts, lang, lane_hint, published_at, date_precision, content_sha256, backfill, defects[]`、`state(received/held/merged/screened-out/promoted/dropped/backfill/failed)`、`hold_until, attempts`、租约列、`item_id` |
-| `items` | `public_id`（唯一，`^[a-z0-9]{12,32}$`）、`title_zh(≤200), summary_zh(≤600), reason_zh(≤200)`、`lane, source_type, evidence_type, evidence_basis, specialties[], entities(jsonb), entity_keys[], flags[]`、`score_authority(0–30), score_impact(0–30), score_novelty(0–20), score_relevance(0–20), score_total(0–100)`、`selected, selected_at, selected_rule, safety_alert, verification`、`published_at, timeline_at, state(screened/scored/published/withdrawn/failed), visible_at, withdrawn_at, withdrawn_reason`、`editor_version, editor_model`、`lexemes(tsvector)`、`event_id`、租约列 |
+| `items` | `public_id`（唯一，`^[a-z0-9]{12,32}$`）、`title_zh(≤200), summary_zh(≤600), reason_zh(≤200)`、`lane, source_type, evidence_type, evidence_basis, industry_kind（可空文本，无默认值；只在题材为 `industry` 时由编辑调用或回填写入，已发布且非空的部分索引 `frontier_items_industry_kind_idx (industry_kind, timeline_at DESC, id DESC)` 是 `industryKind` 过滤读的索引）, specialties[], entities(jsonb), entity_keys[], flags[]`、`score_authority(0–30), score_impact(0–30), score_novelty(0–20), score_relevance(0–20), score_total(0–100)`、`selected, selected_at, selected_rule, safety_alert, verification`、`published_at, timeline_at, state(screened/scored/published/withdrawn/failed), visible_at, withdrawn_at, withdrawn_reason`、`editor_version, editor_model`、`lexemes(tsvector)`、`event_id`、租约列 |
 | `item_keys` | 去重键（级联自 `items`） |
 | `item_texts` | `abstract_raw, body_excerpt(≤12000), model_input, model_input_sha256, abstract_zh, publication_types, mesh, journal, authors_short, open_access, enrichment(jsonb)` |
 | `item_mentions` / `item_links` | 并入的提及 / 链接（`retraction`、`correction`、`expression-of-concern`、`withdrawal`、`preprint-of`、`new-version`） |

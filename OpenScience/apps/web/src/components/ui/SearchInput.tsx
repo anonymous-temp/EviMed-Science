@@ -1,9 +1,21 @@
 import { forwardRef, useImperativeHandle, useRef, type InputHTMLAttributes, type KeyboardEvent } from "react";
 import { Search, X } from "lucide-react";
+import { isComposingKey } from "@/lib/compositionKeys";
 import { cn } from "@/lib/cn";
 import { IconButton } from "@/components/ui/IconButton";
 
 /**
+ * Component: SearchInput; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: search input, icon, optional clear action.
+ * Variants: compact filter and page-header sizes.
+ * States: empty, filled, disabled and focused.
+ * Hit area: shared control sizes; explicit clear action.
+ * Keyboard: native text entry; composition-safe callbacks and Escape clear.
+ * Long content: input scrolls; accessible label stays complete.
+ * Theme: surface and focus semantic tokens.
+ * Responsive: full-width on narrow screens.
+ * Verification: host composition key and SearchInput tests; real IME remains manual.
+ *
  * The one search box: 36 px in a page header, 28 in a filter row (spec §18.3,
  * appendix E #9), a quiet grey ground and no border until it has focus, a
  * 16 px glass at the start. Four hand-made search boxes (28 / 32 / 36 px,
@@ -24,10 +36,8 @@ import { IconButton } from "@/components/ui/IconButton";
  * engine), so without this a query could only be deleted by hand. The caller
  * empties its own state; focus returns to the box.
  *
- * Focus is the border turning `--focus`; the outline stays transparent (the
- * global text-field rule), which is what forced-colours mode paints. The 28 px
- * one in a toolbar row has no border: it is a pill, and its focus is a 2 px
- * outline inside it.
+ * Focus uses identity ink for the border and outline. The 28 px toolbar pill
+ * uses an inner 2 px ink outline; forced-colors mode supplies system Highlight.
  */
 export const SearchInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> & {
   label: string;
@@ -44,6 +54,7 @@ export const SearchInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes
   useImperativeHandle(ref, () => input.current as HTMLInputElement);
   const filled = onClear !== undefined && rest.value !== undefined && String(rest.value) !== "";
   const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isComposingKey(event)) return;
     onKeyDown?.(event);
     if (event.defaultPrevented || event.key !== "Escape" || !filled) return;
     // The key cleared the query; it is not also the page's Escape (a drawer under the box stays open).
@@ -64,8 +75,8 @@ export const SearchInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes
           pill
             // In a toolbar row it is a pill like the chips beside it — 28 high, 14 px, grey, no border: the look of a selected chip, so the
             // row's filled controls are one kind. Focus is a 2 px line inside the pill (an outline, which forced colours keep).
-            ? "rounded-full focus:outline-2 focus:-outline-offset-2 focus:outline-focus"
-            : "rounded border border-transparent focus:border-focus",
+            ? "rounded-full focus:outline-2 focus:-outline-offset-2 focus:outline-focus-input"
+            : "rounded border border-transparent focus:border-focus-input",
           "placeholder:text-text-3 hover:bg-surface-3 focus:bg-surface",
           "[&::-webkit-search-cancel-button]:hidden",
           height,

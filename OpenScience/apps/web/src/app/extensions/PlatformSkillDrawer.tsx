@@ -8,7 +8,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { copyPlatformSkill, readPlatformSkill, projectPlatformSkills, saveProjectPlatformSkills, type PersonalSkill, type PlatformSkill } from "@/lib/skillLibraryClient";
 import { productErrorMessage } from "@/lib/productClient";
-import { nextDisabled, skillActivationText, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { nextDisabled, skillActivationText, skillDisplayName, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { RepositoryLink } from "./CatalogueView";
 import { useActivationPoll } from "./useActivationPoll";
 import { useLoad } from "./useLoad";
@@ -54,7 +54,7 @@ export function PlatformSkillDrawer({ skill, projectId, projectName, onClose, on
     catch (cause) { if (alive.current) setError(productErrorMessage(cause)); }
     finally { running.current = false; if (alive.current) setCopying(false); }
   };
-  return <Drawer title={skill.title} description={`${skillPublisher(detail ?? skill)} · ${skill.group}`} onClose={onClose}>
+  return <Drawer title={skillDisplayName(skill)} description={`${skillPublisher(detail ?? skill)} · ${skill.group}`} onClose={onClose}>
     <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col gap-4"><div className="flex flex-wrap items-center gap-2"><Tag>技能</Tag><Tag>{thirdParty ? "第三方" : "EviMed Science"}</Tag>{skillAdapted(detail ?? skill) && <Tag>已改编</Tag>}<RepositoryLink href={sourceUrl} title={skill.title} /></div>
         <p data-prose className="text-body text-text-2">{skill.use}</p></div>

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
 import { SOURCE_FOLDERS, evidenceSourceTypeOf, isEvidenceSourceType } from "@evimed/domain";
-import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
+import { PACKAGE_SOURCE_ARTIFACT_LIMIT, claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 import { attachClaimSourceLocations, claimVerification } from "./clinicalEvidenceQuality.mjs";
 import {
   HttpError,
@@ -524,8 +524,8 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       ]).filter((value) => typeof value === "string" && value.startsWith(".evimed-sources/"));
       /** @type {Record<string, string>} */
       const sourceArtifacts = {};
-      // Bounded like the gate: one canonical file per document, 48 at most.
-      for (const artifactPath of [...new Set(named)].slice(0, 48)) {
+      // Bounded like the gate: one canonical file per document, `PACKAGE_SOURCE_ARTIFACT_LIMIT` at most.
+      for (const artifactPath of [...new Set(named)].slice(0, PACKAGE_SOURCE_ARTIFACT_LIMIT)) {
         let source = null;
         try { source = await readText(ctx.project.workspaceDir, resolveScopedPath(ctx.project.workspaceDir, artifactPath)); } catch { /* an unsafe path is an unread source */ }
         if (source) sourceArtifacts[artifactPath] = source;

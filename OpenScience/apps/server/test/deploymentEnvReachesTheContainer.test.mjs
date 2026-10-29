@@ -258,6 +258,10 @@ const operatorLevers = {
   // The probe gateway's window (2026-10-10, Q-8): a limit that never arrived would leave the default in force while the operator
   // believes theirs applies, on a channel that drives the platform's logged-in vendor accounts.
   OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE: ["open-science-web"],
+  // The probe tasks' two limits (2026-10-28): the age after which the queue gives up on a task the host accepted, and how long the gateway keeps
+  // the record of one it accepted for a runtime. A limit that never arrived leaves the default in force while the operator believes theirs applies.
+  OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES: ["open-science-web"],
+  OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS: ["open-science-web"],
   // The inclusion check's age limit (2026-10-10, Q-7): a job held past it is failed so its round can close; a limit that never
   // arrived would hold the round for ever, whatever the operator set.
   OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS: ["open-science-web"],
@@ -337,6 +341,9 @@ const operatorLevers = {
   // The promotion of a person's general method to the pack of everyone's (2026-10-25): a lever that never arrived would leave the default on, and three a day, whatever the operator set.
   OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY: ["open-science-web"],
+  // An account is a voice only in standing (2026-10-27): a floor that never arrived would hold at fourteen days and three runs whatever the operator set.
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS: ["open-science-web"],
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links
@@ -445,6 +452,9 @@ const operatorLevers = {
   // (the Docker socket resolves a bind source on the host). Without it every PDF
   // or Word record answers that this deployment cannot convert it.
   OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR: ["open-science-runtime-controller"],
+  // The research-database connector's egress allowlist (2026-10-28): the connector exists only when this and the keyring file are
+  // both set, so a value that never arrived would leave it off whatever the operator wrote.
+  OPEN_SCIENCE_RESEARCH_DB_ALLOW: ["open-science-web"],
 };
 
 async function composeFiles() {
@@ -1007,4 +1017,38 @@ test("F12e: the plugin reads the platform's own evidence feed by default, at the
   } finally {
     setEvidencePublicBase(served);
   }
+});
+
+test("the research-database CA directory is a read-only directory mount of the web service alone, unset means /dev/null and no path, and every limit reaches the web API", async () => {
+  const file = YAML.parse(await readFile(path.join(deployDir, "docker-compose.yml"), "utf8"), { merge: true });
+  const web = file.services["open-science-web"];
+  assert.equal(web.environment.OPEN_SCIENCE_RESEARCH_DB_CA_DIR, "${OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR:+/run/evimed/research-db-ca}");
+  assert.deepEqual(web.volumes.filter((/** @type {any} */ volume) => volume.target === "/run/evimed/research-db-ca"),
+    [{ type: "bind", source: "${OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR:-/dev/null}", target: "/run/evimed/research-db-ca", read_only: true, bind: { create_host_path: false } }]);
+  for (const [name, service] of Object.entries(file.services)) {
+    if (name === "open-science-web") continue;
+    assert.ok(!JSON.stringify(/** @type {any} */ (service)).includes("research-db-ca"), `${name} must not hold the research-database CA directory`);
+  }
+  const { RESEARCH_DB_LIMIT_SPECS } = await import("../src/researchDbConfig.mjs");
+  const example = await readFile(path.join(deployDir, ".env.example"), "utf8");
+  assert.match(example, /^OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR=$/m);
+  for (const spec of RESEARCH_DB_LIMIT_SPECS) {
+    // Value-less, so unset it is absent from the container and the code's own default stands; documented with that default.
+    assert.ok(Object.hasOwn(web.environment, spec.env) && web.environment[spec.env] == null, `${spec.env} is passed value-less to the web service`);
+    assert.match(example, new RegExp(`^# ${spec.env}=${spec.fallback}$`, "m"), `${spec.env} is documented with its default`);
+  }
+});
+
+test("the research-database keyring is a read-only file mount of the web service alone, and unset means /dev/null and no path", async () => {
+  const file = YAML.parse(await readFile(path.join(deployDir, "docker-compose.yml"), "utf8"), { merge: true });
+  const web = file.services["open-science-web"];
+  assert.equal(web.environment.OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE, "${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:+/run/secrets/research-db-keyring}");
+  assert.deepEqual(web.volumes.filter((/** @type {any} */ volume) => volume.target === "/run/secrets/research-db-keyring"),
+    [{ type: "bind", source: "${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:-/dev/null}", target: "/run/secrets/research-db-keyring", read_only: true }]);
+  for (const [name, service] of Object.entries(file.services)) {
+    if (name === "open-science-web") continue;
+    assert.ok(!JSON.stringify(/** @type {any} */ (service)).includes("research-db-keyring"), `${name} must not hold the research-database keyring`);
+  }
+  const example = await readFile(path.join(deployDir, ".env.example"), "utf8");
+  for (const name of ["OPEN_SCIENCE_RESEARCH_DB_ALLOW", "OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE"]) assert.match(example, new RegExp(`^${name}=$`, "m"));
 });

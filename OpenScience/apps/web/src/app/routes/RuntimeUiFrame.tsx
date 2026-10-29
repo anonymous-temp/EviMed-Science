@@ -1,6 +1,6 @@
 import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, stopGeoConversationRun, type GeoConversationScope } from "@/lib/geoNativeClient";
 import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
-import { putConversationReference } from "@/lib/apiClient";
+import { putConversationReference, stageVcrConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, runtimeLockMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
@@ -9,6 +9,7 @@ import { scopedConversationPath, conversationNavigationState, newRuntimeUiIntent
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
+import { listPath } from "@/lib/knowledgeNav";
 import { getWebSessionSourceScope, putWebSessionSourceScope } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
@@ -330,7 +331,7 @@ function SimulatedRechargeButton() {
  * `active` is the conversation surface being on screen in this project:
  * inactive frames keep their document and their lease and send nothing.
  */
-export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease }: {
+export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease, onPaneAcknowledged }: {
   projectId: string;
   origin: string;
   scope?: GeoConversationScope;
@@ -348,6 +349,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
    * execution of it — so an acknowledged opening must leave the address where it is.
    */
   mirrorAddress?: boolean;
+  /** A non-addressed pane may consume an acknowledged creation and adopt the actual session. */
+  onPaneAcknowledged?: (requestId: string, sessionId: string) => void;
   /** The address does not yet name a conversation and the shell is finding
    *  one: hold the opening request, but let the runtime warm up meanwhile. */
   suspended?: boolean;
@@ -362,6 +365,7 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
   const location = useLocation();
   const navigate = useNavigate();
   const onReleaseRef = useRef(onRelease);
+  const onPaneAcknowledgedRef = useRef(onPaneAcknowledged); onPaneAcknowledgedRef.current = onPaneAcknowledged;
   onReleaseRef.current = onRelease;
   const mirroredSession = useRef<{ sessionId: string; attempt: number } | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
@@ -789,7 +793,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
         // its own origin, so a destination it could spell freely would be a
         // redirect it could choose.
         const routes: Record<string, string> = {
-          "new-task": "/app/chat", knowledge: "/app/files",
+          // The materials of the project on screen: a bare /app/files is the account's, which the frame's rail did not mean.
+          "new-task": "/app/chat", knowledge: listPath({ scope: projectId, kind: null, q: "" }),
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
           geo: "/app/geo", "virtual-research": "/app/virtual-research", autopilot: TASKS_PATH,
         };
@@ -966,9 +971,11 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
             || (request.kind === "open" && message.sessionId !== request.sessionId)))) return;
         incoming.current = message.seq;
         if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: !scope && request.kind === "open" }); return; }
+        if (request.restoreDraft && message.draftRestored === false) toast.error("输入框已有内容或暂不能确认草稿状态，旧草稿仍已保留。可先查看当前输入，再返回恢复。");
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         setFrameTask(message.sessionId);
+        if (!mirrorAddress && roomHold.current.active && !roomHold.current.suspended) onPaneAcknowledgedRef.current?.(request.requestId, message.sessionId);
         // Remove only this acknowledged request. A later navigation intent
         // must survive an acknowledgement from the previous operation.
         if (roomHold.current.active && !roomHold.current.suspended && (mirrorAddress || geoIdFromChatPath(location.pathname)) && intent?.requestId === request.requestId) {
@@ -1022,11 +1029,12 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
     void (async () => {
       if (scope && (intent.scope?.geoProjectId !== scope.geoProjectId || intent.sessionId !== scope.sessionId || intent.kind !== "open" || intent.originReference)) throw new Error("Conversation scope changed");
       if (intent.originReference) await putConversationReference(intent.sessionId, projectId, intent.originReference);
+      const stagedReference = intent.vcrReference ? await stageVcrConversationReference(intent.sessionId, projectId, intent.vcrReference) : undefined;
       if (!alive) return;
       iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
     }, origin);
     })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
     return () => { alive = false; };
@@ -1180,7 +1188,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
   // session store and is not faked from the ledger, which keeps no reply text.
   const openExistingResults = async () => {
     if (scope) { navigate(`/app/geo/${encodeURIComponent(scope.geoProjectId)}/articles`); return; }
-    let target = "/app/files";
+    // The project's files, by name: a bare /app/files is the account's materials.
+    let target = listPath({ scope: projectId, kind: null, q: "" });
     try {
       const runs = (await readCurrentRuns()).filter((run) => sessionId && run.sessionId === sessionId);
       for (const run of runs.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))) {
@@ -1236,7 +1245,9 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
               {binding && <iframe
                 key={binding.frameId} ref={iframe} src={binding.frameUrl} title="对话"
                 className="absolute inset-0 h-full w-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
+                // A link the conversation opens in a new tab (an answer's citation, a source card, 2026-10-27) is the site's own page,
+                // not a page that inherits this frame's sandbox and so loses its scripts' origin, its storage and its logins.
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
                 allow="clipboard-read; clipboard-write"
               />}
             </>

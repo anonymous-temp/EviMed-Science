@@ -9,7 +9,10 @@ import { BENEFIT_RULE, decideSite, rowsDigest, siteConditions, summarizeSite } f
  * `run.mjs --live --incumbent --output <file>` leaves: the rule and the plan's launch conditions applied to each pass, the
  * rows (ids, labels, outcomes and numbers; no case text), and the decision, which is `on` only when every pass says so.
  *
- *   node evals/judge-sites/write-benefit.mjs --site J3 --pass <report> [--pass <report>] [--before <report>] [--notes <json>]
+ *   node evals/judge-sites/write-benefit.mjs --site J3 --pass <report> [--pass <report>] [--before <report>] [--notes <json>] [--date YYYY-MM-DD]
+ *
+ * `--date` names the day of the record (default 2026-10-10, the day of the first nine): the file is `benefit-<date>.json` and says so.
+ * `notes.measuredOn` replaces the sentence about the host the passes ran on, for a record written on another one.
  *
  * The record is what the calibration pin and `release-readiness.json` cite: its `resultsSha256` is the pin's `resultSha256`.
  */
@@ -19,7 +22,9 @@ const option = (name, fallback = null) => { const index = argv.indexOf(name); re
 const options = (name) => argv.flatMap((value, index) => (value === name ? [argv[index + 1]] : []));
 const site = option('--site');
 const passFiles = options('--pass');
-if (!site || !/^J\d+$/.test(site) || !passFiles.length) throw new Error('usage: --site J<n> --pass <report> [--pass <report>] [--before <report>] [--notes <json>]');
+if (!site || !/^J\d+$/.test(site) || !passFiles.length) throw new Error('usage: --site J<n> --pass <report> [--pass <report>] [--before <report>] [--notes <json>] [--date YYYY-MM-DD]');
+const date = option('--date', '2026-10-10');
+if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('--date is YYYY-MM-DD');
 const USD_CNY = 6.7489; // the reference list's mid-rate (metering.mjs), the one every Jev cost in the ledger is converted at
 const dir = path.join(root, 'evals/judge-sites', site);
 const sha = (text) => createHash('sha256').update(text).digest('hex');
@@ -94,11 +99,11 @@ const every = passes.every((pass) => pass.decision === 'on');
 const record = {
   schemaVersion: 1,
   site,
-  recordedAt: '2026-10-10',
+  recordedAt: date,
   rule: { ...BENEFIT_RULE, siteConditions: basis ?? 'none named by the plan: the generic bar applies' },
   model: passes[0].model,
   corpus: { files: caseFiles, cases: cases.size, ...(notes.corpus ?? {}) },
-  measuredOn: 'A development host in Taipei, where both providers answer a bare request in about 0.16 s. The production host is in Beijing: TypeSafe is reached there in 0.5 to 0.6 s (plan 2026-10-06 section 0), and a 325-token Jev request took 0.33 to 1.24 s on 2026-10-07 (4 requests, privateEvidence latency-production-host.json). Latency here compares the two paths on one network; it is not the production figure.',
+  measuredOn: notes.measuredOn ?? 'A development host in Taipei, where both providers answer a bare request in about 0.16 s. The production host is in Beijing: TypeSafe is reached there in 0.5 to 0.6 s (plan 2026-10-06 section 0), and a 325-token Jev request took 0.33 to 1.24 s on 2026-10-07 (4 requests, privateEvidence latency-production-host.json). Latency here compares the two paths on one network; it is not the production figure.',
   incumbentCostBasis: 'List prices (peak) from the reference price list on the tokens the provider reported. A repeated run of identical prompts is partly served from DeepSeek\'s prompt cache and costs less than a first call; production questions are new, so the first pass of a site is the representative one.',
   passes,
   ...(before ? { beforeLabelCorrection: before } : {}),
@@ -110,7 +115,7 @@ const record = {
   },
   ...(notes.notes ? { notes: notes.notes } : {}),
 };
-const target = path.join(dir, 'benefit-2026-10-10.json');
+const target = path.join(dir, `benefit-${date}.json`);
 // Everything is indented, except that each row is one line: a pass is a hundred rows and a page of them is no easier to read, only longer.
 const held = [];
 const text = JSON.stringify(record, (key, value) => { if (key === 'rows' && Array.isArray(value)) { held.push(value); return `@@rows${held.length - 1}@@`; } return value; }, 2)

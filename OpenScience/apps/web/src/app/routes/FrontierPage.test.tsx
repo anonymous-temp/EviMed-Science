@@ -415,6 +415,21 @@ describe("the control row", () => {
     expect(location()).toBe("/app/frontier?view=all");
   });
 
+  it("narrows 行业动态 by kind from 「筛选」 (c5-biz): one choice, in the address, a token on the row that lets go of it", async () => {
+    renderPage("/app/frontier?view=all");
+    await screen.findByText("今天的一条 RCT");
+    const panel = await openFilters();
+    const kinds = within(within(panel).getByRole("group", { name: "行业动态" }));
+    expect(kinds.getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "交易与授权", "融资与上市", "人事与组织", "公司经营", "研发管线"]);
+    await userEvent.click(kinds.getByRole("button", { name: "融资与上市" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ industryKind: "financing" }));
+    expect(location()).toContain("kind=financing");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "移除筛选：行业动态 · 融资与上市" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ industryKind: null }));
+    expect(location()).toBe("/app/frontier?view=all");
+  });
+
   it("offers the time range in 全部 only", async () => {
     renderPage();
     await screen.findByText("今天的一条 RCT");
@@ -448,6 +463,8 @@ describe("the control row", () => {
   it.each([
     ["/app/frontier?view=all&channel=literature&evidence=rct&unread=1", { channel: "literature", evidence: "rct", unread: true }],
     ["/app/frontier?view=all&channel=podcast&evidence=anecdote", { channel: null, evidence: null }],
+    ["/app/frontier?view=all&kind=people&lane=pipeline", { industryKind: "people", lane: "pipeline" }],
+    ["/app/frontier?view=all&kind=merger", { industryKind: null }],
     ["/app/frontier?lane=pipeline&specialty=oncology&starred=1", { lane: "pipeline", specialties: ["oncology"], starred: true }],
     ["/app/frontier?specialty=oncology,cardiology", { specialties: ["oncology", "cardiology"] }],
     // A retired specialty reads as its successor, or as nothing.
@@ -684,6 +701,52 @@ describe("精选's safety strip", () => {
   });
 });
 
+describe("精选's title-only safety alerts (owner, 2026-10-27)", () => {
+  // The PMDA and PRAC notices: a title and nothing else, always taken by the day's mix.
+  const titleOnly = (id: string, title: string, hours: number, over: Record<string, unknown> = {}) => frontierItem({
+    id, title, safetyAlert: true, summary: null, source: { id: "pmda", name: "日本 PMDA" }, timelineAt: ago(hours), datePrecision: "day", ...over });
+  const pmda1 = titleOnly("pmda-1", "日本PMDA 修订 amenamevir 的注意事项", 1);
+  const pmda2 = titleOnly("pmda-2", "日本PMDA 修订他克莫司水合物软膏的注意事项", 1.5);
+
+  it("leaves them to the strip: no card in the day group, the day's count is of what is drawn, and the strip carries them", async () => {
+    feed = async () => page([pmda1, pmda2, today, yesterday]);
+    alerts = async () => page([pmda1, pmda2, alert]);
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    const drawn = screen.getAllByRole("article").map((card) => card.getAttribute("aria-labelledby"));
+    expect(drawn).toHaveLength(2);
+    expect(screen.queryByRole("heading", { level: 3, name: /日本PMDA/ })).not.toBeInTheDocument();
+    const heading = screen.getByRole("heading", { level: 2, name: /^今天/ });
+    expect(heading).toHaveTextContent("· 1 条");
+    const strip = await screen.findByRole("region", { name: "安全警示" });
+    expect(strip).toHaveTextContent("安全警示 3");
+    await userEvent.click(within(strip).getByRole("button", { name: "全部 ›" }));
+    expect(within(strip).getByRole("link", { name: /日本PMDA 修订他克莫司水合物软膏的注意事项/ })).toBeInTheDocument();
+  });
+
+  it("keeps an alert that says something as a card, and one older than the strip's window", async () => {
+    const older = titleOnly("pmda-old", "日本PMDA 修订英克司兰钠的注意事项", 60);
+    feed = async () => page([alert, today, older]);
+    renderPage();
+    expect(await screen.findByRole("heading", { level: 3, name: /葡萄糖注射液含不锈钢颗粒/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: /英克司兰钠/ })).toBeInTheDocument();
+  });
+
+  it("draws every one of them in 全部", async () => {
+    feed = async () => page([pmda1, pmda2, today]);
+    renderPage("/app/frontier?view=all");
+    expect(await screen.findByRole("heading", { level: 3, name: /amenamevir/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: /他克莫司水合物软膏/ })).toBeInTheDocument();
+  });
+
+  it("is not a page with nothing on it when the rest of the page's items are all alerts: there is another page, and 「加载更多」 is its way on", async () => {
+    feed = async () => page([pmda1, pmda2], { nextCursor: "c2" });
+    renderPage();
+    expect(await screen.findByRole("button", { name: "加载更多" })).toBeInTheDocument();
+    expect(screen.queryByText("暂无精选")).not.toBeInTheDocument();
+  });
+});
+
 describe("当前热点", () => {
   it("shows the three hottest with their heat and how they moved, and opens the whole list", async () => {
     client.fetchFrontierHotBoard.mockResolvedValue(board([
@@ -823,10 +886,11 @@ describe("the new-items hint", () => {
 });
 
 describe("the four states", () => {
-  it("shows the feed's skeleton while the first page is on its way", async () => {
+  it("shows the feed's skeleton after 300ms while the first page is on its way", async () => {
     feed = () => new Promise(() => {});
     const { container } = renderPage();
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    expect(container.querySelector(".animate-pulse")).toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     // Everything around the list still arrives; the list alone is waiting.
     expect(await screen.findByRole("region", { name: "安全警示" })).toBeInTheDocument();
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
@@ -850,7 +914,7 @@ describe("the four states", () => {
       return page([today]);
     };
     renderPage();
-    const alertBox = await screen.findByRole("alert");
+    const alertBox = await screen.findByRole("note");
     fail = false;
     await userEvent.click(within(alertBox).getByRole("button", { name: "重试" }));
     expect(await screen.findByText("今天的一条 RCT")).toBeInTheDocument();
@@ -949,7 +1013,13 @@ describe("the actions on a card", () => {
     await waitFor(() => expect(screen.queryByRole("group", { name: "不感兴趣" })).not.toBeInTheDocument());
     expect(await screen.findByRole("article", { name: "今天的一条 RCT" })).toBeInTheDocument();
     expect(client.unhideFrontierItem).not.toHaveBeenCalled();
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    const failureMessage = await screen.findByText("服务暂时不可用，请稍后重试。", { selector: "[data-toast] button" });
+    const failureToast = failureMessage.closest("[data-toast]");
+    expect(failureToast).toBeVisible();
+    expect(failureToast).toHaveAttribute("data-toast-tone", "error");
+    expect(failureToast).not.toHaveAttribute("role");
+    expect(client.hideFrontierItem).toHaveBeenCalledTimes(1);
+    expect(client.hideFrontierItem).toHaveBeenCalledWith("today-1");
   });
 
   it("saves to the knowledge base, and stops offering it where the server has no such route", async () => {
@@ -1033,12 +1103,12 @@ describe("热榜", () => {
     expect(rows[0]).toHaveTextContent("2 家机构报道 · 含原始论文 · 3 小时前更新");
     expect(rows[0]).toHaveTextContent("38 热度");
     expect(rows[0].querySelector("svg[data-sparkline] path")).not.toBeNull();
-    expect(within(rows[2]).getByText("新")).toHaveClass("bg-accent-soft");
+    expect(within(rows[2]).getByText("新")).toHaveClass("bg-surface-2", "text-text-2");
     expect(within(rows[2]).getByText("暂无走势")).toBeInTheDocument();
-    expect(within(rows[3]).getByText("升温")).toHaveClass("bg-warn-soft");
+    expect(within(rows[3]).getByText("升温")).toHaveClass("bg-surface-2", "text-text-2");
     // One title edge: every row's title link carries the marker the release walk measures.
     for (const row of rows) expect(row.querySelector("[data-row-title]")).not.toBeNull();
-    expect(screen.getByText("近 72 小时 · 22:40 更新")).toBeInTheDocument();
+    expect(screen.getByText("近 72 小时 · 22:40 更新（北京时间）")).toBeInTheDocument();
     // The number is shown; the page does not explain the system (2026-10-07: 「热度怎么算」 is gone).
     expect(screen.queryByText("热度怎么算")).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain("热度衡量关注程度");
@@ -1062,7 +1132,7 @@ describe("热榜", () => {
     expect(within(controlRow()).getByRole("button", { name: "本周" })).toHaveAttribute("aria-pressed", "true");
     release();
     expect(await screen.findByText("9 家机构报道 · 含官方公告 · 在榜 31 小时 · 最高第 2 名")).toBeInTheDocument();
-    expect(screen.getByText(/^近 7 天 · \d{2}:\d{2} 更新$/)).toBeInTheDocument();
+    expect(screen.getByText(/^近 7 天 · \d{2}:\d{2} 更新（北京时间）$/)).toBeInTheDocument();
     expect(screen.queryByText("热度")).not.toBeInTheDocument();
   });
 
@@ -1110,15 +1180,19 @@ describe("日报", () => {
     const header = await screen.findByRole("heading", { level: 2, name: "9月20日 周日" });
     expect(client.fetchFrontierDaily).toHaveBeenCalledWith("2026-09-20");
     expect(header.parentElement).toHaveTextContent("52 条 · 约 9 分钟");
-    expect(screen.getByRole("heading", { level: 3, name: "FDA 发布新方法学（NAMs）专题" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "事件页 ›" })).toHaveAttribute("href", "/app/frontier/events/ev1");
+    // The lead stands first among the three things the issue is read for first, with the way to its event.
+    const things = screen.getByRole("list", { name: "先看三件事" });
+    expect(within(things).getAllByRole("listitem")[0]).toHaveTextContent("FDA 发布新方法学（NAMs）专题");
+    expect(within(things).getByRole("link", { name: "事件页 ›" })).toHaveAttribute("href", "/app/frontier/events/ev1");
   });
 
   it("puts the safety alerts first, names institutions and never an interface, and starts every title on one line", async () => {
     renderPage("/app/frontier?view=daily&day=2026-09-20");
     const safety = await screen.findByRole("list", { name: "安全警示" });
+    // 先看三件事 stands over the issue's lanes (the lead was above them before it); the alerts are the first lane under it.
     const sections = screen.getAllByRole("list").filter((list) => list.tagName === "OL");
-    expect(sections[0]).toBe(safety);
+    expect(sections[0]).toBe(screen.getByRole("list", { name: "先看三件事" }));
+    expect(sections[1]).toBe(safety);
     expect(within(safety).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       expect.stringMatching(/^01I 级召回：葡萄糖注射液含不锈钢颗粒FDA详情$/),
       expect.stringMatching(/^02氯巴占口服混悬液条形码错误英国 MHRA详情$/),
@@ -1142,8 +1216,9 @@ describe("日报", () => {
     await userEvent.click(screen.getByRole("button", { name: "复制" }));
     expect(writeText).toHaveBeenCalledWith("# EviMed 医学前沿日报 2026-09-20");
     expect(await screen.findByText("已复制")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "往期" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "9月21日 周一" }));
+    // 往期 is the column beside the issue, not a menu in the toolbar.
+    expect(screen.queryByRole("button", { name: "往期" })).not.toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("navigation", { name: "往期日报" })).getByRole("button", { name: /^9月21日 周一/ }));
     await waitFor(() => expect(client.fetchFrontierDaily).toHaveBeenLastCalledWith("2026-09-21"));
     // From the archive's neighbours, where the server names none.
     await userEvent.click(await screen.findByRole("button", { name: "‹ 前一日" }));
@@ -1165,6 +1240,75 @@ describe("日报", () => {
     client.listFrontierDailies.mockResolvedValue(null);
     renderPage("/app/frontier?view=daily");
     expect(await screen.findByText("暂无日报")).toBeInTheDocument();
+  });
+
+  describe("the archive by month", () => {
+    /** `count` issues, one a day, newest first, from `from` (a UTC date, so no zone moves a day). */
+    const run = (from: string, count: number) => Array.from({ length: count }, (_, at) => {
+      const date = new Date(`${from}T00:00:00Z`);
+      date.setUTCDate(date.getUTCDate() - at);
+      return { day: date.toISOString().slice(0, 10), title: null, itemCount: 10 + at, generatedAt: null };
+    });
+    const schedule = { time: "07:30", timeZone: "Asia/Shanghai" };
+
+    it("reads sixty issues, shows them by month, and reads the next sixty before the oldest it holds — the open issue stays open", async () => {
+      const first = run("2026-09-21", 60);
+      const older = run(first.at(-1)!.day.replace(/\d+$/, (d) => String(Number(d) - 1).padStart(2, "0")), 2);
+      client.listFrontierDailies.mockImplementation(async (_limit: number, _day?: string | null, before?: string | null) => ({ dailies: before ? older : first, schedule }));
+      renderPage("/app/frontier?view=daily&day=2026-09-20");
+      const column = await screen.findByRole("navigation", { name: "往期日报" });
+      expect(client.listFrontierDailies).toHaveBeenCalledWith(60, "2026-09-20");
+      expect(within(column).getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["2026年9月", "2026年8月", "2026年7月"]);
+      expect(within(column).getAllByRole("button", { name: /^9月20日/ })[0]).toHaveAttribute("aria-current", "date");
+      await userEvent.click(within(column).getByRole("button", { name: "更早的日报" }));
+      await waitFor(() => expect(client.listFrontierDailies).toHaveBeenLastCalledWith(60, null, first.at(-1)!.day));
+      await waitFor(() => expect(within(screen.getByRole("navigation", { name: "往期日报" })).getAllByRole("button").length).toBe(60 + 2));
+      expect(screen.queryByRole("button", { name: "更早的日报" })).not.toBeInTheDocument();
+      expect(within(screen.getByRole("navigation", { name: "往期日报" })).getAllByRole("button", { name: /^9月20日/ })[0]).toHaveAttribute("aria-current", "date");
+    });
+
+    it("keeps what a later page added when the reader moves to another issue", async () => {
+      const first = run("2026-09-21", 60);
+      const older = run("2026-07-20", 2);
+      client.listFrontierDailies.mockImplementation(async (_limit: number, _day?: string | null, before?: string | null) => ({ dailies: before ? older : first, schedule }));
+      renderPage("/app/frontier?view=daily&day=2026-09-20");
+      await userEvent.click(await screen.findByRole("button", { name: "更早的日报" }));
+      await waitFor(() => expect(within(screen.getByRole("navigation", { name: "往期日报" })).getAllByRole("button").length).toBe(62));
+      await userEvent.click(within(screen.getByRole("navigation", { name: "往期日报" })).getByRole("button", { name: /^7月20日/ }));
+      await waitFor(() => expect(client.fetchFrontierDaily).toHaveBeenLastCalledWith("2026-07-20"));
+      await waitFor(() => expect(within(screen.getByRole("navigation", { name: "往期日报" })).getAllByRole("button", { name: /^7月20日/ })[0]).toHaveAttribute("aria-current", "date"));
+      expect(within(screen.getByRole("navigation", { name: "往期日报" })).getAllByRole("button").length).toBe(62);
+    });
+
+    it("has no 「更早的日报」 when the archive fits one page", async () => {
+      client.listFrontierDailies.mockResolvedValue({ dailies: run("2026-09-21", 3), schedule });
+      renderPage("/app/frontier?view=daily&day=2026-09-20");
+      await screen.findByRole("navigation", { name: "往期日报" });
+      expect(screen.queryByRole("button", { name: "更早的日报" })).not.toBeInTheDocument();
+    });
+
+    describe("on a phone", () => {
+      beforeEach(() => {
+        vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+          matches: query === "(max-width: 639px)", media: query, onchange: null,
+          addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
+        }) as unknown as MediaQueryList);
+      });
+      afterEach(() => { vi.restoreAllMocks(); });
+
+      it("is 月份 and 往期 in the 「筛选」 sheet: a month chosen lists its issues, and an issue chosen opens it", async () => {
+        client.listFrontierDailies.mockResolvedValue({ dailies: [...run("2026-09-21", 3), ...run("2026-08-02", 2)], schedule });
+        renderPage("/app/frontier?view=daily&day=2026-09-20");
+        await screen.findByRole("heading", { level: 2, name: "9月20日 周日" });
+        expect(screen.queryByRole("navigation", { name: "往期日报" })).not.toBeInTheDocument();
+        await userEvent.click(within(controlRow()).getByRole("button", { name: /^筛选/ }));
+        const sheet = screen.getByRole("dialog", { name: "筛选" });
+        expect(within(sheet).getByRole("group", { name: "月份" })).toBeInTheDocument();
+        expect(within(within(sheet).getByRole("group", { name: "往期" })).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["9月21日 周一", "9月20日 周日", "9月19日 周六"]);
+        await userEvent.click(within(within(sheet).getByRole("group", { name: "月份" })).getByRole("button", { name: /^2026年8月/ }));
+        await waitFor(() => expect(within(within(screen.getByRole("dialog", { name: "筛选" })).getByRole("group", { name: "往期" })).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["8月2日 周日", "8月1日 周六"]));
+      });
+    });
   });
 });
 
@@ -1388,7 +1532,7 @@ describe("关注, the reader's own place (owner, 2026-10-25)", () => {
     it("says that the follows could not be read, rather than that there are none", async () => {
       client.listFrontierFollows.mockRejectedValue(new WebApiError("down", { status: 502 }));
       renderPage("/app/frontier?view=following&follow=all");
-      expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用，请稍后重试。");
+      expect(await screen.findByRole("note")).toHaveTextContent("服务暂时不可用，请稍后重试。");
       expect(screen.queryByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).not.toBeInTheDocument();
       client.listFrontierFollows.mockResolvedValue([]);
       await userEvent.click(screen.getByRole("button", { name: "重试" }));
@@ -1600,9 +1744,14 @@ describe("追踪", () => {
     client.listFrontierCongresses.mockResolvedValue([congress()]);
     renderPage("/app/frontier?view=hot");
     const link = await screen.findByRole("link", { name: /ESMO 2026/ });
-    expect(link).toHaveTextContent("ESMO 2026进行中·57 条");
+    expect(link).toHaveTextContent(/^会议专题ESMO 2026 · .+进行中每日 AI 速递 · 收录 57 条$/);
     expect(link).toHaveAttribute("href", "/app/frontier/congress/esmo-2026");
-    expect(await screen.findByRole("list", { name: "热榜" })).toBeInTheDocument();
+    const ranking = await screen.findByRole("list", { name: "热榜" });
+    expect(link.compareDocumentPosition(ranking) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The ranking is headed 「医学热点」 with its count.
+    const section = ranking.closest("section")!;
+    expect(within(section).getByRole("heading", { level: 2, name: "医学热点" })).toBeInTheDocument();
+    expect(section).toHaveTextContent("医学热点1");
   });
 
   it("reads an unknown segment in the address as 审批", async () => {

@@ -1,0 +1,1165 @@
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation, useParams, useRoutes, useSearchParams } from "react-router";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { knownErrorCodeMessage } from "@evimed/domain";
+import { WebApiError } from "@/lib/apiClient";
+import { useProjectStore } from "@/lib/projects";
+import type { SourceDisplay, SourceRecord } from "@/lib/sourceClient";
+import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
+import { TWO_COLUMN_MIN_WIDTH } from "./useReaderBox";
+import knowledgePage from "./knowledgeFixtures/page-analysis-mine.json";
+import knowledgeStatus from "./knowledgeFixtures/status-compiled.json";
+import { readListState } from "@/lib/knowledgeNav";
+import { readerMeta, ORIGIN_LABEL } from "./sourceView";
+import { SourceReader } from "./SourceReader";
+
+const mocks = vi.hoisted(() => ({
+  getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(), getSourceDependents: vi.fn(),
+  retrySource: vi.fn(), removeDocument: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
+  listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), setSourceProjects: vi.fn(),
+  downloadSourceFile: vi.fn(), downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), getKnowledgePage: vi.fn(), getKnowledgeStatus: vi.fn(),
+}));
+const context = vi.hoisted(() => ({ projectId: "default" }));
+/** The width the page's own box reports, and the observers told when it changes: jsdom lays nothing out. */
+const layout = vi.hoisted(() => ({ width: 1200, observers: new Set<() => void>() }));
+
+vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
+  ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeDocument", "refetchSource", "getSourceNote", "saveSourceNote",
+    "listDuplicateCandidates", "decideDuplicateGroup", "setSourceProjects", "getKnowledgePage", "getKnowledgeStatus"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
+vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getSourceDependents: mocks.getSourceDependents }));
+vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact, downloadSourceFile: mocks.downloadSourceFile }));
+vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
+vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()), hasWebApi: true, getWebProjectId: () => context.projectId }));
+// The preview is the file viewer's own business: the page has to give it the right file, in the right project, on the right page.
+vi.mock("@/components/inspector/FilePreviewInspector", () => ({
+  FilePreviewInspector: ({ data, embedded, page, sourceFileId }: { sourceFileId?: string; data: { path: string; projectId?: string; root?: string }; embedded?: boolean; page?: number }) => (
+    <div data-source-file={sourceFileId} data-testid="preview" data-embedded={String(Boolean(embedded))}>预览：{data.path}（{data.root}，项目 {data.projectId}{page ? `，第 ${page} 页` : ""}）</div>
+  ),
+}));
+// What a dataset was understood to mean has its own panel and its own tests.
+vi.mock("@/components/sources/DatasetMeaningPanel", () => ({
+  DatasetMeaningPanel: ({ projectId, path, sha256 }: { projectId: string; path: string; sha256?: string | null }) => <p>数据含义面板：{projectId}·{path}·{sha256}</p>,
+}));
+
+const arrived = "2020-03-05T08:00:00";
+
+const display = (overrides: Partial<SourceDisplay> = {}): SourceDisplay => ({
+  title: "幽门螺杆菌感染处理第六次全国共识报告", gist: "给出一线四联方案、疗程 14 天与根除后复查的推荐。", docType: "review-guideline", typeLabel: "综述或指南", typeShort: "指南",
+  kind: "literature", origin: "upload", format: "pdf", pages: 18, size: 2_200_000, site: null, url: null, shared: false, ...overrides,
+});
+function makeSource(id: string, shown: Partial<SourceDisplay> = {}, payload: Record<string, unknown> = {}, extra: Partial<SourceRecord> = {}): SourceRecord {
+  return {
+    id, projectId: "default", revision: 3, createdAt: arrived, updatedAt: arrived, deletedAt: null, readable: true,
+    display: display(shown),
+    payload: { paths: [`knowledge-base/${id}.pdf`], status: "complete", docType: "review-guideline", depth: "structured", version: 1, generation: 1,
+      reasons: [], valueVector: {}, coverage: null, outputs: { summary: "给出一线四联方案。" }, fingerprint: { size: 2_200_000 },
+      currentUnderstandingId: "understanding:x:g1", ...payload },
+    ...extra,
+  } as SourceRecord;
+}
+const guideline = makeSource("src_guideline");
+/** The same document, read as the paper it is: only a paper's page carries 「研究信息」 and the paper's slots. */
+const paperOf = (source: SourceRecord): SourceRecord => ({
+  ...source, display: { ...source.display, docType: "published-paper", typeLabel: "已发表论文", typeShort: "论文" }, payload: { ...source.payload, docType: "published-paper" },
+}) as SourceRecord;
+const sheet = makeSource("src_sheet", { title: "疳证纳入研究提取表.xlsx", gist: "75 项研究的基线、干预、对照和总有效率。", docType: "dataset", typeShort: "数据表", kind: "table", origin: "conversation", format: "xlsx", pages: null, size: 48_000, shared: true },
+  { paths: ["knowledge-base/chat/疳证纳入研究提取表-1a2b3c4d.xlsx"], fingerprint: { size: 48_000, sha256: "a".repeat(64) } });
+const policy = makeSource("src_policy", { title: "2026 医院药事管理制度汇编.docx", gist: null, docType: "policy-document", typeShort: "制度文件", kind: "document", origin: "drive", format: "docx", pages: 42 },
+  { paths: ["openlist/制度/2026 医院药事管理制度汇编.docx"], outputs: { summary: "", artifactPath: "knowledge-base/.evimed-derived/src_policy/read-1-job-aaa/index.md" }, connector: { type: "openlist", id: "/制度/2026 医院药事管理制度汇编.docx" } });
+const webPage = makeSource("src_page", { title: "国家药监局关于修订阿莫西林制剂说明书的公告", gist: "增加严重皮肤不良反应警示。", docType: "webpage", typeShort: "网页", kind: "page", origin: "link", format: "md", pages: null, size: 9_000, site: "nmpa.gov.cn", url: "https://www.nmpa.gov.cn/notice" },
+  { paths: ["knowledge-base/links/nmpa.gov.cn-notice-1a2b3c4d.md"], link: { url: "https://www.nmpa.gov.cn/notice", finalUrl: "https://www.nmpa.gov.cn/notice", site: "nmpa.gov.cn", fetchedAt: "2020-10-05T08:00:00Z", rendered: false, original: null } });
+const note = makeSource("src_note", { title: "10月3日组会记录", gist: "确定 C1–C3 三类比较分开合并。", docType: "note-memo", typeShort: "笔记", kind: "note", origin: "note", format: "md", pages: null, size: 300 },
+  { paths: ["knowledge-base/notes/10月3日组会记录-1a2b3c.md"] });
+const picture = makeSource("src_image", { title: "流程图.png", gist: null, docType: "image", typeShort: "图片", kind: "image", format: "png", pages: null, size: 80_000 },
+  { paths: ["knowledge-base/流程图.png"], currentUnderstandingId: null, outputs: {} });
+const broken = makeSource("src_broken", { title: "8.11 医学测评.pdf", gist: null, docType: "document", typeShort: "文档", kind: "document", pages: null, size: 2_200_000 },
+  { status: "failed", error: { code: "source_parser_timeout", message: "Source analysis failed." }, currentUnderstandingId: null, outputs: {} }, { readable: false });
+const reading = makeSource("src_reading", { title: "AAP 2026 儿童尿路感染诊断与管理指南.pdf", gist: null, pages: null, origin: "frontier" },
+  { status: "parsing", currentUnderstandingId: null, outputs: {} }, { readable: false });
+const removed = makeSource("src_removed", { title: "已移除的原件.pdf" }, { status: "missing" }, { readable: false });
+
+const understanding = (extra: Record<string, unknown> = {}, sourceId = "src_guideline") => ({
+  sourceId, generation: 1, depth: "structured", status: "complete",
+  pageMap: [{ page: 1, start: 0, end: 100 }, { page: 5, start: 100, end: 200 }, { page: 6, start: 200, end: 300 }],
+  current: {
+    id: "understanding:x:g1", sourceId, generation: 1, docType: "review-guideline", depth: "structured", schemaVersion: 1, createdAt: arrived, run: null, usage: null,
+    summary: "针对我国幽门螺杆菌高耐药背景，推荐含铋剂四联 14 天作为一线经验方案。强调根除后 4 周以上复查。需要时按药敏调整。",
+    slots: { purpose: { state: "known", value: "给出处理建议", evidence: [] }, limitations: { state: "unknown", reason: "原文未涉及" }, design: { state: "unknown", reason: "原文未涉及" } },
+    claims: [
+      { id: "c1", statement: "一线经验治疗推荐铋剂四联方案，疗程 14 天", evidence: [{ sourceId, generation: 1, unitId: "u1", start: 120, end: 150, quote: "铋剂四联" }] },
+      { id: "c2", statement: "不推荐三联方案作为一线经验治疗", evidence: [{ sourceId, generation: 1, unitId: "u1", start: 250, end: 260, quote: "三联" }] },
+      ...Array.from({ length: 9 }, (_, index) => ({ id: `x${index}`, statement: `第 ${index + 3} 条要点`, evidence: [] })),
+    ],
+    methods: [], omissionAudit: { status: "not_run", omissionRate: null }, units: [],
+  },
+  ...extra,
+});
+
+const ledger = (overrides: Partial<SourceMaterialsLedger> = {}): SourceMaterialsLedger => ({
+  version: 1, status: "extracted", format: "pdf", pagination: "paginated", origin: "reported", extraction: { materials: "m@1" },
+  sourceSha256: null, textSha256: null, pages: { status: "mapped", pageCount: 38, textLayerPages: 38 },
+  tables: { total: 0, structured: 0, unextracted: 0, failed: 0, continued: 0, continuedAmbiguous: 0 },
+  values: { total: 0, located: 0, ambiguous: 0, unlocated: 0, unextracted: 0, failed: 0 },
+  figures: { total: 0, captioned: 0, valuesKnown: 0 }, footnotes: { linked: 0, orphanMarkers: 0, orphanNotes: 0 },
+  supplements: { referenced: 0, linked: 0 }, reasons: [], ...overrides,
+});
+const withCoverage = (source: SourceRecord, coverage: Record<string, unknown>): SourceRecord => ({
+  ...source, payload: { ...source.payload, coverage: { total: 10, accounted: 10, extracted: 10, indexedOnly: 0, noContent: 0, failed: 0, percent: 100, omissionRate: null, ...coverage } },
+}) as SourceRecord;
+
+/** The probe the tests read the navigation off: where the page went and what it carried. */
+function Probe() {
+  const location = useLocation();
+  return <p data-testid="location" data-search={location.search} data-state={JSON.stringify(location.state ?? null)}>{location.pathname}</p>;
+}
+/** What the knowledge base's page does with the reader where there is no room beside the list: a page of its own, at the address's list. */
+function ReaderRoute() {
+  const { sourceId = "" } = useParams();
+  const [params] = useSearchParams();
+  return <SourceReader key={sourceId} sourceId={sourceId} listState={readListState(params)} mode="page" />;
+}
+function Table() {
+  return useRoutes([
+    { path: "/app/files", element: <><p>知识库列表</p><Probe /></> },
+    { path: "/app/files/:sourceId", element: <><ReaderRoute /><Probe /></> },
+    { path: "/app/chat", element: <Probe /> },
+  ]);
+}
+/** The reader as the knowledge base's pane holds it, beside the list: the same box, a header of its own and a switch in place of the tab list. */
+function PaneRoute({ backLabel }: { backLabel?: string }) {
+  const { sourceId = "" } = useParams();
+  const [params] = useSearchParams();
+  return <SourceReader key={sourceId} sourceId={sourceId} listState={readListState(params)} mode="pane" backLabel={backLabel} />;
+}
+function renderPane(entry = "/app/files/src_guideline", backLabel?: string) {
+  return render(<MemoryRouter initialEntries={[entry]}><PaneTable backLabel={backLabel} /></MemoryRouter>);
+}
+function PaneTable({ backLabel }: { backLabel?: string }) {
+  return useRoutes([
+    { path: "/app/files", element: <><p>知识库列表</p><Probe /></> },
+    { path: "/app/files/:sourceId", element: <><PaneRoute backLabel={backLabel} /><Probe /></> },
+    { path: "/app/chat", element: <Probe /> },
+  ]);
+}
+const readerAt = (id = "src_guideline", search = "?scope=default") => `/app/files/${id}${search}`;
+function renderReader(entry = readerAt()) {
+  return render(<MemoryRouter initialEntries={[entry]}><Table /></MemoryRouter>);
+}
+const addressOf = () => { const where = screen.getByTestId("location"); return `${where.textContent}${where.getAttribute("data-search")}`; };
+const selectSpy = vi.fn(async (_projectId: string, land?: () => void) => { land?.(); });
+
+/** The page's box is `width` wide: what a resize observer would have told it. */
+function resize(width: number) {
+  layout.width = width;
+  act(() => { for (const observer of layout.observers) observer(); });
+}
+const columnOf = (name: "original" | "points") => document.querySelector<HTMLElement>(`[data-reader-column="${name}"]`);
+
+describe("a document's page", () => {
+  beforeAll(() => {
+    vi.stubGlobal("ResizeObserver", class {
+      readonly callback: () => void;
+      constructor(callback: () => void) { this.callback = callback; layout.observers.add(callback); }
+      observe() {}
+      unobserve() {}
+      disconnect() { layout.observers.delete(this.callback); }
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() { return layout.width; } });
+  });
+  afterAll(() => {
+    vi.unstubAllGlobals();
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  });
+  beforeEach(() => {
+    Object.values(mocks).forEach((mock) => mock.mockReset());
+    selectSpy.mockClear();
+    layout.width = 1200;
+    layout.observers.clear();
+    context.projectId = "default";
+    useProjectStore.setState({
+      currentId: "default", select: selectSpy as never,
+      projects: [{ id: "default", name: "我的研究" }, { id: "paper-1", name: "疳证 Meta 文献检索" }],
+    });
+    mocks.getSource.mockImplementation(async (id: string) => ({ src_guideline: guideline, src_sheet: sheet, src_policy: policy, src_page: webPage, src_note: note, src_image: picture, src_broken: broken, src_reading: reading, src_removed: removed }[id]
+      ?? (() => { throw new WebApiError("not found", { status: 404, code: "source_not_found" }); })()));
+    mocks.getSourceUnderstanding.mockResolvedValue(understanding());
+    mocks.getSourceMaterials.mockResolvedValue({ sourceId: "src_guideline", generation: 1, materials: null, reason: "not_extracted" });
+    mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: null, currentVersion: 1, items: [], nextCursor: null });
+    mocks.getSourceUses.mockResolvedValue({ items: [] });
+    mocks.getSourceDependents.mockResolvedValue({ memories: [], methods: [], results: [] });
+    mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
+    mocks.retrySource.mockResolvedValue(guideline);
+    mocks.removeDocument.mockResolvedValue(guideline);
+    mocks.refetchSource.mockResolvedValue({ source: webPage, duplicate: true, changed: false });
+    mocks.setSourceProjects.mockResolvedValue({ libraryProjects: "all", appliesTo: "all" });
+    mocks.getSourceNote.mockResolvedValue({ title: "10月3日组会记录", body: "确定 C1–C3 三类比较分开合并。" });
+    mocks.saveSourceNote.mockResolvedValue({ source: { ...note, id: "src_note_2" }, duplicate: false, changed: true });
+    mocks.downloadArtifact.mockResolvedValue(undefined);
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  describe("its header", () => {
+    it("keeps a compiled-page edit open while the source pipeline is still queued", async () => {
+      vi.useFakeTimers();
+      const wiki = makeSource(knowledgePage.sourceId, { title: knowledgePage.title, origin: "wiki", kind: "wiki", format: "md", pages: null },
+        { paths: [`knowledge-base/wiki/${knowledgePage.path}`], status: "queued" }, { readable: false });
+      mocks.getSource.mockResolvedValueOnce(wiki).mockRejectedValue(new WebApiError("retired", { status: 404, code: "source_not_found" }));
+      mocks.getKnowledgePage.mockResolvedValue(knowledgePage);
+      mocks.getKnowledgeStatus.mockResolvedValue(knowledgeStatus);
+      renderReader(readerAt(knowledgePage.sourceId));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+      fireEvent.change(screen.getByLabelText("页面全文"), { target: { value: "Unsaved research draft" } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(screen.getByLabelText("页面全文")).toHaveValue("Unsaved research draft");
+      expect(mocks.getSource).toHaveBeenCalledTimes(1);
+    });
+
+    it("is one line: the way back, the title with what the document is, and the three things to do with it", async () => {
+      renderReader();
+      const heading = await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      expect(heading.closest("header")?.querySelectorAll("p")).toHaveLength(0);
+      expect(screen.getByRole("navigation", { name: "返回" })).toHaveTextContent("知识库");
+      expect(within(heading.closest("header")!).getByText("指南 · 2.1 MB · 18 页 · 上传 · 2020-03-05")).toBeInTheDocument();
+      const header = heading.closest("header")!;
+      expect(within(header).getByRole("button", { name: "在对话中使用" })).toBeEnabled();
+      expect(within(header).getByRole("button", { name: "下载" })).toBeEnabled();
+      expect(within(header).getByRole("button", { name: `“${guideline.display.title}”的操作` })).toBeInTheDocument();
+    });
+
+    it("goes back to the list it was opened from, with its scope, type and search", async () => {
+      renderReader(readerAt("src_guideline", "?scope=paper-1&kind=literature&q=%E5%85%B1%E8%AF%86&tab=content&page=5"));
+      const back = await screen.findByRole("link", { name: "知识库" });
+      expect(back).toHaveAttribute("href", "/app/files?scope=paper-1&kind=literature&q=%E5%85%B1%E8%AF%86");
+      await userEvent.click(back);
+      expect(addressOf()).toBe("/app/files?scope=paper-1&kind=literature&q=%E5%85%B1%E8%AF%86");
+      // The list is told to put itself back as it was left.
+      expect(JSON.parse(screen.getByTestId("location").getAttribute("data-state")!)).toMatchObject({ kbRestore: true });
+    });
+
+    it("has the document's own actions in its 「⋯」, from the same menu as the row's — and where it takes effect is not one of them", async () => {
+      renderReader();
+      await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
+      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["重新读取", "删除"]);
+    });
+
+    it("offers to settle a suspected duplicate when the document is in one", async () => {
+      mocks.listDuplicateCandidates.mockResolvedValue({ items: [{ kind: "version-family", groupKey: "g1", label: "同一份资料的两个版本", members: [], sourceIds: ["src_guideline", "src_other"], decision: null }], scanned: 2, truncated: false });
+      renderReader();
+      await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
+      await waitFor(() => expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重新读取", "处理疑似重复", "删除"]));
+      await userEvent.click(screen.getByRole("menuitem", { name: "处理疑似重复" }));
+      expect(await screen.findByRole("dialog", { name: "疑似重复" })).toBeInTheDocument();
+    });
+
+    describe("where it takes effect (「生效项目」)", () => {
+      const everywhere = { ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: "all", appliesTo: "all" } as SourceRecord;
+      const inTwo = { ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: ["paper-1"], appliesTo: ["default", "paper-1"] } as SourceRecord;
+
+      it("says it after what the document is — 「生效于 所有项目」, or the projects by name, the holders first — and the words are the press that changes it", async () => {
+        mocks.getSource.mockResolvedValue(everywhere);
+        const first = renderReader();
+        const header = (await screen.findByRole("heading", { level: 1, name: guideline.display.title })).closest("header")!;
+        expect(within(header).getByRole("button", { name: `“${guideline.display.title}”的生效项目：所有项目，点击修改` })).toHaveTextContent("所有项目");
+        first.unmount();
+        mocks.getSource.mockResolvedValue(inTwo);
+        renderReader();
+        expect(await screen.findByRole("button", { name: `“${guideline.display.title}”的生效项目：我的研究、疳证 Meta 文献检索，点击修改` })).toHaveTextContent("我的研究、疳证 Meta 文献检索");
+      });
+
+      it("says nothing of it for a record that carries no answer, and not for a compiled page, which is its project's", async () => {
+        renderReader();
+        await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+        expect(screen.queryByText("生效于")).not.toBeInTheDocument();
+      });
+
+      it("opens a dialog with 「所有项目」 and the projects, the holder checked and fixed, and saves what was chosen, then reads the document again", async () => {
+        mocks.getSource.mockResolvedValue({ ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: null, appliesTo: ["default"] } as SourceRecord);
+        mocks.setSourceProjects.mockResolvedValue({ libraryProjects: ["paper-1"], appliesTo: ["default", "paper-1"] });
+        renderReader();
+        await userEvent.click(await screen.findByRole("button", { name: /的生效项目：我的研究，点击修改/ }));
+        const dialog = await screen.findByRole("dialog", { name: "生效项目" });
+        expect(within(dialog).getByRole("radio", { name: "所有项目" })).not.toBeChecked();
+        expect(within(dialog).getByRole("radio", { name: "选择项目" })).toBeChecked();
+        // The project that holds the file is checked and cannot be let go of; the others are the person's to tick.
+        const held = within(dialog).getByRole("checkbox", { name: /我的研究/ });
+        expect(held).toBeChecked(); expect(held).toBeDisabled();
+        expect(within(dialog).getByRole("button", { name: "保存" })).toBeDisabled();
+        await userEvent.click(within(dialog).getByRole("checkbox", { name: "疳证 Meta 文献检索" }));
+        await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+        await waitFor(() => expect(mocks.setSourceProjects).toHaveBeenCalledWith("src_guideline", ["paper-1"]));
+        await waitFor(() => expect(mocks.getSource).toHaveBeenCalledTimes(2));
+        expect(screen.queryByRole("dialog", { name: "生效项目" })).not.toBeInTheDocument();
+        expect(mocks.toastSuccess).toHaveBeenCalledWith("已更新生效项目");
+      });
+
+      it("saves 「所有项目」 as the word, and says a refusal in the registry's sentence, keeping the dialog", async () => {
+        mocks.getSource.mockResolvedValue(inTwo);
+        mocks.setSourceProjects.mockRejectedValueOnce(new WebApiError("no", { status: 400, code: "library_project_invalid" }));
+        renderReader();
+        await userEvent.click(await screen.findByRole("button", { name: /的生效项目：/ }));
+        const dialog = await screen.findByRole("dialog", { name: "生效项目" });
+        await userEvent.click(within(dialog).getByRole("radio", { name: "所有项目" }));
+        await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+        expect(await within(dialog).findByRole("alert")).toHaveTextContent(knownErrorCodeMessage("library_project_invalid")!);
+        expect(mocks.setSourceProjects).toHaveBeenLastCalledWith("src_guideline", "all");
+        // The choice is kept, so it can be sent again.
+        expect(within(dialog).getByRole("radio", { name: "所有项目" })).toBeChecked();
+        await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+        await waitFor(() => expect(screen.queryByRole("dialog", { name: "生效项目" })).not.toBeInTheDocument());
+      });
+    });
+
+    it("reads again from the copy the platform holds, and a saved page from its address, saying whether it changed", async () => {
+      renderReader();
+      await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "重新读取" }));
+      await waitFor(() => expect(mocks.retrySource).toHaveBeenCalledWith("src_guideline", 3));
+    });
+
+    it("reads a saved page from its address", async () => {
+      renderReader(readerAt("src_page"));
+      await userEvent.click(await screen.findByRole("button", { name: `“${webPage.display.title}”的操作` }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "重新读取" }));
+      await waitFor(() => expect(mocks.refetchSource).toHaveBeenCalledWith("src_page"));
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("页面没有变化");
+    });
+
+    it("deletes after a confirmation, and returns to the list as it was", async () => {
+      renderReader(readerAt("src_guideline", "?scope=paper-1"));
+      await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+      const confirm = await screen.findByRole("alertdialog");
+      expect(confirm).toHaveTextContent("删除这份资料？");
+      // What it does is said in the dialog: every copy of the file goes, not only this project's.
+      expect(confirm).toHaveTextContent("这份资料在账户里的所有副本都会删除");
+      await userEvent.click(within(confirm).getByRole("button", { name: "删除" }));
+      await waitFor(() => expect(mocks.removeDocument).toHaveBeenCalledWith("src_guideline", 3));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=paper-1"));
+    });
+
+    it("downloads the original from its own project", async () => {
+      mocks.getSource.mockResolvedValue({ ...guideline, projectId: "paper-1" });
+      renderReader();
+      await userEvent.click(await screen.findByRole("button", { name: "下载" }));
+      expect(mocks.downloadArtifact).toHaveBeenCalledWith("knowledge-base/src_guideline.pdf", "base", "src_guideline.pdf", "paper-1");
+    });
+  });
+
+  describe("「在对话中使用」", () => {
+    it("puts a request to use the document in the composer, unsent, in the document's own project — naming it by title and file, never by id or path", async () => {
+      mocks.getSource.mockResolvedValue({ ...guideline, projectId: "paper-1" });
+      renderReader();
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
+      const where = await screen.findByText("/app/chat");
+      const intent = JSON.parse(where.getAttribute("data-state")!).runtimeUiIntent;
+      expect(intent.kind).toBe("create");
+      expect(intent.draft).toContain("请阅读知识库里的这份资料");
+      expect(intent.draft).toContain(`资料：${guideline.display.title}（src_guideline.pdf）`);
+      expect(intent.draft.endsWith("我的问题：")).toBe(true);
+      expect(intent.draft).not.toMatch(/src_guideline(?!\.pdf)|knowledge-base|\.evimed-derived|workspace/);
+    });
+
+    it("takes a knowledge page into a conversation together with the documents it cites", async () => {
+      const wiki = makeSource(knowledgePage.sourceId, { title: knowledgePage.title, origin: "wiki", kind: "wiki", format: "md", pages: null }, { paths: [`knowledge-base/wiki/${knowledgePage.path}`] });
+      mocks.getSource.mockResolvedValue({ ...wiki, projectId: "paper-1" });
+      mocks.getKnowledgePage.mockResolvedValue(knowledgePage);
+      mocks.getKnowledgeStatus.mockResolvedValue(knowledgeStatus);
+      renderReader(readerAt(knowledgePage.sourceId));
+      await screen.findByRole("heading", { name: "事实时间线" });
+      await userEvent.click(screen.getByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
+      const where = await screen.findByText("/app/chat");
+      const intent = JSON.parse(where.getAttribute("data-state")!).runtimeUiIntent;
+      expect(intent.draft).toContain("请阅读知识库里的这一页和它引用的资料");
+      expect(intent.draft).toContain(`页面：${knowledgePage.title}`);
+      expect(intent.references.map((entry: { id: string }) => entry.id)).toEqual([knowledgePage.sourceId, ...knowledgePage.sources.map((entry) => entry.sourceId)]);
+    });
+
+    it("opens the one project it takes effect in without asking, whatever project the sidebar is in", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: null, appliesTo: ["paper-1"] });
+      renderReader(readerAt("src_sheet"));
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
+      expect(screen.queryByRole("dialog", { name: "选择对话项目" })).not.toBeInTheDocument();
+    });
+
+    it("asks which project when it takes effect in several, and in none of them is the sidebar's project switched behind the person's back", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: ["default"], appliesTo: ["default", "paper-1"] });
+      renderReader(readerAt("src_sheet"));
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      expect(selectSpy).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole("combobox", { name: "项目" }));
+      await userEvent.click(screen.getByRole("button", { name: "我的研究" }));
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("default", expect.any(Function)));
+    });
+
+    it("asks among every one of the account's own projects for a document that takes effect in all of them", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: "all", appliesTo: "all" });
+      renderReader(readerAt("src_sheet"));
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      await userEvent.click(screen.getByRole("combobox", { name: "项目" }));
+      expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["我的研究", "疳证 Meta 文献检索"]);
+    });
+
+    it("says so, and starts no conversation, for a document that takes effect nowhere", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, personal: true, projectId: "evimed-library", holders: [], libraryProjects: [], appliesTo: [] });
+      renderReader(readerAt("src_sheet"));
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("生效项目"));
+      expect(selectSpy).not.toHaveBeenCalled();
+    });
+
+    it("is not offered while the document is still being read", async () => {
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_reading"), current: null, status: "parsing" });
+      renderReader(readerAt("src_reading"));
+      expect(await screen.findByRole("button", { name: "在对话中使用" })).toBeDisabled();
+      expect(await screen.findByText("正在读取")).toBeInTheDocument();
+    });
+  });
+
+  it("reads and downloads personal originals without selecting the hidden storage project", async () => {
+    mocks.getSource.mockResolvedValue({ ...guideline, personal: true, projectId: "evimed-library", holders: [], libraryProjects: "all", appliesTo: "all" });
+    renderReader("/app/files/src_guideline");
+    const preview = await screen.findByTestId("preview");
+    expect(preview).toHaveAttribute("data-source-file", "src_guideline");
+    expect(preview).not.toHaveTextContent("evimed-library");
+    await userEvent.click(screen.getByRole("button", { name: "下载" }));
+    expect(mocks.downloadSourceFile).toHaveBeenCalled(); expect(mocks.downloadArtifact).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "在对话中使用" }));
+    expect(await screen.findByRole("dialog", { name: "选择对话项目" })).toBeInTheDocument(); expect(selectSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText("evimed-library")).toBeNull();
+  });
+
+  describe("two columns or two tabs, by the page's own width", () => {
+    it("puts the original on the left and the key points on the right where the original can be 560 px wide", async () => {
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(document.querySelector("[data-reader-layout]")).toHaveAttribute("data-reader-layout", "columns");
+      expect(screen.queryByRole("tablist", { name: "资料视图" })).not.toBeInTheDocument();
+      const original = columnOf("original")!;
+      const points = columnOf("points")!;
+      expect(original.compareDocumentPosition(points) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(await within(original).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/src_guideline.pdf（base，项目 default）");
+      expect(await within(points).findByText("给出一线四联方案、疗程 14 天与根除后复查的推荐。")).toBeInTheDocument();
+      expect(points.style.width).toBe("360px");
+    });
+
+    it("goes to the two tabs 「内容」 and 「原文」 one pixel short of that, and back again", async () => {
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH - 1);
+      expect(document.querySelector("[data-reader-layout]")).toHaveAttribute("data-reader-layout", "tabs");
+      const tabs = screen.getByRole("tablist", { name: "资料视图" });
+      // The views are the page's own, in its band; the page body below is their panel.
+      expect(tabs.closest("[data-page-chrome]")).not.toBeNull();
+      expect(screen.getByRole("tabpanel")).toHaveAttribute("data-page-body");
+      expect(within(tabs).getByRole("tab", { name: "内容", selected: true })).toBeInTheDocument();
+      expect(within(tabs).getByRole("tab", { name: "原文", selected: false })).toBeInTheDocument();
+      expect(screen.queryByTestId("preview")).not.toBeInTheDocument();
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(document.querySelector("[data-reader-layout]")).toHaveAttribute("data-reader-layout", "columns");
+    });
+
+    it("decides by the page's width and not the window's: a wide window whose sidebar leaves a narrow page is tabs", async () => {
+      const window1600 = vi.spyOn(window, "innerWidth", "get").mockReturnValue(1600);
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(700);
+      expect(document.querySelector("[data-reader-layout]")).toHaveAttribute("data-reader-layout", "tabs");
+      window1600.mockRestore();
+    });
+
+    it("keeps the tab and the page in the address, and opens the original at the page a key point rests on", async () => {
+      renderReader();
+      resize(700);
+      await userEvent.click(await screen.findByRole("button", { name: "第 5 页" }));
+      expect(addressOf()).toBe("/app/files/src_guideline?scope=default&tab=original&page=5");
+      expect(screen.getByRole("tab", { name: "原文", selected: true })).toBeInTheDocument();
+      const preview = await screen.findByTestId("preview");
+      expect(preview).toHaveTextContent("预览：knowledge-base/src_guideline.pdf（base，项目 default，第 5 页）");
+      expect(preview).toHaveAttribute("data-embedded", "true");
+      await userEvent.click(screen.getByRole("tab", { name: "内容" }));
+      expect(addressOf()).toBe("/app/files/src_guideline?scope=default&tab=content&page=5");
+    });
+
+    it("opens at the tab and the page the address names", async () => {
+      resize(700);
+      renderReader(readerAt("src_guideline", "?tab=original&page=6"));
+      expect(await screen.findByRole("tab", { name: "原文", selected: true })).toBeInTheDocument();
+      expect(await screen.findByTestId("preview")).toHaveTextContent("第 6 页");
+    });
+
+    it("turns the original to the page in the left column without leaving the key points, when both are on screen", async () => {
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH + 200);
+      await userEvent.click(await screen.findByRole("button", { name: "第 6 页" }));
+      expect(addressOf()).toBe("/app/files/src_guideline?scope=default&page=6");
+      expect(await within(columnOf("original")!).findByTestId("preview")).toHaveTextContent("第 6 页");
+      expect(within(columnOf("points")!).getByText(/一线经验治疗推荐铋剂四联方案/)).toBeInTheDocument();
+    });
+
+    it("ignores a tab or a page the address spells wrongly", async () => {
+      resize(700);
+      renderReader(readerAt("src_guideline", "?tab=elsewhere&page=-3"));
+      expect(await screen.findByRole("tab", { name: "内容", selected: true })).toBeInTheDocument();
+    });
+  });
+
+  describe("the key points", () => {
+    const text = () => columnOf("points")!.textContent ?? "";
+    const order = (...needles: string[]) => {
+      const at = needles.map((needle) => text().indexOf(needle));
+      expect(at.every((index) => index >= 0), `all of ${needles.join(" / ")} are there: ${at}`).toBe(true);
+      expect([...at].sort((left, right) => left - right)).toEqual(at);
+    };
+
+    it("go in the order of the plan: the gist, what the study is, the key points, what was not read, the tables and figures, then the folds", async () => {
+      const materials = ledger({ pages: { status: "mapped", pageCount: 38, textLayerPages: 34, noTextLayerPages: [31, 32, 33, 34] },
+        tables: { total: 3, structured: 2, unextracted: 1, failed: 0, continued: 0, continuedAmbiguous: 0 }, figures: { total: 2, captioned: 2, valuesKnown: 0 } });
+      mocks.getSource.mockResolvedValue({ ...paperOf(withCoverage(guideline, { materials })), payload: { ...paperOf(withCoverage(guideline, { materials })).payload, familyId: "fam_1", version: 2,
+        metadata: { authors: ["王一", "李二", "张三", "赵四"], source: "中华消化杂志", publicationDate: "2022-03-15" } } });
+      const withStudy = understanding();
+      withStudy.current.slots = { ...withStudy.current.slots, design: { state: "known", value: "随机对照试验", evidence: [] }, doi: { state: "known", value: "10.1000/xyz", evidence: [] } } as never;
+      mocks.getSourceUnderstanding.mockResolvedValue(withStudy);
+      mocks.getSourceMaterials.mockResolvedValue({ sourceId: "src_guideline", generation: 1, materials: { coverage: materials, structure: {
+        tables: [{ id: "tbl-1", index: 1, kind: "table", status: "structured", caption: { label: "表 3", text: "表 3 推荐等级汇总", placement: "before" }, page: { status: "located", pages: [9] } }],
+        figures: [{ kind: "figure", index: 1, id: "fig-1", label: "图 1", caption: { text: "图 1 治疗流程" }, page: { status: "located", pages: [4] } }] } } });
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: "fam_1", currentVersion: 2, nextCursor: null,
+        items: [{ ...guideline, payload: { ...guideline.payload, version: 2 } }, { ...guideline, id: "src_guideline_v1", payload: { ...guideline.payload, version: 1 }, createdAt: "2019-12-01T08:00:00" }] });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("表 3 推荐等级汇总");
+      await within(columnOf("points")!).findByText(/以前的版本（1）/);
+      order("讲了什么", "给出一线四联方案", "研究信息", "王一、李二、张三 等", "中华消化杂志 2022", "随机对照试验", "10.1000/xyz", "要点", "一线经验治疗推荐铋剂四联方案",
+        "没有读全：第 31—34 页没有文字层，1 张表格没有读成数据，2 张图的内容没有读取。", "表格与图", "图 1 治疗流程", "表 3 推荐等级汇总", "完整摘要", "以前的版本（1）");
+      // The pages come from the page map and from the materials, and each is a way to the original.
+      expect(within(columnOf("points")!).getByRole("button", { name: "第 5 页" })).toBeInTheDocument();
+      expect(within(columnOf("points")!).getByRole("button", { name: "第 9 页" })).toBeInTheDocument();
+      expect(within(columnOf("points")!).getByRole("button", { name: "第 4 页" })).toBeInTheDocument();
+      // The long summary and the earlier versions are folded, and an earlier version is a page of its own.
+      expect(within(columnOf("points")!).getByText("完整摘要").closest("details")).not.toHaveAttribute("open");
+      expect(within(columnOf("points")!).getByRole("link", { name: "第 1 版 · 2019-12-01" })).toHaveAttribute("href", "/app/files/src_guideline_v1?scope=default");
+    });
+
+    it("show only what the reading has: no row for a study slot it left unknown, and not more than eight points", async () => {
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      const points = await within(columnOf("points")!).findByRole("list");
+      expect(within(points).getAllByRole("listitem")).toHaveLength(8);
+      expect(text()).not.toMatch(/研究信息|研究设计|尚不明确|原文未涉及|给出处理建议/);
+      // There is nothing in the reading to put under these, and no record of who used the document: they are not on the page.
+      expect(text()).not.toMatch(/包含什么|局限|用过它的对话|遗漏|抽查|查看历史|方法草稿/);
+    });
+
+    // 2026-10-14: an understanding read before the type-by-type slots keeps the paper's slots on its record for a document that is not
+    // a paper, and the page drew them under 「研究信息」 — on production, for a product test whose own summary says it is not a study.
+    it("draw no study slot for a document that is not a paper, whatever its stored reading carries — and name nothing 「研究信息」", async () => {
+      const product = makeSource("src_product", { title: "8.11 医学测评.pdf", gist: "这是一份产品测评记录，不是研究论文。", docType: "document", typeShort: "文档", kind: "document" }, { docType: "document" });
+      const stored = understanding({}, "src_product");
+      stored.current.slots = {
+        design: { state: "known", value: "本文档没有研究设计", evidence: [] }, population: { state: "known", value: "文档没有定义研究人群", evidence: [] },
+        interventionExposure: { state: "known", value: "被评价的干预是一个软件工具", evidence: [] }, outcomes: { state: "known", value: "测评结论", evidence: [] },
+        purpose: { state: "known", value: "记录一次测评", evidence: [] },
+      } as never;
+      mocks.getSource.mockResolvedValue(product);
+      mocks.getSourceUnderstanding.mockResolvedValue(stored);
+      renderReader(readerAt("src_product"));
+      await screen.findByRole("heading", { level: 1, name: product.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByRole("list");
+      expect(text()).toContain("这是一份产品测评记录，不是研究论文。");
+      expect(text()).not.toMatch(/研究信息|文献信息|研究设计|研究人群|干预或暴露|研究终点|本文档没有研究设计|被评价的干预/);
+    });
+
+    it("name the section for what it holds: a paper's 「研究信息」, the authors and place of any other literature under 「文献信息」", async () => {
+      const metadata = { authors: ["王一", "李二"], source: "中华消化杂志", publicationDate: "2022-03-15" };
+      mocks.getSource.mockResolvedValue({ ...guideline, payload: { ...guideline.payload, metadata } });
+      const stored = understanding();
+      stored.current.slots = { ...stored.current.slots, design: { state: "known", value: "随机对照试验", evidence: [] } } as never;
+      mocks.getSourceUnderstanding.mockResolvedValue(stored);
+      const guide = renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("王一、李二");
+      expect(text()).toContain("文献信息");
+      expect(text()).not.toMatch(/研究信息|随机对照试验/);
+      guide.unmount();
+      mocks.getSource.mockResolvedValue({ ...paperOf(guideline), payload: { ...paperOf(guideline).payload, metadata } });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("随机对照试验");
+      expect(text()).toContain("研究信息");
+      expect(text()).not.toContain("文献信息");
+    });
+
+    // N-16: the conversations that used the document, last in the column.
+    const used = (over: Record<string, unknown> = {}) => ({ sessionId: "ses_1", projectId: "default", runId: "run_1", title: "SGLT2 抑制剂与心衰再住院", kinds: ["search"], uses: 2,
+      firstUsedAt: "2020-10-06T08:00:00Z", lastUsedAt: "2020-10-06T08:05:00Z", ...over });
+
+    it("end with the conversations that used the document, each a link into the conversation, and only when there are some", async () => {
+      mocks.getSourceUses.mockResolvedValue({ items: [used(), used({ sessionId: "ses_2", runId: "run_2", title: null, kinds: ["read"], lastUsedAt: "2020-09-01T08:00:00Z" }),
+        used({ sessionId: "ses_3", projectId: "paper-1", runId: "run_3", title: "另一个项目里的对话", lastUsedAt: "2020-08-01T08:00:00Z" })] });
+      mocks.getSource.mockResolvedValue({ ...withCoverage(guideline, {}), payload: { ...guideline.payload, familyId: "fam_1", version: 2 } });
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: "fam_1", currentVersion: 2, nextCursor: null,
+        items: [{ ...guideline, payload: { ...guideline.payload, version: 2 } }, { ...guideline, id: "src_guideline_v1", payload: { ...guideline.payload, version: 1 }, createdAt: "2019-12-01T08:00:00" }] });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("SGLT2 抑制剂与心衰再住院");
+      // After everything else the column says, the folds included.
+      order("讲了什么", "要点", "完整摘要", "以前的版本（1）", "用过它的对话", "SGLT2 抑制剂与心衰再住院", "一段对话", "另一个项目里的对话");
+      const points = columnOf("points")!;
+      expect(within(points).getByRole("link", { name: "SGLT2 抑制剂与心衰再住院" })).toHaveAttribute("href", "/app/chat/ses_1");
+      expect(within(points).getByRole("link", { name: "一段对话" })).toHaveAttribute("href", "/app/chat/ses_2");
+      // A conversation of another project is opened through the run's address, which finds the project it is in.
+      expect(within(points).getByRole("link", { name: "另一个项目里的对话" })).toHaveAttribute("href", "/app/runs?run=run_3");
+      expect(points.textContent).toContain("2020-10-06");
+      // No count, no kind of use, no run or session identifier: only the conversation and the day.
+      expect(points.textContent).not.toMatch(/ses_|run_|用过 ?\d|检索|读取/);
+      expect(mocks.getSourceUses).toHaveBeenCalledWith("src_guideline");
+    });
+
+    // 「相关记忆与做法」: what rests on the document, folded, after everything else, and only where something does.
+    it("end with a fold of what rests on the document, closed, and draw nothing where nothing does", async () => {
+      mocks.getSourceDependents.mockResolvedValue({
+        memories: [{ recordId: "mem_1", text: "纳入标准为 18 岁以上", scope: "project" }],
+        methods: [{ id: "mth_1", title: "汇总前核对纳入研究数" }],
+        results: [{ versionId: `rv_${"1".repeat(64)}`, runId: "run_9", path: "deliverables/a/clinical-evidence-report.md", title: "房颤抗凝综述", at: "2020-10-06T08:00:00Z" }],
+      });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      const points = columnOf("points")!;
+      const fold = await within(points).findByText("相关记忆与做法");
+      expect(fold.closest("details")).not.toHaveAttribute("open");
+      expect(mocks.getSourceDependents).toHaveBeenCalledWith("src_guideline");
+      order("讲了什么", "要点", "相关记忆与做法");
+      await userEvent.click(fold);
+      expect(within(points).getByRole("link", { name: "纳入标准为 18 岁以上" })).toHaveAttribute("href", "/app/memory?record=mem_1");
+      expect(within(points).getByRole("link", { name: "汇总前核对纳入研究数" })).toHaveAttribute("href", "/app/memory?method=mth_1");
+      expect(within(points).getByRole("link", { name: "证据分析报告 · 房颤抗凝综述" })).toHaveAttribute("href", "/app/runs/run_9/files/deliverables/a/clinical-evidence-report.md");
+      expect(points.textContent).not.toMatch(/mem_|mth_|run_|rv_|用过 ?\d/);
+      cleanup();
+      mocks.getSourceDependents.mockResolvedValue({ memories: [], methods: [], results: [] });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("相关记忆与做法");
+      cleanup();
+      mocks.getSourceDependents.mockRejectedValue(new WebApiError("down", { status: 503 }));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("相关记忆与做法");
+      expect(within(columnOf("points")!).queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("say nothing about use where the record has none, or cannot be read", async () => {
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("用过它的对话");
+      cleanup();
+      mocks.getSourceUses.mockRejectedValue(new WebApiError("down", { status: 503 }));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("用过它的对话");
+      expect(within(columnOf("points")!).queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("show the conversations even for a document the reading failed on or is still reading, which a run may have read the text of", async () => {
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_broken"), current: null, status: "failed" });
+      mocks.getSource.mockResolvedValue(broken);
+      mocks.getSourceUses.mockResolvedValue({ items: [used()] });
+      renderReader(readerAt("src_broken"));
+      await screen.findByRole("heading", { level: 1, name: broken.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(await within(columnOf("points")!).findByText("SGLT2 抑制剂与心衰再住院")).toBeInTheDocument();
+    });
+
+    // N-17: what the document contains and what limits it, written by the reading from the document, for every type.
+    it("put what the document contains and what limits it after the study information and before the key points, only where the reading has them", async () => {
+      const written = understanding();
+      written.current.slots = { ...written.current.slots, design: { state: "known", value: "随机对照试验", evidence: [] } } as never;
+      (written.current as Record<string, unknown>).contents = ["表 3 推荐等级汇总", "合并糖尿病时的用药调整"];
+      (written.current as Record<string, unknown>).limitations = ["仅纳入单中心回顾性病例", "随访不足一年"];
+      mocks.getSourceUnderstanding.mockResolvedValue(written);
+      mocks.getSource.mockResolvedValue(paperOf(guideline));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("仅纳入单中心回顾性病例");
+      order("讲了什么", "研究信息", "随机对照试验", "包含什么", "表 3 推荐等级汇总", "合并糖尿病时的用药调整", "局限", "仅纳入单中心回顾性病例", "随访不足一年", "要点", "一线经验治疗推荐铋剂四联方案");
+      const sections = within(columnOf("points")!).getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+      expect(sections.indexOf("包含什么")).toBeLessThan(sections.indexOf("要点"));
+    });
+
+    it("leave a list out where the reading has none — an empty list is an answer, a missing one was never read — and never cut one out of the summary", async () => {
+      const written = understanding();
+      (written.current as Record<string, unknown>).contents = [];
+      (written.current as Record<string, unknown>).limitations = [];
+      mocks.getSourceUnderstanding.mockResolvedValue(written);
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toMatch(/包含什么|局限/);
+      // An understanding that predates the fields has neither heading either, however long its summary is.
+      cleanup();
+      mocks.getSourceUnderstanding.mockResolvedValue(understanding());
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toMatch(/包含什么|局限/);
+    });
+
+    it("show them for a table as well, beside the meaning of its columns", async () => {
+      const written = { ...understanding({}, "src_sheet"), current: { ...understanding().current, sourceId: "src_sheet", contents: ["基线表", "结局表"], limitations: ["未说明数据的缺失处理"] } };
+      mocks.getSourceUnderstanding.mockResolvedValue(written);
+      mocks.getSource.mockResolvedValue(sheet);
+      renderReader(readerAt("src_sheet"));
+      await screen.findByRole("heading", { level: 1, name: sheet.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("基线表");
+      order("包含什么", "基线表", "局限", "未说明数据的缺失处理", "数据含义面板");
+    });
+
+    it("say the gist as the row does, and fold the whole summary only when there is more than the gist", async () => {
+      const oneSentence = understanding();
+      oneSentence.current.summary = "给出一线四联方案、疗程 14 天与根除后复查的推荐。";
+      mocks.getSourceUnderstanding.mockResolvedValue(oneSentence);
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("给出一线四联方案、疗程 14 天与根除后复查的推荐。");
+      expect(text()).not.toContain("完整摘要");
+    });
+
+    it("name a page in plain words where there is no page to open on", async () => {
+      mocks.getSource.mockResolvedValue(policy);
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_policy"), current: { ...understanding().current, sourceId: "src_policy" } });
+      renderReader(readerAt("src_policy"));
+      await screen.findByRole("heading", { level: 1, name: policy.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText(/一线经验治疗推荐铋剂四联方案/);
+      expect(within(columnOf("points")!).queryByRole("button", { name: /第 \d+ 页/ })).not.toBeInTheDocument();
+      expect(within(columnOf("points")!).getAllByText("第 5 页").length).toBeGreaterThan(0);
+    });
+
+    it("keep the list of tables and figures to the first six, and give the rest on request", async () => {
+      const crowded = withCoverage(guideline, { materials: ledger({ tables: { total: 8, structured: 8, unextracted: 0, failed: 0, continued: 0, continuedAmbiguous: 0 } }) });
+      mocks.getSource.mockResolvedValue(crowded);
+      mocks.getSourceMaterials.mockResolvedValue({ sourceId: "src_guideline", generation: 1, materials: { coverage: ledger(), structure: { figures: [],
+        tables: Array.from({ length: 8 }, (_, index) => ({ id: `tbl-${index + 1}`, index: index + 1, kind: "table", status: "structured", caption: { label: `表 ${index + 1}`, text: `表 ${index + 1} 的标题` }, page: { status: "located", pages: [index + 1] } })) } } });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("表 6 的标题");
+      expect(within(columnOf("points")!).queryByText("表 7 的标题")).not.toBeInTheDocument();
+      await userEvent.click(within(columnOf("points")!).getByRole("button", { name: "显示全部 8 项" }));
+      expect(within(columnOf("points")!).getByText("表 8 的标题")).toBeInTheDocument();
+    });
+
+    it("leave the tables and figures out when they cannot be read, and keep the rest", async () => {
+      mocks.getSource.mockResolvedValue(withCoverage(guideline, { materials: ledger({ tables: { total: 2, structured: 2, unextracted: 0, failed: 0, continued: 0, continuedAmbiguous: 0 } }) }));
+      mocks.getSourceMaterials.mockRejectedValue(new WebApiError("unavailable", { status: 503 }));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(text()).not.toContain("表格与图");
+      expect(within(columnOf("points")!).queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("say the way to the newest version when this is an old one", async () => {
+      mocks.getSource.mockResolvedValue({ ...guideline, id: "src_guideline", payload: { ...guideline.payload, familyId: "fam_1", version: 1 } });
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: "fam_1", currentVersion: 2, nextCursor: null,
+        items: [{ ...guideline, id: "src_guideline_v2", payload: { ...guideline.payload, version: 2 } }, { ...guideline, payload: { ...guideline.payload, version: 1 } }] });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(await within(columnOf("points")!).findByRole("link", { name: "打开最新版本" })).toHaveAttribute("href", "/app/files/src_guideline_v2?scope=default");
+      expect(text()).not.toContain("以前的版本");
+    });
+  });
+
+  describe("what was not read", () => {
+    const gapOf = async (source: SourceRecord) => {
+      mocks.getSource.mockResolvedValue(source);
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: source.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      return document.querySelector("[data-reader-gap]")?.textContent ?? null;
+    };
+
+    it("is one sentence, naming the pages, the tables and the figures that were not read", async () => {
+      expect(await gapOf(withCoverage(guideline, { failed: 3, materials: ledger({
+        pages: { status: "mapped", pageCount: 38, textLayerPages: 30, noTextLayerPages: [31, 32, 33, 34, 40] },
+        tables: { total: 4, structured: 2, unextracted: 1, failed: 1, continued: 0, continuedAmbiguous: 0 }, figures: { total: 6, captioned: 6, valuesKnown: 0 } }) })))
+        .toBe("没有读全：3 段文字没能读取，第 31—34、40 页没有文字层，2 张表格没有读成数据，6 张图的内容没有读取。");
+    });
+
+    it("is not there when nothing was missed — and a file that exists is not said to be understood for it", async () => {
+      expect(await gapOf(withCoverage(guideline, { materials: ledger({ tables: { total: 3, structured: 3, unextracted: 0, failed: 0, continued: 0, continuedAmbiguous: 0 } }) }))).toBeNull();
+    });
+
+    it("is not there for a document read before the extraction existed, which says nothing either way", async () => {
+      expect(await gapOf(withCoverage(guideline, {}))).toBeNull();
+    });
+
+    it("says only the figures where those are all that was missed", async () => {
+      expect(await gapOf(withCoverage(guideline, { materials: ledger({ figures: { total: 1, captioned: 1, valuesKnown: 0 } }) }))).toBe("没有读全：1 张图的内容没有读取。");
+    });
+
+    it("says a partly read document's missing parts under its key points", async () => {
+      mocks.getSource.mockResolvedValue(withCoverage({ ...guideline, payload: { ...guideline.payload, status: "needs_attention" } } as SourceRecord, { failed: 2 }));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("讲了什么");
+      expect(document.querySelector("[data-reader-gap]")).toHaveTextContent("没有读全：2 段文字没能读取。");
+    });
+  });
+
+  describe("the original, by what the document is", () => {
+    const original = async (source: SourceRecord) => {
+      mocks.getSource.mockResolvedValue(source);
+      renderReader(readerAt(source.id));
+      await screen.findByRole("heading", { level: 1, name: source.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      return columnOf("original")!;
+    };
+
+    it("is the file itself for a paper, a guideline or a document, in the project it belongs to", async () => {
+      expect(await within(await original({ ...guideline, projectId: "paper-1" })).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/src_guideline.pdf（base，项目 paper-1）");
+    });
+
+    it("is the text that was read for a document in the cloud drive, and says so", async () => {
+      const column = await original(policy);
+      expect(await within(column).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/.evimed-derived/src_policy/read-1-job-aaa/index.md");
+      expect(within(column).getByText("从网盘文件读出的文本")).toBeInTheDocument();
+    });
+
+    it("is the snapshot for a web page, with the day it was taken and the way to the page itself", async () => {
+      const column = await original(webPage);
+      expect(await within(column).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/links/nmpa.gov.cn-notice-1a2b3c4d.md");
+      expect(within(column).getByText("这是网页的快照，抓取于 2020-10-05")).toBeInTheDocument();
+      const link = within(column).getByRole("link", { name: "打开原网页" });
+      expect(link).toHaveAttribute("href", "https://www.nmpa.gov.cn/notice");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    });
+
+    it("is the editor for a note, and saving it follows the note to its next version", async () => {
+      const savedNote = { ...note, id: "src_note_2" };
+      mocks.getSource.mockImplementation(async (id: string) => id === savedNote.id ? savedNote : note);
+      mocks.getSourceNote.mockImplementation(async (id: string) => ({ title: note.display.title, body: id === savedNote.id ? "增加：敏感性分析另行报告。" : "确定 C1–C3 三类比较分开合并。" }));
+      resize(700);
+      renderReader(readerAt(note.id));
+      const column = await screen.findByRole("tabpanel");
+      const body = await within(column).findByLabelText("正文");
+      expect(body).toHaveValue("确定 C1–C3 三类比较分开合并。");
+      expect(within(column).getByRole("button", { name: "保存" })).toBeDisabled();
+      await userEvent.clear(body);
+      await userEvent.type(body, "增加：敏感性分析另行报告。");
+      await userEvent.click(within(column).getByRole("button", { name: "保存" }));
+      await waitFor(() => expect(mocks.saveSourceNote).toHaveBeenCalledWith("src_note", { title: "10月3日组会记录", body: "增加：敏感性分析另行报告。" }));
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("已保存，正在重新读取");
+      await waitFor(() => expect(addressOf()).toBe("/app/files/src_note_2?scope=default"));
+      await userEvent.click(await screen.findByRole("tab", { name: "内容" }));
+      expect(await screen.findByText("增加：敏感性分析另行报告。")).toBeInTheDocument();
+      expect(screen.queryByText("确定 C1–C3 三类比较分开合并。")).not.toBeInTheDocument();
+    });
+
+    it("keeps historical note originals readable but read only", async () => {
+      const historical = { ...note, payload: { ...note.payload, publication: { current: false } } };
+      mocks.getSource.mockResolvedValue(historical);
+      resize(700);
+      renderReader(readerAt(note.id));
+      const body = await screen.findByLabelText("正文");
+      expect(body).toHaveAttribute("readonly");
+      expect(screen.getByLabelText("标题")).toHaveAttribute("readonly");
+      expect(screen.getByText("历史版本，仅供查看。")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+      expect(mocks.saveSourceNote).not.toHaveBeenCalled();
+    });
+
+    it("shows same-content occurrences and uses the selected family's publication revision", async () => {
+      const current = { ...note, payload: { ...note.payload, version: 1, familyId: "fam_note", publication: { current: true, bindings: { fam_note: { current: true, logicalPath: "note.md", publicationRevision: 3 } } } } };
+      const prior = { ...current, id: "src_note_b", payload: { ...current.payload, version: 2 } };
+      const first = { ...current, payload: { ...current.payload, version: 1 } };
+      mocks.getSource.mockResolvedValue(current);
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: current.id, familyId: "fam_note", currentVersion: 3, items: [{ ...current, payload: { ...current.payload, version: 3 } }, prior, first], nextCursor: null });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      renderReader(readerAt(current.id));
+      await userEvent.click(await screen.findByText("以前的版本（2）"));
+      expect(await screen.findByText(/第 1 版.*内容相同/)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /第 2 版/ })).toHaveAttribute("href", "/app/files/src_note_b?scope=default");
+      expect(screen.queryByRole("link", { name: "打开最新版本" })).not.toBeInTheDocument();
+    });
+
+    it("keeps note version navigation beside its independently loaded preview", async () => {
+      const old = { ...note, payload: { ...note.payload, familyId: "fam_note", version: 1 } };
+      const latest = { ...old, id: "src_note_latest", payload: { ...old.payload, version: 2 } };
+      mocks.getSource.mockImplementation(async (id: string) => id === latest.id ? latest : old);
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: old.id, familyId: "fam_note", currentVersion: 2, items: [latest, old], nextCursor: null });
+      mocks.getSourceUnderstanding.mockResolvedValue({ current: null });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      renderReader(readerAt(old.id));
+      const newest = await screen.findByRole("link", { name: "打开最新版本" });
+      await userEvent.click(newest);
+      await waitFor(() => expect(addressOf()).toContain(latest.id));
+      await userEvent.click(await screen.findByText("以前的版本（1）"));
+      const previous = await screen.findByRole("link", { name: /第 1 版/ });
+      await userEvent.click(previous);
+      await waitFor(() => expect(addressOf()).toBe(readerAt(old.id)));
+      expect(mocks.getSourceUnderstanding).not.toHaveBeenCalled();
+    });
+
+    it("deduplicates identical metadata labels while retaining distinct origins", () => {
+      expect(readerMeta(note).split(" · ").filter((part) => part === "笔记")).toHaveLength(1);
+      for (const origin of ["upload", "drive"] as const) {
+        const source = makeSource("src_meta", { typeShort: "笔记", origin });
+        expect(readerMeta(source)).toContain("笔记");
+        expect(readerMeta(source)).toContain(ORIGIN_LABEL[origin]);
+      }
+    });
+
+    it("renders a saved note as Markdown without an understanding", async () => {
+      mocks.getSource.mockResolvedValue(note);
+      mocks.getSourceUnderstanding.mockResolvedValue({ current: null });
+      mocks.getSourceNote.mockResolvedValue({ title: "Note", body: "# Saved heading\n\n| Item | Value |\n| --- | --- |\n| A | 3 |" });
+      resize(700);
+      renderReader(readerAt("src_note") + "&tab=content");
+      expect(await screen.findByRole("heading", { name: "Saved heading" })).toBeInTheDocument();
+      expect(await screen.findByRole("table")).toBeInTheDocument();
+    });
+
+    it("opens on the editor where there are two tabs, because a note is the original", async () => {
+      mocks.getSource.mockResolvedValue(note);
+      resize(700);
+      renderReader(readerAt("src_note"));
+      expect(await screen.findByRole("tab", { name: "原文", selected: true })).toBeInTheDocument();
+      expect(await screen.findByLabelText("正文")).toBeInTheDocument();
+    });
+
+    it("is a preview of the table beside the meaning of its columns, which take the key points' place", async () => {
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_sheet"), current: { ...understanding().current, sourceId: "src_sheet", summary: "75 项研究的基线、干预、对照和总有效率，共 82 行 14 列。" } });
+      const column = await original(sheet);
+      expect(await within(column).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/chat/疳证纳入研究提取表-1a2b3c4d.xlsx");
+      const points = columnOf("points")!;
+      expect(await within(points).findByText("数据含义面板：default·knowledge-base/chat/疳证纳入研究提取表-1a2b3c4d.xlsx·" + "a".repeat(64))).toBeInTheDocument();
+      expect(within(points).getByText("75 项研究的基线、干预、对照和总有效率。")).toBeInTheDocument();
+      expect(within(points).queryByText("要点")).not.toBeInTheDocument();
+      expect(within(points).queryAllByRole("listitem")).toHaveLength(0);
+    });
+
+    it("lets the meaning of a table's columns be the main column where there is no room for two", async () => {
+      mocks.getSource.mockResolvedValue(sheet);
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_sheet"), current: { ...understanding().current, sourceId: "src_sheet" } });
+      resize(700);
+      renderReader(readerAt("src_sheet"));
+      expect(await screen.findByRole("tab", { name: "内容", selected: true })).toBeInTheDocument();
+      expect(await screen.findByText(/数据含义面板：/)).toBeInTheDocument();
+    });
+
+    it("is the picture for an image", async () => {
+      expect(await within(await original(picture)).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/流程图.png");
+    });
+
+    it("says the original was removed, and does not offer a download of it", async () => {
+      const column = await original(removed);
+      expect(within(column).getByText("原件已移除，这份资料的原文看不到了。")).toBeInTheDocument();
+      expect(screen.queryByTestId("preview")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "下载" })).toBeDisabled();
+    });
+
+    it("says there is no original to show when the document has no path", async () => {
+      const column = await original({ ...guideline, payload: { ...guideline.payload, paths: [] } } as SourceRecord);
+      expect(within(column).getByText("这份资料的原文暂时看不到。")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "下载" })).toBeDisabled();
+    });
+  });
+
+  describe("a document that could not be read, or is being read", () => {
+    it("gives the reason in the registry's words and the one thing to do, and still shows and offers the original", async () => {
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_broken"), current: null, status: "failed" });
+      mocks.getSource.mockResolvedValue(broken);
+      renderReader(readerAt("src_broken"));
+      await screen.findByRole("heading", { level: 1, name: broken.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(await within(columnOf("points")!).findByText(knownErrorCodeMessage("source_parser_timeout")!)).toBeInTheDocument();
+      await userEvent.click(within(columnOf("points")!).getByRole("button", { name: "重新读取" }));
+      await waitFor(() => expect(mocks.retrySource).toHaveBeenCalledWith("src_broken", 3));
+      expect(await within(columnOf("original")!).findByTestId("preview")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "下载" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "在对话中使用" })).toBeDisabled();
+    });
+
+    it("says it is being read, and asks again until it is", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_reading"), current: null, status: "parsing" });
+      mocks.getSource.mockResolvedValue(reading);
+      renderReader(readerAt("src_reading"));
+      expect(await screen.findByText("正在读取")).toBeInTheDocument();
+      mocks.getSource.mockResolvedValue({ ...reading, readable: true, payload: { ...reading.payload, status: "complete" } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5100); });
+      await waitFor(() => expect(screen.getByRole("button", { name: "在对话中使用" })).toBeEnabled());
+      expect(mocks.getSource.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("offers the original when a readable document has no understanding", async () => {
+      mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_image"), current: null });
+      mocks.getSource.mockResolvedValue(picture);
+      renderReader(readerAt("src_image"));
+      await screen.findByRole("heading", { level: 1, name: picture.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await waitFor(() => expect(mocks.getSourceUnderstanding).toHaveBeenCalled());
+      await waitFor(() => expect(within(columnOf("points")!).queryByRole("status", { name: "正在加载内容" })).toBeNull());
+      expect(within(columnOf("points")!).getByRole("link", { name: "查看原文" })).toHaveAttribute("href", "/app/files/src_image?tab=original");
+    });
+
+    it("says it could not load the key points, with a way to try again, and the original still shows", async () => {
+      mocks.getSourceUnderstanding.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: "product_state_unavailable" }));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      const alert = await within(columnOf("points")!).findByRole("note");
+      expect(alert).toHaveTextContent("无法加载内容");
+      expect(within(columnOf("original")!).getByTestId("preview")).toBeInTheDocument();
+      await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+      expect(await within(columnOf("points")!).findByText("讲了什么")).toBeInTheDocument();
+    });
+  });
+
+  describe("a document that is not there", () => {
+    it("a retired source with a valid knowledge address can reopen the current same-path page", async () => {
+      const params = new URLSearchParams({scope:"paper-1",kind:"wiki",kpProject:"paper-1",kpTree:"wiki",kpPath:"concept/alias.md",
+        kpGeneration:`kg_${"a".repeat(32)}`,kpId:"alias-page",kpRevision:"3"});
+      renderReader(readerAt("src_gone",`?${params}`));
+      expect(await screen.findByRole("link",{name:"打开当前知识页"})).toHaveAttribute("href",
+        `/app/files/open?${new URLSearchParams({project:"paper-1",tree:"wiki",path:"concept/alias.md"})}`);
+      expect(screen.queryByTestId("preview")).not.toBeInTheDocument();
+    });
+    it("is one sentence and the way back, the same for a document that was deleted and one that was never this account's", async () => {
+      renderReader(readerAt("src_gone", "?scope=paper-1"));
+      expect(await screen.findByText("这份资料不存在或已删除。")).toBeInTheDocument();
+      expect(screen.queryByTestId("preview")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "在对话中使用" })).not.toBeInTheDocument();
+      const back = screen.getByRole("link", { name: "回到知识库" });
+      expect(back).toHaveAttribute("href", "/app/files?scope=paper-1");
+      // 404 is all the control plane says for both; the page adds nothing that tells them apart.
+      cleanup();
+      mocks.getSource.mockRejectedValue(new WebApiError("The source is unavailable.", { status: 404, code: "project_not_found" }));
+      renderReader(readerAt("src_other_account"));
+      expect(await screen.findByText("这份资料不存在或已删除。")).toBeInTheDocument();
+    });
+
+    it("says it could not open the document when that is what happened, with a way to try again", async () => {
+      mocks.getSource.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: "product_state_unavailable" }));
+      renderReader();
+      const alert = await screen.findByRole("note");
+      expect(alert).toHaveTextContent("无法打开这份资料");
+      expect(screen.queryByText("这份资料不存在或已删除。")).not.toBeInTheDocument();
+      await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+      expect(await screen.findByRole("heading", { level: 1, name: guideline.display.title })).toBeInTheDocument();
+    });
+
+    it("is loading before it is anything else, and says so without saying it is empty", async () => {
+      mocks.getSource.mockReturnValue(new Promise(() => {}));
+      renderReader();
+      expect(await screen.findByRole("status", { name: "正在打开资料" })).toBeInTheDocument();
+      expect(screen.queryByText("这份资料不存在或已删除。")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("in the pane beside the list", () => {
+    it("names the document with a heading of its own level, and has no tab list: the page beside it is a master-detail page", async () => {
+      mocks.getSource.mockResolvedValue({ ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: "all", appliesTo: "all" });
+      renderPane();
+      const heading = await screen.findByRole("heading", { level: 2, name: guideline.display.title });
+      expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+      const header = heading.closest("header")!;
+      expect(within(header).getByText("指南 · 2.1 MB · 18 页 · 上传 · 2020-03-05")).toBeInTheDocument();
+      expect(within(header).getByRole("button", { name: /的生效项目：所有项目/ })).toBeInTheDocument();
+      expect(within(header).getByRole("button", { name: "在对话中使用" })).toBeEnabled();
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+      // No way back above it: the list is beside it.
+      expect(screen.queryByRole("navigation", { name: "返回" })).not.toBeInTheDocument();
+    });
+
+    it("switches the document's two views with a radio group over the body where there is no room for two columns, and keeps the choice in the address", async () => {
+      renderPane();
+      await screen.findByRole("heading", { level: 2, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH - 1);
+      expect(document.querySelector("[data-reader-layout]")).toHaveAttribute("data-reader-layout", "tabs");
+      const views = screen.getByRole("radiogroup", { name: "资料视图" });
+      expect(within(views).getByRole("radio", { name: "内容", checked: true })).toBeInTheDocument();
+      await userEvent.click(within(views).getByRole("radio", { name: "原文" }));
+      expect(addressOf()).toContain("tab=original");
+      expect(await screen.findByTestId("preview")).toHaveTextContent("预览：knowledge-base/src_guideline.pdf");
+      expect(columnOf("original")).not.toBeNull();
+      // With room for both the switch is gone: both columns are on screen.
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(screen.queryByRole("radiogroup", { name: "资料视图" })).not.toBeInTheDocument();
+      expect(columnOf("points")).not.toBeNull();
+    });
+
+    it("opens a compiled page with the way back to what the pane showed — the project's pages — and a document with none", async () => {
+      const wiki = makeSource(knowledgePage.sourceId, { title: knowledgePage.title, origin: "wiki", kind: "wiki", format: "md", pages: null }, { paths: [`knowledge-base/wiki/${knowledgePage.path}`] });
+      mocks.getSource.mockResolvedValue({ ...wiki, projectId: "paper-1" });
+      mocks.getKnowledgePage.mockResolvedValue(knowledgePage);
+      mocks.getKnowledgeStatus.mockResolvedValue(knowledgeStatus);
+      renderPane(`/app/files/${knowledgePage.sourceId}?scope=paper-1&kind=wiki`, "知识页");
+      const back = await screen.findByRole("link", { name: "知识页" });
+      expect(back).toHaveAttribute("href", "/app/files?scope=paper-1&kind=wiki");
+      // A compiled page is its project's: it says nothing of where it takes effect.
+      expect(screen.queryByText("生效于")).not.toBeInTheDocument();
+    });
+
+    it("uses the document's project's conversation from the pane as it does from a page", async () => {
+      mocks.getSource.mockResolvedValue({ ...guideline, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: null, appliesTo: ["paper-1"] });
+      renderPane();
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
+    });
+
+    it("deletes from the pane and goes back to the list as it was, with no document chosen", async () => {
+      renderPane("/app/files/src_guideline?kind=literature");
+      await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+      await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除" }));
+      await waitFor(() => expect(mocks.removeDocument).toHaveBeenCalledWith("src_guideline", 3));
+    });
+  });
+
+  describe("another document's page", () => {
+    it("is read afresh, never the previous document under the new address", async () => {
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: "src_guideline", familyId: "fam_1", currentVersion: 2, nextCursor: null,
+        items: [{ ...guideline, payload: { ...guideline.payload, version: 2 } }, { ...guideline, id: "src_sheet", payload: { ...guideline.payload, version: 1 } }] });
+      mocks.getSource.mockImplementation(async (id: string) => (id === "src_guideline" ? { ...guideline, payload: { ...guideline.payload, familyId: "fam_1", version: 2 } } : sheet));
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await userEvent.click(await within(columnOf("points")!).findByText(/以前的版本（1）/));
+      await userEvent.click(await screen.findByRole("link", { name: /第 1 版/ }));
+      expect(await screen.findByRole("heading", { level: 1, name: sheet.display.title })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { level: 1, name: guideline.display.title })).not.toBeInTheDocument();
+    });
+  });
+});

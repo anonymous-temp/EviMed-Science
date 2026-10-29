@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { connect as connectSocket } from "node:net";
-import { mkdtemp, mkdir, rm, symlink, writeFile, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -19,7 +19,8 @@ import { GeoNativeFramePolicy, createGeoFrameResolver } from "../src/geoNativeFr
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
 import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
-import { isDeniedRuntimeUiMethod, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
+import { isDeniedRuntimeUiMethod, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES, RUNTIME_UI_READABLE_SETTINGS, RUNTIME_UI_SETTINGS_READ, runtimeUiSettingsAnswer } from "@evimed/domain";
+import { CHAT_PRESENTATION } from "../src/dshProfilePatch.mjs";
 
 const UI_ORIGIN = "https://science.example:8443";
 const SHELL_ORIGIN = "https://science.example";
@@ -87,7 +88,12 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     peer.on("message", (raw) => {
       const frame = JSON.parse(raw.toString());
       received.push(frame);
-      if (frame.type === "open") peer.send(JSON.stringify({ type: "item", streamId: frame.streamId, value: { reached: frame.endpoint } }));
+      if (frame.type === "open") {
+        peer.send(JSON.stringify({ type: "item", streamId: frame.streamId, value: { reached: frame.endpoint } }));
+        // A prompt is controlled explicitly by each test; cancellation is a
+        // short RPC whose acknowledgement ends immediately in the real kernel.
+        if(frame.endpoint==='session/cancel') peer.send(JSON.stringify({type:'end',streamId:frame.streamId}));
+      }
       else if (frame.type === "cancel") peer.send(JSON.stringify({ type: "end", streamId: frame.streamId }));
     });
   });
@@ -508,13 +514,14 @@ test('a delegated frame re-verifies its runtime context only when the runtime ge
 });
 
 test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
-  const checked = [], charged = [], forwarded = [];
+  const checked = [], charged = [], forwarded = [],stopped=[];
   const f = await fixture(t, {}, {}, {
     authorizePrompt: async (_project, sessionId) => {
       checked.push(sessionId);
       if (sessionId === "source-private") throw new HttpError(403, "agent_background_only", "Internal session.");
     },
     balanceGate: async (_project, payload) => { charged.push(payload.args.request.sessionId); },
+    agentRuns:{recordSteeredInput:async()=>{},noteStopRequest:async(_project,target)=>{stopped.push(target.sessionId);return null;}},
   });
   f.manager.proxy = async (req, res) => { forwarded.push(JSON.parse(req.__openScienceProxyBody)); res.writeHead(200); res.end("{}"); };
   const request = (op, sessionId = "public-session") => ({ type: "client-request", rpcId: `rpc-${op}`, method: "loopx.goalbar",
@@ -525,6 +532,7 @@ test("LoopX GoalBar uses the authenticated project, preserves its protocol, and 
     const body = request(op); assert.equal((await send(body)).status, 200); assert.deepEqual(forwarded.at(-1), body);
   }
   assert.deepEqual(charged, ["public-session"]);
+  assert.deepEqual(stopped,["public-session"]);
   assert.equal(checked.length, 4);
   assert.equal((await send(request("start", "source-private"))).status, 403);
   assert.equal(forwarded.length, 4);
@@ -650,6 +658,7 @@ test("a stop pressed in the kernel's own window is noted on the run before it re
   const frame = cancel("stop-mux", "s-mux");
   c.send(frame);
   assert.equal((await c.next()).value.reached, "session/cancel");
+  assert.equal((await c.next()).type,"end");
   assert.deepEqual(f.received.at(-1), frame, "the kernel receives the frame exactly as it was sent");
   assert.equal(await noted(first.run.id), true, "the user's intent is on the run by the time the kernel has the cancel");
   // The monitor reads the aborted turn and writes a cancel naming nobody: it is the user's.
@@ -659,6 +668,7 @@ test("a stop pressed in the kernel's own window is noted on the run before it re
   // A stop for a session with nothing running notes nothing, and still reaches the kernel.
   c.send(cancel("stop-idle", "s-idle"));
   assert.equal((await c.next()).value.reached, "session/cancel");
+  assert.equal((await c.next()).type,"end");
   assert.equal(ledger.stopRequests.size, 0);
 
   // The HTTP RPC records at the same point.
@@ -1008,6 +1018,127 @@ test("a new project's first open is told there is no default workspace to make, 
     const refused = await fetch(`${f.base}/api/workspace/initializeDefault`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN }, body });
     assert.equal((await refused.json()).error?.code, "runtime_ui_method_denied", body);
   }
+});
+
+/**
+ * A fake kernel for the settings read: every request it sees is recorded, and it answers with `answer(call)`.
+ * @param {any} f @param {(call: any) => { status?: number, contentType?: string, body: string }} answer
+ */
+function settingsKernel(f, answer) {
+  const seen = [];
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on("request", (req, res) => {
+    const parts = [];
+    req.on("data", (part) => parts.push(part));
+    req.on("end", () => {
+      const call = JSON.parse(Buffer.concat(parts).toString("utf8") || "null");
+      seen.push({ path: req.url, call });
+      const { status = 200, contentType = "application/json", body } = answer(call);
+      res.writeHead(status, { "content-type": contentType });
+      res.end(body);
+    });
+  });
+  return seen;
+}
+
+/** @param {any} f @param {string} method @param {string} body */
+const postSettings = (f, method, body) => fetch(`${f.base}/api/${method}`, {
+  method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" }, body,
+});
+
+const settingsRead = (rpcId = "r1") => ({ type: "client-request", rpcId, method: RUNTIME_UI_SETTINGS_READ, payload: { args: {} } });
+
+test("the chat's presentation reaches the page through the one settings read, and the rest of the kernel's document does not", { timeout: 5000 }, async (t) => {
+  // A hosted conversation drew the web client's default work details (`detailed`: every step flat while the turn runs)
+  // because the page's only settings read was denied with the namespace (2026-10-28). The kernel's answer is the recorded
+  // one (packages/contracts/dsh/fixtures, a live 0.2.1-rc.2 with the profile's `ui-chat` values in its patch): 21 views,
+  // among them the model provider, the web tools' endpoints, the sandbox and the permission table.
+  const recorded = await readFile(new URL("../../../packages/contracts/dsh/fixtures/settings-describe.json", import.meta.url), "utf8");
+  const views = JSON.parse(recorded).result.value.namespaces;
+  assert.ok(views.length > 1 && views.some((view) => view.ns === "llm-deepseek"), "the recording is the whole document");
+  const f = await fixture(t);
+  const seen = settingsKernel(f, () => ({ body: recorded }));
+  const response = await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead("r1")));
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  const answer = JSON.parse(text);
+  assert.deepEqual(answer, {
+    type: "server-response", rpcId: "r1",
+    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: [views.find((view) => view.ns === "ui-chat")] } },
+  });
+  // What the chat adopts is `value`, and it is the profile's.
+  assert.deepEqual(
+    { transcriptView: answer.result.value.namespaces[0].value.transcriptView, linkOpening: answer.result.value.namespaces[0].value.linkOpening },
+    CHAT_PRESENTATION,
+  );
+  for (const leaked of ["llm-deepseek", "bash-sandbox", "permission", "api.deepseek.com", "DEEPSEEK_API_KEY"]) {
+    assert.equal(text.includes(leaked), false, `${leaked} is not the page's to read`);
+  }
+  assert.deepEqual(seen, [{ path: "/api/settings/describe", call: settingsRead("r1") }], "the kernel got the page's call as it was sent");
+  assert.ok(isDeniedRuntimeUiMethod(RUNTIME_UI_SETTINGS_READ), "the namespace stays denied: this is an exception on one transport, not an opening");
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
+});
+
+test("anything but the exact settings read is refused before the kernel, and every settings write stays refused", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  const seen = settingsKernel(f, () => ({ body: "{}" }));
+  const call = settingsRead();
+  for (const body of ["", "{", "null", JSON.stringify({ ...call, payload: {} }), JSON.stringify({ ...call, payload: { args: { ns: "llm-deepseek" } } }),
+    JSON.stringify({ ...call, rpcId: "" }), JSON.stringify({ ...call, rpcId: "r".repeat(129) }), JSON.stringify({ ...call, method: "settings/mutate" }),
+    JSON.stringify({ ...call, extra: true }), JSON.stringify({ ...call, payload: { args: {}, more: 1 } })]) {
+    const refused = await postSettings(f, RUNTIME_UI_SETTINGS_READ, body);
+    assert.equal(refused.status, 403, body);
+    assert.equal((await refused.json()).error?.code, "runtime_ui_method_denied", body);
+  }
+  const fetched = await fetch(`${f.base}/api/${RUNTIME_UI_SETTINGS_READ}`, { headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+  assert.equal(fetched.status, 403, "a GET is not the read");
+  for (const [method, args] of [["settings/mutate", { ns: "ui-chat", ops: [{ op: "set", path: ["transcriptView"], value: "detailed" }] }],
+    ["settings/update", { ns: "ui-chat", patch: { transcriptView: "detailed" } }], ["settings/replace", { ns: "ui-chat", section: {} }], ["settings/openSettingsDocument", {}]]) {
+    const refused = await postSettings(f, method, JSON.stringify({ type: "client-request", rpcId: "w", method, payload: { args } }));
+    assert.equal(refused.status, 403, method);
+    assert.equal((await refused.json()).error?.code, "runtime_ui_method_denied", method);
+  }
+  assert.deepEqual(seen, [], "the kernel was asked nothing");
+});
+
+test("a kernel answer the projection does not recognise is refused, never forwarded", { timeout: 5000 }, async (t) => {
+  const view = { ns: "ui-chat", autoGenerate: false, schema: { uid: 1, refs: {} }, value: { transcriptView: "standard" }, applies: "live", secrets: [], revision: 0 };
+  const document = (namespaces, rpcId = "r1") => JSON.stringify({ type: "server-response", rpcId, result: { ok: true, value: { writable: true, hasDocument: true, namespaces } } });
+  const cases = {
+    failure: { body: JSON.stringify({ type: "server-response", rpcId: "r1", result: { ok: false, error: { code: "gateway/internal", message: "settings service is absent", details: {} } } }) },
+    "another call's answer": { body: document([view], "r2") },
+    "not JSON": { contentType: "text/html", body: document([view]) },
+    "not a success status": { status: 500, body: document([view]) },
+    "no namespace list": { body: JSON.stringify({ type: "server-response", rpcId: "r1", result: { ok: true, value: { writable: true } } }) },
+    "a readable view without its value": { body: document([{ ...view, value: undefined }]) },
+    "a readable view twice": { body: document([view, view]) },
+    "a secret slot of another shape": { body: document([{ ...view, secrets: [{ path: "apiKey", set: true }] }]) },
+  };
+  const f = await fixture(t);
+  let current = "";
+  const seen = settingsKernel(f, () => cases[current]);
+  for (const name of Object.keys(cases)) {
+    current = name;
+    const refused = await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead("r1")));
+    assert.equal(refused.status, 403, name);
+    const text = await refused.text();
+    assert.equal(JSON.parse(text).error?.code, "runtime_ui_method_denied", name);
+    assert.equal(text.includes("settings service is absent") || text.includes("standard"), false, name);
+  }
+  assert.equal(seen.length, Object.keys(cases).length, "each was asked of the kernel once and refused on the way back");
+  // A document with no readable namespace is still an answer: the page keeps its own default.
+  assert.equal(runtimeUiSettingsAnswer({ rpcId: "r1" }, { status: 200, contentType: "application/json; charset=utf-8", body: document([{ ...view, ns: "llm-deepseek" }]) }),
+    JSON.stringify({ type: "server-response", rpcId: "r1", result: { ok: true, value: { writable: false, hasDocument: false, namespaces: [] } } }));
+});
+
+test("the multiplexed socket keeps refusing the settings read: the page makes it over HTTP", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  c.send({ type: "open", streamId: "s1", endpoint: RUNTIME_UI_SETTINGS_READ, payload: { args: {} } });
+  assert.equal((await c.next()).error?.code, "runtime_ui_method_denied");
+  assert.equal((await c.next()).type, "end");
+  assert.deepEqual(f.received, []);
 });
 
 test("the page's question whether the host has a desktop is answered here, and the routes that would act on a yes stay refused", { timeout: 5000 }, async (t) => {
@@ -1477,7 +1608,7 @@ test("renewal preserves an admitted unary prompt response across the old expiry 
     respond = () => { res.writeHead(200, { "content-type": "application/json" }); res.end('{"accepted":true}'); };
     entered();
   });
-  const payload = JSON.stringify({ type: "client-request", rpcId: "original-prompt", method: "session/prompt", payload: { args: { input: "native draft" } } });
+  const payload = JSON.stringify({ type: "client-request", rpcId: "original-prompt", method: "session/prompt", payload: { args: { request:{requestId:"original-prompt",sessionId:"renewed-session",mode:"queue",content:[{type:"text",text:"native draft"}]} } } });
   const response = fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" }, body: payload });
   await admitted;
   now += 4000;
@@ -1909,7 +2040,7 @@ test("plugin apply admission covers native HTTP prompt forwarding and refuses a 
     },
   };
   const request = () => fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" },
-    body: JSON.stringify({ type: "client-request", rpcId: "prompt", method: "session/prompt", payload: { args: { request: {} } } }) });
+    body: JSON.stringify({ type: "client-request", rpcId: "prompt", method: "session/prompt", payload: { args: { request: {requestId:"prompt",sessionId:"plugin-session",mode:"queue",content:[{type:"text",text:"Native question"}]} } } }) });
   assert.equal((await request()).status, 423);
   applying = false;
   assert.equal((await request()).status, 200);
@@ -1931,9 +2062,9 @@ test("PostgreSQL plugin fence holds native mux admission through kernel ACK and 
   t.after(async () => { await db.query("DELETE FROM evimed_control.users WHERE id=$1", [f.user.id]); await db.close(); });
   // An admission waits for an apply up to `admissionWaitMs` (20 s by default, since 2026-10-04) before it is refused with
   // `plugin_apply_in_progress`; the test holds the apply's lock only until it has seen that refusal, so the wait is short here.
-  const service = new PluginService(db, { admissionWaitMs: 300 }); f.manager.pluginService = service;
+  const service = new PluginService(db, { admissionWaitMs: 300 }); f.manager.pluginService = service;f.manager.promptAdmissionDatabase=db;
   const connection = f.connect(); await connection.opened;
-  connection.send(open("plugin-prompt", "session/prompt"));
+  connection.send(open("plugin-prompt", "session/prompt",{request:{requestId:"plugin-prompt",sessionId:"plugin-session",mode:"queue",content:[{type:"text",text:"Question"}]}}));
   assert.equal((await connection.next()).type, "item");
   const lockKey = `plugin-project:${f.user.id}:${project.id}`;
   const claim = () => db.transaction(client => client.query("SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired", [lockKey]));
@@ -1944,11 +2075,11 @@ test("PostgreSQL plugin fence holds native mux admission through kernel ACK and 
   assert.equal((await claim()).rows[0].acquired, true);
   await db.transaction(async client => {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [lockKey]);
-    const before = f.received.length; connection.send(open("during-apply", "session/prompt"));
+    const before = f.received.length; connection.send(open("during-apply", "session/prompt",{request:{requestId:"during-apply",sessionId:"plugin-session",mode:"queue",content:[{type:"text",text:"Question"}]}}));
     assertNativeError(await connection.next(), "during-apply", "plugin_apply_in_progress");
     await connection.next(); assert.equal(f.received.length, before);
   });
-  connection.send(open("unknown-prompt", "session/prompt")); await connection.next();
+  connection.send(open("unknown-prompt", "session/prompt",{request:{requestId:"unknown-prompt",sessionId:"plugin-session",mode:"queue",content:[{type:"text",text:"Question"}]}})); await connection.next();
   connection.ws.terminate();
   for (let n = 0; n < 50; n++) { if (await service.hasPendingPrompts(project)) break; await delay(10); }
   assert.equal(await service.hasPendingPrompts(project), true);
@@ -2189,6 +2320,7 @@ test('HTTP and mux bind only the authenticated actor after generation admission,
   assertNativeError(await connection.next(),'actor-stale-mux','extension_contract_invalid');await connection.next();assert.equal(bindings.length,1);
   f.manager.assertPersonalSkillPromptGeneration=async()=>{};
   const frame=open('actor-mux','session/prompt',{request:{...request,requestId:'actual-actor-mux'}});connection.send(frame);assert.equal((await connection.next()).type,'item');assert.deepEqual(bindings[1],{actor:f.user.id,request:frame.payload.args.request});
+  for(const peer of f.peers)peer.send(JSON.stringify({type:'end',streamId:'actor-mux'}));assert.equal((await connection.next()).type,'end');
   fail=true;assert.equal((await post({...request,requestId:'unbound-core'})).status,200);assert(audits.some(item=>item.event==='extension.actor.bind'&&item.userId===f.user.id));assert.equal(bindings.length,2);
 });
 
@@ -2260,4 +2392,24 @@ test("maintenance rejects cold native frame GET and WebSocket starts while warm 
   assert.equal(await f.connect().opened, 101);
   assert.equal(creations, 1);
   assert.equal(admissions, 3, 'warm GET and WebSocket reads do not request creation admission');
+});
+
+test('native HTTP and mux human prompts share the managed continuation proof-to-ack exclusion',async t=>{
+ for(const transport of ['http','mux']) await t.test(transport,async t=>{
+  let prepared;const preparedPromise=new Promise(resolve=>{prepared=resolve;});const f=await fixture(t,{}, {},{preparePrompt:async()=>{prepared();}});const project=await f.store.requireProject(f.user,'default');
+  let entered,releaseProof,wireEntered,releaseAck;const enteredPromise=new Promise(resolve=>{entered=resolve;}),proof=new Promise(resolve=>{releaseProof=resolve;}),wirePromise=new Promise(resolve=>{wireEntered=resolve;}),ack=new Promise(resolve=>{releaseAck=resolve;});let forwarded=0;
+  f.manager.proxy=async(_req,res)=>{forwarded++;res.writeHead(200,{'content-type':'application/json'});res.end('{}');};
+  f.manager.runtimes.set(f.manager.key(project),await f.manager.start(project));
+  f.manager.assertInteractiveRuntimeAvailable=()=>{};f.manager.assertPersonalSkillPromptGeneration=async()=>{};f.manager.refreshCapsuleMethods=async()=>{};f.manager.enforceProjectQuota=async()=>{};
+  f.manager.callKernel=async(_runtime,_project,method)=>{if(method==='session/prompt'){wireEntered();await ack;}return{};};
+  const completion=f.manager.dispatchPrompt(project,'same_session',{text:'Original managed calculation completion',beforePrompt:async()=>{entered();await proof;}});await enteredPromise;
+  let human,c;
+  if(transport==='http') human=fetch(`${f.base}/api/session/prompt`,{method:'POST',headers:{Cookie:f.cookie,Origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'rpc-human',method:'session/prompt',payload:{args:{request:{requestId:'human',sessionId:'same_session',mode:'queue',content:[{type:'text',text:'A newer human question'}]}}}})});
+  else {c=f.connect();assert.equal(await c.opened,101);c.send(open('human','session/prompt',{request:{requestId:'human',sessionId:'same_session',mode:'queue',content:[{type:'text',text:'A newer human question'}]}}));}
+  await preparedPromise;assert.equal(forwarded,0);assert.equal(f.received.length,0);
+  releaseProof();await wirePromise;assert.equal(forwarded,0);assert.equal(f.received.length,0,'neither native carrier may submit before managed acceptance');
+  releaseAck();await completion;
+  if(transport==='http'){const response=await human;assert.equal(response.status,200);await response.json();assert.equal(forwarded,1);}
+  else {assert.equal((await c.next()).type,'item');assert.equal(f.received[0].endpoint,'session/prompt');for(const peer of f.peers)peer.send(JSON.stringify({type:'end',streamId:'human'}));assert.equal((await c.next()).type,'end');}
+ });
 });

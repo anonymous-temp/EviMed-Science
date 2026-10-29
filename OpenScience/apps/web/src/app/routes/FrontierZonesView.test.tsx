@@ -127,12 +127,13 @@ describe("证据专区 opens in place", () => {
     expect(zones.listEvidenceZones).toHaveBeenLastCalledWith("", "next", undefined);
   });
 
-  it("offers 「新建专区」 in the toolbar to a reader who may make one", async () => {
+  it("offers 「新建专区」 as the page's action, in its header, to a reader who may make one", async () => {
     zones.listEvidenceZones.mockResolvedValue({ items: [zone], nextCursor: null, canCreate: true });
     mount();
     await screen.findByRole("link", { name: "急诊医学" });
-    expect(within(document.querySelector("[data-page-header]") as HTMLElement).queryAllByRole("button")).toEqual([]);
-    await userEvent.click(within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("button", { name: "新建专区" }));
+    // The page's one primary is the header's, at every width (the toolbar is under the title on a phone).
+    expect(within(document.querySelector("[data-toolbar]") as HTMLElement).queryByRole("button", { name: "新建专区" })).toBeNull();
+    await userEvent.click(within(document.querySelector("[data-page-header]") as HTMLElement).getByRole("button", { name: "新建专区" }));
     expect(await screen.findByRole("textbox", { name: "专区名称" })).toBeInTheDocument();
   });
 

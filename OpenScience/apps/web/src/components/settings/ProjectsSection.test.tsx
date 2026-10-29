@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listWebProjects: vi.fn(),
   exportWebProject: vi.fn(),
   deleteWebProject: vi.fn(),
+  getProjectLibraryLoss: vi.fn(),
   listWebAgentRuns: vi.fn(),
   archiveWebAgentRun: vi.fn(),
   select: vi.fn(),
@@ -39,6 +40,8 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   listWebAgentRuns: mocks.listWebAgentRuns,
   archiveWebAgentRun: mocks.archiveWebAgentRun,
 }));
+
+vi.mock("@/lib/sourceClient", () => ({ getProjectLibraryLoss: mocks.getProjectLibraryLoss }));
 
 vi.mock("@/lib/projects", () => {
   const state = () => ({ currentId: mocks.projectId, select: mocks.select, load: mocks.load, create: mocks.create, rename: mocks.rename });
@@ -68,6 +71,7 @@ describe("项目", () => {
     ];
     mocks.listWebProjects.mockImplementation(async () => mocks.projects);
     mocks.listWebAgentRuns.mockResolvedValue([]);
+    mocks.getProjectLibraryLoss.mockResolvedValue({ items: [] });
     mocks.create.mockImplementation(async (name: string) => {
       const project = { id: "p-1a2b3c4d", name };
       mocks.projects = [...mocks.projects, project];
@@ -172,13 +176,38 @@ describe("项目", () => {
     expect(mocks.load).toHaveBeenCalled();
   });
 
+  it("says which other projects lose a document that only this project holds, when the person had sent it to them", async () => {
+    mocks.getProjectLibraryLoss.mockResolvedValue({ items: [{ sourceId: "src_a", title: "ASPREE", projects: ["default"] }] });
+    open();
+    await screen.findByText("Paper 1");
+    fireEvent.click(within(row("Paper 1")).getByRole("button", { name: "“Paper 1”的更多操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "删除项目“Paper 1”？" });
+    expect(mocks.getProjectLibraryLoss).toHaveBeenCalledWith("paper1");
+    expect(await within(dialog).findByText(/被设为在“我的研究”生效的资料（《ASPREE》）会随项目一起删除/)).toBeInTheDocument();
+  });
+
+  it("says nothing of other projects when the answer cannot be read, and still deletes", async () => {
+    mocks.getProjectLibraryLoss.mockRejectedValue(new Error("offline"));
+    open();
+    await screen.findByText("Paper 1");
+    fireEvent.click(within(row("Paper 1")).getByRole("button", { name: "“Paper 1”的更多操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "删除项目“Paper 1”？" });
+    await waitFor(() => expect(mocks.getProjectLibraryLoss).toHaveBeenCalled());
+    expect(within(dialog).queryByText(/会随项目一起删除/)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除项目" }));
+    await waitFor(() => expect(mocks.deleteWebProject).toHaveBeenCalledWith("paper1"));
+  });
+
   it("tells two projects of one name apart in the list, the menus and the dialogs, and renames from the stored name", async () => {
-    const year = new Date().getFullYear();
+    // The year and the clock are Beijing's (AT45), whatever zone the machine runs in.
+    const year = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric" }).format(new Date()));
     mocks.geoIds = new Set(["g1", "g2"]);
     mocks.projects = [
       { id: "default", name: "我的研究", lastActivityAt: null },
-      { id: "g1", name: "波立维", createdAt: new Date(year, 8, 29, 9, 0).toISOString() },
-      { id: "g2", name: "波立维", createdAt: new Date(year, 8, 29, 17, 30).toISOString() },
+      { id: "g1", name: "波立维", createdAt: `${year}-09-29T09:00:00+08:00` },
+      { id: "g2", name: "波立维", createdAt: `${year}-09-29T17:30:00+08:00` },
     ];
     open();
     expect(await screen.findByText("波立维 · 9月29日 09:00")).toBeInTheDocument();

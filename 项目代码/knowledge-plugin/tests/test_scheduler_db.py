@@ -869,3 +869,60 @@ async def test_a_plan_of_posts_to_one_url_is_never_short_cut(settings, pool):
     clock.advance(hours=1)
     [second] = await poll_now(crawler)
     assert second.requests == 2 and len(adapter.parsed) == 4                 # both POSTs parsed on both polls
+
+
+# ------------------------------------------------------------------ a process that dies inside a read
+
+
+async def test_a_source_the_dead_process_was_reading_waits_its_failure_backoff(settings, pool):
+    """2026-10-27: a source whose page killed the process (out of memory, once a minute for hours) was released at every
+    start and read first again. A lease still held at start is a read the process did not come back from: it is a failed
+    read, with the failure backoff; a clean stop gives its leases back without a penalty."""
+    import socket
+
+    clock = Clock()
+    await seed(pool, source("died-a"), source("other-b"))
+    mine = f"{socket.gethostname()}:4242"
+    async with pool.connection() as conn:
+        for sid, owner in (("died-a", mine), ("other-b", "another-host:1")):
+            await conn.execute(
+                "UPDATE evimed_knowledge.sources SET lease_owner = %s, lease_until = %s, next_poll_at = %s WHERE id = %s",
+                (owner, T0 + timedelta(minutes=10), T0, sid))
+    crawler = crawler_for(settings, pool, clock, ScriptedAdapter(), ScriptedFetcher(clock))
+
+    await crawler._recover_dead_leases()
+
+    parked = await state_of(pool, "died-a")
+    assert parked["lease_owner"] is None and parked["lease_until"] is None
+    assert parked["consecutive_failures"] == 1 and parked["last_error_code"] == "worker_died"
+    assert parked["failing_since"] == T0
+    assert parked["next_poll_at"] == T0 + timedelta(seconds=policy.failure_delay_s(parked["poll_floor_s"], 1))
+    assert (await state_of(pool, "other-b"))["lease_owner"] == "another-host:1", "a lease of another host is not ours to judge"
+    assert [row["id"] for row in await crawler.claim(10)] == [], "nothing is due before the backoff is over"
+
+    async with pool.connection() as conn:       # it dies inside the same read again: the wait doubles
+        await conn.execute("UPDATE evimed_knowledge.sources SET lease_owner = %s, lease_until = %s WHERE id = 'died-a'",
+                           (mine, T0 + timedelta(minutes=10)))
+    await crawler._recover_dead_leases()
+    again = await state_of(pool, "died-a")
+    assert again["consecutive_failures"] == 2
+    assert again["next_poll_at"] == T0 + timedelta(seconds=policy.failure_delay_s(again["poll_floor_s"], 2))
+    assert policy.failure_delay_s(again["poll_floor_s"], 2) == 2 * policy.failure_delay_s(again["poll_floor_s"], 1)
+
+
+async def test_a_clean_stop_releases_what_it_was_reading_without_a_penalty(settings, pool):
+    import socket
+
+    clock = Clock()
+    src = source("stopped-a")
+    await seed(pool, src)
+    async with pool.connection() as conn:
+        await conn.execute("UPDATE evimed_knowledge.sources SET lease_owner = %s, lease_until = %s WHERE id = %s",
+                           (f"{socket.gethostname()}:7", T0 + timedelta(minutes=10), src.id))
+    crawler = crawler_for(settings, pool, clock, ScriptedAdapter(), ScriptedFetcher(clock))
+
+    await crawler._release_own_leases()
+
+    row = await state_of(pool, src.id)
+    assert row["lease_owner"] is None and row["consecutive_failures"] == 0 and row["last_error_code"] is None
+    assert row["next_poll_at"] <= T0, "still due: it was not at fault"

@@ -46,13 +46,21 @@ its `written` is a sample of what the extractor wrote for it before the
 wrote nothing), and `preChange` says whether it `held` or `failed` the case's
 own checks.
 
+**A case held in a named project (2026-10-27).** Production writes one line of the platform's at the head of each batch of a conversation's memory
+session that holds the person's words (just before a user message, while no message is pending) when the conversation is held in a named project (`projectContextLine` in `@evimed/domain`: the engine was otherwise never told
+which project it was in, and filed a rule for "this repository" as a preference that every conversation is handed). The native runner
+replays that line for every case whose `replay.projectId` is not `default`, under the project's name (`replay.projectName`, else
+`CASE_PROJECT_NAMES` in the runner); `--no-project-line` measures without it. Inside a named project a task line of 「最近在做」
+(`recent_work`) is the feature, so a case of that context that keeps nothing else says `onlyKinds`, and `cardNoTextContains` reads the
+project's card alone.
+
 The decided checks, all over the records one replay wrote (`expect`):
 `noTextContains` (a string appears in none), `noRecordOfKinds`, `atMostRecords`,
 `requireKinds` (a map from a record kind to the least number of that kind —
 the other direction: something worth keeping was kept), `requireTextContains`
 (some record carries the string), `requireKeys` (some record is written under
 each key) and `keyValues` (a closed key holds only the values listed),
-`briefRefusedWhenTagged`, and
+`briefRefusedWhenTagged`, `onlyKinds` (every file written is of one of these kinds), `cardNoTextContains` (a string the project's card does not carry), and
 `identifierShapes` (offline: the code that refuses identifiers by their shape
 sees each kind in the researcher's message). A misspelt field is a shape error,
 not a silent pass. (A case could also carry `incidentCandidates`, what a leaking model
@@ -187,6 +195,7 @@ corpus once (`--repeat 3`) for the never side: the new types and the longer shar
 | `--only c22,e3b,e3c,i01,i02,i03,p01` (`results/2026-10-25-native-memory-package.json`) | 16/21: E3B, E3C, I02, I03, P01 in every sample; C22 1/3 (the promotion said only as a choice to keep landed in the profile twice); I01 0/3 because the case asked for the person's wording (「先看结论」) and the engine kept the gist (「回答先给结论，再展开细节」) |
 | C22 again after the promotion names a preference (`results/2026-10-25-native-c22-preference-wording.json`) | 3/3, a preference after the second conversation |
 | the whole corpus (`results/2026-10-25-native-next-round-full.json`) | 234/237 decidable samples, 9 need reading, no failure; the three not passing are I01 under the old wording of its check, which passes as rewritten (the files are in the result). Every refusal held (c15–c21, c23, c24, g06–g10, m01–m03, s01–s03); P01 put the project's rule under 约束 |
+| the whole corpus with the project line, 2026-10-27 (`results/2026-10-27-native-full-final.json`) | 239/240 decidable samples, 9 need reading; the one failure is standing-role-and-focus #2, whose project card took the question's drug as an example (2/3). On the way: without the line c03 wrote a preference 3/3 and with it the project's card 3/3; a preferences sentence naming a repository's rule as the work's made m02 write a sycophantic correction 3/3 and was reverted (m02 3/3 with a corrections counter-example); the cases held in a named project now leave a task line of 「最近在做」 by its kind only (「整理一份病例」) |
 
 The `pendingTemplate` markers of C22, I01 and I02 are gone.
 

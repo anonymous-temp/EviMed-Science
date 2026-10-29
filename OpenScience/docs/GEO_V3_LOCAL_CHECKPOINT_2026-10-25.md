@@ -1,5 +1,7 @@
 # GEO V3 local development checkpoint — 2026-10-25
 
+> Historical checkpoint: later main-branch repairs and the current local integration evidence are recorded in [GEO integration follow-up](GEO_INTEGRATION_FOLLOWUP_2026-10-27.md). The unfinished items below describe the state on 2026-10-25, not the current tree.
+
 ## Delivery boundary
 
 The owner requested an immediate commit and push of the implemented work, with remaining gaps listed separately. This is a development-branch checkpoint, not a release qualification or an assertion that every planned item has passed. Online deployment was explicitly cancelled. No production deployment is part of this checkpoint.

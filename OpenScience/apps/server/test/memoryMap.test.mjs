@@ -50,24 +50,25 @@ test("the range is days in the researcher's zone: a named span, all, or two date
 });
 
 test("a request names the blocks it wants, and events are not among the defaults", () => {
-  assert.deepEqual([...blocksOf("")].sort(), ["buckets", "edges", "facets", "lanes", "nodes", "summary"]);
+  assert.deepEqual([...blocksOf("")].sort(), ["buckets", "edges", "facets", "nodes", "summary"]);
   assert.deepEqual([...blocksOf("events,summary")].sort(), ["events", "summary"]);
   assert.throws(() => blocksOf("nodes,secrets"), { code: "memory_map_invalid" });
+  assert.throws(() => blocksOf("nodes,lanes"), { code: "memory_map_invalid" }, "the lineages are no block any more: nothing draws them");
 });
 
 test("a source that fails costs its own part and is named in missing; the others are drawn as they would have been", async () => {
-  const good = recordsContribution([record()], {}, { now: NOW, timeZone: "UTC" });
+  const good = recordsContribution([record()], {}, { now: NOW });
   const map = await build([
     source("records", good),
     { name: "documents", read: async () => { throw new Error("db down"); } },
     { name: "topics", read: () => new Promise(() => {}) , applies: () => false },
-    source("activity", { missing: ["feedback"], buckets: [{ t: "2026-10-01", run: 2 }] }),
+    source("activity", { missing: ["methods"], events: [{ id: "method:m:retired", at: "2026-10-01T00:00:00Z", type: "method", change: "retired", ref: "method:m" }] }),
   ]);
-  assert.deepEqual(map.missing, ["documents", "feedback"], "a source that stood aside was never asked and is not missing");
+  assert.deepEqual(map.missing, ["documents", "methods"], "a source that stood aside was never asked and is not missing");
   assert.equal(map.summary.memories, 1);
   assert.deepEqual(map.nodes.map((node) => node.id).sort(), ["memory:rec_1", "you:account"]);
   assert.equal(map.version, 1);
-  assert.deepEqual(map.buckets.series.map((bucket) => [bucket.t, bucket.run]), [["2026-09-01", 0], ["2026-10-01", 2]], "the memory's own day and the ledger's");
+  assert.deepEqual(map.buckets.series, [], "no source of this read counted a document added");
 });
 
 test("a source that never answers is given up on, not waited for", async () => {
@@ -84,15 +85,15 @@ test("a run summary, a sensitive memory and a forgotten one are never drawn", as
     record({ id: "secret", sensitive: true }),
     record({ id: "gone", status: "archived" }),
     record({ id: "session", scope: "session", scopeId: "ses_1" }),
-  ], {}, { now: NOW, timeZone: "UTC" });
-  const map = await build([source("records", contribution)], { include: "nodes,events,lanes" });
+  ], {}, { now: NOW });
+  const map = await build([source("records", contribution)], { include: "nodes,events" });
   assert.deepEqual(map.nodes.filter((node) => node.type === "memory").map((node) => node.id), ["memory:ok"]);
   assert.deepEqual(map.events.map((event) => event.ref), ["memory:ok"], "nor an event about one");
 });
 
 test("nothing the platform keeps for itself about a memory reaches the document", async () => {
-  const contribution = recordsContribution([record({ origin: "inferred", provenance: { basis: "inferred" }, confidence: 0.3 })], {}, { now: NOW, timeZone: "UTC" });
-  const map = await build([source("records", contribution)], { include: "summary,facets,nodes,edges,buckets,lanes,events" });
+  const contribution = recordsContribution([record({ origin: "inferred", provenance: { basis: "inferred" }, confidence: 0.3 })], {}, { now: NOW });
+  const map = await build([source("records", contribution)], { include: "summary,facets,nodes,edges,buckets,events" });
   const text = JSON.stringify(map);
   assert.doesNotMatch(text, /inferred|provenance|basis|origin|confidence|推断/u);
 });
@@ -110,7 +111,7 @@ test("a memory is marked when a source it rests on was withdrawn, when it is in 
     conflicts: [{ recordId: "b", otherId: "c", recordStatus: "active", otherStatus: "active" }],
     usage: {},
   };
-  const map = await build([source("records", recordsContribution(records, links, { now: NOW, timeZone: "UTC" }))]);
+  const map = await build([source("records", recordsContribution(records, links, { now: NOW }))]);
   const reason = Object.fromEntries(map.nodes.filter((node) => node.type === "memory").map((node) => [node.id, [node.state, node.reason]]));
   assert.deepEqual(reason, {
     "memory:a": ["check", "source-retracted"], "memory:b": ["check", "conflict"], "memory:c": ["check", "conflict"],
@@ -125,7 +126,7 @@ test("a memory is marked when a source it rests on was withdrawn, when it is in 
 test("every line has a stable id, and a line the account called wrong is left out of the map and of what hangs only from it", async () => {
   const records = [record({ id: "a" }), record({ id: "b" })];
   const links = { sources: [{ recordId: "a", type: "doi", id: "10.1/x", state: "current", linkedAt: null }, { recordId: "b", type: "knowledge_source", id: "src_1", state: "current", linkedAt: null }], conflicts: [], usage: {} };
-  const sources = [source("records", recordsContribution(records, links, { now: NOW, timeZone: "UTC" }))];
+  const sources = [source("records", recordsContribution(records, links, { now: NOW }))];
   const whole = await build(sources);
   const again = await build(sources);
   assert.deepEqual(whole.edges.map((edge) => edge.id), again.edges.map((edge) => edge.id), "the same line has the same id in two reads");
@@ -146,47 +147,25 @@ test("every line has a stable id, and a line the account called wrong is left ou
 test("a disagreement that is settled, or that a replaced memory was a side of, is no reason to look", async () => {
   const records = [record({ id: "a" }), record({ id: "b", status: "superseded", supersededBy: "a", invalidSince: "2026-09-20T00:00:00Z" })];
   const links = { sources: [], conflicts: [{ recordId: "a", otherId: "b", recordStatus: "active", otherStatus: "superseded" }], usage: {} };
-  const map = await build([source("records", recordsContribution(records, links, { now: NOW, timeZone: "UTC" }))]);
+  const map = await build([source("records", recordsContribution(records, links, { now: NOW }))]);
   assert.equal(map.nodes.find((node) => node.id === "memory:a").state, "current");
   assert.equal(map.nodes.find((node) => node.id === "memory:b").state, "replaced");
   assert.ok(!map.edges.some((edge) => edge.type === "conflicts"));
   assert.ok(map.edges.some((edge) => edge.type === "replaces" && edge.from === "memory:a" && edge.to === "memory:b"));
 });
 
-test("a belief that changed is a lane: each version over the interval it held, oldest first", async () => {
+test("a belief that changed is a chain of replaces lines, each version tied to the one it replaced", async () => {
   const records = [
     record({ id: "v1", kind: "decision", scope: "project", scopeId: "prj_a", summary: "纳入 ≥16 岁", status: "superseded", supersededBy: "v2", createdAt: "2026-08-01T00:00:00Z", invalidSince: "2026-09-01T00:00:00Z" }),
     record({ id: "v2", kind: "decision", scope: "project", scopeId: "prj_a", summary: "纳入 ≥18 岁", status: "superseded", supersededBy: "v3", createdAt: "2026-09-01T00:00:00Z", invalidSince: "2026-10-01T00:00:00Z" }),
     record({ id: "v3", kind: "decision", scope: "project", scopeId: "prj_a", summary: "纳入 ≥18 岁且有影像", createdAt: "2026-10-01T00:00:00Z" }),
     record({ id: "alone", kind: "decision", scope: "project", scopeId: "prj_a", summary: "只做 ITT" }),
   ];
-  const map = await build([source("records", recordsContribution(records, { conflicts: [{ recordId: "v3", otherId: "alone", recordStatus: "active", otherStatus: "active" }] }, { now: NOW, timeZone: "UTC" }))]);
-  assert.equal(map.lanes.length, 1, "a memory that never changed is no lane");
-  assert.deepEqual(map.lanes[0].segments.map((segment) => [segment.recordId, segment.state, segment.from, segment.to, segment.conflict]), [
-    ["v1", "replaced", "2026-08-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z", false],
-    ["v2", "replaced", "2026-09-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z", false],
-    ["v3", "current", "2026-10-01T00:00:00.000Z", null, true],
-  ]);
-  assert.equal(map.lanes[0].label, "纳入 ≥18 岁且有影像");
-  assert.equal(map.lanes[0].projectId, "prj_a");
+  const map = await build([source("records", recordsContribution(records, { conflicts: [{ recordId: "v3", otherId: "alone", recordStatus: "active", otherStatus: "active" }] }, { now: NOW }))]);
+  assert.equal(map.lanes, undefined, "the lineages are not part of the document");
+  assert.deepEqual(map.nodes.filter((node) => node.type === "memory").map((node) => [node.id, node.state]).sort(), [["memory:alone", "check"], ["memory:v1", "replaced"], ["memory:v2", "replaced"], ["memory:v3", "check"]]);
   const replaces = map.edges.filter((edge) => edge.type === "replaces").map((edge) => [edge.from, edge.to]);
   assert.deepEqual(replaces.sort(), [["memory:v2", "memory:v1"], ["memory:v3", "memory:v2"]]);
-});
-
-test("the second radar counts memories in force under fixed named aspects, now and thirty days before, on one scale", async () => {
-  const records = [
-    record({ id: "p1", kind: "profile" }), record({ id: "p2", kind: "preference" }), record({ id: "p3", kind: "preference", createdAt: "2026-10-05T00:00:00Z" }),
-    record({ id: "p4", kind: "decision", scope: "project", scopeId: "prj_a", createdAt: "2026-10-10T00:00:00Z" }),
-    record({ id: "old", kind: "preference", status: "superseded", supersededBy: "p3", createdAt: "2026-08-01T00:00:00Z", invalidSince: "2026-10-05T00:00:00Z" }),
-  ];
-  const map = await build([source("records", recordsContribution(records, {}, { now: NOW, timeZone: "UTC" }))]);
-  const memory = map.facets.dimensions.find((dimension) => dimension.id === "memory");
-  assert.deepEqual(memory.axes.map((axis) => axis.label), ["背景", "偏好", "工作与写作习惯", "纠正过的", "项目事实", "已定的决策"]);
-  const preference = memory.axes.find((axis) => axis.id === "aspect:preference");
-  assert.deepEqual([preference.value, preference.previousValue, preference.count], [2, 2, 2], "one now (two in force), and two a month ago (one of them since replaced)");
-  assert.equal(memory.scale, "count");
-  assert.equal(memory.total, 4);
-  assert.equal(memory.axes.find((axis) => axis.id === "aspect:decision").previousValue, 0);
 });
 
 test("a range keeps the marks that began inside it and what they are tied to", async () => {
@@ -196,7 +175,7 @@ test("a range keeps the marks that began inside it and what they are tied to", a
     record({ id: "late", createdAt: "2026-10-10T00:00:00Z", status: "superseded", supersededBy: "mid" }),
   ];
   const links = { sources: [{ recordId: "mid", type: "doi", id: "10.1/y", state: "current", linkedAt: null }], conflicts: [], usage: {} };
-  const sources = [source("records", recordsContribution(records, links, { now: NOW, timeZone: "UTC" }))];
+  const sources = [source("records", recordsContribution(records, links, { now: NOW }))];
   const all = await build(sources);
   assert.equal(all.nodes.filter((node) => node.type === "memory").length, 3);
   const month = await build(sources, { range: "30d" });
@@ -210,21 +189,12 @@ test("a range keeps the marks that began inside it and what they are tied to", a
   assert.equal(none.summary.memories, 0);
 });
 
-test("the calendar is the last year whatever the range, and the sources' days add up", async () => {
+test("the calendar is the last year whatever the range, and the sources' days add up; a day holds the documents added and nothing else", async () => {
   const map = await build([
-    source("records", { buckets: [{ t: "2026-05-01", memory: 2 }, { t: "2026-10-11", memory: 1 }] }),
-    source("activity", { buckets: [{ t: "2026-10-11", run: 3, feedback: 1 }] }),
+    source("documents", { buckets: [{ t: "2026-05-01", document: 2 }, { t: "2026-10-11", document: 1 }] }),
+    source("more-documents", { buckets: [{ t: "2026-10-11", document: 3 }] }),
   ], { range: "30d" });
-  assert.deepEqual(map.buckets.series, [
-    { t: "2026-05-01", memory: 2, run: 0, method: 0, feedback: 0, document: 0 },
-    { t: "2026-10-11", memory: 1, run: 3, method: 0, feedback: 1, document: 0 },
-  ]);
-  // The documents added are a day's fifth count, added up like the others, and the heat of the calendar never reads them.
-  const withDocuments = await build([
-    source("records", { buckets: [{ t: "2026-10-11", memory: 1 }] }),
-    source("documents", { buckets: [{ t: "2026-10-11", document: 4 }, { t: "2026-10-09", document: 1 }] }),
-  ]);
-  assert.deepEqual(withDocuments.buckets.series.map((day) => [day.t, day.memory, day.document]), [["2026-10-09", 0, 1], ["2026-10-11", 1, 4]]);
+  assert.deepEqual(map.buckets.series, [{ t: "2026-05-01", document: 2 }, { t: "2026-10-11", document: 4 }]);
 });
 
 function crowd(count, { projectId = "prj_a", kind = "project_fact", prefix = "m" } = {}) {
@@ -237,7 +207,7 @@ function crowd(count, { projectId = "prj_a", kind = "project_fact", prefix = "m"
 test("an overview never draws more than the cap: the rest is folded into clusters by project and kind, and it is counted", async () => {
   const records = [...crowd(300), ...crowd(90, { projectId: "prj_b", kind: "decision", prefix: "d" }), record({ id: "look", scope: "project", scopeId: "prj_a" })];
   const links = { sources: [{ recordId: "look", type: "doi", id: "10.1/z", state: "retracted", linkedAt: null }], conflicts: [], usage: {} };
-  const map = await build([source("records", recordsContribution(records, links, { now: NOW, timeZone: "UTC" }))]);
+  const map = await build([source("records", recordsContribution(records, links, { now: NOW }))]);
   assert.ok(map.nodes.length <= MAP_OVERVIEW_NODES, `${map.nodes.length} marks`);
   assert.ok(map.edges.length <= MAP_EDGES);
   assert.ok(map.truncated.nodes > 200 && map.truncated.nodes < 391, `${map.truncated.nodes} folded`);
@@ -253,7 +223,7 @@ test("an overview never draws more than the cap: the rest is folded into cluster
 
 test("a cluster is opened by focusing on it, and a mark by focusing on it with a depth", async () => {
   const records = [...crowd(260), record({ id: "other", scope: "project", scopeId: "prj_b", kind: "decision" })];
-  const sources = [source("records", recordsContribution(records, {}, { now: NOW, timeZone: "UTC" }))];
+  const sources = [source("records", recordsContribution(records, {}, { now: NOW }))];
   const overview = await build(sources);
   const cluster = overview.nodes.find((node) => node.type === "cluster");
   assert.equal(cluster.id, "cluster:memory:prj_a:project_fact");
@@ -288,7 +258,7 @@ test("foldToFit and egoOf are the pure halves: a small map is untouched, a sourc
 });
 
 test("a memory of a project the account no longer has hangs from 「其他」", async () => {
-  const contribution = recordsContribution([record({ id: "orphan", scope: "project", scopeId: "prj_gone", kind: "project_fact" })], {}, { now: NOW, timeZone: "UTC" });
+  const contribution = recordsContribution([record({ id: "orphan", scope: "project", scopeId: "prj_gone", kind: "project_fact" })], {}, { now: NOW });
   const map = await build([source("records", contribution)]);
   const other = map.nodes.find((node) => node.type === "project");
   assert.equal(other.label, "其他");
@@ -297,7 +267,7 @@ test("a memory of a project the account no longer has hangs from 「其他」", 
 });
 
 test("a topic is attached to the marks it holds that are drawn, and one with none left is not shown", async () => {
-  const contribution = recordsContribution([record({ id: "a" }), record({ id: "b" })], {}, { now: NOW, timeZone: "UTC" });
+  const contribution = recordsContribution([record({ id: "a" }), record({ id: "b" })], {}, { now: NOW });
   const map = await build([source("records", contribution), source("topics", {
     facets: { topics: [
       { id: "topic:1", label: "回答风格", weight: 2, trend: 1, members: ["memory:a", "memory:b", "memory:gone"] },
@@ -334,7 +304,7 @@ function routes(overrides = {}) {
   const handler = createMemoryMapRoutes({
     config: { memoryEnabled: true, memoryMapEnabled: true, maxJsonBytes: 100_000 },
     memorySettings: { configured: true },
-    sources: [source("records", recordsContribution([record()], {}, { now: NOW, timeZone: "UTC" }))],
+    sources: [source("records", recordsContribution([record()], {}, { now: NOW }))],
     store: {
       requireProject: async (_user, id) => { calls.push(["project", id]); if (id === "theirs") throw new HttpError(404, "project_not_found", "Project not found."); return { id }; },
       listProjects: async () => projects,

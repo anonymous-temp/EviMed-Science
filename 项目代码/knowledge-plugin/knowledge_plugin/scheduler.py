@@ -129,7 +129,7 @@ class Crawler:
     # ------------------------------------------------------------------ lifecycle
 
     async def start(self) -> None:
-        await self._release_own_leases()
+        await self._recover_dead_leases()
         try:
             self._registry_mtime = os.stat(self._settings.registry_path).st_mtime   # the file just synced
         except OSError:
@@ -184,14 +184,43 @@ class Crawler:
             pass
 
     async def _release_own_leases(self) -> None:
-        """Leases held by this host's previous process (same container, new pid) are released now
-        instead of waiting ten minutes; the service runs one crawler per host."""
+        """A clean stop gives back what this process was reading, with no penalty; the service runs one crawler per host."""
         prefix = socket.gethostname() + ":%"
         async with self._pool.connection() as conn:
             await conn.execute(
                 "UPDATE evimed_knowledge.sources SET lease_owner = NULL, lease_until = NULL WHERE lease_owner LIKE %s",
                 (prefix,),
             )
+
+    async def _recover_dead_leases(self) -> None:
+        """What this host's previous process (same container, new pid) was reading when it died.
+
+        A clean stop released its leases (``_release_own_leases``), so a lease still held at start is a read the process
+        did not come back from: it was killed inside it. Releasing it for an immediate re-read, as this used to, sent a
+        source whose page kills the process (2026-10-27: a WeChat article that sent the plugin out of memory about once a
+        minute for hours) to the front of the queue after every restart, for ever. It is a failed read now, with the
+        failure backoff of a source that failed (``policy.failure_delay_s``: up to 30 minutes at the first death,
+        doubling to six hours): a source that only shared the dying process pays one short wait, a source that kills it
+        is read a few times a day instead of every minute. The next read that ends clears the count like any other
+        success."""
+        prefix = socket.gethostname() + ":%"
+        now = self._clock()
+        async with self._pool.connection() as conn:
+            async with conn.transaction():
+                rows = await (await conn.execute(
+                    """SELECT id, poll_floor_s, consecutive_failures FROM evimed_knowledge.sources
+                        WHERE lease_owner LIKE %s ORDER BY id FOR UPDATE""", (prefix,))).fetchall()
+                for row in rows:
+                    failures = int(row["consecutive_failures"] or 0) + 1
+                    await conn.execute(
+                        """UPDATE evimed_knowledge.sources SET lease_owner = NULL, lease_until = NULL,
+                                  consecutive_failures = %s, failing_since = coalesce(failing_since, %s),
+                                  last_attempt_at = %s, last_error_code = 'worker_died', next_poll_at = %s WHERE id = %s""",
+                        (failures, now, now, now + timedelta(seconds=policy.failure_delay_s(row["poll_floor_s"], failures)),
+                         row["id"]))
+        if rows:
+            log.warning("%s sources were being read when the previous process died, each waits its failure backoff: %s",
+                        len(rows), ", ".join(row["id"] for row in rows[:10]))
 
     # ------------------------------------------------------------------ polling
 

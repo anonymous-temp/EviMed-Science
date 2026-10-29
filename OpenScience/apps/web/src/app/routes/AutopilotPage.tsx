@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock } from "lucide-react";
 import { AUTOPILOT_BUDGET_ERROR_CODES } from "@evimed/domain";
 import { getWebProjectId, listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
@@ -12,10 +12,9 @@ import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { snapshotHref } from "@/lib/readPages";
 import { splitArtifacts } from "@/lib/artifactNames";
-import { taskPath } from "@/lib/taskLocation";
+import { NEW_TASK, newTaskPath, TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { List, ListRow } from "@/components/ui/ListRow";
 import { Drawer } from "@/components/ui/Drawer";
 import { MasterDetail, type MasterDetailState } from "@/components/ui/MasterDetail";
 import { FormDialog } from "@/components/ui/FormDialog";
@@ -26,10 +25,12 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { MaterialPicker } from "@/components/autopilot/MaterialPicker";
 import { ResearchProgress } from "@/components/autopilot/ResearchProgress";
 import { TaskBar } from "@/components/autopilot/TaskBar";
+import { NewTaskPane, type NewTaskDraft } from "@/components/autopilot/NewTaskPane";
 import { TaskDialog } from "@/components/autopilot/TaskDialog";
+import { TaskExamples } from "@/components/autopilot/TaskExamples";
 import { TaskList, type TaskRowActions } from "@/components/autopilot/TaskList";
 import { boundedLock, TaskPane } from "@/components/autopilot/TaskPane";
-import { activeAgenda, cancellationPending, budgetBlocks, executionsOf, inFlight, inLingdou, latestRun, lastRunLine, needsMaterial, revisionConflict, RECOMMENDATIONS, type Recommendation } from "@/components/autopilot/taskPresentation";
+import { activeAgenda, cancellationPending, budgetBlocks, executionsOf, firstTaskOf, inFlight, inLingdou, latestRun, lastRunLine, needsMaterial, recommendationById, revisionConflict, type Recommendation } from "@/components/autopilot/taskPresentation";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
 
 /** Where an upload lands: the project's knowledge base, which registers it as a source. */
@@ -44,16 +45,17 @@ const KNOWLEDGE_ROOT = "knowledge-base";
 const LIST_COLUMN = 300;
 const PANE_MIN = 640;
 
-/** What a scheduled task is, said where there is none yet: the work, and where the result is. */
-const FIRST_RUN_SENTENCE = "按你定的时间，让 EviMed 自己去做一件事，比如每天一份行业要闻、每周一份工作汇总，结果留在这里。";
-
 /** How often the page reads the project again: quickly while an execution is on its way, quietly otherwise. */
 const POLL_ACTIVE_MS = 5_000;
 const POLL_IDLE_MS = 30_000;
 
 type Action = { kind: "pause" | "archive" | "resume" | "run" | "stop-run" | "material"; agenda: AgendaRecord; requestId?: string; episode?: EpisodeRecord; sourceIds?: string[]; remove?: string };
 
-/** `/app/autopilot` (the list) and `/app/autopilot/:taskId` (one task); the old `?task=` address becomes the second. */
+/**
+ * `/app/autopilot` (the list), `/app/autopilot/:taskId` (one task) and `/app/autopilot/new` (the new-task form, `?example=<id>` started
+ * from an example); the old `?task=` address becomes the second. Beside the list a bare address is never an empty page: it opens the
+ * list's first task, or the new-task form where there is none.
+ */
 export function AutopilotPage() {
   useProjectStore(state => state.currentId);
   const projectId = getWebProjectId();
@@ -89,8 +91,12 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   // label every picker uses (`projectLabels`), so two projects of one name are told apart here as they are in the sidebar.
   const projectName = useProjectLabels().get(projectId);
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const { taskId } = useParams();
-  const selectedId = taskId ?? null;
+  // `new` is the form, never a task: no request below is made for it, and a task's id is never that word.
+  const creating = taskId === NEW_TASK;
+  const selectedId = taskId && !creating ? taskId : null;
+  const example = creating ? recommendationById(params.get("example")) : undefined;
   const digestId = params.get("digest");
   const executionParam = params.get("execution");
   const urlSearch = params.get("q") ?? "";
@@ -115,7 +121,12 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const [retry, setRetry] = useState<Action | null>(null);
   const [confirm, setConfirm] = useState<Action | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
-  const [editor, setEditor] = useState<{ agenda?: AgendaRecord; recommendation?: Recommendation } | null>(null);
+  const [editor, setEditor] = useState<{ agenda: AgendaRecord } | null>(null);
+  // The new-task form's own state, as it reports it: what an example or 「新建」 pressed over it would lose, and the example asked for then.
+  const [draft, setDraft] = useState<NewTaskDraft>({ dirty: false, locked: false });
+  const [replacing, setReplacing] = useState<{ example?: Recommendation; go: () => void } | null>(null);
+  // How many times the form has been made again: the same example pressed twice starts it over twice, as the dialog it replaced did.
+  const [fresh, setFresh] = useState(0);
   const [busy, setBusy] = useState(false);
   // An execution asked to stop whose record still reads as running: the stop is on its way, and the button says so.
   const [stopping, setStopping] = useState<string | null>(null);
@@ -401,31 +412,37 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   });
 
   const closeEditor = () => setEditor(null);
-  // First use is one page with a create action and examples that only populate a draft. It is the page's column, on the title's left
-  // edge like every block of a page: a block of its own width centred under the title started 136 px right of it (release walk of
-  // evimed-b559d4b7ebd0-1, 「two left edges」); the empty state centres itself in the column, and the examples are the column's list.
   // Nothing is known of the project's tasks while they are being read, or when the first read failed: the list says so, and the
   // pane says nothing. A later read that fails leaves the tasks on screen, and the pane as it was.
   const known = agendas !== null && !(error && agendas.length === 0);
-  const none = known && !agendas.some(agenda => !agenda.payload.archivedAt);
-  const firstTask = agendas?.find(agenda => !agenda.payload.archivedAt) ?? null;
-  const firstRun = !available ? <EmptyState icon={CalendarClock} title="定时执行暂不可用" description="你仍可查看历史结果；恢复后可以新建与启用任务。" action={<Button variant="secondary" onClick={() => void load()}>重新检查</Button>} /> : <div className="w-full space-y-4 pb-8"><EmptyState icon={CalendarClock} title="还没有定时任务" description={FIRST_RUN_SENTENCE}
-    action={<Button onClick={() => setEditor({})}>新建任务</Button>} className="min-h-0 flex-1" />
-    <section aria-label="任务示例" className="space-y-2 px-2">
-      <h2 className="text-ui font-semibold text-text">从示例开始</h2>
-      <List divided>{RECOMMENDATIONS.slice(0, 4).map(item => <ListRow key={item.title} title={item.title} meta={item.prompt} onOpen={() => setEditor({ recommendation: item })} />)}</List>
-    </section>
-  </div>;
+  const firstTask = agendas ? firstTaskOf(agendas) : null;
+  const none = known && firstTask === null;
+  // The new-task form is the page's main area, so the way to it is an address (`/app/autopilot/new`, an example as `?example=`), and the
+  // way back is where the researcher was, which that address carries as router state. A project with no task has nowhere to go back to.
+  const origin = (location.state as { from?: unknown } | null)?.from;
+  const cameFrom = typeof origin === "string" && origin.startsWith(TASKS_PATH) ? origin : null;
+  const openDraft = (item?: Recommendation) => {
+    // A form that is saving (or has created its task and not yet enabled it) is not made again: an unedited example is not "dirty",
+    // so nothing else would stop 新建 from remounting it between `createAgenda` and `startAgenda`.
+    if (draft.locked) return;
+    const go = () => { setFresh(count => count + 1); navigate(newTaskPath(item?.id), { replace: creating, state: { from: creating ? cameFrom : selectedId ? taskPath(selectedId, { search: searchNow.current }) : null } }); };
+    // An example over a form with an edit asks what discarding it asks; the form is made again for the example.
+    if (draft.dirty) setReplacing({ example: item, go }); else go();
+  };
+  const leaveDraft = () => navigate(cameFrom ?? taskPath(null, { search: searchNow.current }), { replace: true });
+  const unavailable = <EmptyState icon={CalendarClock} title="定时执行暂不可用" description="你仍可查看历史结果；恢复后可以新建与启用任务。" action={<Button variant="secondary" onClick={() => void load()}>重新检查</Button>} className="min-h-0 flex-1" />;
   // Beside the list the way on is the list; without it the list is a link away — so the detail is a function of the split.
-  const detail = ({ split }: MasterDetailState) => !selectedId
-    ? !known ? null
-      : none ? firstRun
-        : (
-          // Asking for a task to be chosen leaves a way to choose one: the list's first is a press away.
-          <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1"
-            action={firstTask ? <Link to={taskPath(firstTask.id, { search })} className={buttonClasses({ variant: "secondary" })}>打开第一项任务</Link> : undefined}
-            reason={firstTask ? undefined : "从列表选择一项任务。"} />
-        )
+  const detail = ({ split }: MasterDetailState) => creating
+    ? <NewTaskPane key={`${example?.id ?? "blank"}:${fresh}`} projectId={projectId} available={available} recommendation={example} intro={none} examples={!none || !split} backTo={split ? undefined : taskPath(null, { search })}
+      onChooseExample={openDraft} onCancel={none ? undefined : leaveDraft} onDraftChange={setDraft} onRecorded={record}
+      onSaved={value => { record(value); navigate(taskPath(value.id, { search: searchNow.current }), { replace: true }); }}
+      onAdopted={id => { void load(); navigate(taskPath(id, { search: searchNow.current }), { replace: true }); }} />
+    : !selectedId
+      // A bare address beside the list is never an empty pane: it is the list's first task, or the form for the first one. A briefing's
+      // address is read first (`digestId`), and it says where it goes.
+      ? !known || digestId ? null
+        : none ? available ? <Navigate to={newTaskPath()} replace /> : unavailable
+          : firstTask ? <Navigate to={taskPath(firstTask.id, { search })} replace /> : null
     : agendas === null ? <div className="px-6 py-6"><FilesSkeleton /></div>
       : !selected ? <EmptyState icon={CalendarClock} title="未找到这个任务" description="它可能已经删除。从列表选择其他任务。" className="min-h-0 flex-1"
         action={split ? undefined : <Link to={taskPath(null, { search })} className={buttonClasses({ variant: "secondary" })}>回到定时任务</Link>} />
@@ -453,24 +470,27 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
               : <TaskPane agenda={selected} execution={execution} lock={lock} ledgerRun={ledgerRun} projectId={projectId} />}
         </>;
 
-  const list = ({ split }: MasterDetailState) => <TaskList agendas={agendas} available={available} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
-    onRetry={() => void load()} onCreate={() => { if (available) setEditor({}); }} busy={busy} actions={rowActions} singleColumn={!split}
-    actionNotice={actionError && !selected ? <div role="alert" className="px-2 text-ui text-error">{actionError}{retry && <Button variant="text" disabled={busy} onClick={() => void operate(retry)}>重试操作</Button>}</div> : undefined}
-    firstRun={none ? firstRun : undefined} />;
+  // With no task the list column says what a first one can be (the examples fill the form beside it); a deployment that cannot schedule
+  // says that instead, where the list is the page (beside the list the pane says it).
+  const list = ({ split }: MasterDetailState) => <TaskList agendas={agendas} available={available} createLocked={creating && draft.locked} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
+    onRetry={() => void load()} onCreate={() => { if (available && !(creating && !example)) openDraft(); }} busy={busy} actions={rowActions} singleColumn={!split}
+    actionNotice={actionError && !selected ? <div role="alert" className={split ? "text-ui text-error" : "px-2 text-ui text-error"}>{actionError}{retry && <Button variant="text" disabled={busy} onClick={() => void operate(retry)}>重试操作</Button>}</div> : undefined}
+    empty={!none ? undefined : available ? <TaskExamples selectedId={example?.id} locked={draft.locked} bleed={split} onChoose={openDraft} /> : split ? undefined : unavailable} />;
 
-  return <MasterDetail list={list} detail={detail} selected={Boolean(selectedId)} listLabel="任务列表" detailLabel="任务"
-    listWidth={LIST_COLUMN} detailMin={none && !selectedId ? Number.POSITIVE_INFINITY : PANE_MIN} narrow="swap" modeAttribute="data-autopilot-layout"
+  return <MasterDetail list={list} detail={detail} selected={Boolean(taskId)} listLabel="任务列表" detailLabel="任务"
+    listWidth={LIST_COLUMN} detailMin={PANE_MIN} narrow="swap" modeAttribute="data-autopilot-layout"
     listAttributes={{ "data-task-list": "" }} detailAttributes={{ "data-task-main": "" }}>
-    <PageTitle page={selected?.payload.title ?? "定时任务"} section={selected ? "定时任务" : undefined} />
+    <PageTitle page={selected?.payload.title ?? (creating ? "新建定时任务" : "定时任务")} section={selected || creating ? "定时任务" : undefined} />
     {(progressOpen || materialsOpen) && selected && <Drawer title={materialsOpen ? "任务材料" : "研究进展"} onClose={() => { setProgressOpen(false); setMaterialsOpen(false); }}>
       <ResearchProgress agenda={selected} state={researchState} error={progressError} busy={busy} lastRun={lastRunLine(selected, selectedEpisodes ?? episodes, { withTime: true })}
         onAdd={() => void addMaterial()} onPick={() => setPicking(true)} onRemove={sourceId => void operate({ kind: "material", agenda: selected, remove: sourceId })} onRetry={() => void loadProgress()} />
       {!progressError && !researchState && <FilesSkeleton />}
     </Drawer>}
-    {editor && <TaskDialog projectId={projectId} available={available} agenda={editor.agenda} recommendation={editor.recommendation} showBudgets={editor.agenda ? budgetRefused === editor.agenda.id || budgetBlocks(editor.agenda, latestRun(editor.agenda.id, everyEpisode)) : false}
+    {editor && <TaskDialog projectId={projectId} available={available} agenda={editor.agenda} showBudgets={budgetRefused === editor.agenda.id || budgetBlocks(editor.agenda, latestRun(editor.agenda.id, everyEpisode))}
       saving={editorSaving} onBusyChange={setEditorSaving} onClose={closeEditor} onRecorded={record}
-      onSaved={value => { record(value); closeEditor(); setBudgetRefused(null); if (!editor.agenda) navigate(taskPath(value.id, { search: searchNow.current })); }}
-      onAdopted={id => { void load(); closeEditor(); navigate(taskPath(id, { search: searchNow.current })); }} />}
+      onSaved={value => { record(value); closeEditor(); setBudgetRefused(null); }} />}
+    {replacing && <ConfirmDialog title="放弃未保存的修改？" subject={replacing.example ? `改用示例“${replacing.example.title}”` : "重新开始新建任务"} consequences="未保存的修改将丢失。" recovery="返回编辑可继续保留修改。" confirmLabel="放弃修改"
+      onConfirm={() => { const next = replacing; setReplacing(null); next.go(); }} onCancel={() => setReplacing(null)} />}
     {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy}
       onCancel={() => setPicking(false)} onChoose={sourceIds => { const target = selected; setPicking(false); void operate({ kind: "material", agenda: target, sourceIds }); }} /></FormDialog>}
     {confirm && <ConfirmDialog title={confirm.kind === "pause" ? "暂停任务？" : "删除任务？"} body={confirm.kind === "pause" ? "暂停后将取消正在进行、排队和等待重试的执行，已产生的结果会保留。" : "删除后停止后续计划，取消正在进行、排队和等待重试的执行，并保留历史结果。"} tone="danger" confirmLabel={confirm.kind === "pause" ? "暂停任务" : "删除任务"} onCancel={() => setConfirm(null)} onConfirm={() => { const action = confirm; setConfirm(null); void operate(action); }} />}

@@ -1,3 +1,4 @@
+import { measurement, type MetricReading } from "@/lib/measurement";
 /**
  * What 总览 says, decided before anything is drawn.
  *
@@ -40,6 +41,7 @@ import { MENTION_ONLY_WORD, mentionOnly, metricName, metricUnit } from "./tabs/g
 
 export interface OverviewTile {
   key: string;
+  reading: MetricReading;
   label: string;
   /** The bare number, or the word standing in for it. */
   value: string;
@@ -114,11 +116,11 @@ const TILE_ORDER: readonly GeoOverviewMetricKey[] = ["gvi", "mention", "accuracy
 const UNIT_TEXT: Record<GeoUnit, string | undefined> = { index: "/ 100", percent: "%", count: undefined };
 
 /** The number without its unit — the tile sets the unit beside it, once. */
-export function tileValue(cell: GeoCell | null | undefined, unit: GeoUnit): { value: string; unit?: string; placeholder: boolean } {
+export function tileValue(cell: GeoCell | null | undefined, unit: GeoUnit): { reading: MetricReading; value: string; unit?: string; placeholder: boolean } {
   const word = geoCellWord(cell, unit);
   return cell?.status === "ok" && cell.value !== null
-    ? { value: unit === "percent" ? word.replace(/%$/, "") : word, unit: UNIT_TEXT[unit], placeholder: false }
-    : { value: word, placeholder: true };
+    ? { reading: measurement(cell.value, UNIT_TEXT[unit] ?? "", geoCellPhrase(cell, unit)), value: unit === "percent" ? word.replace(/%$/, "") : word, unit: UNIT_TEXT[unit], placeholder: false }
+    : { reading: { kind: "unmeasured", reason: word }, value: word, placeholder: true };
 }
 
 /** One reading of a series: a point's value, the sample under it, and what its round measured. */
@@ -259,6 +261,14 @@ function extraMetric(diagnosis: GeoDiagnosis | null, ids: readonly string[]): { 
  * Live wrong statements about us that would reach a patient (S3/S4): the safety tile's number. The server's count is over every
  * error of the project; a list is only what it carried.
  */
+export function safetyReading(diagnosis: GeoDiagnosis | null): MetricReading {
+  const round = diagnosis?.round;
+  const count = diagnosis?.errorCounts?.severe;
+  // A diagnosis envelope and a truncated error list are not proof of a counted zero.
+  const covered = round && typeof round.done === "number" && round.done > 0;
+  return covered ? measurement(count, "条严重讲错", `本轮 ${round.done} 次有效回答`, round.sampleDate ?? null) : { kind: "unmeasured", reason: "未测" };
+}
+
 export function severeOpenErrors(diagnosis: GeoDiagnosis | null): number {
   const counted = diagnosis?.errorCounts?.severe;
   if (typeof counted === "number" && Number.isFinite(counted)) return counted;
@@ -340,23 +350,25 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
   }
   // 用药安全 is the last cell and the only red one on the band.
   const severe = severeOpenErrors(diagnosis);
+  const safety = safetyReading(diagnosis);
   const risk = extraMetric(diagnosis, ["M-15"]);
   tiles.push({
     key: "safety",
     label: "用药安全",
-    value: diagnosis ? String(severe) : "—",
-    unit: diagnosis ? "条严重讲错" : undefined,
-    placeholder: !diagnosis,
+    reading: safety,
+    value: safety.kind === "measured" ? String(safety.value) : "—",
+    unit: safety.kind === "measured" ? "条严重讲错" : undefined,
+    placeholder: safety.kind !== "measured",
     delta: null,
     polarity: "down",
-    note: risk ? `${risk.name} ${formatGeoValue(risk.cell.value ?? 0, risk.unit)}` : null,
+    note: risk && risk.cell.status === "ok" && risk.cell.value !== null ? `${risk.name} ${formatGeoValue(risk.cell.value, risk.unit)}` : null,
     target: null,
     trend: [],
     lead: false,
     tone: severe > 0 ? "safety" : "default",
     rank: null,
     rival: null,
-    tab: diagnosis ? TILE_TABS.safety : null,
+    tab: safety.kind === "measured" ? TILE_TABS.safety : null,
     triple: null,
   });
   return tiles;

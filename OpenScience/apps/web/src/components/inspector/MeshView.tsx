@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/Button";
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- Named scientific drawing regions support local keyboard navigation without application mode. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Box, RotateCcw } from "lucide-react";
 import * as THREE from "three";
@@ -7,19 +9,25 @@ import { extOf } from "@/lib/artifacts";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
 import { formatNumber } from "@/lib/format";
+import { meshHelpLine, needsScientificFallback, scientificFallbackMaterial } from "./meshMaterial";
+import { viewerKey } from "./viewerKeyboard";
 import { IconButton } from "@/components/ui/IconButton";
 
 /**
- * Interactive 3D viewer for mesh / CAD-export files (stl, obj, ply, gltf, glb),
- * rendered locally with three.js + WebGL — no service. A warm studio: soft
- * hemisphere + key/fill lights, a neutral physical material for meshes that
- * carry none, a subtle contact-shadow ground, and a gradient backdrop that
- * matches the app's warm palette. The scene is theme-independent (a model reads
- * the same in light or dark mode), like the molecule and Office previews.
- * Drag to orbit, scroll to zoom, right-drag to pan.
+ * Anatomy: named viewer/content region, local controls and decoded readout.
+ * Variants: file-format branches retain the source's scientific meaning.
+ * States: setup, readable content, empty/invalid input and selected value.
+ * Hit area: native controls; the drawing surface accepts pointer input.
+ * Keyboard: native controls; focused drawing shortcuts never intercept editors.
+ * Long content: bounded content scrolls; scientific units remain visible.
+ * Theme: app chrome follows tokens; fixed scientific stages retain their palette.
+ * Responsive behavior: drawing coordinates track the available container.
+ * Verification: adjacent tests and ScientificViewerGallery; physical AT/touch unverified.
  */
 export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBuffer }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const renderRef = useRef<(() => void) | null>(null);
+  const keyboardRef = useRef<((key: string, rotate: boolean) => void) | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const homeRef = useRef<(() => void) | null>(null);
   // Each mesh with its shaded material, so wireframe mode can swap in a dark
@@ -49,7 +57,6 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
     const mount = mountRef.current;
     if (!mount) return;
     let cancelled = false;
-    let raf = 0;
     setRendering(true);
     setError(null);
     setMeta(null);
@@ -92,17 +99,35 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
     scene.add(fill);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+    controls.enableDamping = false;
     controls.dampingFactor = 0.08;
     controlsRef.current = controls;
 
     const root = new THREE.Group();
     scene.add(root);
 
-    const animate = () => {
-      controls.update();
-      renderer.render(scene, camera);
-      raf = requestAnimationFrame(animate);
+    // OrbitControls emits change for pointer/wheel interactions. No idle RAF loop.
+    const render = () => { if (!cancelled) renderer.render(scene, camera); };
+    renderRef.current = render;
+    controls.addEventListener("change", render);
+    keyboardRef.current = (key, rotate) => {
+      const offset = camera.position.clone().sub(controls.target);
+      if (key === "+" || key === "=") offset.multiplyScalar(0.9);
+      else if (key === "-") offset.multiplyScalar(1.1);
+      else {
+        const dx = key === "ArrowLeft" ? -1 : key === "ArrowRight" ? 1 : 0;
+        const dy = key === "ArrowUp" ? 1 : key === "ArrowDown" ? -1 : 0;
+        if (rotate) {
+          const spherical = new THREE.Spherical().setFromVector3(offset);
+          spherical.theta += dx * 0.1;
+          spherical.phi = Math.max(0.01, Math.min(Math.PI - 0.01, spherical.phi - dy * 0.1));
+          offset.setFromSpherical(spherical);
+        } else {
+          const delta = new THREE.Vector3(dx, dy, 0).applyQuaternion(camera.quaternion).multiplyScalar(offset.length() * 0.05);
+          controls.target.add(delta);
+        }
+      }
+      camera.position.copy(controls.target).add(offset); controls.update(); render();
     };
 
     (async () => {
@@ -119,13 +144,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         const meshes: Array<{ mesh: THREE.Mesh; shaded: THREE.Material | THREE.Material[] }> = [];
         const wireMat = new THREE.MeshBasicMaterial({ color: 0x6b6155, wireframe: true });
         wireMatRef.current = wireMat;
-        const neutral = new THREE.MeshStandardMaterial({
-          color: 0xd8cfc4,
-          metalness: 0.05,
-          roughness: 0.68,
-          side: THREE.DoubleSide,
-          flatShading: false,
-        });
+        const neutral = scientificFallbackMaterial();
         object.traverse((o) => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
@@ -133,9 +152,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
           mesh.receiveShadow = true;
           const geom = mesh.geometry as THREE.BufferGeometry;
           if (geom && !geom.attributes.normal) geom.computeVertexNormals();
-          const hasMaterial = Array.isArray(mesh.material) ? mesh.material.length > 0 : !!mesh.material;
-          // STL/PLY carry no material; give them the neutral clay so lighting reads.
-          if (!hasMaterial || ext === "stl" || ext === "ply") mesh.material = neutral;
+          if (needsScientificFallback(mesh, ext)) mesh.material = neutral;
           // Render both faces: agent-generated meshes often have inconsistent
           // winding, and single-sided culling would make them vanish.
           for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material])
@@ -214,7 +231,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
         if (!cancelled) {
           setRendering(false);
-          animate();
+          render();
         }
       } catch (e) {
         if (!cancelled) {
@@ -232,13 +249,16 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
             camera.aspect = w / h;
             camera.updateProjectionMatrix();
             renderer.setSize(w, h);
+            render();
           })
         : null;
     observer?.observe(mount);
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(raf);
+      controls.removeEventListener("change", render);
+      renderRef.current = null;
+      keyboardRef.current = null;
       observer?.disconnect();
       controls.dispose();
       controlsRef.current = null;
@@ -255,11 +275,17 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
   const applyWireframe = useCallback((wire: boolean) => {
     const wm = wireMatRef.current;
     for (const { mesh, shaded } of meshesRef.current) mesh.material = wire && wm ? wm : shaded;
+    renderRef.current?.();
   }, []);
 
   return (
-    <div className="relative h-full min-h-[420px] w-full touch-none select-none overflow-hidden">
-      <div ref={mountRef} className="absolute inset-0" aria-label={`${filename} 的三维模型预览`} />
+    <div className="relative flex h-full min-h-[420px] w-full flex-col touch-none select-none overflow-hidden"
+      {...{ tabIndex: 0, role: "region", "aria-label": `${filename} 三维模型交互视图` }}
+      onWheelCapture={(e) => { if (e.ctrlKey || e.metaKey) e.stopPropagation(); }}
+      onKeyDown={(e) => { if (!viewerKey(e)) return; if (e.key === "0") resetView(); else if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-"].includes(e.key)) keyboardRef.current?.(e.key, e.shiftKey); else return; e.preventDefault(); }}>
+      <p className="relative order-1 rounded bg-surface p-2 text-caption text-text">{meshHelpLine(meta?.tris)}</p>
+      <div className="relative order-2 flex flex-wrap gap-2 rounded bg-surface p-2 text-caption text-text">{[{ label: "左移", key: "ArrowLeft" }, { label: "右移", key: "ArrowRight" }, { label: "上移", key: "ArrowUp" }, { label: "下移", key: "ArrowDown" }, { label: "左转", key: "ArrowLeft", rotate: true }, { label: "右转", key: "ArrowRight", rotate: true }, { label: "放大", key: "+" }, { label: "缩小", key: "-" }].map((action) => <Button variant="secondary" size="md" key={action.label} type="button" onClick={() => keyboardRef.current?.(action.key, !!action.rotate)}>{action.label}</Button>)}</div>
+      <div ref={mountRef} className="relative min-h-40 flex-1" aria-label={`${filename} 的三维模型预览`} />
 
       <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-e2 backdrop-blur">
         <div className="flex items-center gap-1 px-1.5 text-caption text-muted">
@@ -270,8 +296,9 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
             { v: true, label: "着色" },
             { v: false, label: "线框" },
           ].map((o) => (
-            <button
+            <Button variant="secondary" size="md"
               key={o.label}
+              aria-pressed={shaded === o.v}
               type="button"
               onClick={() => {
                 setShaded(o.v);
@@ -283,13 +310,13 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
               )}
             >
               {o.label}
-            </button>
+            </Button>
           ))}
         </div>
         <IconButton icon={RotateCcw} label="重置视图" size="sm" onClick={resetView} />
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
+      <div className="pointer-events-none relative order-3 ml-auto rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
         <span className="font-semibold text-text">{ext.toUpperCase()}</span>
         {meta && <span className="ml-2">{formatNumber(meta.tris)} 个三角面</span>}
       </div>
@@ -327,7 +354,7 @@ async function loadModel(ext: string, bytes: ArrayBuffer): Promise<THREE.Object3
       const { PLYLoader } = await import("three/examples/jsm/loaders/PLYLoader.js");
       const geom = new PLYLoader().parse(bytes);
       if (!geom.attributes.normal) geom.computeVertexNormals();
-      return new THREE.Mesh(geom);
+      return new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: !!geom.getAttribute("color"), roughness: 0.8 }));
     }
     case "obj": {
       const { OBJLoader } = await import("three/examples/jsm/loaders/OBJLoader.js");

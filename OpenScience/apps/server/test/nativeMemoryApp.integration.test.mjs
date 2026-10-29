@@ -164,5 +164,6 @@ test("the map's events of a native account are derived from the files' revisions
   const memory = map.events.filter((event) => event.type === "memory");
   assert.ok(memory.length >= 1, JSON.stringify(map.events.map((event) => event.type)));
   assert.ok(memory.some((event) => event.change === "updated" && /then detail/.test(event.text)), JSON.stringify(memory));
-  assert.ok(map.buckets.series.some((day) => day.memory >= 1), JSON.stringify(map.buckets));
+  // A calendar day holds only the documents added since 2026-10-27 (the memory dashboard reads nothing else of it): the memory's change is an event.
+  assert.ok(map.buckets.series.every((day) => !("memory" in day)), JSON.stringify(map.buckets));
 });

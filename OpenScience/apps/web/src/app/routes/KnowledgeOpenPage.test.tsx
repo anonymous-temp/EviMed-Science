@@ -29,10 +29,10 @@ describe("a compiled file named by its place", () => {
     expect(mocks.pageAt).toHaveBeenCalledWith("p1", "kg", "entities/alpha.md");
   });
 
-  it("keeps the tab's own project out of the address", async () => {
+  it("names the tab's own project in the address too: without a scope the way back lists the account's materials, which have no pages", async () => {
     mocks.pageAt.mockResolvedValue({ sourceId: `src_${"b".repeat(32)}` });
     open("?project=home&tree=wiki&path=concept%2FA.md");
-    await waitFor(() => expect(screen.getByTestId("where").textContent).toBe(`/app/files/src_${"b".repeat(32)}?kind=wiki`));
+    await waitFor(() => expect(screen.getByTestId("where").textContent).toBe(`/app/files/src_${"b".repeat(32)}?scope=home&kind=wiki`));
   });
 
   it("says in one sentence that a file is gone, with the way to the pages", async () => {
@@ -40,6 +40,12 @@ describe("a compiled file named by its place", () => {
     open("?project=p1&tree=kg&path=entities%2Fgone.md");
     expect(await screen.findByText("这一页现在没有找到，可能已被重新整理。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "回到知识页" })).toHaveAttribute("href", "/app/files?scope=p1&kind=wiki");
+  });
+
+  it("sends an address it cannot read back to the tab's own project's pages, not to the account's materials", async () => {
+    open("?project=&tree=kg&path=entities%2Fx.md");
+    expect(await screen.findByText("这一页现在没有找到，可能已被重新整理。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "回到知识页" })).toHaveAttribute("href", "/app/files?scope=home&kind=wiki");
   });
 
   it("never asks for an address it cannot read", async () => {

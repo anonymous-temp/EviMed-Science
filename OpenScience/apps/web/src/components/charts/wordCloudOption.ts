@@ -4,7 +4,7 @@ import type { MapPalette } from "./map/palette";
 
 /**
  * The topic cloud's option. A word is a topic: its size is the number of memories in it — the same number the ranking beside the
- * cloud prints, so no size is a guess — and its colour is its trend (the brand blue when it grew in the last 30 days, a quiet grey
+ * cloud prints, so no size is a guess — and its colour is its trend (the brand accent when it grew in the last 30 days, a quiet grey
  * when it held, a lighter grey when it shrank), never a random colour. Nothing is rotated: a Chinese word turned on its side is
  * harder to read, and a cloud that cannot be read is a decoration. A reader's chosen topic is the heavier word.
  */

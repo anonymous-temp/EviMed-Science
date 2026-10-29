@@ -4,8 +4,8 @@ import { methodFieldText } from "./vcrMethodFieldText";
 const text = (method: string, path: string, root: Record<string, unknown> = {}, unit?: string) => methodFieldText(method, path, { unit }, root, "原标签");
 describe("method-context scientific field meanings", () => {
   it.each([
-    ["accrual.poisson_gamma", "sites[0].alpha", "招募强度 Gamma 形状 α"],
-    ["accrual.poisson_gamma", "sites[0].beta", "招募强度 Gamma 速率 β"],
+    ["accrual.poisson_gamma", "sites[0].alpha", "入组强度 Gamma 形状 α"],
+    ["accrual.poisson_gamma", "sites[0].beta", "入组强度 Gamma 速率 β"],
     ["accrual.poisson_gamma", "screenFailure.alpha", "筛选失败率 Beta 先验形状 α"],
     ["accrual.poisson_gamma", "screenFailure.beta", "筛选失败率 Beta 先验形状 β"],
     ["design.analytic", "analysis.alpha", "检验显著性水平 α"],

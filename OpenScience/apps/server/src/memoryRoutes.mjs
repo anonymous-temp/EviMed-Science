@@ -163,9 +163,10 @@ export function createMemoryRoutes({
       if (unknown.length > 0) throw new HttpError(400, "memory_payload_invalid", `Unknown field(s): ${unknown.sort().join(", ")}.`);
       const memory = engine();
       const text = assertString(body.text, "text", { max: 2_000 });
-      const projectId = body.projectId == null || body.projectId === "" ? null
-        : (await store.requireProject(ctx.user, assertString(body.projectId, "projectId", { max: 64 }))).id;
-      const remembered = await memory.remember(ctx.user.id, { text, projectId });
+      const project = body.projectId == null || body.projectId === "" ? null
+        : await store.requireProject(ctx.user, assertString(body.projectId, "projectId", { max: 64 }));
+      const projectId = project?.id ?? null;
+      const remembered = await memory.remember(ctx.user.id, { text, projectId, projectName: project?.name ?? null });
       await audit(ctx, "memory.remember", "completed", { project: projectId ?? "" });
       sendJson(res, 200, { data: remembered });
       return true;

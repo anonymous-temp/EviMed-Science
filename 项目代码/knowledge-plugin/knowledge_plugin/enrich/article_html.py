@@ -35,7 +35,7 @@ from typing import Any, Iterable
 
 from selectolax.parser import HTMLParser, Node
 
-from ..adapters.common import clean_markup, looks_truncated, structured_abstract
+from ..adapters.common import clean_markup, decompose_all, looks_truncated, structured_abstract
 from ..model import BODY_TEXT_MAX
 
 ABSTRACT_MIN = 200          # shorter is a standfirst or a teaser (BMJ's citation_abstract of a feature: 166)
@@ -264,8 +264,7 @@ _ABSTRACT_NOISE = ("figure", "img", "picture", "aside", "button", "nav", "svg", 
 
 def _abstract_html(node: Node) -> str:
     for selector in _ABSTRACT_NOISE:
-        for noise in node.css(selector):
-            noise.decompose()
+        decompose_all(node.css(selector))
     return node.html or ""
 
 
@@ -355,10 +354,8 @@ def body_paragraphs(container: Node) -> list[str]:
     back matter out. A block's own text is the paragraph: nothing inside a block is read again. (Not
     ``Node.traverse``: it goes on past the container into the nodes that follow it.)"""
     for selector in _SKIP_SUBTREES:
-        for node in container.css(selector):
-            node.decompose()
-    for node in container.css(_TABLE_PARTS):
-        node.decompose()
+        decompose_all(container.css(selector))
+    decompose_all(container.css(_TABLE_PARTS))
     out: list[str] = []
     skip_level: int | None = None
     stack = list(reversed(list(container.iter())))

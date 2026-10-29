@@ -130,7 +130,14 @@ try {
     throw new Error(`${label} still pending after ${Math.round(timeoutMs / 1000)}s`);
   };
   const replyOf = async (sessionId) => {
-    const tr = await get(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`);
+    // The transcript route does not wake a runtime, and a finished run's runtime may already have yielded its slot (the per-account
+    // ceiling; 2026-10-29 S7 read an empty reply that way and scored it as a leak): started again, the session is read once more.
+    let tr = await get(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`);
+    if (tr.status === 409 && tr.body?.code === "runtime_not_running") {
+      const started = await context.request.post(`${base}/api/commands/start_runtime`, { headers, data: {}, timeout: 180000 }).catch(() => null);
+      note(`transcript: runtime was gone; start_runtime ${started ? started.status() : "failed"}`);
+      tr = await get(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`);
+    }
     const items = tr.body?.data?.messages ?? [];
     const textOf = (m) => (m.parts ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("").trim();
     const lastUser = items.map((m) => m.role).lastIndexOf("user");

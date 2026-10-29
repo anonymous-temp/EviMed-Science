@@ -1,3 +1,5 @@
+import { measurement } from "@/lib/measurement";
+import { Freshness } from "./Freshness";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { TOOLTIP_DELAYS } from "@evimed/design-tokens";
 import userEvent from "@testing-library/user-event";
@@ -61,10 +63,10 @@ describe("StatTile", () => {
     render(
       <StatTile
         label="综合可见度"
-        value="61"
-        unit="/ 100"
+        reading={measurement(61, "/ 100", "示例读数")}
+
         rank="第 3 / 6"
-        delta={<Delta value={17} unit="index" />}
+        delta={<Delta value={17} />}
         note="较基线 · 目标 65"
         hint="61，264 次回答"
         lead
@@ -82,45 +84,94 @@ describe("StatTile", () => {
     expect(within(tile).getByText("61")).not.toHaveClass("text-metric-lg");
   });
 
+  // R1 P2-5: a screen reader was told 「观测时间未知」 on every tile, or the raw ISO text; a time that is not known is not mentioned.
+  it("gives a screen reader the scope, and the observation time in Beijing time only when there is one", () => {
+    const { rerender } = render(<StatTile label="提及率" reading={measurement(31, "%", "最近一轮", "2026-09-26T08:00:00Z")} />);
+    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("范围：最近一轮 · 观测于 2026/9/26 16:00:00");
+    expect(screen.getByRole("group", { name: "提及率" })).not.toHaveTextContent("T08:00");
+    rerender(<StatTile label="提及率" reading={measurement(31, "%", "最近一轮")} />);
+    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("范围：最近一轮");
+    expect(screen.getByRole("group", { name: "提及率" })).not.toHaveTextContent(/未知|观测/);
+  });
+
+  // 2026-10-27, the memory section's clickability grammar: a tile that is a door to a list is pressed as a whole, the figure stays ink, and the mark at
+  // its end says where it goes (› here, ↗ out of the section).
+  it("is pressed as a whole when it is a door: one link named for its number, an ink figure, a mark at its end, no link in the figure", async () => {
+    const onOpen = vi.fn();
+    render(
+      <MemoryRouter>
+        <StatBand label="五个数字" columns={3} separate>
+          <StatTile whole label="关于你" reading={measurement(23, "", "示例")} to="/app/memory?tab=self" note="近 30 天 +11" />
+          <StatTile whole leaves label="知识" reading={measurement(14, "", "示例")} to="/app/files" />
+          <StatTile whole label="收到的" reading={measurement(6, "", "示例")} onOpen={onOpen} />
+        </StatBand>
+      </MemoryRouter>,
+    );
+    const about = screen.getByRole("link", { name: "关于你 23，查看" });
+    expect(about).toHaveAttribute("href", "/app/memory?tab=self");
+    expect(about).toHaveTextContent("近 30 天 +11");
+    expect(about).toHaveClass("hover:bg-surface-2");
+    expect(about.querySelector("[data-stat-value]")).toHaveClass("text-text");
+    expect(about.querySelector("[data-stat-value]")).not.toHaveClass("text-accent");
+    expect(about.querySelector("a, button")).toBeNull();
+    expect(about.querySelector("svg.lucide-chevron-right")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "知识 14，查看" }).querySelector("svg.lucide-arrow-up-right")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "收到的 6，查看" }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws a band of separate tiles as cards of one frame, and a tile that is not a door as it always was", () => {
+    const { container } = render(
+      <StatBand label="三个数字" columns={3} separate>
+        <StatTile label="记忆" reading={measurement(7, "", "示例")} />
+      </StatBand>,
+    );
+    const grid = container.querySelector("section > div")!;
+    // No hairline between cells: each tile is a card of the frame every card of a data page has.
+    expect(grid.className).not.toMatch(/border-l|border-t/);
+    expect(grid.className).toContain("[&>*]:rounded-card");
+    expect(screen.getByRole("group", { name: "记忆" })).toBeInTheDocument();
+  });
+
   it("has a skeleton of its own, and says a missing number in words", () => {
-    const { container, rerender } = render(<StatTile label="引用命中率" value="样本不足" loading />);
+    const { container, rerender } = render(<StatTile label="引用命中率" reading={{ kind: "loading" }} />);
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
-    rerender(<StatTile label="引用命中率" value="样本不足" />);
+    rerender(<StatTile label="引用命中率" reading={{ kind: "unmeasured", reason: "样本不足" }} />);
     expect(screen.getByRole("group", { name: "引用命中率" })).toHaveTextContent("样本不足");
   });
 
   // axe `heading-order`, 2026-10-07 audit B-04: the tile's label was an <h3> in a <section>, so every tile was a landmark and the
   // outline went from the page title to level three. A tile is data: a named group, its label a paragraph.
   it("is a named group whose label is not a heading, so it takes no place in the page's outline", () => {
-    render(<StatTile label="品牌提及率" value="43" unit="%" />);
+    render(<StatTile label="品牌提及率" reading={measurement(43, "%", "示例读数")} />);
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "品牌提及率" })).toHaveTextContent("品牌提及率");
   });
 
   it("has a dense variant for a band of small counts: padded and sized down on a phone only, the ordinary tile from sm up", () => {
-    const { rerender } = render(<StatTile label="可发布" value="37" />);
+    const { rerender } = render(<StatTile label="可发布" reading={measurement(37, "", "示例读数")} />);
     const ordinary = screen.getByRole("group", { name: "可发布" });
     expect(ordinary).toHaveClass("p-4");
     expect(ordinary.className).not.toMatch(/max-sm:/);
     expect(within(ordinary).getByText("37").className).not.toMatch(/max-sm:/);
-    rerender(<StatTile label="可发布" value="37" dense />);
+    rerender(<StatTile label="可发布" reading={measurement(37, "", "示例读数")} dense />);
     const dense = screen.getByRole("group", { name: "可发布" });
     // The base classes are unchanged, so from `sm` up it is the same tile.
     expect(dense).toHaveClass("p-4", "max-sm:p-3");
     expect(within(dense).getByText("37")).toHaveClass("text-metric", "max-sm:text-heading");
     // A leading metric and a word standing in for a number keep their own sizes.
-    rerender(<StatTile label="可发布" value="37" dense lead />);
+    rerender(<StatTile label="可发布" reading={measurement(37, "", "示例读数")} dense lead />);
     expect(within(screen.getByRole("group", { name: "可发布" })).getByText("37")).not.toHaveClass("max-sm:text-heading");
-    rerender(<StatTile label="可发布" value="未测" dense placeholder />);
+    rerender(<StatTile label="可发布" reading={{ kind: "unmeasured", reason: "未测" }} dense />);
     expect(within(screen.getByRole("group", { name: "可发布" })).getByText("未测")).not.toHaveClass("max-sm:text-heading");
   });
 
   it("puts a dense band two tiles to a row on a phone, and leaves every other band in one column", () => {
-    const { rerender } = render(<StatBand label="本周" columns={4}><StatTile label="A" value="1" /></StatBand>);
+    const { rerender } = render(<StatBand label="本周" columns={4}><StatTile label="A" reading={measurement(1, "", "示例读数")} /></StatBand>);
     const grid = () => screen.getByRole("region", { name: "本周" }).firstElementChild as HTMLElement;
     expect(grid()).toHaveClass("grid-cols-1", "sm:grid-cols-2", "lg:grid-cols-4");
-    rerender(<StatBand label="本周" columns={4} dense><StatTile label="A" value="1" dense /></StatBand>);
+    rerender(<StatBand label="本周" columns={4} dense><StatTile label="A" reading={measurement(1, "", "示例读数")} dense /></StatBand>);
     expect(grid()).toHaveClass("grid-cols-2", "sm:grid-cols-2", "lg:grid-cols-4");
     expect(grid()).not.toHaveClass("grid-cols-1");
   });
@@ -128,21 +179,21 @@ describe("StatTile", () => {
   // R19 live walk: two tiles of four columns drew the dividers' grey ground as a block where the tiles ran out. The lines are the
   // tiles' own now, and a band of two or three has the columns of that many.
   it("shows no ground where a row runs out of tiles, and spreads two or three tiles over two or three columns", () => {
-    const { rerender } = render(<StatBand label="本周" columns={2}><StatTile label="A" value="1" /><StatTile label="B" value="2" /></StatBand>);
+    const { rerender } = render(<StatBand label="本周" columns={2}><StatTile label="A" reading={measurement(1, "", "示例读数")} /><StatTile label="B" reading={measurement(2, "", "示例读数")} /></StatBand>);
     const grid = () => screen.getByRole("region", { name: "本周" }).firstElementChild as HTMLElement;
     expect(grid()).toHaveClass("bg-surface", "sm:grid-cols-2");
     expect(grid()).not.toHaveClass("bg-border");
     expect(grid()).not.toHaveClass("gap-px");
     expect(grid().className).toContain("[&>*]:border-l");
-    rerender(<StatBand label="本周" columns={3}><StatTile label="A" value="1" /><StatTile label="B" value="2" /><StatTile label="C" value="3" /></StatBand>);
+    rerender(<StatBand label="本周" columns={3}><StatTile label="A" reading={measurement(1, "", "示例读数")} /><StatTile label="B" reading={measurement(2, "", "示例读数")} /><StatTile label="C" reading={measurement(3, "", "示例读数")} /></StatBand>);
     expect(grid()).toHaveClass("sm:grid-cols-3");
   });
 
   it("declares the band's denominator once, under the band", () => {
     render(
       <StatBand label="本轮指标" columns={4} footnote="按 4 个引擎、264 次有效回答计算">
-        <StatTile label="A" value="1" />
-        <StatTile label="B" value="2" />
+        <StatTile label="A" reading={measurement(1, "", "示例读数")} />
+        <StatTile label="B" reading={measurement(2, "", "示例读数")} />
       </StatBand>,
     );
     expect(within(screen.getByRole("region", { name: "本轮指标" })).getAllByText(/次有效回答计算/)).toHaveLength(1);
@@ -150,9 +201,9 @@ describe("StatTile", () => {
 
   it("associates visible scientific disclosures with their own figures", () => {
     render(<>
-      <StatBand label="本轮指标" footnote="按 4 个引擎、178 次有效回答计算 · DeepSeek 本轮未测：探测暂停"><StatTile label="提及率" value="31%" /></StatBand>
-      <StatBand label="未知指标" footnote="事实准确率、引用命中率、检索触发率这一轮没有读数"><StatTile label="事实准确率" value="—" /></StatBand>
-      <StatBand label="无注释"><StatTile label="数量" value="2" /></StatBand>
+      <StatBand label="本轮指标" footnote="按 4 个引擎、178 次有效回答计算 · DeepSeek 本轮未测：探测暂停"><StatTile label="提及率" reading={measurement(31, "%", "示例读数")} /></StatBand>
+      <StatBand label="未知指标" footnote="事实准确率、引用命中率、检索触发率这一轮没有读数"><StatTile label="事实准确率" reading={{ kind: "unmeasured", reason: "—" }} /></StatBand>
+      <StatBand label="无注释"><StatTile label="数量" reading={measurement(2, "", "示例读数")} /></StatBand>
     </>);
     const measured = screen.getByRole("region", { name: "本轮指标" });
     const unknown = screen.getByRole("region", { name: "未知指标" });
@@ -289,12 +340,12 @@ describe("DataTable", () => {
 
   it("has the four states", async () => {
     const retry = vi.fn();
-    const { rerender, container } = render(<DataTable label="t" columns={columns} rows={rows} rowKey={(row) => row.id} state="loading" />);
+    const { rerender, container } = render(<DataTable label="t" columns={columns} rows={[]} rowKey={(row) => row.id} state="loading" />);
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
     rerender(<DataTable label="t" columns={columns} rows={[]} rowKey={(row) => row.id} emptyText="还没有数据。" />);
     expect(screen.getByText("还没有数据。")).toBeInTheDocument();
     rerender(<DataTable label="t" columns={columns} rows={rows} rowKey={(row) => row.id} state="error" errorMessage="读不到" onRetry={retry} />);
-    await userEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: /重试/ }));
+    await userEvent.click(within(screen.getByRole("note")).getByRole("button", { name: /重试/ }));
     expect(retry).toHaveBeenCalled();
   });
 
@@ -398,13 +449,13 @@ describe("ProgressRail", () => {
     // 「未测」 and 「样本不足」 are words, and a word at the 40 px metric rung
     // shouts a non-measurement louder than every measurement beside it. It is set at the section rung (18 / 600) — the page's own
     // heading pair — and not at a 20 / 600 of its own (R19.2).
-    const { container, rerender } = render(<StatTile label="豆包" value="未测" placeholder />);
+    const { container, rerender } = render(<StatTile label="豆包" reading={{ kind: "unmeasured", reason: "未测" }} />);
     const word = container.querySelector("[data-stat-value]");
     expect(word).toHaveClass("text-section");
     expect(word).not.toHaveClass("text-heading");
     expect(word).not.toHaveClass("text-metric");
     expect(word).not.toHaveClass("text-metric-lg");
-    rerender(<StatTile label="品牌提及率" value="21" unit="%" lead />);
+    rerender(<StatTile label="品牌提及率" reading={measurement(21, "%", "示例读数")} lead />);
     expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric");
   });
 
@@ -510,5 +561,16 @@ describe("colour that is the data keeps it in a Windows contrast theme (spec §1
     expect(container.querySelector("[data-heat-step]")).toHaveAttribute("data-forced-colors", "preserve");
     expect(screen.getByText("—")).not.toHaveAttribute("data-forced-colors");
     expect(preserved(container.querySelector("span.bg-heat-0"))).not.toBeNull();
+  });
+});
+
+describe("Freshness", () => {
+  it("draws the last successful read when it is known, and no sentence at all when it is not", () => {
+    const { rerender } = render(<Freshness at="2026-09-26T08:00:00Z" error="刷新失败" onRetry={() => {}} />);
+    expect(screen.getByText(/上次成功读取/)).toHaveTextContent("上次成功读取 2026/9/26 16:00:00");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    rerender(<Freshness at={null} error="刷新失败" onRetry={() => {}} />);
+    expect(screen.queryByText(/上次成功读取|未知/)).not.toBeInTheDocument();
+    expect(screen.getByText("刷新失败")).toBeInTheDocument();
   });
 });

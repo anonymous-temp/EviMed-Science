@@ -5,7 +5,7 @@ import { extOf, extToKind } from "@/lib/artifacts";
 import { formatDay } from "@/lib/format";
 import type { SourceRecord } from "@/lib/sourceClient";
 import { NoteEditor } from "./NoteEditor";
-import { isEditableNote, originalPathOf } from "./sourceView";
+import { hasCapturedDriveOriginal, isEditableNote, originalPathOf } from "./sourceView";
 
 const FilePreviewInspector = lazy(() => import("@/components/inspector/FilePreviewInspector").then((module) => ({ default: module.FilePreviewInspector })));
 
@@ -42,8 +42,8 @@ export function SourceOriginal({ source, page, onNoteSaved }: {
       <Provenance source={source} />
       <div className="min-h-0 flex-1">
         <Suspense fallback={<p role="status" className="p-6 text-ui text-text-3">正在打开预览</p>}>
-          <FilePreviewInspector embedded onClose={noop} page={page}
-            data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "base", projectId: source.projectId }} />
+          <FilePreviewInspector sourceFileId={source.personal ? source.id : undefined} embedded onClose={noop} page={page}
+            data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "base", projectId: source.personal ? undefined : source.projectId }} />
         </Suspense>
       </div>
     </div>
@@ -68,7 +68,7 @@ function Provenance({ source }: { source: SourceRecord }) {
     );
   }
   if (display.origin === "drive") {
-    return <p className="border-b border-border bg-surface px-4 py-2 text-caption text-text-3">从网盘文件读出的文本</p>;
+    return <p className="border-b border-border bg-surface px-4 py-2 text-caption text-text-3">{hasCapturedDriveOriginal(source) ? "从网盘保存的原件" : "从网盘文件读出的文本"}</p>;
   }
   return null;
 }

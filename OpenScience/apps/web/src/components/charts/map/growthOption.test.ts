@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import { SVGRenderer } from "echarts/renderers";
 import { echarts } from "../echartsBase";
 import "./register";
-import { growthOf, type GrowthEvent, type Lane } from "@/components/memory/overview/memoryOverviewModel";
+import { growthOf, type ChangeEvent, type Lane } from "@/components/memory/overview/memoryOverviewModel";
 import { TEST_PALETTE } from "./palette";
-import { dotTooltip, growthDots, growthOption, laneOffset, LANE_SYMBOLS, weekCellTooltip } from "./growthOption";
+import { dotTooltip, growthDots, growthOption, heatStep, laneOffset, LANE_SYMBOLS, weekCellTooltip } from "./growthOption";
 
 const formatDay = (day: string) => `${Number(day.slice(5, 7))}月${Number(day.slice(8, 10))}日`;
-const event = (lane: Lane, day: string, title: string | null = null): GrowthEvent => ({ lane, day, title, open: null });
-const input = (events: GrowthEvent[], today = "2026-10-12") => ({ growth: growthOf(events, today, formatDay), events, timeZone: "UTC", palette: TEST_PALETTE, formatDay });
+const event = (lane: Lane, day: string, title: string | null = null): ChangeEvent => ({ lane, day, title, open: null, id: `${lane}:${day}`, projectId: null, about: false, state: "current" });
+const input = (events: ChangeEvent[], today = "2026-10-12") => ({ growth: growthOf(events, today), events, timeZone: "UTC", palette: TEST_PALETTE, formatDay });
 const draw = (option: unknown) => {
   echarts.use([SVGRenderer]);
   const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 640, height: 220 });
@@ -24,17 +24,17 @@ describe("the growth strip", () => {
     expect(growthOption(input([]))).toBeNull();
   });
 
-  it("is one dot for each gain in a lane for each kind that has any, a shape for each lane and the brand blue for all", () => {
-    const events = [event("noted", "2026-09-22"), event("noted", "2026-09-30"), event("learned", "2026-10-02", "先给结论"), event("documents", "2026-10-02"), event("received", "2026-10-09")];
+  it("is one dot for each gain in a lane for each kind that has any, a shape for each lane and the brand accent for all", () => {
+    const events = [event("noted", "2026-09-22"), event("noted", "2026-09-30"), event("learned", "2026-10-02", "先给结论"), event("documents", "2026-10-02"), event("received", "2026-10-09"), event("forgotten", "2026-10-10")];
     const option = growthOption(input(events)) as { series: Array<{ type: string; name: string; symbol: string; data: Array<{ value: number[]; event: number }>; itemStyle: { color: string } }>; yAxis: { data: string[]; inverse: boolean }; xAxis: { type: string } };
-    expect(option.yAxis.data).toEqual(["● 记下", "▲ 学会", "■ 资料", "◆ 收下"]);
+    expect(option.yAxis.data).toEqual(["● 记下", "▲ 学会", "■ 资料", "◆ 收下", "✕ 忘记"]);
     expect(option.yAxis.inverse).toBe(true);
     expect(option.xAxis.type).toBe("time");
     expect(option.series.map((series) => [series.name, series.type, series.symbol, series.data.length])).toEqual([
-      ["记下", "scatter", "circle", 2], ["学会", "scatter", "triangle", 1], ["资料", "scatter", "rect", 1], ["收下", "scatter", "diamond", 1],
+      ["记下", "scatter", "circle", 2], ["学会", "scatter", "triangle", 1], ["资料", "scatter", "rect", 1], ["收下", "scatter", "diamond", 1], ["忘记", "scatter", LANE_SYMBOLS.forgotten, 1],
     ]);
     expect(new Set(option.series.map((series) => series.itemStyle.color))).toEqual(new Set([TEST_PALETTE.current]));
-    expect(Object.values(LANE_SYMBOLS)).toEqual(["circle", "triangle", "rect", "diamond"]);
+    expect(Object.values(LANE_SYMBOLS).slice(0, 4)).toEqual(["circle", "triangle", "rect", "diamond"]);
     // Each dot knows the event it is, so a press finds what it opens.
     expect(option.series[1]!.data[0]!.event).toBe(2);
   });
@@ -80,10 +80,10 @@ describe("the growth strip", () => {
     expect(dotTooltip(event("learned", "2026-10-02", "先给结论"), formatDay)).toContain("学会 · 10月2日");
     expect(dotTooltip(event("documents", "2026-10-02"), formatDay)).toContain("放进了一份资料");
     expect(dotTooltip(event("noted", "2026-10-02", "<img src=x onerror=1>"), formatDay)).not.toContain("<img");
-    const week = { start: "2026-09-21", end: "2026-09-27", counts: { noted: 2, learned: 0, documents: 1, received: 0 } };
+    const week = { start: "2026-09-21", end: "2026-09-27", counts: { noted: 2, learned: 0, documents: 1, received: 0, forgotten: 0 } };
     expect(weekCellTooltip(week, formatDay)).toContain("9月21日 ～ 9月27日");
     expect(weekCellTooltip(week, formatDay)).toContain("记下 2 · 资料 1");
-    expect(weekCellTooltip({ ...week, counts: { noted: 0, learned: 0, documents: 0, received: 0 } }, formatDay)).toContain("这一周没有新增");
+    expect(weekCellTooltip({ ...week, counts: { noted: 0, learned: 0, documents: 0, received: 0, forgotten: 0 } }, formatDay)).toContain("这一周没有新增");
   });
 
   it("is drawn by the map's registrations: a scatter or a heatmap that is not registered is silently nothing", () => {
@@ -92,6 +92,32 @@ describe("the growth strip", () => {
     const events = [...Array.from({ length: 31 }, (_unused, index) => event("noted", `2026-09-${String(1 + (index % 28)).padStart(2, "0")}`))];
     const weeks = draw(growthOption(input(events)));
     expect(TEST_PALETTE.heat.some((step) => weeks.includes(step))).toBe(true);
+  });
+
+  it("frames the cells of the week the reader selected", () => {
+    const events = [...Array.from({ length: 31 }, (_unused, index) => event("noted", `2026-09-${String(1 + (index % 28)).padStart(2, "0")}`))];
+    const built = input(events);
+    const week = built.growth.weeks[1]!.start;
+    const plain = draw(growthOption(built));
+    const framed = draw(growthOption({ ...built, selectedWeek: week }));
+    expect(framed).not.toBe(plain);
+    expect(framed).toContain(TEST_PALETTE.text);
+  });
+
+  it("prints a count on the two darkest steps in the light ink, every other count in the body colour", () => {
+    const events = [...Array.from({ length: 20 }, () => event("noted", "2026-09-01")), ...Array.from({ length: 5 }, () => event("noted", "2026-09-15")),
+      ...Array.from({ length: 8 }, () => event("noted", "2026-09-22"))];
+    const built = input(events);
+    expect(built.growth.shape).toBe("weeks");
+    const svg = draw(growthOption(built));
+    const fills = (count: number) => [...svg.matchAll(/<text[^>]*fill="([^"]+)"[^>]*>([^<]+)<\/text>/gu)].filter((match) => match[2] === String(count)).map((match) => match[1]);
+    expect(fills(20)).toEqual([TEST_PALETTE.onHeat]);
+    expect(fills(5)).toEqual([TEST_PALETTE.text]);
+  });
+
+  it("steps a count by its share of the busiest, none being the lightest", () => {
+    expect([0, 1, 5, 10, 20].map((total) => heatStep(total, 20))).toEqual([0, 1, 2, 3, 5]);
+    expect(heatStep(3, 0)).toBe(0);
   });
 
   it("uses no colour but the map's palette", () => {

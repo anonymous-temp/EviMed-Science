@@ -19,6 +19,18 @@ export interface HeadlineProps {
   className?: string;
 }
 
+/**
+ * Component: Headline; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Paragraph of NoteParts with optional identifier.
+ * Variants: Caller classes; no heading-rank variant.
+ * States: Static sentence; numeric links/actions derive from parts.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Sentence retained and wraps; no truncation.
+ * Theme: Section-size semibold text; NoteParts links keep link role.
+ * Responsive: Fluid paragraph follows available width.
+ * Verification: Note.test.tsx and DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Headline({ parts, id, className }: HeadlineProps) {
   return (
     <p data-headline="" id={id} className={cn("text-section font-semibold text-text", className)}>

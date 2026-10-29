@@ -522,7 +522,7 @@ export async function loadAgentRegistry({
       if (parseSkillName(skillText, `${entry.name}/${skillFileName}`) !== mapped.skill) {
         throw registryError(`${entry.name}/${skillFileName} frontmatter name must be "${mapped.skill}".`);
       }
-      const replacement = { manifest: mapped, packageDir, manifestPath, skillPath, skillText, products: productsOf(source) };
+      const replacement = { manifest: Object.freeze({ ...mapped, listed: source.display?.listed !== false }), packageDir, manifestPath, skillPath, skillText, products: productsOf(source) };
       const existingIndex = packages.findIndex((candidate) => candidate.manifest.id === mapped.id);
       if (existingIndex >= 0) packages[existingIndex] = replacement;
       else { ids.add(mapped.id); packages.push(replacement); }

@@ -65,13 +65,14 @@ export function ImportDialog({ onClose, onSaved }: {
       setBusy(false);
     }
   };
-  const save = async () => {
+  const save = async (markSaved: () => void) => {
     if (!offer || busy) return;
     setBusy(true);
     setError(null);
     try {
       const saved = await saveMemoryImport(offer.id, [...kept]);
       toast.success(saved.saved > 0 ? `已交给记忆：${saved.saved} 条，几秒后出现在列表里` : "没有选中的内容，没有记下");
+      markSaved(); setText(""); setBusy(false);
       onSaved();
       onClose();
     } catch (reason) {
@@ -82,7 +83,8 @@ export function ImportDialog({ onClose, onSaved }: {
   const toggle = (id: string, on: boolean) => setKept((current) => { const next = new Set(current); if (on) next.add(id); else next.delete(id); return next; });
 
   return (
-    <FormDialog title="从其他 AI 导入" onClose={onClose} busy={busy}>
+    <FormDialog title="从其他 AI 导入" onClose={onClose} busy={busy} dirty={text.length > 0}>
+      {(_requestClose, markSaved) => <>
       {step === "prompt" && (
         <div className="space-y-3">
           <p className="text-ui text-text">把下面这段话发给你原来用的 AI 助手，请它把记得的关于你的内容列出来。</p>
@@ -125,10 +127,11 @@ export function ImportDialog({ onClose, onSaved }: {
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="text" disabled={busy} onClick={() => setStep("paste")}>返回修改</Button>
-            <Button type="button" loading={busy} disabled={kept.size === 0} onClick={() => void save()}>保存所选</Button>
+            <Button type="button" loading={busy} disabled={kept.size === 0} onClick={() => void save(markSaved)}>保存所选</Button>
           </div>
         </div>
       )}
+      </>}
     </FormDialog>
   );
 }

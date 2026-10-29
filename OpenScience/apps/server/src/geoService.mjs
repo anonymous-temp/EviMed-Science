@@ -1,4 +1,4 @@
-import { freezeGeoPlanBasis, geoPlanFreshness, geoPlanScopeKey, geoPlanDigest, geoPlanCanonicalScope } from "./geoPlanContext.mjs";
+import { geoPlanFreshness, geoPlanScopeKey, geoPlanDigest, geoPlanCanonicalScope } from "./geoPlanContext.mjs";
 import { geoErrorClinicalContext } from "./geoErrors.mjs";
 /**
  * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
@@ -59,6 +59,7 @@ import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tall
 import { geoSourceFromRow, questionGroupFromRow, questionFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { GEO_PROBE_ENGINES } from "./geoProbeQueue.mjs";
+import { GEO_PROBE_TASK_OUTCOMES } from "./geoProbeGateway.mjs";
 import { HttpError } from "./security.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
@@ -2389,7 +2390,13 @@ export class GeoService {
       try { selected = await readGeoSelection(this.store, project, { selectionRef: basis.selection.reference }); } catch { /* historical frozen basis remains readable */ }
     }
     const base = await this.spine.load(project, { answers: false });
-    const groups = basis?.groups ?? (selected ? (await freezeGeoPlanBasis(this.store, project, { selectionRef: selected.selection.reference })).basis.groups : null);
+    // Browsing a selected result needs group identity, not a frozen planning input.
+    // The latter has a deliberate size gate and belongs only to staging a task.
+    const groups = basis?.groups ?? (selected ? (await this.store.query(
+      "SELECT g.id,g.set_version,g.name,g.pool FROM evimed_geo.question_groups g JOIN unnest($2::text[],$3::integer[]) AS selected(id,set_version) ON g.id=selected.id AND g.set_version=selected.set_version WHERE g.geo_project_id=$1 AND g.user_id=$4 ORDER BY g.id",
+      [project.id, [...new Map(selected.questions.map(question => [question.group_id, Number(question.set_version)])).keys()],
+        [...new Map(selected.questions.map(question => [question.group_id, Number(question.set_version)])).values()], project.userId],
+    )).rows.map(group => ({ id: group.id, setVersion: Number(group.set_version), name: group.name, pool: group.pool })) : null);
     const spine = { ...base, strategy, ...(basis ? { targets: basis.targets } : {}),
       ...(groups ? { groups: groups.map(group => ({ ...(base.groups.find(item => item.id === group.id) ?? { ...group,
         questions: (selected?.questions ?? []).filter(question => question.group_id === group.id).map(questionFromRow), weight: null, isControl: false }), aliasIds: [] })), currentOf: new Map(groups.map(group => [group.id, group.id])) } : {}) };
@@ -2732,7 +2739,7 @@ export async function geoReadiness({ config, geo, database }) {
   }
   const warnings = [];
   if (!geo.worker) warnings.push("geo_worker_missing");
-  if (!String(config.geoSocialUrl ?? "").trim()) warnings.push("geo_social_unconfigured");
+  if (!geo.social?.configured) warnings.push("geo_social_unconfigured");
   if (!geoMarketConfigured(config)) warnings.push("geo_market_unconfigured");
   return {
     required: true, enabled: true, audience: config.geoAudience, engines: config.geoEngines,
@@ -2747,7 +2754,7 @@ export async function geoReadiness({ config, geo, database }) {
  * Everything the metrics endpoint shows about the module, read once per scrape.
  * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, valueUpkeep?: { metrics?: () => Record<string, number> } | null,
  *   importDelivery?: { counters?: { imported: number, failed: number } } | null,
- *   measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
+ *   measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number>, probeTotals?: Record<string, number> } | null }} geo
  */
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
@@ -2756,7 +2763,7 @@ export async function geoMetricsSnapshot(geo) {
     const [what, outcome] = key.split("\u0000");
     return { what, outcome, value };
   }), social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
-    cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null,
+    cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null, probeTasks: geo.measureState?.probeTotals ?? null,
     questionBank: geo.questionBank?.metrics?.() ?? null, valueUpkeep: geo.valueUpkeep?.metrics?.() ?? null,
     imports: geo.importDelivery?.counters ? { ...geo.importDelivery.counters } : null };
 }
@@ -2832,6 +2839,14 @@ export function geoMetricFamilies(enabled, snapshot) {
   if (snapshot.inclusion && Object.keys(snapshot.inclusion).length) {
     add("inclusion_total", "What the inclusion-check channel did since this process started (expired: a check still pending at OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS, its job failed so its round can close).", "counter",
       Object.entries(snapshot.inclusion).map(([event, value]) => ({ labels: { event }, value: Number(value) })));
+  }
+  // The probe's tasks (geoProbeGateway.mjs `GEO_PROBE_TASK_OUTCOMES`), the interactive gateway's and the measurement queue's together. An
+  // accepted task is paid for whether or not anyone reads its answer: `accepted` against `completed`, `partial` and `failed` is how many
+  // are still out, `pending` an ask that outlived its tool deadline and was left to be read by its id, `accepted_result_unavailable` a
+  // task whose result could not be established (never submitted again), `resubmit_prevented` a lapsed lease that would have asked again.
+  if (snapshot.probeTasks) {
+    add("probe_tasks_total", "Probe tasks by outcome since this process started: accepted by the host; finished as completed, partial or failed; pending (an interactive ask left to be read later by its id); accepted_result_unavailable (accepted, result never established, never submitted again); resubmit_prevented (a lapsed lease under an accepted task, read instead of asked again); capacity_wait (an engine with no idle slot, nothing asked).", "counter",
+      GEO_PROBE_TASK_OUTCOMES.map((outcome) => ({ labels: { outcome }, value: Number(/** @type {Record<string, number>} */ (snapshot.probeTasks)[outcome] ?? 0) })));
   }
   const social = snapshot.social;
   if (social?.counters) {

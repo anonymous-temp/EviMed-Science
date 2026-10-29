@@ -60,7 +60,9 @@ function isRelease(name) {
  * were cleared by hand instead — by the same hands that then removed release
  * directories this script would have refused to (2026-09-17).
  */
-const IMAGE_REPOS = ["open-science-web", "open-science-runtime", "evimed-runtime-dsh"];
+// `evimed-result-replay:<release>` is rebuilt by every host delta (host-delta-release.sh) when result replay is on; it was not
+// listed, so each release left a 690 MB image behind (seven of them on 2026-10-28, when the host stood at 99%).
+const IMAGE_REPOS = ["open-science-web", "open-science-runtime", "evimed-runtime-dsh", "evimed-result-replay"];
 
 /**
  * Which of the host's image tags belong to a release.

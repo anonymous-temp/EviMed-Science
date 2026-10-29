@@ -14,6 +14,18 @@ import { buttonClasses } from "@/components/ui/Button";
  * It fills the page slot it is given and centres; `role` is the caller's (`alert` for a failure, `status` for a page that is
  * reloading by itself).
  */
+/**
+ * Component: StateScreen; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Centered EmptyState with optional contextual children, action and back link.
+ * Variants: Optional alert/status role and title element.
+ * States: Caller chooses empty/error/status copy; no inferred data state.
+ * Hit area: Back uses secondary button styling; supplied actions own behavior.
+ * Keyboard: Native back link/actions; no automatic focus.
+ * Long content: Action row wraps; children and title remain readable.
+ * Theme: Delegates EmptyState semantics and shared secondary action roles.
+ * Responsive: Full-height flex center; caller must bound content.
+ * Verification: Primitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function StateScreen({ icon, title, titleAs, action, back, role, className, children }: {
   icon: LucideIcon;
   /** The one sentence. */

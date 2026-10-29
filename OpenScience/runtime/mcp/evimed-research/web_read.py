@@ -16,6 +16,14 @@ the result carries one page of it, and `page=N` reads on from the same snapshot
 — the boundaries are a pure function of the text, so page 2 is page 2 of the
 text page 1 came from, not of whatever the site serves a minute later.
 
+A long page does not fill the context on its first read (2026-10-28: a PMC article page came back as ~44,000
+characters in one result). Past `PAGE_CHARS` of text, page 1 carries the first `HEAD_CHARS` of it and an outline of
+the preserved file — every Markdown heading with the line it starts on and how long its section runs — so the run
+reads the sections it needs by line range and checks a quotation with `locate_quote`; `page=2` continues exactly where
+that opening ends and the later pages are `PAGE_CHARS` slices of the rest, so paging through a text returns every
+character once. (Page 2 used to start at `PAGE_CHARS`, so the text between the opening and the first 12,000 characters
+was in no page — 2026-10-28.) The preserved snapshot is unchanged: it is the quotable record, whatever the result shows.
+
 Pages from authorities carry `official: true`. The label is the gateway's,
 from its own table; it says where a page comes from, for an evidence grade,
 and never decides whether the page could be read.
@@ -32,6 +40,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import urllib.error
 import urllib.request
 from collections import OrderedDict
@@ -46,6 +55,10 @@ from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 # enough that reading a 300-page PDF is thirty deliberate calls rather than one
 # that fills the context.
 PAGE_CHARS = 12_000
+# What page 1 of a text longer than PAGE_CHARS shows of it (the rest is in the preserved file, found by the outline).
+HEAD_CHARS = 6_000
+# Headings listed in that outline: a long document's table of contents, not its every subheading.
+MAX_OUTLINE_ENTRIES = 60
 # A list page's links are how a run reaches the notice it wants; forty is a
 # page of a regulator's list, not a portal's whole navigation.
 MAX_LINKS = 40
@@ -162,6 +175,56 @@ def pages_of(text: str, size: int = PAGE_CHARS) -> list[str]:
     return pages
 
 
+def reading_pages(text: str) -> list[str]:
+    """The pages `page=N` returns. A text of at most `PAGE_CHARS` is one page. A longer one opens with its head
+    (`head_of`: what page 1 shows) and continues from the character after it in slices of `PAGE_CHARS`, so the pages
+    are the text with nothing between them missing. A pure function of the text, like `pages_of`."""
+    if len(text) <= PAGE_CHARS:
+        return pages_of(text)
+    head = head_of(text)
+    return [head, *pages_of(text[len(head):].lstrip("\n"))]
+
+
+def head_of(text: str, size: int = HEAD_CHARS) -> str:
+    """The first `size` characters of `text`, cut at the last paragraph boundary inside them (else the last line
+    boundary, else hard); a boundary in the first half would leave a stub, so it does not count. Text that fits
+    is returned whole."""
+    if len(text) <= size:
+        return text
+    for separator in ("\n\n", "\n"):
+        cut = text.rfind(separator, 0, size)
+        if cut >= size // 2:
+            return text[:cut]
+    return text[:size]
+
+
+_HEADING = re.compile(r"^(#{1,4})\s+(.+?)\s*$")
+
+
+def _headings(lines: list[str]) -> list[tuple[int, int, str]]:
+    """`(line index, level, title)` of every Markdown heading, levels 1-4."""
+    found = []
+    for index, line in enumerate(lines):
+        match = _HEADING.match(line)
+        if match:
+            found.append((index, len(match.group(1)), match.group(2)))
+    return found
+
+
+def _outline(lines: list[str]) -> list[dict]:
+    """The headings of the preserved file as a reading map: where each starts (1-based line, what `read` takes as
+    its offset), how many lines and characters its section runs to the next heading. Capped at MAX_OUTLINE_ENTRIES."""
+    headings = _headings(lines)
+    outline = []
+    for position, (index, level, title) in enumerate(headings[:MAX_OUTLINE_ENTRIES]):
+        end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
+        outline.append({
+            "heading": title[:120], "level": level, "line": index + 1, "lines": end - index,
+            "characters": sum(len(line) + 1 for line in lines[index:end]),
+        })
+    return outline
+
+
 def _snapshot_markdown(receipt: dict, text: str) -> bytes:
     """The preserved page. Deterministic — no retrieval time — so reading the
     same bytes again reuses the same capture, as `official_page_fetch` did."""
@@ -206,10 +269,15 @@ def _preserve(receipt: dict, text: str) -> dict:
     except ImmutableCaptureError as error:
         raise WebReadError("web_read_output_invalid", str(error)) from error
     relative = paths["page.md"]
+    file_lines = markdown.decode("utf-8").split("\n")
     return {
         "sourceId": source_id,
         "markdownPath": relative,
         "markdownSha256": hashlib.sha256(markdown).hexdigest(),
+        # The reading map of the file just written, for a long page's first result.
+        "outline": _outline(file_lines),
+        "outlineHeadings": len(_headings(file_lines)),
+        "fileLines": len(file_lines),
     }
 
 
@@ -240,7 +308,7 @@ def read(arguments: dict) -> dict:
             text = payload["text"]
             snapshot = {
                 "receipt": receipt,
-                "pages": pages_of(text),
+                "pages": reading_pages(text),
                 "characters": len(text),
                 "links": [
                     {"text": str(link.get("text") or "")[:160], "url": str(link.get("url") or "")}
@@ -276,6 +344,13 @@ def read(arguments: dict) -> dict:
             "nextPage": page + 1 if page < total else None,
             "content": snapshot["pages"][page - 1],
         }
+        # A long text's first page is its opening and the file's outline, not 12,000 characters of it (`reading_pages`).
+        long_text = page == 1 and snapshot["characters"] > PAGE_CHARS
+        if long_text:
+            data["outline"] = snapshot["outline"]
+            data["fileLines"] = snapshot["fileLines"]
+            if snapshot["outlineHeadings"] > len(snapshot["outline"]):
+                data["outlineHeadings"] = snapshot["outlineHeadings"]
         if page == 1 and snapshot["links"]:
             data["links"] = snapshot["links"]
         # Exactly the provenance fields the server's ToolResult contract admits
@@ -301,10 +376,19 @@ def read(arguments: dict) -> dict:
             "sources": [source],
             "artifacts": [snapshot["markdownPath"]],
         }
+        if long_text:
+            result["summary"] += " The text is %d characters long: this result shows the first %d of them and an outline of the preserved file." % (
+                snapshot["characters"], len(data["content"]),
+            )
+            result["next_actions"] = [
+                "Read the sections you need from %s with read (offset and limit from the outline's line numbers) and check a quotation with locate_quote, "
+                "rather than paging through the whole text; page=2 continues exactly where this opening ends, in slices of up to %d characters."
+                % (snapshot["markdownPath"], PAGE_CHARS),
+            ]
         if snapshot["notice"]:
             result["status"] = "warning"
             result["warnings"] = [snapshot["notice"]]
-            result["next_actions"] = ["Prefer another source for anything the page may have left out."]
+            result["next_actions"] = [*result.get("next_actions", []), "Prefer another source for anything the page may have left out."]
         if receipt.get("via") == "deepseek-fetch":
             result["warnings"] = [*result.get("warnings", []), RENDITION_WARNING]
         return result

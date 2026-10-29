@@ -20,7 +20,7 @@ const attempt = { contextRef: 'gpc_previous', sessionId: 'original-session', req
 const page = (items: GeoSignalDetail[]): GeoSignalPage => ({ items, total: items.length, counts: { pending: items.length, started: 0, processing: 0, completed: 0, ignored: 0, failed_recoverable: 0 }, actionable: items.length, nextCursor: null });
 const draw = (path = '/app/geo/geo?signal=gs_exact', value = project) => render(<MemoryRouter initialEntries={[path]}><GeoSignalsWorkbench geoId="geo" project={value as never} /></MemoryRouter>);
 beforeEach(() => {
-  vi.clearAllMocks(); api.members.mockImplementation(async(_geo,_signal,input)=>({side:input.side,basisDigest:input.expectedBasisDigest,total:0,items:[],more:false,nextOffset:null})); api.moduleSession.mockImplementation(async(geoId,target)=>({projectId:'control',sessionId:target.sessionId??'primary-session',scope:{kind:'geo',geoProjectId:geoId,sessionId:target.sessionId??'primary-session'}})); api.detail.mockResolvedValue(signal()); api.list.mockResolvedValue(page([signal()])); api.project.mockResolvedValue({ projectId: 'control', sessionId: 'fresh-session' });
+  vi.clearAllMocks(); api.members.mockImplementation(async(_geo,_signal,input)=>({side:input.side,basisDigest:input.expectedBasisDigest,total:0,items:[],more:false,nextOffset:null})); api.moduleSession.mockImplementation(async(geoId,target)=>{const sessionId=target.sessionId??(await api.project(geoId)).sessionId??'primary-session';return {projectId:'control',sessionId,scope:{kind:'geo',geoProjectId:geoId,sessionId}};}); api.detail.mockResolvedValue(signal()); api.list.mockResolvedValue(page([signal()])); api.project.mockResolvedValue({ projectId: 'control', sessionId: 'fresh-session' });
   api.stage.mockImplementation(async (_geo, body) => ({ referenceId: 'gpc_exact', sessionId: body.sessionId, draft: 'Review selected preserved versions.', state: 'staged' })); api.open.mockResolvedValue(true);
 });
 
@@ -109,13 +109,24 @@ it('overview preview reads full actionable scope and history opens through the s
   expect(api.list).toHaveBeenCalledWith('geo', { limit: 20 });
 });
 
-it('keeps history reachable after the final actionable item was ignored', async () => {
-  api.list.mockResolvedValue({ ...page([]), counts: { ...page([]).counts, ignored: 1 } });
-  draw('/app/geo/geo');
-  fireEvent.click(await screen.findByRole('button', { name: '查看全部发现' }));
-  expect(await screen.findByRole('combobox', { name: '处理状态' })).toBeTruthy();
+it('keeps ignored history as a compact summary until explicitly expanded and filtered', async () => {
+  const historical=signal({state:'ignored',disposition:'ignored',actionable:false,title:'Historical ignored evidence'});
+  const empty={...page([]),counts:{...page([]).counts,ignored:1}};
+  api.list.mockImplementation(async (_geo,query)=>query.actionable?empty:query.state==='pending'?empty:{...page([historical]),actionable:0,counts:empty.counts});
+  const mounted=draw('/app/geo/geo');
+  expect(await screen.findByText('当前没有待处理发现 · 已保留 1 条发现记录')).toBeVisible();
+  expect(mounted.container.querySelector('[data-geo-signals-summary]')).toBeInTheDocument();
+  expect(screen.queryByRole('heading',{name:'发现与处理'})).toBeNull();
+  expect(screen.queryByText('当前条件下没有记录。')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'查看全部发现'}));
+  expect(await screen.findByText('Historical ignored evidence')).toBeVisible();
+  fireEvent.change(screen.getByRole('combobox',{name:'处理状态'}),{target:{value:'ignored'}});
+  await waitFor(()=>expect(api.list).toHaveBeenLastCalledWith('geo',{limit:20,state:'ignored'}));
+  expect(await screen.findByText('Historical ignored evidence')).toBeVisible();
+  fireEvent.change(screen.getByRole('combobox',{name:'处理状态'}),{target:{value:'pending'}});
+  expect(await screen.findByText('当前条件下没有记录。')).toBeVisible();
+  expect(screen.getByRole('combobox',{name:'处理状态'})).toHaveValue('pending');
 });
-
 it('resolves the first exact module primary before staging a signal in a same-id personal collision',async()=>{
  api.project.mockResolvedValue({projectId:'control',sessionId:null});
  draw('/app/geo/geo?signal=gs_exact',{...project,sessionId:null} as never);
@@ -157,4 +168,28 @@ it('shows immutable group values, denominators, exact side analysis and uncertai
   fireEvent.click(screen.getByRole('button', { name: '在对话中分析' }));
   await waitFor(() => expect(api.stage).toHaveBeenCalledWith('geo', expect.objectContaining({ mode: 'signal', intent: 'analyse', focusRefs: [] })));
   expect(api.open).toHaveBeenCalledWith(expect.objectContaining({ geoPlanContext: { referenceId: 'gpc_exact' } }), 'Review selected preserved versions.');
+});
+
+
+it('keeps a failed independent signal read retryable instead of showing a compact history summary',async()=>{
+ api.list.mockRejectedValueOnce(new Error('Signal read unavailable')).mockResolvedValueOnce({...page([]),counts:{...page([]).counts,ignored:1}});
+ const mounted=draw('/app/geo/geo');
+ fireEvent.click(await screen.findByRole('button',{name:'重试'}));
+ expect(await screen.findByText('当前没有待处理发现 · 已保留 1 条发现记录')).toBeVisible();
+ expect(mounted.container.querySelector('[data-geo-signals-summary]')).toBeInTheDocument();
+});
+
+it.each([false,true])('keeps a zero-current-stage preview compact when other steps have actionable work, with stage history=%s',async hasStageHistory=>{
+ const currentHistory=signal({id:'stage-history',title:'Question-stage historical finding',step:'questions',affectedSteps:['questions'],state:'ignored',disposition:'ignored',actionable:false});
+ const globalCounts={...page([]).counts,pending:2,ignored:1};
+ api.list.mockImplementation(async (_geo,query)=>query.actionable?{...page([]),actionable:2,counts:globalCounts}:{...page(hasStageHistory?[currentHistory]:[]),actionable:2,counts:globalCounts});
+ const mounted=render(<MemoryRouter><GeoSignalsWorkbench geoId="geo" project={project as never} step="questions"/></MemoryRouter>);
+ expect(await screen.findByText('本阶段暂无待处理发现')).toBeVisible();
+ expect(mounted.container.querySelector('[data-geo-signals-summary]')).toBeInTheDocument();
+ expect(screen.queryByText(/已保留 3 条/)).toBeNull();expect(screen.queryByText('当前条件下没有记录。')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'查看本阶段发现'}));
+ await waitFor(()=>expect(api.list).toHaveBeenLastCalledWith('geo',{limit:20,step:'questions'}));
+ if(hasStageHistory)expect(await screen.findByText('Question-stage historical finding')).toBeVisible();
+ else expect(await screen.findByText('当前条件下没有记录。')).toBeVisible();
+ expect(screen.getByRole('combobox',{name:'处理状态'})).toBeVisible();
 });

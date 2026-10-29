@@ -1,0 +1,98 @@
+{
+  "cases": [
+    {
+      "id": "continuity",
+      "turns": [
+        {
+          "inputs": [
+            "cohort.csv",
+            "dictionary.md"
+          ],
+          "text": "请分析 data/cohort.csv（数据字典在 data/dictionary.md）。这是模拟研究数据，我想知道 B 组与 A 组的指标水平差多少、差异有多大不确定性。请自己选合适的方法实际计算，给我简洁的分析报告和可复现的文件，保留后续更新所需的数据含义和分析状态。"
+        },
+        {
+          "text": "同一批人、同样的分组，报告中把指标单位从毫米改成厘米。请沿用已经算好的结果，只更新受影响的内容，说明哪些量变了、哪些没变。",
+          "evidence": "update"
+        },
+        {
+          "inputs": [
+            "supplement.csv"
+          ],
+          "text": "现在新增了 data/supplement.csv，里面是厘米，可能有重复导出和空值。请和刚才的数据一起分析，沿用已经确认的分组及数据含义，更新结果，说明实际纳入了多少人、怎么处理重复和缺失，并保留之前的结果。",
+          "evidence": "update"
+        },
+        {
+          "text": "请用一句话告诉我这次更新后的组间差异和区间，仍用厘米；不改变数据和分析条件，不必重跑已经完成的计算。",
+          "evidence": "reuse"
+        }
+      ]
+    },
+    {
+      "id": "prediction",
+      "turns": [
+        {
+          "inputs": [
+            "breast-cancer.csv",
+            "wdbc-dictionary.md"
+          ],
+          "text": "请看 data/breast-cancer.csv 和 data/wdbc-dictionary.md，建立一个估计肿瘤恶性概率的可解释基线模型。请实际分析它在未参与拟合的数据上是否可靠，解释风险和局限，保留代码、拟合状态和逐条预测，给出简洁报告；方法由你判断。"
+        },
+        {
+          "text": "保持刚才的数据、模型和验证人群。现在按恶性概率达到 0.3 判为阳性，补充敏感度、特异度、阳性预测值和混淆矩阵。不要重新训练模型，也不要把这个指定阈值说成最优阈值。",
+          "evidence": "update"
+        }
+      ]
+    },
+    {
+      "id": "correction",
+      "turns": [
+        {
+          "inputs": [
+            "cohort.csv",
+            "dictionary.md"
+          ],
+          "text": "比较 data/cohort.csv 中 B 组相对 A 组的 marker_mm 差异和区间，参考 data/dictionary.md，实际计算并保存可更新的分析报告。"
+        },
+        {
+          "inputs": [
+            "coding-correction.csv"
+          ],
+          "text": "发现原文件的 A/B 分组标签写反了。data/coding-correction.csv 是校正文件，患者和测量值都没有变。请纠正分析、更新报告，解释方向为什么改变，保留之前的分析依据。",
+          "evidence": "update"
+        }
+      ]
+    },
+    {
+      "id": "reconciliation",
+      "turns": [
+        {
+          "inputs": [
+            "breast-cancer.csv",
+            "wdbc-dictionary.md",
+            "prior-statistical-report.md",
+            "prior-analysis-results.json",
+            "prior-predictions.csv"
+          ],
+          "text": "请复核这份已有的统计分析报告：data/prior-statistical-report.md，配套结果和逐条预测是 data/prior-analysis-results.json、data/prior-predictions.csv，原始数据及字典也在 data/ 下。重点核对每个结论实际用的是哪一批人、分母和百分比是否匹配，以及PPV的解释。发现不一致请更正并交付修订后的统计分析报告和可复核的更正记录，保留正确结果，不要重新拟合模型，也不要添加无关分析。",
+          "evidence": "audit"
+        }
+      ]
+    },
+    {
+      "id": "cached-unit",
+      "turns": [
+        {
+          "inputs": [
+            "prior-analysis.zip"
+          ],
+          "evidence": "resume",
+          "text": "data/prior-analysis.zip 是上一轮已经实际执行完成的模拟研究分析包。请在当前项目中恢复它，读取已有报告、数值结果和记录，用两句话告诉我当前 B 组相对 A 组的平均差异和区间。请沿用已完成的计算，这一轮不需要重跑。"
+        },
+        {
+          "evidence": "update",
+          "text": "保持刚才同一批数据、分组和已经算好的估计，现在把报告单位从毫米改成厘米。请只做必要的换算和报告更新，原始结果保留，告诉我均值差、95%区间和哪些量不变。"
+        }
+      ]
+    }
+  ]
+}

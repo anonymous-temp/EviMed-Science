@@ -322,8 +322,10 @@ export class EvolutionMaintenance {
     await this.callbacks.proposeReview?.({ category: 'tool-retire', subjectId: reviewId, materialVersion: tool.payload.artifactDigest ?? 1, directional: true,
       attemptedPaths: ['sequential-harm-test', 'distinct-account-evidence'], title: '复核被多位研究者纠正的科研工具',
       body: `${harm.runs} 位研究者首次使用该工具得到的结果中，有 ${harm.bad} 位作了纠正，高于平常的纠正水平。这是关联，不说明问题由工具造成。软退役后新研究不再使用它，历史结果和版本都保留，之后可以恢复。`,
-      // The conservative option of a harm alarm is the protective one: a soft retirement the same decision reverses (`restoreReview`).
-      options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire', conservative: 'retire' });
+      // Under the serving cutover the conservative option of a harm alarm is the protective one: a soft retirement the same decision reverses
+      // (`restoreReview`). Without it the card names `keep`, as it always did.
+      options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire',
+      conservative: this.service.config.evolutionServingOnly === true ? 'retire' : 'keep' });
     return this.retried(async () => {
       const current = await this.service.get(tool.id);
       if (current.payload.usage?.harm?.reviewId === reviewId) return current;

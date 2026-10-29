@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-26",
+  "scope": "candidate-local real DeepSeek + DSH + control-plane, public/synthetic data; not deployed-image or production acceptance",
+  "kernelVersion": "0.2.1-rc.2",
+  "observedModel": "deepseek-flash",
+  "provider": "deepseek-official",
+  "cases": [
+    {
+      "case": "continuity",
+      "captureDirectory": "continuity-1793022976134",
+      "executionComplete": true,
+      "rawAgentEvidenceComplete": true,
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "turns": [
+        {
+          "index": 0,
+          "runId": "run_d8cd39334c2656b1b0f49193e5d4e556",
+          "route": "statistical-analysis",
+          "durationMs": 369873,
+          "toolCalls": 63,
+          "status": "succeeded",
+          "captureComplete": true
+        },
+        {
+          "index": 1,
+          "runId": "run_862e12f39c46ba49b8201afbe0ee28cf",
+          "route": "open-domain-answer",
+          "durationMs": 582146,
+          "toolCalls": 53,
+          "status": "succeeded",
+          "captureComplete": true
+        },
+        {
+          "index": 2,
+          "runId": "run_b9cbe0036e64b50e441c972b8db5fedb",
+          "route": "open-domain-answer",
+          "durationMs": 816445,
+          "toolCalls": 92,
+          "status": "succeeded",
+          "captureComplete": true
+        },
+        {
+          "index": 3,
+          "runId": "run_f03b977688f9655c1e4260483270d486",
+          "route": "open-domain-answer",
+          "durationMs": 4081,
+          "toolCalls": 1,
+          "status": "succeeded",
+          "captureComplete": true
+        }
+      ],
+      "numericalPassed": true,
+      "boundNumericalValues": 36,
+      "stateVerdict": null
+    },
+    {
+      "case": "correction",
+      "captureDirectory": "correction-1793022976134",
+      "executionComplete": true,
+      "rawAgentEvidenceComplete": true,
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "turns": [
+        {
+          "index": 0,
+          "runId": "run_40025278735f374c634139d4cf3f84e7",
+          "route": "statistical-analysis",
+          "durationMs": 506001,
+          "toolCalls": 110,
+          "status": "succeeded",
+          "captureComplete": true
+        },
+        {
+          "index": 1,
+          "runId": "run_72b2d7477820c7233b881ef72fb7d7d0",
+          "route": "open-domain-answer",
+          "durationMs": 432681,
+          "toolCalls": 45,
+          "status": "succeeded",
+          "captureComplete": true
+        }
+      ],
+      "numericalPassed": true,
+      "boundNumericalValues": 16,
+      "stateVerdict": null
+    },
+    {
+      "case": "prediction",
+      "captureDirectory": "prediction-1793022976140",
+      "executionComplete": true,
+      "rawAgentEvidenceComplete": false,
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "turns": [
+        {
+          "index": 0,
+          "runId": "run_95158eab7001571a5199394ba97ea1a7",
+          "route": "statistical-analysis",
+          "durationMs": 579484,
+          "toolCalls": 72,
+          "status": "succeeded",
+          "captureComplete": true
+        },
+        {
+          "index": 1,
+          "runId": "run_e791a2981dcc859dc2014838930f8239",
+          "route": "open-domain-answer",
+          "durationMs": 120212,
+          "toolCalls": 18,
+          "status": "succeeded",
+          "captureComplete": true
+        }
+      ],
+      "numericalPassed": true,
+      "boundNumericalValues": 14,
+      "stateVerdict": "prediction/state-verdict.json"
+    },
+    {
+      "case": "reconciliation",
+      "captureDirectory": "reconciliation-1793025058614",
+      "executionComplete": true,
+      "rawAgentEvidenceComplete": false,
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "turns": [
+        {
+          "index": 0,
+          "runId": "run_293c79e059cb26660fab56651ffff365",
+          "route": "open-domain-answer",
+          "durationMs": 658948,
+          "toolCalls": 65,
+          "status": "succeeded",
+          "captureComplete": true
+        }
+      ],
+      "numericalPassed": true,
+      "boundNumericalValues": 8,
+      "stateVerdict": null
+    },
+    {
+      "case": "cached-unit",
+      "captureDirectory": "cached-unit-1793025711310",
+      "executionComplete": true,
+      "rawAgentEvidenceComplete": true,
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "turns": [
+        {
+          "index": 0,
+          "runId": "run_16b048ddd28d9126ad74e121478820bc",
+          "route": "open-domain-answer",
+          "durationMs": 37615,
+          "toolCalls": 11,
+          "status": "succeeded",
+          "captureComplete": true
+        },
+        {
+          "index": 1,
+          "runId": "run_b92df07740ae9359f53f2438dbf876c1",
+          "route": "open-domain-answer",
+          "durationMs": 179430,
+          "toolCalls": 17,
+          "status": "succeeded",
+          "captureComplete": true
+        }
+      ],
+      "numericalPassed": true,
+      "boundNumericalValues": 9,
+      "stateVerdict": "cached-unit/state-verdict.json"
+    }
+  ],
+  "executedTurns": 11,
+  "boundNumericalValues": 83,
+  "archive": {
+    "path": ".evimed-local/acceptance/statistical-analysis-20261026/captured-workspaces.tar.gz",
+    "location": "the maintainer's local evidence store (gitignored); not in this repository",
+    "sha256": "3392d211630aafde50cd67a3aee07d5dfc7845456687f2af3563a21c1026780a",
+    "bytes": 2397838
+  },
+  "sourceDigests": {
+    "capabilities/statistical-analysis/SKILL.md": "dd79b61fd2ee87e83391f68989d01ff6e2ebc8dc4ae64aa9b99d0cd3cf1c32ad",
+    "capabilities/statistical-analysis/scripts/analysis_session.py": "c7176dc4368023a9928ec94f1b535766b0b6288d2fc7f425ac132590b37800e0",
+    "capabilities/statistical-analysis/scripts/analysis_checks.py": "8ba258cddfd71259f5022c8e129636ff7e0a12ed95324f33868aca03c8a1cd76",
+    "capabilities/statistical-analysis/scripts/run_analysis.py": "ec1666014d8a9bcb4cb223653977601d2449f41fb485ceca0334e9fb634ff321",
+    "evals/statistical-analysis/live/driver.mjs": "f3df759dbd66ac2257453c0a59656907bd161b962d467fcc5907268a7ffc8b85",
+    "evals/statistical-analysis/live/judge.py": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
+    "evals/statistical-analysis/live/cases.json": "c26e4ba12a93464f40fb4da63ec856b7dc3802e34c5a3aaaa7e5fed8069c0677"
+  },
+  "qualifications": [
+    "Initial continuity unit follow-up produced correct values but unnecessarily ran the full pipeline; it is NOT accepted as selective recomputation. The later cached-unit case independently verifies archive originals and numerical-state hashes/mtimes, with no original pipeline execution.",
+    "Initial prediction reply/report mixed whole-data and held-out event proportions. The later reconciliation case correctly restores 212/569, 148/398 and 64/171 scopes; the original defect remains preserved.",
+    "Raw structural-driver refusals for an open-ended operating-point filename and natural audit routing were evaluator false negatives. Raw records remain unchanged; a separate structural reassessment uses the corrected driver. Resume remains pending in the driver until independent state verification.",
+    "The original 8 candidate turns preceded final role-column diagnostics and the stricter reuse/report-scope wording. Final cached-unit and reconciliation turns test the targeted behavior; all final source checks are covered by deterministic tests and independent artifact replay.",
+    "Numerical comparisons use declared display rounding bounds. Cached-unit conversion carries the earlier six-decimal mm precision plus six-decimal cm display precision; its initial overstrict rounding verdict is retained in the archive.",
+    "Method breadth/latency and broader real clinical longitudinal/multicentre datasets remain further evaluation topics. No new advanced prediction algorithm was introduced.",
+    "The raw cached-unit run predates the final driver separation of structural and reuse verification. Its acceptance relies on cached-unit/state-verdict.json, not the old raw structural flag."
+  ],
+  "verification": {
+    "pythonTests": 179,
+    "liveDriverTests": 11,
+    "statisticalCapabilityAndDomainContracts": 15,
+    "deploymentConfigurationContracts": {
+      "macOSPassed": 75,
+      "gnuBashSpecificTestPassedInLinux": 1
+    },
+    "credentialScan": {
+      "textArtifacts": 334,
+      "matches": 0
+    },
+    "productionDeployment": false
+  }
+}

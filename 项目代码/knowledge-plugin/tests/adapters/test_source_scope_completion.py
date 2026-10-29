@@ -23,6 +23,17 @@ LATER_DISABLED = {source_id for source_id, override in json.loads((ROOT / 'regis
                   if isinstance(override, dict) and override.get('enabled') is False and override.get('disabled_reason')
                   and any(key.startswith('_why_disabled_') and key.removeprefix('_why_disabled_') > '20260930' for key in override)}
 
+# Sample titles of the 2026-09-30 captures that the list reader has read differently since 2026-10-26 (c5-sources): a list marker the
+# page puts in front of the link text is not part of the title (smpaa-joint-procurement), and a title the page cut with "..." is
+# read whole from the link's title attribute (pharmnet-news). Everything else is read as it was.
+READ_SINCE_20261026 = {
+    '套现2.94亿美元！复星医药减...': '套现2.94亿美元！复星医药减持Gland',
+    '· 关于复方氨基酸注射剂相关亚型价格确认工作的公告 2026-09-11': '关于复方氨基酸注射剂相关亚型价格确认工作的公告 2026-09-11',
+    '· 第12批国家组织药品集中带量采购公告（第2号） 2026-07-22': '第12批国家组织药品集中带量采购公告（第2号） 2026-07-22',
+    '· 关于取消2个国家组织药品集采中选药品中选资格并将相关企业列入违规名单的公告 2026-04-03':
+        '关于取消2个国家组织药品集采中选药品中选资格并将相关企业列入违规名单的公告 2026-04-03',
+}
+
 
 @pytest.mark.parametrize('record', ADMITTED, ids=lambda record: record['id'])
 def test_admitted_source_replays_real_entries_from_its_protected_capture(record):
@@ -42,7 +53,7 @@ def test_admitted_source_replays_real_entries_from_its_protected_capture(record)
     assert sum(entry.published_at is not None for entry in entries) == record['dated']
     for sample in record['samples']:
         entry = entries[sample['index']]
-        assert entry.title == sample['title']
+        assert entry.title == READ_SINCE_20261026.get(sample['title'], sample['title'])
         assert entry.url == sample['url']
         assert (entry.published_at.isoformat() if entry.published_at else None) == sample['date']
         assert entry.summary == sample['summary']

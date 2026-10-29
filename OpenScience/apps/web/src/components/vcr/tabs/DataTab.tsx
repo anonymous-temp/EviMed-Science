@@ -1,3 +1,4 @@
+import { VcrFollowupHistory } from "../VcrFollowupHistory";
 import { VcrReferenceWorkspace } from "../VcrReferenceSearch";
 import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
 import { useRef, useState } from "react";
@@ -24,7 +25,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { MasterDetail } from "@/components/ui/MasterDetail";
 import { Section } from "@/components/ui/Section";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Radio } from "@/components/ui/Radio";
 import { Tag } from "@/components/ui/Tag";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { VcrKnowledgeSection } from "../VcrKnowledge";
@@ -114,6 +115,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       onChanged={() => onStudyChanged?.()}
     />
   );
+  const history = study.abilities.includes("read_patient_level") ? <VcrFollowupHistory studyId={studyId} canExport={study.abilities.includes("export")} /> : null;
   const cards = data.assumptions.length > 0;
   const keyCards = data.assumptions.filter((assumption) => matches(assumption, "key")).length;
   // The filter only means something while some cards are key and some are not.
@@ -137,11 +139,12 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   if (!cards && data.precedents.length === 0) {
     return (
       <div className="flex flex-col gap-6">
+        {history}
         {defined ? <DefinitionCard study={study} /> : null}
         {defined ? pack : null}
         <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
         <VcrRegistryCoverage sources={data.registryCoverage} />
-        {defined ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
+        {defined || study.question?.trim() ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
       </div>
     );
   }
@@ -169,6 +172,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   return (
     <div className="flex flex-col gap-6">
       {headline.length > 0 && <Headline parts={headline} />}
+      {history}
       <DefinitionCard study={study} />
       {pack}
       <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
@@ -555,13 +559,12 @@ function SignCard({ studyId, assumption, kinds, onClose, onSigned }: {
       onSubmit={(event) => { event.preventDefault(); sign(); }}
     >
       {kinds.length > 1 && (
-        <SegmentedControl
-          aria-label="复核类型"
-          value={kind}
-          onChange={setKind}
-          options={kinds.map((value) => ({ value, label: reviewKindLabel(value) }))}
-          className="self-start"
-        />
+        // The kind of review is a field of this form, not a view of the page: one of the kinds the reader holds.
+        <fieldset role="radiogroup" aria-label="复核类型" className="flex min-w-0 flex-wrap gap-x-4">
+          {kinds.map((value) => (
+            <Radio key={value} name="vcr-review-kind" label={reviewKindLabel(value)} value={value} checked={kind === value} disabled={busy} onChange={() => setKind(value)} />
+          ))}
+        </fieldset>
       )}
       <Input label="备注" value={note} onChange={(event) => setNote(event.target.value)} />
       <div className="flex justify-end gap-2">

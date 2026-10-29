@@ -204,8 +204,10 @@ test("sign-in warms the project whose runtime was used last, or the default one 
   }
 });
 
-test("the knowledge base and the personal library reach a Docker runtime read-only, and only where they belong", async (t) => {
-  const { buildRuntimeLaunchPlan, RUNTIME_KNOWLEDGE_BASE_DIR, RUNTIME_LIBRARY_DIR, personalLibraryDir } = await import("../src/runtimeManager.mjs");
+test("the knowledge base and the project's own view of the personal library reach a Docker runtime read-only, and only where they belong", async (t) => {
+  const { buildRuntimeLaunchPlan, RUNTIME_KNOWLEDGE_BASE_DIR, RUNTIME_LIBRARY_DIR } = await import("../src/runtimeManager.mjs");
+  const { projectLibraryViewDir } = await import("../src/libraryScope.mjs");
+  const viewOf = (/** @type {any} */ config, /** @type {string} */ user, /** @type {string} */ project) => projectLibraryViewDir(config, user, project);
   const { symlink } = await import("node:fs/promises");
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "rt-views-"));
   t.after(() => rm(dataDir, { recursive: true, force: true }));
@@ -230,11 +232,30 @@ test("the knowledge base and the personal library reach a Docker runtime read-on
   assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)), false);
 
   await mkdir(path.join(baseDir, "knowledge-base"), { recursive: true });
-  await mkdir(personalLibraryDir(docker, "alice"), { recursive: true });
+  // The account's own library directory is the master the projects' views are made from; it is there and is never what is mounted.
+  await mkdir(path.join(dataDir, "users", "alice", "library"), { recursive: true });
+  plan = buildRuntimeLaunchPlan(docker, base, 4096);
+  assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)), false, "the account's library alone mounts nothing");
+  await mkdir(viewOf(docker, "alice", "paper1"), { recursive: true });
   plan = buildRuntimeLaunchPlan(docker, base, 4096);
   assert.ok(mounts(plan).includes(`type=bind,src=${path.join(baseDir, "knowledge-base")},dst=${RUNTIME_KNOWLEDGE_BASE_DIR},readonly`));
-  assert.ok(mounts(plan).includes(`type=bind,src=${path.join(dataDir, "users", "alice", "library")},dst=${RUNTIME_LIBRARY_DIR},readonly`));
+  assert.ok(mounts(plan).includes(`type=bind,src=${path.join(dataDir, "users", "alice", "library-views", "paper1")},dst=${RUNTIME_LIBRARY_DIR},readonly`));
+  assert.equal(mounts(plan).some((mount) => mount.includes(`src=${path.join(dataDir, "users", "alice", "library")},`)), false, "never the account folder");
+  // Another project of the same account mounts its own view, never this one's.
+  const sibling = { ...base, id: "paper2", rootDir: path.join(dataDir, "users", "alice", "projects", "paper2") };
+  sibling.baseDir = sibling.workspaceDir = path.join(sibling.rootDir, "workspace");
+  sibling.runtimeDir = path.join(sibling.rootDir, "runtime");
+  plan = buildRuntimeLaunchPlan(docker, sibling, 4096);
+  assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)), false, "a project with no view mounts no library");
+  await mkdir(viewOf(docker, "alice", "paper2"), { recursive: true });
+  plan = buildRuntimeLaunchPlan(docker, sibling, 4096);
+  assert.ok(mounts(plan).includes(`type=bind,src=${viewOf(docker, "alice", "paper2")},dst=${RUNTIME_LIBRARY_DIR},readonly`));
+  assert.equal(mounts(plan).some((mount) => mount.includes(viewOf(docker, "alice", "paper1"))), false);
+  // A shared project context never gets a library.
+  const { readOnlyWorkspaceViews } = await import("../src/runtimeManager.mjs");
+  assert.equal(readOnlyWorkspaceViews(docker, base, { projectOnly: true }).library, null);
   // Nested after the workspace mount, or the workspace would cover them.
+  plan = buildRuntimeLaunchPlan(docker, base, 4096);
   const order = mounts(plan);
   assert.ok(order.findIndex((mount) => mount.endsWith("dst=/workspace")) < order.findIndex((mount) => mount.includes(RUNTIME_KNOWLEDGE_BASE_DIR)));
 
@@ -248,23 +269,23 @@ test("the knowledge base and the personal library reach a Docker runtime read-on
   await mkdir(scratch.workspaceDir, { recursive: true });
   plan = buildRuntimeLaunchPlan(docker, scratch, 4096);
   assert.ok(mounts(plan).includes(`type=bind,src=${path.join(baseDir, "knowledge-base")},dst=${RUNTIME_KNOWLEDGE_BASE_DIR},readonly`));
-  assert.ok(mounts(plan).includes(`type=bind,src=${personalLibraryDir(docker, "alice")},dst=${RUNTIME_LIBRARY_DIR},readonly`));
+  assert.ok(mounts(plan).includes(`type=bind,src=${viewOf(docker, "alice", "paper1")},dst=${RUNTIME_LIBRARY_DIR},readonly`));
   assert.equal(mounts(plan).some((mount) => mount.includes(path.join(scratch.workspaceDir, "knowledge-base"))), false);
 
   const otherRoot = path.join(dataDir, "users", "bob", "projects", "other");
   const otherBase = path.join(otherRoot, "workspace");
   await mkdir(path.join(otherBase, "knowledge-base"), { recursive: true });
-  await mkdir(personalLibraryDir(docker, "bob"), { recursive: true });
-  assert.equal(mounts(plan).some((mount) => mount.includes(otherRoot) || mount.includes(personalLibraryDir(docker, "bob"))), false);
+  await mkdir(viewOf(docker, "bob", "other"), { recursive: true });
+  assert.equal(mounts(plan).some((mount) => mount.includes(otherRoot) || mount.includes(viewOf(docker, "bob", "other"))), false);
   const otherPlan = buildRuntimeLaunchPlan(docker, { id: "other", userId: "bob", rootDir: otherRoot, baseDir: otherBase,
     workspaceDir: path.join(otherBase, "scratch"), runtimeDir: path.join(otherRoot, "runtime") }, 4096);
   assert.ok(mounts(otherPlan).includes(`type=bind,src=${path.join(otherBase, "knowledge-base")},dst=${RUNTIME_KNOWLEDGE_BASE_DIR},readonly`));
-  assert.equal(mounts(otherPlan).some((mount) => mount.includes(baseDir) || mount.includes(personalLibraryDir(docker, "alice"))), false);
+  assert.equal(mounts(otherPlan).some((mount) => mount.includes(baseDir) || mount.includes(viewOf(docker, "alice", "paper1"))), false);
 
-  // A library that is a symlink is a way out of the account, not a library.
-  await rm(personalLibraryDir(docker, "alice"), { recursive: true });
+  // A library view that is a symlink is a way out of the account, not a library.
+  await rm(viewOf(docker, "alice", "paper1"), { recursive: true });
   await mkdir(path.join(dataDir, "elsewhere"), { recursive: true });
-  await symlink(path.join(dataDir, "elsewhere"), personalLibraryDir(docker, "alice"));
+  await symlink(path.join(dataDir, "elsewhere"), viewOf(docker, "alice", "paper1"));
   plan = buildRuntimeLaunchPlan(docker, base, 4096);
   assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)), false);
 });
@@ -283,6 +304,17 @@ test("a launch creates the knowledge-base directory first, so its view is mounte
   await mkdir(scratch);
   await manager.ensureKnowledgeBaseDir({ id: "paper1", userId: "alice", baseDir, workspaceDir: scratch });
   await assert.rejects(() => stat(path.join(scratch, "knowledge-base")));
+});
+
+test("a launch asks the library for its project's directory, and does nothing where there is no library", async () => {
+  const manager = managerWith({ dataDir: "/unused" });
+  // No library (no product store): nothing to ask and nothing to fail.
+  await manager.ensureLibraryView({ id: "paper1", userId: "alice" });
+  const asked = [];
+  manager.libraryViews = { ensure: async (userId, projectId) => { asked.push([userId, projectId]); } };
+  await manager.ensureLibraryView({ id: "paper1", userId: "alice" });
+  await manager.ensureLibraryView({ id: "", userId: "alice" });
+  assert.deepEqual(asked, [["alice", "paper1"]], "for the project that is launching, and only when there is one");
 });
 
 test("a password sign-in warms a runtime only when it asks, so a script's sign-in starts nothing", async (t) => {

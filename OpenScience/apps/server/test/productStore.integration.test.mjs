@@ -153,6 +153,26 @@ test("history exposes every retained revision through bounded revision pages", o
   assert.deepEqual(second.map((x) => x.revision), [1]);
 });
 
+test("a write that drops the earlier revisions leaves the record only as it now stands, in its own transaction, and no other record's history", options, async () => {
+  const id = randomUUID(), neighbour = randomUUID();
+  await documents.put(owner, "profile", neighbour, { version: 0 }, { expectedRevision: 0 });
+  await documents.put(owner, "profile", neighbour, { version: 1 }, { expectedRevision: 1 });
+  await documents.put(owner, "profile", id, { text: "the method", account: owner }, { expectedRevision: 0 });
+  await documents.put(owner, "profile", id, { text: "the method", account: owner, step: 2 }, { expectedRevision: 1 });
+  const voided = await documents.put(owner, "profile", id, { text: null, account: null }, { expectedRevision: 2, dropEarlierRevisions: true });
+  assert.equal(voided.revision, 3);
+  assert.deepEqual((await documents.history(owner, "profile", id)).map((x) => [x.revision, x.payload]), [[3, { text: null, account: null }]]);
+  assert.equal(JSON.stringify(await documents.history(owner, "profile", id)).includes(owner), false, "nothing of the earlier contents is left in the history");
+  assert.deepEqual((await documents.history(owner, "profile", neighbour)).map((x) => x.revision), [2, 1], "another record's history is its own");
+  // The write that loses a race drops nothing: the whole transaction is refused.
+  const refused = await documents.put(owner, "profile", neighbour, { version: 9 }, { expectedRevision: 1, dropEarlierRevisions: true }).then(() => null, (error) => error.code);
+  assert.equal(refused, "product_revision_conflict");
+  assert.deepEqual((await documents.history(owner, "profile", neighbour)).map((x) => x.revision), [2, 1]);
+  // A later write keeps history as before.
+  await documents.put(owner, "profile", id, { text: null, account: null, note: "again" }, { expectedRevision: 3 });
+  assert.deepEqual((await documents.history(owner, "profile", id)).map((x) => x.revision), [4, 3]);
+});
+
 test("lease completion, failure and renewal recheck time after waiting for a row lock", options, async () => {
   for (const action of ["finish", "fail", "renew"]) {
     const row = await jobs.enqueue(owner, "verify", { action }, { idempotencyKey: randomUUID() });

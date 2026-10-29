@@ -193,7 +193,7 @@ test("a step asked for while another is out is queued behind it, and the study s
   assert.equal(view.activity.run.step, "definition");
   assert.equal(view.steps.evidence.status, "queued");
   assert.equal(view.steps.definition.status, "running", "queued and running are two states, and the read model keeps them apart");
-  assert.equal(view.next, null, "what is next waits on a step that is under way");
+  assert.equal(Object.hasOwn(view,"next"),false,"the conversation owns the next action; the retired programme recommendation is not published");
 });
 
 test("a person's cancel stops the run and the programme does not send it again; asking for the step again does", options, async () => {
@@ -225,7 +225,7 @@ test("a study with nothing said about it refuses a press by name, and the page r
   assert.equal(refused.status, 409);
   assert.equal(refused.body.code, "vcr_definition_missing");
   const view = (await call("GET", `/api/vcr/studies/${created.body.data.id}`)).body.data;
-  assert.equal(view.next, null);
+  assert.equal(Object.hasOwn(view,"next"),false,"an empty study exposes no retired next-step shortcut");
   assert.equal(view.activity, null);
   assert.equal(record.dispatches.length, 0);
 });

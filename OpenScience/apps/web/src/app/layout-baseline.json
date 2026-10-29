@@ -1,6 +1,6 @@
 {
   "greySentences": {
-    "total": 63,
+    "total": 61,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
@@ -25,7 +25,6 @@
       "components/vcr/VcrKnowledge.tsx": 2,
       "components/vcr/VcrPublishSimulation.tsx": 1,
       "components/vcr/VcrRegistryCoverage.tsx": 1,
-      "components/vcr/VcrSettingsDrawer.tsx": 2,
       "components/vcr/data/CloudDocuments.tsx": 4,
       "components/vcr/data/FieldMapEditor.tsx": 1,
       "components/vcr/data/SourceCard.tsx": 6

@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildMemoryMap } from "../src/memoryMap.mjs";
-import { bucketsOf, createActivitySource, memoryEventsOf } from "../src/memoryMapSources/activity.mjs";
+import { createActivitySource, memoryEventsOf } from "../src/memoryMapSources/activity.mjs";
 import { recencyWeight, requestMemo } from "../src/memoryMapSources/common.mjs";
 import { createCapsuleNotesSource, capsuleNotesContribution } from "../src/memoryMapSources/capsuleNotes.mjs";
-import { createDocumentsSource, documentKindCounts, documentNode } from "../src/memoryMapSources/documents.mjs";
+import { createDocumentsSource, documentDays, documentKindCounts, documentNode } from "../src/memoryMapSources/documents.mjs";
 import {
   createKnowledgeGraphSource, documentIdOfUri, entityTypeOf, graphFromCompile, parseEntity, parseFrontmatter, parseRelations, parseWikiPage, resolveLink,
 } from "../src/memoryMapSources/knowledgeGraph.mjs";
@@ -15,7 +15,6 @@ import { createMethodsSource } from "../src/memoryMapSources/methods.mjs";
 import { createNativeMemorySource } from "../src/memoryMapSources/nativeMemory.mjs";
 import { createNativeRecordLinks } from "../src/memoryMapSources/recordLinks.mjs";
 import { recordsContribution } from "../src/memoryMapSources/records.mjs";
-import { createRunsSource, workDimension, workOf } from "../src/memoryMapSources/runs.mjs";
 import { createTopicsSource } from "../src/memoryMapSources/topics.mjs";
 
 const NOW = new Date("2026-10-12T08:00:00Z");
@@ -55,7 +54,7 @@ test("what a memory rests on becomes a mark: a document by its id, a work by its
     { recordId: "rec_1", type: "evidence_card", id: "card_1", state: "unknown", linkedAt: null },
     { recordId: "rec_1", type: "frontier_item", id: "fi_1", state: "unknown", linkedAt: null },
   ], conflicts: [], usage: {} };
-  const found = recordsContribution([record()], links, { now: NOW, timeZone: "UTC" });
+  const found = recordsContribution([record()], links, { now: NOW });
   const byId = Object.fromEntries(found.nodes.map((node) => [node.id, node]));
   assert.deepEqual(Object.keys(byId).sort(), ["document:src_abc", "memory:rec_1", "reference:doi:10.1056/nejmoa2034577", "reference:evidence_card:card_1", "reference:frontier_item:fi_1"]);
   assert.deepEqual(byId["document:src_abc"].open, { kind: "page", href: "/app/files/src_abc" });
@@ -118,7 +117,7 @@ test("the inventory of the knowledge is the knowledge base's own count of each p
   const doc = (id, projectId, at) => ({ id, projectId, createdAt: at, deletedAt: null, payload: { title: id, docType: "published-paper", paths: [`${id}.pdf`] } });
   // Two projects: one holds 250 documents of which the page reads 100 (the newest), the other has 3 and 40 compiled files.
   const sources = {
-    list: async (_userId, { projectId }) => (projectId === "prj_a"
+    list: async (_userId, { projectId }) => (projectId === "evimed-library" ? { items: [], counts: { all: 0 }, nextCursor: null } : projectId === "prj_a"
       ? { items: [doc("src_1", "prj_a", "2026-10-10T00:00:00Z"), doc("src_2", "prj_a", "2026-10-10T05:00:00Z"), doc("src_3", "prj_a", "2026-10-01T00:00:00Z")], counts: { all: 250, literature: 200, table: 30, document: 20, page: 0, note: 0, image: 0, wiki: 0 }, nextCursor: null }
       : { items: [], counts: { all: 43, literature: 1, table: 0, document: 2, page: 0, note: 0, image: 0, wiki: 40 }, nextCursor: null }),
   };
@@ -135,6 +134,35 @@ test("the inventory of the knowledge is the knowledge base's own count of each p
   assert.deepEqual(map.facets.documentTypes.map((type) => [type.id, type.count]), [["literature", 201], ["table", 30], ["document", 22]]);
   assert.equal(map.summary.documents, 3, "the headline's marks are the ones drawn");
   assert.equal(map.buckets.series.reduce((sum, day) => sum + day.document, 0), 3);
+});
+
+test("personal storage is read beside the projects of a whole-account map, hanging from the account; no other internal project is, and a project's map never reads it", async () => {
+  const doc = (id, projectId, at) => ({ id, projectId, createdAt: at, deletedAt: null, payload: { title: id, docType: "published-paper", paths: [`${id}.pdf`] } });
+  const asked = [];
+  const sources = { list: async (_userId, { projectId }) => {
+    asked.push(projectId);
+    if (projectId === "evimed-library") return { items: [doc("src_mine", "evimed-library", "2026-10-10T00:00:00Z")], counts: { all: 1, literature: 1, wiki: 0 }, nextCursor: null };
+    return { items: [doc("src_a", projectId, "2026-10-01T00:00:00Z")], counts: { all: 2, literature: 2, wiki: 0 }, nextCursor: null };
+  } };
+  const found = await createDocumentsSource({ sources }).read(request({ projects: [{ id: "prj_a", name: "甲" }] }));
+  assert.deepEqual(asked, ["prj_a", "evimed-library"], "the account's own storage, and no other internal project (the request carries none of them)");
+  const mine = found.nodes.find((node) => node.id === "document:src_mine");
+  assert.equal(mine.projectId, null, "storage is not a project: no mark of it, and no 「其他」 either");
+  assert.deepEqual(found.edges.map((edge) => [edge.from, edge.to]), [["document:src_a", "project:prj_a"], ["document:src_mine", "you:account"]]);
+  assert.deepEqual(found.facets.projectDocuments, [{ id: "prj_a", count: 2 }], "storage has no row among the projects' counts");
+  assert.deepEqual(found.facets.documentTypes, [{ id: "literature", label: "文献与指南", count: 3 }], "its documents are in the account's inventory");
+  // The aggregator: the document is on the map and counted, under the account.
+  const map = await buildMemoryMap({ sources: [createDocumentsSource({ sources })] }, { user, projects: [{ id: "prj_a", name: "甲" }], now: NOW, include: "summary,facets,nodes,edges" });
+  assert.equal(map.summary.documents, 2);
+  assert.ok(map.nodes.some((node) => node.id === "you:account"), "the account is a mark for the documents that hang from it");
+  assert.equal(map.nodes.some((node) => node.id === "project:__other"), false);
+  assert.deepEqual(map.facets.projects.map((project) => project.id), ["prj_a"]);
+  // One project's map reads that project alone.
+  asked.length = 0;
+  await createDocumentsSource({ sources }).read(request({ projectId: "prj_a", projects: [{ id: "prj_a", name: "甲" }] }));
+  assert.deepEqual(asked, ["prj_a"]);
+  // A document of storage that a memory names is the account's too, not 「其他」.
+  assert.equal(documentNode(doc("src_mine", "evimed-library", "2026-10-10T00:00:00Z")).projectId, null);
 });
 
 const NOTE = (id, over = {}, payload = {}) => ({ id, revision: 1, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", deletedAt: null, projectId: null,
@@ -161,29 +189,26 @@ test("the notes of the account's own capsule are memories on the map and in its 
     assert.equal(style.group, "写作习惯", "a kind of the capsule's own has a word");
     assert.deepEqual(found.edges.map((edge) => [edge.from, edge.to, edge.type]), [
       ["memory:entry:e1", "you:account", "belongs-to"], ["memory:entry:e2", "project:prj_a", "belongs-to"], ["memory:entry:e6", "you:account", "belongs-to"]]);
-    assert.deepEqual(found.events.map((event) => [event.ref, event.change, event.lane]), [["memory:entry:e1", "created", "account"], ["memory:entry:e2", "created", "project:prj_a"], ["memory:entry:e6", "created", "account"]]);
-    assert.deepEqual(found.buckets.map((day) => [day.t, day.memory]), [["2026-10-01", 1], ["2026-10-05", 1], ["2026-10-08", 1]]);
-    // They are counted in the aspects the memory page files them under (a writing habit is a habit).
-    const aspects = Object.fromEntries(found.facets.dimensions[0].axes.map((axis) => [axis.id, axis.count]));
-    assert.deepEqual([aspects["aspect:preference"], aspects["aspect:habit"], aspects["aspect:project"]], [1, 1, 1]);
+    assert.deepEqual(found.events.map((event) => [event.ref, event.change, event.at]), [
+      ["memory:entry:e1", "created", "2026-10-01T00:00:00.000Z"], ["memory:entry:e2", "created", "2026-10-05T00:00:00.000Z"], ["memory:entry:e6", "created", "2026-10-08T00:00:00.000Z"]]);
+    assert.deepEqual(Object.keys(found).sort(), ["edges", "events", "facts", "nodes"], "a note is a mark, its lines, its events and the day the account began: no calendar, radar or lineage");
+    assert.equal(found.facts.since, "2026-10-01T00:00:00.000Z");
   }
   // Narrowed to a project, its notes alone.
   assert.deepEqual((await source.read(request({ projectId: "prj_a" }))).nodes.map((node) => node.id), ["memory:entry:e2"]);
   assert.equal(createCapsuleNotesSource({ capsules: null }).applies(), false);
-  // Beside the memories they are one picture: the headline counts both, the radar adds both, the kinds and the person's own facet follow.
-  const records = recordsContribution([record({ id: "rec_9", kind: "preference", createdAt: "2026-09-01T00:00:00Z" })], {}, { now: NOW, timeZone: "UTC" });
+  // Beside the memories they are one picture: the headline counts both and the person's own facet follows.
+  const records = recordsContribution([record({ id: "rec_9", kind: "preference", createdAt: "2026-09-01T00:00:00Z" })], {}, { now: NOW });
   const both = await buildMemoryMap({ sources: [{ name: "records", read: async () => records }, source] }, { user, projects, now: NOW, include: "summary,facets,events" });
   assert.equal(both.summary.memories, 4);
   assert.deepEqual(both.facets.aboutYou.map((kind) => [kind.id, kind.count]), [["preference", 2], ["writing_style", 1]], "what is about the person, by kind; the project's note is not");
-  assert.equal(both.facets.dimensions.find((dimension) => dimension.id === "memory").axes.find((axis) => axis.id === "aspect:preference").count, 2);
-  assert.equal(both.facets.dimensions.find((dimension) => dimension.id === "memory").total, 4);
   assert.equal(both.events.filter((event) => event.change === "created").length, 4);
-  assert.equal(capsuleNotesContribution([], { now: NOW, timeZone: "UTC", projectId: null }).nodes.length, 0);
+  assert.equal(capsuleNotesContribution([], { now: NOW, projectId: null }).nodes.length, 0);
 });
 
 test("a documents read that failed in every project is the source's failure; one project failing is only its own", async () => {
   const asked = request({ projects: [{ id: "p1", name: "一" }, { id: "p2", name: "二" }] });
-  const half = createDocumentsSource({ sources: { list: async (_u, { projectId }) => { if (projectId === "p1") throw new Error("boom"); return { items: [{ id: "src_2", projectId, createdAt: "2026-09-01T00:00:00Z", payload: { title: "二的资料", paths: ["a.md"] } }] }; } } });
+  const half = createDocumentsSource({ sources: { list: async (_u, { projectId }) => { if (projectId === "p1") throw new Error("boom"); return { items: projectId === "p2" ? [{ id: "src_2", projectId, createdAt: "2026-09-01T00:00:00Z", payload: { title: "二的资料", paths: ["a.md"] } }] : [] }; } } });
   assert.deepEqual((await half.read(asked)).nodes.map((node) => node.id), ["document:src_2"]);
   const none = createDocumentsSource({ sources: { list: async () => { throw new Error("db down"); } } });
   await assert.rejects(() => none.read(asked), /db down/);
@@ -205,63 +230,35 @@ test("the learned methods are marks hanging from the account, named as the memor
   assert.equal(source.applies(request({ projectId: "prj_a" })), false, "methods are the account's, not a project's");
 });
 
-test("the first radar counts the researcher's own finished conversations by the kind of work, and shows a medical axis only when it was used", () => {
-  const run = (id, agent, finishedAt, extra = {}) => ({ id, status: "succeeded", effectiveAgentId: agent, finishedAt, automated: false, ...extra });
-  const runs = [
-    run("1", "open-domain-answer", "2026-10-05T00:00:00Z", { taskType: "web-research" }), run("2", "open-domain-answer", "2026-10-06T00:00:00Z", { taskType: "web-research" }),
-    run("3", "manuscript-support", "2026-10-07T00:00:00Z"), run("4", "statistical-analysis", "2026-09-20T00:00:00Z"),
-    run("5", "open-domain-answer", "2026-09-01T00:00:00Z", { taskType: "web-research" }),
-    // Not judged yet: counted under nothing, however recent.
-    run("y1", "open-domain-answer", "2026-10-09T00:00:00Z"),
-    run("x1", "open-domain-answer", "2026-10-08T00:00:00Z", { automated: true }),
-    run("x2", "open-domain-answer", "2026-10-08T00:00:00Z", { status: "failed" }),
-    run("x3", "open-domain-answer", "2026-10-08T00:00:00Z", { deleted: true }),
-    run("x4", "source-understanding", "2026-10-08T00:00:00Z"),
-    run("x5", "evolution-scout", "2026-10-08T00:00:00Z"),
-    run("x6", "no-such-capability", "2026-10-08T00:00:00Z"),
-  ];
-  const work = workOf(runs, (agent) => agent === "source-understanding" || agent === "evolution-scout");
-  assert.deepEqual(work.map((item) => item.label).sort(), ["查资料与调研", "查资料与调研", "查资料与调研", "表格与数据分析", "写作"].sort());
-  const dimension = workDimension(work, NOW);
-  assert.deepEqual(dimension.axes.map((axis) => axis.label), ["写作", "文档与演示", "表格与数据分析", "代码", "查资料与调研", "其他"], "no medical axis for an account that never used one");
-  const byLabel = Object.fromEntries(dimension.axes.map((axis) => [axis.label, axis]));
-  assert.deepEqual([byLabel["查资料与调研"].count, byLabel["查资料与调研"].value, byLabel["查资料与调研"].previousValue], [2, 0.5, 1]);
-  assert.deepEqual([dimension.total, dimension.previousTotal, dimension.scale], [4, 1, "share"]);
-  assert.equal(byLabel["表格与数据分析"].previousValue, 0, "a month ago the account only looked things up");
-  assert.deepEqual(dimension.axes.map((axis) => axis.id), ["kind:writing", "kind:documents", "kind:data", "kind:code", "kind:web-research", "kind:other"]);
-  const clinical = workDimension(workOf([run("c", "clinical-evidence-synthesis", "2026-10-09T00:00:00Z")]), NOW);
-  assert.ok(clinical.axes.some((axis) => axis.label === "医学证据"));
+test("the activity source lists the learned methods' events, for the account and not for a project, and names the part it could not read", async () => {
+  const learning = { listMethods: async (userId, options) => {
+    assert.equal(userId, "usr_1"); assert.ok(options.limit > 0);
+    return { items: [
+      { id: "mth_1", createdAt: "2026-09-05T00:00:00Z", payload: { display: { title: "先给结论再给依据", summary: "回答先写结论" }, status: "retired", statusChangedAt: "2026-10-01T00:00:00Z", statusReason: "replaced" } },
+      { id: "mth_2", createdAt: "2026-09-06T00:00:00Z", payload: { frontmatter: { name: "write-sql-plan" }, status: "approved" } },
+    ] };
+  } };
+  const source = createActivitySource({ learning });
+  assert.deepEqual((await source.read(request())).events.map((event) => [event.ref, event.type, event.change, event.text]), [
+    ["method:mth_1", "method", "learned", "先给结论再给依据"], ["method:mth_1", "method", "retired", "先给结论再给依据"], ["method:mth_2", "method", "learned", "write-sql-plan"],
+  ]);
+  assert.equal(source.applies(request({ projectId: "prj_a" })), false, "the methods are the account's, not a project's");
+  assert.equal(createActivitySource({ learning: null }).applies(request()), false);
+  const broken = await createActivitySource({ learning: { listMethods: async () => { throw new Error("ledger unreadable"); } } }).read(request());
+  assert.deepEqual([broken.events, broken.missing], [[], ["methods"]], "the source names the part it could not read and still answers");
 });
 
-test("the runs source reads each project's ledger once, shared with the activity source, and fails only when every ledger did", async () => {
-  let reads = 0;
-  const agentRuns = { researcherRuns: async (project) => { reads += 1; return [{ id: `r-${project.id}`, status: "succeeded", effectiveAgentId: "open-domain-answer", finishedAt: "2026-10-05T00:00:00Z", sessionId: "s", title: "t", taskType: "code" }]; } };
-  const projectOf = async (_user, id) => ({ id });
-  const asked = request({ projects: [{ id: "p1", name: "一" }, { id: "p2", name: "二" }] });
-  const dimension = (await createRunsSource({ agentRuns, projectOf }).read(asked)).facets.dimensions[0];
-  const activity = await createActivitySource({ agentRuns, projectOf }).read(asked);
-  assert.equal(reads, 2, "two projects, one read each");
-  assert.equal(dimension.total, 2);
-  assert.equal(activity.buckets[0].run, 2);
-  const broken = { researcherRuns: async () => { throw new Error("ledger unreadable"); } };
-  await assert.rejects(() => createRunsSource({ agentRuns: broken, projectOf }).read(request({ projects })), /ledger unreadable/);
-  const partial = await createActivitySource({ agentRuns: broken, projectOf }).read(request({ projects }));
-  assert.deepEqual(partial.missing, ["runs"], "the activity source names the part it could not read and still answers");
-});
-
-test("the calendar counts events by day in the researcher's zone, and only the last year", () => {
-  const events = [
-    { at: "2026-10-11T17:30:00Z", type: "memory" }, { at: "2026-10-11T23:30:00Z", type: "run" }, { at: "2026-10-12T01:00:00Z", type: "run" },
-    { at: "2025-09-01T00:00:00Z", type: "memory" }, { at: "2027-01-01T00:00:00Z", type: "memory" },
-  ];
-  assert.deepEqual(bucketsOf(events, "Asia/Shanghai", NOW), [
-    { t: "2026-10-12", memory: 1, run: 2, method: 0, feedback: 0, document: 0 },
-  ], "17:30Z is already the 12th in Shanghai; a year ago and the future are not drawn");
-  assert.deepEqual(bucketsOf([{ at: "2026-10-11T08:00:00Z", type: "document" }, { at: "2026-10-11T09:00:00Z", type: "document" }], "UTC", NOW),
-    [{ t: "2026-10-11", memory: 0, run: 0, method: 0, feedback: 0, document: 2 }], "a document added is a day's own count");
-  assert.deepEqual(bucketsOf(events, "UTC", NOW).map((bucket) => [bucket.t, bucket.memory, bucket.run]), [["2026-10-11", 1, 1], ["2026-10-12", 0, 1]]);
+test("the calendar counts the documents added by day in the researcher's zone, and only the last year", () => {
+  const added = ["2026-10-11T17:30:00Z", "2026-10-11T23:30:00Z", "2026-10-12T01:00:00Z", "2025-09-01T00:00:00Z", "2027-01-01T00:00:00Z"];
+  assert.deepEqual(documentDays(added, "Asia/Shanghai", NOW), [{ t: "2026-10-12", document: 3 }], "17:30Z is already the 12th in Shanghai; a year ago and the future are not drawn");
+  assert.deepEqual(documentDays(added, "UTC", NOW), [{ t: "2026-10-11", document: 2 }, { t: "2026-10-12", document: 1 }]);
   const memories = memoryEventsOf([record({ id: "a", scope: "project", scopeId: "prj_a", kind: "decision" })]);
-  assert.deepEqual(memories.map((event) => [event.ref, event.lane, event.kind, event.change]), [["memory:a", "project:prj_a", "decision", "created"]]);
+  assert.deepEqual(memories.map((event) => [event.ref, event.type, event.change]), [["memory:a", "memory", "created"]]);
+  assert.deepEqual(Object.keys(memories[0]).sort(), ["at", "change", "id", "ref", "text", "type"]);
+  // A native memory is a Markdown file: its event says the words, not the list it was laid out as.
+  const native = memoryEventsOf([record({ id: "n", uri: "viking://user/u/memories/x.md", value: "- 安全性表格还缺注射部位反应的数据\n  * 向数据组要\n2. 下周一前" })]);
+  assert.equal(native[0].text, "安全性表格还缺注射部位反应的数据 向数据组要 下周一前");
+  assert.equal(memoryEventsOf([record({ id: "m", uri: "viking://user/u/memories/y.md", value: "-1 是下限，3-5 次" })])[0].text, "-1 是下限，3-5 次", "a minus sign is no list marker");
 });
 
 test("the topics source serves the grouping as it stands and never groups: members are marks, and the status says if it is due", async () => {
@@ -303,14 +300,13 @@ test("the memory seam draws an account's memories by the one function, from what
 
   const native = await wired.read(asked);
   // The one difference is a mark's size: a file has no importance or use counter of its own, so it says how recent the file is.
-  const same = recordsContribution(NATIVE_FIXTURE.records, NATIVE_FIXTURE, { now: NOW, timeZone: "UTC", weigh: (record) => recencyWeight(record.updatedAt ?? record.createdAt ?? null, NOW) });
+  const same = recordsContribution(NATIVE_FIXTURE.records, NATIVE_FIXTURE, { now: NOW, weigh: (record) => recencyWeight(record.updatedAt ?? record.createdAt ?? null, NOW) });
   assert.deepEqual(native, same, "the seam adds nothing to what the one function draws");
   const sizes = native.nodes.filter((node) => node.type === "memory").map((node) => node.weight);
   assert.ok(new Set(sizes).size > 1, "the marks of the files are not all one size");
   assert.ok(!native.nodes.some((node) => node.id === "memory:nat_s"), "a sensitive memory is not drawn from files either");
   assert.equal(native.nodes.find((node) => node.id === "memory:nat_3").reason, "source-changed");
-  assert.equal(native.lanes.length, 1);
-  assert.equal(native.lanes[0].segments.length, 2);
+  assert.ok(native.edges.some((edge) => edge.type === "replaces" && edge.from === "memory:nat_3" && edge.to === "memory:nat_2"));
 
   const narrowed = await wired.read(request({ projectId: "prj_a" }));
   assert.deepEqual(narrowed.nodes.filter((node) => node.type === "memory").map((node) => node.id).sort(), ["memory:nat_2", "memory:nat_3"]);

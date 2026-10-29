@@ -13599,10 +13599,10 @@
   "volume_per_week": 30,
   "tier": "P2",
   "lane": "pipeline",
-  "egress": "direct",
+  "egress": "none",
   "launch_tier": "P2",
-  "launch_reason": "生产机直连，需配列表解析规则",
-  "note": "全站（含 https://36kr.com/feed 与 /api/newsflash）都返回同一个 17.6 KB 的火山引擎「正在进行安全检测」页面；老的 36kr.com/feed 已不再是 RSS，verify 会误判 page-ok，实际拿不到内容。"
+  "launch_reason": "频道已 404，退役",
+  "note": "2026-10-26：https://36kr.com/information/medical 已是 404，站点频道列表里也不再有医疗频道（无头浏览器核对）；此前整站（含 /feed 与 /api/newslist）返回火山引擎「正在进行安全检测」页面。egress none：不再加载，行在库里按“缺行即退役”处理。"
  },
  {
   "id": "tmtpost-health",

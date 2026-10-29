@@ -16,7 +16,6 @@ import {
 import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { tagClasses } from "@/components/ui/Tag";
 import type { WebReadPage } from "@/lib/apiClient";
 import { pageForSource } from "@/lib/readPages";
 import { ReadPageCard } from "@/components/runs/ReadPages";
@@ -229,9 +228,10 @@ export function ClaimCitation({ ids, claims, statuses, reading }: {
           type="button"
           aria-label={label}
           data-claims={ids.join(" ")}
+          // A control, so it is a quiet text button and not a tag: the mark carries the state (colour, ✓ / ⚠ and words), the ground
+          // appears under the pointer, and the 22 px height stays the hit area.
           className={cn(
-            tagClasses({ tone: attention ? "warn" : "neutral" }),
-            "mx-0.5 gap-0.5 align-super hover:bg-surface-3",
+            "mx-0.5 inline-flex h-tag shrink-0 items-center gap-0.5 whitespace-nowrap rounded-tag px-1.5 align-super text-meta hover:bg-surface-2",
             tone,
           )}
         >

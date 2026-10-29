@@ -186,14 +186,6 @@
           "label": "数据管理"
         },
         {
-          "value": "recruiter",
-          "label": "招募协调员"
-        },
-        {
-          "value": "site",
-          "label": "中心"
-        },
-        {
           "value": "viewer",
           "label": "只读查看者"
         }

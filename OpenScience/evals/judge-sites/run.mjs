@@ -4,7 +4,7 @@
 //   node evals/judge-sites/run.mjs --live --output <private.json> [--site ...]          Jev alone, at each site's pinned threshold
 //   ... --incumbent                 also run the path each site replaces, as production runs it (incumbents.mjs; J3 through the
 //                                   production classifier and routing, J2 through ChannelIntentClassifier, J5 and J6 through the
-//                                   frontier editor, J4 the frozen register pattern, J15 and J18 their fixed originals)
+//                                   frontier editor, J4 the frozen register pattern, J23 no harm check, J15 and J18 their fixed originals)
 //   ... --resume                    skip the cases the output file already holds
 //
 // Keys come from the files the server itself reads (OPEN_SCIENCE_TYPESAFE_API_KEY_FILE, OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE); nothing here
@@ -109,8 +109,8 @@ function labelCorrect(example, value) {
   return undefined;
 }
 /** What a caller does with an answer Jev did not settle, for the sites whose caller does something other than ask the original path
- *  (J4: no notice). J2 asked for the safe default intent until 2026-10-10 (`JEV_J2_BEFORE`) and asks the original classifier now. */
-const DEFAULTS = { J4: { leakage: false } };
+ *  (J4: no notice; J23: the method is not flagged and goes on). J2 asked for the safe default intent until 2026-10-10 (`JEV_J2_BEFORE`) and asks the original classifier now. */
+const DEFAULTS = { J4: { leakage: false }, J23: { harmful: false } };
 const JEV_J2_BEFORE = { switch_to: null, has_request: true, continues_running_task: false };
 function comparableValue(site, value, input) {
   if (site !== 'J2' || !value) return value;
@@ -183,7 +183,7 @@ try {
               if (site === 'J2' && !arm.failure && row.rawValue) row.baselineAgreement = includesExpected(row.rawValue, arm.value);
             } catch (error) { row.incumbent = { failure: /^[a-z_]+$/.test(error.message) ? error.message : 'incumbent_failed' }; }
           }
-          // The site with Jev on: Jev where it settled; elsewhere what its caller does (a fixed default for J2 and J4), else the original path.
+          // The site with Jev on: Jev where it settled; elsewhere what its caller does (a fixed default for J4 and J23), else the original path.
           if (site !== 'J3') {
             if (Object.hasOwn(DEFAULTS, site)) row.hybridCorrect = row.outcome === 'settled' ? row.correct : labelCorrect(example, DEFAULTS[site]);
             else if (row.incumbent) row.hybridCorrect = row.outcome === 'settled' ? row.correct : row.incumbent.correct;

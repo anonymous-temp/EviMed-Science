@@ -12,6 +12,15 @@ it('validates an explicit historical target through the module without a fallbac
  expect(await ensureGeoConversationSession('geo-exact','owner-control','historical')).toBe('historical');
  expect(open).toHaveBeenCalledWith('geo-exact',{kind:'session',sessionId:'historical'});
 });
+it('opens the project\'s own conversation as the primary, so one the kernel lost is repaired, and returns the session that stands',async()=>{
+ open.mockResolvedValue(descriptor('replacement'));
+ expect(await ensureGeoConversationSession('geo-exact','owner-control','dead-root','dead-root')).toBe('replacement');
+ expect(open).toHaveBeenCalledWith('geo-exact',{kind:'primary'});
+});
+it('keeps an addressed conversation exact beside the primary',async()=>{
+ expect(await ensureGeoConversationSession('geo-exact','owner-control','historical','native-root')).toBe('historical');
+ expect(open).toHaveBeenCalledWith('geo-exact',{kind:'session',sessionId:'historical'});
+});
 it.each([{projectId:'actor-control'},{sessionId:'other'},{scope:{kind:'geo',geoProjectId:'other',sessionId:'historical'}}])('rejects an exact descriptor mismatch %j',async mismatch=>{
  open.mockResolvedValue({...descriptor('historical'),...mismatch});
  await expect(ensureGeoConversationSession('geo-exact','owner-control','historical')).rejects.toThrow();

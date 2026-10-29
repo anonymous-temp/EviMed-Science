@@ -30,7 +30,7 @@ function probed(list: RouteObject[]): RouteObject[] {
   return list.map((route) => {
     const element = route.element as ReactElement | undefined;
     const type = element?.type as { name?: string } | string | undefined;
-    const keep = element?.type === Navigate || (typeof type === "function" && ["ChatRedirect", "RunRedirect", "NotFound", "Outlet"].includes((type as { name: string }).name));
+    const keep = element?.type === Navigate || (typeof type === "function" && ["ChatRedirect", "RunRedirect", "MemoryMapRedirect", "NotFound", "Outlet"].includes((type as { name: string }).name));
     const replaced = route.children ? <Outlet /> : keep ? element : <Landed />;
     return route.children
       ? { ...route, element: replaced, children: probed(route.children) } as RouteObject
@@ -69,6 +69,12 @@ describe("every address people already have still arrives", () => {
     ["/app/sources", "/app/files?tab=sources"],
     ["/app/notebooks", "/app/files"],
     ["/app/capsules", "/app/memory/overview"],
+    // 「记忆地图」 was a tab of its own until 2026-10-27: it is part of 总览 now, and an old address goes there with what it can carry over.
+    ["/app/memory/map", "/app/memory/overview"],
+    ["/app/memory/map?view=graph", "/app/memory/overview?explore=graph"],
+    ["/app/memory/map?view=topics&project=prj_1&q=%E7%96%B3&open=record%3Aa1", "/app/memory/overview?explore=topics&project=prj_1&q=%E7%96%B3&open=record%3Aa1"],
+    ["/app/memory/map?view=time&focus=memory%3Aa1&part=you", "/app/memory/overview"],
+    ["/app/memory/map?view=activity&look=1&range=90d", "/app/memory/overview?look=1&range=90d"],
     ["/app/settings", "/app/account?tab=appearance"],
     // 运维 left 设置 for a page of its own (`AccountPage` sends the section's old address, `?tab=ops`, there: its own test).
     ["/app/ops", "/app/ops"],
@@ -126,10 +132,11 @@ describe("every address people already have still arrives", () => {
 });
 
 describe("知识库's addresses", () => {
-  it("has the list at /app/files and one document at /app/files/:sourceId, which is a page and not a drawer", () => {
+  it("has the list and one document on one route, /app/files/:sourceId?, so choosing a document never remounts the list", () => {
     const leaf = (path: string) => matchRoutes(routes, path)?.at(-1);
-    expect(leaf("/app/files")?.route.path).toBe("files");
-    expect(leaf("/app/files/src_1a2b")?.route.path).toBe("files/:sourceId");
+    expect(leaf("/app/files")?.route.path).toBe("files/:sourceId?");
+    expect(leaf("/app/files/src_1a2b")?.route.path).toBe("files/:sourceId?");
+    expect(leaf("/app/files/open")?.route.path).toBe("files/open");
     expect(leaf("/app/files/src_1a2b")?.params).toEqual({ sourceId: "src_1a2b" });
     // An id with a slash in it is not a second path segment.
     expect(leaf("/app/files/a/b")?.route.path).toBe("*");

@@ -1,0 +1,112 @@
+{
+  "scope": "explicitly_bound_numerical_values_only",
+  "passed": true,
+  "checks": [
+    {
+      "turn": 0,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "n",
+          "actual": 171,
+          "expected": 171,
+          "passed": true,
+          "tolerance": 1e-12
+        },
+        {
+          "reference": "events",
+          "actual": 64,
+          "expected": 64,
+          "passed": true,
+          "tolerance": 1e-12
+        },
+        {
+          "reference": "prevalence",
+          "actual": 0.3742690058479532,
+          "expected": 0.3742690058479532,
+          "passed": true,
+          "tolerance": 1e-12
+        },
+        {
+          "reference": "auc",
+          "actual": 0.9933,
+          "expected": 0.9932827102803738,
+          "passed": true,
+          "tolerance": 5e-05
+        },
+        {
+          "reference": "brier",
+          "actual": 0.0216,
+          "expected": 0.021578370897409358,
+          "passed": true,
+          "tolerance": 5e-05
+        },
+        {
+          "reference": "ppv",
+          "actual": 0.9841269841269841,
+          "expected": 0.9841269841269841,
+          "passed": true,
+          "tolerance": 1e-12
+        },
+        {
+          "reference": "sensitivity",
+          "actual": 0.96875,
+          "expected": 0.96875,
+          "passed": true,
+          "tolerance": 1e-12
+        },
+        {
+          "reference": "specificity",
+          "actual": 0.9906542056074766,
+          "expected": 0.9906542056074766,
+          "passed": true,
+          "tolerance": 1e-12
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "role": "bindings",
+      "path": "independent-bindings.json",
+      "sha256": "b7e51cdb266037a93f59b66cc36e748a44b4199c2869d289dd11d7aa501773b3",
+      "bytes": 2294
+    },
+    {
+      "role": "judge",
+      "path": "evals/statistical-analysis/live/judge.py",
+      "sha256": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
+      "bytes": 9692
+    },
+    {
+      "role": "fixture-manifest",
+      "path": "evals/statistical-analysis/live/fixture-sources.json",
+      "sha256": "5120794224a067edd8deb630e911416f653b005556257389f8aa0317cb6424a5",
+      "bytes": 1244
+    },
+    {
+      "role": "results",
+      "path": "turn-0/workspace/deliverables/statistical-review/verification-results.json",
+      "sha256": "9930a867bcbcaf5535291bbde9cab6d409d5e63c1badfa9358ea3877c21f7919",
+      "bytes": 30433
+    },
+    {
+      "role": "predictions",
+      "path": "turn-0/workspace/data/prior-predictions.csv",
+      "sha256": "f268e889335908395d94011d126052f6adf3767e7799f5d147454e2060972f79",
+      "bytes": 31322
+    },
+    {
+      "role": "fixture",
+      "path": "evals/statistical-analysis/live/fixtures/breast-cancer.csv",
+      "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+      "bytes": 123562
+    }
+  ],
+  "versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "scikit-learn": "1.6.1"
+  }
+}
