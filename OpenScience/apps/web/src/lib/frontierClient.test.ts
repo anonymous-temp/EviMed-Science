@@ -364,21 +364,22 @@ describe("the routes of the second wave", () => {
     expect(await fetchFrontierDaily("2026-09-21")).toMatchObject({ readingMinutes: 1, previousDay: null, nextDay: null });
   });
 
-  it("reads the reader's own followed zones off an issue, and drops what is not a zone with a card", async () => {
+  it("reads the reader's own followed zones off an issue: their items and week categories, dropping what is not a zone with an item", async () => {
     fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-23", sections: [], safety: [], markdown: "", followedZones: [
-      { zoneId: "ez_1", zoneTitle: "房颤抗凝", cards: [
-        { id: "ec_1", title: "新卡", summary: "摘要", change: "new", revision: 1, updatedAt: "2026-09-23T01:00:00.000Z" },
-        { id: "ec_2", title: "旧卡", change: "anything else", revision: 3 },
-        { title: "no id" },
+      { zoneId: "ez_1", slug: "glp1-weight", zoneTitle: "GLP-1 减重", entries: [
+        { item: { ...rawItem({ id: "z1" }), slot: "personal" }, category: "guideline", categoryLabel: "指南与共识" },
+        { item: rawItem({ id: "z2" }) },
+        { item: { title: "not an item" }, category: "evidence" },
       ] },
-      { zoneId: "ez_2", zoneTitle: "空专区", cards: [] },
-      { zoneTitle: "no id", cards: [{ id: "ec_3", title: "x" }] },
+      { zoneId: "ez_2", zoneTitle: "空专区", entries: [] },
+      { zoneTitle: "no id", entries: [{ item: rawItem({ id: "z3" }) }] },
     ] } } }));
     const daily = await fetchFrontierDaily("2026-09-23");
-    expect(daily?.followedZones).toEqual([{ zoneId: "ez_1", zoneTitle: "房颤抗凝", cards: [
-      { id: "ec_1", title: "新卡", summary: "摘要", change: "new", revision: 1, updatedAt: "2026-09-23T01:00:00.000Z" },
-      { id: "ec_2", title: "旧卡", summary: "", change: "updated", revision: 3, updatedAt: null },
-    ] }]);
+    expect(daily?.followedZones).toHaveLength(1);
+    expect(daily?.followedZones?.[0]).toMatchObject({ zoneId: "ez_1", slug: "glp1-weight", zoneTitle: "GLP-1 减重" });
+    expect(daily?.followedZones?.[0].entries.map((entry) => [entry.item.id, entry.category, entry.categoryLabel])).toEqual([["z1", "guideline", "指南与共识"], ["z2", "evidence", ""]]);
+    // The zone items are served in the issue's list, so a click on one is attributed.
+    expect(daily?.slots).toMatchObject({ z1: "personal", z2: null });
     fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-21", sections: [], safety: [], markdown: "" } } }));
     expect((await fetchFrontierDaily("2026-09-21"))?.followedZones).toEqual([]);
   });

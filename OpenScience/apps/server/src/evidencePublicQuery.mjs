@@ -83,8 +83,10 @@ export function evidencePublicPredicate(audience, { card = "c", zone = "z" } = {
     return `${card}.state = 'published' AND ${zone}.state = 'published' AND ${card}.withdrawn IS NULL
             AND (${zone}.kind = 'official' OR (${zone}.kind = 'user' AND ${zone}.visibility = 'internet' AND ${card}.lineage->>'resultVersionId' IS NOT NULL))`;
   }
-  if (audience === "pages") return `${card}.state = 'published' AND ${zone}.state = 'published' AND ${zone}.visibility = 'internet'`;
-  if (audience === "zones") return `${zone}.state = 'published' AND ${zone}.visibility = 'internet'`;
+  // A zone with a topic definition (`lifecycle <> 'none'`) is not a zone of cards: the platform's topic zones are read by their own pages
+  // (`evidencePublicTopicReads.mjs`) and a reader's is never public, so neither is found here however its visibility was set.
+  if (audience === "pages") return `${card}.state = 'published' AND ${zone}.state = 'published' AND ${zone}.visibility = 'internet' AND ${zone}.lifecycle = 'none'`;
+  if (audience === "zones") return `${zone}.state = 'published' AND ${zone}.visibility = 'internet' AND ${zone}.lifecycle = 'none'`;
   throw new TypeError(`Unknown public audience "${audience}".`);
 }
 

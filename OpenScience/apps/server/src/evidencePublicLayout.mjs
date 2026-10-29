@@ -10,8 +10,10 @@
 //   description, `og:url` is the canonical address (so only where a public address is configured), `og:type` is `article` for a card and
 //   `website` for the rest, and the summary card is the only Twitter tag. They are written whether or not the page is indexable: a preview
 //   of a page a person pasted into a chat reveals nothing the page does not. There is no `og:image`: the pages carry no pictures.
-// - **No structured markup for machines that read answers** (plan §2.3, ruling 6): no JSON-LD, no microdata and no llms file. The only
-//   machine-readable additions are the two the plan keeps: the canonical address and the AI-generated-content metadata.
+// - **Structured markup only where the owner asked for it** (plan §2.3, ruling 6, narrowed 2026-10-29 by plan §6.9): no microdata and no
+//   llms file anywhere, and JSON-LD on a platform topic zone's page alone (`jsonLd`, made by `evidencePublicTopicPages.mjs` from what
+//   the page shows). Every other page keeps the two machine-readable additions the plan had: the canonical address and the
+//   AI-generated-content metadata.
 // - **The AI label has two parts** (《人工智能生成合成内容标识办法》, in force 2025-09-01, and the national standard it points to,
 //   GB 45438-2025《网络安全技术 人工智能生成合成内容标识方法》). The explicit part is a visible 「AI 生成」 mark on the card, which the
 //   card page draws. The implicit part is metadata: the standard's implicit label is a JSON object under the key `AIGC` whose fields
@@ -23,7 +25,7 @@
 //   the other `Label` values are not used. The standard defines the file formats it covers, not an HTML page, so the object is carried
 //   in `<meta name="AIGC" content='{...}'>`, which is this build's choice of carrier and is said so here rather than assumed.
 
-import { html, pathLink, raw } from "./evidencePublicHtml.mjs";
+import { html, jsonLdBlock, pathLink, raw } from "./evidencePublicHtml.mjs";
 import { evidenceAbsoluteUrl } from "./evidencePublicIndexing.mjs";
 import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 import { evidencePublicStylesheetPath } from "./evidencePublicStyle.mjs";
@@ -60,14 +62,18 @@ export function aigcMetadata({ producerName, produceId, propagateId }) {
 /**
  * A full page.
  * @param {{ title: string, description: string, path: string, noindex: boolean, active?: string, body: any, wide?: boolean, aigc?: string | null,
- *   publicUrl?: unknown, alternates?: boolean, ogType?: "website" | "article" }} page
+ *   publicUrl?: unknown, alternates?: boolean, ogType?: "website" | "article", canonicalPath?: string | null,
+ *   feed?: { title: string, href: string } | null, jsonLd?: unknown }} page
+ *   `canonicalPath` names the page this one is an alias of (a zone read by its slug); `feed` is one more feed the head advertises (a
+ *   zone's); `jsonLd` is the page's structured data, written as one `application/ld+json` block.
  * @returns {string}
  */
-export function renderPage({ title, description, path, noindex, active = "", body, wide = false, aigc = null, publicUrl = null, alternates = false, ogType = "website" }) {
-  const canonical = evidenceAbsoluteUrl(publicUrl, path.split("?")[0]);
-  const feedLinks = alternates
+export function renderPage({ title, description, path, noindex, active = "", body, wide = false, aigc = null, publicUrl = null, alternates = false, ogType = "website",
+  canonicalPath = null, feed = null, jsonLd = null }) {
+  const canonical = evidenceAbsoluteUrl(publicUrl, (canonicalPath ?? path).split("?")[0]);
+  const feedLinks = html`${alternates
     ? html`<link rel="alternate" type="application/rss+xml" title="${EVIDENCE_SITE_NAME}" href="${evidencePublicPath("/feed.xml")}"><link rel="alternate" type="application/json" title="${EVIDENCE_SITE_NAME}（JSON）" href="${evidencePublicPath("/feed.json")}">`
-    : "";
+    : ""}${feed ? html`<link rel="alternate" type="application/rss+xml" title="${feed.title}" href="${feed.href}">` : ""}`;
   return `<!doctype html>\n${html`<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -85,6 +91,7 @@ ${canonical ? html`<meta property="og:url" content="${canonical}">` : ""}
 <meta name="twitter:card" content="summary">
 ${aigc ? html`<meta name="AIGC" content="${aigc}">` : ""}
 ${feedLinks}
+${jsonLd ? jsonLdBlock(jsonLd) : ""}
 <link rel="stylesheet" href="${evidencePublicStylesheetPath()}">
 </head>
 <body>

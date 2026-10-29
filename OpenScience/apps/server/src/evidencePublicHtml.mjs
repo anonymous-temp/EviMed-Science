@@ -94,3 +94,15 @@ export function timeTag(value) {
   if (!day) return html``;
   return html`<time datetime="${new Date(/** @type {any} */ (value)).toISOString()}">${day}</time>`;
 }
+
+/**
+ * A JSON value safe inside a `<script>` block: `<`, `>`, `&` and the two line separators are written as escapes, so no value can close the
+ * block or open a comment in it.
+ * @param {unknown} value
+ */
+export function jsonForScript(value) {
+  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+/** The script block that carries a page's structured data (a data block: the browser runs nothing of it). @param {unknown} data */
+export const jsonLdBlock = (data) => raw(`<script type="application/ld+json">${jsonForScript(data)}</script>`);

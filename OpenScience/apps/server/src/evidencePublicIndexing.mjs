@@ -20,9 +20,18 @@
 //   indexing is on and the deployment has a public address (the sitemap's own conditions), keeps crawlers off the private surfaces
 //   (`/app/`, `/api/`, `/internal/`, `/evolution/`) and off the pages' JSON API, and never disallows a page: a page that says `noindex` has
 //   to be crawlable for the crawler to read it.
+// - **AI search is allowed and AI training is not** (owner, 2026-10-29). The crawlers that fetch a page to answer a question or to index it
+//   (`OAI-SearchBot`, `PerplexityBot`, `Claude-SearchBot`, `Bingbot`, `Googlebot`, `Baiduspider`) have a group of their own that allows the
+//   public base path; the crawlers that collect text to train a model (`GPTBot`, `ClaudeBot`, `CCBot`, `Google-Extended`, `Bytespider`,
+//   `anthropic-ai`) are disallowed everywhere. A crawler obeys the one group that names it and no other, so the private surfaces are
+//   repeated in the search group: they stay closed to everyone. Both lists are closed and are the owner's decision, not a reading of
+//   anything.
+// - **A topic zone's page is indexable by a count** (`topicIndexable`): at least five items in thirty days or a 最新进展 to read. Under
+//   that it is `noindex` (and its links are still followed: that is the default) and absent from the sitemap; the rule lifts by itself.
 
 import { HttpError } from "./security.mjs";
 import { evidencePublicPath } from "./evidencePublicPaths.mjs";
+import { topicIndexable } from "./evidencePublicTopicReads.mjs";
 
 /** The static pages a sitemap lists besides zones, cards and authors, under the base the deployment serves the pages at. The index is the first of them. */
 const sitePaths = () => ["/", "/about", "/metrics", "/simulations"].map((suffix) => evidencePublicPath(suffix));
@@ -41,18 +50,24 @@ function later(left, right) {
  * @param {{ config: Record<string, any>, reads: { authorQualifies: (authorHandle: string | null) => Promise<boolean> } }} options
  */
 export function createEvidencePublicIndexing({ config, reads }) {
-  const counters = { noindexSwitchOff: 0, noindexNewAuthor: 0, noindexWithdrawn: 0, noindexAlways: 0, indexable: 0, sitemapRequests: 0, sitemapUrls: 0 };
+  const counters = { noindexSwitchOff: 0, noindexNewAuthor: 0, noindexWithdrawn: 0, noindexAlways: 0, noindexThin: 0, indexable: 0, sitemapRequests: 0, sitemapUrls: 0 };
 
   /**
    * Whether a page may be indexed, and why not.
-   * @param {{ kind: "site" } | { kind: "never" } | { kind: "zone", zoneKind: string, ownerHandle: string | null } | { kind: "card", zoneKind: string, authorHandle: string | null, withdrawn: boolean } | { kind: "author", official: boolean, authorHandle: string }} page
-   * @returns {Promise<{ index: boolean, reason: "switch_off" | "new_author" | "withdrawn" | "never" | null }>}
+   * @param {{ kind: "site" } | { kind: "never" } | { kind: "topic", month: number, hasProgress: boolean } | { kind: "zone", zoneKind: string, ownerHandle: string | null } | { kind: "card", zoneKind: string, authorHandle: string | null, withdrawn: boolean } | { kind: "author", official: boolean, authorHandle: string }} page
+   * @returns {Promise<{ index: boolean, reason: "switch_off" | "new_author" | "withdrawn" | "never" | "thin" | null }>}
    */
   async function decide(page) {
     if (page.kind === "never") { counters.noindexAlways += 1; return { index: false, reason: "never" }; }
     if (page.kind === "card" && page.withdrawn) { counters.noindexWithdrawn += 1; return { index: false, reason: "withdrawn" }; }
     if (config.evidencePublicIndexable !== true) { counters.noindexSwitchOff += 1; return { index: false, reason: "switch_off" }; }
     if (page.kind === "site") { counters.indexable += 1; return { index: true, reason: null }; }
+    // The platform's own topic zone: no author to qualify, only the page's content (plan §6.9).
+    if (page.kind === "topic") {
+      if (!topicIndexable(page)) { counters.noindexThin += 1; return { index: false, reason: "thin" }; }
+      counters.indexable += 1;
+      return { index: true, reason: null };
+    }
     const { official, authorHandle } = page.kind === "author" ? { official: page.official, authorHandle: page.authorHandle }
       : page.kind === "zone" ? { official: page.zoneKind === "official", authorHandle: page.ownerHandle }
         : { official: page.zoneKind === "official", authorHandle: page.authorHandle };
@@ -63,9 +78,11 @@ export function createEvidencePublicIndexing({ config, reads }) {
 
   /**
    * The sitemap's entries: every page `decide` calls indexable. Authors are asked about once each.
-   * @param {{ zones: { id: string, kind: string, authorHandle: string | null, updatedAt: string | null }[], cards: { id: string, kind: string, authorHandle: string | null, updatedAt: string | null }[] }} entries
+   * @param {{ zones: { id: string, kind: string, authorHandle: string | null, updatedAt: string | null }[], cards: { id: string, kind: string, authorHandle: string | null, updatedAt: string | null }[],
+   *   topics?: { id: string, month: number, hasProgress: boolean, lastmod: string | null }[] }} entries
+   *   `topics` are the platform's topic zones: each is listed when `topicIndexable`, with the date its page says it changed.
    */
-  async function sitemapPaths({ zones, cards }) {
+  async function sitemapPaths({ zones, cards, topics = [] }) {
     /** @type {Map<string, boolean>} */
     const verdicts = new Map();
     const allowed = async (/** @type {string} */ kind, /** @type {string | null} */ authorHandle) => {
@@ -88,6 +105,11 @@ export function createEvidencePublicIndexing({ config, reads }) {
       if (!(await allowed(zone.kind, zone.authorHandle))) continue;
       pages.push({ path: evidencePublicPath(`/z/${encodeURIComponent(zone.id)}`), lastmod: zone.updatedAt });
       note(zone.authorHandle, zone.updatedAt);
+    }
+    for (const topic of topics) {
+      if (!topicIndexable(topic)) continue;
+      pages.push({ path: evidencePublicPath(`/z/${encodeURIComponent(topic.id)}`), lastmod: topic.lastmod });
+      latest = later(latest, topic.lastmod);
     }
     for (const card of cards) {
       if (!(await allowed(card.kind, card.authorHandle))) continue;
@@ -125,18 +147,33 @@ export function evidenceAbsoluteUrl(publicUrl, path) {
 /** The application's own surfaces no crawler has a reason to read: the signed-in app and its API, the gateways and the plugin manifests. */
 const PRIVATE_SURFACES = Object.freeze(["/app/", "/api/", "/internal/", "/evolution/"]);
 
+/** The crawlers that read a page to index it or to answer a question with it: allowed to the public pages (owner, 2026-10-29). */
+export const EVIDENCE_SEARCH_CRAWLERS = Object.freeze(["OAI-SearchBot", "PerplexityBot", "Claude-SearchBot", "Bingbot", "Googlebot", "Baiduspider"]);
+/** The crawlers that collect text to train a model: disallowed everywhere (owner, 2026-10-29). */
+export const EVIDENCE_TRAINING_CRAWLERS = Object.freeze(["GPTBot", "ClaudeBot", "CCBot", "Google-Extended", "Bytespider", "anthropic-ai"]);
+
 /**
  * The host's `/robots.txt`. The pages are crawlable whatever the deployment's indexing switch says, so a page that says `noindex` is read
- * as such; the sitemap is announced only when it exists (indexing on, a public address configured).
+ * as such; the sitemap is announced only when it exists (indexing on, a public address configured). Three groups: the search crawlers
+ * (allowed to the public pages, the private surfaces closed), the training crawlers (closed) and everyone else (the private surfaces
+ * closed; the public pages allowed aloud only while indexing is on, in both groups that admit a crawler). A crawler obeys the one group
+ * that names it, so the closed surfaces are written into both of them.
  * @param {{ indexable: boolean, publicUrl: unknown }} options
  */
 export function evidenceRobotsTxt({ indexable, publicUrl }) {
   const sitemap = indexable ? evidenceAbsoluteUrl(publicUrl, evidencePublicPath("/sitemap.xml")) : null;
+  const closed = [`Disallow: ${evidencePublicPath("/api/")}`, ...PRIVATE_SURFACES.map((path) => `Disallow: ${path}`)];
   return [
+    ...EVIDENCE_SEARCH_CRAWLERS.map((agent) => `User-agent: ${agent}`),
+    ...(indexable ? [`Allow: ${evidencePublicPath("/")}`] : []),
+    ...closed,
+    "",
+    ...EVIDENCE_TRAINING_CRAWLERS.map((agent) => `User-agent: ${agent}`),
+    "Disallow: /",
+    "",
     "User-agent: *",
     ...(indexable ? [`Allow: ${evidencePublicPath("/")}`] : []),
-    `Disallow: ${evidencePublicPath("/api/")}`,
-    ...PRIVATE_SURFACES.map((path) => `Disallow: ${path}`),
+    ...closed,
     ...(sitemap ? ["", `Sitemap: ${sitemap}`] : []),
     "",
   ].join("\n");
