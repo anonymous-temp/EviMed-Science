@@ -162,6 +162,7 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_product.memory_index_state": "publication bookkeeping for the ranking index over capsules that are themselves exported; derived from them and from nothing else",
   "evimed_memory.settings": "carried by the archive as memory/memory.json, beside the memories: the researcher's own pause switches, read through the same store (`MemorySettingsStore.exportUserMemory`)",
   "evimed_memory.sessions": "the capsule a conversation is trying, for conversations that live in this deployment's runtime; it means nothing outside it, and the capsule itself is exported",
+  "evimed_frontier.zone_notice_claims": "which key updates of the zones a reader owns or follows their daily notice already named (frontierZoneUpdates.mjs), kept a fortnight so none is named twice: delivery bookkeeping over feed items and zones, not anything the researcher wrote, and meaningless outside this deployment's feed",
   "evimed_memory.topic_sets": "how the exported memories were last grouped into topics for the memory map, with the names the researcher gave those groups: derived from the memories, regrouped on demand, and keyed by group ids that mean nothing in another deployment",
 });
 

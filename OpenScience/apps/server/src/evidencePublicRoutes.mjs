@@ -252,6 +252,8 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     await countRead(req, head, { zoneId: zone.id });
     sendPage(res, head, 200, page, {
       path: alias && zone.slug ? topicZoneSlugPath(zone.slug) : topicZonePath(zone.id), canonicalPath: topicZonePath(zone.id), active: "zones", ogType: "article",
+      // 最新进展 is written by a model, so the page carries the implicit AI-content label (as a card an AI wrote does) beside the visible note under it.
+      aigc: zone.progress ? aigcMetadata({ producerName: EVIDENCE_PLATFORM_PRODUCER_NAME, produceId: `${zone.id}@${zone.progress.at}`, propagateId: `${zone.id}@${zone.progress.at}` }) : null,
       noindex: await noindexFor({ kind: "topic", month: zone.month, hasProgress: Boolean(zone.progress) }),
       feed: { title: `${zone.title} · ${EVIDENCE_SITE_NAME}`, href: topicZoneFeedPath(zone.id) },
     });

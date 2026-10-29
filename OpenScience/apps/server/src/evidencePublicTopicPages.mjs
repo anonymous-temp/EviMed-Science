@@ -69,7 +69,7 @@ ${item.guide ? html`<p>${clip(item.guide, 200)}</p>` : ""}
 <p class="meta">${item.source}${item.at ? html` · ${timeTag(item.at)}` : ""} · ${externalLink(item.url, "原文")}</p>
 </li>`;
   const note = /** @type {Record<string, string>} */ (LIFECYCLE_NOTES)[zone.lifecycle] ?? "";
-  const description = clip(zone.progress?.text.replace(/\[\d{1,2}\]/g, "") || zone.scope || `${zone.title}的最新医学进展。`);
+  const description = clip(zone.progress?.text.replace(/\s*\[\d{1,2}\]/g, "") || zone.scope || `${zone.title}的最新医学进展。`);
   return {
     title: `${zone.title} · ${EVIDENCE_SITE_NAME}`,
     description,

@@ -208,6 +208,8 @@ test("a platform topic zone is a page: its keywords and scope, 最新进展 with
   assert.deepEqual(crumbs.itemListElement.map((entry) => entry.name), ["EviMed 证据中心", "内分泌代谢", "肥胖", "GLP-1 受体激动剂减重"]);
   assert.ok(list.itemListElement.length >= 9 && list.itemListElement.every((entry) => /^https:\/\//.test(entry.url)));
   assert.match(body, /<link rel="canonical" href="https:\/\/www\.evimed\.test\/evidence\/z\/ez_glp1weight">/);
+  assert.match(body, /<meta name="AIGC" content="[^"]+ez_glp1weight@/, "a paragraph a model wrote carries the implicit AI-content label");
+  assert.match(body, /<meta name="description" content="FDA 批准司美格鲁肽用于新的适应症；肥胖诊疗指南同步更新。没有对应的标注 ?[^"]*">/);
   assert.equal(body.includes("<script>") || /<script(?![^>]*ld\+json)/.test(body), false, "the only script block is the data");
   // The sitemap says the same date.
   const sitemap = await text("/evidence/sitemap.xml");
