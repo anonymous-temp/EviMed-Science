@@ -41,7 +41,7 @@ export function VcrCountsBand({ counts, tabOf, className }: {
   if (!counts || keys.length === 0) return null;
   return (
     <section aria-label="样本量的几个数" data-vcr-counts="" className={className}>
-      {counts.scope && <p className="mb-1.5 text-compact text-text-3">{counts.scope}</p>}
+      {counts.scope && <p className="mb-1.5 text-caption text-text-3">{counts.scope}</p>}
       {/* A row of tiles that fills its width however many there are: a grid of fixed columns left a grey hole for each one missing. */}
       <div className="flex flex-wrap gap-px overflow-hidden rounded-panel border border-border bg-border [&>*]:min-w-40 [&>*]:flex-1 [&>*]:bg-surface">
         {keys.map((key) => {
@@ -66,7 +66,7 @@ export function VcrCountsLine({ counts, className }: { counts: VcrCounts | null 
       {keys.map((key) => (
         <span key={key} className="whitespace-nowrap">
           {countLabel(key)}
-          <span data-vcr-count={key} className="ml-1 font-medium tabular-nums text-text-2">{countText(counts[key] as number)}</span>
+          <span data-vcr-count={key} className="ml-1 tabular-nums text-text-2">{countText(counts[key] as number)}</span>
         </span>
       ))}
     </p>

@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { EVIDENCE_ZONE_SQL } from "./evidenceZonePersistence.mjs";
 import { FRONTIER_EVENT_READING_SQL } from "./frontierEventReading.mjs";
+import { FRONTIER_INTERACTIONS_SQL } from "./frontierInteractions.mjs";
+import { frontierTagSeedRows, tagKey } from "./frontierTags.mjs";
 
 /**
  * The frontier feed's own schema, `evimed_frontier` (「前沿动态」, plan §10.4).
@@ -54,6 +57,16 @@ const migrations = new WeakMap();
 /** The schema name, written once. */
 export const FRONTIER_SCHEMA = "evimed_frontier";
 
+/** The zone the feed's days and clocks are read in: Beijing time, everywhere (owner, 2026-10-26). The web reads the same zone. */
+export const FRONTIER_FEED_TIME_ZONE = "Asia/Shanghai";
+
+/**
+ * The version of the rule that decides `items.timeline_at` (`frontierTimelineAt` in `frontierPipeline.mjs`): 1 was "our publication
+ * instant unless the source is more than 72 hours older", 2 is the source's own time. The migration writes it once the published
+ * items have been given the rule (`backfillTimelineRule`).
+ */
+export const FRONTIER_TIMELINE_RULE = 2;
+
 /**
  * The `meta` keys this module seeds, and what each counts. Values are JSON
  * numbers; `bumpFrontierVersion` is the one way a version moves.
@@ -69,11 +82,15 @@ export const FRONTIER_META_KEYS = Object.freeze({
   pluginCursor: "plugin_cursor",
   /** The last manifest the plugin served, with its compatibility verdict. */
   pluginManifest: "plugin_manifest",
+  /** Bumped by every change of the tag tree (a promotion, a merge, a sleep): the in-memory vocabulary reloads on it. */
+  tagsVersion: "tags_version",
+  /** The rule `timeline_at` was last given by (`FRONTIER_TIMELINE_RULE`); not a version, nothing bumps it. */
+  timelineRule: "timeline_rule",
 });
 
 /** The keys `bumpFrontierVersion` moves; the cursor and the manifest are not versions.
  *  @type {ReadonlySet<string>} */
-const VERSION_KEYS = new Set([FRONTIER_META_KEYS.contentVersion, FRONTIER_META_KEYS.hotVersion, FRONTIER_META_KEYS.dailyVersion]);
+const VERSION_KEYS = new Set([FRONTIER_META_KEYS.contentVersion, FRONTIER_META_KEYS.hotVersion, FRONTIER_META_KEYS.dailyVersion, FRONTIER_META_KEYS.tagsVersion]);
 
 /** The tables every deployment has. The trigram index and the vector table
  *  follow below, only where their extension exists. */
@@ -109,6 +126,10 @@ CREATE INDEX IF NOT EXISTS frontier_sources_lane_idx ON evimed_frontier.sources 
 -- Contract 1.3.0 (flywheel F09, 2026-10-05): the source's content is the platform's own. A label the cards show and the
 -- reason an item of such a source is never independent corroboration of another's; scoring never reads it.
 ALTER TABLE evimed_frontier.sources ADD COLUMN IF NOT EXISTS platform_produced boolean NOT NULL DEFAULT false;
+-- fr-sources 2026-10-22
+-- The plugin's own switch as the mirror last read it (frontierIngest.mirrorSources): enabled takes it whenever it
+-- changes and keeps the platform's display switch otherwise; null until the first mirror that reads it.
+ALTER TABLE evimed_frontier.sources ADD COLUMN IF NOT EXISTS plugin_enabled boolean;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.entries (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -149,6 +170,15 @@ CREATE INDEX IF NOT EXISTS frontier_entries_queue_idx
 CREATE INDEX IF NOT EXISTS frontier_entries_identity_idx ON evimed_frontier.entries (identity_key);
 CREATE INDEX IF NOT EXISTS frontier_entries_retention_idx
   ON evimed_frontier.entries (received_at) WHERE state IN ('screened-out', 'dropped', 'backfill', 'failed');
+-- fr-social 2026-10-22
+-- Knowledge plugin contract 1.5.0: what a social post carries (an X post, a WeChat article, a post on one of six Chinese
+-- platforms), and every entry's channel. As the plugin delivered it, whitelisted again by the ingest; NULL when absent.
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS metrics jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.items (
   id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -202,6 +232,13 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.items (
   lease_until       timestamptz(3),
   updated_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS editor_diagnostics jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- fr-events 2026-10-22: one selected item per event. The grouping call judges whether a report tells a reader anything the
+-- event's selected report did not; an item that does not names that report here (its 「同一事件」 link) and is published
+-- unselected. event_selection is the verdict as given, for operators: {addsValue, reason, decidedAt}.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS same_event_item_id bigint REFERENCES evimed_frontier.items(id) ON DELETE SET NULL;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS event_selection jsonb;
+CREATE INDEX IF NOT EXISTS frontier_items_same_event_idx ON evimed_frontier.items (same_event_item_id) WHERE same_event_item_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS frontier_items_doi_key ON evimed_frontier.items (lower(doi)) WHERE doi IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS frontier_items_identity_key ON evimed_frontier.items (identity_key);
 CREATE INDEX IF NOT EXISTS frontier_items_url_idx ON evimed_frontier.items (md5(canonical_url));
@@ -228,6 +265,29 @@ CREATE INDEX IF NOT EXISTS frontier_items_published_idx
 -- each of those is a scan of every item ever published.
 CREATE INDEX IF NOT EXISTS frontier_items_visible_idx
   ON evimed_frontier.items (visible_at DESC) WHERE state = 'published';
+-- fr-social 2026-10-22
+-- The six contract 1.5.0 fields, copied from the item's primary entry when the item is made and when that entry is revised.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS metrics jsonb;
+-- fr-edit 2026-10-22
+-- The editor's tags (at most seven; the reader adds the evidence type).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}';
+-- The media proxy serves an id only while a published item names it: one containment lookup per picture.
+CREATE INDEX IF NOT EXISTS frontier_items_media_idx ON evimed_frontier.items USING gin (media jsonb_path_ops) WHERE media <> '[]'::jsonb;
+-- ct-write 2026-10-24: the reader's 「AI 要点」 (frontierBrief.mjs) — the genre's typed fields as served ({genre, points, quote}), the
+-- basis it was written on (the settled reader text's hash, a colon, the genre), when, and which instructions wrote it; and which
+-- instructions wrote the 导读 (lead_version) and the 推荐理由 (reason_version), so the backfill (scripts/ops/frontier-rewrite.mjs)
+-- rewrites only what an older prompt wrote.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief_basis text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief_at timestamptz(3);
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS brief_version text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_version text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS reason_version text;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_keys (
   key     text PRIMARY KEY,
@@ -252,6 +312,66 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
   open_access        text,
   enrichment         jsonb NOT NULL DEFAULT '{}'::jsonb
 );
+-- fr-social 2026-10-22
+-- The full text (the plugin text answer's body_text, contract 1.5.0): a post or article as it arrived, or a page's readable
+-- text, and whether the plugin delivered it whole (body_text_complete).
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 100000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_complete boolean;
+-- fr-edit 2026-10-22
+-- The Chinese reading of it is the edit stage's: a translation whose paragraphs all came back (body_complete), or the
+-- source's own Chinese (original-zh, with body_zh left null: the original is the Chinese text); which text it was read from
+-- (body_zh_source: the full text, the abstract or the page excerpt, best first); and the translation of a quoted post.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text CHECK (char_length(body_zh) <= 150000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_kind text CHECK (body_zh_kind IN ('translation', 'original-zh'));
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_at timestamptz(3);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_complete boolean;
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_source text CHECK (body_zh_source IN ('body', 'abstract', 'excerpt'));
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS quoted_zh text;
+-- reader-text 2026-10-22 (frontierReaderTidy.mjs): the verdict on the reader's text — which text (source), the hash of it as
+-- stored (sha), the paragraphs that are not the article's (drop), and why an answer was refused — null until settled, and
+-- set back to null whenever a text column changes. The translation step waits for it.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_tidy jsonb;
+CREATE INDEX IF NOT EXISTS item_texts_reader_tidy_due ON evimed_frontier.item_texts (item_id)
+  WHERE reader_tidy IS NULL AND (body_text IS NOT NULL OR abstract_raw IS NOT NULL OR body_excerpt IS NOT NULL);
+-- reader-text 2026-10-22 (frontierLead.mjs, frontierInsight.mjs): the reader's 导读 paragraph, written from the settled reader text
+-- and kept with the hash of the text it was written from (lead_basis = reader_tidy->>'sha'); the 「AI 解读」 of a 精选 item, its
+-- cited reports ([{n, item_id}]) and its basis (the text's and the related reports' hash); and when a published item's text last
+-- changed, so a late abstract is edited even after the owed-edit window. A full text the platform read itself (an open-access PDF
+-- through the document parser) says so in item_texts.body_text_origin; the plugin's says nothing (null).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_zh text CHECK (char_length(lead_zh) <= 800);
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_basis text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_at timestamptz(3);
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_zh text CHECK (char_length(insight_zh) <= 800);
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_refs jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_basis text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_at timestamptz(3);
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS text_arrived_at timestamptz(3);
+-- ct-base 2026-10-24: what the item is as a reader names it (@evimed/domain FRONTIER_GENRES; null until written)
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS genre text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS genre_basis text CHECK (genre_basis IN ('code', 'model'));
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_origin text CHECK (body_text_origin IN ('oa-pdf'));
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS oa_pdf_tried_at timestamptz(3);
+-- rt2 2026-10-22: a full text read from an open-access PDF is the paper to its references, up to 100,000 characters, and its
+-- translation with it — the lengths the two columns were first declared with (40,000 and 60,000, contract 1.5.0) are widened on a
+-- database that already has them (ADD COLUMN IF NOT EXISTS changes nothing there); a constraint already as declared is left.
+-- Found on production: the 40,000 check refused every longer paper, which stayed first in the full-text queue.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.item_texts'::regclass AND conname = 'item_texts_body_text_check'
+      AND pg_get_constraintdef(oid) = 'CHECK ((char_length(body_text) <= 100000))') THEN
+    ALTER TABLE evimed_frontier.item_texts DROP CONSTRAINT IF EXISTS item_texts_body_text_check;
+    ALTER TABLE evimed_frontier.item_texts ADD CONSTRAINT item_texts_body_text_check CHECK (char_length(body_text) <= 100000);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.item_texts'::regclass AND conname = 'item_texts_body_zh_check'
+      AND pg_get_constraintdef(oid) = 'CHECK ((char_length(body_zh) <= 150000))') THEN
+    ALTER TABLE evimed_frontier.item_texts DROP CONSTRAINT IF EXISTS item_texts_body_zh_check;
+    ALTER TABLE evimed_frontier.item_texts ADD CONSTRAINT item_texts_body_zh_check CHECK (char_length(body_zh) <= 150000);
+  END IF;
+END $$;
+-- c2-gaps 2026-10-25 (G2): the reader's fourth text — the entry's usable summary and the record's facts, as the plugin delivered
+-- them, for an item that has no full text, abstract or page excerpt (a registry record, a regulator's database row, a safety notice,
+-- a feed's own summary). Written with the other text columns (frontierSummaryText), NULL until looked at, '' when there is nothing
+-- to read; the entry's own columns and the content hash are untouched. The 导读 and 要点 of such an item are written from it.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_summary text CHECK (char_length(reader_summary) <= 12000);
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_mentions (
   item_id      bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
@@ -312,6 +432,9 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.events (
 );
 CREATE INDEX IF NOT EXISTS frontier_events_recent_idx ON evimed_frontier.events (last_at DESC) WHERE merged_into IS NULL;
 CREATE INDEX IF NOT EXISTS frontier_events_hot_idx ON evimed_frontier.events (heat DESC) WHERE merged_into IS NULL AND status = 'developing';
+-- fr-events 2026-10-22: the overview's own title (AIHOT story-digest: it names the whole event, never only its latest
+-- report); the event is called by it once written, else by its first primary source's title.
+ALTER TABLE evimed_frontier.events ADD COLUMN IF NOT EXISTS digest_title_zh text CHECK (char_length(digest_title_zh) <= 60);
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.event_aliases (
   public_id text PRIMARY KEY,
@@ -387,6 +510,22 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.weeklies (
   generated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 
+-- fr-edit 2026-10-22
+-- The monthly report (frontierMonthly.mjs): compiled from the month's dailies, one row per month, written once.
+CREATE TABLE IF NOT EXISTS evimed_frontier.monthlies (
+  month        text PRIMARY KEY CHECK (month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  window_start timestamptz(3) NOT NULL,
+  window_end   timestamptz(3) NOT NULL,
+  lead         jsonb NOT NULL,
+  overview     text,
+  sections     jsonb NOT NULL,
+  markdown     text NOT NULL,
+  item_ids     bigint[] NOT NULL,
+  model        text NOT NULL,
+  written      boolean NOT NULL DEFAULT false,
+  generated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_changes (
   seq        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   item_id    bigint NOT NULL,
@@ -443,7 +582,7 @@ ${FRONTIER_EVENT_READING_SQL}
 CREATE TABLE IF NOT EXISTS evimed_frontier.user_follows (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id    text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
-  kind       text NOT NULL CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event')),
+  kind       text NOT NULL CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag', 'query')),
   key        text NOT NULL,
   label      text NOT NULL,
   muted      boolean NOT NULL DEFAULT false,
@@ -476,6 +615,208 @@ ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS inputs_versio
 ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS computed_inputs_version bigint NOT NULL DEFAULT 0;
 ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS memory_mark text;
 ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS for_you_seen_at timestamptz(3);
+-- ct-track 2026-10-24: the onboarding answer of 与我相关 — the reader's role, one to three specialties, up to ten interests (tag
+-- slugs or entity keys) — and when it was given or skipped (frontierProfiles.mjs prefs). Roles, specialties and interests are
+-- checked in code against @evimed/domain, as the schema's other closed words are.
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS role text;
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS specialties text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS interests text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS onboarded_at timestamptz(3);
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS onboarding_skipped_at timestamptz(3);
+
+-- 2026-10-23: a reader may follow a tag. The kind list was an inline CHECK, which ADD/CREATE ... IF NOT EXISTS never changes on
+-- a deployed database: it is replaced where it does not name the new kind yet.
+DO $frontier_follow_kinds$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.user_follows'::regclass AND conname = 'user_follows_kind_check'
+             AND pg_get_constraintdef(oid) NOT LIKE '%''tag''%') THEN
+    ALTER TABLE evimed_frontier.user_follows DROP CONSTRAINT user_follows_kind_check;
+    ALTER TABLE evimed_frontier.user_follows ADD CONSTRAINT user_follows_kind_check
+      CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag'));
+  END IF;
+END
+$frontier_follow_kinds$;
+
+-- The tag tree (frontierTags.mjs, owner 2026-10-23). A merged tag keeps its rows and links; merged_into names the tag that stands
+-- for it. Kinds and states are closed here because nothing outside this module writes them.
+CREATE TABLE IF NOT EXISTS evimed_frontier.tags (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  slug         text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,79}$'),
+  name         text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 40),
+  name_en      text CHECK (name_en IS NULL OR char_length(name_en) <= 200),
+  kind         text CHECK (kind IS NULL OR kind IN ('disease', 'drug', 'drug-class', 'therapy', 'technology', 'method', 'concept', 'population', 'policy')),
+  specialties  text[] NOT NULL DEFAULT '{}',
+  broader_id   bigint REFERENCES evimed_frontier.tags(id) ON DELETE SET NULL,
+  mesh_ui      text,
+  state        text NOT NULL CHECK (state IN ('candidate', 'active', 'dormant', 'merged', 'rejected')),
+  merged_into  bigint REFERENCES evimed_frontier.tags(id) ON DELETE SET NULL,
+  origin       text NOT NULL CHECK (origin IN ('seed', 'model', 'split')),
+  created_at   timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  state_at     timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  judged_at    timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS frontier_tags_state_idx ON evimed_frontier.tags (state);
+CREATE INDEX IF NOT EXISTS frontier_tags_merged_idx ON evimed_frontier.tags (merged_into) WHERE merged_into IS NOT NULL;
+CREATE TABLE IF NOT EXISTS evimed_frontier.tag_aliases (
+  key     text PRIMARY KEY,
+  tag_id  bigint NOT NULL REFERENCES evimed_frontier.tags(id) ON DELETE CASCADE,
+  alias   text NOT NULL CHECK (char_length(alias) <= 200),
+  origin  text NOT NULL CHECK (origin IN ('seed', 'model', 'mesh', 'merge', 'judge'))
+);
+CREATE INDEX IF NOT EXISTS frontier_tag_aliases_tag_idx ON evimed_frontier.tag_aliases (tag_id);
+CREATE TABLE IF NOT EXISTS evimed_frontier.item_tags (
+  item_id  bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+  tag_id   bigint NOT NULL REFERENCES evimed_frontier.tags(id) ON DELETE CASCADE,
+  rank     smallint NOT NULL,
+  origin   text NOT NULL CHECK (origin IN ('edit', 'retag', 'split')),
+  PRIMARY KEY (item_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS frontier_item_tags_tag_idx ON evimed_frontier.item_tags (tag_id, item_id);
+CREATE TABLE IF NOT EXISTS evimed_frontier.tag_changes (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  at         timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  action     text NOT NULL CHECK (action IN ('promote', 'merge', 'reject', 'dormant', 'wake', 'split', 'undo')),
+  tag_id     bigint NOT NULL REFERENCES evimed_frontier.tags(id) ON DELETE CASCADE,
+  other_id   bigint REFERENCES evimed_frontier.tags(id) ON DELETE SET NULL,
+  before     jsonb,
+  after      jsonb,
+  reason     text,
+  undone_at  timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS frontier_tag_changes_at_idx ON evimed_frontier.tag_changes (at DESC);
+-- tag_version: the tagging the item has (frontierTags FRONTIER_TAG_VERSION); null = tagged before the tree, so tagged again.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tag_version smallint;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tag_claim_until timestamptz(3);
+CREATE INDEX IF NOT EXISTS frontier_items_untagged_idx ON evimed_frontier.items (timeline_at DESC)
+  WHERE state = 'published' AND tag_version IS NULL;
+
+-- 2026-10-23: thirty specialties. A retired key is read as its successor or as nothing (@evimed/domain FRONTIER_SPECIALTY_RETIRED);
+-- what is stored is moved once, so no reader, filter or follow meets one.
+UPDATE evimed_frontier.items SET specialties = array_remove(array_remove(array_replace(specialties, 'surgery-anesthesia', 'general-surgery'), 'geriatrics'), 'public-health')
+  WHERE specialties && ARRAY['surgery-anesthesia', 'geriatrics', 'public-health']::text[];
+UPDATE evimed_frontier.user_profiles SET specialties = array_remove(array_remove(array_replace(specialties, 'surgery-anesthesia', 'general-surgery'), 'geriatrics'), 'public-health')
+  WHERE specialties && ARRAY['surgery-anesthesia', 'geriatrics', 'public-health']::text[];
+DELETE FROM evimed_frontier.user_follows f WHERE f.kind = 'specialty' AND f.key = 'surgery-anesthesia'
+  AND EXISTS (SELECT 1 FROM evimed_frontier.user_follows g WHERE g.user_id = f.user_id AND g.kind = 'specialty' AND g.key = 'general-surgery');
+UPDATE evimed_frontier.user_follows SET key = 'general-surgery', label = '普通外科' WHERE kind = 'specialty' AND key = 'surgery-anesthesia';
+DELETE FROM evimed_frontier.user_follows WHERE kind = 'specialty' AND key IN ('geriatrics', 'public-health');
+
+-- c2-base 2026-10-25: hot-event topics (@evimed/domain frontierTopics.mjs) — a public hot event's general medical question,
+-- written as the question; the event as one attributed line; the reports and evidence the lead triggers found for it, and its
+-- overview. group_key is the normalised key a re-sighting of the same event is recognised by; subject_names are the people
+-- or bodies the event names, kept so code can hold them out of evidence queries and titles, and never served to a reader.
+CREATE TABLE IF NOT EXISTS evimed_frontier.topics (
+  id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  public_id         text NOT NULL UNIQUE CHECK (public_id ~ '^[a-z0-9]{12,32}$'),
+  group_key         text NOT NULL UNIQUE CHECK (char_length(group_key) BETWEEN 1 AND 200),
+  title_zh          text NOT NULL CHECK (char_length(title_zh) BETWEEN 1 AND 60),
+  question_zh       text NOT NULL CHECK (char_length(question_zh) BETWEEN 1 AND 160),
+  peg_zh            text CHECK (char_length(peg_zh) <= 200),
+  peg_source        jsonb,
+  domain            text NOT NULL,
+  entity_keys       text[] NOT NULL DEFAULT '{}',
+  subject_names     text[] NOT NULL DEFAULT '{}',
+  boards            jsonb NOT NULL DEFAULT '[]'::jsonb,
+  surge             boolean NOT NULL DEFAULT false,
+  status            text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed')),
+  first_seen_at     timestamptz(3) NOT NULL,
+  accepted_at       timestamptz(3) NOT NULL,
+  closed_at         timestamptz(3),
+  queries           jsonb NOT NULL DEFAULT '{}'::jsonb,
+  waves             jsonb NOT NULL DEFAULT '[]'::jsonb,
+  overview_zh       text CHECK (char_length(overview_zh) <= 800),
+  overview_refs     jsonb,
+  overview_basis    text,
+  overview_at       timestamptz(3),
+  programme_state   text CHECK (programme_state IN ('queued', 'taken', 'card', 'skipped')),
+  programme_card_id text,
+  programme_at      timestamptz(3),
+  updated_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS frontier_topics_recent_idx ON evimed_frontier.topics (status, accepted_at DESC);
+CREATE TABLE IF NOT EXISTS evimed_frontier.topic_items (
+  topic_id  bigint NOT NULL REFERENCES evimed_frontier.topics(id) ON DELETE CASCADE,
+  item_id   bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+  role      text NOT NULL CHECK (role IN ('report', 'evidence', 'background')),
+  via       text NOT NULL CHECK (via IN ('lead', 'corpus')),
+  added_at  timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (topic_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS frontier_topic_items_item_idx ON evimed_frontier.topic_items (item_id);
+-- c2-base 2026-10-25: why a reader hid an item, when they said (@evimed/domain FRONTIER_HIDE_REASONS); null = no reason given.
+ALTER TABLE evimed_frontier.user_state ADD COLUMN IF NOT EXISTS hidden_reason text
+  CHECK (hidden_reason IN ('not-relevant', 'already-seen', 'low-quality', 'promotional', 'not-my-specialty', 'source'));
+-- c3-base 2026-10-25: 精选 calibration, study facts, ask questions, trackers, typed watches, congress recaps (round c3).
+-- A rare practice-changing label with its one-line reason, admitted in code (c3-select).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS practice_changing boolean NOT NULL DEFAULT false;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS practice_zh text CHECK (char_length(practice_zh) <= 200);
+-- What a study item's source says (design, size, population, comparator, primary endpoint and its direction), each field anchored
+-- by a verbatim quote that code found in the source (c3-faith); read by the faithfulness check and the score ceilings.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS study_facts jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS study_facts_version text;
+-- Up to three questions a reader may ask about the item, each opening the conversation with the item as its origin (c3-ask).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_zh jsonb;
+-- The tracker record of an approval or a guideline (agency, drug, indication, kind; body, key recommendations), anchored like
+-- study_facts (c3-track).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS track_facts jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS track_facts_version text;
+-- When the re-clustering sweep last compared an event with its neighbours (c3-cluster).
+ALTER TABLE evimed_frontier.events ADD COLUMN IF NOT EXISTS recluster_checked_at timestamptz(3);
+-- A reader may follow something they typed (a drug, a trial, a question): kind query, its parsed form in query, and when the
+-- reader last opened that follow, which the new-item counts are counted from (c3-watch).
+ALTER TABLE evimed_frontier.user_follows ADD COLUMN IF NOT EXISTS query jsonb;
+ALTER TABLE evimed_frontier.user_follows ADD COLUMN IF NOT EXISTS seen_at timestamptz(3);
+DO $frontier_follow_kinds_query$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.user_follows'::regclass AND conname = 'user_follows_kind_check'
+             AND pg_get_constraintdef(oid) NOT LIKE '%''query''%') THEN
+    ALTER TABLE evimed_frontier.user_follows DROP CONSTRAINT user_follows_kind_check;
+    ALTER TABLE evimed_frontier.user_follows ADD CONSTRAINT user_follows_kind_check
+      CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag', 'query'));
+  END IF;
+END
+$frontier_follow_kinds_query$;
+-- The published items a typed follow matched, once each, with the score that matched them (c3-watch).
+CREATE TABLE IF NOT EXISTS evimed_frontier.follow_matches (
+  follow_id  bigint NOT NULL REFERENCES evimed_frontier.user_follows(id) ON DELETE CASCADE,
+  item_id    bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+  score      real,
+  matched_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (follow_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS frontier_follow_matches_follow_idx ON evimed_frontier.follow_matches (follow_id, matched_at DESC);
+CREATE INDEX IF NOT EXISTS frontier_follow_matches_item_idx ON evimed_frontier.follow_matches (item_id);
+-- c3-watch 2026-10-25
+-- How far a typed follow's items have been looked at (a scan starts a little before it), and when a daily notice named a match.
+ALTER TABLE evimed_frontier.user_follows ADD COLUMN IF NOT EXISTS matched_through timestamptz(3);
+ALTER TABLE evimed_frontier.follow_matches ADD COLUMN IF NOT EXISTS notified_at timestamptz(3);
+CREATE INDEX IF NOT EXISTS frontier_user_follows_query_idx ON evimed_frontier.user_follows (matched_through NULLS FIRST) WHERE kind = 'query';
+-- One congress day's recap (@evimed/domain frontier-congresses.json ids), written from that day's items with numbers checked (c3-track).
+CREATE TABLE IF NOT EXISTS evimed_frontier.congress_recaps (
+  congress_id  text NOT NULL CHECK (congress_id ~ '^[a-z0-9-]{3,80}$'),
+  day          date NOT NULL,
+  recap_zh     text CHECK (char_length(recap_zh) <= 2000),
+  refs         jsonb NOT NULL DEFAULT '[]'::jsonb,
+  item_ids     bigint[] NOT NULL DEFAULT '{}',
+  model        text,
+  cost_cny     numeric(10, 4),
+  generated_at timestamptz(3),
+  PRIMARY KEY (congress_id, day)
+);
+-- c3-primary 2026-10-25: a top journal's research paper with no text of its own is read through the published reports of it. The text
+-- is the reports' words under their source names (item_texts.reader_reports, the last of the reader texts), the reports it was made
+-- from are listed in reader_reports_refs, and items.primary_checked_at is when the paper was last looked at for reports.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_reports text CHECK (char_length(reader_reports) <= 12000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_reports_refs jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS primary_checked_at timestamptz(3);
+
+-- c3-ask 2026-10-25: the text (its settled hash) and the instructions the questions were written from, and when, so a changed text
+-- or a changed prompt writes them again and an item with no good question is not asked about twice.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_basis text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_version text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_at timestamptz(3);
+
+${FRONTIER_INTERACTIONS_SQL}
 `;
 }
 
@@ -553,6 +894,85 @@ async function ensureVectorTable(client, dimension, halfvecSupported) {
   return type;
 }
 
+/** The seed of the tag tree (frontierTags.mjs), read once per process when the table is empty. */
+let tagSeed = /** @type {ReturnType<typeof frontierTagSeedRows> | null} */ (null);
+
+/**
+ * Load the tag tree's seed into an empty `tags` table, in the migration's transaction: once, on the first start of a release that
+ * has the tree — a table with any row (a seed already loaded, or tags grown since) is never touched again.
+ * @param {any} client
+ */
+async function seedFrontierTags(client) {
+  const present = await client.query("SELECT EXISTS (SELECT 1 FROM evimed_frontier.tags) AS present");
+  if (present.rows[0]?.present) return;
+  tagSeed ??= frontierTagSeedRows(JSON.parse(readFileSync(new URL("./frontierTagSeed.json", import.meta.url), "utf8")));
+  const rows = tagSeed;
+  await client.query(`INSERT INTO evimed_frontier.tags (slug, name, name_en, kind, specialties, mesh_ui, state, origin)
+    SELECT r.slug, r.name, r.name_en, r.kind, r.specialties, r.mesh_ui, r.state, 'seed'
+    FROM jsonb_to_recordset($1::jsonb) AS r(slug text, name text, name_en text, kind text, specialties text[], mesh_ui text, state text)`,
+  [JSON.stringify(rows.map((row) => ({ slug: row.slug, name: row.name, name_en: row.nameEn, kind: row.kind, specialties: row.specialties,
+    mesh_ui: row.meshUi, state: row.state })))]);
+  await client.query(`UPDATE evimed_frontier.tags t SET broader_id = b.id
+    FROM jsonb_to_recordset($1::jsonb) AS r(slug text, broader text) JOIN evimed_frontier.tags b ON b.slug = r.broader
+    WHERE t.slug = r.slug`, [JSON.stringify(rows.filter((row) => row.broader).map((row) => ({ slug: row.slug, broader: row.broader })))]);
+  // Every spelling once: the name, the English name, then the aliases; the first tag to claim a key keeps it.
+  const aliases = new Map();
+  for (const row of rows) {
+    for (const [alias, origin] of /** @type {Array<[string | null, string]>} */ ([[row.name, "seed"], [row.nameEn, "mesh"], ...row.aliases.map((spelling) => /** @type {[string, string]} */ ([spelling, /[\p{Script=Han}]/u.test(spelling) ? "seed" : "mesh"]))])) {
+      if (!alias) continue;
+      const key = tagKey(alias);
+      if (key && !aliases.has(key)) aliases.set(key, { key, slug: row.slug, alias: alias.slice(0, 200), origin });
+    }
+  }
+  await client.query(`INSERT INTO evimed_frontier.tag_aliases (key, tag_id, alias, origin)
+    SELECT r.key, t.id, r.alias, r.origin FROM jsonb_to_recordset($1::jsonb) AS r(key text, slug text, alias text, origin text)
+    JOIN evimed_frontier.tags t ON t.slug = r.slug ON CONFLICT (key) DO NOTHING`, [JSON.stringify([...aliases.values()])]);
+  // The tree moved: every process's vocabulary reloads (written without reading the answer back, as the rest of the migration is).
+  await client.query(`INSERT INTO evimed_frontier.meta (key, value, updated_at) VALUES ($1, '1'::jsonb, clock_timestamp())
+    ON CONFLICT (key) DO UPDATE SET value = to_jsonb(CASE WHEN jsonb_typeof(evimed_frontier.meta.value) = 'number'
+      THEN (evimed_frontier.meta.value #>> '{}')::bigint ELSE 0 END + 1), updated_at = clock_timestamp()`, [FRONTIER_META_KEYS.tagsVersion]);
+}
+
+/**
+ * Give every published item the current rule of `timeline_at` (`frontierTimelineAt`, written here in SQL), once: the `meta` key
+ * `timeline_rule` says which rule the stored values were last decided by, and a value that is not `FRONTIER_TIMELINE_RULE` means
+ * they were decided by an older one. One UPDATE moves only the rows whose value changes, the key is stored, and the content
+ * version moves once when a row did — an empty database, or one the rule already ran on, changes nothing. No `item_changes` row
+ * is written: the feed's notices and the evolution reader take one per item as news, and a moved axis is not news.
+ *
+ * - `instant`: the source's instant, or `visible_at` when the source's is later (`LEAST` ignores a missing date, which
+ *   leaves `visible_at`, as the rule says for no usable date).
+ * - `day`: `LEAST(visible_at, the last millisecond of the stated day in the feed's zone)`, the stated day being the UTC date
+ *   of `published_at` (every such date is stored at UTC midnight).
+ * - anything else (`inferred`): `visible_at`.
+ * @param {any} client
+ */
+export async function backfillTimelineRule(client) {
+  const stored = (await client.query("SELECT value FROM evimed_frontier.meta WHERE key = $1", [FRONTIER_META_KEYS.timelineRule])).rows[0]?.value;
+  if (metaNumber(stored) === FRONTIER_TIMELINE_RULE) return;
+  const moved = await client.query(`UPDATE evimed_frontier.items i SET timeline_at = r.at
+    FROM (SELECT id, CASE date_precision
+        WHEN 'instant' THEN LEAST(published_at, visible_at)
+        WHEN 'day' THEN LEAST(visible_at, (((published_at AT TIME ZONE 'UTC')::date + 1)::timestamp AT TIME ZONE $1::text) - interval '1 millisecond')
+        ELSE visible_at END AS at
+      FROM evimed_frontier.items WHERE state = 'published' AND visible_at IS NOT NULL) r
+    WHERE i.id = r.id AND r.at IS NOT NULL AND i.timeline_at IS DISTINCT FROM r.at`, [FRONTIER_FEED_TIME_ZONE]);
+  // An event's span is its visible members' first and last `timeline_at` (`FrontierEvents#refresh`), which only a joining report
+  // recomputes: the moved axis is given to every event here, or a settled one would keep a first report its own reports contradict.
+  if ((moved.rowCount ?? 0) > 0) {
+    await client.query(`UPDATE evimed_frontier.events e SET first_at = m.first_at, last_at = m.last_at, updated_at = clock_timestamp()
+      FROM (SELECT ei.event_id, min(i.timeline_at) AS first_at, max(i.timeline_at) AS last_at
+          FROM evimed_frontier.event_items ei
+          JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+          JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+          GROUP BY ei.event_id) m
+      WHERE e.id = m.event_id AND (e.first_at IS DISTINCT FROM m.first_at OR e.last_at IS DISTINCT FROM m.last_at)`);
+  }
+  await client.query(`INSERT INTO evimed_frontier.meta (key, value, updated_at) VALUES ($1, to_jsonb($2::integer), clock_timestamp())
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()`, [FRONTIER_META_KEYS.timelineRule, FRONTIER_TIMELINE_RULE]);
+  if ((moved.rowCount ?? 0) > 0) await bumpFrontierVersion(client);
+}
+
 /**
  * Create or bring up to date the frontier schema, and say which search legs it
  * supports.
@@ -572,6 +992,8 @@ export async function migrateFrontier(database, { dimension }) {
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-frontier-v1'))");
     await client.query(sql());
+    await seedFrontierTags(client);
+    await backfillTimelineRule(client);
     await client.query(EVIDENCE_ZONE_SQL);
     const trigramVersion = await ensureExtension(client, "pg_trgm");
     if (trigramVersion) {

@@ -1,6 +1,6 @@
 {
   "note": "The same request a few seconds later: the id is usable again and has nothing.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Ffx-user-b%2Fmemories",

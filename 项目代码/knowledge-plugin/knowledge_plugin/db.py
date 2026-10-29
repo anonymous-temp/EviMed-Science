@@ -7,7 +7,7 @@ applied at every start in ONE transaction behind ``pg_advisory_xact_lock(hashtex
 'evimed-knowledge-v1'))``, so two instances starting together serialise, and a second run is a
 no-op (every statement is ``IF NOT EXISTS``, or a guarded block that finds its work done).
 
-Two advisory locks exist, and only these two:
+Advisory locks serialize three independent boundaries:
 
 - ``SCHEMA_LOCK`` — the migration.
 - ``SEQ_LOCK`` — every transaction that allocates an entry ``seq`` holds it until commit. Sequence
@@ -15,6 +15,8 @@ Two advisory locks exist, and only these two:
   flight, seq 105 could commit before 104, a consumer at ``after=104``... would read 105 and never
   see 104. Serialising the (short) write transactions makes commit order equal seq order, which
   is what "strictly increasing in delivery order" (contract rule 2) needs.
+
+- ``evimed-knowledge-registry`` — base and dynamic source composition, so concurrent discovery/reload cannot retire each other's rows.
 
 Connections run in UTC with a 60 s statement timeout; the password, when there is one, comes from
 ``KNOWLEDGE_PLUGIN_DATABASE_PASSWORD_FILE`` and is added to the conninfo, never logged.

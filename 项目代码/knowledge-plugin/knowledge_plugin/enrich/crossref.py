@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
-from ..adapters.common import clean_markup
+from ..adapters.common import clean_markup, structured_abstract
 from .common import Endpoints, Trace, get
 
 
@@ -23,7 +23,8 @@ def work_url(endpoints: Endpoints, doi: str) -> str:
 
 
 def jats_abstract(value: Any) -> str | None:
-    text = clean_markup(value)
+    """The JATS abstract's text, each ``<sec>`` a paragraph ``Title: text`` (``structured_abstract``)."""
+    text = structured_abstract(value)
     if text[:9].lower() == "abstract ":
         text = text[9:].lstrip()
     return text or None

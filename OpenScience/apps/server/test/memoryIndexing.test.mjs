@@ -33,7 +33,7 @@ function openVikingFake({ pageSize = 1_000 } = {}) {
     const method = options.method ?? "GET";
     const headers = options.headers ?? {};
     const body = options.body == null ? null : JSON.parse(options.body);
-    calls.push({ path: target.pathname, method, params: target.searchParams, body });
+    calls.push({ path: target.pathname, method, params: target.searchParams, body, signal: options.signal });
     if (target.pathname === "/health") return reply(200, { status: "ok", healthy: true, version: "v0.4.19", auth_mode: "trusted" });
     if (headers["X-API-Key"] !== apiKey) {
       return failed(401, "UNAUTHENTICATED", "Missing API Key in trusted mode with Root API Key enabled.");
@@ -112,6 +112,40 @@ function openVikingFake({ pageSize = 1_000 } = {}) {
 function indexFact(fake, userId, { capsuleId, factKind, factId, revision, content, accountCreatedAt = generation }) {
   fake.files.set(capsuleFactUri(userId, { accountCreatedAt, capsuleId, factKind, factId, revision }), content);
 }
+
+// One capsule per person: the index holds one subtree for all of a person's notes, the path cannot say which project a note is for, and the
+// canonical row does. A note of another project is not a candidate (it is dropped before the reranker), and the index is asked for more hits than are
+// wanted so that notes a project may not read do not take the first places.
+test("a fact labelled with another project is dropped before ranking, and the index is asked for headroom", async () => {
+  const fake = openVikingFake();
+  for (const [factId, content] of [["mine", "kidney note of this project"], ["theirs", "kidney note of another project"], ["shared", "kidney fact of the whole account"]]) {
+    indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "preference", factId, revision: 1, content });
+  }
+  const rows = [
+    { id: "mine", revision: 1, project_id: "p1", payload: { capsuleId: "capsule-a", status: "approved", content: "kidney note of this project" } },
+    { id: "theirs", revision: 1, project_id: "p2", payload: { capsuleId: "capsule-a", status: "approved", content: "kidney note of another project" } },
+    { id: "shared", revision: 1, project_id: null, payload: { capsuleId: "capsule-a", status: "approved", content: "kidney fact of the whole account" } },
+  ];
+  const database = {
+    async query(sql) {
+      if (sql.includes("evimed_control.users")) return { rows: [{ generation }] };
+      if (sql.includes("kind='preferences'")) return { rows: [{ id: "active-capsules:account", payload: { items: [{ capsuleId: "capsule-a", mode: "own" }] } }] };
+      return { rows };
+    },
+  };
+  const reranked = [];
+  const indexing = new MemoryIndexing({ database, openViking: fake.client, jobs: {}, rerank: { configured: true, async order(_query, texts) { reranked.push(texts); return texts.map((_, index) => index); } } });
+  const selections = [{ capsuleId: "capsule-a", mode: "own" }];
+  const contents = async (/** @type {string | null} */ projectId) => (await indexing.recall("owner", generation, selections, "kidney", 3, projectId)).map((item) => item.row.payload.content).sort();
+  assert.deepEqual(await contents("p1"), ["kidney fact of the whole account", "kidney note of this project"]);
+  assert.deepEqual(await contents("p2"), ["kidney fact of the whole account", "kidney note of another project"]);
+  assert.deepEqual(await contents(null), ["kidney fact of the whole account"], "a recall in no project reads the account's own entries");
+  assert.equal(reranked.length, 2, "one candidate is not reranked");
+  assert.ok(!reranked[0].includes("kidney note of another project"), "what a project may not read never reaches the reranker");
+  assert.ok(!reranked[1].includes("kidney note of this project"));
+  const asked = fake.calls.filter((call) => call.path === "/api/v1/search/find").map((call) => call.body.node_limit);
+  assert.deepEqual(asked, [12, 12, 12], "three wanted, a few times as many asked for");
+});
 
 test("semantic recall preserves index order but reloads approved current facts from PostgreSQL", async () => {
   const fake = openVikingFake();
@@ -321,8 +355,10 @@ test("rebuild rewrites the capsule subtree, waits for each write and publishes t
     [["fact-b", 1, "method_preference"], ["runtime-note:ff01", 2, "analysis"]].sort());
   assert.equal([...fake.files.values()][0].startsWith("analysis / knowledge\n\n"), true, "the kind and the layer lead the file");
   const writes = fake.calls.filter((call) => call.path === "/api/v1/content/write");
-  assert.ok(writes.every((call) => call.body.wait === true && call.body.timeout > 0),
+  assert.ok(writes.every((call) => call.body.wait === true),
+
     "a file the server has not embedded yet is invisible to find, so the readback that follows would be a coin toss");
+  assert.ok(writes.every((call) => !Object.hasOwn(call.body, "timeout")), "v0.5.1 refuses a write body that names a timeout");
   assert.equal(fake.calls.filter((call) => call.method === "DELETE").length, 1);
   const insert = published.find(([sql]) => sql.includes("INSERT INTO evimed_product.memory_index_state"));
   assert.ok(insert, "a rebuild that published nothing would be rebuilt forever");
@@ -507,15 +543,10 @@ test("worker uses ProductJobs leases and retries a bounded failed index job", as
   assert.equal(calls[1][4].message, "Memory indexing failed.");
 });
 
-// One worker, two producers. The capsule half publishes approved facts; the
-// record half carries one research memory. They are dispatched by the kind the
-// queue leased, never by inspecting a payload, so a capsule job can never be
-// handed to the component that indexes records and call it a bad payload.
-test("the worker leases both halves of the index and gives each to the component that owns it", async () => {
-  const claimed = [
-    { id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } },
-    { id: "job-record", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-record-index", payload: { recordId: "r" } },
-  ];
+// One worker, one producer: the capsule half publishes approved facts. (A second half indexed the legacy engine's records until
+// that engine was deleted, 2026-10-25; its job kind is deleted at start by `legacyMemoryRetirement.mjs` and nothing claims it.)
+test("the worker leases the capsule half of the index and gives it to the component that owns it", async () => {
+  const claimed = [{ id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } }];
   const asked = [];
   const jobs = {
     async claim(kinds) { asked.push(kinds); return claimed.shift() ?? null; },
@@ -523,19 +554,12 @@ test("the worker leases both halves of the index and gives each to the component
   };
   const ran = [];
   const indexing = { async rebuild(job) { ran.push(["capsule", job.id]); return { status: "published" }; }, async reconcile() {} };
-  const substrate = { async indexRecord(job) { ran.push(["record", job.id]); return { status: "indexed" }; } };
-  const worker = new MemoryIndexWorker({ jobs, indexing, substrate, pollMs: 60_000, reconcileMs: 60_000 });
+  const worker = new MemoryIndexWorker({ jobs, indexing, pollMs: 60_000, reconcileMs: 60_000 });
 
-  assert.deepEqual(worker.kinds, ["memory-index", "memory-record-index"]);
+  assert.deepEqual(worker.kinds, ["memory-index"], "the retired record kind has no claimer");
   await worker.tick();
-  await worker.tick();
-  assert.deepEqual(ran, [["capsule", "job-capsule"], ["record", "job-record"]]);
-  assert.deepEqual(asked[0], ["memory-index", "memory-record-index"]);
-});
-
-test("a worker with no substrate does not lease the work it could not run", () => {
-  const worker = new MemoryIndexWorker({ jobs: {}, indexing: {}, pollMs: 60_000, reconcileMs: 60_000 });
-  assert.deepEqual(worker.kinds, ["memory-index"]);
+  assert.deepEqual(ran, [["capsule", "job-capsule"]]);
+  assert.deepEqual(asked[0], ["memory-index"]);
 });
 
 test("worker stops retrying a job whose input the index will refuse again", async () => {
@@ -552,20 +576,7 @@ test("worker stops retrying a job whose input the index will refuse again", asyn
   }
 });
 
-// Both halves can be left behind by the same outage, so both are reconciled.
-// The capsule ledger re-arms from what it published; the record half re-arms
-// the jobs its writers enqueued. A reconcile that drove only one of them would
-// leave a deleted memory's copy in the index with nothing left to remove it.
-test("the reconcile drives both halves of the index, not only the one it started with", async () => {
-  const ran = [];
-  const indexing = { async reconcile() { ran.push("capsules"); return 1; } };
-  const substrate = { async reconcileRecords() { ran.push("records"); return 2; } };
-  const worker = new MemoryIndexWorker({ jobs: {}, indexing, substrate, pollMs: 60_000, reconcileMs: 60_000 });
-  await worker.reconcile();
-  assert.deepEqual(ran.sort(), ["capsules", "records"]);
-});
-
-test("a worker with no substrate still reconciles the half it has", async () => {
+test("the reconcile re-arms the capsule ledger from what it published", async () => {
   const ran = [];
   const indexing = { async reconcile() { ran.push("capsules"); return 1; } };
   const worker = new MemoryIndexWorker({ jobs: {}, indexing, pollMs: 60_000, reconcileMs: 60_000 });
@@ -580,10 +591,7 @@ test("with no index provider the worker drains the queue instead of letting it g
   // a Postgres trigger cannot read a Node config. Nothing was constructed to
   // claim them, so they accumulated silently: two had been queued since
   // 2026-09-15 when the 2026-09-16 review found them (M5).
-  const claimed = [
-    { id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } },
-    { id: "job-record", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-record-index", payload: { recordId: "r" } },
-  ];
+  const claimed = [{ id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } }];
   const finished = [];
   const jobs = {
     async claim() { return claimed.shift() ?? null; },
@@ -594,13 +602,11 @@ test("with no index provider the worker drains the queue instead of letting it g
   const worker = new MemoryIndexWorker({ jobs, indexing: null, pollMs: 60_000, reconcileMs: 60_000 });
 
   assert.equal(worker.draining, true);
-  assert.deepEqual(worker.kinds, ["memory-index", "memory-record-index"], "with no index, neither half has a claimer");
-  await worker.tick();
+  assert.deepEqual(worker.kinds, ["memory-index"], "with no index, the capsule half is drained rather than left to grow");
   await worker.tick();
   assert.deepEqual(finished, [
     ["job-capsule", { skipped: "no_index_provider" }],
-    ["job-record", { skipped: "no_index_provider" }],
-  ], "the job rows say why they were closed rather than disappearing");
+  ], "the job row says why it was closed rather than disappearing");
 
   // And reconcile has nothing to reconcile against, rather than throwing on a
   // null index every interval.

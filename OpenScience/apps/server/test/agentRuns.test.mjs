@@ -34,7 +34,8 @@ import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.
 import { HttpError } from "../src/security.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
-import { learningTriggersFor } from "../src/learningTriggers.mjs";
+import { learningRefusal, learningTriggersFor } from "../src/learningTriggers.mjs";
+import { persistRunTranscript } from "../src/runTranscripts.mjs";
 
 /** Bind synthetic legacy fixture state to the actual platform-created run, never an inferred owner. */
 async function bindLegacyFixtureState(project, runId) {
@@ -105,7 +106,9 @@ test("specialist dispatch preserves managed GEO provenance for learning and rele
     assert.deepEqual(await store.researcherRuns(project), []);
     assert.equal(await store.lastSessionId(project), null, "background work does not take over the last open conversation");
     const completed = { ...persisted, status: "succeeded", artifacts: ["report.md"], transcript: { completeness: "complete" } };
-    assert.deepEqual(learningTriggersFor({ run: completed, runs: [completed], project }).map((lesson) => lesson.trigger), ["delivered"]);
+    // Researcher-owned: no gate refuses it, so what the researcher corrects in it is a lesson (a clean delivery is read when the run is settled).
+    assert.equal(learningRefusal({ run: completed, runs: [completed], project }), null);
+    assert.deepEqual(learningTriggersFor({ run: { ...completed, corrections: 1 }, runs: [{ ...completed, corrections: 1 }], project }).map((lesson) => lesson.trigger), ["correction"]);
   } finally {
     await store.cancelSession(project, binding.sessionId);
     await store.closeProject(project);
@@ -391,25 +394,19 @@ async function dispatchRun(base, sessionId, dispatchId, text = "research this qu
   return { response, body: await response.json() };
 }
 
-/** A research-memory store at the interface, for the two cases a dispatch has
- *  to tell apart: a deployment that has none, and one whose store is broken. */
+/** The memory settings store at the interface, for the two cases a dispatch has to tell apart: a deployment that has none, and one whose
+ *  store is broken (the researcher's pauses are read from it at every dispatch, and a pause that cannot be read is no licence to read). */
 function memoryStoreDouble({ configured = true, fail = null } = {}) {
   const refuse = () => { if (fail) throw fail; };
   return {
     configured,
     async status() {
-      return fail
-        ? { configured, connected: false, code: "memory_unavailable", structured: false }
-        : { configured, connected: configured, code: null, structured: configured };
+      return fail ? { configured, connected: false, code: "memory_unavailable" } : { configured, connected: configured, code: null };
     },
-    async relevant() { refuse(); return []; },
-    // What a dispatch reads of the memory since review M6 (the standing profile and the counts beside it).
-    async residentRecords() { refuse(); return []; },
-    async lookupCounts() { refuse(); return { user: 0, project: 0, session: 0 }; },
-    async list() { refuse(); return []; },
-    async listRecords() { refuse(); return []; },
-    async listAllRecords() { refuse(); return []; },
-    async profile() { refuse(); return { records: [], memos: [] }; },
+    async settings() { refuse(); return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
+    async sessionState() { refuse(); return { trialCapsuleId: null }; },
+    async residentState() { refuse(); return { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false }; },
+    async noteResidentDelivered() { refuse(); },
   };
 }
 
@@ -422,7 +419,7 @@ test("a deployment with no research memory store still dispatches", async () => 
     const result = await startRun(base, "ses_memory_absent");
     assert.equal(result.response.status, 202, JSON.stringify(result.body));
     assert.equal(result.body.data.status, "running");
-  }, { researchMemory: memoryStoreDouble({ configured: false }) });
+  }, { memorySettings: memoryStoreDouble({ configured: false }) });
 });
 
 // A store that exists and cannot answer is the opposite case. Continuing would
@@ -440,22 +437,7 @@ test("a research memory store that cannot answer fails the dispatch and records 
     const runs = await listRuns(base);
     assert.equal(runs.body.data[0].status, "failed");
     assert.equal(runs.body.data[0].errorCode, "memory_unavailable");
-  }, { researchMemory: memoryStoreDouble({ fail: offline }) });
-});
-
-// The third case, and the one the prompt's old "科研记忆服务暂时不可用" note used
-// to serve: a deployment with no store of its own whose recall still fails.
-// That is what a strict index asks for when the index is down, and it is a
-// rejection like any other — a run that has been told to stop is not a run to
-// decorate with an excuse and dispatch anyway.
-test("a recall that fails rejects the dispatch even where the store itself is absent", async () => {
-  const offline = new HttpError(503, "memory_index_unavailable", "The memory index is unavailable.");
-  await withApp(async ({ base }) => {
-    assert.equal((await bind(base, "ses_memory_strict", { mode: "open-domain" })).status, 200);
-    const result = await startRun(base, "ses_memory_strict");
-    assert.equal(result.response.status, 503, JSON.stringify(result.body));
-    assert.equal(result.body.code, "memory_index_unavailable");
-  }, { researchMemory: memoryStoreDouble({ configured: false, fail: offline }) });
+  }, { memorySettings: memoryStoreDouble({ fail: offline }) });
 });
 
 test("starts immutable open-domain and specialist run identities from research-session bindings", async () => {
@@ -871,8 +853,9 @@ test("canceling waits for the observer even when the terminal ledger write fails
 
 test("a specialist turn cannot succeed without every declared required output", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-required-output-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -889,7 +872,7 @@ test("a specialist turn cannot succeed without every declared required output", 
       runtimeAgent: "evimed-meta-analysis",
     };
     let reads = 0;
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       agentRegistry: {
         get: () => ({
           id: "meta-analysis",
@@ -908,6 +891,8 @@ test("a specialist turn cannot succeed without every declared required output", 
       readSessionHistory: async () => {
         reads += 1;
         if (reads === 1) return [];
+        // Exceed the former 100 ms polling window without changing the terminal outcome.
+        if (reads === 2) await new Promise((resolve) => setTimeout(resolve, 150));
         return [{
           info: { id: "msg_meta_early", role: "assistant", time: { completed: Date.now() } },
           parts: [{ type: "text", text: "The managed job is still running." }],
@@ -916,15 +901,15 @@ test("a specialist turn cannot succeed without every declared required output", 
     });
 
     await store.start(project, { sessionId: binding.sessionId });
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await store.list(project))[0]?.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     const run = (await store.list(project))[0];
     assert.equal(run.status, "failed");
     assert.equal(run.errorCode, "specialist_required_output_missing");
     assert.deepEqual(run.artifacts, []);
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -1487,6 +1472,9 @@ test("a valid, matching receipt makes its files the artifacts even when the tran
     const files = { "clinical-evidence-report.md": "# graded and unchanged\n", "clinical-evidence-matrix.json": "{\"claims\":[]}\n" };
     for (const [name, body] of Object.entries(files)) await writeFile(path.join(deliverableDir, name), body, "utf8");
     await writeFile(path.join(deliverableDir, "scratch.txt"), "left beside the package, named by no receipt\n", "utf8");
+    // This preexisting sibling is outside this run; keep its mtime unambiguously before millisecond run timestamps.
+    const earlier = new Date(Date.now() - 5000);
+    await utimes(path.join(deliverableDir, "scratch.txt"), earlier, earlier);
     await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
       formatVersion: 1,
       runId: "run_live_valid",
@@ -2583,8 +2571,9 @@ test("refuses a symlinked run ledger", async () => {
 
 test("server monitor owns terminal state and records only existing structured artifacts", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-monitor-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -2602,7 +2591,7 @@ test("server monitor owns terminal state and records only existing structured ar
       runtimeAgent: "evimed-adr-analysis",
     };
     let reads = 0;
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       agentRegistry: {
         get: () => ({
           id: "adr-analysis",
@@ -2633,11 +2622,9 @@ test("server monitor owns terminal state and records only existing structured ar
     const started = await store.start(project, { sessionId: binding.sessionId });
     await relabelReceipt(project, started.id);
     assert.equal(started.status, "running");
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const run = (await store.list(project))[0];
-      if (run.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     const finished = (await store.list(project))[0];
     assert.equal(finished.status, "succeeded");
     assert.deepEqual(finished.artifacts, ["reports/real.md"]);
@@ -2648,6 +2635,7 @@ test("server monitor owns terminal state and records only existing structured ar
     await store.closeProject(project, "canceled");
     assert.equal((await store.list(project))[0].status, "canceled");
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -2982,8 +2970,9 @@ test("no research tool failure fails a run that ended on its own, and each one t
 
 test("one running run per session is enforced and workspace files cannot forge meta ledger", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-single-"));
+  let project, recovered;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -3006,7 +2995,7 @@ test("one running run per session is enforced and workspace files cannot forge m
       (error) => error?.code === "agent_run_active",
     );
     assert.equal((await store.list(project)).length, 1);
-    const recovered = new AgentRunStore({ get: async () => binding }, {
+    recovered = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
       monitorIntervalMs: 1,
       monitorMaxPolls: 20,
@@ -3016,23 +3005,24 @@ test("one running run per session is enforced and workspace files cannot forge m
       }],
     });
     await recovered.recover(project);
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await recovered.list(project))[0].status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await recovered.list(project))[0];
+    const monitor = recovered.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     assert.equal((await recovered.list(project))[0].status, "succeeded");
     await recovered.start(project, { sessionId: binding.sessionId });
     assert.equal((await recovered.list(project)).length, 2);
     await recovered.closeProject(project, "canceled");
   } finally {
+    if (recovered && project) await recovered.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test("maps runtime-visible absolute artifacts to the host workspace and rejects unsafe files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-runtime-path-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -3053,7 +3043,7 @@ test("maps runtime-visible absolute artifacts to the host workspace and rejects 
       runtimeAgent: null,
     };
     let reads = 0;
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
       monitorIntervalMs: 1,
       monitorMaxPolls: 20,
@@ -3074,22 +3064,23 @@ test("maps runtime-visible absolute artifacts to the host workspace and rejects 
     });
 
     await store.start(project, { sessionId: binding.sessionId });
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await store.list(project))[0]?.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     const run = (await store.list(project))[0];
     assert.equal(run.status, "succeeded");
     assert.deepEqual(run.artifacts, ["reports/real.md"]);
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test("fails baseline history closed and uses a persisted message cursor instead of old assistant history", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-cursor-"));
+  let project, store;
   try {
-    const project = {
+    project = {
       id: "project-1",
       userId: "user-1",
       rootDir: root,
@@ -3111,7 +3102,7 @@ test("fails baseline history closed and uses a persisted message cursor instead 
     };
     let baselineFails = true;
     let history = [oldAssistant];
-    const store = new AgentRunStore({ get: async () => binding }, {
+    store = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
       monitorIntervalMs: 1,
       monitorMaxPolls: 100,
@@ -3145,13 +3136,13 @@ test("fails baseline history closed and uses a persisted message cursor instead 
         parts: [{ type: "text", text: "new answer" }],
       },
     ];
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      if ((await store.list(project))[0]?.status !== "running") break;
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    const observedRun = (await store.list(project))[0];
+    const monitor = store.monitors.get(observedRun.id);
+    if (monitor) await awaitBackgroundMonitor(monitor.promise);
     assert.equal((await store.list(project))[0].status, "succeeded");
     assert.equal((await store.list(project))[0].id, started.id);
   } finally {
+    if (store && project) await store.closeProject(project, "canceled");
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -5250,11 +5241,18 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     "../src/kbSearchGateway.mjs", "../src/kbBrowseGateway.mjs", "../src/frontierGateway.mjs",
     // 循证 GEO's gateway, the write module it hands writes to, and the social
     // channel behind `social_posts_search` (2026-09-25).
-    "../src/geoGateway.mjs", "../src/geoWrites.mjs", "../src/socialCrawlClient.mjs",
+    "../src/geoGateway.mjs", "../src/socialCrawlClient.mjs",
   ]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");
     for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render|kb_search|kb_browse|frontier|geo|social_posts)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
+  // The write module is shared with the GEO pages, and the gateway is its one exit to a run: a refusal reaches the run by its own
+  // name only when the gateway passes that name through; every other one is translated (`geo_write_payload_invalid`,
+  // `geo_read_filter_invalid`, `geo_request_too_large`). So of the module's codes, the passed-through ones are the run's
+  // (2026-10-25: the GEO v3 import, diagnosis and round codes are page codes the run never hears).
+  const { GEO_GATEWAY_PASS_THROUGH_CODES } = await import("../src/geoGateway.mjs");
+  const writes = await readFile(new URL("../src/geoWrites.mjs", import.meta.url), "utf8");
+  for (const [, code] of writes.matchAll(/"(geo_[a-z0-9_]+)"/g)) if (GEO_GATEWAY_PASS_THROUGH_CODES.has(code)) emitted.add(code);
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 
   const unclassified = [...emitted]
@@ -6222,11 +6220,13 @@ test("a run whose container is already gone is judged from its receipt, not fail
       },
       monitorIntervalMs: 60_000,
     });
+    // This fixture owns the reconciliation boundary: no monitor may observe
+    // disappearance before the new receipt names this run.
+    store.scheduleMonitor = () => {};
     const started = await store.start(project, { sessionId: binding.sessionId });
     await relabelReceipt(project, started.id);
-    // Asserted on the ledger rather than on this call's return value: `start`
-    // also schedules the monitor, which reconciles on its own, and the run's
-    // recorded outcome is what the rest of the system reads either way.
+    // Assert the durable outcome that the rest of the system reads, after
+    // reconciling against the receipt bound above.
     await store.reconcileSession(project, binding.sessionId).catch(() => {});
     const finished = (await store.list(project)).find((item) => item.id === started.id);
 
@@ -7176,7 +7176,7 @@ test("a receipt naming a file that no longer matches its digest still ships the 
     /** A store whose container is alive for the run's first read and gone after it. */
     const goneAfterStart = () => {
       let alive = true;
-      return new AgentRunStore({ get: async () => binding }, {
+      const store = new AgentRunStore({ get: async () => binding }, {
         model: "deepseek/deepseek-v4-pro",
         readSessionHistory: async () => {
           if (alive) { alive = false; return []; }
@@ -7186,6 +7186,10 @@ test("a receipt naming a file that no longer matches its digest still ships the 
         },
         monitorIntervalMs: 60_000,
       });
+      // These cases drive reconcile/close explicitly, once their owned receipt
+      // is prepared. Automatic first polls would race relabelReceipt below.
+      store.scheduleMonitor = () => {};
+      return store;
     };
     const store = goneAfterStart();
     const started = await store.start(project, { sessionId: binding.sessionId });
@@ -8693,6 +8697,92 @@ function wordPackageBytes(parts = ["[Content_Types].xml", "word/document.xml"]) 
 const bashPart = (command) => ({ type: "tool", tool: "bash", state: { status: "completed", input: { command }, output: "" } });
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+test("finished artifact refresh recovers a presented CSV and preserves the original unverified outcome", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, store }) => {
+    const started = await dispatch("refresh-files");
+    const current = started?.id ? started : (await store.list(project))[0];
+    const files = ["report.md", "matrix.json", "agenda.json", "corrected.csv"];
+    await mkdir(path.join(project.workspaceDir, "deliverables", "refresh"), { recursive: true });
+    for (const name of files) await writeFile(path.join(project.workspaceDir, "deliverables", "refresh", name), name);
+    const finished = await store.finishInternal(project, current.id, { status: "succeeded", verification: "unverified",
+      artifacts: files.slice(0, 3).map(name => `deliverables/refresh/${name}`), qualityNotices: ["Original finding"] });
+    const transcript = { messages: [
+      { seq: 1, role: "tool", time: Date.parse(finished.finishedAt), parts: [{ type: "tool", tool: "present", status: "completed", input: { files: files.map(name => ({ path: `deliverables/refresh/${name}` })) }, output: "Presented" }] },
+      { seq: 2, role: "tool", time: Date.parse(finished.finishedAt), parts: [{ type: "tool", tool: "present", status: "completed", input: { files: [{ path: "bad.csv" }] }, output: '{"status":"error"}' }] },
+    ] };
+    const receipt = await persistRunTranscript({ project, run: finished, sessions: [{ sessionId: binding.sessionId, parentSessionId: null, label: "root", capability: null, transcript, error: null }] });
+    await store.recordLearning(project, current.id, { transcript: receipt });
+    const before = (await store.list(project))[0];
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: "0".repeat(64) }), { code: "run_transcript_changed" });
+    const refreshed = await store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 });
+    assert.deepEqual(refreshed.artifacts, files.map(name => `deliverables/refresh/${name}`).sort());
+    for (const field of ["status", "finishedAt", "durationMs", "verification", "qualityNotices", "attempts"]) assert.deepEqual(refreshed[field], before[field], field);
+    const ledger = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
+    const replay = await store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 });
+    assert.deepEqual(replay.artifacts, refreshed.artifacts);
+    assert.equal(await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8"), ledger, "replay appends nothing");
+    const transcriptPath = path.join(project.rootDir, receipt.path);
+    const original = await readFile(transcriptPath, "utf8");
+    await writeFile(transcriptPath, `${original} `);
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 }), { code: "run_transcript_changed" });
+    const lines = original.trim().split("\n");
+    lines[0] = JSON.stringify({ ...JSON.parse(lines[0]), runId: "foreign-run" });
+    const foreign = `${lines.join("\n")}\n`;
+    await writeFile(transcriptPath, foreign);
+    const foreignSha = createHash("sha256").update(foreign).digest("hex");
+    await store.recordLearning(project, current.id, { transcript: { ...receipt, sha256: foreignSha, bytes: Buffer.byteLength(foreign) } });
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: foreignSha }), { code: "run_transcript_scope_invalid" });
+    await writeFile(transcriptPath, original);
+    await store.recordLearning(project, current.id, { transcript: receipt });
+    await rename(transcriptPath, `${transcriptPath}.saved`);
+    await symlink(`${transcriptPath}.saved`, transcriptPath);
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 }), { code: "path_forbidden" });
+  });
+});
+
+test("a specialist's successful present and newly written deliverables join its partial inventory, including a shell CSV", async () => {
+  await withSpecialistRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+    await dispatch("specialist-present-union");
+    await wait(10);
+    const directory = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(directory, { recursive: true });
+    for (const name of ["note.md", "report.md", "agenda.json", "table.csv"]) await writeFile(path.join(directory, name), name);
+    await writeFile(path.join(project.workspaceDir, "failed.csv"), "an existing file a failed call cannot present");
+    appendHistory([
+      { type: "tool", tool: "write", state: { status: "completed", input: { file_path: "deliverables/d1/note.md" }, output: "ok" } },
+      bashPart("python3 tool.py"),
+      { type: "tool", tool: "present", state: { status: "completed", input: { files: ["deliverables/d1/report.md", "deliverables/d1/agenda.json", "deliverables/d1/table.csv"] }, output: "Presented" } },
+      { type: "tool", tool: "present", state: { status: "completed", input: { files: ["failed.csv"] }, output: '{"ok":false,"code":"failed"}' } },
+    ]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.deepEqual(run.artifacts, ["agenda.json", "note.md", "report.md", "table.csv"].map(name => `deliverables/d1/${name}`));
+    assert.ok(!run.artifacts.includes("failed.csv"));
+    assert.ok(run.presentedFiles.includes("deliverables/d1/table.csv"));
+  });
+});
+
+test("artifact refresh keeps full existing inventories when a lexically earlier presentation arrives and the ledger stays readable", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, store }) => {
+    const started = await dispatch("full-refresh");
+    const artifacts = Array.from({ length: 64 }, (_, index) => `z-${String(index).padStart(2, "0")}.md`);
+    const presentedFiles = Array.from({ length: 64 }, (_, index) => `zz-presented-${String(index).padStart(2, "0")}.md`);
+    for (const file of artifacts) await writeFile(path.join(project.workspaceDir, file), file);
+    await writeFile(path.join(project.workspaceDir, "a-new.csv"), "value\n1\n");
+    const finished = await store.finishInternal(project, started.id, { status: "succeeded", artifacts, presentedFiles, outputFiles: presentedFiles, verification: "unverified" });
+    const transcript = { messages: [{ seq: 1, role: "tool", time: Date.parse(finished.finishedAt), parts: [{ type: "tool", tool: "present", status: "completed",
+      input: { files: ["z-00.md", "a-new.csv"] }, output: "Presented" }] }] };
+    const receipt = await persistRunTranscript({ project, run: finished, sessions: [{ sessionId: binding.sessionId, parentSessionId: null, label: "root", capability: null, transcript, error: null }] });
+    await store.recordLearning(project, started.id, { transcript: receipt });
+    const refreshed = await store.refreshArtifacts(project, started.id, { expectedTranscriptSha256: receipt.sha256 });
+    assert.deepEqual(refreshed.artifacts, artifacts);
+    assert.deepEqual(refreshed.presentedFiles, presentedFiles);
+    assert.deepEqual(refreshed.outputFiles, presentedFiles);
+    const reread = (await store.list(project)).find(run => run.id === started.id);
+    assert.deepEqual(reread.artifacts, artifacts);
+    assert.equal(reread.verification, "unverified");
+  });
+});
+
 test("a Word file a script wrote through bash, and a file a redirect wrote, are the run's files — and its outputs, not its scratch", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     await dispatch("turn_ordinary_files");
@@ -8920,4 +9010,58 @@ test("what a run recorded as its outputs is what a reader is shown, whatever the
     assert.equal(store.withArtifactKinds(old, later).artifactKinds["weekly.docx"], "work");
     assert.equal(store.withArtifactKinds(old).artifactKinds["weekly.docx"], "deliverable", "and as an answer-line run it was ordinary");
   });
+});
+
+
+test("a run's ledger row keeps why each learned method's card was there, from a closed list, and nothing else about a receipt", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-reasons-"));
+  try {
+    const project = { id: "p", userId: "u", rootDir: root, baseDir: path.join(root, "workspace"), workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_reasons", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro", monitorIntervalMs: 60_000, monitorMaxPolls: 20, readSessionHistory: async () => [], readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_reasons" }, async () => ({ accepted: true }));
+    const digest = (letter) => `sha256:${letter.repeat(64)}`;
+    await store.recordLearning(project, run.id, { methodsLoaded: [
+      { name: "a", digest: digest("a"), reason: "similarity" },
+      { name: "b", digest: digest("b"), reason: "explore", secret: "never kept" },
+      { name: "c", digest: digest("c"), reason: "because I said so" },
+      { name: "d", digest: digest("d") },
+    ] });
+    const [stored] = await store.list(project);
+    assert.deepEqual(stored.methodsLoaded, [
+      { name: "a", digest: digest("a"), reason: "similarity" },
+      { name: "b", digest: digest("b"), reason: "explore" },
+      { name: "c", digest: digest("c") },
+      { name: "d", digest: digest("d") },
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a steer typed into a running turn keeps its words unless they carry a credential or an identifier by SHAPE: a message that mentions a password column is kept", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-steer-words-"));
+  const project = { id: "steer-words", userId: "researcher", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_steer", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [], monitorIntervalMs: 60_000 });
+  try {
+    await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "steered" }, async () => ({ accepted: true }));
+    await store.recordSteeredInput(project, binding.sessionId, "req_a", "把密码列去掉，token 也不要");
+    await store.recordSteeredInput(project, binding.sessionId, "req_b", "我的手机号 13800138000，发给我");
+    await store.recordSteeredInput(project, binding.sessionId, "req_c", "密码是 hunter2hunter2，登录用");
+    const [run] = await store.list(project);
+    assert.equal(run.corrections, 3, "every steer is counted, whatever it says");
+    assert.deepEqual(run.steers.map((steer) => steer.text), ["把密码列去掉，token 也不要"], "words that are language are kept; a phone number and a secret assigned to a name are shapes, and the count says it happened");
+  } finally {
+    await store.cancelSession(project, binding.sessionId);
+    await store.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
 });

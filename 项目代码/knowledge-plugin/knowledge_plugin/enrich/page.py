@@ -5,7 +5,18 @@ pages nobody will see (plan 10.3.4). The request is a page request (``api=False`
 applies and the core's fetcher classifies challenge and empty-shell pages (Ruishu, Cloudflare,
 WAF markers, < 300 visible characters) as ``challenge`` before this code sees a body.
 
-Extraction is deterministic and small: drop scripts, styles, navigation, headers, footers, asides
+Extraction (2026-10-22) is trafilatura's (Apache-2.0; the best single tool of Bevendorff et al. 2023, "An Empirical
+Comparison of Web Content Extraction Algorithms", and of the ScrapingHub article benchmark), with its recall setting, the
+text as paragraphs, tables kept, comments, links and images left out. Measured on 307 pages of the feed's 172 page
+sources, our container reading below took the page's furniture with the article — bylines, author biographies, "Editors'
+notes / The GIST / Add as preferred source", 「选择字号：小 中 大」, comment-widget templates, a whole navigation menu on
+cnpharm.com — 272 such paragraphs to trafilatura's 82, for 90 % of the characters. Trafilatura misses the article on
+some pages: on gov.cn it returns the page's language switch (78 characters), on leiphone.com 609 of an article's 3,974.
+So the container reading stays the fallback: its text is used when trafilatura's is under ``MIN_EXCERPT``, or when it is
+at least ``FALLBACK_RATIO`` times longer — the furniture it carries is what the platform's paragraph check removes,
+while an article trafilatura dropped is lost for good.
+
+The container reading is deterministic and small: drop scripts, styles, navigation, headers, footers, asides
 and forms; then take the longest *body* container a CMS marks as such (the Chinese government TRS
 ``#UCAP-CONTENT``/``.pages_content``/``.trs_editor_view``, Sitefinity's ``.sf-detail-body-wrapper``
 on who.int, GOV.UK's ``.govspeak``, ``[itemprop=articleBody]`` …); only when none holds 200
@@ -14,21 +25,37 @@ characters, the longest generic wrapper (``article``, ``main``, ``#content`` …
 toolbar and who.int's related-news list into the excerpt. A PDF is not read (the
 plugin has no PDF parser; the document parser is a platform service) and reports
 ``unavailable``. Feed entries whose own summary is already the full, uncut text skip the request.
+
+Contract 1.5.0: the whole main text, up to 40,000 characters, is also kept as ``body_text`` (what the reader shows and
+translates); the excerpt stays its first 12,000 characters, as before.
+
+A redirect shell (2026-10-25, review G6): the 香港卫生防护中心 press releases link to a 477-byte page whose only content is
+``<meta http-equiv="refresh" content="0; URL=https://www.info.gov.hk/gia/…">`` — 67 of 67 entries were
+``page_no_main_text`` and none was published in 14 days. A page with no main text of its own that carries such a tag is
+followed once, to a host the source's ``allowed_hosts`` (or the page's own host) names, through the same protected fetch
+(robots, pacing, the exit); a second shell is not followed, and a target outside the hosts is a note, not a request.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
+import trafilatura
 from selectolax.parser import HTMLParser
 
 from ..adapters.base import decode_body
 from ..adapters.common import clean_markup, looks_truncated
+from ..model import BODY_TEXT_MAX
 from .common import Attempt, Trace, get
+
+_REFRESH_TARGET = re.compile(r"^\s*\d+(?:\.\d+)?\s*[;,]\s*(?:url\s*=\s*)?[\"']?([^\"'\s][^\"']*?)[\"']?\s*$", re.I)
 
 EXCERPT_MAX = 12_000
 FULL_SUMMARY_MIN = 1_500          # a feed summary this long and uncut is the text; no page request
 MIN_EXCERPT = 200                 # less than this is navigation, not an article
+FALLBACK_RATIO = 3                # the container reading this many times longer: trafilatura missed the article
 
 _REMOVE = ("script", "style", "noscript", "template", "svg", "iframe", "nav", "header", "footer", "aside", "form",
            "button", "select", "[role=navigation]", "[role=banner]", "[role=contentinfo]", "[aria-hidden=true]")
@@ -42,6 +69,33 @@ _GENERIC_CONTAINERS = ("article", "main", "[role=main]", "#content", "#main-cont
 
 def extract_main_text(html_text: str) -> str:
     """The main text of a page as paragraphs, ≤ ``EXCERPT_MAX`` characters (cut at a paragraph end)."""
+    return clip_excerpt(main_text(html_text))
+
+
+def main_text(html_text: str, url: str | None = None) -> str:
+    """The main text of a page as paragraphs, ≤ ``BODY_TEXT_MAX`` characters (cut at a paragraph end): trafilatura's,
+    or the container reading's when trafilatura's is short or a fraction of it (module docstring)."""
+    extracted = extracted_text(html_text, url)
+    fallback = container_text(html_text)
+    if len(extracted) >= MIN_EXCERPT and len(fallback) < FALLBACK_RATIO * len(extracted):
+        return clip_excerpt(extracted, BODY_TEXT_MAX)
+    return clip_excerpt(fallback if len(fallback) >= len(extracted) else extracted, BODY_TEXT_MAX)
+
+
+def extracted_text(html_text: str, url: str | None = None) -> str:
+    """Trafilatura's main text, one paragraph a line; empty when it finds none (or cannot parse the page)."""
+    try:
+        text = trafilatura.extract(html_text, url=url, output_format="txt", favor_recall=True, include_comments=False,
+                                   include_tables=True, include_images=False, include_links=False, deduplicate=False)
+    except Exception:  # noqa: BLE001 - a page the library cannot parse is a page without its text, never a failed job
+        return ""
+    # Already plain text with its entities decoded: read as markup again, "a<b … c>d" would lose its middle as a "tag".
+    return "\n".join(line.strip() for line in (text or "").splitlines() if line.strip())
+
+
+def container_text(html_text: str) -> str:
+    """The longest CMS body container's text, else the longest generic wrapper's, else the body's, one paragraph a
+    line."""
     tree = HTMLParser(html_text)
     for selector in _REMOVE:
         for node in tree.css(selector):
@@ -59,7 +113,7 @@ def extract_main_text(html_text: str) -> str:
         body = clean_markup(tree.body.html or "", keep_paragraphs=True)
         if len(body) > len(best):
             best = body
-    return clip_excerpt(best)
+    return best
 
 
 def clip_excerpt(text: str, limit: int = EXCERPT_MAX) -> str:
@@ -83,9 +137,37 @@ def summary_is_full_text(summary: str | None) -> bool:
     return len(summary) > EXCERPT_MAX or not looks_truncated(summary)
 
 
+def meta_refresh_target(html_text: str, base_url: str) -> str | None:
+    """The address a page's ``<meta http-equiv="refresh" content="N; URL=…">`` sends the reader to, resolved against
+    ``base_url``; ``None`` without such a tag or when the target is not an http(s) address. Other ``http-equiv`` metas
+    (cache controls, content type) and a refresh that only reloads the page (no URL) are not a redirect."""
+    try:
+        metas = HTMLParser(html_text).css("meta")
+    except Exception:  # noqa: BLE001 - a page the parser cannot read has no redirect
+        return None
+    for meta in metas:
+        if (meta.attributes.get("http-equiv") or "").strip().lower() != "refresh":
+            continue
+        found = _REFRESH_TARGET.match(meta.attributes.get("content") or "")
+        if not found:
+            continue
+        target = urljoin(base_url, found.group(1).strip())
+        parts = urlsplit(target)
+        return target if parts.scheme in ("http", "https") and parts.hostname and not parts.username else None
+    return None
+
+
+def _host_in(host: str, hosts: list[str]) -> bool:
+    host = host.lower().rstrip(".")
+    return any(host == name or host.endswith("." + name) for name in (h.lower().rstrip(".") for h in hosts if h))
+
+
 async def page_excerpt(fetcher: Any, url: str, *, source_id: str | None, egress: str,
-                       trace: Trace) -> tuple[str | None, Attempt]:
-    """``(excerpt or None, attempt)`` for the entry's own page."""
+                       trace: Trace, allowed_hosts: list[str] | None = None,
+                       _followed: bool = False) -> tuple[str | None, Attempt]:
+    """``(main text or None, attempt)`` for the entry's own page: the whole main text (≤ ``BODY_TEXT_MAX``); its excerpt
+    is ``clip_excerpt`` of it. ``allowed_hosts`` (the source's) are where one meta-refresh shell may lead (module
+    docstring); without them only the page's own host."""
     attempt = await get(fetcher, url, api=False, source_id=source_id, egress=egress)
     if attempt.result is None:
         trace.record(attempt, "page")
@@ -101,8 +183,17 @@ async def page_excerpt(fetcher: Any, url: str, *, source_id: str | None, egress:
     if content_type and not any(kind in content_type for kind in ("html", "xml", "text/plain")):
         trace.notes.append("page_not_html")
         return None, attempt
-    text = extract_main_text(decode_body(result))
+    html_text = decode_body(result)
+    text = main_text(html_text, url)
     if len(text) < MIN_EXCERPT:
+        target = None if _followed else meta_refresh_target(html_text, result.final_url or url)
+        if target is not None:
+            hosts = list(allowed_hosts or []) + [urlsplit(url).hostname or ""]
+            if _host_in(urlsplit(target).hostname or "", hosts):
+                trace.notes.append("page_meta_refresh")
+                return await page_excerpt(fetcher, target, source_id=source_id, egress=egress, trace=trace,
+                                          allowed_hosts=allowed_hosts, _followed=True)
+            trace.notes.append("page_refresh_host_not_allowed")
         trace.notes.append("page_no_main_text")
         return None, attempt
     return text, attempt

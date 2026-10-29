@@ -227,8 +227,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const [open, setOpen] = React.useState(false);
     const verdict = source.status && Object.hasOwn(statusText, source.status) ? statusText[source.status] : null;
     const heading = source.url
-      ? h('a', { href: source.url, target: '_blank', rel: 'noopener noreferrer', style: { ...link, fontWeight: 500 } }, source.title)
-      : h('span', { style: { color: 'var(--dsw-alias-label-primary)', fontWeight: 500 } }, source.title);
+      ? h('a', { href: source.url, target: '_blank', rel: 'noopener noreferrer', style: { ...link, fontWeight: 600 } }, source.title)
+      : h('span', { style: { color: 'var(--dsw-alias-label-primary)', fontWeight: 600 } }, source.title);
     return h('li', { style: { ...card, listStyle: 'none' }, 'data-evimed-source': String(source.index) },
       h('div', { style: { ...line, alignItems: 'flex-start' } },
         h('span', { style: { ...meta, flex: 'none', minWidth: '18px' } }, String(source.index)),

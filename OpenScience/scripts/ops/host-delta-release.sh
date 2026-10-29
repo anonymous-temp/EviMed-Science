@@ -10,11 +10,15 @@
 #
 # The delta archive is made on the developer's box, rooted at `src/`:
 #
-#   git archive --format=tar --prefix=src/ HEAD -- \
+#   git -c tar.umask=0022 archive --format=tar --prefix=src/ HEAD -- \
 #     $(git diff --name-only --diff-filter=d <OLD>..HEAD | grep -E '^(OpenScience|项目代码)/')
 #   git diff --name-only --diff-filter=D <OLD>..HEAD | grep '^OpenScience/' \
 #     | sed 's|^OpenScience/||' > src/DELETED
 #
+# `tar.umask=0022` because git archives directories 775 and files 664 by default, and the overlay
+# copies those modes onto the release tree: the switch's host-ops preparer then refuses its group-writable
+# source (host_ops_dependency_invalid, 2026-10-22). BUILD_CREATED is toISOString's form, milliseconds
+# included, or the release manifest refuses it after every image is built.
 # `--diff-filter=d` and `src/DELETED` exist because an overlay cannot delete:
 # `git archive` refuses a path the range removed, and a removed web source that
 # lingers in the seeded tree is still compiled by `tsc --noEmit && vite build`

@@ -71,7 +71,7 @@ export function Delta({
   if (sense === null) return null;
   if (sense === "flat") {
     return (
-      <span data-delta="flat" className={cn("inline-flex items-center text-caption font-medium text-text-3", className)}>
+      <span data-delta="flat" className={cn("inline-flex items-center text-caption text-text-3", className)}>
         {flatLabel}
       </span>
     );
@@ -82,7 +82,7 @@ export function Delta({
     <span
       data-delta={sense}
       className={cn(
-        "inline-flex items-center gap-1 text-caption font-medium tabular-nums",
+        "inline-flex items-center gap-1 text-caption tabular-nums",
         worse ? (tone === "safety" ? "text-danger" : "text-text-2") : "text-accent",
         className,
       )}

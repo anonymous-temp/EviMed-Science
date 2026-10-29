@@ -80,9 +80,9 @@ export const GEO_SCHEMA = "evimed_geo";
  */
 export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
-  "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
+  "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
-  "action_choices",
+  "action_choices", "read_selections",
 ]);
 
 /**
@@ -96,6 +96,7 @@ export const GEO_TABLES = Object.freeze([
 export const GEO_ORDER_ARTICLE_LIVE_STATES = Object.freeze(["planned", "reserved", "submitted", "accepted", "published", "verified", "settled", "unknown"]);
 
 const migrations = new WeakMap();
+const committedMigrations = new WeakSet();
 
 /** `IN (...)` over a closed vocabulary, refusing any member that is not a plain word. @param {readonly string[]} words */
 function inList(words) {
@@ -174,6 +175,18 @@ CREATE TABLE IF NOT EXISTS evimed_geo.question_sets (
   PRIMARY KEY (geo_project_id, version)
 );
 
+CREATE TABLE IF NOT EXISTS evimed_geo.read_selections (
+  id text PRIMARY KEY,
+  user_id text NOT NULL,
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id) ON DELETE CASCADE,
+  scope jsonb NOT NULL,
+  round_ids jsonb NOT NULL,
+  data_revision text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_read_selections_project_idx ON evimed_geo.read_selections (geo_project_id, user_id);
+ALTER TABLE evimed_geo.read_selections ADD COLUMN IF NOT EXISTS subset jsonb;
+
 CREATE TABLE IF NOT EXISTS evimed_geo.question_groups (
   id               text PRIMARY KEY,
   user_id          text NOT NULL,
@@ -211,6 +224,16 @@ CREATE TABLE IF NOT EXISTS evimed_geo.questions (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS geo_questions_set_idx ON evimed_geo.questions (geo_project_id, set_version);
+ALTER TABLE evimed_geo.question_sets ADD COLUMN IF NOT EXISTS contract jsonb;
+ALTER TABLE evimed_geo.question_sets ADD COLUMN IF NOT EXISTS request_key text;
+ALTER TABLE evimed_geo.question_sets ADD COLUMN IF NOT EXISTS request_digest text;
+CREATE UNIQUE INDEX IF NOT EXISTS geo_question_sets_request_idx ON evimed_geo.question_sets (geo_project_id, request_key) WHERE request_key IS NOT NULL;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS client_tags text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS original_id text;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS original_row_index integer;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS original_group text;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS classification_status text;
+
 CREATE INDEX IF NOT EXISTS geo_questions_group_idx ON evimed_geo.questions (group_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.journeys (
@@ -337,6 +360,10 @@ CREATE TABLE IF NOT EXISTS evimed_geo.errors (
   updated_at         timestamptz NOT NULL DEFAULT now(),
   UNIQUE (geo_project_id, fingerprint, engine)
 );
+-- Judgment corrections remain separate from measured business resolution.
+ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS judgment_state text NOT NULL DEFAULT 'active' CHECK (judgment_state IN ('active','withdrawn'));
+ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS judgment_correction jsonb;
+ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS judgment_history jsonb NOT NULL DEFAULT '[]'::jsonb;
 CREATE INDEX IF NOT EXISTS geo_errors_project_idx ON evimed_geo.errors (geo_project_id, status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.metrics (
@@ -367,6 +394,10 @@ CREATE TABLE IF NOT EXISTS evimed_geo.metrics (
 );
 CREATE INDEX IF NOT EXISTS geo_metrics_lookup_idx ON evimed_geo.metrics (geo_project_id, metric_id, computed_at);
 CREATE INDEX IF NOT EXISTS geo_metrics_round_idx ON evimed_geo.metrics (round_id);
+
+-- Coverage belongs to the saved computation, including its method version. Historical rows remain unknown.
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS assessment jsonb;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS method_version text;
 
 CREATE TABLE IF NOT EXISTS evimed_geo.strategy (
   geo_project_id text NOT NULL,
@@ -488,6 +519,27 @@ CREATE TABLE IF NOT EXISTS evimed_geo.media_outcomes (
   updated_at  timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (media_type, resource_id, engine)
 );
+
+-- Business associations only; immutable bytes remain in the shared result store.
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS current_result_version_id text;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS online_update_needed boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS evimed_geo.article_versions (
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id),
+  article_id text NOT NULL REFERENCES evimed_geo.articles(id),
+  user_id text NOT NULL,
+  result_version_id text NOT NULL,
+  parent_version_id text,
+  digest text NOT NULL CHECK (digest ~ '^[a-f0-9]{64}$'),
+  path text NOT NULL,
+  run_id text,
+  session_id text,
+  request_id text,
+  association jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (geo_project_id, article_id, result_version_id)
+);
+ALTER TABLE evimed_geo.article_versions ADD COLUMN IF NOT EXISTS review jsonb;
+CREATE INDEX IF NOT EXISTS geo_article_versions_session_idx ON evimed_geo.article_versions (geo_project_id, session_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.orders (
   id               text PRIMARY KEY,
@@ -706,6 +758,11 @@ ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS producer jsonb;
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS product_zone_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS geo_projects_product_zone_key ON evimed_geo.projects (product_zone_id) WHERE product_zone_id IS NOT NULL;
 
+-- The project's own conversation: the one bound when the project was made, recorded once, so the page keeps opening it whichever
+-- other conversation of the project was touched last. Null on a project made before the column; the oldest conversation no programme
+-- run opened is found then, and recorded.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS conversation_session_id text;
+
 -- Links the brand published itself (gap E6). \`url_key\` is \`canonicalGeoUrl(url)\`,
 -- what an engine's citation is matched by; \`article_id\` names the project's
 -- article a link carries, and \`group_id\` the question group whose questions
@@ -728,11 +785,18 @@ CREATE TABLE IF NOT EXISTS evimed_geo.owned_links (
   retired_at     timestamptz,
   UNIQUE (geo_project_id, url_key)
 );
+ALTER TABLE evimed_geo.orders ADD COLUMN IF NOT EXISTS article_result_version_id text;
+ALTER TABLE evimed_geo.orders ADD COLUMN IF NOT EXISTS article_digest text;
+ALTER TABLE evimed_geo.owned_links ADD COLUMN IF NOT EXISTS article_result_version_id text;
+ALTER TABLE evimed_geo.owned_links ADD COLUMN IF NOT EXISTS article_digest text;
 CREATE INDEX IF NOT EXISTS geo_owned_links_project_idx ON evimed_geo.owned_links (geo_project_id, status, published_at DESC);
 
 -- What a strategy run writes beyond the first cut's four parts (rectification 2026-10-14, G2): the tiers' words (what each buys, what
 -- it does not promise), the things not to do, the assumptions with how to change each, and the actions the run wrote by gap. Versioned
 -- with the rest of the strategy and carried forward by a write that does not name them. The numbers of a tier stay in \`targets\`.
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS basis jsonb;
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS scope_key text;
+CREATE INDEX IF NOT EXISTS strategy_scope_version ON evimed_geo.strategy(geo_project_id,scope_key,version DESC);
 ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS tiers jsonb;
 ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS no_go jsonb;
 ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS assumptions jsonb;
@@ -773,13 +837,14 @@ CREATE TABLE IF NOT EXISTS evimed_geo.action_choices (
  * Create or complete the schema: one transaction behind an advisory lock, so
  * two processes starting together cannot interleave their DDL. Cached per
  * database object; a failed attempt is forgotten so the next call retries.
- * @param {{ transaction: (operation: (client: any) => Promise<any>) => Promise<any> }} database
+ * @param {{ transaction: (operation: (client: any) => Promise<any>) => Promise<any>, transactionScope?: () => ReturnType<import("./controlPlaneDatabase.mjs").ControlPlaneDatabase["transactionScope"]> }} database
  * @returns {Promise<{ schema: string, tables: readonly string[] }>}
  */
 export async function migrateGeo(database) {
   if (!database || typeof database.transaction !== "function") throw new TypeError("The GEO migration needs the product database.");
+  const scoped = Boolean(database.transactionScope?.());
   const cached = migrations.get(database);
-  if (cached) return cached;
+  if (cached && (!scoped || committedMigrations.has(database))) return cached;
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-v1'))");
     const ddl = sql();
@@ -789,7 +854,9 @@ export async function migrateGeo(database) {
     await refreshVocabularyChecks(client, ddl, GEO_SCHEMA);
     return { schema: GEO_SCHEMA, tables: GEO_TABLES };
   });
-  migrations.set(database, attempt);
-  try { return await attempt; }
-  catch (error) { migrations.delete(database); throw error; }
+  // DDL released from a savepoint is still owned by the enclosing transaction.
+  // Its rollback must not leave a successful migration cached for the retry.
+  if (!scoped) migrations.set(database, attempt);
+  try { const result = await attempt; if (!scoped) committedMigrations.add(database); return result; }
+  catch (error) { if (!scoped) migrations.delete(database); throw error; }
 }

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { runContextAuthorityPublicKey } from "@evimed/harness-port/run-context-authority";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, buildRuntimeLaunchPlan, requestRuntime, verifyEviMedWorkloadToken } from "../src/runtimeManager.mjs";
+import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, buildRuntimeLaunchPlan, dshProfileInput, requestRuntime, verifyEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { RUNTIME_CONTROLLER_PROTOCOL_VERSION } from "../src/runtimeControllerClient.mjs";
 import { RuntimeControllerClient } from "../src/runtimeControllerClient.mjs";
@@ -591,6 +592,11 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
         (error) => error?.status === 400 && error?.code === "runtime_controller_source_gateway_invalid",
       );
     }
+    const otherAlgorithm = generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ type: "spki", format: "der" }).toString("base64url");
+    for (const attendancePublicKey of [null, true, {}, [], "not-a-public-key", "A".repeat(500), "x\nEVIMED_ATTENDANCE_USER_ID=other", otherAlgorithm]) {
+      await assert.rejects(client.request("POST", "/v1/runtime/start", { ...payload, attendancePublicKey }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_attendance_key_invalid", JSON.stringify(attendancePublicKey));
+    }
     // The GEO method pack flag is a boolean or absent. Anything else is refused before Docker, and a string is not read as a yes.
     for (const geoSkills of [1, 0, "1", "true", "", {}, []]) {
       await assert.rejects(
@@ -628,7 +634,7 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
   }
 });
 
-test("a 循证 GEO project's runtime is launched with the method pack, any other without it, through the isolated controller", async (t) => {
+test("project method packs and public attendance authority reach Docker through the isolated controller", async (t) => {
   // The whole chain on a fake Docker: the manager reads the project's kind (`geoSkillsFor`), the client sends it as protocol 14's
   // one optional field, the controller validates it and builds the launch plan itself, and the container's environment says it.
   const tmp = await shortTempDir("osrg-");
@@ -655,19 +661,40 @@ test("a 循证 GEO project's runtime is launched with the method pack, any other
       runtimeControllerMode: "socket", runtimeControllerTimeoutMs: 2_000, runtimeControllerPollMs: 100, allowDirectDockerControl: false,
       runtimeProxyConnectTimeoutMs: 3_000, runtimeSkillDirs: [], maxProjectBytes: 1024 * 1024, maxProjectUsageScanEntries: 1_000,
       runtimeIdleTimeoutMs: 0, runtimeQuotaCheckIntervalMs: 0, maxLogFileBytes: 1024 * 1024,
-      geoEnabled: true, geoAudience: "all",
+      geoEnabled: true, geoAudience: "all", modelGatewaySigningSecret: "api-only-attendance-controller-test-secret",
     }));
     const launches = async () => (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).filter((args) => args[0] === "run");
     let isGeo = true;
     manager.geoProjectOf = async (userId, projectId) => { assert.deepEqual([userId, projectId], [project.userId, project.id]); return isGeo; };
+    const policy = {kind:'geo-project',ownerId:project.userId,controlProjectId:project.id,geoProjectId:'geo',ownerCreatedAt:'2026-01-01',
+      projectCreatedAt:'2026-01-02',policyVersion:1,revision:1,referenceId:'policy',namespace:{id:'namespace'}};
+    manager.contextPolicies = {forProject:async()=>policy};
+    const library=path.join(dataDir,'users',project.userId,'library');
+    await mkdir(library,{recursive:true});await writeFile(path.join(library,'foreign.md'),'PRIVATE OWNER LIBRARY');
+    const receipts = new Map();
+    manager.contextDocuments = {database:{transaction:async operation=>{const previous=new Map(receipts);try{return await operation({});}catch(error){receipts.clear();for(const [key,value] of previous)receipts.set(key,value);throw error;}},withTransactionClient:async(_client,operation)=>operation()},put:async(user,kind,id,payload,options)=>receipts.set(id,{kind,id,payload,projectId:options.projectId}),get:async(user,kind,id)=>receipts.get(id)};
     const first = await manager.start(project);
     assert.equal(first.geoSkills, true, "the runtime record says what it was launched with");
+    const receipt = await manager.launchedContextReceipt(project);
+    assert.ok(receipt.mounts.some(mount=>mount.includes('dst=/runtime/capsule-methods') && mount.endsWith(',readonly')));
+    assert.ok((await launches())[0].includes(`OPENVIKING_PENDING_DIR=${receipt.pendingDirectory}`));
     await manager.stop(project);
     isGeo = false;
     const second = await manager.start(project);
     assert.equal(second.geoSkills, false);
+    assert.equal((await manager.launchedContextReceipt(project)).policy.namespaceId, "namespace", "the persistent privacy floor survives disabling the method pack");
     const runs = await launches();
     assert.equal(runs.length, 2);
+    assert.ok(runs.every(args=>!args.some(arg=>arg.includes('dst=/workspace/library'))),"the controller also excludes the owner library from every shared launch");
+    assert.equal(await readFile(path.join(library,'foreign.md'),'utf8'),'PRIVATE OWNER LIBRARY');
+    const verifier = runContextAuthorityPublicKey("api-only-attendance-controller-test-secret");
+    for (const args of runs) {
+      assert.ok(args.includes(`EVIMED_ATTENDANCE_PUBLIC_KEY=${verifier}`), "the API's public verifier crosses the controller wire");
+      assert.ok(args.includes(`EVIMED_ATTENDANCE_USER_ID=${project.userId}`));
+      assert.ok(args.includes(`EVIMED_ATTENDANCE_PROJECT_ID=${project.id}`));
+      assert.ok(!JSON.stringify(args).includes("api-only-attendance-controller-test-secret"), "the privileged controller does not receive the signing secret");
+    }
+    assert.equal(controllerConfig({ dataDir, socketPath, dockerBin }).modelGatewaySigningSecret, "");
     assert.ok(runs[0].includes("EVIMED_GEO_SKILLS=1"), "the GEO project's container is given the pack's switch on");
     assert.equal(runs[0].includes("EVIMED_GEO_SKILLS=0"), false);
     assert.ok(runs[1].includes("EVIMED_GEO_SKILLS=0"), "the same project, no longer a GEO project, is given it off");
@@ -693,6 +720,15 @@ test("the capsule startup protocol refuses a controller from before endpoint han
   );
   client.request = async () => ({ protocolVersion: RUNTIME_CONTROLLER_PROTOCOL_VERSION });
   await assert.doesNotReject(client.health());
+});
+
+test("a controller from before the manifest-derived skill policy (protocol 16) is refused, not trusted to launch it", async () => {
+  // Protocol 17: the controller derives EVIMED_DISABLED_PLATFORM_SKILLS / EVIMED_DISABLED_CLIENT_BUNDLES from the verified
+  // personal generation. A protocol 16 controller would launch the project's switched-off skills enabled.
+  assert.ok(RUNTIME_CONTROLLER_PROTOCOL_VERSION >= 17);
+  const client = new RuntimeControllerClient({});
+  client.request = async () => ({ protocolVersion: 16 });
+  await assert.rejects(client.health(), (error) => error?.code === "runtime_controller_protocol_mismatch");
 });
 
 test("runtime controller shutdown ends even while a client holds a connection open", async () => {
@@ -1605,4 +1641,101 @@ test('evolution admission measures the whole host and reserves its final researc
   assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'research'}));
   assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'evimed-sources'}));
   manager.config.evolutionEnabled=false;assert.doesNotThrow(()=>manager.enforceRuntimeCapacity(project));
+});
+
+test("release gate profile crosses the actual controller socket and changes only the model target", async (t) => {
+  const tmp = await shortTempDir("gate-socket-");
+  const dataDir = path.join(tmp, "data");
+  await mkdir(dataDir, { recursive: true });
+  const socketPath = path.join(tmp, "c.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const project = await projectTree(dataDir, "release-gate", "gate-012345abcdef");
+  await projectTree(dataDir, "alice", "gate-012345abcdef");
+  await projectTree(dataDir, "release-gate", "paper1");
+  let requests = 0;
+  const counter = http.createServer((req, res) => { requests++; res.end('{}'); });
+  await new Promise(resolve => counter.listen(0, '127.0.0.1', () => resolve(undefined)));
+  t.after(() => new Promise(resolve => counter.close(() => resolve(undefined))));
+  const counterAddress = counter.address();
+  assert.ok(counterAddress && typeof counterAddress !== 'string');
+
+  const config = {
+    ...controllerConfig({ dataDir, socketPath, dockerBin }),
+    modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
+    releaseGateModelGatewayInternalUrl: `http://127.0.0.1:${counterAddress.port}/internal/model/v1`,
+  };
+  const priorState = process.env.FAKE_DOCKER_STATE, priorVolume = process.env.FAKE_VOLUME_ROOT;
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  const controller = createRuntimeController(config);
+  t.after(async () => {
+    await client.cleanupRuntime(project).catch(() => {});
+    await controller.close();
+    if (priorState === undefined) delete process.env.FAKE_DOCKER_STATE; else process.env.FAKE_DOCKER_STATE = priorState;
+    if (priorVolume === undefined) delete process.env.FAKE_VOLUME_ROOT; else process.env.FAKE_VOLUME_ROOT = priorVolume;
+    await removeTree(tmp);
+  });
+  await controller.listen();
+  const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath });
+  const payload = { userId: project.userId, projectId: project.id, activeWorkspace: "", port: 49152,
+    password: "pw_abcdefghijklmnopqrstuvwxyz", capsuleGatewayUrl: "", revisionGatewayUrl: "", publicSourceGatewayUrl: "", modelGatewayProfile: "release-gate" };
+  // Real HTTP over the Unix socket reaches controller-side validation. Docker
+  // remains a fixture: this proves transport and launch planning, not an image.
+  for (const extra of [
+    { userId: "alice" }, { projectId: "paper1" }, { modelGatewayProfile: "unknown" },
+    { modelGatewayUrl: "http://attacker:9999/internal/model/v1" },
+    { capsuleGatewayUrl: "http://open-science-release-receipt:8798/internal/capsules/v1" },
+    { revisionGatewayUrl: "http://open-science-release-receipt:8798/internal/revisions/v1/authorize" },
+    { memoryGatewayUrl: "http://open-science-release-receipt:8798/internal/memory/v1" },
+  ]) await assert.rejects(() => client.request("POST", "/v1/runtime/start", { ...payload, ...extra }));
+  controller.config.releaseGateModelGatewayInternalUrl = "";
+  await assert.rejects(() => client.request("POST", "/v1/runtime/start", payload));
+  controller.config.releaseGateModelGatewayInternalUrl = config.releaseGateModelGatewayInternalUrl;
+  const plan = buildRuntimeLaunchPlan(config, project, 49152, { modelGatewayProfile: "release-gate" });
+  assert.equal(plan.modelGatewayUrl, config.releaseGateModelGatewayInternalUrl);
+  const manager = new RuntimeManager(loadConfig({ ...config, runtimeControllerMode: "socket", runtimeProxyConnectTimeoutMs: 3000, runtimeControllerPollMs: 100, allowDirectDockerControl: false }));
+  t.after(() => manager.closeAll());
+  await manager.start(project, { modelGatewayProfile: "release-gate" });
+  const patch = await readFile(path.join(project.runtimeDir, "container-runtime", "dsh-home", "control-plane-patch.yml"), "utf8");
+  assert.ok(patch.includes(config.releaseGateModelGatewayInternalUrl));
+  const providerUrl = /baseURL: ["']?([^\s"']+)/.exec(patch)?.[1];
+  assert.equal(providerUrl, config.releaseGateModelGatewayInternalUrl);
+  await (await fetch(providerUrl)).text();
+  assert.equal(requests, 1);
+  const profiled = dshProfileInput(config, project, { ...plan, gateways: { model: 'http://wrong:9999', capsule: 'http://normal/capsule' } }, 'deepseek-flash', '');
+  assert.equal(profiled.modelGatewayUrl, config.releaseGateModelGatewayInternalUrl);
+  const ordinary = buildRuntimeLaunchPlan(config, project, 49152);
+  assert.equal(dshProfileInput(config, project, ordinary, 'deepseek-flash', '').modelGatewayUrl, config.modelGatewayInternalUrl);
+  const ordinaryInput = dshProfileInput(config, project, ordinary, 'deepseek-flash', '');
+  await writeFile(path.join(project.runtimeDir, 'capsule-methods', 'fixture.md'), '# Mounted fixture method\n');
+  // Both profiles observe the same post-start methods mount; start may materialize its empty directory.
+  const gateComparisonPlan = buildRuntimeLaunchPlan(config, project, 49152, { modelGatewayProfile: 'release-gate' });
+  const gateInput = dshProfileInput(config, project, gateComparisonPlan, 'deepseek-flash', '');
+  assert.equal(gateInput.modelGatewayUrl, config.releaseGateModelGatewayInternalUrl);
+  assert.equal(gateInput.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL, config.releaseGateModelGatewayInternalUrl);
+  const normalizeModel = (/** @type {any} */ input) => ({ ...input, modelGatewayUrl: ordinaryInput.modelGatewayUrl,
+    mcpEnvironment: { ...input.mcpEnvironment, EVIMED_MODEL_GATEWAY_URL: ordinaryInput.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL } });
+  assert.equal(ordinaryInput.capsuleMethodsDir, '/runtime/capsule-methods');
+  assert.deepEqual(normalizeModel(gateInput), ordinaryInput);
+
+  // No database is opened: these are the same pure launch/profile builders the
+  // controller uses with a Postgres deployment and an activated memory account.
+  const postgres = { ...config, stateStore: 'postgres', evimedWorkloadSigningSecret: 'fixture-workload-secret-at-least-32-bytes' };
+  const memoryGatewayUrl = 'http://open-science-web:8787/internal/memory/v1';
+  const ancillaryOrdinary = buildRuntimeLaunchPlan(postgres, project, 49152, { memoryGatewayUrl });
+  const ancillaryGate = buildRuntimeLaunchPlan(postgres, project, 49152, { memoryGatewayUrl, modelGatewayProfile: 'release-gate' });
+  const normalProfile = dshProfileInput(postgres, project, ancillaryOrdinary, 'deepseek-flash', '/fixture/token');
+  const gateProfile = dshProfileInput(postgres, project, ancillaryGate, 'deepseek-flash', '/fixture/token');
+  for (const field of ['capsuleGatewayUrl', 'revisionGatewayUrl']) {
+    assert.ok(normalProfile[field]?.startsWith('http://open-science-web:8787/'), field);
+    assert.equal(gateProfile[field], normalProfile[field], field);
+  }
+  assert.equal(ancillaryOrdinary.memoryGatewayUrl, memoryGatewayUrl);
+  assert.ok(ancillaryOrdinary.args.includes(`EVIMED_MEMORY_GATEWAY_URL=${memoryGatewayUrl}`));
+  assert.equal(ancillaryGate.memoryGatewayUrl, memoryGatewayUrl);
+  assert.ok(ancillaryGate.args.includes(`EVIMED_MEMORY_GATEWAY_URL=${memoryGatewayUrl}`));
+  assert.deepEqual({ ...gateProfile, modelGatewayUrl: normalProfile.modelGatewayUrl,
+    mcpEnvironment: { ...gateProfile.mcpEnvironment, EVIMED_MODEL_GATEWAY_URL: normalProfile.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL } }, normalProfile);
+
+  assert.equal(config.modelGatewayInternalUrl, "http://open-science-web:8787/internal/model/v1");
 });

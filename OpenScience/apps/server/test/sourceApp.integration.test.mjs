@@ -202,7 +202,7 @@ test("the page's own upload command makes a source, whatever the file's format",
     const note = await command("knowledge-base/房颤笔记.md");
     assert.equal(note.status, 200);
     const inventory = await (await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers })).json();
-    assert.deepEqual(inventory.data.items.map((item) => item.payload.paths), [["knowledge-base/房颤笔记.md"]]);
+    assert.deepEqual(inventory.data.items.map((item) => [item.payload.logicalPath ?? item.payload.paths[0]]), [["knowledge-base/房颤笔记.md"]]);
 
     // 2026-10-13: no file is refused by its format. A recording or a format nothing here reads is kept as the original,
     // a source like any other that has no text to search.
@@ -219,7 +219,7 @@ test("the page's own upload command makes a source, whatever the file's format",
     const elsewhere = await command("analysis/cohort.sav");
     assert.equal(elsewhere.status, 200);
     const after = await (await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers })).json();
-    assert.deepEqual(after.data.items.map((item) => item.payload.paths[0]).sort(), ["knowledge-base/cohort.sav", "knowledge-base/房颤笔记.md", "knowledge-base/查房录音.mp3"]);
+    assert.deepEqual(after.data.items.map((item) => (item.payload.logicalPath ?? item.payload.paths[0])).sort(), ["knowledge-base/cohort.sav", "knowledge-base/房颤笔记.md", "knowledge-base/查房录音.mp3"]);
     assert.equal(user.id.length > 0, true);
   } finally { await close(); }
 });

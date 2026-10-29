@@ -1,6 +1,6 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { CalendarDays, ChevronDown, Copy } from "lucide-react";
 import {
   fetchFrontierDaily,
@@ -9,6 +9,7 @@ import {
   type FrontierDaily,
   type FrontierDailySchedule,
   type FrontierDailySummary,
+  type FrontierFollowedQuery,
   type FrontierFollowedZone,
   type FrontierItem,
 } from "@/lib/frontierClient";
@@ -19,9 +20,8 @@ import { LoadError } from "@/components/cards/LoadError";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
-import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
 import { FrontierSkeleton } from "./FrontierSkeleton";
-import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
+import { INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
 
 /** 往期 lists this many issues: two weeks, a menu that fits a laptop screen. */
 const ARCHIVE_SHOWN = 14;
@@ -154,7 +154,9 @@ export function dailyControls(state: DailyState, { weekly = false, onDay }: { we
  * never a long scroll away. `laneLimit` shows that many rows of each lane and
  * 「展开其余 N 条」 for the rest: the weekly's way to be read in a few minutes.
  */
-export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean; laneLimit?: number }) {
+export interface DigestExpansion { ids: string[]; onExpand: (id: string) => void }
+
+export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean; laneLimit?: number; expansion?: DigestExpansion }) {
   const origin = useFrontierOrigin();
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
@@ -192,15 +194,15 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
   return (
     <article aria-labelledby="frontier-daily-title">
-      <header className="frontier-brief-header flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-card border border-border bg-surface p-4">
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border pb-2">
         <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{weekly ? weekRange(issue.day) : shortDate(issue.day)}</h2>
         <span className="text-caption tabular-nums text-text-3">{dailyMeta(issue)}</span>
       </header>
 
       {issue.lead && (
-        <section aria-label="头条" className="frontier-brief-lead mt-5 rounded-panel border border-border bg-surface p-5">
-          {/* The title is the way to the original, as on the feed's card and on every row below (§12.3): one kind of 「原文」 entry on the page. */}
-          <h3 className="max-w-measure-body text-title font-semibold text-text"><a href={issue.lead.item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{issue.lead.item.title}</a></h3>
+        <section aria-label="头条" className="mt-5">
+          {/* Feed and digest headlines share the same addressed reader. */}
+          <h3 className="max-w-measure-body text-title font-semibold text-text"><ArticleLink item={issue.lead.item}>{issue.lead.item.title}</ArticleLink></h3>
           <p className="mt-1 text-caption text-text-3">{issue.lead.item.source.name}</p>
           {(leadText || issue.lead.event) && (
             // The issue's own text (`data-prose`), as a row's summary is: content of the issue, not a sentence of the page's.
@@ -216,14 +218,15 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
         </section>
       )}
 
-      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
-      {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
+      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
+      {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
+      {issue.followedQueries && issue.followedQueries.length > 0 && <FollowedQueries follows={issue.followedQueries} />}
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
 
       {issue.aiMinute && (
-        <section aria-labelledby="daily-ai-minute" className="frontier-ai-minute mt-8 rounded-card border border-border bg-accent-soft p-4">
-          <h3 id="daily-ai-minute" className="text-ui font-semibold text-text">AI 一分钟</h3>
+        <section aria-labelledby="daily-ai-minute" className="mt-8">
+          <h3 id="daily-ai-minute" className="text-body font-semibold text-text">AI 一分钟</h3>
           <p data-prose="" className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
         </section>
       )}
@@ -239,13 +242,35 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
 }
 
 /**
+ * 「你关注的」: the things this reader typed to follow that have news, each one a link to its feed with the number of new items
+ * (c3-watch). Theirs alone, like the zones below it.
+ */
+function FollowedQueries({ follows }: { follows: FrontierFollowedQuery[] }) {
+  return (
+    <section aria-labelledby="daily-followed-queries" className="mt-8">
+      <h3 id="daily-followed-queries" className="text-body font-semibold text-text">你关注的</h3>
+      <ul aria-label="有新动态的关注" className="mt-1">
+        {follows.map((follow) => (
+          <li key={follow.id} className="flex items-baseline gap-2 border-b border-border py-3">
+            <Link to={`/app/frontier?view=following&follow=${encodeURIComponent(follow.id)}`} className="min-w-0 flex-1 text-body font-semibold leading-6 text-text hover:text-accent hover:underline">
+              {follow.label}
+            </Link>
+            <span className="shrink-0 text-caption tabular-nums text-text-3">{follow.newItems >= 99 ? "99+" : follow.newItems} 条新动态</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
  * 「你关注的专区」: this reader's own followed zones, with the cards that are new or changed in the issue's window.
  * It is the reader's alone — the issue above it reads the same to everyone — so it is a section of its own, not a lane.
  */
 function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
   return (
-    <section aria-labelledby="daily-followed-zones" className="frontier-daily-section mt-8 rounded-card border border-border bg-surface p-4">
-      <h3 id="daily-followed-zones" className="text-ui font-semibold text-text">你关注的专区</h3>
+    <section aria-labelledby="daily-followed-zones" className="mt-8">
+      <h3 id="daily-followed-zones" className="text-body font-semibold text-text">你关注的专区</h3>
       {zones.map((zone) => (
         <div key={zone.zoneId} className="mt-2">
           <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}`} className={cn(INLINE_ACTION, "-ml-1 px-1 text-text-3 hover:text-accent")}>
@@ -259,7 +284,7 @@ function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
                   <p className="text-body font-semibold leading-6 text-text">
                     <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}/evidence/${encodeURIComponent(card.id)}`} className="hover:text-accent hover:underline">{card.title}</Link>
                   </p>
-                  {card.summary && <p className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{card.summary}</p>}
+                  {card.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{card.summary}</p>}
                 </div>
               </li>
             ))}
@@ -274,67 +299,45 @@ function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
  * One lane of the issue, or its safety alerts: a heading and its count, then numbered rows — all of
  * them, or the first `limit` and 「展开其余 N 条」, which opens the rest where it stands.
  */
-function DailySection({ id, title, items, safety = false, limit }: { id: string; title: string; items: FrontierItem[]; safety?: boolean; limit?: number }) {
-  const [all, setAll] = useState(false);
-  const splitAt = limit !== undefined ? Math.min(limit, items.length) : items.length;
-  const shown = items.slice(0, splitAt);
-  const hidden = items.slice(splitAt);
-  const expandId = `daily-${id}-extra`;
+function DailySection({ id, title, items, safety = false, limit, expansion, expansionId }: { id: string; title: string; items: FrontierItem[]; safety?: boolean; limit?: number; expansion?: DigestExpansion; expansionId: string }) {
+  const [localAll, setAll] = useState(false);
+  const all = expansion ? expansion.ids.includes(expansionId) : localAll;
+  const shown = limit !== undefined && !all ? items.slice(0, limit) : items;
+  const rest = items.length - shown.length;
   return (
-    <section aria-labelledby={`daily-${id}`} className={cn("frontier-daily-section mt-8 rounded-card border border-border bg-surface p-4", safety && "frontier-daily-safety")}>
+    <section aria-labelledby={`daily-${id}`} className="mt-8">
       <h3 id={`daily-${id}`} className="flex scroll-mt-24 items-baseline gap-2">
-        <span className={cn("text-ui font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
+        <span className={cn("text-body font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
         <span className="text-caption tabular-nums text-text-3">{items.length}</span>
       </h3>
-      <ol id={hidden.length > 0 ? expandId : undefined} aria-label={title} className="mt-1">
+      <ol aria-label={title} className="mt-1">
         {shown.map((item, index) => <DailyRow key={item.id} item={item} number={index + 1} safety={safety} />)}
-        {hidden.map((item, index) => <DailyRow key={item.id} item={item} number={splitAt + index + 1} safety={safety} extraOpen={all} />)}
       </ol>
-      {hidden.length > 0 && (
-        <>
-          <Button
-            variant="text"
-            size="sm"
-            className="frontier-daily-toggle -ml-2 mt-1"
-            aria-controls={expandId}
-            aria-expanded={all}
-            onClick={() => setAll((value) => !value)}
-          >
-            <ChevronDown size={16} className={cn("transition-transform duration-normal", all && "rotate-180")} aria-hidden="true" />
-            {all ? "收起" : `展开其余 ${hidden.length} 条`}
-          </Button>
-        </>
-      )}
+      {rest > 0 && <Button variant="text" size="sm" className="-ml-2 mt-1" onClick={() => expansion ? expansion.onExpand(expansionId) : setAll(true)}>展开其余 {rest} 条</Button>}
     </section>
   );
 }
 
-/**
- * A row: 「01」, the title — the way to the original, as on the feed's card — the summary in at
- * most three lines (a safety notice has its title and no more), and a grey line naming the
- * institution — FDA, 英国 MHRA, never the interface it was read through — with 「详情」 where the
- * drawer holds more than the row does.
- */
-function DailyRow({ item, number, safety, extraOpen }: { item: FrontierItem; number: number; safety: boolean; extraOpen?: boolean }) {
-  const [details, setDetails] = useState(false);
+/** A digest row keeps its source and opens the shared article reader. */
+function DailyRow({ item, number, safety }: { item: FrontierItem; number: number; safety: boolean }) {
   return (
-    <li
-      id={extraOpen !== undefined ? `${item.id}-daily-extra` : undefined}
-      aria-hidden={extraOpen === false || undefined}
-      className={cn("flex gap-2 border-b border-border py-3", extraOpen !== undefined && "frontier-daily-extra")}
-      data-open={extraOpen === undefined ? undefined : extraOpen ? "true" : "false"}
-    >
+    <li className="flex gap-2 border-b border-border py-3">
       <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(number)}</span>
       <div className="min-w-0 flex-1">
-        <p data-row-title className="text-body font-semibold leading-6 text-text"><a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
-        {!safety && item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
+        <p data-row-title data-prose="" className="text-body font-semibold leading-6 text-text"><ArticleLink item={item}>{item.title}</ArticleLink></p>
+        {!safety && item.summary && <p data-prose="" className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
           {/* The feed card's own look for this action: a sized button here was the page's tenth kind of control. */}
-          {frontierDetailsOffered(item) && <button type="button" aria-label="详情" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "frontier-details-action px-3")}><span className="text-caption font-semibold">查看详情</span></button>}
+          <ArticleLink item={item} className={cn(INLINE_ACTION, "px-1 text-accent")}>详情</ArticleLink>
         </div>
       </div>
-      {details && <FrontierDetails item={item} onClose={() => setDetails(false)} />}
     </li>
   );
+}
+
+function ArticleLink({ item, children, className = "hover:text-accent hover:underline" }: { item: FrontierItem; children: ReactNode; className?: string }) {
+  const origin = useFrontierOrigin();
+  const location = useLocation();
+  return <Link to={`/app/frontier/items/${encodeURIComponent(item.id)}`} state={{ ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: "简报" } }} onClick={rememberFrontierPosition} className={className}>{children}</Link>;
 }

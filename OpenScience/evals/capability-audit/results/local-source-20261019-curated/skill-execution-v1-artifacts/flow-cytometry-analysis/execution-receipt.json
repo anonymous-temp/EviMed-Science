@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1549,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/flow-cytometry-analysis/results.json",
+      "sha256": "d28a3e1b08daad5ecad3355ee924a5fb102e6e07644ea6c4c877d834d2c88f29"
+    },
+    {
+      "bytes": 2103,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/flow-cytometry-analysis/flow-cytometry-analysis-report.md",
+      "sha256": "4d99cb50e0ddbafc75dd1e947fdf205e3a5ea74340c9c55a2d3185d8978569b7"
+    }
+  ],
+  "finishedAt": "2026-10-19T12:53:19.333904Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "flow-cytometry-analysis",
+  "startedAt": "2026-10-19T12:53:19.332025Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for flow-cytometry-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "No biological gate is inferred automatically; apply a prespecified gating strategy and controls."
+  ]
+}

@@ -1,3 +1,5 @@
+import { useGeoDestinationPath } from "../useGeoPath";
+import { useGeoPath } from "../useGeoPath";
 import { useState } from "react";
 import { Link } from "react-router";
 import { geoValueText, GEO_VALUE_DOMAINS } from "@evimed/domain";
@@ -5,10 +7,10 @@ import type { GeoProject, GeoValue } from "@/lib/geoClient";
 import { CLAIM_TYPE_LABEL } from "@/lib/claimCitations";
 import { formatDay } from "@/lib/format";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { Note } from "@/components/ui/Note";
 import { StepState } from "@/components/ui/StepState";
 import { safeWebHref } from "@/lib/readPages";
 import { useGeoValue } from "../geoProjectData";
-import { geoDestinationPath } from "../geoTabs";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { engineName } from "../geoText";
 import { TabError, TabSection } from "./geoTabKit";
@@ -98,6 +100,7 @@ export function ValueSection({ geoId, project, mode = "profile", className }: { 
 }
 
 function ValueBody({ geoId, value, mode, className }: { geoId: string; value: GeoValue; mode: ValueMode; className?: string }) {
+  const path = useGeoPath();
   const data = value.data ?? {};
   const entries = entriesOf(value, mode);
   const listed = useShowMore(entries, { first: firstOf(mode), step: STEP, resetKey: `${geoId}:${mode}` });
@@ -110,6 +113,10 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
       {text(data.summary) && mode === "profile" && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
         <p className="text-ui text-text-2">{coverageSentence(value.coverage)}</p>
+        {Boolean(value.coverage?.assessment?.partialObservations || value.coverage?.assessment?.unknownObservations) && <Note result={[
+          { n: value.coverage.assessment?.partialObservations ?? 0 }, " 条观察来自部分核查，",
+          { n: value.coverage.assessment?.unknownObservations ?? 0 }, " 条观察的核查范围未确定。",
+        ]} />}
         {Boolean(value.coverage?.uncertain || value.coverage?.notApplicable) && <p className="mt-2 text-caption text-text-3">尚不能判断 {value.coverage.uncertain} 条，不适用 {value.coverage.notApplicable} 条。</p>}
         {Boolean(value.coverage?.assessed && value.coverage?.basisVersion && value.coverage.basisVersion !== value.version) && <p className="mt-2 text-caption text-text-3">以上按第 {value.coverage.basisVersion} 版药品价值分析测得；分析已更新到第 {value.version} 版，下一轮测量后按新版本判断。</p>}
         {!!value.observations?.length && <Disclosure summary={value.observations.length > OBSERVATIONS_SHOWN ? `查看回答中的表达 · 共 ${value.observations.length} 条` : "查看回答中的表达"} className="mt-3">
@@ -138,7 +145,7 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
         {/* On 信源 the changes are the list above; elsewhere the count leads to them. */}
         {!!value.impacts?.length && (mode === "actions" || mode === "profile") && <p className="mt-3 text-ui text-text-2">
           有 {value.impacts.length} 项依据变化，可检查相关结论和内容。
-          <Link to={tabPath(geoId, "sources")} className="ml-2 text-link hover:underline">去信源查看</Link>
+          <Link to={path(tabPath(geoId, "sources"))} className="ml-2 text-link hover:underline">去信源查看</Link>
         </p>}
       </>}
       <BasisLine version={value.version} updatedAt={value.updatedAt} />
@@ -180,6 +187,7 @@ const START_DRAFT = "请结合现有资料开始药品价值分析，说明与�
  * names the work. The analysis is written in the project's conversation, so the button opens it with the brief waiting, unsent.
  */
 function StartAnalysis({ geoId, project, className }: { geoId: string; project: GeoProject; className?: string }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
   const mayRun = !project.access || project.access.abilities.includes("run");
@@ -193,7 +201,7 @@ function StartAnalysis({ geoId, project, className }: { geoId: string; project: 
         gives="这个药的获益、风险、适用性、费用与可及性"
         onStart={mayRun ? () => {
           setBusy(true);
-          void open({ projectId: project.projectId, sessionId: project.sessionId }, START_DRAFT).finally(() => setBusy(false));
+          void open({ projectId: project.projectId }, START_DRAFT).finally(() => setBusy(false));
         } : undefined}
         starting={busy}
         reason={mayRun ? undefined : "你在这个项目里只有查看权限。"}

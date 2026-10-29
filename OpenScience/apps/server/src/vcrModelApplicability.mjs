@@ -74,7 +74,9 @@ export function vcrModelApplicabilityIssues(model, { endpointType, variables, ho
   const applicability = object(model.applicability);
   const card = object(model.card);
   const declared = list(applicability.endpoints).map(String);
-  if (endpointType && declared.length && !declared.includes(endpointType)) {
+  if (endpointType && !declared.length && !model.endpointType) {
+    issues.push({ code: "endpoint_not_covered", field: "endpoint.type", text: "模型未声明覆盖的终点，尚不能判断是否适用于本研究。" });
+  } else if (endpointType && declared.length && !declared.includes(endpointType)) {
     issues.push({ code: "endpoint_not_covered", field: "endpoint.type", text: `它只覆盖 ${declared.join("、")} 终点，这个研究的终点是 ${endpointType}` });
   } else if (endpointType && !declared.length && model.endpointType && String(model.endpointType) !== endpointType) {
     issues.push({ code: "endpoint_not_covered", field: "endpoint.type", text: `它是 ${model.endpointType} 终点的模型，这个研究的终点是 ${endpointType}` });

@@ -32,6 +32,18 @@ const scriptsOf = (job) => job.steps.map((/** @type {any} */ step) => step.run ?
 /** @param {string} file */
 const exists = (file) => access(file).then(() => true, () => false);
 
+test("the web APT helper resolves from the workflow's declared working directory", async () => {
+  const spec = await workflow();
+  const job = spec.jobs.web;
+  const step = job.steps.find((/** @type {any} */ entry) => entry.name === "Install test system dependencies");
+  const cwd = path.resolve(repoRoot, step["working-directory"] ?? job.defaults?.run?.["working-directory"]
+    ?? spec.defaults?.run?.["working-directory"] ?? ".");
+  const helper = /^\s*source\s+(\S+)\s*$/m.exec(step.run)?.[1];
+  assert.ok(helper, "the web dependency step uses the bounded APT helper");
+  assert.equal(await exists(path.resolve(cwd, helper)), true, "the sourced helper exists under the actual step cwd");
+  assert.equal(path.resolve(cwd, helper), path.join(openScience, "scripts/ops/ci-apt.sh"));
+});
+
 test("the tests that need the engine's R and Python are exactly the ones the durable-state step leaves out", async () => {
   const files = (await readdir(testDir)).filter((name) => name.endsWith(".integration.test.mjs"));
   // The walk has to have walked: a directory that read as empty would find no

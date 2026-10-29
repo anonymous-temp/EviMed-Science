@@ -1,0 +1,165 @@
+{
+ "case": "enrich/paper-openalex",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-22T15:28:09+00:00",
+ "note": "Unpaywall asked without a contact address (no secret read): its 422 is recorded as it came",
+ "rows": [
+  {
+   "entry_id": "paper:8712fbd9356e0cdc3c997865cf048fd7",
+   "revision": 1,
+   "source_id": null,
+   "external_key": "10.1016/s1001-9294(22)00007-4",
+   "identity_key": "doi:10.1016/s1001-9294(22)00007-4",
+   "url": "https://doi.org/10.1016/s1001-9294(22)00007-4",
+   "canonical_url": "https://doi.org/10.1016/s1001-9294(22)00007-4",
+   "doi": "10.1016/s1001-9294(22)00007-4",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-22T08:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {},
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "openalex",
+   "abstract_chars": 1643,
+   "body_chars": 0,
+   "notes": [
+    "landing_blocked:direct",
+    "landing_challenge"
+   ]
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1016%2Fs1001-9294%2822%2900007-4%22%5Bdoi%5D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1016%2Fs1001-9294%2822%2900007-4%22%5Bdoi%5D",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:09+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 336,
+   "sha256": "7a10b8dc7f9a7f79e4c63f2f96390bff129c5914bfc18379078b3b526db7e148"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1016%2Fs1001-9294%2822%2900007-4%22&format=json&resultType=core&pageSize=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1016%2Fs1001-9294%2822%2900007-4%22&format=json&resultType=core&pageSize=25",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:11+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 200,
+   "sha256": "8c6aacd87756f1bdd11d827013c0d246f27859a7936c4f036887420b2e50be61"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1016/s1001-9294(22)00007-4",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1016/s1001-9294(22)00007-4",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:12+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 22697,
+   "sha256": "d600180247f9ad8f5f1c0a7bca724756080db70c6b70fd8e79d83ca4bc8fb584"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1016/s1001-9294(22)00007-4?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1016/s1001-9294(22)00007-4?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:14+00:00",
+   "file": "04.json",
+   "gzip": false,
+   "bytes": 4677,
+   "sha256": "0d107c3b0e1249b9b78b0abc75076bb4f605872fc027fdcfdbc6c6c3c728c1e6"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1016/s1001-9294(22)00007-4?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1016/s1001-9294(22)00007-4?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:15+00:00",
+   "file": "05.json",
+   "gzip": false,
+   "bytes": 242,
+   "sha256": "12e65011691eeb14a2aafc09a5ddee75a470a9dfd2bdac924b2c52f3f77754ff"
+  },
+  {
+   "method": "GET",
+   "url": "https://linkinghub.elsevier.com/retrieve/pii/S1001929422000074",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 403,
+   "final_url": "https://www.sciencedirect.com/science/article/pii/S1001929422000074",
+   "headers": {
+    "content-type": "text/html; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:18+00:00",
+   "file": "06.html.gz",
+   "gzip": true,
+   "bytes": 387366,
+   "sha256": "d736058e0ec9b2f4091ae86682c9db3095b1787c9c884699b1725d24052543b4",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "4b198ab869c9714ce92a1fc080e41f1a6355ac463a931e23cdb7872c99e75289",
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  }
+ ]
+}

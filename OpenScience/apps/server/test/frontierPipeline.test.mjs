@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { FRONTIER_PREPRINT_LANE_SOURCE_TYPES, FRONTIER_SCORE_MAXIMA, frontierAuthorityScore } from "@evimed/domain";
+import { FRONTIER_PREPRINT_LANE_SOURCE_TYPES, FRONTIER_SCORE_MAXIMA, frontierAuthorityScore, frontierScoreCeilings } from "@evimed/domain";
 import {
   FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT,
   FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT,
   FRONTIER_SELECT_THRESHOLD_DEFAULT,
+  FRONTIER_PRIMARY_GIVE_UP_MS,
   FRONTIER_TEXT_GIVE_UP_MS,
   FRONTIER_TEXT_AFTER_ATTEMPT_MS,
   FRONTIER_TEXT_HOLD_MS,
@@ -24,7 +25,9 @@ import {
   frontierKeptModelFlags,
   frontierSafetyAlert,
   frontierSelectionDecision,
+  frontierJournalWithoutAbstract,
   frontierTextDecision,
+  frontierItemReadable,
   frontierTextPendingHold,
   frontierTimelineAt,
   frontierNoticeKind,
@@ -177,22 +180,61 @@ test("a relation is classified by its type: four notice states, and everything e
   assert.deepEqual(frontierUpdateLinks({}), []);
 });
 
-test("the text step: take it when it is there, wait for it when it is worth waiting, never more than five days", () => {
-  const now = new Date("2026-09-22T12:00:00Z");
+test("the text step: take it when it is there, wait for it while it may come, and never show an item with nothing to read", () => {
+  const now = new Date("2026-10-22T12:00:00Z");
   const fresh = { first_seen_at: new Date(now.getTime() - HOUR).toISOString(), summary_raw: "short", defects: ["short-summary"] };
   const old = { ...fresh, first_seen_at: new Date(now.getTime() - FRONTIER_TEXT_GIVE_UP_MS).toISOString() };
   const withSummary = { ...fresh, summary_raw: "s".repeat(200), defects: [] };
   const decide = (/** @type {any} */ status, /** @type {any} */ entry, /** @type {any} */ source, promoted = false) =>
     frontierTextDecision({ status, entry, source, promoted, now });
+  assert.equal(FRONTIER_TEXT_GIVE_UP_MS, 14 * 24 * HOUR, "the knowledge plugin's own horizon for a journal's text");
   assert.deepEqual(decide("available", fresh, smallJournal), { action: "promote", holdMs: 0 });
-  assert.deepEqual(decide("unavailable", fresh, smallJournal), { action: "promote", holdMs: 0 });
   assert.deepEqual(decide("pending", fresh, smallJournal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS });
   assert.deepEqual(decide("error", fresh, smallJournal), { action: "hold", holdMs: FRONTIER_TEXT_RETRY_MS }, "a plugin that did not answer is asked again sooner");
-  assert.deepEqual(decide("pending", old, smallJournal), { action: "promote", holdMs: 0 }, "after five days it goes on without");
-  assert.deepEqual(decide("pending", fresh, journal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a top journal never waits");
+  // Nothing a reader could use, and nothing more will come: not shown.
+  assert.deepEqual(decide("unavailable", fresh, smallJournal), { action: "drop", holdMs: 0 });
+  assert.deepEqual(decide("pending", old, smallJournal), { action: "drop", holdMs: 0 }, "after fourteen days it is not waited for");
+  assert.deepEqual(decide("pending", fresh, journal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a top journal's paper waits for its text too");
+  // c3-primary: a top journal's paper (authority 4-5) is waited for twenty-one days, the plugin's horizon for it; the others fourteen.
+  assert.equal(FRONTIER_PRIMARY_GIVE_UP_MS, 21 * 24 * HOUR);
+  assert.deepEqual(decide("pending", old, journal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "fourteen days is not the end of a top journal's paper");
+  const older = { ...fresh, first_seen_at: new Date(now.getTime() - FRONTIER_PRIMARY_GIVE_UP_MS).toISOString() };
+  assert.deepEqual(decide("pending", older, journal), { action: "drop", holdMs: 0 });
+  assert.deepEqual(decide("pending", older, smallJournal), { action: "drop", holdMs: 0 });
+  // A safety feed's notice goes out on its title; a whole feed summary is enough to go on; a published item keeps asking.
   assert.deepEqual(decide("pending", fresh, safety), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
-  assert.deepEqual(decide("pending", withSummary, smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a whole feed summary is enough to go on");
-  assert.deepEqual(decide("pending", fresh, smallJournal, true), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a published item keeps asking");
+  assert.deepEqual(decide("unavailable", fresh, safety), { action: "promote", holdMs: 0 });
+  assert.deepEqual(decide("pending", withSummary, smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
+  assert.deepEqual(decide("unavailable", withSummary, smallJournal), { action: "promote", holdMs: 0 });
+  assert.deepEqual(decide("pending", fresh, smallJournal, true), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
+  assert.deepEqual(decide("pending", old, smallJournal, true), { action: "promote", holdMs: 0 }, "an item already shown is never taken back by the text step");
+});
+
+test("an item may be shown with a reader text, a usable feed summary, or a safety feed's notice — and not otherwise", () => {
+  const entry = { summary_raw: null, defects: ["no-summary"] };
+  assert.equal(frontierItemReadable({ texts: { abstract_raw: "Background: x." }, entry, source: smallJournal }), true);
+  assert.equal(frontierItemReadable({ texts: { body_excerpt: "A page's text." }, entry, source: smallJournal }), true);
+  assert.equal(frontierItemReadable({ texts: {}, entry: { summary_raw: "s".repeat(120), defects: [] }, source: smallJournal }), true);
+  assert.equal(frontierItemReadable({ texts: {}, entry, source: safety }), true);
+  assert.equal(frontierItemReadable({ texts: { abstract_raw: "  " }, entry, source: journal }), false);
+  assert.equal(frontierItemReadable({ texts: null, entry: null, source: null }), false);
+  // A record is its own text: a registry's or openFDA's entry; an article delivered by an API still needs its text.
+  const registry = { source_type: "evidence-body", access: "json-api" };
+  assert.equal(frontierItemReadable({ texts: {}, entry, source: registry }), true);
+  assert.equal(frontierItemReadable({ texts: {}, entry: { ...entry, doi: "10.1101/x" }, source: registry }), false);
+  assert.deepEqual(frontierTextDecision({ status: "unavailable", entry: { first_seen_at: new Date().toISOString() }, source: registry, promoted: false, now: new Date() }),
+    { action: "promote", holdMs: 0 }, "the plugin answers a record unavailable on purpose: record_is_the_text");
+});
+
+test("a journal's paper without its abstract is never selected", () => {
+  const media = { source_type: "media", authority: 2, safety_feed: false };
+  // …and an item a journal published without its abstract is never selected, by the line or by the lane floor's query.
+  const base = { safetyAlert: false, verification: "passed", scoreTotal: 90, demoted: false, source: smallJournal, selectedToday: 0, threshold: 70 };
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"] }), { selected: false, rule: null });
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"], source: journal }), { selected: false, rule: null }, "a top journal's too");
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"], source: media }), { selected: true, rule: "threshold" }, "the rule is a journal's");
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"], safetyAlert: true }), { selected: true, rule: "safety-bypass" });
+  assert.equal(frontierJournalWithoutAbstract({ source: smallJournal, flags: ["preprint"] }), false);
 });
 
 test("a pending text is asked for again just after the plugin's own next try, backing off while the plugin is behind", () => {
@@ -202,7 +244,7 @@ test("a pending text is asked for again just after the plugin's own next try, ba
   // The first ask: the plugin schedules the fetch now and answers pending.
   assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: smallJournal, promoted: false, now, nextAttemptAt: at(0) }),
     { action: "hold", holdMs: FRONTIER_TEXT_AFTER_ATTEMPT_MS }, "not twelve hours: the abstract is minutes away");
-  assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: journal, promoted: false, now, nextAttemptAt: at(0) }),
+  assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: journal, promoted: true, now, nextAttemptAt: at(0) }),
     { action: "promote-hold", holdMs: FRONTIER_TEXT_AFTER_ATTEMPT_MS }, "a published item gets its abstract as soon");
   assert.deepEqual(frontierTextDecision({ status: "error", entry, source: smallJournal, promoted: false, now, nextAttemptAt: at(0) }),
     { action: "hold", holdMs: FRONTIER_TEXT_RETRY_MS }, "an unanswered ask keeps its own retry");
@@ -283,13 +325,36 @@ test("F12c: what the editor proposed stays on an item when its labels are decide
   assert.deepEqual(frontierKeptModelFlags({ flags: null, source: media }), []);
 });
 
-test("timeline_at: the publication instant, or the source's date when that is more than 72 hours older", () => {
-  const now = new Date("2026-09-22T12:00:00Z");
-  assert.equal(frontierTimelineAt(now, null).toISOString(), now.toISOString());
-  assert.equal(frontierTimelineAt(now, "2026-09-20T12:00:00Z").toISOString(), now.toISOString(), "48 hours: today");
-  assert.equal(frontierTimelineAt(now, "2026-09-19T12:00:00Z").toISOString(), now.toISOString(), "exactly 72 hours: today");
-  assert.equal(frontierTimelineAt(now, "2026-09-15T00:00:00Z").toISOString(), "2026-09-15T00:00:00.000Z", "a week old: its own day");
-  assert.equal(frontierTimelineAt(now, "not a date").toISOString(), now.toISOString());
+test("timeline_at: an instant is the source's own time, never after our clock; a day is the arrival instant on that Beijing day and the end of it after", () => {
+  const iso = (/** @type {Date} */ date) => date.toISOString();
+  // instant: the source's moment (the production case: posted 19:00 Beijing, published by us at 05:59 the next morning).
+  assert.equal(iso(frontierTimelineAt(new Date("2026-10-25T21:59:00Z"), "2026-10-25T11:00:00Z", "instant")), "2026-10-25T11:00:00.000Z", "earlier than our clock: the source's");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-10-25T11:00:00Z"), new Date("2026-10-25T11:00:00Z"), "instant")), "2026-10-25T11:00:00.000Z", "the same moment");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-09-22T12:00:00Z"), "2026-09-15T00:00:00Z", "instant")), "2026-09-15T00:00:00.000Z", "a week old: its own time, as before");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-09-22T12:00:00Z"), "2026-09-22T12:00:00.001Z", "instant")), "2026-09-22T12:00:00.000Z", "after our clock: not believed");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-09-22T12:00:00Z"), "2026-10-01T00:00:00Z", "instant")), "2026-09-22T12:00:00.000Z", "a date days ahead: not believed");
+  // day: the stated day is the UTC date the source's date is stored at (UTC midnight); the zone is Beijing (UTC+8, no DST).
+  const day = (/** @type {string} */ visible, /** @type {string} */ stated) => iso(frontierTimelineAt(new Date(visible), stated, "day"));
+  assert.equal(day("2026-10-25T10:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-25T10:00:00.000Z", "seen on its own Beijing day: the arrival instant");
+  assert.equal(day("2026-10-24T20:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-24T20:00:00.000Z", "04:00 Beijing on the stated day: the arrival instant");
+  assert.equal(day("2026-10-25T15:59:59.999Z", "2026-10-25T00:00:00Z"), "2026-10-25T15:59:59.999Z", "the last millisecond of the day: the arrival instant");
+  assert.equal(day("2026-10-25T16:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-25T15:59:59.999Z", "the next Beijing day's first moment: the end of the stated day");
+  assert.equal(day("2026-10-26T04:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-25T15:59:59.999Z", "a day later: the end of its day (23:59:59.999 Beijing)");
+  assert.equal(day("2026-09-22T12:00:00Z", "2026-09-15T00:00:00Z"), "2026-09-15T15:59:59.999Z", "a week old: the end of its day");
+  assert.equal(day("2026-10-25T17:00:00Z", "2026-10-26T00:00:00Z"), "2026-10-25T17:00:00.000Z", "a stated day not yet over: the arrival instant");
+  assert.equal(day("2026-10-26T04:00:00Z", "2026-10-30T00:00:00Z"), "2026-10-26T04:00:00.000Z", "a day ahead of our clock: not believed");
+  assert.equal(day("2027-01-05T00:00:00Z", "2026-12-31T00:00:00Z"), "2026-12-31T15:59:59.999Z", "across a year end");
+  assert.equal(day("2026-03-05T00:00:00Z", "2024-02-29T00:00:00Z"), "2024-02-29T15:59:59.999Z", "a leap day");
+  // no usable date, or a date that is a guess: our own moment.
+  const now = new Date("2026-10-26T04:00:00Z");
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z", "inferred"), now);
+  assert.equal(frontierTimelineAt(now, null, "instant"), now);
+  assert.equal(frontierTimelineAt(now, null, "day"), now);
+  assert.equal(frontierTimelineAt(now, "not a date", "instant"), now);
+  assert.equal(frontierTimelineAt(now, "not a date", "day"), now);
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z"), now, "no precision stated: not believed");
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z", null), now);
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z", "week"), now);
 });
 
 test("selection: safety alerts always; verified items at the threshold while the source has room; never demoted or retracted", () => {
@@ -309,38 +374,42 @@ test("selection: safety alerts always; verified items at the threshold while the
 });
 
 test("F12b: the lane's classes cannot reach the selection line by arithmetic, which is why they have a lane", () => {
-  // The editor gives at most 30 + 20 + 20; the rest of a total is the authority term, which a preprint discounts (x0.6) and a newsroom
-  // fixes to a press release (x0.5). The registry gives all 52 such sources authority 2 (review B, D-08: ceilings 77 and 76); even a
-  // grade more, and the best design for a preprint, leaves them under the line - and the selection rule agrees.
+  // On the scoring of 2026-10-25 a preprint's impact is capped at 18 and its novelty at 14, a company release's impact at 20
+  // (`frontier-selection.json`); the authority term is a preprint's x0.6 and a newsroom's press-release x0.5. The registry gives all 52
+  // such sources authority 2; even a grade more leaves them under the line - and the selection rule agrees.
   assert.deepEqual([...FRONTIER_PREPRINT_LANE_SOURCE_TYPES], ["preprint", "company"]);
-  const editorial = FRONTIER_SCORE_MAXIMA.impact + FRONTIER_SCORE_MAXIMA.novelty + FRONTIER_SCORE_MAXIMA.relevance;
-  const ceilings = {
-    preprint: [2, 3].map((authority) => frontierAuthorityScore({ authority, evidenceType: "rct", preprint: true }) + editorial),
-    company: [2, 3].map((authority) => frontierAuthorityScore({ authority, evidenceType: "press-release" }) + editorial),
+  const model = { impact: FRONTIER_SCORE_MAXIMA.impact, novelty: FRONTIER_SCORE_MAXIMA.novelty, relevance: FRONTIER_SCORE_MAXIMA.relevance };
+  const best = (/** @type {{ authority: number, evidenceType: string, preprint?: boolean, genre?: string }} */ input) => {
+    const authority = frontierAuthorityScore({ authority: input.authority, evidenceType: input.evidenceType, preprint: input.preprint });
+    const { parts } = frontierScoreCeilings({ parts: { authority, ...model }, genre: input.genre ?? null, evidenceType: input.evidenceType, evidenceFixed: true, preprint: input.preprint });
+    return parts.authority + parts.impact + parts.novelty + parts.relevance;
   };
-  assert.deepEqual(ceilings, { preprint: [77, 81], company: [76, 79] });
+  const ceilings = {
+    preprint: [2, 3].map((authority) => best({ authority, evidenceType: "rct", preprint: true, genre: "preprint" })),
+    company: [2, 3].map((authority) => best({ authority, evidenceType: "press-release" })),
+  };
   for (const ceiling of Object.values(ceilings).flat()) assert.ok(ceiling < FRONTIER_SELECT_THRESHOLD_DEFAULT, `${ceiling} is under the line`);
-  for (const [source, scoreTotal] of [[preprint, 81], [company, 79]]) {
+  for (const [source, scoreTotal] of [[preprint, Math.max(...ceilings.preprint)], [company, Math.max(...ceilings.company)]]) {
     const decided = frontierSelectionDecision({ safetyAlert: false, verification: "passed", scoreTotal, demoted: false, flags: [], source, selectedToday: 0,
       threshold: FRONTIER_SELECT_THRESHOLD_DEFAULT });
     assert.deepEqual(decided, { selected: false, rule: null }, `${source.source_type}: the best it can score is not selected`);
   }
   // And a journal of the same grade does reach it, so the lane is for the classes, not for a grade.
-  assert.ok(frontierAuthorityScore({ authority: 3, evidenceType: "rct" }) + editorial >= FRONTIER_SELECT_THRESHOLD_DEFAULT);
+  assert.ok(best({ authority: 3, evidenceType: "rct", genre: "paper" }) >= FRONTIER_SELECT_THRESHOLD_DEFAULT);
 });
 
-test("F12b: the lane's two numbers are read from the config, and the defaults are two a day from a total of 60", () => {
+test("F12b: the lane's two numbers are read from the config, and the defaults are two a day from a total of 50", () => {
   assert.equal(FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT, 2);
-  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, 60);
+  assert.equal(FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT, 50);
   assert.equal(frontierPreprintLanePerDay({}), 2);
   assert.equal(frontierPreprintLanePerDay(null), 2);
-  assert.equal(frontierPreprintLaneMinScore({}), 60);
+  assert.equal(frontierPreprintLaneMinScore({}), 50);
   assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: 5 }), 5);
   assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: 0 }), 0, "0 is no lane, not the default");
   assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: 70 }), 70);
   assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: 0 }), 0);
   for (const bad of ["", null, undefined, "x", -1, 1.5]) assert.equal(frontierPreprintLanePerDay({ frontierPreprintLanePerDay: bad }), 2, `per day ${String(bad)}`);
-  for (const bad of ["", null, undefined, "x"]) assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: bad }), 60, `floor ${String(bad)}`);
+  for (const bad of ["", null, undefined, "x"]) assert.equal(frontierPreprintLaneMinScore({ frontierPreprintLaneMinScore: bad }), 50, `floor ${String(bad)}`);
 });
 
 test("near-duplicate titles compare without case, spacing or punctuation", () => {

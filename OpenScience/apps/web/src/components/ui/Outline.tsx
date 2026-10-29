@@ -14,8 +14,9 @@ import { Tooltip } from "@/components/ui/Tooltip";
  *  - `useOutline` reads the headings the page actually rendered (`h2`, `h3` inside the container), gives each an id, and follows
  *    which one is being read — so the contents always match what is on screen whatever the Markdown or the blocks looked like;
  *  - `Outline` draws them: a column that stays beside the body while it scrolls (`layout="column"`, from `lg`), or a folded
- *    「目录 · N 节」 above it (`layout="folded"`, on a narrow page or in a pane). A page holds one of them, never both, so the
- *    caller chooses with `useWide()`.
+ *    「目录 · N 节」 above it (`layout="folded"`, on a narrow page or in a pane), or just the list (`layout="inline"`) inside a column
+ *    that already sticks and names it (the frontier reader's 「本文目录」). A page holds one of them, never two, so the caller chooses
+ *    with `useWide()`.
  *
  * The column sticks below the page's sticky band: `PageShell` publishes the band's height as `--page-chrome-h`, and the offset
  * adds a rem to it (0 where there is no band, which is what the report page has). A page of four sections or more has an
@@ -104,7 +105,7 @@ export function Outline({ entries, active, onSelect, layout, onTop, label = "目
   /** The id of the section being read. */
   active: string | null;
   onSelect: (id: string) => void;
-  layout: "column" | "folded";
+  layout: "column" | "folded" | "inline";
   /** The way back up, under the column. Defaults to scrolling the page's own scroll container. */
   onTop?: () => void;
   /** The list's accessible name, and the column's heading. */
@@ -137,6 +138,7 @@ export function Outline({ entries, active, onSelect, layout, onTop, label = "目
       </ol>
     </nav>
   );
+  if (layout === "inline") return <div data-outline="" data-print-hide="" className={className}>{contents}</div>;
   if (layout === "folded") {
     return (
       <div data-outline="" data-print-hide="" className={className}>
@@ -152,7 +154,7 @@ export function Outline({ entries, active, onSelect, layout, onTop, label = "目
   };
   return (
     <aside ref={column} data-outline="" data-print-hide="" className={cn("sticky w-56 shrink-0 self-start overflow-y-auto", STICKY_BELOW_BAND, STICKY_COLUMN_MAX_HEIGHT, className)}>
-      <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={16} aria-hidden="true" />{label}</p>
+      <p className="mb-2 flex items-center gap-1.5 px-2 text-caption text-muted"><ListTree size={16} aria-hidden="true" />{label}</p>
       {contents}
       {/* A 60 KB report needs a way back up (appendix D §4.5). */}
       <button type="button" onClick={top} className="mt-3 flex min-h-6 items-center gap-1 px-2 text-caption text-link hover:underline">

@@ -96,7 +96,7 @@ export function ShortcutHelp() {
           className="w-full max-w-md rounded-panel border border-border bg-surface shadow-e3 outline-none"
         >
           <header className="flex h-11 items-center gap-2 border-b border-border px-4">
-            <h2 className="flex-1 text-ui font-medium text-text">键盘快捷键</h2>
+            <h2 className="flex-1 text-ui font-semibold text-text">键盘快捷键</h2>
             <IconButton icon={X} label="关闭快捷键面板" size="sm" onClick={() => setOpen(false)} />
           </header>
           <ul className="px-4 py-3">

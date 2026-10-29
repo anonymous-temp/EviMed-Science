@@ -216,9 +216,15 @@ test("the calendar is the last year whatever the range, and the sources' days ad
     source("activity", { buckets: [{ t: "2026-10-11", run: 3, feedback: 1 }] }),
   ], { range: "30d" });
   assert.deepEqual(map.buckets.series, [
-    { t: "2026-05-01", memory: 2, run: 0, method: 0, feedback: 0 },
-    { t: "2026-10-11", memory: 1, run: 3, method: 0, feedback: 1 },
+    { t: "2026-05-01", memory: 2, run: 0, method: 0, feedback: 0, document: 0 },
+    { t: "2026-10-11", memory: 1, run: 3, method: 0, feedback: 1, document: 0 },
   ]);
+  // The documents added are a day's fifth count, added up like the others, and the heat of the calendar never reads them.
+  const withDocuments = await build([
+    source("records", { buckets: [{ t: "2026-10-11", memory: 1 }] }),
+    source("documents", { buckets: [{ t: "2026-10-11", document: 4 }, { t: "2026-10-09", document: 1 }] }),
+  ]);
+  assert.deepEqual(withDocuments.buckets.series.map((day) => [day.t, day.memory, day.document]), [["2026-10-09", 0, 1], ["2026-10-11", 1, 4]]);
 });
 
 function crowd(count, { projectId = "prj_a", kind = "project_fact", prefix = "m" } = {}) {
@@ -327,7 +333,7 @@ function routes(overrides = {}) {
   const calls = [];
   const handler = createMemoryMapRoutes({
     config: { memoryEnabled: true, memoryMapEnabled: true, maxJsonBytes: 100_000 },
-    researchMemory: { configured: true, getRecord: async (_user, id) => { if (id === "mine") return record({ id }); if (id === "secret") return record({ id, sensitive: true }); throw new HttpError(404, "memory_not_found", "Memory not found."); } },
+    memorySettings: { configured: true },
     sources: [source("records", recordsContribution([record()], {}, { now: NOW, timeZone: "UTC" }))],
     store: {
       requireProject: async (_user, id) => { calls.push(["project", id]); if (id === "theirs") throw new HttpError(404, "project_not_found", "Project not found."); return { id }; },
@@ -336,7 +342,7 @@ function routes(overrides = {}) {
     context: async () => ({ user, project: { id: "prj_a" } }),
     decodeRouteComponent: (value) => decodeURIComponent(value),
     isInternalProject: (_user, id) => id === "evimed-frontier",
-    recordLinks: async (_user, found) => ({ rests: [], replaced: [], replacedBy: null, conflicts: [], usedIn: [], for: found.id }),
+    nativeLinks: async (_user, id) => { if (id !== "mine") throw new HttpError(404, "memory_not_found", "Memory not found."); return { rests: [], replaced: [], replacedBy: null, conflicts: [], usedIn: [], for: id }; },
     ...overrides,
   });
   return { handler, calls };
@@ -375,7 +381,7 @@ test("the map is off with the memory subsystem or with its own switch, and says 
   }
 });
 
-test("a memory's links are its own: another account's record, and a sensitive one, are a 404", async (t) => {
+test("a memory's links are its own: a file the account does not hold is a 404, and with no engine the route says so by name", async (t) => {
   const { handler } = routes();
   const base = await serve(t, handler);
   const mine = await fetch(`${base}/api/memory/records/mine/links`);
@@ -384,4 +390,8 @@ test("a memory's links are its own: another account's record, and a sensitive on
   assert.equal((await fetch(`${base}/api/memory/records/theirs/links`)).status, 404);
   assert.equal((await fetch(`${base}/api/memory/records/secret/links`)).status, 404);
   assert.equal(await (await fetch(`${base}/api/memory/elsewhere`)).status, 404, "it answers only its own paths");
+  const bare = await serve(t, routes({ nativeLinks: null }).handler);
+  const unavailable = await fetch(`${bare}/api/memory/records/mine/links`);
+  assert.equal(unavailable.status, 503);
+  assert.equal((await unavailable.json()).code, "memory_engine_unavailable");
 });

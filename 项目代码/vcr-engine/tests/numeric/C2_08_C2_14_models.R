@@ -20,15 +20,23 @@
 
 vcr_case("C2-09", c("AC-33"), function() {
   full <- c("individual_conditioned", "updates_with_new_data", "calibrated_uncertainty", "validation_record")
-  labels <- vapply(list(full, full[-2], full[-4], character(0)), vcr_twin_label, character(1))
-  # The domain derives the same label from the same evidence.
-  domain_agrees <- TRUE
+  subsets <- lapply(0:15, function(mask) full[as.logical(intToBits(mask)[seq_along(full)])])
+  cases <- c(list(full, full[-2], full[-4], full[-1], character(0)), subsets,
+             list(c("individual_conditioned", "individual_conditioned", "unknown")))
+  labels <- vapply(cases, vcr_twin_label, character(1))
+  subset_expected <- rep(c("scenario_simulation", "baseline_conditioned_prediction"), 8)
+  subset_expected[16] <- "digital_twin"
+  expected <- c("digital_twin", "baseline_conditioned_prediction", "baseline_conditioned_prediction",
+                "scenario_simulation", "scenario_simulation", subset_expected, "baseline_conditioned_prediction")
+  # Every evidence subset must agree across the actual R and domain classifiers.
+  # An absent bridge is not evidence of agreement.
+  domain_agrees <- FALSE
   if (nzchar(Sys.which("node"))) {
     src <- file.path(VCR_ROOT, "..", "..", "OpenScience", "packages", "domain", "src", "vcrVocabulary.mjs")
     if (file.exists(src)) {
       script <- sprintf("import('%s').then(m=>console.log([%s].map(e=>m.twinLabel(e)).join(',')))",
                         normalizePath(src),
-                        paste(vapply(list(full, full[-2], full[-4], character(0)), function(e)
+                        paste(vapply(cases, function(e)
                           sprintf("[%s]", paste(sprintf("'%s'", e), collapse = ",")), character(1)), collapse = ","))
       out <- suppressWarnings(system2("node", c("--input-type=module", "-e", shQuote(script)), stdout = TRUE, stderr = FALSE))
       domain_agrees <- identical(strsplit(paste(out, collapse = ""), ",")[[1]], labels)
@@ -36,12 +44,10 @@ vcr_case("C2-09", c("AC-33"), function() {
   }
   card <- .c2_card(twinEvidence = full, label = "digital_twin")
   issues_ok <- length(vcr_model_card_issues(card)) == 0L
-  ok <- identical(labels, c("digital_twin", "baseline_conditioned_prediction",
-                            "baseline_conditioned_prediction", "baseline_conditioned_prediction")) &&
-    domain_agrees && issues_ok
+  ok <- identical(labels, expected) && domain_agrees && issues_ok
   list(pass = ok,
-       detail = sprintf("all four -> %s; missing updates_with_new_data -> %s; missing validation_record -> %s; none -> %s; domain twinLabel agrees: %s",
-                        labels[1], labels[2], labels[3], labels[4], domain_agrees))
+       detail = sprintf("all four -> %s; missing updates_with_new_data -> %s; missing validation_record -> %s; missing individual_conditioned -> %s; none -> %s; all 16 evidence subsets checked; domain twinLabel agrees: %s",
+                        labels[1], labels[2], labels[3], labels[4], labels[5], domain_agrees))
 })
 
 vcr_case("C2-10", c("AC-33"), function() {

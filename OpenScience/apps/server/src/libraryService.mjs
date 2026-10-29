@@ -285,6 +285,25 @@ export class LibraryService {
     return { items, maxItems: this.maxItems };
   }
 
+  /** Read only a current authorized library copy; leftover files do not grant membership.
+   * @param {string} userId @param {string} sourceId @returns {Promise<string | null>} */
+  async readCopyText(userId, sourceId) {
+    const work = async () => {
+      let record;
+      try { record = await this.#requireEntry(userId, sourceId); }
+      catch (error) { if (/** @type {any} */ (error)?.status === 404) return null; throw error; }
+      if (!record.payload.copy) return null;
+      const dir = await this.#root(userId);
+      const file = path.join(dir, librarySourceId(record.payload.sourceId), COPY_FILE);
+      try {
+        await assertNoSymlinkPath(dir, file);
+        return await fs.readFile(file, "utf8");
+      } catch (error) { if (/** @type {any} */ (error)?.code === "ENOENT") return null; throw error; }
+    };
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
   /**
    * Add a project's source to the library; adding a document the library
    * already holds (from this project or another) answers with that entry.
@@ -292,6 +311,13 @@ export class LibraryService {
    * @returns {Promise<{ item: ReturnType<typeof entryView>, created: boolean }>}
    */
   async add(userId, sourceId) {
+    const work = () => this.addCurrent(userId, sourceId);
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /** @param {string} userId @param {unknown} sourceId */
+  async addCurrent(userId, sourceId) {
     const source = await this.documents.get(userId, "source", librarySourceId(sourceId));
     if (!source) throw new HttpError(404, "library_source_invalid", "The source is unavailable.");
     // A knowledge page quotes the documents of its own project; in another project those documents are not there to check it against.
@@ -341,6 +367,13 @@ export class LibraryService {
    *  revision; the copy goes at once, so no later run reads it.
    * @param {string} userId @param {unknown} sourceId */
   async remove(userId, sourceId) {
+    const work = () => this.removeCurrent(userId, sourceId);
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /** @param {string} userId @param {unknown} sourceId */
+  async removeCurrent(userId, sourceId) {
     const record = await this.#requireEntry(userId, sourceId);
     await this.documents.remove(userId, RECORD_KIND, record.id, record.revision);
     this.counters.removed += 1;
@@ -400,9 +433,12 @@ export class LibraryService {
     /** @type {Map<string, any[]>} */
     const byUser = new Map();
     for (const row of rows) byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), { id: row.id, revision: row.revision, payload: row.payload }]);
+    if (userId && !byUser.has(userId)) byUser.set(userId, []);
     const totals = { written: 0, removed: 0, failed: 0 };
     let budget = COPIES_PER_PASS;
-    for (const [owner, records] of byUser) {
+    for (const [owner] of byUser) {
+      const work = async () => {
+      const records = await this.#records(owner);
       const present = await this.#presentCopies(owner);
       const live = await this.#liveSources(owner, records.map((record) => record.payload.sha256));
       for (const record of records) {
@@ -420,8 +456,11 @@ export class LibraryService {
       const named = new Set(records.map((record) => record.payload.sourceId));
       for (const name of present) {
         if (named.has(name) || !SOURCE_ID.test(name)) continue;
-        await this.#removeCopy(owner, name).then(() => { totals.removed += 1; }, (error) => this.#failed(error));
+        await this.#removeCopy(owner, name).then(() => { totals.removed += 1; }, (error) => { totals.failed += 1; this.#failed(error); });
       }
+      };
+      if (typeof this.sources.withRegistrationLocks === "function") await this.sources.withRegistrationLocks([`library:${owner}`], work);
+      else await work();
     }
     return totals;
   }
@@ -431,16 +470,24 @@ export class LibraryService {
    * if the library has it. Called when a source finishes; never throws.
    * @param {string} userId @param {string} sourceId
    */
-  async refreshSource(userId, sourceId) {
+  async refreshSource(userId, sourceId, { strict = false } = {}) {
+    const work = () => this.refreshSourceCurrent(userId, sourceId, { strict });
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /** @param {string} userId @param {string} sourceId @param {{ strict?: boolean }} [options] */
+  async refreshSourceCurrent(userId, sourceId, { strict = false } = {}) {
     try {
       const source = await this.documents.get(userId, "source", librarySourceId(sourceId));
       const sha256 = String(source?.payload.fingerprint?.sha256 ?? "");
       if (!SHA256.test(sha256)) return null;
       const record = await this.documents.get(userId, RECORD_KIND, `library:${sha256}`);
       if (!record) return null;
-      return await this.#refresh(userId, record, (await this.#liveSources(userId, [sha256])).get(sha256) ?? []);
+      return await this.#refresh(userId, record, (await this.#liveSources(userId, [sha256])).get(sha256) ?? [], null, strict);
     } catch (error) {
       this.#failed(error);
+      if (strict) throw error;
       return null;
     }
   }
@@ -474,6 +521,18 @@ export class LibraryService {
     if (!this.capsules) throw new HttpError(503, "library_unavailable", "The memory capsule is unavailable on this deployment.");
     const id = String(sourceId ?? "");
     if (!/^src_[a-f0-9]{32}$/.test(id)) throw new HttpError(400, "library_payload_invalid", "That is not a document id.");
+    const work = async () => {
+      // Deletion uses account, jobs and source row locks; its withdrawal and
+      // this publication must serialize before either reads the source.
+      await this.sources.lockSourceMutation?.(userId, id);
+      return this.publishSourceUnderstandingCurrent(userId, id);
+    };
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`source:${userId}:${id}`], work) : work();
+  }
+
+  /** @param {string} userId @param {string} id */
+  async publishSourceUnderstandingCurrent(userId, id) {
     return this.#exclusive(userId, async () => {
       const source = await this.sources.get(userId, id).catch(() => null);
       if (!source) throw new HttpError(409, "library_source_removed", "That document is gone.");
@@ -500,7 +559,12 @@ export class LibraryService {
         }
         let written = await this.capsules.addEntry(userId, capsule.id, { factKind: entry.factKind, layer: DOCUMENT_MEMORY_LAYER,
           content: entry.content, origin: "inferred", provenance: entry.provenance,
-          derivedFrom: { sourceId: id, projectId: source.projectId } });
+          derivedFrom: { sourceId: id, projectId: source.projectId } }, { publicationKey: entry.key });
+        if (written.deletedAt || written.payload.status === "retired" || written.payload.correctedAt) {
+          entryIds[entry.key] = written.id;
+          kept += 1;
+          continue;
+        }
         if (written.payload.status !== "approved") {
           written = await this.capsules.updateEntry(userId, capsule.id, written.id, { status: "approved", expectedRevision: written.revision });
         }
@@ -528,7 +592,7 @@ export class LibraryService {
       const latest = await this.documents.get(userId, RECORD_KIND, ledgerId);
       await this.documents.put(userId, RECORD_KIND, ledgerId, {
         recordType: PUBLICATION_RECORD_TYPE, sourceId: id, projectId: source.projectId, capsuleId: capsule.id, rule: PUBLICATION_RULE,
-        generation: understanding.generation, at: this.now().toISOString(), facts, methods, entries: entryIds,
+        generation: understanding.generation, textSha256: source.payload.analysis?.textSha256 ?? null, sourceRevision: source.revision, at: this.now().toISOString(), facts, methods, entries: entryIds,
       }, { expectedRevision: latest?.revision ?? 0 });
       this.counters.published += 1;
       // The document may have been deleted while this ran — a researcher who
@@ -655,7 +719,7 @@ export class LibraryService {
    * entry and its previous copy as they were for the next pass.
    * @param {string} userId @param {any} record @param {any[]} candidates @param {Set<string> | null} [present]
    */
-  async #refresh(userId, record, candidates, present = null) {
+  async #refresh(userId, record, candidates, present = null, strict = false) {
     const source = resolveSource(candidates, record);
     if (!source || !sourceReadable(source.payload)) return record;
     const key = copyKey(source);
@@ -675,6 +739,7 @@ export class LibraryService {
     } catch (error) {
       this.counters.copyFailures += 1;
       this.#failed(error);
+      if (strict) throw error;
       return record;
     }
   }

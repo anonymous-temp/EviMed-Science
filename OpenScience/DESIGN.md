@@ -56,7 +56,7 @@ under the more-contrast layer too, and for the rival greys a chart draws. The co
 unrounded: a pair at 4.4995 does not pass a 4.5 floor. The notes used to be typed by hand and went
 stale silently; two of them were already fiction when the check first ran, and eight more by
 2026-10-08 — so the build now reads back every figure a note quotes ("N on the page", "N on the
-sidebar", "white on it N", "on <role>: N") and fails on a stale one. 47 rules × light / dark ×
+sidebar", "white on it N", "on <role>: N") and fails on a stale one. 49 rules × light / dark ×
 standard / more contrast.
 
 ### Roles
@@ -75,6 +75,7 @@ standard / more contrast.
 | `text` | `#1a1f25` | `#eef1f4` | body and headings, 16.00:1 |
 | `text-2` | `#3e454d` | `#c3cad2` | secondary lines, 9.37:1 |
 | `text-3` | `#5f686f` | `#8d96a0` | metadata, 5.48:1 — **nothing lighter carries text** |
+| `title-ink` | `#0e305f` | `#dde9f9` | the title of a list row that opens a document (前沿动态's cards, 2026-10-23): the brand's deep blue (brand-900 / brand-100), not black and not the bright accent — 12.62:1, 11.43:1 on a hovered row. **List titles in title-ink; hover accent; read text-2** |
 | `text-graphic` | `#939ca6` | `#535b64` | icons and rules only, 2.69:1 — **never a word, and never a status** (a mark that says something wears a `dot-*` or `border-control` step; the build fails a `dot-*` that borrows this grey) |
 | `accent` | `#0a5dc1` | `#5f97e0` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
 | `accent-soft` | `#eef4fc` | `#0a1f3e` | selected row background, the verified chip. Never text |
@@ -114,8 +115,11 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   the capsule grew. It drew the stock — a line that rose to 75 and fell to 42, under a heading that began on another day than its
   first point — and could not say what happened. It is gone (2026-10-17): what happened to the memories is the time view of the
   map, the weekly bars of 记下 / 合并 / 忘记 counted from the same events as the list under them, with the window's one slider in the
-  card's header, and `?tab=growth` arrives there. Every tab of the memory page is a list and nothing else; no peer's memory page has a
-  chart, so a chart on a list page needs an argument of this size. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
+  card's header. **What the capsule gained since its first day is the one chart that came back (2026-10-23), as the first card of 总览**
+  (`/app/memory/overview`, a data page of its own): a dot for each gain up to thirty in a lane for each kind that has any (记下 ●, 学会 ▲,
+  资料 ■, 收下 ◆), weekly counts after that, counting gains only — what was replaced or forgotten is the time view's — and `?tab=growth`
+  arrives at 总览. 总览 and 地图 are the memory page's two pictures; its three lists (关于你, 项目, 做法) are lists and nothing else; no peer's
+  memory page has a chart, so a chart on a list page needs an argument of this size. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
   rule 1), reached from the memory page's last tab, 「地图」 (its page is drawn by the same `MemoryFrame` — one title, one column, the same four tabs in the sticky band — so the two read as one page: a map behind a menu item was not found, 2026-10-14; and its five views are one chip group of the one toolbar row, not a second row of tabs); it draws in the brand blue, the warn amber and one grey, tells a
   mark's kind by shape and words, and prints a radar's numbers at its axes; the knowledge base's graph follows the same grammar.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
@@ -174,12 +178,14 @@ place it shadowed every Chinese face after it. HarmonyOS Sans and MiSans are gon
 by character: DOI, PMID, NCT, run id.
 
 The serif came back on 2026-09-26, confined (fusion plan §5.2). An evidence platform borrows its
-authority from the journals and every one of them is set in a serif, so the **wordmark**, the
+authority from the journals and every one of them is set in a serif, so the **standalone wordmark**, the
 **home headline** and the **title of a document** wear one — and nothing else does, because a
 serif on a button reads as an old intranet. Three rungs carry the family themselves
 (`text-wordmark`, `text-hero`, `text-doc-title` — a rule in the generated CSS binds it, since
 Tailwind's size scale cannot), so a page never names `font-serif` to get it. A report's title is
 `text-doc-title`; its sections are 18 / 600 in the sans.
+
+The navigation lockup is the compact exception (owner review, 2026-10-25): the full EviMed Science name uses the sans `text-ui` / 600 rung on one line. The notification control belongs with the account actions, leaving the brand and sidebar collapse control together even at the minimum sidebar width.
 
 ```
 "EviMed CJK Punct Serif", "Source Serif 4", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC",
@@ -206,24 +212,29 @@ controls, 18 for a section heading inside a reading page, and 32 / 40 for metric
 rungs are admissible on a data page only.**
 
 A page still uses at most **four size × weight pairs**. That budget is what the five-size scale
-was protecting, and it survives unchanged.
+was protecting. A **data page** — one that sets figures at the metric rung or has two levels of
+heading (循证 GEO's and 虚拟临床研究's tabs, the model records) — uses at most **five** (owner,
+2026-10-19), and its leading figure is at 32 like the rest: the 40 px `metric-lg` beside the 32 px
+ones was a sixth pair. The release walk holds both (`typePairs` in the `data` and `geo` budgets of
+`scripts/ops/page-templates.json`).
 
 | Rung | Size / line | What it is |
 |---|---|---|
 | `badge` | 12 / 1 | a count inside a pill |
 | `meta` | 12 / 1.5 | the densest metadata: dates, journals, counts, legends |
 | `caption` | 12 / 20px | captions and secondary one-liners (a line in a row) |
-| `compact` | 13 / 20px | a small control, a filter chip, a dense data table |
+| `compact` | 13 / 20px | held in reserve for a dense grid whose 12 px cells would be too small; nothing sets it since R19.2 — a control is `ui`, a table head and a heat cell `caption` |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
-| `wordmark` | 16 / 1.3 · serif | the EviMed lockup in the sidebar |
+| `reading` · `reading-lg` · `reading-xl` | 16 · 18 · 20 / 1.8 | the frontier reader (2026-10-23): an article's text is `reading` below 1280 px and `reading-lg` from there (`text-reading xl:text-reading-lg`), its AI 导读 one step above (`reading-lg` → `reading-xl`), on the reading measure (`max-w-measure-body xl:max-w-read`, 40 CJK a line) — the scale's own sizes at a long text's line height, a responsive pair rather than a tenth size |
+| `wordmark` | 16 / 1.3 · serif | standalone brand lockups; the sidebar uses the compact sans `ui` rung |
 | `section` | 18 / 26px | a section heading inside an answer or a report |
 | `heading` | 20 / 28px | a card heading on a data page, a document title in a preview pane |
 | `title` | 24 / 32px | every page H1 |
 | `doc-title` | 24 / 34px · serif | the title of a report, article or evidence card |
 | `display` | 24 / 1.3 | the login page, a full-page empty state |
 | `metric` | 32 / 40px | a KPI number — **data pages only** |
-| `metric-lg` | 40 / 48px | the one leading KPI of a dashboard |
+| `metric-lg` | 40 / 48px | in the closed set, set by no page since 2026-10-19 (a leading KPI is 32 like the rest) |
 | `hero` | 40 / 50px · serif | the home headline — one per product |
 
 Sizes reach the browser in **rem** (2.1), so a reader who raised the browser's default font size
@@ -231,7 +242,15 @@ gets a larger interface; the table itself speaks px.
 
 Weights **400 / 500 / 600**, nothing else — and Chinese hierarchy uses **400 and 600 only**:
 Microsoft YaHei has no 500, so a 500 title renders at 400 on Windows (an unread list row is 600
-for that reason). No `letter-spacing` and no `uppercase` on Chinese — tracking breaks the
+for that reason). Since R19.2 nothing in the product is set at 500 — ESLint bans `font-medium` (and
+`font-bold`) in every component, and `copyRules.test.ts` reads every string — and the two weights
+are given by role: **600** is a heading, a name that must be told from the text around it, an
+unread row, a figure that is the point of a line; **400** is everything
+a ground, a rule, a colour or a position already says — a button, a tab, a step, a chip, a
+segment, a navigation item (the current one too), a link, a table head in the muted colour, a flagged value on a warm ground. Weight is
+spent only at 14 px and above; a 12 or 13 px line is 400 and says the rest in colour.
+
+No `letter-spacing` and no `uppercase` on Chinese — tracking breaks the
 character grid.
 
 **Mixed-script spacing** (spec §5.5): **interface copy we write types a half-width space** between
@@ -314,11 +333,11 @@ hand-drawn 1.4). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8); under a fin
 their drawn size. A table or grid that scrolls sideways (`DataTable`, `HeatGrid`, a Markdown table) freezes its row-header
 column and is a named, focusable region while it overflows (`ScrollRegion`).
 
-`Button` sizes map onto that: `sm` 28 with 13 px text, `md` 36 (the default), `lg` 44.
+`Button` sizes map onto that: `sm` 28 with 14 px text (13 until R19.2), `md` 36 (the default), `lg` 44.
 `IconButton` is 28 in a row and 36 in a header. `Input`, `Textarea` and `SearchInput` are 36 (28
 with `size="sm"` in a table, toolbar or filter row) and 8 px round — except that the 28 px search in a
-toolbar row is a pill of 13 px text on the grey ground, the look of a selected chip, so the row's filled
-controls are one kind. Filter chips are 28 high with 13 px text.
+toolbar row is a pill of 14 px text on the grey ground, the look of a selected chip, so the row's filled
+controls are one kind. Filter chips are 28 high with 14 px text.
 
 ### Layers, opacity, timing (2.1)
 
@@ -338,33 +357,34 @@ bordered pill or bordered `<button>` outside it:
 
 | Component | What it is |
 |---|---|
-| `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle; and the **slots** a page is composed of — `scope`, `steps`, `activity`, `tabs`, `toolbar`, `headline` — which the shell renders in one fixed order, steps/tabs/toolbar in one sticky band (see 「页面结构」) |
+| `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle; and the **slots** a page is composed of — `scope`, `steps`, `activity`, `tabs`, `toolbar`, `headline` — which the shell renders in one fixed order, steps/tabs/toolbar in one sticky band (see 「页面结构」); a reading page adds `eyebrow` (the line over its title) and `aside` (a sticky right column from 1024 px whose top is the back row's, under the body below) |
 | `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px; the open tab is always scrolled whole into its row |
-| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey, at the same weight — told by ground and colour, as a selected tab is), the rest in “更多 ▾” |
+| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 14 px (no border; selected sits on grey, at the same weight — told by ground and colour, as a selected tab is), the rest in “更多 ▾”; `iconEnd` draws a mark a press lets go of after the words (「#肝细胞癌 ×」) |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
 | `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
 | `Tooltip` | an inverse 12 px layer on `z-tooltip`: an icon's name or a truncated line's whole text; hoverable, Escape closes it, never the only place something is said |
-| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` at 500 when current |
+| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` when current, at the weight of the others |
 | `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible. A row that can be pressed says so: hover `surface-2`, `selected` `accent-soft`, and a trailing mark the row draws itself (› opens a drawer or page, ⌄ expands in place, ↗ leaves); `trailing` text lets the press through. Numbers of one measure are `columns` under a `ListHeader` |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has — or, in place of a button, the `reason` there is none. Carries `data-empty` |
-| `Toolbar` | the one row of controls above the content they control: `views`, declared `filters` (select, chips, toggle — drawn by the toolbar, folded into one 「筛选」 chip below 640 px), `search`, `summary`, `actions`. `PageShell`'s `toolbar` slot is where it stands; inside a `Section` it is that block's own |
-| `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined (in the accent, by the rule and the colour only: a step is drawn like a tab of the row below it — 14 / 500, square — whatever its state), a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
+| `Toolbar` | the one row of controls above the content they control: `views`, declared `filters` (select, chips, toggle, and `panel` — a chip that opens labelled groups of those, a group of chips one value or `multi` several, 「专科 ▾」), `search` (with `suggestions`: a list under the box), `summary`, `actions`. Below 640 px, and where a band's row runs out of room, everything but the `pinned` filters folds into one 「筛选」 chip that opens a **filter panel** — every dimension a labelled group of chips, toggles as switches — as a sheet from the bottom on a phone (「重置」, 「查看结果」) and a card under the chip on a wide screen; never a menu that stacks dimensions (owner, 2026-10-23). A `scroll` chip group gives way to its row by scrolling. `oneRow` (前沿动态, owner 2026-10-25) is one row at every width: the views at the left, the open view's controls at the right, then what is applied as tokens (each a press that lets go of it; at most two, then 「+N」 that opens the panel; none once the row is short), 「筛选 · N」 with the accent mark, and the search last; a filter declared `folded` is inside 「筛选」 at every width. On a phone that row is the scrolling views with 「筛选」 and the search as icons — the search opens over the row — and one more line only while something narrows the list or a `pinned` control must stay in sight; `sheetLead` is the sheet's first section; 「/」 puts the cursor in the search (`searchShortcut`). There is no second row of controls under the views on any page. `PageShell`'s `toolbar` slot is where it stands; inside a `Section` it is that block's own |
+| `Score` | a score as a pill — its name small, a hairline, the number (`ScorePill`, 「AI 评分 86」), its tier its ground (accent, accent tint, grey outline) — and its parts as thin bars (`ScoreBars`), opened on hover, keyboard focus or a tap; without parts a label |
+| `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined (in the accent, by the rule and the colour only: a step is drawn like a tab of the row below it — 14 / 400, square — whatever its state), a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
 | `StepState` | the body of a step's tab while it has nothing to show: `empty` (a recipe: what it uses, what it gives, one verb-and-object button), `queued`, `running`, `failed`, `credits`. Props are facts; the sentences are composed once |
 | `ActivityStrip` | what is going on right now, under the rail: 「正在生成虚拟患者 · 计算 1,200 / 2,000」, elapsed, 取消; `variant="chip"` is the header's form. No percentage |
 | `Note` | the only way a sentence stands alone on a page: with an `action`, or as a `result` that holds a number which can open what it counts (the figure is the link colour at the sentence's weight). A bare string does not compile; `tone="warn"` is a pale amber band with the text colour — the ground says it, not amber text |
 | `Headline` | the data page's one sentence, each number a link to what it counts |
-| `Section` | the one block heading (18 / 600, `sub` 14 / 600) with a count and a `toolbar` slot |
+| `Section` | the one block heading (18 / 600, `sub` 14 / 600) with a count and a `toolbar` slot; `compact` uses 14 / 600 for catalogue group labels while preserving the section's heading level |
 | `FactList` | the one key / value `dl`, eight rows and then 「全部 N 项」 |
 | `ChartGrid` | charts by rows; a row's cells share a height and its spans fill it, so a grid has no hole |
-| `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below; read off the headings the page rendered |
+| `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below, or the bare list (`inline`) in a column that already sticks (the frontier reader's 「本文目录」); read off the headings the page rendered |
 | `MasterDetail` | a list column (320–360 px) and one record; below the room for both, the record is a `Drawer` — or, for a conversation, replaces the list |
 | `ScopeMenu` | whose things the page shows (a project, a kind of project, everyone's), in the header after the title or as a chip in a toolbar |
 | `StateScreen` | a whole page's failure or wrong address: an icon, one sentence, one action, 「回到原处」 |
 
 Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, `Drawer`
-(its `footer` is the one bar stuck to the panel's bottom), `ConfirmDialog`, `FormDialog` (a form in a
+(its `footer` is the one bar stuck to the panel's bottom; `placement="bottom"` is the phone's sheet), `ConfirmDialog`, `FormDialog` (a form in a
 16 px panel on the modal tier — no page draws its own), `Toaster`, `Disclosure`. A card (`Card`) is for unlike content — a hot list
 above a feed, a tool in a grid — and never for a list of like things.
 
@@ -377,35 +397,37 @@ under one another, the memory page a chart, two statistics blocks and a list, �
 capability map and an evolution panel. `scripts/ops/ui-walk.mjs` checks each rule on the live
 pages after every release.
 
-1. **One page, one kind of object, as a list.** Content of a different kind goes in a tab or on its
+1. **One page, one kind of object, as a list.** The October 20 analysis-workbench exception below supersedes this restriction for connected configuration and results. Content of a different kind goes in a tab or on its
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
-   one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`) and the knowledge base's graph
+   one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`), the 记忆总览 (`/app/memory/overview`: the capsule as six cards of one grammar — a sentence whose numbers
+   link to their parts, 成长 the page's only canvas, 关于你, 项目, 我的做法, 知识, 收到的 — each changing form with the amount it has to show: 0 a recipe with one button, 1–5 the
+   things themselves, 6–30 ranked bars or dots, 31 and more folded; held to two kinds of section and five size × weight pairs, of which four are used) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
    view at a time over one shared selection, switched by one row, with the same marks listed under the canvas, and
    every mark opening the record's own drawer or the document's own page — so its three shapes (the sentence with
    its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
    themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2. A data
    page is also held to the data-page budget of controls — 10 kinds and 7 text colours, against a reading
-   page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget: the shell's three, the view
+   page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget (and so does 总览; 2026-10-23, measured in Chromium on the pages' own fixtures with the walk's `measure`: a button the header or a recipe adds is a `text` button, the look of the sidebar's 28 px controls, because a filled one was the eleventh kind): the shell's three, the view
    switch's two (the chosen view is a second kind), the chips, the search, the mark rows, the timeline
    scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
-2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
+2. **A row opens by the nature of what it is** (long configuration/mapping uses the main area under the October 20 correction below) (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
-   - a **record** — a memory entry, an inbox message, a frontier item, an evidence-matrix row, a GEO
+   - a **record** — a memory entry, an inbox message, an evidence-matrix row, a GEO
      source or a wrong answer — opens in the right-hand drawer (`Drawer`) and the list stays where it
      is; a record's row does not take the reader to another page to read what it holds;
    - a **conversation-type object** — a scheduled task — opens its conversation in the main area,
      with the list as a column inside the page (`/app/autopilot/:taskId`);
-   - a **document** — a knowledge-base source, a compiled wiki page, a report, an event, a file the
+   - a **document** — a frontier article, a knowledge-base source, a compiled wiki page, a report, an event, a file the
      assistant made (a spreadsheet, a deck, a script, shown by the kernel's own preview) — opens on a page of
      its own that has an address (`/app/files/:sourceId`), and going back restores the list as it was.
    A drawer never holds a conversation and never holds a second input box (the kernel's composer is
    the only one).
 3. **The header is the title, the scope and at most one primary button** — and a search box. Two
    solid accent buttons in a header fail the walk.
-4. **Only what can be acted on, and the result itself.** System state, version numbers, model
+4. **Only what can be acted on, and the result itself.** Short purpose/input/output/next-action guidance is allowed under the October 20 correction below. System state, version numbers, model
    names, identifiers and how a statistic was counted are not on a user page; say what the reader
    can do and what came of it.
 5. **At most one row of view switches and one row of filters.** A second tab strip, a row of
@@ -459,7 +481,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | T1 列表页 | 前沿动态, 知识库, 记忆 (关于你 / 项目 / 做法), 收件箱, 科研工具, 插件与技能, the GEO and study homes | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
 | T2 主从页 | 定时任务, 方法库, 假设卡 | header · `MasterDetail` (list 320–360 px, the record beside it; below 1024 px a `Drawer`, or the page swaps for a conversation) | a list and one record | the right-hand column |
 | T3 模块页 | 循证 GEO, 虚拟临床研究 (and one GEO answer, read inside the band under 问题与回答) | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
-| T4 数据页 | 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
+| T4 数据页 | 记忆总览, 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
 
@@ -495,14 +517,32 @@ needs a kind of its own says what it is in its `budgetNote`. `lookKinds.test.tsx
 band a line taller on one tab, a tag in a link, a sort header after two pictures, 41 rows on a first screen, nine to eleven kinds of
 control on pages that had eight to ten. By class: a toolbar in the band is one row whatever the data — its filters fold into 「筛选」
 when the row would wrap (`Toolbar` `inBand`); a `Tag` is never in a link, a button or a row's title (`tagNotInControl.test.ts` reads
-every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a small button is 13 / 400 like the chip
-beside it, a severity grade 12 / 400 like a tag (the current navigation item stays 14 / 500 on purpose: it is the one kind of control the page's
-secondary buttons already are, and a weight of its own would split them); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
+every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a toolbar's controls — search, chips, segments, a small button, the activity chip — are the page's own 14 / 400 (13 was a size pair of its
+own on every page that had a toolbar), a severity grade 12 / 400 like a tag, and no control is 500, and the current navigation item is 400 (its ground says it: a 600 of its own was a
+second kind of 36 px control beside the secondary buttons on every page); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
 a list that is a heading and a fold on one account and a heading and rows on another is one shape (the overview's 交付物); the first
 screen of a data page holds at most twenty rows, so the list under two pictures starts with five (准确与安全) or twenty (信源) and says how many
 more. A data file is a window of lines, a page of four sections has its contents, and a scroll box is a named stop (`KnowledgePageView`).
 The operator's console is one card (`OpsCard`): a good state has no colour (amber for a thing to look at, red for a failure), an
 identifier is a copy button and never page text, and a list that holds nothing is not a tab.
+
+**前沿动态's list and reader (2026-10-23, the owner's screenshots; the band 2026-10-25: 「不要横着罗列着，顶上弄好几行」).** The band is
+one row on every view (`Toolbar` `oneRow`): six views — 精选 · 全部 · 关注 · 热榜 · 简报 · 证据专区 — at the left; at the right the
+open view's few controls (热榜 当前 | 本周 | 本月 and when it was taken; 简报 日报 | 周报, 分类, 往期, 复制; 证据专区 「全部专区 ▾」, the
+count of a search, 新建专区), on 精选, 全部 and 关注 the applied tokens (the chosen tag keeps its 「关注」) and 「筛选」 — 栏目 (one
+choice), 专科 (the thirty in their five groups, several at once, each chosen one with 「关注」, then their 热门标签), 来源, 证据类型,
+时间 (全部 only), 只看收藏 — and the search last. 只看未读 is a toggle at the right end of the list's first day heading. 与我相关 is
+关注's first entry (`?view=following&follow=foryou`; `?view=foryou` lands there): from 640 px 关注 is a column of the reader's places —
+与我相关, 全部关注, each followed specialty, tag, drug, topic, source, event and evidence zone, each an address, then 「添加关注 · 管理」 —
+beside the list it opens; on a phone that column is the first section of the 「筛选」 sheet. Nothing followed and the onboarding card
+never answered: the card is 关注's empty state, and its answers become the first follows. A search's results offer 「关注“<词>”」. A card is one link to its reader:
+the title's link stretches over it, the ground lightens under the pointer and the title — `title-ink` — turns the accent; the summary
+is three lines (two on a phone) and never expands; the meta row ends in the 「AI 评分」 pill and the footer holds three tags that
+narrow the feed, 「另有 N 家报道」, ☆ and ⋯ (深入研究 first). A day-grouped list has its clock in a column and a heading per day that
+stays under the band; any other list says the date after the source. The reader is two columns from 1024 px: the article on one
+edge (back, byline, title, 导读, text) and a sticky column whose top is the back row's — 「打开原文 ↗」 with ☆ and ⋯, 「深入研究」,
+推荐理由 with the score's parts, 专科 and 标签 (one chip, every one a link) and 本文目录 at three sections; below 1024 px the notes
+follow the text and the actions are a bar at the window's bottom.
 
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`
@@ -612,7 +652,7 @@ coloured shimmer · put an opacity modifier on a token colour · put a shadow on
 let a badge cover the icon it sits on · render two adjacent rows with identical text · show raw
 validator strings, enum codes, run ids or model names in the body of the UI · rely on hover to
 reveal anything a keyboard user needs · explain how the system works on the page (a subtitle, a
-hint under a card, “为什么入选”) · show the back office as text: 已交付, 核对 N 条, 用过 N 次,
+hint under a card, “为什么入选”; this historical blanket wording is superseded for useful task guidance by the October 20 correction below) · show the back office as text: 已交付, 核对 N 条, 用过 N 次,
 起生效, token, 缓存命中, tok/s, an API's name, a project id.
 
 ---
@@ -677,3 +717,22 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
   2025.10 JSON Schema (it is not vendored, and CI does not fetch).
 - The reader's print copy is mounted on `beforeprint`; a headless PDF renderer that does not fire
   that event prints the shell unless the event is dispatched first.
+
+
+### October 19 workflow correction
+
+The owner requires usable workflows and visible memory charts, not compliance with the older drawer/tree shape at their expense. The memory landing opens its map when available, with explicit list and record links preserved. One real node or topic is enough to visualize; sparse dimensions use honest bars rather than a misleading radar or a missing chart. No-data and failed-read states remain distinct, and no placeholder records are fabricated.
+
+Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「打开原文」) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Method libraries lead to configuration, existing versioned jobs and results. Refer to `docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
+
+## Workflow correction adopted 2026-10-20
+
+These presentation decisions supersede conflicting September 23, October 7/8 and October 14/19 rules precisely as described below. Earlier records remain historical; this is an acceptance target, not a claim that the implementation has passed. See `../docs/superpowers/plans/2026-10-19-workflow-rectification.md`, October 20 owner review.
+
+- Global home, logo and New Conversation open the general AI assistant without inherited GEO/study title, progress or specialist binding. Resume-project links are explicit; preserve history, drafts and native tabs. The VCR home lists studies and progress with one New Study action. Methods, reference search and population templates are contextual tools, not competing study-home tabs; retain compatible links and saved objects.
+- Keep the seven VCR and eight GEO steps reachable with visible current/completed/waiting state and next actions, including during conversation. The October 19 compact-control ruling removes redundant navigation, but a compact selector alone cannot be the only discoverable workflow. Use one conversation and one native composer; remove the redundant Chat button when it is open. Preserve project identity, results, actual run history and the native DSH right pane.
+- Research Tools is the existing shared discovery surface for task-oriented methods, visible on its initial screen and reused inside study steps. This supersedes the October 14 fixed catalogue inventory as a restriction on those method entries. Small calculations need not traverse a full study. Show a short purpose, required inputs, expected outputs and reachable next action; meaningful examples, missing prerequisites and remedies are explicitly permitted. The older blanket no-hint/no-purpose-text rule applies only to explanations of implementation, not useful task guidance.
+- Related inputs, configuration, progress and result tables/plots belong together in one analysis workbench in the main area, with responsive tabs where useful. This is an explicit exception to the older one-object/one-shape rule, not permission to stack unrelated metadata. Long method configuration and literature-to-parameter mapping use the main area; drawers hold only short previews or small edits. Do not repurpose the native right pane or add another file/browser system.
+- Share reference-trial search across global AI, Research Tools and the study evidence context, with Use in This Study. Distinguish live results from saved status and source failures. Literature parameters retain values, units, passages, missing fields and destination mapping; registration alone never claims executability. Retain configuration/source versions and immutable historical results.
+- The study population step owns criteria, source data, included/excluded/unknown counts, selected version and cohort results. Select account-level reusable template versions from that step, preserve Save as Template/Use Template and compatible links, and recalculate changed criteria as a new version without overwriting history.
+- Keep design tokens, default Chinese UI, keyboard/mobile access, ordinary-account access and user/project/tenant boundaries. Technical implementation, source-proof machinery and operator jargon stay out of UI; scientific sources needed to judge or reuse parameters remain available in context. No added approval ceremony or clinical delivery gate. Preserve existing quality budgets and acceptance checks; do not weaken them merely to pass unusable UI. A measured workbench-specific template change must express this connected workflow, not excuse unrelated stacked content.

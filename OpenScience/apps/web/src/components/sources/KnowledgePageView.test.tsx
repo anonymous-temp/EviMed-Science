@@ -98,6 +98,13 @@ describe("KnowledgePageView", () => {
     expect(screen.getByRole("note")).toHaveTextContent(`“${lost && lost.kind === "source" ? lost.quote : ""}”`);
   });
 
+  it("labels the historical source version and check time independently of present availability", async () => {
+    mocks.page.mockResolvedValue({ ...absent, links: absent.links.map((link) => link.kind === "source" ? { ...link, checkedAt: "2026-10-20T10:00:00Z", sourceVersion: 3, available: false } : link) });
+    renderView(absent);
+    expect((await screen.findAllByText(/曾核对于.*来源第 3 版，当前不可读取/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("img", { name: "原文里找到了这句引文" })).toBeNull();
+  });
+
   it("opens the document at the quotation", async () => {
     mocks.locate.mockResolvedValueOnce({ status: "verified", start: 12, end: 20, page: 3, textSha256: "d".repeat(64) });
     renderView(absent);
@@ -166,17 +173,94 @@ describe("editing a page", () => {
     await waitFor(() => expect(screen.getByTestId("where").textContent).toBe(`/app/files/${saved.sourceId}?scope=p1&kind=wiki`));
   });
 
-  it("takes the newer version in when a compile rewrote the page, and says so in one sentence", async () => {
+  it.each([409, 404])("preserves the draft and offers the newer version separately after status %i", async (status) => {
     const newer = { ...mine, sha256: "e".repeat(64), markdown: "---\ntype: analysis\ntitle: x\n---\n\n新的整理结果。" };
-    mocks.save.mockRejectedValue(new WebApiError("changed", { status: 409, code: "knowledge_page_changed" }));
+    mocks.save.mockRejectedValue(new WebApiError("changed", { status, code: status === 409 ? "knowledge_page_changed" : "source_not_found" }));
     mocks.pageAt.mockResolvedValue(newer);
     renderView(mine);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "编辑" }));
     await user.type(await screen.findByLabelText("页面全文"), "x");
     await user.click(screen.getByRole("button", { name: "保存" }));
-    expect(await screen.findByText(/这一页刚被重新整理过，已换成最新的版本/)).toBeInTheDocument();
+    expect(await screen.findByText(/你的修改已保留/)).toBeInTheDocument();
     expect(mocks.pageAt).toHaveBeenCalledWith("p1", "wiki", mine.path);
-    expect(screen.getByLabelText("页面全文")).toHaveValue(newer.markdown);
+    expect((screen.getByLabelText("页面全文") as HTMLTextAreaElement).value).toMatch(/x$/);
+    expect(screen.getByLabelText("最新版本")).toHaveValue(newer.markdown);
+    expect(screen.getByRole("button", { name: "复制我的修改" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "以我的修改继续编辑" }));
+    mocks.save.mockResolvedValue({ changed: true, writeBack: "written", userBlocks: 1, page: newer });
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenLastCalledWith({ sourceId: newer.sourceId, markdown: `${mine.markdown}x`, baseSha256: newer.sha256 }));
   });
+});
+
+it("loads and edits the addressed alias without falling back to its equal-byte sibling", async () => {
+  vi.clearAllMocks();
+  const address = { projectId: "p1", tree: "wiki" as const, path: "concept/zz-duplicate.md", generationId: `kg_${"a".repeat(32)}`, pageId: "alias-page", pageRevision: 3 };
+  const alias = { ...mine, path: address.path, address };
+  const saved = { ...alias, sourceId: `src_${"7".repeat(32)}`, markdown: `${alias.markdown}\nAlias correction.`, address: { ...address, pageRevision: 4 } };
+  mocks.pageAt.mockResolvedValue(alias); mocks.status.mockResolvedValue(statusCompiled);
+  mocks.save.mockResolvedValue({ changed: true, writeBack: "written", userBlocks: 1, page: saved });
+  const params = new URLSearchParams({ scope: "p1", kind: "wiki", kpProject: "p1", kpTree: address.tree, kpPath: address.path,
+    kpGeneration: address.generationId, kpId: address.pageId, kpRevision: String(address.pageRevision) });
+  render(<MemoryRouter initialEntries={[`/app/files/${alias.sourceId}?${params}`]}>
+    <Routes><Route path="*" element={<><KnowledgePageView source={sourceFor(alias)} /><Where /></>} /></Routes>
+  </MemoryRouter>);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "编辑" }));
+  await user.type(await screen.findByLabelText("页面全文"), "\nAlias correction.");
+  await user.click(screen.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ sourceId: alias.sourceId, markdown: `${alias.markdown}\nAlias correction.`, baseSha256: alias.sha256, address }));
+  expect(mocks.page).not.toHaveBeenCalled();
+  expect(mocks.pageAt).toHaveBeenCalledWith("p1", "wiki", address.path, address);
+  await waitFor(() => expect(screen.getByTestId("where").textContent).toContain(`src_${"7".repeat(32)}`));
+  expect(screen.getByTestId("where").textContent).toContain("kpPath=concept%2Fzz-duplicate.md");
+  expect(screen.getByTestId("where").textContent).toContain("kpRevision=4");
+});
+
+
+it("keeps an internal page link's logical path when its source is shared by another page", async () => {
+  vi.clearAllMocks();
+  const addressed = { ...mine, address: {projectId:"p1",tree:"wiki" as const,path:mine.path,generationId:`kg_${"a".repeat(32)}`,pageId:"addressed",pageRevision:1} };
+  mocks.page.mockResolvedValue(addressed); mocks.status.mockResolvedValue(statusCompiled);
+  renderView(addressed);
+  const target = addressed.links.find(link=>link.kind==="page"&&link.text==="离线优先盘点与冲突合并");
+  if (!target || target.kind!=="page" || !target.path) throw new Error("fixture page link is required");
+  expect(await screen.findByRole("link",{name:target.text})).toHaveAttribute("href",`/app/files/open?${new URLSearchParams({project:"p1",tree:"wiki",path:target.path})}`);
+});
+
+it("retry reacquires the same logical alias after its receipt is obsolete without source-id fallback", async () => {
+  vi.clearAllMocks();
+  const address = {projectId:"p1",tree:"wiki" as const,path:"concept/zz-duplicate.md",generationId:`kg_${"a".repeat(32)}`,pageId:"alias-page",pageRevision:3};
+  const fresh = {...mine,path:address.path,address:{...address,pageRevision:4},sourceId:`src_${"9".repeat(32)}`};
+  mocks.status.mockResolvedValue(statusCompiled);
+  mocks.pageAt.mockImplementation(async (_project,_tree,_path,receipt) => {
+    if (receipt?.pageRevision===3) throw new WebApiError("changed",{status:409,code:"knowledge_page_changed"});
+    return fresh;
+  });
+  const params = new URLSearchParams({scope:"p1",kind:"wiki",kpProject:"p1",kpTree:address.tree,kpPath:address.path,
+    kpGeneration:address.generationId,kpId:address.pageId,kpRevision:"3"});
+  render(<MemoryRouter initialEntries={[`/app/files/${mine.sourceId}?${params}`]}><Routes><Route path="*" element={<><KnowledgePageView source={sourceFor(mine)}/><Where/></>}/></Routes></MemoryRouter>);
+  await userEvent.setup().click(await screen.findByRole("button",{name:/重试/}));
+  expect(await screen.findByRole("heading",{name:"事实时间线"})).toBeVisible();
+  expect(mocks.pageAt.mock.calls[0]).toEqual(["p1","wiki",address.path,address]);
+  expect(mocks.pageAt.mock.calls[1]).toEqual(["p1","wiki",address.path]);
+  expect(mocks.page).not.toHaveBeenCalled();
+  await waitFor(()=>expect(screen.getByTestId("where").textContent).toContain("kpRevision=4"));
+  expect(screen.getByTestId("where").textContent).toContain(fresh.sourceId);
+});
+
+it("a malformed or forbidden address cannot use the obsolete-receipt retry path", async () => {
+  vi.clearAllMocks(); mocks.status.mockResolvedValue(statusCompiled);
+  const params = new URLSearchParams({kpProject:"p1",kpTree:"wiki",kpPath:"concept/a.md",kpGeneration:"bad",kpId:"page",kpRevision:"3"});
+  const view = render(<MemoryRouter initialEntries={[`/app/files/${mine.sourceId}?${params}`]}><KnowledgePageView source={sourceFor(mine)}/></MemoryRouter>);
+  await userEvent.setup().click(await screen.findByRole("button",{name:/重试/}));
+  expect(mocks.pageAt).not.toHaveBeenCalled(); expect(mocks.page).not.toHaveBeenCalled();
+  view.unmount();
+  params.set("kpGeneration",`kg_${"a".repeat(32)}`);
+  mocks.pageAt.mockRejectedValue(new WebApiError("forbidden",{status:403,code:"knowledge_scope_denied"}));
+  render(<MemoryRouter initialEntries={[`/app/files/${mine.sourceId}?${params}`]}><KnowledgePageView source={sourceFor(mine)}/></MemoryRouter>);
+  await userEvent.setup().click(await screen.findByRole("button",{name:/重试/}));
+  await waitFor(()=>expect(mocks.pageAt).toHaveBeenCalledTimes(2));
+  expect(mocks.pageAt.mock.calls.every(args=>args.length===4)).toBe(true);
 });

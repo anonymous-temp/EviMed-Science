@@ -130,6 +130,10 @@ finish() {
 [ -f "${REL}/OpenScience/deploy/web/release-manifest.json" ] || { echo "no release manifest under ${REL}; generate it first"; exit 1; }
 [ -f "$OVERRIDE" ] || { echo "no compose override at ${OVERRIDE}"; exit 1; }
 
+# Git-archive releases have no package installation. Prepare only the owned,
+# same-release domain resolver before any host CLI imports server vocabulary.
+node "${REL}/OpenScience/scripts/ops/prepare-host-ops-dependencies.mjs" --source-root "${REL}/OpenScience"
+
 # A prepared artifact's immutable release identity need not name its staging
 # directory. Refuse disagreement before shared configuration or current moves.
 EXPECTED_RELEASE_ID=$(env -u OPEN_SCIENCE_RELEASE_ID node --env-file="${REL}/OpenScience/deploy/web/.env" -e '
@@ -450,33 +454,41 @@ if [ "$PRUNE" -eq 1 ]; then
 fi
 echo "=== switched to ${EXPECTED_RELEASE_ID} ==="
 
-# The post-release walk of the live pages (item 9), as the account
-# `shared/ui-walk.env` names, in a throwaway container of the release's own
-# runtime image: it has the Node, Chromium and the Playwright driver the walk
-# needs, and the host has none of them. The walk aborts every
-# `start_runtime`, logs out, and writes its report and screenshots to
-# `shared/ui-walk/<release>/`. After retention on purpose: the walk judges the
+# The post-release walk of the live pages (item 9), in a throwaway container of
+# the release's own runtime image: it has the Node, Chromium and the Playwright
+# driver the walk needs, and the host has none of them. It signs in as nobody:
+# the walk registers an account of its own through the product's self-
+# registration, walks as it, and deletes it through the product at the end (a
+# deletion it cannot do is a FAIL line naming the account and a failed walk), so
+# `shared/ui-walk.env` holds the address and the switches and no account or
+# password. The walk aborts every `start_runtime` (the chat page's own is let
+# through when it is asked for), and writes its report and screenshots to
+# `shared/ui-walk/<release>/`. The container is on docker's default bridge network, never the host's: on the host network
+# Chromium sees ERR_NETWORK_CHANGED the moment the walk account's first runtime container adds its interface, aborts the frame load
+# and the chat page times out; the public origin the walk reads is reachable from the bridge (rehearsed 2026-10-25). After retention on purpose: the walk judges the
 # pages, not whether the switch may finish, and its failure leaves the release
 # in front — it says so, and exits non-zero. It is always the whole walk:
 # `OPEN_SCIENCE_WALK_ONLY` (a partial walk, for the one who changed a page) is
-# emptied here whatever ui-walk.env says.
+# emptied here whatever ui-walk.env says, and so are the two settings that name
+# an account (the production walk refuses them: an old file must not decide whom
+# the release walk signs in as). The walk's file and the helper it imports
+# (`throwaway-account.mjs`) are mounted side by side.
 WALK_ENV="${ROOT}/shared/ui-walk.env"
 if [ ! -f "$WALK_ENV" ]; then
   echo "=== UI WALK NOT RUN: ${WALK_ENV} is missing (docs/WEB_OPERATIONS_RUNBOOK.md, \"Post-release UI walk\") ==="
   finish 0
 fi
 echo "=== walk the live pages ==="
-walk_password=$(sed -n 's/^OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=//p' "$WALK_ENV")
-[ -f "$walk_password" ] || { echo "UI WALK NOT RUN: OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE in ${WALK_ENV} names no file; ${EXPECTED_RELEASE_ID} is live"; finish 1; }
 walk_image=$(docker exec "$WEB_CONTAINER" printenv OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE)
 walk_out="${ROOT}/shared/ui-walk/${NEW}"
 mkdir -p "$walk_out"
 set +e
-docker run --rm --network host --env-file "$WALK_ENV" \
-  -e OPEN_SCIENCE_WALK_PASSWORD_FILE=/run/walk/password -e OPEN_SCIENCE_WALK_OUT=/walk-out \
+docker run --rm --env-file "$WALK_ENV" \
+  -e OPEN_SCIENCE_WALK_OUT=/walk-out -e OPEN_SCIENCE_WALK_USER= -e OPEN_SCIENCE_WALK_PASSWORD_FILE= \
   -e OPEN_SCIENCE_WALK_CHROMIUM=/usr/bin/chromium -e OPEN_SCIENCE_WALK_ONLY= \
-  -v "${walk_password}:/run/walk/password:ro" -v "${walk_out}:/walk-out" \
+  -v "${walk_out}:/walk-out" \
   -v "${ROOT}/current/OpenScience/scripts/ops/ui-walk.mjs:/walk/ui-walk.mjs:ro" \
+  -v "${ROOT}/current/OpenScience/scripts/ops/throwaway-account.mjs:/walk/throwaway-account.mjs:ro" \
   --entrypoint sh "$walk_image" -c \
   'OPEN_SCIENCE_PLAYWRIGHT_CORE="$(python -c "import os, playwright; print(os.path.join(os.path.dirname(playwright.__file__), \"driver\", \"package\"))")" exec node /walk/ui-walk.mjs'
 walked=$?

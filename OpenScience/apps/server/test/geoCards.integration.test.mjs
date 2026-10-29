@@ -155,6 +155,33 @@ test("a claim the ruler stops verifying leaves its card, and the card keeps the 
   assert.equal((await db.query("SELECT card_id FROM evimed_geo.claims WHERE claim_key='contra'")).rows[0].card_id, null);
 });
 
+test("a question with more claims than one card holds is saved as a card the zone takes, the rest held and unmarked, and a refresh then changes nothing", options, async () => {
+  // 2026-10-19: the evidence programme's cards of 64-78 claims were refused whole by the zone ("Invalid evidence content: claims.").
+  // A GEO question with 64 verified claims would have been too; the zone must take the card and the project must say what it left out.
+  const facts = Array.from({ length: 64 }, (_, n) => `Fact ${n} of the trial.`);
+  const many = facts.map((fact, n) => ({ claimKey: `k${String(n).padStart(2, "0")}`, statement: `结论 ${n}。`, quote: fact, sourceRef: "10.1056/NEJMoa0000000",
+    sourceKind: "trial", journeyStage: { key: "治疗选择", label: "治疗选择" }, clinicalQuestion: "同一个问题", artifactPath: ".evimed-sources/many.txt" }));
+  const files = new Map([[".evimed-sources/many.txt", facts.join("\n")]]);
+  const read = async (/** @type {{ artifactPath: string | null }} */ claim) => (claim.artifactPath ? files.get(claim.artifactPath) ?? null : null);
+  const created = await store.createProject({ userId: "alice", projectId: "p-many", engines: ["deepseek"], coverageDays: 90,
+    product: { brandName: "信尔美", genericName: "玛仕度肽注射液", holder: "某某制药有限公司" } });
+  await store.updateProject("alice", created.id, { producer: { kind: "enterprise", relation: "own_product" } });
+  await store.upsertClaims("alice", created.id, many);
+  const service = withPeople();
+  const geo = await store.getProject("alice", created.id);
+  const result = await service.refresh(geo, { readSource: read });
+  assert.deepEqual(result.failed, [], "the zone took the card");
+  assert.deepEqual(result.cards.map((card) => [card.change, card.claims]), [["created", 60]]);
+  assert.deepEqual(result.held.map((entry) => [entry.claimKey, entry.reason]), [["k60", "card_limit"], ["k61", "card_limit"], ["k62", "card_limit"], ["k63", "card_limit"]]);
+  const row = (await db.query("SELECT claims, jsonb_array_length(claims) AS n FROM evimed_frontier.evidence_cards")).rows[0];
+  assert.equal(row.n, 60);
+  const marks = (await db.query("SELECT claim_key, card_id FROM evimed_geo.claims ORDER BY claim_key")).rows;
+  assert.equal(marks.filter((mark) => mark.card_id).length, 60);
+  assert.deepEqual(marks.filter((mark) => !mark.card_id).map((mark) => mark.claim_key), ["k60", "k61", "k62", "k63"]);
+  const again = await service.refresh(await store.getProject("alice", created.id), { readSource: read });
+  assert.deepEqual(again.cards.map((card) => card.change), ["unchanged"]);
+});
+
 test("a project that says no producer, or has no reviewer, writes no card and loses nothing", options, async () => {
   const noProducer = await project({ producer: null });
   await assert.rejects(() => withPeople().refresh(noProducer, { readSource }), refused("geo_card_producer_required", 409));

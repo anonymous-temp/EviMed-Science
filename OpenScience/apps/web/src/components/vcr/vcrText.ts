@@ -162,6 +162,26 @@ export function rangeText(low: number | null | undefined, high: number | null | 
 }
 
 /**
+ * Engine results store interval levels as fractions; page contracts use percentage
+ * points. Apply only at a raw-engine display boundary, never to a page interval.
+ * Older results with percentage-point levels (> 1) remain readable. Bounds and
+ * the original result are preserved, including a genuine 1% engine level (0.01).
+ */
+export function engineIntervalForDisplay(interval: VcrInterval | null | undefined): VcrInterval | null {
+  if (!interval) return null;
+  const raw = interval.level;
+  const level = typeof raw === "number" && Number.isFinite(raw) && raw > 0 && raw <= 100
+    ? (raw <= 1 ? Math.round(raw * 100 * 1e8) / 1e8 : raw) : null;
+  return { ...interval, level };
+}
+
+/** A page-level percentage, preserving a genuine 1% and fractional levels. */
+export function intervalLevelText(level: number | null | undefined): string {
+  return typeof level === "number" && Number.isFinite(level) && level > 0 && level <= 100
+    ? `${numberText(level, significantDecimals(level))}% ` : "";
+}
+
+/**
  * 「95% 置信区间 3.6–4.6」 / 「预测区间 3.0–5.6」 — the interval, with its own
  * name. An interval without a name is not written at all.
  */
@@ -171,7 +191,7 @@ export function intervalText(interval: VcrInterval | null | undefined, precision
   if (!range) return "";
   const name = intervalLabel(interval.kind);
   if (!name) return "";
-  const level = typeof interval.level === "number" && Number.isFinite(interval.level) ? `${numberText(interval.level, 0)}% ` : "";
+  const level = intervalLevelText(interval.level);
   return `${level}${name} ${range}`;
 }
 

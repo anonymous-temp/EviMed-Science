@@ -40,6 +40,21 @@ export function verifyOpenVikingPluginArchive(file, expected) {
   return actual;
 }
 
+
+/**
+ * The address a build fetches a pinned archive from: a GitHub release through GITHUB_DOWNLOAD_PREFIX and an npm tarball
+ * through NPM_REGISTRY when the build passes them — the serving host reaches neither origin at a usable speed (the first
+ * full runtime build there, 2026-10-24, died on github.com with `curl: (18)`). The sha256 check after the download is what
+ * makes a mirror safe.
+ * @param {string} url @param {NodeJS.ProcessEnv} [env]
+ */
+export function mirroredArchiveUrl(url, env = process.env) {
+  const prefix = env.GITHUB_DOWNLOAD_PREFIX || '';
+  if (prefix && url.startsWith('https://github.com/')) return prefix + url;
+  const registry = (env.NPM_REGISTRY || '').replace(/\/+$/, '');
+  if (registry && url.startsWith('https://registry.npmjs.org/')) return registry + url.slice('https://registry.npmjs.org'.length);
+  return url;
+}
 /** Fetch the pinned archive unless the verified bytes are already there. @param {{ pins: any, root?: string }} input */
 export function fetchOpenVikingPlugin({ pins, root = OPENVIKING_PLUGIN_ROOT }) {
   const pin = openVikingPluginPin(pins);
@@ -47,8 +62,8 @@ export function fetchOpenVikingPlugin({ pins, root = OPENVIKING_PLUGIN_ROOT }) {
   const file = path.join(root, pin.filename);
   try { verifyOpenVikingPluginArchive(file, pin.sha256); }
   catch {
-    execFileSync('curl', ['--fail', '--silent', '--show-error', '--location', '--retry', '3',
-      '--connect-timeout', '20', '--max-time', '600', pin.url, '-o', file], { stdio: 'inherit' });
+    execFileSync('curl', ['--http1.1', '--fail', '--silent', '--show-error', '--location', '--retry', '5', '--retry-all-errors',
+      '--retry-delay', '2', '--connect-timeout', '20', '--max-time', '600', mirroredArchiveUrl(pin.url), '-o', file], { stdio: 'inherit' });
     verifyOpenVikingPluginArchive(file, pin.sha256);
   }
   return file;

@@ -1,51 +1,66 @@
 // 「与你相关」 without a database (build spec D.4; signals widened 2026-09-24):
 // which memories and questions may feed a profile, how a reason reads, how
-// phrase vectors are stored, how per-phrase scores become at most eight items
-// with no phrase picking more than two, and what marks a profile due.
+// phrase vectors are stored, how the ranking's parts become at most eight
+// entries in display order (no reason picking more than its cap, must-see
+// first, one exploration entry with its propensity), how genre affinity is
+// smoothed, and what marks a profile due.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { isResearcherRun } from "../src/agentRuns.mjs";
 import {
   FRONTIER_FOR_YOU_PER_PHRASE,
   FRONTIER_FOR_YOU_SIZE,
+  FRONTIER_RANKING,
   FrontierProfiles,
   decodeVector,
   encodeVector,
-  frontierForYouRanking,
+  frontierEditorialShare,
+  frontierForYouBlock,
+  frontierGenreAffinity,
   frontierPhraseSource,
+  FRONTIER_MEMORY_LINES,
   frontierProfileMemories,
   frontierProfileQuestions,
   frontierReasonText,
+  frontierSpecialtyDemotion,
 } from "../src/frontierProfiles.mjs";
 
-const record = (id, overrides = {}) => ({
-  id, scope: "user", scopeId: "", kind: "profile", key: `profile.${id}`, value: `value ${id}`, summary: `心血管专科医生 ${id}`,
-  status: "active", sensitive: false, origin: "explicit", provenance: { basis: "stated" }, ...overrides,
-});
+const lineId = (uri, line) => `native:${uri}#${createHash("sha256").update(line).digest("hex").slice(0, 12)}`;
+const file = (rel, body, overrides = {}) => ({ uri: `viking://user/u1/memories/${rel}`, type: "preferences", body, sensitive: false, projectId: null,
+  modTime: "2026-10-20T00:00:00.000Z", ...overrides });
 
-test("a profile reads memory of every provenance — active, not sensitive, not a run summary, not a paused or internal project", () => {
+test("a profile reads the engine's files that say who a person is, how they work and what they work on: one phrase a line, newest file first, nothing sensitive, paused or internal", () => {
+  const profile = file("profile.md", "---\ntitle: x\n---\n# Profile\n<!-- MEMORY_FIELDS {} -->\n- 心内科主治医师（as of 2026-09-01）\n- 在苏州工作\n", { type: "profile", modTime: "2026-10-01T00:00:00.000Z" });
   const memories = frontierProfileMemories([
-    record("stated"),
-    record("confirmed", { provenance: { basis: "confirmed" } }),
-    record("edited", { origin: "manual", provenance: { basis: "edited" }, summary: "" }),
-    record("inferred", { origin: "inferred", provenance: { basis: "inferred" } }),
-    record("assistant", { origin: "system", provenance: { basis: "assistant" } }),
-    record("tool", { origin: "system", provenance: { basis: "tool" } }),
-    record("pending", { status: "pending" }),
-    record("archived", { status: "archived" }),
-    record("superseded", { status: "superseded" }),
-    record("sensitive", { sensitive: true }),
-    record("summary", { kind: "run_summary" }),
-    record("project", { scope: "project", scopeId: "sglt2-meta", kind: "project_fact" }),
-    record("paused", { scope: "project", scopeId: "paused-project", kind: "project_fact" }),
-    record("internal", { scope: "project", scopeId: "evimed-learning", kind: "project_fact" }),
-    record("session", { scope: "session", scopeId: "s1" }),
-    record("empty", { summary: " ", value: " " }),
+    profile,
+    file("preferences/format.md", "- 回答先给结论，再给依据。\n- 表格不超过五列。", { modTime: "2026-10-20T00:00:00.000Z" }),
+    file("entities/drug/sglt2.md", "# SGLT2 抑制剂\n正在做心衰住院的 Meta 分析", { type: "entities", modTime: "2026-10-10T00:00:00.000Z" }),
+    file("projects/trial.md", "领域：心血管\n## 目标\n- 比较两种他汀", { type: "project_context", projectId: "sglt2-meta", modTime: "2026-10-15T00:00:00.000Z" }),
+    // What is not read: another kind of file, a sensitive one, a paused project's, an internal project's, an empty one.
+    file("preferences/corrections/length.md", "- 摘要不超过两百字。", { type: "corrections" }),
+    file("project_facts/fact.md", "- 纳入十二项随机对照试验。", { type: "project_facts" }),
+    file("preferences/private.md", "- 一件很私人的事情。", { sensitive: true }),
+    file("projects/paused.md", "领域：肿瘤学研究项目", { type: "project_context", projectId: "paused-project" }),
+    file("projects/internal.md", "领域：平台内部评测项目", { type: "project_context", projectId: "evimed-learning" }),
+    file("preferences/empty.md", "  \n#  标题只有标题\n- 短\n"),
   ], { pausedProjects: ["paused-project"] });
-  assert.deepEqual(memories.map((memory) => memory.id), ["stated", "confirmed", "edited", "inferred", "assistant", "tool", "project"],
-    "what the reader said and what was inferred from their conversations both count");
-  assert.equal(memories[2].text, "value edited", "the value stands in for an empty summary");
-  assert.deepEqual(memories[0], { id: "stated", kind: "profile", text: "心血管专科医生 stated" });
+  assert.deepEqual(memories.map((memory) => memory.text), [
+    "回答先给结论，再给依据。", "表格不超过五列。",
+    "领域：心血管", "比较两种他汀",
+    "正在做心衰住院的 Meta 分析",
+    "心内科主治医师", "在苏州工作",
+  ], "newest file first and the file's own order within it; the front matter, the engine's field comment, headings, bullets and an as-of date are the file's dress");
+  assert.deepEqual(memories.map((memory) => memory.kind), ["preference", "preference", "project_fact", "project_fact", "project_fact", "profile", "profile"]);
+  assert.equal(memories[0].id, lineId("viking://user/u1/memories/preferences/format.md", "回答先给结论，再给依据。"), "a line is named by its file and its words: native:<uri>#<12 hex of sha256>");
+  assert.equal(memories[5].id, lineId(profile.uri, "心内科主治医师"));
+  // The same files in another order read the same.
+  assert.deepEqual(frontierProfileMemories([file("a.md", "- 第一件事情很重要"), file("b.md", "- 第二件事情也重要", { modTime: "2026-10-21T00:00:00.000Z" })]).map((memory) => memory.text),
+    ["第二件事情也重要", "第一件事情很重要"]);
+  // At most forty lines of one reader's memory are read.
+  const many = file("preferences/many.md", Array.from({ length: 60 }, (_, index) => `- 第 ${index} 条偏好的说明`).join("\n"));
+  assert.equal(frontierProfileMemories([many]).length, FRONTIER_MEMORY_LINES);
+  assert.deepEqual(frontierProfileMemories(null), []);
 });
 
 const run = (id, startedAt, overrides = {}) => ({ id, startedAt, question: `问题 ${id}`, titleSource: "question", title: `问题 ${id}`, ...overrides });
@@ -110,60 +125,139 @@ test("a phrase vector is stored as float32 base64 and read back only at its own 
   }
 });
 
-test("the ranking: each item once, by its best phrase; ties by weight; below the floor nothing", () => {
-  const ranked = frontierForYouRanking([
-    { itemId: "a", phrase: 0, score: 0.6, weight: 70 },
-    { itemId: "a", phrase: 1, score: 0.8, weight: 70 },
-    { itemId: "b", phrase: 0, score: 0.8, weight: 90 },
-    { itemId: "c", phrase: 2, score: 0.3, weight: 99 },
-  ], { minScore: 0.4 });
-  assert.deepEqual(ranked, [{ itemId: "b", phrase: 0, score: 0.8 }, { itemId: "a", phrase: 1, score: 0.8 }],
-    "equal scores: the item with more weight first; each with the phrase that matched it best");
-  assert.equal(ranked.some((entry) => entry.itemId === "c"), false, "an item near nothing the reader showed interest in is not 与你相关");
+/** A candidate of the block: an id, a score out of 100, and whatever else the case needs. */
+const candidate = (id, overrides = {}) => ({ id, publicId: `pub${id}`, weight: 50, selected: false, safetyAlert: false, genre: "paper", specialties: [],
+  visibleAt: NOW_MS - 3_600_000, ...overrides });
+const reason = (topic, cap = FRONTIER_FOR_YOU_PER_PHRASE) => ({ topic, kind: "project_fact", cap });
+const NOW_MS = Date.parse("2026-10-24T08:00:00Z");
+const NO_EXPLORE = { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } };
+/** The block with what a test does not name left plain: no editorial share, no genre term, nothing to explore. */
+const block = (input) => frontierForYouBlock({ readerSpecialties: [], editorialShare: 0, terms: {}, now: NOW_MS, selectThreshold: 82, ranking: NO_EXPLORE,
+  random: () => 0, ...input });
+
+test("the block: each item once, under its best reason; ties by weight", () => {
+  const entries = block({
+    candidates: [candidate("a", { weight: 70 }), candidate("b", { weight: 90 })],
+    reasons: [reason("A"), reason("B")],
+    pairs: [{ itemId: "a", reason: 0, score: 0.6 }, { itemId: "a", reason: 1, score: 0.8 }, { itemId: "b", reason: 0, score: 0.8 }],
+  });
+  assert.deepEqual(entries.map((entry) => [entry.itemId, entry.topic, entry.slot]), [["b", "A", "personal"], ["a", "B", "personal"]],
+    "equal scores: the item with more weight first; each under the reason that matched it best");
 });
 
-test("the ranking: a phrase picks at most two items, an item whose phrase is full comes in under its next, at most eight", () => {
-  const matches = [
+test("the block: a reason picks at most its cap, an item whose reason is full comes in under its next, at most eight", () => {
+  const candidates = [...Array.from({ length: 6 }, (_, index) => candidate(`sglt2-${index}`)), ...Array.from({ length: 4 }, (_, index) => candidate(`other-${index}`)),
+    ...Array.from({ length: 3 }, (_, index) => candidate(`weak-${index}`))];
+  const pairs = [
     // Six items all nearest one phrase — the 2026-09-23 block where four of five came from one memory.
-    ...Array.from({ length: 6 }, (_, index) => ({ itemId: `sglt2-${index}`, phrase: 0, score: 0.9 - index * 0.01, weight: 50 })),
+    ...Array.from({ length: 6 }, (_, index) => ({ itemId: `sglt2-${index}`, reason: 0, score: 0.9 - index * 0.01 })),
     // The third of them is also near a second phrase, above the floor.
-    { itemId: "sglt2-2", phrase: 1, score: 0.5, weight: 50 },
-    // Two phrases with two items each, and a third with three weak ones.
-    ...Array.from({ length: 4 }, (_, index) => ({ itemId: `other-${index}`, phrase: 2 + Math.floor(index / 2), score: 0.7 - index * 0.01, weight: 50 })),
-    ...Array.from({ length: 3 }, (_, index) => ({ itemId: `weak-${index}`, phrase: 4, score: 0.45 - index * 0.01, weight: 50 })),
+    { itemId: "sglt2-2", reason: 1, score: 0.5 },
+    ...Array.from({ length: 4 }, (_, index) => ({ itemId: `other-${index}`, reason: 2 + Math.floor(index / 2), score: 0.7 - index * 0.01 })),
+    ...Array.from({ length: 3 }, (_, index) => ({ itemId: `weak-${index}`, reason: 4, score: 0.45 - index * 0.01 })),
   ];
-  const ranked = frontierForYouRanking(matches, { minScore: 0.4 });
-  assert.equal(ranked.length, FRONTIER_FOR_YOU_SIZE);
-  const perPhrase = new Map();
-  for (const entry of ranked) perPhrase.set(entry.phrase, (perPhrase.get(entry.phrase) ?? 0) + 1);
-  assert.ok([...perPhrase.values()].every((count) => count <= FRONTIER_FOR_YOU_PER_PHRASE), JSON.stringify([...perPhrase]));
-  assert.deepEqual(ranked.filter((entry) => entry.phrase === 0).map((entry) => entry.itemId), ["sglt2-0", "sglt2-1"]);
-  assert.deepEqual(ranked.find((entry) => entry.itemId === "sglt2-2"), { itemId: "sglt2-2", phrase: 1, score: 0.5 },
-    "its best phrase full, the item comes in under the next phrase that still holds");
-  assert.deepEqual(ranked.filter((entry) => entry.phrase === 4).map((entry) => entry.itemId), ["weak-0"], "the eighth place, and no ninth");
-  assert.equal(new Set(ranked.map((entry) => entry.itemId)).size, ranked.length, "an item once");
+  const entries = block({ candidates, reasons: ["P0", "P1", "P2", "P3", "P4"].map((topic) => reason(topic)), pairs });
+  assert.equal(entries.length, FRONTIER_FOR_YOU_SIZE);
+  const perReason = new Map();
+  for (const entry of entries) perReason.set(entry.topic, (perReason.get(entry.topic) ?? 0) + 1);
+  assert.ok([...perReason.values()].every((count) => count <= FRONTIER_FOR_YOU_PER_PHRASE), JSON.stringify([...perReason]));
+  assert.deepEqual(entries.filter((entry) => entry.topic === "P0").map((entry) => entry.itemId), ["sglt2-0", "sglt2-1"]);
+  assert.equal(entries.find((entry) => entry.itemId === "sglt2-2")?.topic, "P1", "its best reason full, the item comes in under the next that holds");
+  assert.deepEqual(entries.filter((entry) => entry.topic === "P4").map((entry) => entry.itemId), ["weak-0"], "the eighth place, and no ninth");
+  assert.equal(new Set(entries.map((entry) => entry.itemId)).size, entries.length, "an item once");
+  // Served in display order: each topic's run is contiguous, so the index is the position the block shows it at.
+  const runs = entries.map((entry) => entry.topic).filter((topic, index, all) => index === 0 || all[index - 1] !== topic);
+  assert.equal(new Set(runs).size, runs.length, runs.join());
 });
 
-test("the ranking: the editorial score orders near-equals and never lifts an item past the floor", () => {
-  const ranked = frontierForYouRanking([
-    { itemId: "strong-match", phrase: 0, score: 0.62, weight: 40 },
-    { itemId: "better-edited", phrase: 1, score: 0.6, weight: 95 },
-    { itemId: "below-floor", phrase: 2, score: 0.39, weight: 100 },
-  ], { minScore: 0.4, editorial: 0.1 });
-  assert.deepEqual(ranked.map((entry) => entry.itemId), ["better-edited", "strong-match"]);
-  assert.deepEqual(frontierForYouRanking([
-    { itemId: "strong-match", phrase: 0, score: 0.8, weight: 0 },
-    { itemId: "better-edited", phrase: 1, score: 0.6, weight: 100 },
-  ], { minScore: 0.4, editorial: 0.1 }).map((entry) => entry.itemId), ["strong-match", "better-edited"], "a light blend, not a re-sort by score");
+test("the block: the editorial share orders near-equals, shrinking as the reader comes back; the genre term leans by what they read", () => {
+  const candidates = [candidate("strong-match", { weight: 40 }), candidate("better-edited", { weight: 95 })];
+  const reasons = [reason("A"), reason("B")];
+  const pairs = [{ itemId: "strong-match", reason: 0, score: 0.62 }, { itemId: "better-edited", reason: 1, score: 0.6 }];
+  assert.deepEqual(block({ candidates, reasons, pairs, editorialShare: frontierEditorialShare(0) }).map((entry) => entry.itemId), ["better-edited", "strong-match"]);
+  assert.deepEqual(block({ candidates, reasons, pairs: [{ itemId: "strong-match", reason: 0, score: 0.9 }, pairs[1]], editorialShare: frontierEditorialShare(50) })
+    .map((entry) => entry.itemId), ["strong-match", "better-edited"], "a light blend, not a re-sort by score");
+  assert.equal(frontierEditorialShare(0), FRONTIER_RANKING.editorial.ceiling);
+  assert.equal(frontierEditorialShare(FRONTIER_RANKING.editorial.visitsHalf), (FRONTIER_RANKING.editorial.ceiling + FRONTIER_RANKING.editorial.floor) / 2);
+  assert.ok(frontierEditorialShare(1_000) < FRONTIER_RANKING.editorial.floor + 0.01);
+  const leaning = block({ candidates: [candidate("paper", { genre: "paper" }), candidate("alert", { genre: "approval" })], reasons: [reason("A"), reason("B")],
+    pairs: [{ itemId: "paper", reason: 0, score: 0.6 }, { itemId: "alert", reason: 1, score: 0.6 }], terms: frontierGenreAffinity([], "pharmacist") });
+  assert.deepEqual(leaning.map((entry) => entry.itemId), ["alert", "paper"], "a pharmacist's prior leans to approvals");
+});
+
+test("genre affinity: Beta-smoothed toward the role's prior; an open counts half, a satisfied read one, a hide one more failure", () => {
+  const empty = frontierGenreAffinity([], null);
+  assert.equal(empty.paper.mean, FRONTIER_RANKING.genre.base);
+  assert.equal(empty.paper.term, 0, "no evidence and no role: no lean");
+  const pharmacist = frontierGenreAffinity([], "pharmacist");
+  assert.equal(pharmacist.safety.mean, FRONTIER_RANKING.genre.lean);
+  assert.ok(pharmacist.safety.term > 0 && pharmacist.paper.term === 0);
+  const read = frontierGenreAffinity([
+    ...Array.from({ length: 6 }, () => ({ genre: "guideline", seen: true, opened: true, satisfied: true })),
+    { genre: "guideline", seen: true, opened: true, satisfied: false },
+    ...Array.from({ length: 10 }, () => ({ genre: "news", seen: true })),
+    { genre: "news", seen: true, hidden: true },
+  ], null);
+  assert.deepEqual([read.guideline.trials, read.guideline.successes], [7, 6.5]);
+  assert.deepEqual([read.news.trials, read.news.successes], [12, 0], "a hide is the impression's failure and one more");
+  assert.ok(read.guideline.term > 0 && read.news.term < 0);
+  assert.ok(read.guideline.term <= FRONTIER_RANKING.genre.share && read.news.term >= -FRONTIER_RANKING.genre.share, "clipped to the share");
+  assert.equal(frontierGenreAffinity([{ genre: "not-a-genre", seen: true }], null).paper.trials, 0, "an unknown genre counts nowhere");
+});
+
+test("must-see first: a recent safety alert in the reader's specialties or none, then a selected guideline or approval of theirs; at most two", () => {
+  const entries = block({
+    readerSpecialties: ["cardiology"],
+    candidates: [
+      candidate("alert-other", { safetyAlert: true, genre: "safety", specialties: ["dermatology"] }),
+      candidate("alert-broad", { safetyAlert: true, genre: "safety", specialties: [], visibleAt: NOW_MS - 2 * 3_600_000 }),
+      candidate("alert-old", { safetyAlert: true, genre: "safety", visibleAt: NOW_MS - 80 * 3_600_000 }),
+      candidate("guideline", { selected: true, genre: "guideline", specialties: ["cardiology"], weight: 90 }),
+      candidate("approval", { selected: true, genre: "approval", specialties: ["cardiology"], weight: 85 }),
+      candidate("mine", { weight: 60 }),
+    ],
+    reasons: [reason("A")], pairs: [{ itemId: "mine", reason: 0, score: 0.7 }],
+  });
+  assert.deepEqual(entries.map((entry) => [entry.itemId, entry.slot, entry.topic]).slice(0, 3), [
+    ["alert-broad", "must-see", "安全警示"], ["guideline", "must-see", "指南共识"], ["mine", "personal", "A"]],
+    "another specialty's alert, and one older than 72 hours, are not must-see; the approval waits for room");
+  assert.deepEqual(entries.find((entry) => entry.itemId === "approval")?.slot, "editorial", "then the editor's pick fills the room left");
+});
+
+test("the exploration entry: drawn uniformly from the best unmatched items, its probability recorded, at the first boundary from the fourth place", () => {
+  const ranking = FRONTIER_RANKING;
+  const candidates = [
+    ...["a", "b", "c", "d", "e"].map((id) => candidate(id, { weight: 60 })),
+    candidate("good-1", { weight: 95 }), candidate("good-2", { weight: 90 }), candidate("good-3", { weight: 83 }), candidate("weak", { weight: 70 }),
+  ];
+  const pairs = [{ itemId: "a", reason: 0, score: 0.8 }, { itemId: "b", reason: 0, score: 0.79 }, { itemId: "c", reason: 1, score: 0.7 },
+    { itemId: "d", reason: 1, score: 0.69 }, { itemId: "e", reason: 2, score: 0.6 }];
+  const draws = [];
+  for (const draw of [0, 0.5, 0.99]) {
+    const entries = block({ candidates, reasons: [reason("X"), reason("Y"), reason("Z")], pairs, ranking, random: () => draw });
+    const explore = entries.filter((entry) => entry.slot === "explore");
+    assert.equal(explore.length, 1);
+    assert.equal(explore[0].propensity, Math.round(1_000_000 / 3) / 1_000_000, "three items of 精选 quality outside the profile; weak is not one");
+    assert.equal(explore[0].topic, "其他领域精选");
+    assert.equal(entries.indexOf(explore[0]), 4, "not inside Y's run at the fourth place: after it");
+    draws.push(explore[0].itemId);
+  }
+  assert.deepEqual(draws, ["good-1", "good-2", "good-3"], "the draw decides which, uniformly over the pool (best first, so a draw of 0 is the best)");
+  // With no reason of the reader's at all: 精选 by score, and the drawn entry joins their run.
+  const cold = block({ candidates: [candidate("s1", { selected: true, weight: 99 }), candidate("s2", { selected: true, weight: 90 }),
+    candidate("s3", { selected: true, weight: 85 }), candidate("x", { weight: 88 })], reasons: [], pairs: [], ranking, random: () => 0 });
+  assert.deepEqual(cold.map((entry) => [entry.itemId, entry.slot, entry.topic]), [["s1", "editorial", "精选"], ["s2", "editorial", "精选"],
+    ["s3", "editorial", "精选"], ["x", "explore", "精选"]]);
+  assert.equal(cold[3].propensity, 1);
 });
 
 test("personalization is off without a memory store or a model, and unavailable while the memory store is failing", () => {
   const database = { query: async () => ({ rows: [] }) };
   const config = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key" };
   assert.equal(new FrontierProfiles({ database, config }).state(), "off", "no memory store");
-  assert.equal(new FrontierProfiles({ database, config: {}, researchMemory: { configured: true } }).state(), "off", "no model to read it with");
+  assert.equal(new FrontierProfiles({ database, config: {}, memorySettings: { configured: true } }).state(), "off", "no model to read it with");
   let now = new Date("2026-09-22T04:00:00Z");
-  const profiles = new FrontierProfiles({ database, config, researchMemory: { configured: true }, now: () => now });
+  const profiles = new FrontierProfiles({ database, config, memorySettings: { configured: true }, now: () => now });
   assert.equal(profiles.state(), "available");
   profiles.memoryFailedAt = now.getTime();
   assert.equal(profiles.state(), "unavailable");
@@ -186,7 +280,7 @@ function recordingDatabase({ fail = false } = {}) {
 
 test("a star, an unstar or a new question marks the profile due; an item opened only while there is nothing yet; a hide drops only the ranking", async () => {
   const database = recordingDatabase();
-  const profiles = new FrontierProfiles({ database, researchMemory: { configured: true } });
+  const profiles = new FrontierProfiles({ database, memorySettings: { configured: true } });
   await profiles.noteItemAction("u1", "star");
   await profiles.noteItemAction("u1", "unstar");
   await profiles.noteItemAction("u1", "read");
@@ -211,11 +305,50 @@ test("a star, an unstar or a new question marks the profile due; an item opened 
 
 test("a mark that cannot be written fails nothing: it is counted, and the profile waits for its day", async () => {
   const database = recordingDatabase({ fail: true });
-  const profiles = new FrontierProfiles({ database, researchMemory: { configured: true } });
+  const profiles = new FrontierProfiles({ database, memorySettings: { configured: true } });
   await profiles.noteItemAction("u1", "star");
   await profiles.noteItemAction("u1", "hide");
   profiles.noteConversation("u1", { id: "run_1", question: "问题" });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(profiles.counters.staleMarkFailures, 3);
   assert.equal(profiles.lastError, "database_unavailable");
+});
+
+test("「不是我的专科」: each hide lowers the specialties of its item by one step, to a ceiling, except what the reader stated (c2-hide)", () => {
+  const rule = FRONTIER_RANKING.notMySpecialty;
+  assert.deepEqual(rule, { windowDays: 90, perHide: 0.04, max: 0.2 }, "the documented constant: ninety days, a step of 0.04, a ceiling of 0.2");
+  assert.deepEqual(frontierSpecialtyDemotion([], []), {});
+  assert.deepEqual(frontierSpecialtyDemotion(null, null), {}, "nothing read is nothing lowered");
+  assert.deepEqual(frontierSpecialtyDemotion([["oncology"], ["oncology", "hematology"], ["cardiology"]], []),
+    { oncology: 0.08, hematology: 0.04, cardiology: 0.04 }, "a specialty by the number of items hidden for it");
+  assert.deepEqual(frontierSpecialtyDemotion(Array.from({ length: 9 }, () => ["oncology"]), []), { oncology: rule.max }, "to a ceiling");
+  assert.deepEqual(frontierSpecialtyDemotion([["oncology", "oncology"]], []), { oncology: 0.04 }, "an item counts once for a specialty");
+  assert.deepEqual(frontierSpecialtyDemotion([["cardiology"], ["cardiology", "oncology"]], ["cardiology"]), { oncology: 0.04 },
+    "what the reader named in onboarding stands; the item's other specialty carries the hide");
+  assert.deepEqual(frontierSpecialtyDemotion([[], ["", 7]], []), {}, "no key, no step");
+});
+
+test("the block: a demoted specialty falls in the rank, in the editor's order and in the exploration pool; a safety alert is never lowered (c2-hide)", () => {
+  const candidates = [candidate("onco", { weight: 90, selected: true, specialties: ["oncology"] }), candidate("cardio", { weight: 80, selected: true, specialties: ["cardiology"] }),
+    candidate("mixed", { weight: 85, selected: true, specialties: ["oncology", "cardiology"] }),
+    candidate("alert", { weight: 40, selected: true, safetyAlert: true, genre: "safety", specialties: ["oncology"] })];
+  const plain = block({ candidates, reasons: [], pairs: [] }).map((entry) => entry.itemId);
+  assert.deepEqual(plain, ["alert", "onco", "mixed", "cardio"], "the editor's order by score, after the must-see alert");
+  const lowered = block({ candidates, reasons: [], pairs: [], demotion: { oncology: 0.2 } }).map((entry) => entry.itemId);
+  assert.deepEqual(lowered, ["alert", "cardio", "onco", "mixed"], "twenty points off every item of the specialty (the strongest of an item's specialties), and the alert stays first");
+  assert.deepEqual(block({ candidates, reasons: [], pairs: [], demotion: { oncology: 0.04 } }).map((entry) => entry.itemId), ["alert", "onco", "mixed", "cardio"],
+    "one hide moves an item four points: a near tie is decided, a clear lead is not");
+  // The rank of a match: a phrase's cosine plus the boost, which now holds the demotion.
+  const pairs = [{ itemId: "onco", reason: 0, score: 0.6 }, { itemId: "cardio", reason: 1, score: 0.55 }];
+  const reasons = [reason("A"), reason("B")];
+  assert.deepEqual(block({ candidates: candidates.slice(0, 2), reasons, pairs }).map((entry) => entry.itemId), ["onco", "cardio"]);
+  assert.deepEqual(block({ candidates: candidates.slice(0, 2), reasons, pairs, demotion: { oncology: 0.08 } }).map((entry) => entry.itemId), ["cardio", "onco"],
+    "a match is lowered on the cosine scale");
+  // The exploration pool sorts by the same standing: with one place for the editor, the pool's first is the best of the rest by standing.
+  const explore = (demotion) => frontierForYouBlock({ readerSpecialties: [], editorialShare: 0, terms: {}, now: NOW_MS, selectThreshold: 82, random: () => 0,
+    ranking: FRONTIER_RANKING, candidates: [candidate("a", { weight: 90, selected: true, specialties: ["oncology"] }), candidate("b", { weight: 80, selected: true, specialties: ["cardiology"] }),
+      candidate("c", { weight: 75, selected: true, specialties: ["cardiology"] })], reasons: [], pairs: [], size: 1 + FRONTIER_RANKING.explore.slots, demotion })
+    .map((entry) => [entry.itemId, entry.slot]);
+  assert.deepEqual(explore({}), [["a", "editorial"], ["b", "explore"]]);
+  assert.deepEqual(explore({ oncology: 0.2 }), [["b", "editorial"], ["c", "explore"]], "the lowered item is neither the editor's pick nor the first drawn");
 });

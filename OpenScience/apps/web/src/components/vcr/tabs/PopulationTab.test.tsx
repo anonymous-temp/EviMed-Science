@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
+import { readVcrStudy, type VcrQualityReport, type VcrStudy } from "@/lib/vcrClient";
 import { PopulationTab } from "./PopulationTab";
 import { renderTab } from "../__fixtures__/tabFrame";
 import { fixture, installVcrServer, EMPTY_STUDY_ID, STUDY_ID } from "../__fixtures__/serverFixtures";
@@ -88,17 +88,12 @@ describe("人群 · a real cohort", () => {
     expect(greyed.querySelector("[data-vcr-outcome]")).toHaveTextContent("2,743");
   });
 
-  it("carries a quality report of values, tagged exploratory, and no verdict", async () => {
+  it("does not show a stale synthetic quality report for the real cohort", async () => {
     const { container } = draw();
-    const report = (await found(container, "[data-vcr-quality]")).closest("section") as HTMLElement;
-    expect(within(report).getByText("质量报告")).toBeInTheDocument();
-    expect(within(report).getByText("合成 · 探索性")).toBeInTheDocument();
-    for (const group of ["fidelity", "utility", "leakage"]) {
-      expect(report.querySelector(`[data-vcr-quality-group='${group}']`)).not.toBeNull();
-    }
-    expect(within(report).getByText("成员推断 AUC").closest("div")).toHaveTextContent("0.52");
-    expect(within(report).getByText("训练记录 3,412 条 · 合成 1 份")).toBeInTheDocument();
-    expect(report.textContent).not.toMatch(/安全|匿名|合格/);
+    await found(container, "[data-vcr-outcome]");
+    expect(fixture("ev201/population.json").quality).toBeNull();
+    expect(container.querySelector("[data-vcr-quality]")).toBeNull();
+    expect(screen.queryByText("合成 · 探索性")).toBeNull();
   });
 
   // Two cards answering one question with different numbers was a defect: the engine's comparison of two versions (定义库) is the one
@@ -166,6 +161,32 @@ describe("人群 · a generated population", () => {
     patch(raw);
     installVcrServer(network.productRequest, { [tab("population")]: raw, ...overrides });
   };
+
+  it("carries a synthetic quality report of values, tagged exploratory, and no verdict", async () => {
+    const quality: VcrQualityReport = {
+      tag: "合成 · 探索性", trainingRecords: 3412, copies: 1,
+      groups: [
+        { key: "fidelity", label: "保真度", rows: [{ key: "ks", label: "最大 KS 距离", value: { value: 0.04, source: "synthetic" } }] },
+        { key: "utility", label: "可用性", rows: [{ key: "joint", label: "入排通过率的相对差", value: { value: 0.06, source: "synthetic" } }] },
+        { key: "leakage", label: "泄露风险", rows: [{ key: "membership", label: "成员推断 AUC", value: { value: 0.52, source: "synthetic" } }] },
+      ],
+    };
+    serve((raw) => {
+      raw.quality = quality;
+      raw.download = { path: `records/${raw.records.result}.csv`, rows: raw.records.rows };
+    });
+    const { container } = draw();
+    const report = (await found(container, "[data-vcr-quality]")).closest("section") as HTMLElement;
+    expect(within(report).getByText("质量报告")).toBeInTheDocument();
+    expect(within(report).getByText("合成 · 探索性")).toBeInTheDocument();
+    for (const group of ["fidelity", "utility", "leakage"]) {
+      expect(report.querySelector(`[data-vcr-quality-group='${group}']`)).not.toBeNull();
+    }
+    expect(within(report).getByText("成员推断 AUC").closest("div")).toHaveTextContent("0.52");
+    expect(within(report).getByText("训练记录 3,412 条 · 合成 1 份")).toBeInTheDocument();
+    expect(container.querySelector("[data-headline]")).toHaveTextContent("情景人群 · 1,000 条生成记录");
+    expect(report.textContent).not.toMatch(/安全|匿名|合格/);
+  });
 
   it("says what it is in one line — version, kind, how many records — and which variables broke a limit; no card says how it was made or what it may be used for", async () => {
     serve();
@@ -359,7 +380,7 @@ describe("人群 · before there is one", () => {
     const { container } = renderTab(<PopulationTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />, { studyId: EMPTY_STUDY_ID });
     expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "说明研究问题" })).toBeInTheDocument();
-    expect(container.querySelector("[data-page-chrome]")).toBeNull();
+    expect(container.querySelector("[data-page-chrome]")).toContainElement(screen.getByRole("button", { name: "数据来源" }));
   });
 
   it("is a recipe with one verb-and-object button when the step was never asked for, and the button starts it where the reader is", async () => {

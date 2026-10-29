@@ -56,6 +56,9 @@ import { createPublicSourceGatewayHandler, PUBLIC_SOURCE_GATEWAY_PATH } from "..
 import { createWebSearchGatewayHandler, WEB_SEARCH_GATEWAY_PATH } from "../../apps/server/src/webSearchGateway.mjs";
 import { createGeoProbeGatewayHandler, GEO_PROBE_GATEWAY_PATH } from "../../apps/server/src/geoProbeGateway.mjs";
 import { createModelGatewayHandler, MODEL_GATEWAY_PATH } from "../../apps/server/src/modelGateway.mjs";
+import { createKbBrowseGatewayHandler, KB_BROWSE_GATEWAY_PATH } from "../../apps/server/src/kbBrowseGateway.mjs";
+import { OpenVikingClient } from "../../apps/server/src/openVikingClient.mjs";
+import { OpenVikingResources } from "../../apps/server/src/openVikingResources.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
@@ -122,6 +125,9 @@ const routes = new Map([
   [WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler(config, runtimeManager)],
   [GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler(config, runtimeManager)],
   [MODEL_GATEWAY_PATH, createModelGatewayHandler(config, runtimeManager)],
+  [KB_BROWSE_GATEWAY_PATH, createKbBrowseGatewayHandler(config, runtimeManager, {
+    resources: new OpenVikingResources({ client: new OpenVikingClient(config) }),
+  })],
 ]);
 
 const server = createServer((req, res) => {
@@ -207,6 +213,7 @@ function runPython(gatewayUrl, specialists) {
         EVIMED_PUBLIC_SOURCE_GATEWAY_URL: `${gatewayUrl}${PUBLIC_SOURCE_GATEWAY_PATH}`,
         EVIMED_WEB_SEARCH_GATEWAY_URL: `${gatewayUrl}${WEB_SEARCH_GATEWAY_PATH}`,
         EVIMED_GEO_PROBE_GATEWAY_URL: `${gatewayUrl}${GEO_PROBE_GATEWAY_PATH}`,
+        EVIMED_KB_BROWSE_GATEWAY_URL: `${gatewayUrl}${KB_BROWSE_GATEWAY_PATH}`,
         EVIMED_MODEL_GATEWAY_URL: `${gatewayUrl}${modelGatewayBase}`,
         EVIMED_MODEL_GATEWAY_MODEL: config.deepseekModel,
         EVIMED_MODEL_GATEWAY_TOKEN_FILE: gatewayTokenFile,

@@ -2,8 +2,8 @@
 // job ledger, and the metric families an operator reads.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EvidenceProgrammeWorker, evidenceProgrammeMetricFamilies, fallbackProgrammeAction, parseProgrammeDecision } from "../src/evidenceProgramme.mjs";
-import { EVIDENCE_PROGRAMME_ZONES, PROGRAMME_DECISION_HOUR } from "../src/evidenceProgrammeData.mjs";
+import { EvidenceProgrammeWorker, evidenceProgrammeMetricFamilies, fallbackProgrammeAction, parseProgrammeDecision, rankProgrammeTopics, subjectNamesIn, summariseProgrammeDecision, topicBoardStanding } from "../src/evidenceProgramme.mjs";
+import { EVIDENCE_PROGRAMME_ZONES, PROGRAMME_DECISION_HOUR, PROGRAMME_TOPIC_TASK_TYPE, SELECTOR_ZONES, TOPIC_ZONE } from "../src/evidenceProgrammeData.mjs";
 import { AUTOPILOT_TASK_TYPES } from "@evimed/domain";
 
 const zones = new Map([
@@ -12,15 +12,30 @@ const zones = new Map([
   ["breast-cancer", { choosable: false, allowed: ["evidence-update"] }],
 ]);
 
-test("the official zones are data in one module: six zones, every task type a real one, the operator's three recognised by title and not made", () => {
-  assert.deepEqual(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.title), ["房颤抗凝", "心肾与慢性肾病", "研究解读", "非小细胞肺癌", "乳腺癌", "2 型糖尿病"]);
+test("the official zones are data in one module: seven zones, every task type a real one, the operator's three recognised by title and not made", () => {
+  assert.deepEqual(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.title), ["房颤抗凝", "心肾与慢性肾病", "研究解读", "非小细胞肺癌", "乳腺癌", "2 型糖尿病", "热点求证"]);
   assert.deepEqual(EVIDENCE_PROGRAMME_ZONES.filter((zone) => zone.origin === "imported").map((zone) => zone.key), ["af-anticoagulation", "cardiorenal-ckd", "research-interpretation"]);
   for (const zone of EVIDENCE_PROGRAMME_ZONES) {
     assert.ok(zone.topic.taskTypes.every((type) => AUTOPILOT_TASK_TYPES.includes(type)), `${zone.key}: task types are the domain's`);
     assert.ok(zone.topic.standingQuestion && zone.topic.questionZh, zone.key);
     if (zone.origin === "programme") assert.ok(zone.requestId && zone.description && zone.background, `${zone.key} carries the text it is made with`);
   }
-  assert.equal(new Set(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.key)).size, 6);
+  assert.equal(new Set(EVIDENCE_PROGRAMME_ZONES.map((zone) => zone.key)).size, 7);
+  assert.equal(new Set(EVIDENCE_PROGRAMME_ZONES.filter((zone) => zone.requestId).map((zone) => zone.requestId)).size, 4, "each zone the programme makes has its own request id");
+});
+
+test("「热点求证」 answers the day's hot topic: a programme zone with its own text and request id, no terms, a synthesis task type, and never the selector's choice", () => {
+  assert.equal(TOPIC_ZONE?.key, "hot-questions");
+  assert.deepEqual([TOPIC_ZONE.title, TOPIC_ZONE.origin, TOPIC_ZONE.answersTopics, TOPIC_ZONE.requestId], ["热点求证", "programme", true, "evimed-evidence-zone-20261025-hot-questions"]);
+  assert.match(TOPIC_ZONE.requestId, /^evimed-evidence-zone-\d{8}-[a-z0-9-]+$/, "in the form the other programme zones use");
+  assert.deepEqual(TOPIC_ZONE.topic.terms, [], "fed by topics, never by the feed's entity counts");
+  assert.ok(TOPIC_ZONE.topic.taskTypes.includes(PROGRAMME_TOPIC_TASK_TYPE), "a topic's episode is a synthesis the zone allows");
+  assert.ok(!TOPIC_ZONE.topic.taskTypes.includes("signal-monitoring"));
+  for (const text of [TOPIC_ZONE.description, TOPIC_ZONE.background, TOPIC_ZONE.topic.questionZh]) assert.match(text, /[\u4e00-\u9fff]/, "plain Chinese for the reader");
+  assert.match(TOPIC_ZONE.background, /原始研究/);
+  assert.match(TOPIC_ZONE.background, /绝对风险/);
+  assert.ok(!SELECTOR_ZONES.some((zone) => zone.key === "hot-questions"), "the selector never chooses it");
+  assert.equal(SELECTOR_ZONES.length, 6);
 });
 
 test("the decision is parsed against a closed schema: only a zone that can be chosen, a task type it allows, once, within what the budget buys", () => {
@@ -141,4 +156,69 @@ test("every outcome of the programme has a metric family: decisions, signals, ac
   assert.equal(byName.open_science_evidence_programme_claims_published_total.series[0].value, 5);
   assert.deepEqual(byName.open_science_evidence_programme_signal_failures_total.series, [{ labels: { class: "reads" }, value: 1 }, { labels: { class: "requests" }, value: 0 }], "a page signal that could not be read is counted by class");
   assert.deepEqual(byName.open_science_evidence_programme_signals_total.series.filter((entry) => ["reads", "requests"].includes(entry.labels.class)).map((entry) => entry.value), [2, 2]);
+});
+
+test("where a hot topic was seen is two numbers: distinct boards, and the best rank on any of them", () => {
+  assert.deepEqual(topicBoardStanding([{ board: "weibo", peakRank: 7 }, { board: "baidu", peakRank: 3 }, { board: "weibo", peakRank: 2 }]), { boards: 2, bestRank: 2 }, "a board seen twice is one board");
+  assert.deepEqual(topicBoardStanding(["weibo", "toutiao"]), { boards: 2, bestRank: null }, "a board named alone has no rank");
+  assert.deepEqual(topicBoardStanding([{ board: "baidu", rank: 4 }, { board: "toutiao", bestRank: 9 }]), { boards: 2, bestRank: 4 }, "the rank may be recorded under the trigger's other names");
+  assert.deepEqual(topicBoardStanding([{ peakRank: 1 }, { board: " ", peakRank: 1 }, { board: "weibo", peakRank: 0 }, { board: "baidu", peakRank: "x" }, null, 5]), { boards: 2, bestRank: null },
+    "an entry that names no board is not counted, and a rank that is not a positive number is no rank");
+  assert.deepEqual(topicBoardStanding(null), { boards: 0, bestRank: null });
+});
+
+test("the day's pick ranks hot topics in code: a surge first, then the most boards, then the best peak rank, then the earliest accepted, then the id", () => {
+  const order = (topics) => rankProgrammeTopics(topics).map((topic) => topic.id);
+  const at = (hour) => `2026-10-05T0${hour}:00:00.000Z`;
+  assert.deepEqual(order([
+    { id: "wide", surge: false, boards: [{ board: "weibo", peakRank: 1 }, { board: "baidu", peakRank: 1 }, { board: "toutiao", peakRank: 1 }], acceptedAt: at(1) },
+    { id: "surge", surge: true, boards: [{ board: "weibo", peakRank: 20 }], acceptedAt: at(2) },
+  ]), ["surge", "wide"], "a surge beats a topic on more boards");
+  assert.deepEqual(order([
+    { id: "one", boards: [{ board: "weibo", peakRank: 1 }], acceptedAt: at(1) },
+    { id: "two", boards: [{ board: "weibo", peakRank: 30 }, { board: "baidu", peakRank: 30 }], acceptedAt: at(2) },
+  ]), ["two", "one"], "two boards beat one, whatever the rank");
+  assert.deepEqual(order([
+    { id: "low", boards: [{ board: "weibo", peakRank: 12 }], acceptedAt: at(1) },
+    { id: "high", boards: [{ board: "baidu", peakRank: 3 }], acceptedAt: at(2) },
+    { id: "unranked", boards: ["toutiao"], acceptedAt: at(0) },
+  ]), ["high", "low", "unranked"], "then the best peak rank; no rank is the worst");
+  assert.deepEqual(order([
+    { id: "b", boards: [{ board: "weibo", peakRank: 3 }], acceptedAt: at(2) },
+    { id: "a", boards: [{ board: "weibo", peakRank: 3 }], acceptedAt: at(2) },
+    { id: "c", boards: [{ board: "weibo", peakRank: 3 }], acceptedAt: at(1) },
+  ]), ["c", "a", "b"], "a full tie goes to the earliest accepted (nearest to leaving the window), then the id");
+  assert.deepEqual(rankProgrammeTopics([]), []);
+});
+
+test("a subject name is found in a card's title by exact comparison of the topic's closed list, folded for width, case and space", () => {
+  assert.deepEqual(subjectNamesIn(["张某某猝死：年轻人风险有多大？"], ["张某某"]), ["张某某"]);
+  assert.deepEqual(subjectNamesIn(["What Kevin  Smith's collapse means"], ["kevin smith"]), ["kevin smith"], "case and spaces are folded");
+  assert.deepEqual(subjectNamesIn(["ＡＢＣ 俱乐部球员心脏骤停"], ["ABC俱乐部"]), ["ABC俱乐部"], "full-width letters are folded");
+  assert.deepEqual(subjectNamesIn(["年轻人心源性猝死的风险有多大？", "年轻人发生心源性猝死的风险有多大？"], ["张某某", "某俱乐部"]), [], "the question names nobody");
+  assert.deepEqual(subjectNamesIn(["张三丰的问题"], ["张", "", null]), [], "a name of fewer than two characters names nobody");
+  assert.deepEqual(subjectNamesIn(["任何标题"], null), []);
+});
+
+test("the operator reads the day's topic pick and what became of the topic beside each action", () => {
+  const summary = summariseProgrammeDecision({ id: "programme-decision-2026-10-05", payload: {
+    day: "2026-10-05", source: "model", topicPick: { state: "picked", candidates: 2, topicId: "tpabc123def4567", surge: true, boards: 2, bestRank: 1 },
+    actions: [{ zone: "hot-questions", taskType: "evidence-update", status: "scheduled", reason: "今天最强的热点话题", topicId: "tpabc123def4567", topicState: "skipped", topicReason: "no_qualifying_claims", episodeId: "episode-1" },
+      { zone: "nsclc", taskType: "evidence-update", status: "deferred", reason: "concurrency" }],
+    outcomes: { "episode-1": { outcome: "no_qualifying_claims" } } } });
+  assert.deepEqual(summary.topicPick, { state: "picked", candidates: 2, topicId: "tpabc123def4567", surge: true, boards: 2, bestRank: 1 });
+  assert.deepEqual([summary.actions[0].topicId, summary.actions[0].topicState, summary.actions[0].topicReason, summary.actions[0].outcome], ["tpabc123def4567", "skipped", "no_qualifying_claims", "no_qualifying_claims"]);
+  assert.deepEqual([summary.actions[1].topicId, summary.actions[1].topicState], [null, null], "a zone's own action has no topic");
+  assert.equal(summariseProgrammeDecision({ id: "x", payload: { actions: [] } }).topicPick, null, "a decision made before topics existed says so");
+});
+
+test("the topic pick and the topic states have their metric families", () => {
+  const counters = { decisions: { model: 0, fallback: 0, none: 0, topic: 1 }, signals: {}, signalFailures: {}, demandEntities: 0, actions: {}, cards: {}, claimsExcluded: {}, claimsPublished: 0,
+    original: {}, admissions: {}, hookFailures: 0, topics: { picks: { picked: 3, none: 1, zone_unavailable: 0, unreadable: 0 }, states: { taken: 3, card: 2, skipped: 1, expired: 0 } } };
+  const byName = Object.fromEntries(evidenceProgrammeMetricFamilies(/** @type {any} */ ({ enabled: true, status: () => ({ counters }) })).map((family) => [family.name, family]));
+  assert.deepEqual(byName.open_science_evidence_programme_topic_picks_total.series.find((entry) => entry.labels.outcome === "picked"), { labels: { outcome: "picked" }, value: 3 });
+  assert.deepEqual(byName.open_science_evidence_programme_topic_states_total.series.find((entry) => entry.labels.state === "card"), { labels: { state: "card" }, value: 2 });
+  assert.deepEqual(byName.open_science_evidence_programme_decisions_total.series.find((entry) => entry.labels.source === "topic"), { labels: { source: "topic" }, value: 1 });
+  const older = evidenceProgrammeMetricFamilies(/** @type {any} */ ({ enabled: true, status: () => ({ counters: { ...counters, topics: undefined } }) }));
+  assert.deepEqual(older.find((family) => family.name.endsWith("topic_picks_total")).series, [], "counters without topics export empty series, never a throw");
 });

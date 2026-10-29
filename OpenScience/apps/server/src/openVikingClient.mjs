@@ -288,7 +288,12 @@ export class OpenVikingClient {
   /** Write one file, creating parents. `wait` blocks until the semantic and
    *  vector refresh finishes, which materialization wants and a hot path does
    *  not: an unindexed file is invisible to `find`, so a caller that does not
-   *  wait must accept that its write is not yet recallable. */
+   *  wait must accept that its write is not yet recallable.
+   *
+   *  The body carries no `timeout`: v0.5.1 removed that field and its request model forbids unknown ones (a body
+   *  that still names it is refused, so every write would fail), and v0.5.0 treats it as optional. How long a
+   *  waiting write may take is the client's own deadline (`timeoutMs`, `request`), which is what bounded it in
+   *  practice — the engine's bound was always set below that deadline. */
   async write(userId, uri, content, { tags = [], wait = false, timeoutSeconds = null } = {}) {
     this.#assertConfigured();
     return this.request({
@@ -300,9 +305,11 @@ export class OpenVikingClient {
         content: String(content ?? ""),
         mode: "replace",
         wait: Boolean(wait),
-        ...(timeoutSeconds == null ? {} : { timeout: Number(timeoutSeconds) }),
         ...(tags.length ? { tags, tag_mode: "replace" } : {}),
       },
+      // Waiting is bounded by HTTP; v0.5.1 removed the body timeout. An HTTP
+      // abort does not cancel the engine's already accepted background work.
+      timeoutMs: timeoutSeconds == null ? null : Number(timeoutSeconds) * 1_000,
     });
   }
 
@@ -311,14 +318,14 @@ export class OpenVikingClient {
    *  and nothing there means it already does. Resolves false when there was
    *  nothing to delete: a 404 (v0.4.x), or the 200 with
    *  `estimated_deleted_count: 0` that v0.5.0 answers for a target already gone. */
-  async remove(userId, uri, { recursive = false } = {}) {
+  async remove(userId, uri, { recursive = false, openVikingUser = null } = {}) {
     this.#assertConfigured();
     // Query parameters, not a body: `DELETE /api/v1/fs` reads `uri` and
     // `recursive` from the query string and answers 400 to a JSON body. Found
     // by deleting against a running server, which is the only way this route's
     // shape was ever going to be confirmed.
     try {
-      const body = await this.request({ method: "DELETE", path: "/api/v1/fs", query: { uri, recursive: recursive ? "true" : "false" }, userId });
+      const body = await this.request({ method: "DELETE", path: "/api/v1/fs", query: { uri, recursive: recursive ? "true" : "false" }, userId, openVikingUser });
       return body?.result?.estimated_deleted_count !== 0;
     } catch (error) {
       if (error instanceof HttpError && error.code === "memory_index_not_found") return false;
@@ -462,12 +469,13 @@ export class OpenVikingClient {
    *
    * @param {{ method?: string, path: string, query?: Record<string, unknown> | null, body?: unknown,
    *   userId?: string | null, openVikingUser?: string | null, peerId?: string | null, timeoutMs?: number | null,
-   *   idempotencyKey?: string | null, responseType?: "json" | "text" | "bytes", authenticated?: boolean }} request
+   *   idempotencyKey?: string | null, responseType?: "json" | "text" | "bytes", authenticated?: boolean,
+   *   maxResponseBytes?: number | null }} request
    * @returns {Promise<any>}
    */
   async request({
     method = "GET", path, query = null, body = undefined, userId = null, openVikingUser = null, peerId = null,
-    timeoutMs = null, idempotencyKey = null, responseType = "json", authenticated = true,
+    timeoutMs = null, idempotencyKey = null, responseType = "json", authenticated = true, maxResponseBytes = null,
   }) {
     // `/health` is asked before anything is known to be configured: `status()` reports what is missing by name.
     if (authenticated) this.#assertConfigured();
@@ -529,7 +537,29 @@ export class OpenVikingClient {
       /** @type {string} */ let text = "";
       /** @type {Buffer | null} */ let bytes = null;
       try {
-        if (responseType === "bytes" && response.ok) bytes = Buffer.from(await response.arrayBuffer());
+        if (maxResponseBytes != null) {
+          if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) throw new Error("invalid response bound");
+          const reader = response.body?.getReader();
+          let responseBytes;
+          if (reader) {
+            const chunks = []; let total = 0;
+            try {
+              for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                total += value.byteLength;
+                if (total > maxResponseBytes) { await reader.cancel(); throw new Error("response bound exceeded"); }
+                chunks.push(Buffer.from(value));
+              }
+              responseBytes = Buffer.concat(chunks, total);
+            } finally { reader.releaseLock(); }
+          } else {
+            responseBytes = Buffer.from(await response.text());
+            if (responseBytes.length > maxResponseBytes) throw new Error("response bound exceeded");
+          }
+          if (responseType === "bytes" && response.ok) bytes = responseBytes;
+          else text = responseBytes.toString("utf8");
+        } else if (responseType === "bytes" && response.ok) bytes = Buffer.from(await response.arrayBuffer());
         else text = await response.text();
       } catch {
         throw new HttpError(503, controller.signal.aborted ? "memory_index_timeout" : "memory_index_unavailable", "The memory index is unavailable.");

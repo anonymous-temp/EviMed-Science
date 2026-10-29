@@ -139,6 +139,8 @@ evidence_method_dir=/opt/evimed/skills/evimed/open-domain-answer
 export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL="" EVIMED_REVISION_AUTHORIZE_URL="" EVIMED_DISABLED_TOOLS_FILE=""
 export EVIMED_PUBLIC_SOURCE_GATEWAY_URL="" EVIMED_WEB_SEARCH_GATEWAY_URL="" EVIMED_MODEL_GATEWAY_TOKEN_FILE=""
 export EVIMED_PERSONAL_SKILLS_DIR=/opt/evimed/personal-skills
+export EVIMED_DISABLED_PLATFORM_SKILLS='[]' EVIMED_DISABLED_CLIENT_BUNDLES='[]'
+export EVIMED_ATTENDANCE_PUBLIC_KEY="" EVIMED_ATTENDANCE_USER_ID="" EVIMED_ATTENDANCE_PROJECT_ID=""
 export EVIMED_EXTENSION_PROJECTION_FILE="" EVIMED_EXTENSION_GATEWAY_URL=""
 export EVIMED_PLATFORM_SKILLS_DIR="" EVIMED_EVOLUTION_GATEWAY_URL=""
 export EVIMED_WORKLOAD_TOKEN_FILE="${smoke_home}/evimed-workload.token"
@@ -157,12 +159,10 @@ export EVIMED_EVIDENCE_STALE_MINUTES=10 EVIMED_SCREENING_BATCH_SIZE=50
 export EVIMED_DUPLICATE_LINES_ENABLED=1
 export EVIMED_GUIDANCE_ENABLED=1 EVIMED_RUN_POLICY_ENABLED=1 EVIMED_EVIDENCE_ENABLED=1
 export EVIMED_CAPSULE_ENABLED=1 EVIMED_CAPSULE_MEMORY_ENABLED=1 EVIMED_SCREENING_ENABLED=1 EVIMED_COMPACTION_ENABLED=1
-# The compaction group reads all five, and the boot proof has to boot under
-# the same environment a run gets. `basic` here is the shipped default: the
-# provider swap registers nothing on it, so this proves the row loads
-# without asserting a policy the deployment has not chosen. The byte guard is
-# three quarters of the model gateway's default 2 MiB body limit.
-export EVIMED_COMPACTION_POLICY=basic EVIMED_COMPACTION_THRESHOLD_RATIO=0.8
+# The compaction group reads all four, and the boot proof has to boot under
+# the same environment a run gets. The byte guard is three quarters of the
+# model gateway's default 2 MiB body limit.
+export EVIMED_COMPACTION_THRESHOLD_RATIO=0.8
 export EVIMED_COMPACTION_RETAIN_RATIO=0.16 EVIMED_COMPACTION_MAX_TOKENS=8192
 export EVIMED_COMPACTION_MAX_REQUEST_BYTES=1572864
 export DSH_TELEMETRY_DISABLED=1 DSH_PERMISSION_MODE=workspace-write
@@ -272,11 +272,22 @@ def call(method, args):
     envelope = json.load(urllib.request.urlopen(request, timeout=60))
     result = envelope.get("result") or {}
     if not result.get("ok"):
-        raise RuntimeError(json.dumps(result.get("error"), ensure_ascii=False)[:800])
+        raise RuntimeError(method + ": " + json.dumps(result.get("error"), ensure_ascii=False)[:800])
     return result.get("value") or {}
 try:
     session = call("session/create", {"request": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"}})
     entries = {entry.get("entryId"): entry for entry in call("pluginInventory/list", {}).get("entries", [])}
+    catalogue = call("evimedSkills/list", {"sessionId": session["sessionId"]})
+    assert catalogue.get("complete") is True, "scoped skill catalogue incomplete"
+    selected = next(item for item in catalogue["items"] if item["name"] == "open-domain-answer")
+    assert selected["source"] == "builtin" and selected["canDuplicate"], "built-in method source unavailable"
+    skill_args = {"sessionId": session["sessionId"], "key": selected["key"]}
+    detail = call("evimedSkills/read", skill_args)
+    snapshot = call("evimedSkills/snapshotBuiltin", skill_args)
+    assert detail["instructions"] and detail["key"] == selected["key"], "skill detail mismatch"
+    assert snapshot["digest"] == detail["digest"], "skill snapshot changed"
+    assert any(item["path"] == "SKILL.md" and item["bytesBase64"] for item in snapshot["entries"]), "skill snapshot bytes absent"
+
 except urllib.error.HTTPError as error:
     print("HTTP %s: %s" % (error.code, error.read().decode("utf-8", "replace")[:800]))
     sys.exit(1)

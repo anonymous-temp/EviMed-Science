@@ -23,7 +23,6 @@ import { useFrontierFeature } from "@/lib/frontierFeature";
 import { useGeoFeature } from "@/lib/geoClient";
 import { useVcrFeature } from "@/lib/vcrClient";
 import { useVcrFinishedToasts } from "@/components/vcr/useVcrFinishedToasts";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -45,8 +44,8 @@ interface NavItem {
  * It was ten here and two in the footer, with no grouping and no hierarchy, and
  * three of the ten were the same body of material seen three ways while two
  * more differed by one word (2026-09-15 walk, C1/C3/C5/C8). Resource pages that
- * are views of one thing became tabs on that thing; the inbox became the bell
- * above, because one notification does not earn a permanent row. 「运行记录」
+ * are views of one thing became tabs on that thing; the inbox became a footer
+ * utility, because one notification does not earn a permanent row. 「运行记录」
  * left on 2026-09-20: it was the ledger's view of the same conversations the
  * tree below already lists, under a third name for them.
  *
@@ -60,12 +59,12 @@ interface NavItem {
  * made the conversation page read as three shells.
  */
 const NAV: NavItem[] = [
-  { to: "/app/chat", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
+  { to: "/app/home", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
   { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
-  { to: "/app/extensions/skills", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
+  { to: "/app/extensions/discover", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
 ];
 
 /**
@@ -93,7 +92,7 @@ const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar siz
 function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo: boolean }): NavItem[] {
   return NAV.flatMap((item) => [
     item,
-    ...(frontier && item.to === "/app/chat" ? [FRONTIER_NAV] : []),
+    ...(frontier && item.to === "/app/home" ? [FRONTIER_NAV] : []),
     ...(item.to === "/app/capabilities" ? [...(vcr ? [VCR_NAV] : []), ...(geo ? [GEO_NAV] : [])] : []),
   ]);
 }
@@ -105,9 +104,9 @@ function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo:
  * is not on screen).
  */
 export function isCurrent(to: string, pathname: string, projectModule: "geo" | "vcr" | null): boolean {
-  if (to === "/app/extensions/skills") return pathname.startsWith("/app/extensions");
-  const chatting = pathname.startsWith("/app/chat");
-  if (to === "/app/chat") return chatting && projectModule === null;
+  if (to === "/app/extensions/discover") return pathname.startsWith("/app/extensions");
+  const chatting = pathname === "/app/home" || pathname.startsWith("/app/chat");
+  if (to === "/app/home") return chatting && projectModule === null;
   if (to === VCR_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "vcr");
   if (to === GEO_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "geo");
   return pathname.startsWith(to);
@@ -188,11 +187,13 @@ export function Sidebar() {
       {/* The grey ground is the whole edge: no rule down the right side
         * (2026-09-23 plan §5.2), the same grey as the kernel's own column. */}
       <div className="flex h-full max-w-full flex-col bg-surface-1" style={{ width }}>
-        <div className="px-4 pb-3 pt-4">
+        <div className="px-3 pb-3 pt-4">
           <div className="flex items-center gap-1.5">
-            <EviMedMark className="h-5 w-5 shrink-0" />
-            <div className="text-wordmark font-semibold text-text">EviMed</div>
-            <InboxBell />
+            <Link to="/app/home" aria-label="EviMed Science 首页" className="flex min-w-0 flex-1 items-center gap-1.5">
+              {/* Preserve the full wordmark and collapse control at the minimum sidebar width. */}
+              <EviMedMark className={cn("h-5 w-5 shrink-0", width < 220 && "hidden")} />
+              <span className="whitespace-nowrap text-ui font-semibold text-text">EviMed Science</span>
+            </Link>
             <IconButton icon={PanelLeft} label="收起侧边栏" title="收起侧边栏 (Ctrl+B)" onClick={toggleSidebar} />
           </div>
         </div>
@@ -205,7 +206,7 @@ export function Sidebar() {
               icon={item.icon}
               label={item.label}
               active={isCurrent(item.to, location.pathname, projectModule)}
-              freshState={item.to === "/app/chat" ? () => ({ runtimeUiIntent: newRuntimeUiIntent() }) : undefined}
+              freshState={item.to === "/app/home" ? () => ({ globalEntry: crypto.randomUUID() }) : undefined}
             />
           ))}
         </nav>
@@ -216,40 +217,45 @@ export function Sidebar() {
           * list of the current project's recent work below the rows above. */}
         <ProjectBrowser geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
 
-        {/* One footer row: who is signed in, and the gear to 设置 (2026-09-23
-          * plan §5.2). The count of data sources without a credential used to
+        {/* Account identity above its utilities keeps every action reachable at
+          * the minimum width. The count of data sources without a credential used to
           * sit here — a standing fact about the deployment, not the reader's
           * work; 设置 → 数据源 lists what needs setting. */}
-        <div className="flex items-center gap-2 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <span
-            aria-hidden="true"
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-caption font-medium text-accent-fg"
-          >
-            {(accountName.trim()[0] ?? "").toUpperCase()}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-ui text-text">{accountName}</span>
-          {operator && (
-            <Tooltip content="运维" kind="label">
+        <div className="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-caption font-semibold text-accent-fg"
+            >
+              {(accountName.trim()[0] ?? "").toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-ui text-text">{accountName}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5">
+            <InboxBell />
+            {operator && (
+              <Tooltip content="运维" kind="label">
+                <Link
+                  to="/app/ops"
+                  aria-label="运维"
+                  aria-current={location.pathname.startsWith("/app/ops") ? "page" : undefined}
+                  className={iconButtonClasses({ active: location.pathname.startsWith("/app/ops") })}
+                >
+                  <Wrench size={16} aria-hidden="true" />
+                </Link>
+              </Tooltip>
+            )}
+            <Tooltip content="设置" kind="label">
               <Link
-                to="/app/ops"
-                aria-label="运维"
-                aria-current={location.pathname.startsWith("/app/ops") ? "page" : undefined}
-                className={iconButtonClasses({ active: location.pathname.startsWith("/app/ops") })}
+                to="/app/account"
+                aria-label="设置"
+                aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
+                className={iconButtonClasses({ active: location.pathname.startsWith("/app/account") })}
               >
-                <Wrench size={16} aria-hidden="true" />
+                <Settings size={16} aria-hidden="true" />
               </Link>
             </Tooltip>
-          )}
-          <Tooltip content="设置" kind="label">
-            <Link
-              to="/app/account"
-              aria-label="设置"
-              aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
-              className={iconButtonClasses({ active: location.pathname.startsWith("/app/account") })}
-            >
-              <Settings size={16} aria-hidden="true" />
-            </Link>
-          </Tooltip>
+          </div>
         </div>
       </div>
 

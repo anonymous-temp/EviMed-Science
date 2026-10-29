@@ -408,6 +408,9 @@ test("a model is adopted as the first call shape unless its card says otherwise,
   const { saved, service } = adoptingService();
   const plain = /** @type {any} */ (await service.adoptModel({ id: "u1" }, { name: "fitted-os", version: "1.0.0", card: { inputs: ["年龄"] } }));
   assert.equal(saved[0].card.type, "fitted_prediction_model");
+  assert.equal(saved[0].risk, null, "an omitted assessment is unknown, never low risk");
+  assert.equal(saved[0].endpointType, null);
+  assert.equal(saved[0].applicability.population, undefined, "source identity alone is not clinical applicability");
   assert.deepEqual(plain.issues, [], "a first-shape card is asked for nothing new");
   await assert.rejects(service.adoptModel({ id: "u1" }, { name: "x", card: { interfaceShape: "quantum" } }), { code: "vcr_model_invalid" });
   assert.equal(saved.length, 1, "nothing was saved for the unknown shape");
@@ -427,7 +430,27 @@ test("a model of the event-history shape is kept with the card it arrives with, 
     name: "event-model", version: "2.2.0",
     card: { interfaceShape: "event_history_to_trajectories", inputs: ["诊断事件"], outputs: "N 条未来轨迹，是预测分布的抽样。",
       history: { eventTypes: ["diagnosis"], fields: ["subject", "event_type", "time"] }, trajectories: { max: 500, absorbing: ["death"] }, knownLimits: ["罕见事件校准较差"] },
-    applicability: { eventTypes: ["death"], horizon: { max: 24, unit: "months" } }, validation: { temporal: "时间外验证" },
+    applicability: { population: "Source cohort", eventTypes: ["death"], horizon: { max: 24, unit: "months" } }, validation: { temporal: "时间外验证" },
   }));
   assert.deepEqual(complete.issues, []);
+});
+
+test('the canonical conversation remembers submitted intake after the transient activity has expired', async () => {
+  const study = { ...t0Study, status: 'draft', conversationSessionId: 'canonical', steps: { definition: { status: 'none', requested: true, held: true } } };
+  const { store } = studyOnly(study);
+  store.one = async sql => sql.includes("detail->>'purpose' = 'intake'") ? { run_id: 'intake_run', session_id: 'canonical', detail: { goalsApplied: true, awaitingInput: true } } : null;
+  const view = await new VcrService({ store, config: {} }).studyView({ id: 'lead' }, study.id);
+  assert.equal(view.activity, null);
+  assert.equal(view.conversation.submitted, true);
+  assert.equal(view.conversation.sessionId, 'canonical');
+});
+
+test('an unsubmitted or sibling-session intake mark cannot mark the canonical conversation submitted', async () => {
+  const study = { ...t0Study, status: 'draft', conversationSessionId: 'canonical', steps: { definition: { status: 'none', requested: true, held: true } } };
+  for (const mark of [null, { run_id: null, session_id: 'canonical', detail: { goalsApplied: false } }, { run_id: 'other_run', session_id: 'sibling', detail: { goalsApplied: true, awaitingInput: true } }]) {
+    const { store } = studyOnly(study);
+    store.one = async sql => sql.includes("detail->>'purpose' = 'intake'") ? mark : null;
+    const view = await new VcrService({ store, config: {} }).studyView({ id: 'lead' }, study.id);
+    assert.equal(Boolean(view.conversation.submitted), false);
+  }
 });

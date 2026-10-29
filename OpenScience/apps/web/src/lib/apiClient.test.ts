@@ -1407,3 +1407,32 @@ describe("productClient budget refusals", () => {
     expect(inbox.inboxErrorMessage(error)).toBe("消息已发生变化，请刷新后重试。");
   });
 });
+
+describe("source scope request mode", () => {
+  it.each([{ mode: "selected" as const, expected: { sourceIds: [], sourceScopeMode: "selected" } }, { mode: undefined, expected: { sourceIds: [] } }])("preserves explicit selected-empty and legacy omitted mode ($mode)", async ({ mode, expected }) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => String(url).endsWith("/me") ? csrfMeResponse() : responseJson({ sourceScope: [] }));
+    const client = await loadClient("https://science.example/api");
+    await client.putWebSessionSourceScope("session-a", [], "project-a", mode);
+    const call = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual(expected);
+  });
+  it("rejects an invalid explicit scope mode before sending a request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const client = await loadClient("https://science.example/api");
+    await expect(client.putWebSessionSourceScope("session-a", [], "project-a", "all" as never)).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+it("creates the ordinary native session in the explicitly requested project without switching global context",async()=>{
+  const client=await loadClient("/api");
+  client.setWebProjectId("other-open-project");
+  const fetchMock=vi.spyOn(globalThis,"fetch").mockImplementation(async(input)=>String(input).endsWith("/runtime/sessions")?responseJson({id:"actual-session",kernel:"dsh"}):csrfMeResponse());
+  await expect(client.createWebRuntimeSession("geo-control-project")).resolves.toEqual({id:"actual-session",kernel:"dsh"});
+  const index=fetchMock.mock.calls.findIndex(([input])=>String(input).endsWith("/runtime/sessions"));
+  expect(index).toBeGreaterThanOrEqual(0);
+  expect(callHeaders(fetchMock,index).get("X-Open-Science-Project")).toBe("geo-control-project");
+  expect(callHeaders(fetchMock,index).get("X-Open-Science-CSRF")).toBe("csrf_test");
+  expect(client.getWebProjectId()).toBe("other-open-project");
+  expect((fetchMock.mock.calls[index][1] as RequestInit).method).toBe("POST");
+});

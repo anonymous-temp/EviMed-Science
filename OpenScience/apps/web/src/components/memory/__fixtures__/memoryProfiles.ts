@@ -1,18 +1,17 @@
 import type { WebMemoryProfile, WebStructuredMemory } from "@/lib/apiClient";
 
 /**
- * What `GET /api/memory/profile` answers, for the two kinds of account, taken from the control plane's own hand-off
- * (`handoff/ovmem.md`, 「the memory page's native routes」): the same shape for both, a memory kept as a file adding `engine`,
- * `nativeType`, `uri`, `contentHash` and — for a line of the profile document — `document`. One file used by every test of the
- * memory page, the drawer and the map, so the two shapes cannot drift apart in separate fixtures.
+ * What `GET /api/memory/profile` answers: a memory kept as a file carries `nativeType`, `uri`, `contentHash` and — for a line of
+ * the profile document — `document`. One file used by every test of the memory page, the drawer and the map, so the shapes cannot
+ * drift apart in separate fixtures.
  *
  * The `uri` and `key` below are what the server really sends; a test that renders them has found a back-office label.
  */
 
 const hex = (seed: string) => [...seed].reduce((text, char) => (text + char.charCodeAt(0).toString(16)).slice(-24), "").padStart(24, "a");
 
-/** A memory of an account on the older engine. */
-export function legacyRecord(patch: Partial<WebStructuredMemory> = {}): WebStructuredMemory {
+/** A plain memory record: a sentence with its evidence, no file behind it. */
+export function plainRecord(patch: Partial<WebStructuredMemory> = {}): WebStructuredMemory {
   return {
     id: "rec_1", scope: "user", scopeId: "", kind: "preference", key: "preference.style",
     value: "偏好结论先行的回答。", summary: "偏好结论先行的回答。", origin: "explicit", status: "active",
@@ -33,7 +32,7 @@ export function nativeFile(topic: string, value: string, patch: Partial<WebStruc
     origin: "explicit", status: "active", confidence: 1, importance: 0.5, sensitive: false, evidenceCount: 0, version: 4711,
     createdAt: "2026-10-12T02:00:00Z", updatedAt: "2026-10-12T02:00:00Z", lastConfirmedAt: "2026-10-12T02:00:00Z", expiresAt: null,
     evidence: [], revisions: [],
-    engine: "native", nativeType, uri: `viking://user/u-0123456789abcdef01234567/memories/${folder}/${topic}.md`, contentHash: "9f2c".repeat(16),
+    nativeType, uri: `viking://user/u-0123456789abcdef01234567/memories/${folder}/${topic}.md`, contentHash: "9f2c".repeat(16),
     ...rest,
   } as WebStructuredMemory;
 }
@@ -50,17 +49,7 @@ export function nativeProfileLine(line: string, patch: Partial<WebStructuredMemo
 
 const empty = { profile: [], preference: [], behavior: [], project_fact: [], analysis: [], decision: [], correction: [], follow_up: [], run_summary: [] };
 
-/** An account on the older engine with a few memories of the usual kinds. */
-export const legacyProfile: WebMemoryProfile = {
-  records: [
-    legacyRecord({ id: "rec_p", kind: "profile", key: "profile.who", value: "临床药师，关注老年人慢病管理。", summary: "临床药师，关注老年人慢病管理。" }),
-    legacyRecord(),
-    legacyRecord({ id: "rec_f", kind: "project_fact", scope: "project", scopeId: "prj_1", key: "project.fact.scope", value: "纳入范围覆盖疳证。", summary: "纳入范围覆盖疳证。" }),
-  ],
-  groups: empty, activeCount: 3, pendingCount: 0, episodeCount: 0, conversations: { ses_9: "阿司匹林一级预防" }, usage: {},
-};
-
-/** The same person on the second engine: a profile document of three lines, files for the other kinds. */
+/** A person's memory: a profile document of three lines, files for the other kinds. */
 export const nativeProfile: WebMemoryProfile = {
   holder: { id: "u-0123456789abcdef01234567", name: "测试用户" },
   records: [
@@ -73,8 +62,7 @@ export const nativeProfile: WebMemoryProfile = {
       { nativeType: "project_context", folder: "projects", scope: "project", scopeId: "prj_1", kind: "project_fact" }),
     nativeFile("发布窗口", "- 发布定在周三。", { nativeType: "decisions", folder: "decisions", scope: "project", scopeId: "prj_1" }),
   ],
-  groups: empty, activeCount: 7, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {}, engine: "native", pending: [],
+  groups: empty, activeCount: 7, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {}, pending: [],
 };
 
-export const nativeSettings = { learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null, engine: "native" as const };
-export const legacySettings = { learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null, engine: "legacy" as const };
+export const nativeSettings = { learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null };

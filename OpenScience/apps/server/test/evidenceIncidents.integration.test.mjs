@@ -92,7 +92,7 @@ const incidents = async () => (await db.query("SELECT id,payload FROM evimed_pro
 /** A feedback double that records what it was asked and answers as the real service does. */
 function feedbackDouble(answer = {}) {
   /** @type {any[]} */ const calls = [];
-  return { calls, fromEvidenceOutcome: async (project, outcome) => { calls.push({ project, outcome }); return { recorded: [{ kind: "method", id: "m1", digest: "sha256:x", added: true }, { kind: "handbook", id: "h1", digest: "sha256:y", added: true }], unresolved: [], skipped: null, capabilityId: "clinical-evidence-synthesis", ...answer }; } };
+  return { calls, fromEvidenceOutcome: async (project, outcome) => { calls.push({ project, outcome }); return { recorded: [{ kind: "method", id: "m1", digest: "sha256:x", added: true }], unresolved: [], skipped: null, capabilityId: "clinical-evidence-synthesis", ...answer }; } };
 }
 const consumer = (extra = {}) => createEvidenceOutcomes({ database: db, documents, ensureOwner: async () => owner, ...extra });
 
@@ -120,7 +120,7 @@ test("a challenge that amended a claim becomes one incident with the claim and i
   assert.deepEqual(row.payload.claimBefore, { text: "Stroke was less frequent on the drug.", quote: "Among 100 adults on the drug, 7 had a stroke" });
   assert.deepEqual(row.payload.claimAfter, { text: "Stroke was somewhat less frequent on the drug.", quote: "Among 100 adults on the drug, 9 had a stroke" });
   assert.deepEqual(row.payload.produced, { runId: "run-1", capabilityId: "clinical-evidence-synthesis", resultVersionId: VERSION });
-  assert.deepEqual(row.payload.observation, { state: "recorded", methods: 1, handbooks: 1 });
+  assert.deepEqual(row.payload.observation, { state: "recorded", methods: 1 });
   assert.equal(row.payload.card.zoneKind, "user");
   // The observation names the project of the result version, its digest, the closed class and the log entry — and nothing the researcher wrote.
   assert.equal(feedback.calls.length, 1);

@@ -109,6 +109,13 @@ function unreceiptedEntries(files, receipt) {
   return [...byDeliverable].map(([deliverableId, paths]) => ({ deliverableId, unbound: /** @type {const} */ (true), files: paths.map(file => ({ path: file })) }));
 }
 
+/** A prior independently bound capture is a byte witness; an observed path or presentation is not one. */
+async function boundRunVersion(results, project, run, relativePath, bytes) {
+  const prior = await results.list?.(project.userId, { projectId: project.id, path: relativePath, runId: run.id, limit: 100 });
+  return prior?.items.find(version => version.digest === sha(bytes) && version.producer?.sessionId === run.sessionId
+    && version.producer?.kind !== "workspace" && version.coverage?.producer === "bound") ?? null;
+}
+
 /**
  * Internal only. `receipt` has already passed readDeliveryReceipt; hashes are rechecked at publication.
  * Partial capture never withholds the delivered report. A failed matrix capture cannot promote its claims.
@@ -127,9 +134,9 @@ function unreceiptedEntries(files, receipt) {
  * the bytes readable now — and before its siblings, so a report captured beside
  * it can bind its numbers to it. `transformationsFor` joins the script to the
  * dataset transformations N03 recorded for it.
- * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
+ * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null,reviewOrigin?:string,observedOnly?:Set<string>}} input
  */
-export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null }) {
+export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null, reviewOrigin = "capture", observedOnly = new Set() }) {
   const items = [];
   const sourceItems = [];
   const failures = [];
@@ -178,10 +185,12 @@ export async function captureResultDelivery({ results, project, run, receipt = n
           } catch (error) { fail(relativePath, error); }
         }
         if (paths.length > MAX_SOURCES) fail(matrixFile.path, { code: "result_source_capture_limit" });
-        const verification = claimVerification({ matrix, sourceArtifacts });
+        const previous = await results.list(project.userId, { projectId: project.id, runId: run.id, limit: 100 });
+        const frozen = (previous.items ?? []).find(item => item.review?.status === "available" && item.review.verification && item.review.matrixDigest === matrixFile.sha256)?.review;
+        const verification = frozen?.verification ?? claimVerification({ matrix, sourceArtifacts });
         // Where each verified quotation sits in its source, frozen with the verdict
         // so a historical version shows the place it showed then. Best effort.
-        try { attachClaimSourceLocations(verification, { matrix, sourceArtifacts }); } catch { /* locations stay absent */ }
+        if (!frozen?.verification) try { attachClaimSourceLocations(verification, { matrix, sourceArtifacts }); } catch { /* locations stay absent */ }
         links = clinicalResultLinks(matrix, { capturedSources, verdict: verification });
         // Metadata bounds are advisory. The original matrix/report still get captured without an oversized join.
         if (links.inputs.length > 255 || Buffer.byteLength(JSON.stringify(links)) > 1024 * 1024) {
@@ -189,8 +198,7 @@ export async function captureResultDelivery({ results, project, run, receipt = n
         }
         matrixVersion = await results.captureFile({ userId: project.userId, project, relativePath: matrixFile.path,
           producer, expectedDigest: matrixFile.sha256, ...links, findings: [...links.findings, ...findings] });
-        review = { status: "available", matrixText: bytes.toString("utf8"), verification,
-          matrixVersionId: matrixVersion.versionId, matrixDigest: matrixVersion.digest };
+        review = await results.captureReview({ userId: project.userId, project, matrixVersion, verification, origin: frozen ? "legacy-capture" : reviewOrigin });
         items.push(matrixVersion);
       } catch (error) { fail(matrixFile.path, error); links = { inputs: [], findings: [] }; review = null; }
     }
@@ -215,7 +223,8 @@ export async function captureResultDelivery({ results, project, run, receipt = n
     for (const file of ordered) {
       if (matrixVersion && file.path === matrixFile.path) { capturedOutputs.push(matrixVersion); continue; }
       try {
-        const input = { userId: project.userId, project, relativePath: file.path, producer, expectedDigest: file.sha256, review,
+        const fileProducer = observedOnly.has(file.path) ? { ...producer, kind: "workspace", sessionId: null } : producer;
+        const input = { userId: project.userId, project, relativePath: file.path, producer: fileProducer, expectedDigest: file.sha256, review,
           inputs: [...links.inputs, ...(matrixVersion ? [{ kind: "artifact", id: matrixVersion.artifactId, digest: matrixVersion.digest,
             versionId: matrixVersion.versionId, path: matrixVersion.path, availability: "captured" }] : []), ...(executions.get(file.path)?.inputs ?? [])],
           findings: [...links.findings, ...findings], ...lineageOf(file.path) };
@@ -225,15 +234,18 @@ export async function captureResultDelivery({ results, project, run, receipt = n
           try { output = await results.captureFile(input); }
           catch (error) {
             if (error?.code !== "result_capture_changed") throw error;
-            // Changed after its receipt: still the file the run produced. It
-            // is captured as the bytes it is now, with nothing the receipt
-            // vouched for — no digest binding, no claim links, no review.
-            output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings,
+            // A receipt for the old bytes cannot assign different current bytes to this session.
+            const bytes = await stableBytes(project, file.path, results.maxSnapshotBytes ?? 100 * 1024 * 1024);
+            const witness = await boundRunVersion(results, project, run, file.path, bytes);
+            const revision = file.path.startsWith("artifacts/result-revisions/")
+              ? await results.resolveCaptureContext?.(project, { relativePath: file.path, producer, actualDigest: sha(bytes) }) : null;
+            output = witness ?? await results.captureFile({ userId: project.userId, project, relativePath: file.path,
+              producer: revision ? producer : { ...producer, kind: "workspace", sessionId: null }, findings,
               inputs: executions.get(file.path)?.inputs ?? [], ...lineageOf(file.path) });
             unbound.push(file.path);
           }
         } else {
-          output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings,
+          output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer: fileProducer, findings,
             inputs: executions.get(file.path)?.inputs ?? [], ...lineageOf(file.path) });
           unbound.push(file.path);
         }
@@ -253,11 +265,11 @@ export async function captureResultDelivery({ results, project, run, receipt = n
  * `unreceipted` is off for the platform's own background projects, whose runs
  * are jobs rather than something a researcher was handed: what they got
  * captured before — the files a receipt vouches for — is all they get.
- * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean,transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
+ * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean,transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null,reviewOrigin?:string}} input
  */
-export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null, runtimeImageId = null }) {
+export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null, runtimeImageId = null, reviewOrigin = "capture" }) {
   const receipt = await readReceipt(project, run);
-  const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])] : [];
+  const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? []), ...(run.outputFiles ?? []).map(file => typeof file === "string" ? file : file.path), ...(run.presentedFiles ?? []).map(file => typeof file === "string" ? file : file.path)] : [];
   if (!receipt && files.length === 0) return null;
   const imageOnce = askOnce(runtimeImageId);
   // Results a script left outside the deliverable layout (a statistical package at the workspace root) are preserved as
@@ -274,8 +286,30 @@ export async function captureFinishedRun({ results, project, run, readReceipt, u
       if (captured.status === "unavailable") failures.push({ path: pair.resultsPath, code: "result_skill_execution_unavailable" });
     }
   } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
-  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce });
+  const gradedPaths = new Set((receipt?.entries ?? []).flatMap(entry => (entry.files ?? []).map(file => file.path)));
+  const ordinary = files.filter(file => typeof file === "string" && !gradedPaths.has(file));
+  const observedOnly = new Set();
+  const ordinaryItems = [];
+  const observedOrdinary = [];
+  const presented = new Set((run.presentedFiles ?? []).map(file => typeof file === "string" ? file : file.path));
+  for (const relativePath of new Set(ordinary)) {
+    try {
+      const bytes = await stableBytes(project, relativePath, results.maxSnapshotBytes ?? 100 * 1024 * 1024);
+      const witnessed = await boundRunVersion(results, project, run, relativePath, bytes);
+      if (witnessed && !relativePath.startsWith(prefix)) { ordinaryItems.push(witnessed); continue; }
+      const producer = { kind: "deliverable", runId: run.id, sessionId: run.sessionId, eventId: "ordinary-output" };
+      const revision = relativePath.startsWith("artifacts/result-revisions/")
+        ? await results.resolveCaptureContext?.(project, { relativePath, producer }) : null;
+      // A workspace mtime window is an observation, not proof that this session wrote the file. Preserve it without session authority.
+      const owned = Boolean(witnessed) || presented.has(relativePath) || Boolean(revision);
+      if (relativePath.startsWith(prefix)) { if (!owned) observedOnly.add(relativePath); continue; }
+      if (!owned) observedOrdinary.push(relativePath);
+      ordinaryItems.push(await results.captureFile({ userId: project.userId, project, relativePath,
+        producer: owned ? producer : { kind: "workspace", runId: run.id }, findings: runFindingsOf(run) }));
+    } catch (error) { failures.push({ path: relativePath, code: error?.code ?? "result_capture_failed" }); }
+  }
+  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce, reviewOrigin, observedOnly });
   // Reports written while the run was still working were captured before its calculations existed.
   try { await results.rebindRun?.(project.userId, project, run.id); } catch { /* the labels stay as they were captured */ }
-  return failures.length ? { ...delivered, failures: [...delivered.failures, ...failures] } : delivered;
+  return { ...delivered, items: [...ordinaryItems, ...delivered.items], unbound: [...observedOrdinary, ...delivered.unbound], failures: [...delivered.failures, ...failures] };
 }

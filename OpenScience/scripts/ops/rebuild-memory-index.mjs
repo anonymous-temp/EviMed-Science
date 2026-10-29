@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Rewrite the recall index from the authoritative store.
+ * Rewrite the capsule's recall index from the authoritative store.
  *
  * The index holds nothing of its own — every file in it is derived from a row
  * in the control-plane database — so this always converges and is always safe
@@ -11,13 +11,12 @@
  *   node scripts/ops/rebuild-memory-index.mjs --user <userId> [--user <userId>]
  *   node scripts/ops/rebuild-memory-index.mjs --all
  *
- * Both halves of the index are rebuilt, because there is one index: the
- * research-memory records, which this process writes itself, and the capsule
- * facts, which go through the same durable job the server's worker runs so that
- * one capsule is never being written by two processes at once. A change of
- * embedding model or a lost volume invalidates both, and a command that
- * restored only the half its name happened to suggest would leave the other
- * silently unsearchable.
+ * The capsule facts go through the same durable job the server's worker runs so
+ * that one capsule is never being written by two processes at once. A change of
+ * embedding model or a lost volume invalidates them. (The index once held a second half, the
+ * derived copies of the legacy engine's records, which this command also rebuilt; that engine is
+ * deleted, an account's memory is the engine's own files and is not derived from anything, and
+ * `legacyMemoryRetirement.mjs` withdrew those copies.)
  *
  * `--all` reads the user list from the control-plane database, so it needs the
  * same configuration the server runs with.
@@ -172,13 +171,12 @@ async function rebuildCapsules({ database, jobs, indexing, userIds, failurePolic
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [{ loadConfig }, { createStore }, { ResearchMemoryStore }, { OpenVikingClient },
-    { MemorySubstrate }, { MemoryIndexing }, { ProductJobs }, { memoryIndexFailurePolicy }] = await Promise.all([
+  const [{ loadConfig }, { createStore }, { OpenVikingClient },
+    { MemoryIndexProvider }, { MemoryIndexing }, { ProductJobs }, { memoryIndexFailurePolicy }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/store.mjs"),
-    import("../../apps/server/src/researchMemory.mjs"),
     import("../../apps/server/src/openVikingClient.mjs"),
-    import("../../apps/server/src/memorySubstrate.mjs"),
+    import("../../apps/server/src/memoryIndexProvider.mjs"),
     import("../../apps/server/src/memoryIndexing.mjs"),
     import("../../apps/server/src/productJobs.mjs"),
     import("../../apps/server/src/memoryIndexWorker.mjs"),
@@ -188,9 +186,8 @@ async function main() {
   const store = createStore(config);
   const database = "database" in store ? store.database : null;
   try {
-    const researchMemory = new ResearchMemoryStore(config, { database });
     const openViking = new OpenVikingClient(config);
-    const substrate = new MemorySubstrate(config, { store: researchMemory, openViking });
+    const substrate = new MemoryIndexProvider(config, { openViking });
 
     if (!substrate.active) {
       // Not an error worth a stack trace: the likely cause is running this on a
@@ -208,8 +205,8 @@ async function main() {
       return;
     }
     if (!database) {
-      // Research memory and capsules are both rows in the control-plane
-      // database. Without one there is nothing authoritative to rebuild from,
+      // The capsules are rows in the control-plane database. Without one
+      // there is nothing authoritative to rebuild from,
       // and rebuilding from the index itself is the one thing this command
       // must never do.
       process.stdout.write(`${JSON.stringify({ ok: false, reason: "no control-plane database" }, null, 2)}\n`);
@@ -223,43 +220,19 @@ async function main() {
       userIds = [...store.users.keys()];
     }
 
-    const results = [];
-    for (const userId of userIds) {
-      const started = Date.now();
-      try {
-        const result = await substrate.rebuild(userId);
-        results.push({ userId, ...result, ms: Date.now() - started });
-      } catch (error) {
-        // One user's failure must not abandon the rest: this is a bulk operation
-        // over independent namespaces, and a partial index is better than none.
-        results.push({ userId, error: error?.code ?? "rebuild_failed", message: String(error?.message ?? error) });
-      }
-    }
-
     const jobs = new ProductJobs(database);
     const indexing = new MemoryIndexing({ database, openViking, jobs });
     const capsules = await rebuildCapsules({
       database, jobs, indexing, userIds, failurePolicy: memoryIndexFailurePolicy,
     });
 
-    const failed = results.filter((row) => row.error);
-    // Records the index refused one at a time. The user's rebuild continued
-    // past them, so it has no `error` of its own, and a command that reported
-    // `ok` over a user whose index is missing records would be the one report
-    // an operator acts on after a lost volume.
-    const recordsFailed = results.reduce((total, row) => total + (row.failed ?? 0), 0);
     const capsulesFailed = capsules.filter((row) => row.status === "failed" || row.status === "pending");
     const summary = {
-      ok: failed.length === 0 && recordsFailed === 0 && capsulesFailed.length === 0,
+      ok: capsulesFailed.length === 0,
       provider: substrate.provider,
-      users: results.length,
-      written: results.reduce((total, row) => total + (row.written ?? 0), 0),
-      skipped: results.reduce((total, row) => total + (row.skipped ?? 0), 0),
-      recordsFailed,
-      failed: failed.length,
+      users: userIds.length,
       capsules: capsules.length,
       capsulesFailed: capsulesFailed.length,
-      results: options.json ? results : results.filter((row) => row.error || row.failed),
       capsuleResults: options.json ? capsules : capsulesFailed,
     };
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);

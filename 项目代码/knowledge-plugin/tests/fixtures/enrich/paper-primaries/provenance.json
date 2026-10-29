@@ -1,0 +1,746 @@
+{
+ "case": "enrich/paper-primaries",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-25T13:15:09+00:00",
+ "note": "Unpaywall asked without a contact address (no secret read): its 422 is recorded as it came",
+ "rows": [
+  {
+   "entry_id": "j-0028-4793:9374d7a98cc17df2ea5670ca9459cb34",
+   "revision": 1,
+   "source_id": "j-0028-4793",
+   "external_key": "10.1056/nejmoa2609482",
+   "identity_key": "doi:10.1056/nejmoa2609482",
+   "url": "https://doi.org/10.1056/nejmoa2609482",
+   "canonical_url": "https://doi.org/10.1056/nejmoa2609482",
+   "doi": "10.1056/nejmoa2609482",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-24T09:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "0028-4793",
+    "issns": [
+     "0028-4793",
+     "1533-4406"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org"
+    ]
+   },
+   "attempts": 0,
+   "source_authority": 5
+  },
+  {
+   "entry_id": "j-0028-4793:8b46c961fa78b1b8f023dc7e193ed929",
+   "revision": 1,
+   "source_id": "j-0028-4793",
+   "external_key": "10.1056/nejmc2609433",
+   "identity_key": "doi:10.1056/nejmc2609433",
+   "url": "https://doi.org/10.1056/nejmc2609433",
+   "canonical_url": "https://doi.org/10.1056/nejmc2609433",
+   "doi": "10.1056/nejmc2609433",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-21T09:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "0028-4793",
+    "issns": [
+     "0028-4793",
+     "1533-4406"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org"
+    ]
+   },
+   "attempts": 0,
+   "source_authority": 5
+  },
+  {
+   "entry_id": "j-0140-6736:4f7318208f8f77487deba71973fbf7fe",
+   "revision": 1,
+   "source_id": "j-0140-6736",
+   "external_key": "10.1016/s0140-6736(26)02046-5",
+   "identity_key": "doi:10.1016/s0140-6736(26)02046-5",
+   "url": "https://doi.org/10.1016/s0140-6736(26)02046-5",
+   "canonical_url": "https://doi.org/10.1016/s0140-6736(26)02046-5",
+   "doi": "10.1016/s0140-6736(26)02046-5",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-23T09:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "0140-6736",
+    "issns": [
+     "0140-6736",
+     "0099-5355",
+     "1474-547X"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org",
+     "www.sciencedirect.com"
+    ]
+   },
+   "attempts": 0,
+   "source_authority": 5
+  },
+  {
+   "entry_id": "j-0098-7484:8b9a2f0bca68096ffb8c061b5e8496bd",
+   "revision": 1,
+   "source_id": "j-0098-7484",
+   "external_key": "10.1001/jama.2026.16509",
+   "identity_key": "doi:10.1001/jama.2026.16509",
+   "url": "https://doi.org/10.1001/jama.2026.16509",
+   "canonical_url": "https://doi.org/10.1001/jama.2026.16509",
+   "doi": "10.1001/jama.2026.16509",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-14T09:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "0098-7484",
+    "issns": [
+     "0098-7484",
+     "1538-3598"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+     "https://jamanetwork.com/rss/site_3/67.xml"
+    ]
+   },
+   "attempts": 0,
+   "source_authority": 5
+  },
+  {
+   "entry_id": "j-0016-5085:dd98eb1415f76ae523f1e4a8df7bf61a",
+   "revision": 1,
+   "source_id": "j-0016-5085",
+   "external_key": "10.1053/j.gastro.2026.09.022",
+   "identity_key": "doi:10.1053/j.gastro.2026.09.022",
+   "url": "https://doi.org/10.1053/j.gastro.2026.09.022",
+   "canonical_url": "https://doi.org/10.1053/j.gastro.2026.09.022",
+   "doi": "10.1053/j.gastro.2026.09.022",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-20T09:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "0016-5085",
+    "issns": [
+     "0016-5085",
+     "1528-0012"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org",
+     "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.gastrojournal.org/inpress.rss",
+     "https://www.gastrojournal.org/current.rss"
+    ]
+   },
+   "attempts": 0,
+   "source_authority": 5
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "openalex",
+   "abstract_chars": 2389,
+   "body_chars": 0,
+   "notes": []
+  },
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "openalex",
+   "abstract_chars": 679,
+   "body_chars": 0,
+   "notes": [
+    "unpaywall_http-error:http_422"
+   ]
+  },
+  {
+   "status": "pending",
+   "text_kind": "none",
+   "fetched_from": null,
+   "abstract_chars": 0,
+   "body_chars": 0,
+   "notes": [
+    "unpaywall_http-error:http_422",
+    "landing_blocked:direct",
+    "landing_challenge",
+    "indexed_without_abstract"
+   ]
+  },
+  {
+   "status": "pending",
+   "text_kind": "none",
+   "fetched_from": null,
+   "abstract_chars": 0,
+   "body_chars": 0,
+   "notes": [
+    "unpaywall_http-error:http_422",
+    "landing_challenge:direct",
+    "landing_challenge",
+    "indexed_without_abstract"
+   ]
+  },
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "publisher-feed",
+   "abstract_chars": 482,
+   "body_chars": 0,
+   "notes": [
+    "unpaywall_http-error:http_422"
+   ]
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1001%2Fjama.2026.16509%22%5Bdoi%5D%20OR%20%2210.1016%2Fs0140-6736%2826%2902046-5%22%5Bdoi%5D%20OR%20%2210.1053%2Fj.gastro.2026.09.022%22%5Bdoi%5D%20OR%20%2210.1056%2Fnejmc2609433%22%5Bdoi%5D%20OR%20%2210.1056%2Fnejmoa2609482%22%5Bdoi%5D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1001%2Fjama.2026.16509%22%5Bdoi%5D%20OR%20%2210.1016%2Fs0140-6736%2826%2902046-5%22%5Bdoi%5D%20OR%20%2210.1053%2Fj.gastro.2026.09.022%22%5Bdoi%5D%20OR%20%2210.1056%2Fnejmc2609433%22%5Bdoi%5D%20OR%20%2210.1056%2Fnejmoa2609482%22%5Bdoi%5D",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:15:09+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 544,
+   "sha256": "79020ffb81dd54c229942f06c05eec608a85d8b2569a7f15cc629d6855032182"
+  },
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=42913667,42906102,42906101,42906100,42906099,42906098,42873534,42849763",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=42913667,42906102,42906101,42906100,42906099,42906098,42873534,42849763",
+   "headers": {
+    "content-type": "text/xml; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:15:11+00:00",
+   "file": "02.xml",
+   "gzip": false,
+   "bytes": 24530,
+   "sha256": "24f0010de54d23f3870317cddb5a2e9a7f965135bbeadb858dba0dd808fd730f"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1001%2Fjama.2026.16509%22%20OR%20DOI%3A%2210.1016%2Fs0140-6736%2826%2902046-5%22%20OR%20DOI%3A%2210.1053%2Fj.gastro.2026.09.022%22%20OR%20DOI%3A%2210.1056%2Fnejmc2609433%22%20OR%20DOI%3A%2210.1056%2Fnejmoa2609482%22&format=json&resultType=core&pageSize=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1001%2Fjama.2026.16509%22%20OR%20DOI%3A%2210.1016%2Fs0140-6736%2826%2902046-5%22%20OR%20DOI%3A%2210.1053%2Fj.gastro.2026.09.022%22%20OR%20DOI%3A%2210.1056%2Fnejmc2609433%22%20OR%20DOI%3A%2210.1056%2Fnejmoa2609482%22&format=json&resultType=core&pageSize=25",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:15:12+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 19870,
+   "sha256": "0c54a40b19aa808e0ca971c4abf731d9c024a4bacda6f233217d65492235ba63"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1056/nejmoa2609482",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1056/nejmoa2609482",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:14+00:00",
+   "file": "04.json",
+   "gzip": false,
+   "bytes": 8632,
+   "sha256": "faf0db59eccb72f965a87098083e882f03add455b4967ca5f6a234a2875081bf"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1056/nejmoa2609482?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1056/nejmoa2609482?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:15+00:00",
+   "file": "05.json",
+   "gzip": false,
+   "bytes": 4830,
+   "sha256": "128116d5c5335ea934a4791704ff9a499157553949fb94d5268be7615ed4df82"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1056/nejmc2609433",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1056/nejmc2609433",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:17+00:00",
+   "file": "06.json",
+   "gzip": false,
+   "bytes": 3802,
+   "sha256": "3589e38c49e89a41bee48288208d72b9d472bc2b01cdc40e62e841b3d120f535"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.1056/nejmc2609433",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 422,
+   "final_url": "https://api.unpaywall.org/v2/10.1056/nejmc2609433",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:18+00:00",
+   "file": "07.json",
+   "gzip": false,
+   "bytes": 142,
+   "sha256": "75bb31e6c19a124e5df7f10ee8215d6b6c3f15f6b33ef563b6b18507221c766a",
+   "error": {
+    "outcome": "http-error",
+    "detail": "http_422"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1056/nejmc2609433?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1056/nejmc2609433?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:20+00:00",
+   "file": "08.json",
+   "gzip": false,
+   "bytes": 2670,
+   "sha256": "4cd64535eeeb3e775e02404a75fa4172c96fbb70b368eb1a7764402e850dcb4c"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1016/s0140-6736(26)02046-5",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1016/s0140-6736(26)02046-5",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:21+00:00",
+   "file": "09.json",
+   "gzip": false,
+   "bytes": 9887,
+   "sha256": "762a4571cb5368f85263131a13167d3542d45b38c4839097af76a418a2840936"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.1016/s0140-6736(26)02046-5",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 422,
+   "final_url": "https://api.unpaywall.org/v2/10.1016/s0140-6736(26)02046-5",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:23+00:00",
+   "file": "10.json",
+   "gzip": false,
+   "bytes": 142,
+   "sha256": "75bb31e6c19a124e5df7f10ee8215d6b6c3f15f6b33ef563b6b18507221c766a",
+   "error": {
+    "outcome": "http-error",
+    "detail": "http_422"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1016/s0140-6736(26)02046-5?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1016/s0140-6736(26)02046-5?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:24+00:00",
+   "file": "11.json",
+   "gzip": false,
+   "bytes": 1384,
+   "sha256": "dfe31687faa55a48b7c165066c97b2675a68d6327e6c4f4a5967e259f9d259d8"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1016/s0140-6736(26)02046-5?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1016/s0140-6736(26)02046-5?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:15:26+00:00",
+   "file": "12.json",
+   "gzip": false,
+   "bytes": 242,
+   "sha256": "efaaeda53b2023472338a22096b2caa6c4c679b6e4decd590ff497f8e807c0c7"
+  },
+  {
+   "method": "GET",
+   "url": "https://linkinghub.elsevier.com/retrieve/pii/S0140673626020465",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 403,
+   "final_url": "https://www.sciencedirect.com/science/article/pii/S0140673626020465",
+   "headers": {
+    "content-type": "text/html; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:15:29+00:00",
+   "file": "13.html.gz",
+   "gzip": true,
+   "bytes": 387367,
+   "sha256": "6215147b15030ee33e20b46a72b60e004650cc41ebf2fbac295f37279583fb31",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "adcb66fee8e131357c2598f6bd8f621d5a7578eba44b9c95e751fca515c73391",
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1001/jama.2026.16509",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1001/jama.2026.16509",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:30+00:00",
+   "file": "14.json",
+   "gzip": false,
+   "bytes": 3596,
+   "sha256": "5b99a364680e852febdc8ce1f3d09030bf10f3a13476e049d48264e7600d0534"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.1001/jama.2026.16509",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 422,
+   "final_url": "https://api.unpaywall.org/v2/10.1001/jama.2026.16509",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:32+00:00",
+   "file": "15.json",
+   "gzip": false,
+   "bytes": 142,
+   "sha256": "75bb31e6c19a124e5df7f10ee8215d6b6c3f15f6b33ef563b6b18507221c766a",
+   "error": {
+    "outcome": "http-error",
+    "detail": "http_422"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1001/jama.2026.16509?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1001/jama.2026.16509?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:33+00:00",
+   "file": "16.json",
+   "gzip": false,
+   "bytes": 1373,
+   "sha256": "92d3bcace4338685d9b3fbe2e7525f6e8250570dd290c7ad9d3e583018668dca"
+  },
+  {
+   "method": "GET",
+   "url": "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+   "headers": {
+    "content-type": "text/xml",
+    "last-modified": "Sat, 24 Oct 2026 20:43:32 GMT",
+    "etag": "\"0b2fe54f863dd1:0\""
+   },
+   "fetched_at": "2026-10-25T13:15:36+00:00",
+   "file": "17.xml",
+   "gzip": false,
+   "bytes": 9304,
+   "sha256": "3cb5ec70c34bebb70cd2e4ac7ab6dc27d977c62c9f3a325624c03fcc6e0decef"
+  },
+  {
+   "method": "GET",
+   "url": "https://jamanetwork.com/rss/site_3/67.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://jamanetwork.com/rss/site_3/67.xml",
+   "headers": {
+    "content-type": "text/xml",
+    "last-modified": "Tue, 20 Oct 2026 15:43:25 GMT",
+    "etag": "\"808c55bea960dd1:0\""
+   },
+   "fetched_at": "2026-10-25T13:15:45+00:00",
+   "file": "18.xml",
+   "gzip": false,
+   "bytes": 42106,
+   "sha256": "f7c81b5d7ca2a6a55fb64cc87b8fa907f99ec74b118be4350969e1963024dc7d"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1001/jama.2026.16509?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1001/jama.2026.16509?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:15:56+00:00",
+   "file": "19.json",
+   "gzip": false,
+   "bytes": 231,
+   "sha256": "edb5484abdc76534e9ca2ededa4f5cb6f5621482957112cc67cca355471cf318"
+  },
+  {
+   "method": "GET",
+   "url": "https://jamanetwork.com/journals/jama/fullarticle/2855364",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 403,
+   "final_url": "https://jamanetwork.com/journals/jama/fullarticle/2855364",
+   "headers": {
+    "content-type": "text/html; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:15:57+00:00",
+   "file": "20.html",
+   "gzip": false,
+   "bytes": 5707,
+   "sha256": "24519683cc328f15a7abfa735511af5f31f1b67b239a56745e24265b222d1df7",
+   "error": {
+    "outcome": "challenge",
+    "detail": "cloudflare"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1053/j.gastro.2026.09.022",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1053/j.gastro.2026.09.022",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:15:59+00:00",
+   "file": "21.json",
+   "gzip": false,
+   "bytes": 6126,
+   "sha256": "24d9d2d2a706c16f72c671644fc559128390edbcd3f85bc178284c02e84edba9"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.1053/j.gastro.2026.09.022",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 422,
+   "final_url": "https://api.unpaywall.org/v2/10.1053/j.gastro.2026.09.022",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:16:00+00:00",
+   "file": "22.json",
+   "gzip": false,
+   "bytes": 142,
+   "sha256": "75bb31e6c19a124e5df7f10ee8215d6b6c3f15f6b33ef563b6b18507221c766a",
+   "error": {
+    "outcome": "http-error",
+    "detail": "http_422"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1053/j.gastro.2026.09.022?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1053/j.gastro.2026.09.022?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-25T13:16:02+00:00",
+   "file": "23.json",
+   "gzip": false,
+   "bytes": 1364,
+   "sha256": "9afdc0503946d5e58ae49a7cef8fad154b993feadbb76ba87d5bee88810587c8"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.gastrojournal.org/inpress.rss",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.gastrojournal.org/inpress.rss",
+   "headers": {
+    "content-type": "application/rss+xml;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-25T13:16:05+00:00",
+   "file": "24.xml.gz",
+   "gzip": true,
+   "bytes": 181178,
+   "sha256": "15acb4cf60d6a2d54374ab4822d24378d8064654dac7d0d57713edf0356699e5"
+  }
+ ]
+}

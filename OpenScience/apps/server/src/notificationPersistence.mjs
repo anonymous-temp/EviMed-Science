@@ -1,4 +1,5 @@
 const migrations = new WeakMap();
+const committedMigrations = new WeakSet();
 
 const sql = `
 CREATE SCHEMA IF NOT EXISTS evimed_inbox;
@@ -107,12 +108,15 @@ END $foreign_keys$;
 
 /** @param {any} database */
 export async function migrateNotifications(database) {
-  if (migrations.has(database)) return migrations.get(database);
+  const scoped = Boolean(database.transactionScope?.());
+  if ((!scoped || committedMigrations.has(database)) && migrations.has(database)) return migrations.get(database);
   const attempt = database.transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-inbox-v1'))");
     await client.query(sql);
   });
-  migrations.set(database, attempt);
-  try { await attempt; }
-  catch (error) { migrations.delete(database); throw error; }
+  // A savepoint can succeed while its enclosing publication later rolls back.
+  // Only standalone committed migrations may satisfy later transactions.
+  if (!scoped) migrations.set(database, attempt);
+  try { await attempt; if (!scoped) committedMigrations.add(database); }
+  catch (error) { if (!scoped) migrations.delete(database); throw error; }
 }

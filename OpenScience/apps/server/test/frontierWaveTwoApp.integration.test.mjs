@@ -4,7 +4,7 @@
 // two reader actions through the upload's own path, and the upload route
 // itself after it gave that path up to a shared helper.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -85,7 +85,7 @@ test("/status offers what this deployment has, says personalization is off witho
   assert.equal(answer.status, 200);
   const status = (await answer.json()).data;
   assert.equal(status.personalization, "off", "a memory store without a model to read it with cannot personalize");
-  assert.deepEqual(status.capabilities, { saveToLibrary: true, abstractZh: false, forYou: false, hot: true, daily: true, weekly: true, evidencePublicPages: false, evidenceUpkeep: false });
+  assert.deepEqual(status.capabilities, { saveToLibrary: true, abstractZh: false, forYou: false, hot: true, daily: true, weekly: true, monthly: true, evidencePublicPages: false, evidenceUpkeep: false, topics: true, track: true });
   const seen = (await database.query("SELECT last_seen_at FROM evimed_frontier.user_prefs WHERE user_id = $1", [accounts.reader])).rows[0];
   assert.ok(seen?.last_seen_at, "the page read marks the reader for the daily's audience");
   const forYou = await (await fetch(`${base}/api/frontier/for-you`, { headers: sessions.reader })).json();
@@ -118,7 +118,14 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   // now only a candidate, so provide the explicit semantic verdict here.
   const previousEditor = events.editor;
   const previousBudget = events.budgetReader;
-  events.editor = { available: true, judgeSameEvent: async ({ candidates }) => ({ verdicts: candidates.map(() => "yes"), error: null }) };
+  // The report and its coverage are one occurrence; whatever else the words recall from the tests before is another.
+  const trial = (/** @type {string} */ block) => block.includes("注册号 NCT55555555");
+  events.editor = { available: true, callJson: async (messages) => {
+    const [report, ...others] = messages[1].content.split("\n\n").filter((block) => block.startsWith("【"));
+    const relation = (/** @type {string} */ block) => (trial(report) && trial(block) ? "SAME_OCCURRENCE" : "UNRELATED");
+    return report.startsWith("【报道 A】") ? { relation: relation(others[0]), confidence: 1 }
+      : { decisions: others.map((block, index) => ({ id: `C${index + 1}`, relation: relation(block), confidence: 1 })), selection: null };
+  } };
   events.budgetReader = null;
   try { await events.clusterPending(); }
   finally { events.editor = previousEditor; events.budgetReader = previousBudget; }
@@ -149,6 +156,13 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   assert.deepEqual([page.hasPrimary, page.primary], [true, "paper"]);
   assert.ok(Number.isInteger(page.heat) && page.heat > 0);
   assert.equal(page.trend, null, "five hours of history: 「暂无走势」");
+  assert.deepEqual(page.developments, [], "no story beyond this event");
+  const ascending = (await (await fetch(`${base}/api/frontier/events/${event.public_id}?order=asc`, { headers: sessions.reader })).json()).data.event;
+  assert.deepEqual(ascending.items.map((item) => item.id), [paper.publicId, coverage.publicId], "oldest first");
+  const descending = (await (await fetch(`${base}/api/frontier/events/${event.public_id}?order=desc`, { headers: sessions.reader })).json()).data.event;
+  assert.deepEqual(descending.items.map((item) => item.id), [coverage.publicId, paper.publicId], "newest first, whatever the role");
+  const wrong = await fetch(`${base}/api/frontier/events/${event.public_id}?order=sideways`, { headers: sessions.reader });
+  assert.deepEqual([wrong.status, (await wrong.json()).code], [400, "frontier_query_invalid"]);
 
   // Fold this event into an older one by hand, as a bridge would.
   const older = (await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, report_count)
@@ -159,6 +173,8 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   assert.equal(redirect.status, 308);
   assert.equal(redirect.headers.get("location"), "0123456789abcdef", "relative: it resolves under whatever prefix serves the API");
   assert.deepEqual((await redirect.json()).data, { redirect: "0123456789abcdef" });
+  const ordered = await fetch(`${base}/api/frontier/events/${event.public_id}?order=asc`, { headers: sessions.reader, redirect: "manual" });
+  assert.equal(ordered.headers.get("location"), "0123456789abcdef?order=asc", "the order asked for goes with the redirect");
   const followed = await fetch(`${base}/api/frontier/events/${event.public_id}`, { headers: sessions.reader });
   assert.equal(followed.status, 200);
   assert.equal((await followed.json()).data.event.id, "0123456789abcdef");
@@ -228,9 +244,21 @@ test("存入知识库 through the upload's own path: the open-access PDF, or a r
   const kept = await readFile(path.join(project.baseDir, record.path), "utf8");
   assert.match(kept, /闭源论文导读/);
   assert.match(kept, /^来源：FDA（监管）$/m, "the institution, never 「openFDA 药品召回（enforcement）API」");
-  const sources = (await database.query(`SELECT payload->'paths'->>0 AS path FROM evimed_product.documents WHERE user_id = $1 AND kind = 'source' AND deleted_at IS NULL`,
-    [accounts.reader])).rows.map((row) => row.path).sort();
-  assert.deepEqual(sources, [record.path, saved.path].sort(), "both saves became knowledge-base sources, as an upload does");
+  const sources = (await database.query(`SELECT id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='source' AND deleted_at IS NULL`,
+    [accounts.reader])).rows;
+  assert.deepEqual(sources.map(row => row.payload.logicalPath).sort(), [record.path, saved.path].sort(),
+    "both saved items retain their logical document names");
+  for (const source of sources) {
+    const immutable = source.payload.paths[0];
+    assert.ok(immutable.includes(`/.evimed-revisions/${source.payload.fingerprint.sha256}/`));
+    const bytes = await readFile(path.join(project.baseDir, immutable));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), source.payload.fingerprint.sha256);
+    const original = source.payload.logicalPath === saved.path ? PDF : Buffer.from(kept);
+    assert.deepEqual(bytes, original, "the committed source preserves the exact saved bytes");
+    const preview = await fetch(`${base}/api/files/preview/${encodeURIComponent(immutable)}?root=base`, { headers: sessions.reader });
+    assert.equal(preview.status, 200);
+    assert.deepEqual(Buffer.from(await preview.arrayBuffer()), original, "the native file preview reads the committed version");
+  }
 
   const internal = await fetch(`${base}/api/frontier/items/${closed.publicId}/save-to-library`, { method: "POST", headers: sessions.reader,
     body: JSON.stringify({ projectId: "evimed-frontier" }) });

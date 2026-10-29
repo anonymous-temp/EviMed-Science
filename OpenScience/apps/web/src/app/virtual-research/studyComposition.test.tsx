@@ -51,18 +51,17 @@ describe("T3 — a study, at each of its tabs", () => {
       await screen.findByRole("heading", { level: 1, name: /EV-201/ });
       await waitFor(() => expect(container.querySelector("[data-vcr-loading]")).toBeNull());
       // Every tab's body is held to the whole page's rules: 匹配与招募 was the last one with tags in its controls (R19 VCRT put them out).
-      const facts = expectComposed(container, { stepRail: false });
+      const facts = expectComposed(container, { stepRail: true, tablists: 0 });
       expect(facts.header, `${suffix || "总览"}: the header`).not.toBeNull();
       expect(facts.headerPrimaryActions.length).toBeLessThanOrEqual(1);
       expect(facts.controlsBelowContent, `${suffix || "总览"}: no control under the content it controls`).toEqual([]);
       expect(facts.chrome, `${suffix || "总览"}: the band`).toHaveClass("sticky", "top-0");
       // The tab row is the one row of views; whatever the tab holds inside itself is the tab's own business (its body's, not the band's).
-      const bandTabs = within(facts.chrome as HTMLElement).getByRole("tablist");
-      tabsSeen.push(within(bandTabs).getAllByRole("tab").map((tab) => tab.id));
+      const rail = within(facts.chrome as HTMLElement).getByRole("navigation", { name: "研究进度" });
+      tabsSeen.push([...rail.querySelectorAll("[data-rail-step]")].map(step => step.getAttribute("data-rail-step") ?? ""));
       rows.push((facts.chrome as HTMLElement).children.length);
-      // The open tab is the page's one tab panel, labelled by its tab.
-      expect(container.querySelector("[role=tabpanel]")).toBe(facts.body);
-      expect(within(bandTabs).getByRole("tab", { selected: true })).toHaveAttribute("id", `vcr-tab-panel-tab-${suffix.slice(1) || "overview"}`);
+      expect(container.querySelector("#vcr-tab-panel")).toBeInTheDocument();
+      expect(within(facts.chrome as HTMLElement).getByRole("button", { name: /^查看：/ })).toBeInTheDocument();
       unmount();
     }
     expect(tabsSeen.every((ids) => ids.length === 7 && ids.join() === tabsSeen[0].join())).toBe(true);
@@ -83,8 +82,10 @@ describe("T3 — a study, at each of its tabs", () => {
   it("is the conversation view with the band over it, and no tab selected", async () => {
     const { container } = drawStudy(`/app/virtual-research/${STUDY_ID}/chat`);
     await screen.findByRole("region", { name: "研究对话" });
-    const facts = expectComposed(container, { stepRail: false, tablists: 1 });
-    expect(within(facts.chrome as HTMLElement).getAllByRole("tab")).toHaveLength(7);
+    const facts = expectComposed(container, { stepRail: true, tablists: 0 });
+    expect(facts.chrome!.querySelectorAll("[data-rail-step]")).toHaveLength(7);
+    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();
     expect(container.querySelector("[role=tabpanel]")).toBeNull();
   });
@@ -94,7 +95,7 @@ describe("T1 — the list of studies", () => {
   it("has the views, the filters and the search in the one toolbar above the list", async () => {
     const { container } = drawStudy("/app/virtual-research");
     await screen.findByRole("list", { name: "研究" });
-    const facts = expectComposed(container, { toolbar: true, tablists: 1, stepRail: false });
+    const facts = expectComposed(container, { toolbar: true, tablists: 0, stepRail: false });
     expect(facts.toolbars).toHaveLength(1);
     expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
     expect(facts.headerPrimaryActions).toHaveLength(1);

@@ -36,9 +36,12 @@ mailto:<contact>)``. FDA, CDC and Health Canada refuse a browser string from a d
 but answer this honest one (measured 2026-09-22), so the crawler never pretends to be a browser.
 
 Credentials are the transport's business, per host: NCBI ``tool``/``email``/``api_key``, openFDA
-``api_key``, Unpaywall ``email``, OpenAlex ``mailto`` are added to the query here and stripped from
+``api_key``, Unpaywall ``email`` are added to the query here and stripped from
 ``FetchResult.final_url``; the team's EviMed evidence API gets ``Authorization: Bearer <key>`` on its
-API path only; adapters, logs and the fetch log never see any of them, and an ``Authorization``,
+API path only; SocialData (X, contract 1.5.0) gets ``Authorization: Bearer <key>``, Dajiala (WeChat) its ``key``
+query parameter, Elsevier's API (when a key is configured) ``X-ELS-APIKey``; OpenAlex gets nothing (2026-10-22: it
+meters by API key and credit, a contact address buys nothing, and a work by its id is free); adapters, logs and the
+fetch log never see any of them, and an ``Authorization``,
 ``Cookie`` or ``Host`` header an adapter sets is dropped. Log lines carry URLs without their query
 string (``redact_url``).
 """
@@ -62,7 +65,7 @@ import httpx
 
 from .budget import HostBudget
 from .browser import RENDER_HEADER, RENDER_NO_SELECTOR, RENDER_SELECTOR_FOUND, BrowserFetcher
-from .model import IMPLEMENTED_EGRESSES, FetchError, FetchResult, RequestSpec
+from .model import IMPLEMENTED_EGRESSES, NEUTRAL_DETAILS, FetchError, FetchResult, RequestSpec
 from .robots import RobotsCache
 from .settings import EdgeProxy, Settings
 
@@ -230,6 +233,9 @@ def retry_after_seconds(value: str | None, now: datetime) -> float | None:
 # ------------------------------------------------------------------------------------ credentials
 
 CREDENTIAL_KEYS = frozenset({"api_key", "email", "tool", "mailto"})
+SOCIALDATA_HOST = "api.socialdata.tools"     # X through SocialData (contract 1.5.0): Authorization: Bearer
+ELSEVIER_API_HOST = "api.elsevier.com"       # Elsevier's Article Retrieval API (rt-papers 2026-10-22): X-ELS-APIKey
+DAJIALA_HOST = "www.dajiala.com"             # WeChat through Dajiala: the `key` query parameter
 
 
 def _credential_params(host: str, settings: Settings) -> list[tuple[str, str]]:
@@ -248,8 +254,10 @@ def _credential_params(host: str, settings: Settings) -> list[tuple[str, str]]:
             params.append(("api_key", key))
     elif host == "api.unpaywall.org" and contact:
         params.append(("email", contact))
-    elif host == "api.openalex.org" and contact:
-        params.append(("mailto", contact))
+    elif host == DAJIALA_HOST:
+        key = settings.secret("dajiala_key")
+        if key:
+            params.append(("key", key))
     return params
 
 
@@ -270,7 +278,8 @@ def without_credentials(url: str) -> str:
     parts = urlsplit(url)
     if not parts.query:
         return url
-    kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in CREDENTIAL_KEYS]
+    secret = CREDENTIAL_KEYS | ({"key"} if (parts.hostname or "").lower() == DAJIALA_HOST else frozenset())
+    kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in secret]
     if len(kept) == len(parse_qsl(parts.query, keep_blank_values=True)):
         return url
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
@@ -285,7 +294,8 @@ def _utcnow() -> datetime:
 EVIMED_API_HOST = "www.evimed.com"
 EVIMED_API_PREFIX = "/api-evimed/medicine-api/ai-api/"
 # Headers an adapter never sets: identity, credentials and cookies are the transport's business.
-HEADERS_NEVER_FROM_ADAPTERS = frozenset({"host", "user-agent", "authorization", "proxy-authorization", "cookie"})
+HEADERS_NEVER_FROM_ADAPTERS = frozenset({"host", "user-agent", "authorization", "proxy-authorization", "cookie",
+                                         "x-els-apikey"})
 # Outcomes that say the EXIT failed (the request never reached, or never came back from, the
 # upstream) — what the per-egress health in /v1/health counts.
 TRANSPORT_FAILURES = frozenset({"connect_failed", "dns_failed", "tls_failed", "timeout", "navigation_timeout",
@@ -360,6 +370,8 @@ class ProtectedFetcher:
         self._relay_ssl_context = relay_ssl_context
         self._relay_client: httpx.AsyncClient | None = None
         self._relay_key: tuple | None = None
+        self._relay_inflight: dict[httpx.AsyncClient, int] = {}
+        self._retired_relays: set[httpx.AsyncClient] = set()
         if browser is None and settings.browser_cdp_url:
             browser = BrowserFetcher(settings.browser_cdp_url, timeout_s=settings.browser_timeout_s,
                                      user_agent_suffix=user_agent(settings.contact_email()))
@@ -383,6 +395,11 @@ class ProtectedFetcher:
         if self._relay_client is not None:
             await self._relay_client.aclose()
             self._relay_client = None
+        for client in tuple(self._retired_relays):
+            await client.aclose()
+        self._retired_relays.clear()
+        if self._closing:
+            await asyncio.gather(*tuple(self._closing))
         if self._browser is not None:
             await self._browser.aclose()
 
@@ -453,9 +470,7 @@ class ProtectedFetcher:
         if self._relay_client is not None and self._relay_key == key:
             return self._relay_client
         if self._relay_client is not None:
-            task = asyncio.get_running_loop().create_task(self._relay_client.aclose())
-            self._closing.add(task)
-            task.add_done_callback(self._closing.discard)
+            self._retire_relay(self._relay_client)
         context = self._relay_ssl_context
         proxy_spec = (httpx.Proxy(proxy.url, auth=(proxy.username, proxy.password), ssl_context=context) if context
                       else httpx.Proxy(proxy.url, auth=(proxy.username, proxy.password)))
@@ -466,6 +481,18 @@ class ProtectedFetcher:
         )
         self._relay_key = key
         return self._relay_client
+
+    def _retire_relay(self, client: httpx.AsyncClient) -> None:
+        """Future reads replace a failed pool; existing peer responses finish first."""
+        if self._relay_client is client:
+            self._relay_client = None
+            self._relay_key = None
+        self._retired_relays.add(client)
+        if self._relay_inflight.get(client, 0) == 0:
+            self._retired_relays.discard(client)
+            task = asyncio.get_running_loop().create_task(client.aclose())
+            self._closing.add(task)
+            task.add_done_callback(self._closing.discard)
 
     # ---------------------------------------------------------------- public API
 
@@ -484,6 +511,8 @@ class ProtectedFetcher:
         if allowed_hosts and not host_allowed(first.hostname or "", allowed_hosts):
             raise FetchError("blocked", "host_not_allowed")
         if egress == "browser":
+            if spec.same_origin_redirects:
+                raise FetchError("blocked", "strict_origin_browser_unavailable")
             return await self._fetch_browser(spec, first, allowed_hosts, robots_file, wait_for)
         url, body = spec.url, spec.body
         headers = {k: v for k, v in (spec.headers or {}).items() if k.lower() not in HEADERS_NEVER_FROM_ADAPTERS}
@@ -491,12 +520,17 @@ class ProtectedFetcher:
         for hop in range(self._settings.max_redirects + 1):
             parts = _check_url(url)
             host = (parts.hostname or "").lower()
+            if spec.same_origin_redirects and (
+                    parts.scheme != first.scheme or host != (first.hostname or "").lower()
+                    or (parts.port or 443) != (first.port or 443)
+                    or parts.username is not None or parts.password is not None):
+                raise FetchError("blocked", "redirect_origin_not_allowed")
             if not spec.api:
                 allowed, delay, unreachable = await self._robots_by_egress[egress].check(url)
                 self._budget.observe_crawl_delay(host, delay)
                 if not allowed:
                     raise FetchError("robots-denied", "robots_unreachable" if unreachable else "robots_disallow")
-            async with self._budget.slot(host, robots=robots_file):
+            async with self._budget.slot(host, robots=robots_file, priority=spec.priority):
                 response_status, response_headers, content, final_url = await self._counted(
                     egress, exchange(method, url, headers, body, host, api=spec.api))
             if host == EVIMED_API_HOST and (parts.path or "").startswith(EVIMED_API_PREFIX):
@@ -544,6 +578,18 @@ class ProtectedFetcher:
             if not key:
                 raise FetchError("blocked", "evimed_api_key_unconfigured")
             return {"Authorization": f"Bearer {key}"}
+        if host == SOCIALDATA_HOST:
+            key = self._settings.secret("socialdata_key")
+            if not key:
+                raise FetchError("blocked", "socialdata_key_unconfigured")
+            return {"Authorization": f"Bearer {key}"}
+        if host == DAJIALA_HOST and not self._settings.secret("dajiala_key"):
+            raise FetchError("blocked", "dajiala_key_unconfigured")
+        if host == ELSEVIER_API_HOST:
+            key = self._settings.secret("elsevier_key")
+            if not key:
+                raise FetchError("blocked", "elsevier_key_unconfigured")
+            return {"X-ELS-APIKey": key}
         return {}
 
     # ---------------------------------------------------------------- one hop, direct
@@ -624,6 +670,7 @@ class ProtectedFetcher:
             **credentials,
         }
         client = self._relay_client_for(proxy)
+        self._relay_inflight[client] = self._relay_inflight.get(client, 0) + 1
         # every new tunnel pays two extra TLS handshakes, 1-2 s (edgeProxy.mjs, measured 2026-09-22)
         deadline = self._budget.timeout_s(host, self._settings.request_timeout_s) + proxy.connect_timeout_s
         try:
@@ -636,9 +683,14 @@ class ProtectedFetcher:
                     await response.aclose()
             client.cookies.clear()
             return response.status_code, {k.lower(): v for k, v in response.headers.items()}, content, url
+        except asyncio.CancelledError:
+            self._retire_relay(client)
+            raise
         except (TimeoutError, httpx.TimeoutException):
+            self._retire_relay(client)
             raise FetchError("timeout", "timeout") from None
         except httpx.ProxyError as error:
+            self._retire_relay(client)
             status = _proxy_error_status(error)
             if status == 403:
                 # the node's policy refuses this destination: the source is unreachable this way
@@ -647,11 +699,21 @@ class ProtectedFetcher:
                 raise FetchError("http-error", "relay_upstream_unreachable", status=status) from None
             raise FetchError("blocked", "edge_proxy_refused", status=status) from None
         except httpx.ConnectError:
+            self._retire_relay(client)
             if await self._proxy_reachable(proxy):
                 raise FetchError("http-error", "relay_upstream_unreachable") from None
             raise FetchError("blocked", "edge_proxy_unreachable") from None
         except httpx.HTTPError as error:
+            self._retire_relay(client)
             raise FetchError("http-error", "transport_" + type(error).__name__.lower()) from None
+        finally:
+            active = self._relay_inflight[client] - 1
+            if active:
+                self._relay_inflight[client] = active
+            else:
+                self._relay_inflight.pop(client)
+                if client in self._retired_relays:
+                    self._retire_relay(client)
 
     async def _proxy_reachable(self, proxy: EdgeProxy) -> bool:
         """Tell a dead node from a dead upstream behind it: can we complete TLS to the node itself?"""
@@ -738,6 +800,11 @@ class ProtectedFetcher:
         try:
             result = await self._fetch(spec, egress=egress, allowed_hosts=None, robots_file=True)
         except FetchError as error:
+            # The plugin's own refusal to send (the host's budget) or this deployment's missing or failing exit says
+            # nothing about the site: the page's poll ends with that same name (no failure counted), never as a
+            # refusal by robots — 1,6xx relay sources were "robots-denied" through a relay outage (2026-10-09..19).
+            if error.outcome == "host-budget" or error.detail in NEUTRAL_DETAILS:
+                raise
             if error.status is not None and 400 <= error.status < 500 and error.outcome in ("http-error", "blocked"):
                 return error.status, None
             if error.outcome == "empty-body":

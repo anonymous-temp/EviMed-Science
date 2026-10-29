@@ -104,10 +104,10 @@ test('every item has its words, a row fits one line, and the controls and links 
       assert.ok(!CORNER_QUOTES.test(text), `${id}: ${text} — frontend copy quotes with “”`)
       assert.ok(!RETIRED.test(text), `${id}: ${text} — a state nobody can change, a back-office group and a count of tools are not copy`)
     }
-    assert.ok(item.control.kind === 'none' || (item.control.kind === 'switch' && item.control.setting === 'dsh-cite'), `${id}.control`)
+    assert.ok(item.control.kind === 'none' || (item.control.kind === 'switch' && ['dsh-cite', 'annotation', 'mermaid'].includes(item.control.setting)), `${id}.control`)
     assert.ok(item.opens.kind === 'drawer' || (item.opens.kind === 'page' && /^\/app\/[a-z-]+$/.test(item.opens.to)), `${id}.opens`)
     if (item.control.kind === 'switch') assert.equal(item.gate?.project, item.control.setting, `${id}: a switch is the project setting that gates it`)
-    assert.ok(item.gate === null || Object.keys(item.gate).length === 1, `${id}.gate`)
+    assert.ok(item.gate === null || Object.keys(item.gate).length === 1 || ['annotation', 'diagrams'].includes(id) && Object.keys(item.gate).length === 2, `${id}.gate`)
     for (const part of item.parts ?? []) assert.ok(part.title && part.does, `${id} has a part without words`)
   }
   for (const group of WORDS.groups) assert.ok(Object.values(WORDS.items).some((item) => item.group === group.id), `group ${group.id} has no item`)
@@ -150,6 +150,25 @@ test('the listed inventory: an item the deployment switched off or the account i
   assert.deepEqual(find('memory').opens, { kind: 'page', to: '/app/memory' }, 'memory is a page, never a drawer')
   assert.match(find('loopx').does, /消耗灵豆，可随时暂停/, 'the cost line lives in the long task drawer')
   for (const item of first.items.filter((entry) => entry.id !== 'loopx')) assert.doesNotMatch(item.use, /灵豆/, `${item.id}: the cost line is the long task's alone`)
+})
+
+test('repository links retain canonical upstream identities without assigning a source to platform plumbing', async () => {
+  const dependencies = JSON.parse(await read('deps-version.json'))
+  /** @type {{ name: string, repo: string }[]} */
+  const community = JSON.parse(await read('runtime/skills/community/try-install.json')).candidates
+  const items = new Map(listInventory().flatMap(group => group.items.map(item => [item.id, item])))
+  for (const [id, bundle] of [['citations', 'dsh-cite'], ['annotation', '@changfenhuang/dsh-annotation'], ['diagrams', 'dsh-mermaid']]) {
+    const candidate = community.find(entry => entry.name === bundle)
+    assert.ok(candidate, `${bundle} has a recorded upstream repository`)
+    assert.equal(items.get(id)?.repository, `https://github.com/${candidate.repo}`, id)
+  }
+  assert.equal(items.get('loopx')?.repository, `https://github.com/${dependencies.loopx.githubRepo}`)
+  assert.equal(items.get('memory')?.repository, `https://github.com/${dependencies.openviking.githubRepo}`)
+  assert.equal(items.get('diagrams')?.publisher, 'MrmoLabs')
+  assert.equal(items.get('annotation')?.publisher, 'changfenhuang', 'the package author attribution is retained')
+  const basics = items.get('basics')
+  assert.ok(basics)
+  assert.ok(!Object.hasOwn(basics, 'repository'), 'no upstream source is invented for a combined platform item')
 })
 
 test('the research tool set is the account\'s: the tools its runtime is not given are not listed, and the count is what is listed', () => {

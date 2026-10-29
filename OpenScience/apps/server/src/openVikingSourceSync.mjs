@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { sourceOriginOf } from "@evimed/domain";
 import { resourcesRoot } from "./openVikingLayout.mjs";
 import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
+import { HttpError } from "./security.mjs";
 
 /**
  * Every readable document of the knowledge base, kept in OpenViking as the file its Compile reads.
@@ -21,9 +22,10 @@ import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
  *   or out of order still ends in the right state, and the same function serves a new upload, a replacement, a
  *   removal and a retry. (The memory index learned this the hard way: a write-only publisher leaves what was deleted
  *   searchable for ever.)
- * - **The tag is the proof.** Each file carries `sha=<the captured text's digest>`; reconciliation lists a project's
- *   `sources/` with tags and compares it with the readable documents PostgreSQL holds — the same ids, the same
- *   digests, nothing else — and repairs what differs. It runs on a timer, before every compile, and as the backfill.
+ * - **The tags identify the expected copy.** `sha` is the captured text's digest; `rendition` also binds the rendered
+ *   header, metadata and page markers. Reconciliation compares both with the readable documents PostgreSQL holds and
+ *   repairs differences. A tag remains metadata: shared-generation readers must separately verify downloaded bytes.
+ *   Reconciliation runs on a timer, before every compile, and as the backfill.
  * - **A compiled page is not a document to push.** The mirror of the wiki and of the graph lives in the same ledger
  *   (`knowledge-base/wiki/**`, `knowledge-base/kg/**`); pushing it back would feed the compile its own output.
  * - **The engine being down is a queue that waits.** Nothing here is on the path of an upload, a search or a
@@ -35,36 +37,49 @@ import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 
 export const SOURCE_SYNC_JOB_KIND = "ov-resource-sync";
 const SCAN_LIMIT = 5000;
+const renditionHash = text => createHash("sha256").update(text).digest("hex");
 
 /** @param {unknown} error @returns {string} */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "ov_resource_sync_failed");
 
 /** Whether a source record is a mirrored page of a compiled tree. @param {any} source */
 export function isCompiledPage(source) {
-  return sourceOriginOf({ connectorType: source?.payload?.connector?.type, path: source?.payload?.paths?.[0] }) === "wiki";
+  return (Array.isArray(source?.payload?.paths) ? source.payload.paths : [])
+    .some(file => sourceOriginOf({ path: file }) === "wiki");
+}
+
+/** The exact source rendition already used by sync, shared with generation receipts.
+ * @param {any} source @param {any} capture */
+export function sourceRendition(source, capture) {
+  return sourceIndexDocument({ original: source.payload.paths?.[0] ?? source.id, sha256: source.payload.fingerprint?.sha256 ?? "", extractor: capture.extractor ?? {},
+    text: capture.input.text, pageMap: capture.pageMap, metadata: capture.metadata });
 }
 
 /**
- * Every (account, project) that holds a document, for the timer's reconciliation; the project a document was read in
- * most recently first, so a pass that is cut short has done the ones in use.
- * @param {any} database @param {{ limit?: number }} [options] @returns {Promise<Array<{ userId: string, projectId: string }>>}
+ * Scopes owed reconciliation, oldest attempt first. Tombstones and library-only owners must remain discoverable.
+ * @param {any} database @param {{ limit?: number, includeLibrary?: boolean }} [options] @returns {Promise<Array<{ userId: string, projectId: string | null }>>}
  */
-export async function readableSourceProjects(database, { limit = 200 } = {}) {
+export async function readableSourceProjects(database, { limit = 200, includeLibrary = false } = {}) {
   if (!database) return [];
-  const result = await database.query(`SELECT user_id, project_id FROM evimed_product.documents
-    WHERE kind='source' AND deleted_at IS NULL AND project_id IS NOT NULL
-    GROUP BY user_id, project_id ORDER BY max(updated_at) DESC LIMIT $1`, [limit]);
+  const result = await database.query(`WITH scopes AS (
+      SELECT DISTINCT user_id, project_id FROM evimed_product.documents WHERE kind='source' AND project_id IS NOT NULL
+      UNION SELECT DISTINCT user_id, NULL::text AS project_id FROM evimed_product.documents
+        WHERE $2::boolean AND kind='preferences' AND payload->>'recordType'='library-item'
+    ) SELECT scopes.user_id, scopes.project_id FROM scopes
+    LEFT JOIN evimed_product.documents checked ON checked.user_id=scopes.user_id AND checked.kind='preferences'
+      AND checked.id='ov-resource-check:' || coalesce(scopes.project_id, 'library') AND checked.deleted_at IS NULL
+    ORDER BY checked.payload->>'checkedAt' NULLS FIRST, scopes.user_id, scopes.project_id NULLS FIRST LIMIT $1`, [limit, includeLibrary]);
   return result.rows.map((/** @type {any} */ row) => ({ userId: row.user_id, projectId: row.project_id }));
 }
 
 export class OpenVikingSourceSync {
   /**
-   * @param {{ config: any, sources: any, resources: any, jobs: any, library?: any, engine?: any, now?: () => Date, report?: (code: string) => void }} dependencies
+   * @param {{ config: any, sources: any, resources: any, jobs: any, library?: any, engine?: any, lifecycle?: ((job: any) => Promise<any>) | null, now?: () => Date, report?: (code: string) => void }} dependencies
    *   `library`: the account library (`LibraryService`), or null where there is none
    */
-  constructor({ config, sources, resources, jobs, library = null, engine = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, sources, resources, jobs, library = null, engine = null, lifecycle = null, now = () => new Date(), report = () => {} }) {
     this.config = config; this.sources = sources; this.resources = resources; this.jobs = jobs; this.library = library; this.engine = engine;
-    this.now = now; this.report = report;
+    this.now = now; this.report = report; this.lifecycle = lifecycle;
     this.counters = { queued: 0, pushed: 0, removed: 0, unchanged: 0, reconciled: 0, failed: 0 };
     /** @type {{ at: string, projects: number, pushed: number, removed: number, error: string | null } | null} */
     this.lastReconcile = null;
@@ -120,8 +135,7 @@ export class OpenVikingSourceSync {
     const capture = await this.sources.loadCapture(userId, source);
     if (!capture) return null;
     return {
-      text: sourceIndexDocument({ original: source.payload.paths?.[0] ?? source.id, sha256: source.payload.fingerprint?.sha256 ?? "", extractor: capture.extractor ?? {},
-        text: capture.input.text, pageMap: capture.pageMap, metadata: capture.metadata }),
+      text: sourceRendition(source, capture),
       sha: String(source.payload.analysis.textSha256),
     };
   }
@@ -139,7 +153,8 @@ export class OpenVikingSourceSync {
 
   /** Whether a document belongs under `sources/`: readable, of a project, and not a page of a compiled tree. @param {any} source */
   static pushable(source) {
-    return Boolean(source && !source.deletedAt && source.projectId && sourceReadable(source.payload) && !isCompiledPage(source) && source.payload.analysis?.textSha256);
+    return Boolean(source && !source.deletedAt && source.projectId && sourceReadable(source.payload) && !isCompiledPage(source)
+      && source.payload.analysis?.textSha256 && source.payload.analysis.generation === source.payload.generation);
   }
 
   /**
@@ -148,28 +163,38 @@ export class OpenVikingSourceSync {
    * @returns {Promise<{ action: "pushed" | "removed" | "unchanged" | "absent", sourceId: string }>}
    */
   async convergeSource(userId, sourceId, projectId = null) {
+    const work = () => this.convergeSourceCurrent(userId, sourceId, projectId);
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`source:${userId}:${sourceId}`], work) : work();
+  }
+
+  /** @param {string} userId @param {string} sourceId @param {string | null} projectId
+   * @returns {Promise<{ action: "pushed" | "removed" | "unchanged" | "absent", sourceId: string }>} */
+  async convergeSourceCurrent(userId, sourceId, projectId) {
     const source = await this.#current(userId, sourceId);
     const project = source?.projectId ?? projectId;
-    // A mirrored page was never pushed, so there is nothing of it to converge.
-    if (!project || (source && isCompiledPage(source))) return { action: "absent", sourceId };
+    if (!project) return { action: "absent", sourceId };
     const uri = this.resources.sourceUri(userId, project, sourceId);
     if (!OpenVikingSourceSync.pushable(source)) {
       const removed = await this.resources.removeSource(userId, uri);
       if (removed) this.counters.removed += 1;
       return { action: removed ? "removed" : "absent", sourceId };
     }
-    const sha = String(source.payload.analysis.textSha256);
-    if ((await this.resources.attrs(userId, uri))?.sha === sha) { this.counters.unchanged += 1; return { action: "unchanged", sourceId }; }
     const rendition = await this.#rendition(userId, source);
     if (!rendition) return { action: "absent", sourceId };
+    const attrs = await this.resources.attrs(userId, uri);
+    if (attrs?.sha === rendition.sha && attrs.rendition === renditionHash(rendition.text)) {
+      this.counters.unchanged += 1; return { action: "unchanged", sourceId };
+    }
     await this.resources.pushSource(userId, uri, rendition.text, { sourceId, sha: rendition.sha, docType: source.payload.docType ?? null });
     this.counters.pushed += 1;
     return { action: "pushed", sourceId };
   }
 
-  /** The readable documents of a project that belong in the engine: id → the digest of the captured text. @param {string} userId @param {string} projectId */
+  /** The complete readable inventory and its text/rendered digests; a partial scan cannot authorize removals.
+   * @param {string} userId @param {string} projectId */
   async expected(userId, projectId) {
-    /** @type {Map<string, { sha: string, docType: string | null }>} */
+    /** @type {Map<string, { sha: string, renditionSha: string, docType: string | null }>} */
     const expected = new Map();
     let cursor = null;
     for (let scanned = 0; scanned < SCAN_LIMIT;) {
@@ -179,24 +204,30 @@ export class OpenVikingSourceSync {
         if (isCompiledPage(item) || item.deletedAt) continue;
         // The list's projection leaves the text digest out; the record itself has it.
         const source = await this.#current(userId, item.id);
-        if (OpenVikingSourceSync.pushable(source)) expected.set(item.id, { sha: String(source.payload.analysis.textSha256), docType: source.payload.docType ?? null });
+        if (OpenVikingSourceSync.pushable(source)) {
+          const rendition = await this.#rendition(userId, source);
+          if (!rendition) throw new HttpError(409, "source_capture_invalid", "The current source capture is unavailable for reconciliation.");
+          expected.set(item.id, { sha: rendition.sha, renditionSha: renditionHash(rendition.text), docType: source.payload.docType ?? null });
+        }
       }
       cursor = page.nextCursor;
       if (!cursor) break;
     }
+    if (cursor) throw new HttpError(422, "ov_resource_scan_incomplete", "The source reconciliation inventory exceeded its scan bound.");
     return expected;
   }
 
   /**
    * Compare a project's readable documents with the files under its `sources/` and repair what differs, both ways.
-   * `apply: false` only reports. The proof of "PostgreSQL = engine" is a report with nothing missing, stale or extra.
+   * `apply: false` only reports. Empty differences certify matching expected tags, not an independent byte readback.
    * @param {string} userId @param {string} projectId @param {{ apply?: boolean }} [options]
    */
   async reconcileProject(userId, projectId, { apply = true } = {}) {
     const expected = await this.expected(userId, projectId);
     const present = new Map((await this.resources.listSources(userId, this.resources.roots(userId, projectId).sources)).map((/** @type {any} */ entry) => [entry.sourceId, entry]));
     const missing = [...expected.keys()].filter((id) => !present.has(id));
-    const stale = [...expected.keys()].filter((id) => present.has(id) && present.get(id).sha !== expected.get(id)?.sha);
+    const stale = [...expected.keys()].filter((id) => present.has(id)
+      && (present.get(id).sha !== expected.get(id)?.sha || present.get(id).renditionSha !== expected.get(id)?.renditionSha));
     const extra = [...present.keys()].filter((id) => !expected.has(id));
     const report = { projectId, expected: expected.size, present: present.size, missing, stale, extra, pushed: 0, removed: 0, failed: /** @type {{ sourceId: string, code: string }[]} */ ([]) };
     if (!apply) return report;
@@ -211,11 +242,42 @@ export class OpenVikingSourceSync {
     return report;
   }
 
+  /** Strict shared convergence uses the complete canonical receipt inventory
+   * supplied by the policy facade and verifies actual bytes after writing.
+   * It never invokes library reconciliation or trusts text-only tags.
+   * @param {string} userId @param {string} projectId @param {any[]} inputs */
+  async reconcileInputs(userId, projectId, inputs) {
+    const expected = new Map(inputs.map(input => [input.receipt.sourceId, input]));
+    const root = this.resources.roots(userId, projectId).sources;
+    for (const present of await this.resources.listSources(userId, root)) {
+      if (!expected.has(present.sourceId)) await this.resources.removeSource(userId, present.uri);
+    }
+    for (const input of inputs) {
+      const uri = this.resources.sourceUri(userId, projectId, input.receipt.sourceId);
+      const bytes = await this.resources.download(userId, uri);
+      if (!bytes || renditionHash(bytes) !== input.receipt.renditionSha256) {
+        await this.resources.pushSource(userId, uri, input.text, { sourceId: input.receipt.sourceId, sha: input.receipt.textSha256 });
+      }
+      const verified = await this.resources.download(userId, uri);
+      if (!verified || renditionHash(verified) !== input.receipt.renditionSha256) {
+        throw new HttpError(409, "knowledge_source_sync_unverified", "The source rendition readback differs from the canonical receipt.");
+      }
+    }
+    return { expected: expected.size, verified: expected.size };
+  }
+
   /**
    * Make the engine agree with the account's library: one file per document whose read-only copy exists, the copy's own text.
    * @param {string} userId @param {{ apply?: boolean }} [options]
    */
   async reconcileLibrary(userId, { apply = true } = {}) {
+    const work = () => this.reconcileLibraryCurrent(userId, { apply });
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /** @param {string} userId @param {{ apply?: boolean }} [options] */
+  async reconcileLibraryCurrent(userId, { apply = true } = {}) {
     const report = { expected: 0, present: 0, missing: /** @type {string[]} */ ([]), stale: /** @type {string[]} */ ([]), extra: /** @type {string[]} */ ([]), pushed: 0, removed: 0, failed: /** @type {{ sourceId: string, code: string }[]} */ ([]) };
     if (!this.library) return report;
     const entries = (await this.library.searchScope(userId)).filter((/** @type {any} */ entry) => entry.status === "ready" && entry.textSha256);
@@ -242,11 +304,16 @@ export class OpenVikingSourceSync {
 
   /** Run one queued job. @param {{ userId: string, projectId?: string | null, payload: any }} job */
   async runJob(job) {
+    if (job.payload?.action === "lifecycle") return this.runLifecycleJob(job);
     if (!this.enabled) return { skipped: "disabled" };
     const ready = this.engine?.ready?.("knowledge");
     // Pushing needs the engine to answer, not its Compile: only "no answer" postpones a push.
     if (ready && !ready.ok && /^memory_index_|_api_key_/.test(String(ready.code))) throw Object.assign(new Error("The engine is not answering."), { code: ready.code });
-    if (job.payload?.action === "library") return this.reconcileLibrary(job.userId);
+    if (job.payload?.action === "library") {
+      const result = await this.reconcileLibrary(job.userId);
+      if (result.failed.length) throw Object.assign(new Error("Some library resources could not be synchronised."), { code: "ov_resource_sync_partial" });
+      return result;
+    }
     if (job.payload?.action === "forget-project") {
       const removed = await this.resources.removeTree(job.userId, this.resources.roots(job.userId, String(job.payload.forgottenProjectId)).project);
       return { action: removed ? "removed" : "absent", projectId: job.payload.forgottenProjectId };
@@ -254,9 +321,39 @@ export class OpenVikingSourceSync {
     return this.convergeSource(job.userId, String(job.payload?.sourceId ?? ""), job.payload?.projectId ?? job.projectId ?? null);
   }
 
+  /** The validated account epoch owns SQL changes and bounded engine requests until they settle.
+   * @param {{ userId: string, payload: any }} job */
+  async runLifecycleJob(job) {
+    const work = async () => {
+      const lifecycle = await this.lifecycle?.(job);
+      if (lifecycle === false) return { skipped: "obsolete-account" };
+      const runtimeReplica = lifecycle?.runtimeReplica;
+      if (!this.enabled) return { lifecycle: true, skipped: "engine-disabled", ...(runtimeReplica ? { runtimeReplica } : {}) };
+      const sourceScope = job.payload.scope === "source";
+      if (sourceScope) await this.convergeSourceCurrent(job.userId, job.payload.sourceId, job.payload.projectId);
+      const library = sourceScope ? await this.reconcileLibraryCurrent(job.userId) : await this.reconcileLibrary(job.userId);
+      if (library.failed.length) throw Object.assign(new Error("Some library resources could not be synchronised."), { code: "ov_resource_sync_partial" });
+      return { lifecycle: true, library, ...(runtimeReplica ? { runtimeReplica } : {}) };
+    };
+    const database = this.sources.documents?.database;
+    if (!database) return work();
+    const epoch = () => database.transaction(client => database.withTransactionClient(client, async () => {
+      const account = await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1 FOR SHARE", [job.userId]);
+      if (!job.payload.accountCreatedAt || account.rows[0]?.generation !== job.payload.accountCreatedAt) return { skipped: "obsolete-account" };
+      return work();
+    }));
+    if (job.payload.scope !== "source" || typeof this.sources.withRegistrationLocks !== "function") return epoch();
+    const current = await this.sources.documents.get(job.userId, "source", job.payload.sourceId, { includeDeleted: true });
+    // Own every JS/advisory guard before the account -> jobs -> source row fences. Nested
+    // convergence and source publication use their Current helpers under these same guards.
+    const keys = [`library:${job.userId}`, `source:${job.userId}:${job.payload.sourceId}`];
+    if (current?.payload.familyId) keys.push(`family:${job.userId}:${current.payload.familyId}`);
+    return this.sources.withRegistrationLocks(keys, epoch);
+  }
+
   /**
    * The timer's pass: every project that has readable documents, a bounded number per pass, oldest check first.
-   * @param {{ projects: () => Promise<Array<{ userId: string, projectId: string }>>, limit?: number }} options
+   * @param {{ projects: () => Promise<Array<{ userId: string, projectId: string | null }>>, limit?: number }} options
    */
   async reconcileAll({ projects, limit = 50 }) {
     if (!this.enabled) return null;
@@ -264,9 +361,22 @@ export class OpenVikingSourceSync {
     try {
       const users = new Set();
       for (const { userId, projectId } of (await projects()).slice(0, limit)) {
-        const report = await this.reconcileProject(userId, projectId);
-        summary.projects += 1; summary.pushed += report.pushed; summary.removed += report.removed;
         users.add(userId);
+        let errorCode = null;
+        try {
+          if (projectId) {
+            const report = await this.reconcileProject(userId, projectId);
+            summary.projects += 1; summary.pushed += report.pushed; summary.removed += report.removed;
+            if (report.failed.length) errorCode = "ov_resource_sync_partial";
+          } else {
+            const report = await this.reconcileLibrary(userId);
+            summary.pushed += report.pushed; summary.removed += report.removed;
+            users.delete(userId);
+            if (report.failed.length) errorCode = "ov_resource_sync_partial";
+          }
+        } catch (error) { errorCode = codeOf(error); }
+        if (errorCode) { summary.error = errorCode; this.report(errorCode); }
+        await this.recordReconciliation(userId, projectId, errorCode);
       }
       for (const userId of users) {
         const report = await this.reconcileLibrary(userId);
@@ -275,6 +385,17 @@ export class OpenVikingSourceSync {
     } catch (error) { summary.error = codeOf(error); this.report(summary.error); }
     this.lastReconcile = summary;
     return summary;
+  }
+
+  /** Persist attempts, including failures, so one unavailable scope cannot starve the rest after a restart.
+   * @param {string} userId @param {string | null} projectId @param {string | null} error */
+  async recordReconciliation(userId, projectId, error) {
+    const documents = this.sources.documents;
+    if (!documents) return;
+    const id = `ov-resource-check:${projectId ?? "library"}`;
+    const current = await documents.get(userId, "preferences", id);
+    await documents.put(userId, "preferences", id, { recordType: "ov-resource-check", checkedAt: this.now().toISOString(), error },
+      { expectedRevision: current?.revision ?? 0, projectId, telemetry: Boolean(current) });
   }
 
   status() { return { enabled: this.enabled, ...this.counters, lastReconcile: this.lastReconcile }; }
@@ -319,11 +440,21 @@ export class OpenVikingSourceSyncWorker {
   }
 
   async #tick() {
-    if (!this.service.enabled) return null;
+    if (!this.service.enabled && !this.service.lifecycle) return null;
+    if (this.jobs.database && (!this.lastReplicaRearm || Date.now() - this.lastReplicaRearm >= this.reconcileMs)) {
+      this.lastReplicaRearm = Date.now();
+      await this.jobs.database.query(`UPDATE evimed_product.jobs SET status='queued',attempts=0,run_after=clock_timestamp(),
+        finished_at=NULL,updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
+        WHERE id IN (SELECT id FROM evimed_product.jobs WHERE kind=$1 AND status='failed' AND payload->>'action'='lifecycle'
+          AND payload->>'scope'='source' AND error->>'code'='source_runtime_replica_pending' ORDER BY updated_at,id LIMIT 25)`, [SOURCE_SYNC_JOB_KIND]);
+    }
     const job = await this.jobs.claim([SOURCE_SYNC_JOB_KIND], this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     try {
       const result = await this.service.runJob(job);
+      if (["deferred", "retryable-failure"].includes(result?.runtimeReplica?.state)) {
+        throw Object.assign(new Error("The committed source is waiting for its runtime replica."), { code: "source_runtime_replica_pending" });
+      }
       await this.jobs.finish(job.userId, job.id, job.leaseToken, result);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
@@ -346,10 +477,13 @@ export class OpenVikingSourceSyncWorker {
 
   status() { return { running: Boolean(this.running), lastError: this.lastError, lastCompletedAt: this.lastCompletedAt }; }
 
-  async close() {
+  pause() {
     if (this.timer) clearInterval(this.timer);
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.timer = null; this.reconcileTimer = null;
-    await Promise.all([this.running, this.reconciling].filter(Boolean));
   }
-}
+
+  async close() {
+    this.pause();
+    await Promise.all([this.running, this.reconciling].filter(Boolean));
+  }}

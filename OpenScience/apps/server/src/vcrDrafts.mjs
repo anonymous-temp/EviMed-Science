@@ -1,35 +1,18 @@
+import { VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME } from "@evimed/domain";
+
 /**
- * The sweep of 「虚拟临床研究」 drafts: a study nobody ever spoke to is deleted an
- * hour after it was made.
+ * Draft visibility and conservative expiry candidates for virtual clinical research.
+ * Saved inputs, study objects, registered sources and project activity keep a draft reachable.
+ * Missing dependencies and unknown native attachment history never establish emptiness.
  *
- * Hidden knowledge:
- *
- * - **Why drafts exist at all.** 「新建研究」 opens a conversation, and a
- *   conversation needs a project and a runtime before its first word can be
- *   typed — so the study (a row beside the project) is made at once, as a
- *   `draft`. It stays out of the list, the sidebar and the orchestrator's walk
- *   until its first definition names it (`VcrStore.saveDefinition`). Everyone who
- *   clicked 「新建研究」 and closed the tab leaves one behind; this is what
- *   removes them, so the account never accumulates 「未命名研究」 rows.
- * - **Spoken in is the control plane's ledger, not this schema's.** The user's
- *   message is a run in the project's run ledger (`agentRuns.dispatch`, the chat
- *   route), so a project with any run has been spoken in, and its draft is kept
- *   whatever its age: a person may be mid-thought, or the definition write may
- *   be a minute away. The sweep errs toward keeping — a ledger it cannot read
- *   keeps the draft — because deleting a study someone has typed into loses
- *   their conversation, and keeping an empty one costs a row.
- * - **A deletion is the project's.** The study's row, the project, the
- *   conversation's metadata and the files go in the one transaction a project
- *   deletion already is (`remove`, the same hook a failed 「新建研究」 uses), so
- *   a draft cannot outlive its project or the project its draft.
- * - **Idempotent and logged.** A draft already gone is not an error; a second
- *   sweep over the same rows does nothing. Every deletion is counted and
- *   reported with its study id, never its name.
- *
+ * The generic sweep permits a remover to return false when deletion cannot be proven safe.
+ * The hosted composition does so for every project: VCR, source and native-upload writes do
+ * not share the project's deletion lock. Automatic expiry therefore never stops a runtime,
+ * deletes memory or removes project files. Explicit researcher deletion is independent.
  * @module vcrDrafts
  */
 
-/** How long a draft lives with nobody speaking in it. */
+/** Age at which an unused draft becomes a retention candidate, never deletion authority. */
 export const VCR_DRAFT_TTL_MS = 60 * 60_000;
 
 /** Drafts one sweep looks at: a backlog is cleared over a few ticks, never in one long transaction. */
@@ -52,7 +35,7 @@ export function createVcrDraftSweeper({ store, spokenIn, remove, ttlMs = VCR_DRA
   return {
     counts,
 
-    /** One pass: delete the drafts past their hour in which nobody spoke. @returns {Promise<{ deleted: number, kept: number, failed: number }>} */
+    /** One pass: consider old empty drafts; a safe-removal refusal counts as kept. @returns {Promise<{ deleted: number, kept: number, failed: number }>} */
     async sweep() {
       counts.sweeps += 1;
       const cutoff = new Date(now().getTime() - ttlMs);
@@ -70,7 +53,7 @@ export function createVcrDraftSweeper({ store, spokenIn, remove, ttlMs = VCR_DRA
         }
         if (spoken) { kept += 1; continue; }
         try {
-          await remove(study);
+          if (await remove(study) === false) { kept += 1; continue; }
           deleted += 1;
           report(`vcr_draft_deleted:${study.id}`);
           await Promise.resolve(audit("vcr.draft.delete", "completed", { userId: study.userId, projectId: study.projectId, detail: study.id })).catch(() => null);
@@ -85,5 +68,28 @@ export function createVcrDraftSweeper({ store, spokenIn, remove, ttlMs = VCR_DRA
       counts.failed += failed;
       return { deleted, kept, failed };
     },
+  };
+}
+
+/**
+ * One conservative definition of a used draft, shared by visibility and expiry.
+ * A candidate is never evidence of current emptiness; always read its study again.
+ * @param {{store: any, projectUsed: (study: any) => Promise<boolean>}} dependencies
+ */
+export function createVcrDraftUsage({ store, projectUsed }) {
+  return async (/** @type {any} */ candidate) => {
+    try {
+      const study = await store.studyById(candidate.id);
+      if (!study || study.userId !== candidate.userId || study.projectId !== candidate.projectId) return true;
+      if (study.status !== "draft" || String(study.question ?? "").trim()) return true;
+      const name = String(study.name ?? "").trim();
+      if (name && ![VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME].includes(name)) return true;
+      if (typeof store.draftHasResearchContent !== "function" || typeof projectUsed !== "function") return true;
+      if (await store.draftHasResearchContent(study.id)) return true;
+      return await projectUsed(study) !== false;
+    } catch {
+      // Unavailable dependencies cannot prove that a person's work does not exist.
+      return true;
+    }
   };
 }

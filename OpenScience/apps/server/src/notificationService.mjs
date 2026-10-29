@@ -12,6 +12,8 @@ import { productId, productInteger } from "./productPersistence.mjs";
  */
 export const INBOX_SEVERITIES = Object.freeze(["safety", "attention", "info"]);
 const severityRank = Object.freeze({ info: 0, attention: 1, safety: 2 });
+/** One identifier for an account's durable notification event. */
+export const notificationEventId = (userId, key) => `notification:${createHash('sha256').update(JSON.stringify([userId, key])).digest('hex')}`;
 
 /**
  * How long a read item is kept, counted from when it was read (C1). Unread
@@ -511,8 +513,7 @@ export class NotificationService {
       throw new HttpError(400, "notification_payload_invalid", "Silent inbox records are retired: work nobody asked about leaves no inbox item.");
     }
     const values = {
-      id: input.idempotencyKey == null ? randomUUID() : `notification:${createHash("sha256")
-        .update(JSON.stringify([user, text(input.idempotencyKey, "idempotency key", 200)])).digest("hex")}`,
+      id: input.idempotencyKey == null ? randomUUID() : notificationEventId(user, text(input.idempotencyKey, "idempotency key", 200)),
       user, projectId: input.projectId == null ? null : productId(input.projectId, "project"),
       noticeType, priority: NOTICE_PRIORITY[noticeType], title: text(input.title, "title", 150), body: text(input.body, "body", 8000),
       actions: JSON.stringify(actionList), source: JSON.stringify(source(input.source)),
@@ -599,6 +600,26 @@ export class NotificationService {
       try { this.channels.onChange(saved); } catch { /* isolated: evimed_im_events_total{kind="notice_hook_failed"} */ }
     }
     return saved;
+  }
+
+  /** Upgrade an exact event's destination without duplicating it, marking it unread or sending another channel message.
+   * Grouped notices retain their aggregate destination. This internal writer is not exposed as a client mutation.
+   * @param {string} userId @param {string} idempotencyKey @param {{from:any,to:any}} change */
+  async retargetEventSource(userId, idempotencyKey, { from, to }) {
+    const user = productId(userId, "user"), original = source(from), destination = source(to);
+    if (original.type !== destination.type) throw new HttpError(400, "notification_payload_invalid", "Event source types must agree.");
+    const id = notificationEventId(user, text(idempotencyKey, "idempotency key", 200));
+    await migrateNotifications(this.database);
+    return this.database.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-inbox-key:${id}`]);
+      const saved = await client.query(`UPDATE evimed_inbox.notifications SET source=$4::jsonb,revision=revision+1,updated_at=clock_timestamp()
+        WHERE id=$1 AND user_id=$2 AND notice_type='notify' AND event_count=1 AND source=$3::jsonb AND source<>$4::jsonb RETURNING *`,
+      [id, user, JSON.stringify(original), JSON.stringify(destination)]);
+      if (saved.rows[0]) return record(saved.rows[0]);
+      const existing = await client.query(`SELECT * FROM evimed_inbox.notifications WHERE id=$1 AND user_id=$2
+        AND notice_type='notify' AND event_count=1 AND source=$3::jsonb`, [id,user,JSON.stringify(destination)]);
+      return existing.rows[0] ? record(existing.rows[0]) : null;
+    });
   }
 
   /**

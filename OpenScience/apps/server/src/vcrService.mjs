@@ -39,7 +39,7 @@ import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
-  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
+  VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
   vcrModelCardIssues, vcrModelInterfaceOf, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
 
@@ -353,7 +353,7 @@ export async function seedVcrCatalogue({ store, engine = null, methodValidationF
 
 /** Which step each of the home page's four action cards asks for (plan §9.2). */
 export const VCR_ACTION_STEPS = Object.freeze({
-  cohort: "population", patients: "patients", comparator: "comparator", trial: "trial",
+  definition: "definition", cohort: "population", patients: "patients", comparator: "comparator", trial: "trial",
 });
 
 /**
@@ -362,7 +362,8 @@ export const VCR_ACTION_STEPS = Object.freeze({
  * for all seven.
  * @param {string | undefined | null} action
  */
-export function vcrRequestedSteps(action) {
+export function vcrRequestedSteps(action, purpose = "programme") {
+  if (purpose === "calculation") return Object.freeze([]);
   const step = /** @type {Record<string, string>} */ (VCR_ACTION_STEPS)[String(action ?? "")];
   return step ? Object.freeze([step]) : VCR_STEPS;
 }
@@ -583,6 +584,7 @@ export class VcrService {
 
   /** The seven-step rail, row-level. @param {any} study */
   #progress(study) {
+    if (study.purpose === "calculation") return [];
     return VCR_STEPS.map((step) => ({
       step,
       status: study.steps?.[step]?.status ?? "none",
@@ -617,7 +619,7 @@ export class VcrService {
    * say what the study is — a name, or a question to name it from — gets an
    * active study at once.
    * @param {{ id: string }} user
-   * @param {{ name?: string, question?: string, dataTier?: string, intendedUse?: string, action?: string }} input already validated by the route
+   * @param {{ name?: string, question?: string, dataTier?: string, intendedUse?: string, action?: string, draft?: boolean, purpose?: "programme" | "calculation" }} input already validated by the route
    * @param {{ createResearcherProject: (user: any, name: string) => Promise<{ id: string, name: string }>,
    *   bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }> }} hooks
    */
@@ -627,24 +629,28 @@ export class VcrService {
     const control = await hooks.createResearcherProject(user, name);
     const study = await this.store.createStudy({
       userId: String(user.id), projectId: control.id, name, question: String(input.question ?? ""),
-      dataTier: input.dataTier, intendedUse: input.intendedUse, status: given ? "active" : "draft",
+      dataTier: input.dataTier, intendedUse: input.intendedUse, purpose: input.purpose,
+      status: input.draft === true ? "draft" : input.purpose === "calculation" || given ? "active" : "draft",
     });
     // What the study is asked for at birth. One of the home page's four action
     // cards asks for that one step, and whatever it needs upstream comes as a
     // minimal version; 「新建研究」 with a question asks for the whole
     // programme, which is what makes 一句话到研究包 the default path (plan §4,
     // §9.2). Nothing else about the study waits for a person.
-    for (const step of vcrRequestedSteps(input.action)) {
+    for (const step of input.draft === true ? [] : vcrRequestedSteps(input.action, input.purpose)) {
       await this.store.setStep(study.id, step, { requested: true });
     }
-    const session = await hooks.bindSession(user, control.id, VCR_STEP_CAPABILITIES.definition)
-      .catch(() => ({ sessionId: "", bound: false }));
+    // A saved research draft has one held goal. Keeping definition requested also prevents the legacy
+    // all-seven backfill when a later ordinary conversation happens to write its definition.
+    if (input.draft === true && input.purpose !== "calculation") await this.store.setStep(study.id, "definition", { requested: true, held: true });
+    const session = input.purpose === "calculation" ? { sessionId: "", bound: false }
+      : await hooks.bindSession(user, control.id, VCR_STEP_CAPABILITIES.definition).catch(() => ({ sessionId: "", bound: false }));
     // The conversation the study was opened with is the one its 「对话」 opens, whatever background runs follow. A study whose
     // conversation could not be made now (no runtime could be opened) has none yet, and its owner's next read makes one.
     if (session.sessionId) await this.store.setConversationSession(study.id, session.sessionId);
     this.counters.studiesCreated += 1;
     return {
-      id: study.id, projectId: control.id, name: study.name, status: study.status, requested: [...vcrRequestedSteps(input.action)],
+      id: study.id, projectId: control.id, name: study.name, status: study.status, purpose: study.purpose, requested: input.draft === true ? input.purpose === "calculation" ? [] : ["definition"] : [...vcrRequestedSteps(input.action, input.purpose)],
       sessionId: session.sessionId || null, bound: session.bound === true,
     };
   }
@@ -724,7 +730,7 @@ export class VcrService {
     if (action !== undefined) {
       // A changed 起点 re-asks which steps run; a step already done stays done,
       // it is only no longer requested of the programme.
-      const wanted = new Set(vcrRequestedSteps(action === "auto" ? undefined : action));
+      const wanted = new Set(vcrRequestedSteps(action === "auto" ? undefined : action, study.purpose));
       // Re-asking which steps run is an instruction of its own: a hold a 「取消」 put on the programme ends with it.
       for (const step of VCR_STEPS) updated = await this.store.setStep(study.id, step, { requested: wanted.has(step), held: false }) ?? updated;
     }
@@ -748,11 +754,16 @@ export class VcrService {
   async studyView(user, id) {
     const study = await this.requireStudy(user, id);
     const bundle = await this.#bundle(study, user);
-    const [activity, conversation] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user)]);
+    const [activity, conversation, intake] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user),
+      this.store.one(`SELECT run_id, session_id, detail FROM ${VCR_SCHEMA}.schedule_marks
+        WHERE study_id = $1 AND key = 'run:definition' AND detail->>'purpose' = 'intake'`, [study.id])]);
+    // Activity has a short display tail. An acknowledged intake remains a conversation when it needs more information, including on reload.
+    const submitted = Boolean(conversation.sessionId && intake?.run_id && intake.session_id === conversation.sessionId
+      && (intake.detail?.goalsApplied === true || intake.detail?.awaitingInput === true));
     // `activity`: what is going on now, `null` when nothing is; `conversation`: the study's own conversation, which is never one of the
     // programme's runs; `sessionId` is the same id for the readers that predate `conversation`; `engine` is what the page's one line at
     // the top says.
-    return { ...presentStudy(bundle), activity, conversation, sessionId: conversation.sessionId, engine: this.engineState() };
+    return { ...presentStudy(bundle), activity, conversation: { ...conversation, ...(submitted ? { submitted: true, ...(intake.detail?.awaitingInput === true ? { awaitingInput: true } : {}) } : {}) }, sessionId: conversation.sessionId, engine: this.engineState() };
   }
 
   /**
@@ -777,6 +788,7 @@ export class VcrService {
    * @returns {Promise<{ sessionId: string | null, exists: boolean }>}
    */
   async #conversation(study, user) {
+    if (study.purpose === "calculation") return { sessionId: study.conversationSessionId ?? null, exists: Boolean(study.conversationSessionId) };
     const resolver = this.packages.conversations;
     if (resolver?.resolve) {
       const found = await resolver.resolve(study, { create: String(study.userId) === String(user.id) }).catch(() => null);
@@ -812,7 +824,7 @@ export class VcrService {
     const ceiling = useCeilingOf({ study, results, reviews, stale, current });
     return {
       id: study.id, projectId: study.projectId, name: study.name, question: study.question,
-      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status, entityKeys: study.entityKeys ?? [],
+      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status, purpose: study.purpose ?? "programme", entityKeys: study.entityKeys ?? [],
       steps: study.steps, progress: this.#progress(study), tabs: [...VCR_TABS],
       definition,
       counts: vcrCountBand(object(headline?.counts)),
@@ -1284,20 +1296,54 @@ export class VcrService {
    */
   async adoptModel(user, input) {
     const study = input.studyId ? await this.requireStudy(user, String(input.studyId)) : null;
-    const sources = list(input.sources).map((source) => String(object(source).label ?? source));
+    const sources = list(input.sources).map((source) => String(object(source).label ?? source).trim()).filter(Boolean);
+    if (input.risk != null && !["none", "low", "medium", "high"].includes(input.risk)) throw failure(400, "vcr_model_invalid", "Unknown model risk.");
     // The call shape a card declares is one of the two plan §5.2 names (a card that says nothing is the first). A model of the second
     // shape is taken in with the card it arrives with; what that card has not said is returned as notices, never as a refusal, and
     // the applicability check then declines to answer for it field by field (`vcrModelCardIssues`).
     const shape = vcrModelInterfaceOf({ card: object(input.card) });
     if (shape === null) throw failure(400, "vcr_model_invalid", `card.interfaceShape is one of: ${VCR_MODEL_INTERFACES.join(", ")}.`);
-    const card = { ...object(input.card), type: shape === "event_history_to_trajectories" ? "generative" : "fitted_prediction_model",
-      provider: study ? `研究 ${study.name}` : "虚拟临床研究" };
-    const applicability = { ...object(input.applicability), population: sources.length ? `来源试验的人群：${sources.join("、")}` : "来源试验的人群", sources };
+    const card = /** @type {Record<string, any>} */ ({ ...object(input.card), type: shape === "event_history_to_trajectories" ? "generative" : "fitted_prediction_model",
+      provider: study ? `研究 ${study.name}` : "虚拟临床研究" });
+    // Browser copies are a preview only. Preserve source bytes and re-read the verified
+    // extraction ledger server-side before attaching parameters to a model version.
+    for (const key of ["sourceParameters", "sourceRecordHash", "sourcePrecedentId", "sourceEvidenceIds", "sourceImport"]) delete card[key];
+    const sourceRegistryId = String(object(input.card).sourceRegistryId ?? "").trim();
+    if (sourceRegistryId) {
+      if (!/^NCT\d{8}$/.test(sourceRegistryId)) throw failure(400, "vcr_model_invalid", "A ClinicalTrials.gov registration number is required.");
+      let sourceImport = { status: "unavailable", reason: "registry_not_configured" };
+      if (this.packages.evidence?.extractPrecedent && this.packages.evidenceStore?.itemsById) {
+        try {
+          const preserved = await this.packages.evidence.extractPrecedent({ userId: String(user.id), studyId: study?.id ?? null, registry: "clinicaltrials.gov", registryId: sourceRegistryId });
+          sourceImport = { status: preserved.status, reason: preserved.reason ?? "" };
+          if (preserved.status === "ok") {
+            const parameters = await this.packages.evidenceStore.itemsById({ userId: String(user.id), studyId: study?.id ?? null, ids: preserved.evidenceIds });
+            Object.assign(card, { sourceRecordHash: preserved.record?.hash ?? null, sourcePrecedentId: preserved.precedent.id,
+              sourceEvidenceIds: preserved.evidenceIds, sourceParameters: parameters.map((/** @type {any} */ row) => ({
+                parameter: row.parameter, value: row.value, unit: row.unit, quote: row.quote, locator: row.locator,
+              })) });
+          }
+        } catch { sourceImport = { status: "unavailable", reason: "source_preservation_failed" }; }
+      }
+      Object.assign(card, { sourceImport });
+      if (!sources.includes(sourceRegistryId)) sources.push(sourceRegistryId);
+    }
+    for (const key of ["executionSpec", "registrationState", "specificationMissing"]) delete card[key];
+    if (object(input.card).literatureSource) {
+      if (!study) throw failure(400, "vcr_model_invalid", "A preserved literature source belongs to an existing study project.");
+      if (!this.packages.modelSources) throw failure(503, "vcr_unavailable", "文献来源读取暂不可用。");
+      Object.assign(card, await this.packages.modelSources.prepare(user, study, object(input.card)));
+      const title = String(object(card.literatureSource).title ?? object(card.literatureSource).sourceId);
+      if (!sources.includes(title)) sources.push(title);
+    }
+    const applicability = { ...object(input.applicability), sources };
+    const parameterEndpoint = object(object(object(card.executionSpec).scenario).endpoint).type ?? null;
+    if (parameterEndpoint && input.endpointType && input.endpointType !== parameterEndpoint) throw failure(400, "vcr_model_invalid", "The declared endpoint disagrees with the source reference profile.");
     const validation = object(input.validation);
     const saved = await this.store.saveModel({
       userId: String(user.id), studyId: study?.id ?? null,
       name: String(input.name), version: String(input.version ?? "1.0.0"),
-      tier: "literature", risk: String(input.risk ?? "low"), endpointType: input.endpointType ?? null,
+      tier: "literature", risk: input.risk ?? null, endpointType: parameterEndpoint ?? input.endpointType ?? null,
       card, applicability, validation, evidence: list(input.evidence).map(String),
     });
     await this.store.audit({ studyId: study?.id ?? null, userId: String(user.id), actor: String(user.id),
@@ -1316,13 +1362,68 @@ export class VcrService {
     const asked = queryOf(query);
     const evidenceStore = this.packages.evidenceStore;
     if (!evidenceStore) {
-      return presentPrecedents({ available: false, message: "试验先例库在本部署尚未接入。" });
+      return presentPrecedents({ available: false, message: "参考试验库在本部署尚未接入。" });
     }
     const limit = Math.min(200, Math.max(1, Number.parseInt(asked.limit ?? "", 10) || 100));
     const rows = await evidenceStore.listPrecedents({ userId: String(user.id), search: String(asked.q ?? ""), limit });
     const registryCoverage = await (this.packages.evidence?.registryCoverageFor?.(String(user.id)) ?? this.packages.evidence?.registryCoverage?.() ?? []);
     const candidates = this.packages.frontierEvents?.candidatesFor ? await this.packages.frontierEvents.candidatesFor(String(user.id)) : null;
-    return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项试验先例` : null, candidates });
+    return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项参考试验` : null, candidates });
+  }
+
+  /** @param {{ id: string }} user @param {string} studyId @param {string} sourceId */
+  async modelSourcePreview(user, studyId, sourceId) {
+    const study = await this.requireStudy(user, studyId);
+    if (!this.packages.modelSources) throw failure(503, "vcr_unavailable", "文献来源读取暂不可用。");
+    return this.packages.modelSources.preview(user, study, sourceId);
+  }
+
+  /** Bind an actual computation to one immutable source-based model version.
+   * @param {{id:string}} user @param {any} study @param {string} modelId @param {string} kind @param {any} scenario
+   */
+  async modelExecution(user, study, modelId, kind, scenario) {
+    const model = (await this.store.models(String(user.id))).find(row => row.id === modelId);
+    if (!model) throw failure(404, "not_found", "Model not found.");
+    if (!model.studyId || !this.packages.modelSources || !object(model.card).literatureSource) throw failure(400, "vcr_model_invalid", "This model has no source-bound executable configuration.");
+    const sourceStudy = await this.requireStudy(user, model.studyId);
+    const prepared = await this.packages.modelSources.prepare(user, sourceStudy, model.card);
+    const spec = object(prepared.executionSpec);
+    if (!spec.method || VCR_JOB_METHODS[kind] !== spec.method) throw failure(400, "vcr_model_invalid", "This model version has no supported configuration for that method.");
+    const expected = object(spec.scenario);
+    if (object(scenario.endpoint).type !== object(expected.endpoint).type || (expected.timeUnit && scenario.timeUnit !== expected.timeUnit)) {
+      throw failure(400, "vcr_model_invalid", "The endpoint and time unit must agree with this source model version.");
+    }
+    for (const parameter of list(spec.sourceParameters)) {
+      const key = String(parameter.field).split(".")[1];
+      if (object(scenario.truth)[key] !== parameter.value) throw failure(400, "vcr_model_invalid", "A source parameter changed; register a corrected model version first.");
+    }
+    return { id: model.id, version: model.version, source: object(model.card).literatureSource, scenarioHash: spec.scenarioHash ?? null };
+  }
+
+  /** Browser adapter to the existing registry pipeline; no source URL is fetched here.
+   * @param {{ id: string }} user @param {Record<string, any>} input
+   */
+  async searchReferenceTrials(user, input) {
+    const evidence = this.packages.evidence;
+    if (!evidence?.findPrecedents) throw failure(503, "vcr_unavailable", "参考试验检索暂不可用。");
+    return evidence.findPrecedents({ userId: String(user.id), target: { condition: String(input.q ?? "").trim() }, limit: 20 });
+  }
+
+  /** @param {{ id: string }} user @param {Record<string, any>} input */
+  async readReferenceTrial(user, input) {
+    const evidence = this.packages.evidence;
+    if (!evidence?.readRegistryRecord) throw failure(503, "vcr_unavailable", "登记记录暂不可用。");
+    return evidence.readRegistryRecord({ userId: String(user.id), registry: input.registry, registryId: input.registryId });
+  }
+
+  /** The pipeline preserves registry bytes, enrollment kind and verified values together.
+   * @param {{ id: string }} user @param {Record<string, any>} input
+   */
+  async applyReferenceTrial(user, input) {
+    const study = await this.requireStudy(user, String(input.studyId));
+    const evidence = this.packages.evidence;
+    if (!evidence?.extractPrecedent) throw failure(503, "vcr_unavailable", "登记记录暂不可用。");
+    return evidence.extractPrecedent({ userId: study.userId, studyId: study.id, registry: input.registry, registryId: input.registryId });
   }
 
   // --- the runtime's read (build contract §3.2, §4) ---------------------------------------
@@ -1558,7 +1659,7 @@ export class VcrService {
       case "precedents": {
         const evidence = this.packages.evidence;
         if (!evidence?.runtimeRead) {
-          return { available: false, code: "vcr_evidence_unavailable", message: "试验先例库未接入：这一步暂不可用，其余步骤照常。" };
+          return { available: false, code: "vcr_evidence_unavailable", message: "参考试验库未接入：这一步暂不可用，其余步骤照常。" };
         }
         return evidence.runtimeRead(study, { ...filter, what: "precedents" });
       }

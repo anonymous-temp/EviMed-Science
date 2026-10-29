@@ -1,28 +1,25 @@
 /**
- * The map's first source: the account's memories in PostgreSQL (`evimed_memory`), the lines between them and what they rest on.
+ * What the map draws of an account's memories: marks, the lines between them and what they rest on, lineages, events, the radar.
  *
  * Hidden knowledge:
  *
- * - **Derived, never written.** Every mark and line here is read from a table that already has an owner — the records, what
- *   each rests on (`record_sources`), the disagreements still open (`record_conflicts`), the use counters (`record_usage`) — so
- *   the map cannot disagree with the memory page it opens onto.
+ * - **Derived, never written.** Every mark and line here is read from a store that already has an owner — the engine's memory files
+ *   and the overlay's record of what each rests on — so the map cannot disagree with the memory page it opens onto. The one source
+ *   is `nativeMemory.mjs`, which reads them and hands them to `recordsContribution`; this module is the pure half. (It also had
+ *   a PostgreSQL source over the legacy engine's `records` until that engine was deleted, 2026-10-25; the lineages, the open
+ *   disagreements and the use counters below are what those records had and a file of the engine does not.)
  * - **What is never drawn.** A run summary names a conversation and is not a memory; a sensitive memory is never recalled and
- *   is never drawn; a forgotten one is under 已忘记的内容. The store's `mapRecords` filters them in the query, and this module
- *   does not trust that alone: it drops them again, because the rule is the map's and not the query's.
+ *   is never drawn; a forgotten one is under 已忘记的内容. The store filters them, and this module does not trust that alone: it
+ *   drops them again, because the rule is the map's and not the query's.
  * - **Nothing here is a back-office label.** `origin` and `provenance` — who wrote a memory and how sure it is — are the
  *   platform's own and never reach a field of this document (owner ruling 2026-10-10).
  * - **A mark that needs a second look says why**, in one code (`MAP_REASONS`): a source it rests on was withdrawn, changed or
- *   expired, or it disagrees with another memory in force, or its own date has passed. The first that holds is the one told.
- * - **Lineages** are the supersede chains: the memory a later one replaced, which stays as 「曾经如此」. A lane is one chain, each
- *   segment a version over the interval it held.
- *
- * Stands aside when the account's memories live in the native engine (`request.engine === "native"`): that account's marks come
- * from `nativeMemory.mjs`.
+ *   expired, or its own date has passed. The first that holds is the one told.
  *
  * @module memoryMapSources/records
  */
 
-import { MEMORY_KIND_LABELS_ZH } from "../researchMemoryPersistence.mjs";
+import { MEMORY_KIND_LABELS_ZH } from "../memoryKinds.mjs";
 import { bucketsOf, memoryEventsOf } from "./activity.mjs";
 import { excerpt, instant, nodeId, unit } from "./common.mjs";
 
@@ -40,9 +37,11 @@ export const MAP_PREVIOUS_DAYS = 30;
  * (`SELF_SECTIONS` and a project's kinds on the memory page). Never a list of topics, which would change who is on an axis.
  */
 export const MEMORY_ASPECTS = Object.freeze([
-  { id: "aspect:background", label: "背景", kinds: Object.freeze(["profile"]) },
+  // The capsule's notes have kinds of their own beside the memory's (`expertise`, `writing_style`, `method_preference`, `tooling`): they are
+  // counted under the aspect the memory page files them under (`SECTION_OF_KIND`), so a note and a memory of one aspect are one bar.
+  { id: "aspect:background", label: "背景", kinds: Object.freeze(["profile", "expertise", "stance"]) },
   { id: "aspect:preference", label: "偏好", kinds: Object.freeze(["preference"]) },
-  { id: "aspect:habit", label: "工作与写作习惯", kinds: Object.freeze(["behavior"]) },
+  { id: "aspect:habit", label: "工作与写作习惯", kinds: Object.freeze(["behavior", "writing_style", "method_preference", "tooling"]) },
   { id: "aspect:correction", label: "纠正过的", kinds: Object.freeze(["correction"]) },
   { id: "aspect:project", label: "项目事实", kinds: Object.freeze(["project_fact", "analysis", "follow_up"]) },
   { id: "aspect:decision", label: "已定的决策", kinds: Object.freeze(["decision"]) },
@@ -173,34 +172,17 @@ export function aspectDimension(records, now) {
 }
 
 /**
- * The memories the map draws, as the sources that need them share them (one read per request).
- * @param {import("./common.mjs").MapSourceRequest} request @param {any} researchMemory
- */
-export async function drawnRecords(request, researchMemory) {
-  const found = await request.memo("records", () => researchMemory.mapRecords(request.user.id, { projectId: request.projectId, limit: MAP_RECORD_LIMIT }));
-  return found.filter(drawable);
-}
-
-/**
- * What those memories rest on, disagree with and are used by (one read per request).
- * @param {import("./common.mjs").MapSourceRequest} request @param {any} researchMemory
- */
-export async function drawnLinks(request, researchMemory) {
-  const records = await drawnRecords(request, researchMemory);
-  return request.memo("links", () => researchMemory.mapLinks(request.user.id, records.map((record) => record.id)));
-}
-
-/**
- * Everything the map draws of a set of memories, from the memories and the relations read for them. Pure: the source below reads
- * PostgreSQL and the native engine's source reads files, and both hand their memories to this.
+ * Everything the map draws of a set of memories, from the memories and the relations read for them. Pure: the source reads the
+ * engine's files and hands its memories to this.
  *
  * @param {readonly any[]} found the memories, in the store's light shape (`publicRecord`)
  * @param {{ sources?: any[], conflicts?: any[], usage?: Record<string, { count: number }> }} links what they rest on, the open
  *   disagreements (`recordStatus` / `otherStatus` when known) and how often each was handed to a run
- * @param {{ now: Date, timeZone: string }} context
+ * @param {{ now: Date, timeZone: string, weigh?: (record: any) => number }} context `weigh`: what a mark's size says when the store has no
+ *   importance of its own to say it (the native engine's files all have the same): given, it replaces the importance-and-use weight
  * @returns {import("./common.mjs").MapContribution}
  */
-export function recordsContribution(found, links, { now, timeZone }) {
+export function recordsContribution(found, links, { now, timeZone, weigh = undefined }) {
   const records = found.filter(drawable);
   const inSet = new Set(records.map((record) => record.id));
   const live = (/** @type {string} */ id) => ["active", "pending"].includes(records.find((record) => record.id === id)?.status ?? "");
@@ -236,7 +218,7 @@ export function recordsContribution(found, links, { now, timeZone }) {
     nodes.push({
       id, type: "memory", subtype: record.kind, group: /** @type {Record<string, string>} */ (MEMORY_KIND_LABELS_ZH)[record.kind] ?? record.kind,
       label: excerpt(recordText(record), MAP_LABEL_CHARS),
-      weight: unit(0.5 * (Number(record.importance) || 0) + 0.5 * Math.min(1, Math.log1p(used) / Math.log1p(10))),
+      weight: weigh ? unit(weigh(record)) : unit(0.5 * (Number(record.importance) || 0) + 0.5 * Math.min(1, Math.log1p(used) / Math.log1p(10))),
       at: instant(record.createdAt),
       state: record.status === "superseded" ? "replaced" : reason ? "check" : "current",
       reason, projectId, open: { kind: "record", id: record.id },
@@ -275,21 +257,5 @@ export function recordsContribution(found, links, { now, timeZone }) {
       dimensions: [aspectDimension(records, now)],
     },
     facts: { since: dated[0] ?? null },
-  };
-}
-
-/**
- * @param {{ researchMemory: any }} dependencies `mapRecords` and `mapLinks`, as `ResearchMemoryStore` has them
- * @returns {import("./common.mjs").MapSource}
- */
-export function createRecordsSource({ researchMemory }) {
-  return {
-    name: "records",
-    applies: (request) => request.engine !== "native" && typeof researchMemory?.mapRecords === "function",
-    async read(request) {
-      const records = await drawnRecords(request, researchMemory);
-      const links = await drawnLinks(request, researchMemory);
-      return recordsContribution(records, links, { now: request.now, timeZone: request.timeZone });
-    },
   };
 }

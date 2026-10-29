@@ -210,7 +210,7 @@ export function EvidenceMatrixTable({
                   className="block w-full px-4 py-3 text-left hover:bg-surface-2"
                 >
                   <span className="flex items-baseline justify-between gap-3">
-                    <span className="font-mono text-caption font-medium text-text">{claim.claimId}</span>
+                    <span className="font-mono text-caption text-text">{claim.claimId}</span>
                     <span className={cn("text-caption", MARK_TONE_CLASS[mark.tone])}>{mark.text}</span>
                   </span>
                   <span className="mt-1 line-clamp-3 text-ui text-text">{claim.claim}</span>
@@ -225,7 +225,7 @@ export function EvidenceMatrixTable({
             <table className="w-full min-w-[40rem] table-fixed border-separate border-spacing-0 text-left text-ui">
               <caption className="sr-only">证据矩阵：{rowData.length} 条结论</caption>
               <thead>
-                <tr className="text-compact text-text-3">
+                <tr className="text-caption text-text-3">
                   <th scope="col" className={cn(HEAD, "sticky left-0 z-page w-24 bg-surface-2")}>结论</th>
                   <th scope="col" className={cn(HEAD, "w-40")}>核对</th>
                   <th scope="col" className={HEAD}>内容</th>
@@ -253,7 +253,7 @@ export function EvidenceMatrixTable({
                         type="button"
                         data-matrix-open=""
                         aria-haspopup="dialog"
-                        className="whitespace-nowrap rounded font-mono text-caption font-medium text-text hover:underline"
+                        className="whitespace-nowrap rounded font-mono text-caption text-text hover:underline"
                       >
                         {claim.claimId}
                       </button>

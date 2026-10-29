@@ -23,6 +23,8 @@ export type VcrBodyRole =
   | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "recruiter" | "site" | "viewer";
 
 export interface VcrCreateBody {
+  purpose?: "programme" | "calculation";
+  draft?: boolean;
   name?: string;
   question?: string;
   dataTier?: "T0" | "T1" | "T2" | "T3";
@@ -52,8 +54,16 @@ export interface VcrPatchBody {
   action?: "auto" | "cohort" | "patients" | "comparator" | "trial";
 }
 
+export interface VcrQualityBasis {
+  populationId: string; populationVersion: number; resultId: string;
+  table: "population" | "synthetic-population"; inputId: string; sha256: string;
+}
 export interface VcrJobBody {
+  reconstructionResultId?: string;
+  qualityBasis?: VcrQualityBasis;
+  subjectId?: string;
   kind: string;
+  modelId?: string;
   scenario?: Record<string, unknown>;
   inputs?: unknown[];
   seed?: number;
@@ -155,6 +165,8 @@ export interface VcrModelBody {
   endpointType?: "continuous" | "binary" | "time_to_event";
   /** The trials the model was fitted on, one label each. */
   sources?: string[];
+  card?: Record<string, unknown>;
+  applicability?: Record<string, unknown>;
 }
 
 /** A person's re-judgment of one criterion; the platform's own answer is kept beside it. */
@@ -171,7 +183,7 @@ function said<T extends Record<string, unknown>>(entries: T): Partial<T> {
 }
 
 export function studyCreateBody(input: VcrCreateBody = {}) {
-  return said({ name: input.name, question: input.question, dataTier: input.dataTier, intendedUse: input.intendedUse, action: input.action });
+  return said({ name: input.name, question: input.question, dataTier: input.dataTier, intendedUse: input.intendedUse, action: input.action, purpose: input.purpose, draft: input.draft });
 }
 
 export function studyPatchBody(input: VcrPatchBody = {}) {
@@ -193,7 +205,7 @@ export function trialSearchBody(subjectKey: string) {
 export function jobBody(input: VcrJobBody) {
   return said({
     kind: input.kind, scenario: input.scenario, inputs: input.inputs, seed: input.seed, replicates: input.replicates,
-    cpuSecondsLimit: input.cpuSecondsLimit,
+    cpuSecondsLimit: input.cpuSecondsLimit, modelId: input.modelId, subjectId: input.subjectId, reconstructionResultId: input.reconstructionResultId, qualityBasis: input.qualityBasis ? { populationId: input.qualityBasis.populationId, populationVersion: input.qualityBasis.populationVersion, resultId: input.qualityBasis.resultId, table: input.qualityBasis.table, inputId: input.qualityBasis.inputId, sha256: input.qualityBasis.sha256 } : undefined,
   });
 }
 
@@ -290,6 +302,7 @@ export function modelBody(input: VcrModelBody) {
   return said({
     studyId: input.studyId, name: input.name.trim(), version: input.version?.trim() || undefined, risk: input.risk, endpointType: input.endpointType,
     sources: sources.length > 0 ? sources : undefined,
+    card: input.card, applicability: input.applicability,
   });
 }
 

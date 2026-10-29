@@ -27,16 +27,35 @@
  * @module learningMetrics
  */
 
+import { createHash } from "node:crypto";
+
+import { LEARNING_EVIDENCE_KINDS, LEARNING_EVIDENCE_VERDICTS, METHOD_APPLIED_OUTCOMES, METHOD_MOUNT_REASONS, METHOD_RELATION_TYPES } from "@evimed/domain";
+
+import { FOLLOW_UP_JUDGE_OUTCOMES, LEARNING_EVIDENCE_FAILURES } from "./learningEvidence.mjs";
+import { LEARNING_REFUSAL_REASONS } from "./learningTriggers.mjs";
+import { REPLAY_OUTCOMES, REPLAY_VERDICTS } from "./methodReplay.mjs";
+import { SCRIPT_OUTCOMES } from "./scriptLessons.mjs";
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
-import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
+import { LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
 const METHOD_STATUSES = Object.freeze(["candidate", "approved", "retired"]);
 const JOB_STATUSES = Object.freeze(["queued", "running", "succeeded", "failed", "canceled"]);
-const RESULT_OPERATIONS = Object.freeze(["create", "amend", "merge", "no_change", "handbook"]);
-const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carried"]);
+const RESULT_OPERATIONS = Object.freeze(["create", "amend", "merge", "no_change"]);
+const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carried", "explored", "appliedCorrected", "appliedClean"]);
+/** How a mount ranked the library (`selectLearnedMethods`): by meaning, by the words they share, or not at all (no first message to rank by). */
+const MOUNT_RANKING = Object.freeze(["embedding", "lexical", "recent"]);
 /** The branches of `retirementProposal` that stop a method on their own, as the counter of stops labels them. */
-const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regression", "never_opened"]);
+/** What a method that carries code came to when its scripts were run before it was written (`MethodDistillationRuns`). */
+const CODE_SKILL_OUTCOMES = Object.freeze(["verified", "failed", "unavailable"]);
+const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regression", "never_opened", "superseded", "unproven_merge_expired", "library_cap", "replay_regressed"]);
+/**
+ * Why a stage of the consolidation pass did nothing (`MethodConsolidation`): the pass used to succeed with `groups: 1, builds: 0, relations: 0`
+ * for eleven days and say nothing else. `skipped_unchanged` is a group read before and not changed since; `blocked_unproven` a group whose build
+ * waits for a merge nobody has proven; `decide_failed` a DECIDE that produced no answer; `decided_nothing` one that found nothing related;
+ * `merge_refused` a build that dropped something a source stored; `build_limit` a build left for the next pass; the rest are the library's size.
+ */
+const CONSOLIDATE_NOOP_REASONS = Object.freeze(["no_methods", "too_few_methods", "no_groups", "skipped_unchanged", "blocked_unproven", "decide_failed", "decided_nothing", "merge_refused", "build_limit"]);
 
 /** @param {unknown} value @param {readonly string[]} allowed @returns {string} */
 const closed = (value, allowed) => (allowed.includes(String(value ?? "")) ? String(value) : "other");
@@ -56,17 +75,82 @@ export class LearningMetrics {
     this.runs = { withMethods: 0 };
     this.runMethodsLoaded = 0;
     this.runMethodsInvoked = 0;
-    this.deliveries = { distilled: 0, sampledOut: 0 };
-    this.repairs = { distilled: 0, sampledOut: 0 };
+    /** @type {Record<string, number>} */
+    this.triggerRefused = Object.fromEntries([...LEARNING_REFUSAL_REASONS, "other"].map((reason) => [reason, 0]));
+    /** @type {Record<string, number>} */
+    this.evidenceFailed = Object.fromEntries([...LEARNING_EVIDENCE_FAILURES, "other"].map((reason) => [reason, 0]));
+    this.evidenceQuotes = { kept: 0, dropped: 0 };
+    /** @type {Record<string, number>} */
+    this.followUpJudge = Object.fromEntries([...FOLLOW_UP_JUDGE_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
     /** @type {Record<string, number>} */
     this.retirements = Object.fromEntries([...RETIREMENT_CODES, "other"].map((code) => [code, 0]));
+    /** @type {Record<string, number>} */
+    this.scripts = Object.fromEntries([...SCRIPT_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
+    /** @type {Record<string, number>} */
+    this.codeSkills = Object.fromEntries([...CODE_SKILL_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
+    /** @type {Record<string, number>} */
+    this.replayOutcomes = Object.fromEntries([...REPLAY_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
+    /** @type {Record<string, number>} */
+    this.replayVerdicts = Object.fromEntries([...REPLAY_VERDICTS, "other"].map((verdict) => [verdict, 0]));
+    /** @type {Record<string, number>} */
+    this.consolidateNoop = Object.fromEntries([...CONSOLIDATE_NOOP_REASONS, "other"].map((reason) => [reason, 0]));
+    /** @type {Record<string, number>} */
+    this.relations = Object.fromEntries([...METHOD_RELATION_TYPES, "other"].map((type) => [type, 0]));
+    /** @type {Record<string, number>} */
+    this.mountReasons = Object.fromEntries([...METHOD_MOUNT_REASONS, "other"].map((reason) => [reason, 0]));
+    /** @type {Record<string, number>} */
+    this.mountRanking = Object.fromEntries([...MOUNT_RANKING, "other"].map((mode) => [mode, 0]));
+    /** @type {Record<string, number>} */
+    this.applied = Object.fromEntries([...METHOD_APPLIED_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
   }
 
-  /** One repaired delivery that would have queued a lesson: whether the repair sample took it (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`).
-   *  @param {boolean} distilled */
-  observeRepairSample(distilled) {
-    if (distilled) this.repairs.distilled += 1;
-    else this.repairs.sampledOut += 1;
+  /** One run's reaction recorded against a method it opened (`foldApplied`): the researcher corrected it, or moved on.
+   *  @param {string} outcome @param {number} [times] */
+  observeApplied(outcome, times = 1) {
+    const label = closed(outcome, METHOD_APPLIED_OUTCOMES);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.applied[label] = (this.applied[label] ?? 0) + n;
+  }
+
+  /** What the script detector did with one run's programs (`SCRIPT_OUTCOMES`). @param {string} outcome @param {number} [times] */
+  observeScript(outcome, times = 1) {
+    const label = closed(outcome, SCRIPT_OUTCOMES);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.scripts[label] = (this.scripts[label] ?? 0) + n;
+  }
+
+  /** What became of a method that carries code when its scripts were run: verified, failed (no method written), unavailable (the job retries). @param {string} outcome */
+  observeCodeSkill(outcome) {
+    const label = closed(outcome, CODE_SKILL_OUTCOMES);
+    this.codeSkills[label] = (this.codeSkills[label] ?? 0) + 1;
+  }
+
+  /** What one replay of a changed method came to (`REPLAY_OUTCOMES`). @param {string} outcome */
+  observeReplayOutcome(outcome) {
+    const label = closed(outcome, REPLAY_OUTCOMES);
+    this.replayOutcomes[label] = (this.replayOutcomes[label] ?? 0) + 1;
+  }
+
+  /** What the judge said of one accepted run (`REPLAY_VERDICTS`). @param {string} verdict */
+  observeReplayVerdict(verdict) {
+    const label = closed(verdict, REPLAY_VERDICTS);
+    this.replayVerdicts[label] = (this.replayVerdicts[label] ?? 0) + 1;
+  }
+
+  /** A stage of the consolidation pass that did nothing, and why (`CONSOLIDATE_NOOP_REASONS`).
+   *  @param {string} reason @param {number} [times] */
+  observeConsolidateNoop(reason, times = 1) {
+    const label = closed(reason, CONSOLIDATE_NOOP_REASONS);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.consolidateNoop[label] = (this.consolidateNoop[label] ?? 0) + n;
+  }
+
+  /** Relations the consolidation pass newly recorded, by type (a relation a method already held is not counted again).
+   *  @param {string} type @param {number} [times] */
+  observeRelation(type, times = 1) {
+    const label = closed(type, METHOD_RELATION_TYPES);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.relations[label] = (this.relations[label] ?? 0) + n;
   }
 
   /** One method the consolidation pass stopped on its own, by the branch that decided.
@@ -76,21 +160,51 @@ export class LearningMetrics {
     this.retirements[label] = (this.retirements[label] ?? 0) + 1;
   }
 
-  /** One finished delivery that would have queued a lesson: whether the delivery sample took it (`LearningTriggers`).
-   *  @param {boolean} distilled */
-  observeDeliverySample(distilled) {
-    if (distilled) this.deliveries.distilled += 1;
-    else this.deliveries.sampledOut += 1;
+  /** One run or correction a gate turned away from teaching, by the reason (`LEARNING_REFUSAL_REASONS`): the loop stopped for eleven days
+   *  without a sign, and a refusal nobody counts looks like a loop with nothing to learn. @param {string} reason */
+  observeTriggerRefused(reason) {
+    const label = closed(reason, LEARNING_REFUSAL_REASONS);
+    this.triggerRefused[label] = (this.triggerRefused[label] ?? 0) + 1;
   }
 
-  /** One runtime launch: how many learned methods it mounted, and their bytes.
-   *  @param {{methods: number, bytes: number}} mount */
-  observeMount({ methods, bytes }) {
+  /** One piece of evidence that was not written, by why (`LEARNING_EVIDENCE_FAILURES`): a judge that failed, a quotation that was not in
+   *  the message, a message that could not be kept. @param {string} reason */
+  observeEvidenceFailure(reason) {
+    const label = closed(reason, LEARNING_EVIDENCE_FAILURES);
+    this.evidenceFailed[label] = (this.evidenceFailed[label] ?? 0) + 1;
+  }
+
+  /** What the follow-up judging itself did (`FOLLOW_UP_JUDGE_OUTCOMES`): an `adopt` confirmed or not by the second reading, how the examples were
+   *  chosen, a steer read. @param {string} outcome */
+  observeFollowUpJudge(outcome) {
+    const label = closed(outcome, FOLLOW_UP_JUDGE_OUTCOMES);
+    this.followUpJudge[label] = (this.followUpJudge[label] ?? 0) + 1;
+  }
+
+  /** The quotations a distilled method names as what it rests on: how many were in what the distillation was shown, and how many were not.
+   *  @param {number} kept @param {number} dropped */
+  observeEvidenceQuotes(kept, dropped) {
+    this.evidenceQuotes.kept += Math.trunc(count(kept));
+    this.evidenceQuotes.dropped += Math.trunc(count(dropped));
+  }
+
+  /** One mount of learned methods: how many it put in the room and their bytes, why each is there (`METHOD_MOUNT_REASONS`) and how the
+   *  library was ranked for it (`selectLearnedMethods`). A launch and the rewrite of a runtime that is up are each one.
+   *  @param {{methods: number, bytes: number, reasons?: readonly string[], mode?: string | null}} mount */
+  observeMount({ methods, bytes, reasons = [], mode = null }) {
     const mounted = count(methods);
     if (mounted > 0) this.mounts.withMethods += 1;
     else this.mounts.without += 1;
     this.mountedMethods += mounted;
     this.mountedBytes += count(bytes);
+    for (const reason of reasons) {
+      const label = closed(reason, METHOD_MOUNT_REASONS);
+      this.mountReasons[label] = (this.mountReasons[label] ?? 0) + 1;
+    }
+    if (mode) {
+      const label = closed(mode, MOUNT_RANKING);
+      this.mountRanking[label] = (this.mountRanking[label] ?? 0) + 1;
+    }
   }
 
   /** One finished run that carried learned methods: how many, and how many it used.
@@ -115,21 +229,48 @@ export class LearningMetrics {
         series: [{ value: this.mountedBytes }] },
       { name: "open_science_learning_runs_with_methods_total", help: "Finished runs that carried at least one learned method.", type: "counter",
         series: [{ value: this.runs.withMethods }] },
-      { name: "open_science_learning_delivery_lessons_total", type: "counter",
-        help: "Finished deliveries that would have queued a distillation (OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE), by whether the sample took them: distilled, or sampled_out and skipped.",
-        series: [
-          { value: this.deliveries.distilled, labels: { outcome: "distilled" } },
-          { value: this.deliveries.sampledOut, labels: { outcome: "sampled_out" } },
-        ] },
-      { name: "open_science_learning_repair_lessons_total", type: "counter",
-        help: "Repaired deliveries that would have queued a distillation (OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE, none by default), by whether the sample took them.",
-        series: [
-          { value: this.repairs.distilled, labels: { outcome: "distilled" } },
-          { value: this.repairs.sampledOut, labels: { outcome: "sampled_out" } },
-        ] },
+      { name: "open_science_learning_trigger_refused_total", type: "counter",
+        help: "Finished runs and corrections the learning gates turned away, by reason: not_researcher_work, internal_project, internal_agent, clinical_context, paused, before_reset, trial, transcript_incomplete, not_finished, run_unavailable, not_eligible, enqueue_failed.",
+        series: Object.entries(this.triggerRefused).map(([reason, value]) => ({ value, labels: { reason } })) },
+      { name: "open_science_learning_evidence_failed_total", type: "counter",
+        help: "Pieces of learning evidence that were not written, by reason: judge_unavailable, judge_failed, judge_unreadable, quote_not_found, rule_unsafe, sensitive, previous_unavailable, busy, record_failed, settle_failed, adopt_unconfirmed (the second reading of an adopt said something that is not accept, preference, correction or adopt), adopt_without_delivery.",
+        series: Object.entries(this.evidenceFailed).map(([reason, value]) => ({ value, labels: { reason } })) },
+      { name: "open_science_learning_follow_up_judge_total", type: "counter",
+        help: "What the follow-up judging did, by outcome: adopt_confirmed and adopt_disagreed (the second reading of an adopt, with the examples in the other order), examples_embedding and examples_ngram (how the request's nearest examples were chosen: the knowledge base's embedder, or character n-grams when it is down), steer_judged (a steer typed into a run was read when the run finished).",
+        series: Object.entries(this.followUpJudge).map(([outcome, value]) => ({ value, labels: { outcome } })) },
+      { name: "open_science_learning_evidence_quotes_total", type: "counter",
+        help: "Quotations a distilled method named as what it rests on, by whether they were in what the distillation was shown (kept) or not (dropped).",
+        series: [{ value: this.evidenceQuotes.kept, labels: { outcome: "kept" } }, { value: this.evidenceQuotes.dropped, labels: { outcome: "dropped" } }] },
       { name: "open_science_learning_method_retirements_total", type: "counter",
-        help: "Methods the consolidation pass stopped on its own, by the branch that decided; never_opened is the card that rode in OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS answered runs and was never opened.",
+        help: "Methods the consolidation pass stopped on its own, by the branch that decided; never_opened is the card that rode in OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS answered runs and was never opened, unproven_merge_expired a merge nobody opened, library_cap the least used of a library over its cap, replay_regressed a rewrite whose text contradicted runs the person had accepted (returned to its earlier body, or stopped when it had none).",
         series: Object.entries(this.retirements).map(([code, value]) => ({ value, labels: { code } })) },
+      { name: "open_science_learning_script_total", type: "counter",
+        help: "What the script detector did with the programs a clean run carried, by outcome: snippets found, normalised, unparsable, too_small, sensitive (dropped before anything was stored), recorded (new occurrences), lesson_queued (the same program in three runs of two conversations), executor_unavailable (nothing recorded: no hash is guessed), no_transcript.",
+        series: Object.entries(this.scripts).map(([outcome, value]) => ({ value, labels: { outcome } })) },
+      { name: "open_science_learning_code_skill_total", type: "counter",
+        help: "Methods that carry scripts, by what running them before they were written came to: verified, failed (no method written) or unavailable (the executor could not run them; the lesson is retried).",
+        series: Object.entries(this.codeSkills).map(([outcome, value]) => ({ value, labels: { outcome } })) },
+      { name: "open_science_learning_replay_total", type: "counter",
+        help: "Replays of a changed method against up to five runs the person had accepted, by what each came to: clean, regressed (two or more grounded contradictions: the newer version was taken out), no_runs, judge_failed, not_in_force, version_changed, method_gone, paused, restore_failed.",
+        series: Object.entries(this.replayOutcomes).map(([outcome, value]) => ({ value, labels: { outcome } })) },
+      { name: "open_science_learning_replay_judged_total", type: "counter",
+        help: "The judge's reading of one accepted run against a changed method, by verdict: agreed, contradiction (both quotations found), unverified (a contradiction whose quotations were not in what the judge was shown: dropped), failed, unavailable (the run could not be read back).",
+        series: Object.entries(this.replayVerdicts).map(([verdict, value]) => ({ value, labels: { verdict } })) },
+      { name: "open_science_learning_consolidate_noop_total", type: "counter",
+        help: "Stages of the consolidation pass that did nothing, by reason: skipped_unchanged, blocked_unproven, decide_failed, decided_nothing, merge_refused, build_limit, no_groups, too_few_methods, no_methods.",
+        series: Object.entries(this.consolidateNoop).map(([reason, value]) => ({ value, labels: { reason } })) },
+      { name: "open_science_learning_relations_total", type: "counter",
+        help: "Relations between methods the consolidation pass newly recorded, by type (shared_part, subset, merge, abstract_pattern, conflicts_with, supersedes).",
+        series: Object.entries(this.relations).map(([type, value]) => ({ value, labels: { type } })) },
+      { name: "open_science_learning_mount_selected_total", type: "counter",
+        help: "Learned methods put in front of a run, by why: similarity (among the nearest to the conversation's first message), dependency (reused by one that was), explore (the slot of exposure) and recent (no first message to rank by).",
+        series: Object.entries(this.mountReasons).map(([reason, value]) => ({ value, labels: { reason } })) },
+      { name: "open_science_learning_mount_ranked_total", type: "counter",
+        help: "Mounts of learned methods, by how the library was ranked: embedding, lexical (the words they share, when no embedder answered) or recent (no first message).",
+        series: Object.entries(this.mountRanking).map(([mode, value]) => ({ value, labels: { mode } })) },
+      { name: "open_science_learning_method_applied_total", type: "counter",
+        help: "Runs that opened a learned method, by what the researcher did next: corrected it (a correction, preference or rejection that named the method) or moved on (clean).",
+        series: Object.entries(this.applied).map(([outcome, value]) => ({ value, labels: { outcome } })) },
       { name: "open_science_learning_run_methods_total", help: "Learned methods finished runs carried, and the ones they used.", type: "counter", series: [
         { value: this.runMethodsLoaded, labels: { kind: "loaded" } },
         { value: this.runMethodsInvoked, labels: { kind: "invoked" } },
@@ -153,14 +294,31 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,invoked}')::numeric END),0) AS invoked,
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,succeeded}')::numeric END),0) AS succeeded,
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,read}')::numeric END),0) AS read,
-      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,carried}')::numeric END),0) AS carried
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,carried}')::numeric END),0) AS carried,
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,explored}')::numeric END),0) AS explored,
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,appliedCorrected}')::numeric END),0) AS "appliedCorrected",
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,appliedClean}')::numeric END),0) AS "appliedClean"
     FROM evimed_product.documents
     WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType' = ANY($1::text[]) AND ($2::text IS NULL OR user_id=$2)
-    GROUP BY 1,2`, [[LEARNED_METHOD_RECORD_TYPE, HANDBOOK_CANDIDATE_RECORD_TYPE], owner]);
+    GROUP BY 1,2`, [[LEARNED_METHOD_RECORD_TYPE], owner]);
   const jobs = await rows(`SELECT coalesce(payload->>'trigger','') AS trigger, status, count(*)::integer AS n,
       coalesce(result->>'operation','') AS operation
     FROM evimed_product.jobs WHERE kind='distill' AND ($1::text IS NULL OR user_id=$1)
     GROUP BY 1,2,4`, [owner]);
+  // What the researchers did to runs (`learningEvidence.mjs`): by kind and verdict, and when each account last left any.
+  /** @type {any[]} */
+  let evidenceRows = [];
+  /** @type {any[]} */
+  let evidenceLast = [];
+  try {
+    evidenceRows = await rows(`SELECT coalesce(detail->>'evidence','') AS evidence, coalesce(detail->>'verdict','') AS verdict, count(*)::integer AS n
+      FROM evimed_product.feedback_events WHERE trigger_kind='learning-evidence' AND ($1::text IS NULL OR user_id=$1) GROUP BY 1,2`, [owner]);
+    evidenceLast = await rows(`SELECT user_id, max(occurred_at) AS last_at FROM evimed_product.feedback_events
+      WHERE trigger_kind='learning-evidence' AND ($1::text IS NULL OR user_id=$1) GROUP BY user_id`, [owner]);
+  } catch {
+    evidenceRows = [];
+    evidenceLast = [];
+  }
   /** @type {{settled: number, open: number} | null} */
   let spend = null;
   try {
@@ -178,9 +336,7 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
   const byStatus = Object.fromEntries(METHOD_STATUSES.map((status) => [status, 0]));
   /** @type {Record<string, number>} */
   const uses = Object.fromEntries(USE_KINDS.map((kind) => [kind, 0]));
-  let handbookCandidates = 0;
   for (const row of methods) {
-    if (row.record_type === HANDBOOK_CANDIDATE_RECORD_TYPE) { handbookCandidates += count(row.n); continue; }
     const status = closed(row.status, METHOD_STATUSES);
     byStatus[status] = (byStatus[status] ?? 0) + count(row.n);
     for (const kind of USE_KINDS) uses[kind] += count(row[kind]);
@@ -199,7 +355,21 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
       results[operation] = (results[operation] ?? 0) + count(row.n);
     }
   }
-  return { methods: byStatus, uses, handbookCandidates, lessons, results, spend };
+  /** @type {Record<string, Record<string, number>>} */
+  const evidence = {};
+  for (const row of evidenceRows) {
+    const kind = closed(row.evidence, LEARNING_EVIDENCE_KINDS);
+    const verdict = closed(row.verdict, LEARNING_EVIDENCE_VERDICTS);
+    evidence[kind] ??= {};
+    evidence[kind][verdict] = (evidence[kind][verdict] ?? 0) + count(row.n);
+  }
+  // By a hash of the account, never its id: a series per account is the point (an account that has left no evidence for days is the signal),
+  // and a metric label is the wrong place for an identifier.
+  const evidenceLastAt = evidenceLast.map((row) => ({
+    account: createHash("sha256").update(`learning-evidence:${row.user_id}`).digest("hex").slice(0, 12),
+    at: Math.floor(new Date(row.last_at).getTime() / 1000),
+  })).filter((entry) => Number.isFinite(entry.at));
+  return { methods: byStatus, uses, lessons, results, evidence, evidenceLastAt, spend };
 }
 
 /**
@@ -208,7 +378,6 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
  * @param {any} database @param {string} userId @param {{now?: Date}} [options]
  */
 export async function learningSummary(database, userId, { now = new Date() } = {}) {
-  const handbooks = await handbookSummary(database, userId);
   const counts = await learningLedgerCounts(database, { userId, now });
   /** @type {Record<string, number>} */
   const queued = {};
@@ -224,8 +393,6 @@ export async function learningSummary(database, userId, { now = new Date() } = {
     uses: counts.uses,
     lessons: { byTrigger: queued, ...ended },
     results: counts.results,
-    handbookCandidates: counts.handbookCandidates,
-    handbooks,
     spend24hCny: counts.spend ? Math.round((counts.spend.settled) * 1e6) / 1e6 : null,
   };
 }
@@ -250,12 +417,19 @@ export function learningMetricFamilies(enabled, ledger, counters) {
     families.push(
       { name: "open_science_learning_methods", help: "Learned methods in the account libraries, by status.", type: "gauge",
         series: METHOD_STATUSES.map((status) => ({ value: ledger.methods[status] ?? 0, labels: { status } })) },
-      { name: "open_science_learning_handbook_candidates", help: "Lessons taught by the platform reviewer alone, awaiting or consumed by the capability handbook loop.", type: "gauge",
-        series: [{ value: ledger.handbookCandidates }] },
-      { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one, carried as a card by an answered run.", type: "gauge",
-        series: USE_KINDS.map((kind) => ({ value: ledger.uses[kind] ?? 0, labels: { kind } })) },
+      { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one, carried as a card by an answered run (as meant for the work), explored (exposure only), and what the researcher did after a run that opened one: applied_corrected or applied_clean.", type: "gauge",
+        series: USE_KINDS.map((kind) => ({ value: ledger.uses[kind] ?? 0, labels: { kind: kind.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`) } })) },
       { name: "open_science_learning_distill_jobs", help: "Distillation lessons queued, by trigger and job status.", type: "gauge",
         series: Object.entries(ledger.lessons).flatMap(([trigger, statuses]) => JOB_STATUSES.map((status) => ({ value: statuses[status] ?? 0, labels: { trigger, status } }))) },
+      { name: "open_science_learning_lessons_total", type: "counter",
+        help: "Distillation lessons queued, by trigger (correction, adopted, routine, script, edit_diff; a trigger that was deleted since the job was queued reads as other).",
+        series: Object.entries(ledger.lessons).map(([trigger, statuses]) => ({ value: Object.values(statuses).reduce((total, value) => total + value, 0), labels: { trigger } })) },
+      { name: "open_science_learning_evidence_total", type: "counter",
+        help: "What researchers did to runs, as the learning loop counts it, by evidence (steer, follow_up, result_corrected, silent, used) and verdict (correction, preference, rejection, accept, none, adopt). Only accept, adopt and used make a run clean; silent counts for nothing.",
+        series: Object.entries(ledger.evidence).flatMap(([evidence, verdicts]) => Object.entries(verdicts).map(([verdict, value]) => ({ value, labels: { evidence: evidence.replaceAll("-", "_"), verdict } }))) },
+      { name: "open_science_learning_evidence_last_at", type: "gauge",
+        help: "When each account (by a hash of it) last left learning evidence, in seconds since the epoch: an account that works and leaves none is a loop that cannot learn from it.",
+        series: ledger.evidenceLastAt.map((entry) => ({ value: entry.at, labels: { account: entry.account } })) },
       { name: "open_science_learning_distill_results", help: "Finished distillation lessons, by what they wrote.", type: "gauge",
         series: RESULT_OPERATIONS.map((operation) => ({ value: ledger.results[operation] ?? 0, labels: { operation } })) },
     );
@@ -268,38 +442,4 @@ export function learningMetricFamilies(enabled, ledger, counters) {
   }
   if (counters) families.push(...counters.families());
   return families;
-}
-
-/** Actual current-version use records, separate from causal quality evidence. No first-page totals.
- * @param {any} database @param {string} userId */
-export async function handbookSummary(database, userId) {
-  const result = await database.query(`WITH owned AS MATERIALIZED (
-    SELECT id,payload,updated_at FROM evimed_product.documents
-    WHERE user_id=$1 AND kind='method' AND deleted_at IS NULL
-      AND payload->>'recordType' IN ('handbook-candidate','capability-handbook')
-  ), active AS MATERIALIZED (
-    SELECT * FROM owned WHERE payload->>'recordType'='capability-handbook' AND payload->>'status'='active'
-  ), dispositions AS (
-    SELECT coalesce(payload->'dispositions'->(payload->>'contentDigest')->>'disposition',
-      payload->'dispositions'->(payload->>'contentDigest')->>'state','queued') AS state,count(*)::integer AS n
-    FROM owned WHERE payload->>'recordType'='handbook-candidate' GROUP BY 1
-  ), observations AS (
-    SELECT observation FROM active CROSS JOIN LATERAL jsonb_array_elements(coalesce(payload->'observations','[]'::jsonb)) observation
-    WHERE observation->>'contentDigest'=payload->>'contentDigest'
-  ) SELECT jsonb_build_object(
-    'dispositions',coalesce((SELECT jsonb_object_agg(state,n) FROM dispositions),'{}'::jsonb),
-    'applied',(SELECT count(*) FROM active),
-    'unmeasured',(SELECT count(*) FROM active WHERE payload->>'verification'='unmeasured'),
-    'evaluated',(SELECT count(*) FROM active WHERE payload->>'verification'='evaluated'),
-    'verifiedImprovement',(SELECT count(*) FROM active WHERE payload->>'verification'='evaluated' AND payload #>> '{evaluation,verdict}'='better'),
-    'attached',(SELECT count(*) FROM observations WHERE observation->>'attached'='true'),
-    'used',(SELECT count(*) FROM observations WHERE observation->>'used'='true'),
-    'outcomes',coalesce((SELECT sum(jsonb_array_length(coalesce(observation->'outcomes','[]'::jsonb))) FROM observations),0),
-    'recent',coalesce((SELECT jsonb_agg(item) FROM (SELECT jsonb_build_object(
-      'id',id,'title',coalesce(payload #>> '{display,title}',payload #>> '{frontmatter,name}'),
-      'capabilityId',payload->>'capabilityId','version',payload->'version','verification',payload->>'verification',
-      'appliedAt',payload->>'appliedAt','source',payload->'source','evaluationVerdict',payload #>> '{evaluation,verdict}'
-      ) AS item FROM active ORDER BY payload->>'appliedAt' DESC,id LIMIT 6) recent),'[]'::jsonb)
-  ) AS handbook_summary`, [userId]);
-  return result.rows[0]?.handbook_summary ?? null;
 }

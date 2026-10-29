@@ -16,7 +16,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { parse } from 'yaml'
 
-import { PRESET_NAME } from '../index.mjs'
+import { AGENT_PLUGIN_IDS, PLUGIN_SPECIFIERS, PRESET_NAME } from '../index.mjs'
 import { PRESET_ID, PRESET_PATCH_URL, PRESET_ROW_ID, readPresetPatchSource } from '../scripts/build-preset.mjs'
 
 /** A `!!js` scalar kept as text, the way the kernel's loader receives it. */
@@ -66,4 +66,52 @@ test('the GEO method pack is a skill root only where EVIMED_GEO_SKILLS says the 
   // And it stays one root in the same place of the order: after the office pack and before the community skills.
   const order = roots.map((/** @type {string} */ entry) => /(?:\/)(core|evimed|curated-scientific|office|geo-private|community)/.exec(entry)?.[1] ?? 'other')
   assert.deepEqual(order.slice(0, 6), ['core', 'evimed', 'curated-scientific', 'office', 'geo-private', 'community'])
+})
+
+
+test('every service provided by an agent plugin is isolated in its preset ancestry', async () => {
+  const source = parse(await readFile(new URL('../presets/evimed-universal/agent.cordis.yml', import.meta.url), 'utf8'), { customTags: [jsTag] })
+  /** @type {Map<string,Set<string>>} */ const realms = new Map()
+  /** @param {any[]} rows @param {Set<string>} inherited */
+  const walk = (rows, inherited) => {
+    for (const row of rows) {
+      const isolated = new Set([...inherited, ...Object.keys(row.isolate ?? {}).filter(key => row.isolate[key] === true)])
+      realms.set(row.id, isolated)
+      if (Array.isArray(row.config)) walk(row.config, isolated)
+    }
+  }
+  walk(source, new Set())
+  const found = new Set()
+  for (const id of AGENT_PLUGIN_IDS) {
+    const file = PLUGIN_SPECIFIERS[/** @type {keyof typeof PLUGIN_SPECIFIERS} */ (id)]
+    const raw = await readFile(new URL(`../${file}`, import.meta.url), 'utf8')
+    const code = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    for (const [, argument] of code.matchAll(/ctx\.provide\(\s*([^,]+),/g)) {
+      const literal = /^['"]([^'"]+)['"]$/.exec(argument.trim())
+      const constant = /^[A-Z_]+$/.test(argument.trim()) ? new RegExp(`const ${argument.trim()} = ['"]([^'"]+)['"]`).exec(code) : null
+      const service = literal?.[1] ?? constant?.[1]
+      assert.ok(service, `${file}: service name ${argument} is not statically covered by the realm check`)
+      found.add(service)
+      assert.ok(realms.get(id)?.has(service), `${id} provides ${service} without an isolate realm in its preset ancestry`)
+    }
+  }
+  assert.ok(found.has('evimedNativeRoute') && found.has('evimedCapsuleMemory') && found.has('evimedCapabilities'), 'the scan covers literal and constant service names')
+})
+
+
+test('the resolved runtime composition retains every canonical preset isolation realm', async () => {
+  const customTags = [{ ...jsTag, tag: 'tag:yaml.org,2002:js' }]
+  const source = parse(await readFile(new URL('../presets/evimed-universal/agent.cordis.yml', import.meta.url), 'utf8'), { customTags })
+  const baseline = parse(await readFile(new URL('../../../deploy/runtime-dsh/dump-config.baseline.json', import.meta.url), 'utf8'), { customTags })
+  const preset = baseline.find((/** @type {any} */ row) => row.id === PRESET_ROW_ID)
+  assert.equal(preset?.config?.id, PRESET_NAME, 'the pinned runtime baseline declares this preset')
+  /** @param {any[]} rows @param {string} [parent] @returns {Record<string,any>} */
+  const isolation = (rows, parent = '') => Object.fromEntries(rows.flatMap(row => {
+    const path = parent ? `${parent}/${row.id}` : row.id
+    return [[path, row.isolate ?? {}], ...Object.entries(Array.isArray(row.config) ? isolation(row.config, path) : {})]
+  }))
+  const canonical = isolation(source)
+  assert.ok(Object.values(canonical).some(realms => realms.evimedNativeRoute === true), 'the canonical service realm was read')
+  assert.deepEqual(isolation(preset.config.plugins), canonical,
+    're-record the complete pinned DSH dump after preset isolation changes, then regenerate runtime-inventory.json')
 })

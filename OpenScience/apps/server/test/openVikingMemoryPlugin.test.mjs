@@ -200,3 +200,16 @@ test("what is switched is a row of the pinned plugin, named in the support recor
   assert.ok(support.nativePlugins.includes("evimed-memory-bridge"));
   assert.equal(entry.contract, "apps/server/test/openVikingMemoryPlugin.test.mjs");
 });
+
+test("a pinned archive is fetched through the build's mirrors when the build names them, and the digest still decides", async () => {
+  // 2026-10-24: the serving host's first full runtime build died on github.com (LoopX's plugin) — both installers
+  // now take GITHUB_DOWNLOAD_PREFIX / NPM_REGISTRY like install-runtime.sh's own downloads.
+  const loopx = await import(new URL("deploy/runtime-dsh/install-loopx.mjs", root).href);
+  for (const mirrored of [installer.mirroredArchiveUrl, loopx.mirroredArchiveUrl]) {
+    const env = { GITHUB_DOWNLOAD_PREFIX: "https://gh-proxy.com/", NPM_REGISTRY: "https://registry.npmmirror.com/" };
+    assert.equal(mirrored("https://github.com/o/r/releases/download/v1/a.tgz", env), "https://gh-proxy.com/https://github.com/o/r/releases/download/v1/a.tgz");
+    assert.equal(mirrored("https://registry.npmjs.org/@s/p/-/p-1.0.0.tgz", env), "https://registry.npmmirror.com/@s/p/-/p-1.0.0.tgz");
+    assert.equal(mirrored("https://files.pythonhosted.org/packages/x.whl", env), "https://files.pythonhosted.org/packages/x.whl");
+    assert.equal(mirrored("https://github.com/o/r/releases/download/v1/a.tgz", {}), "https://github.com/o/r/releases/download/v1/a.tgz");
+  }
+});

@@ -2,11 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "./apiClient";
 import {
   addFrontierFollow,
+  fetchFrontierOpsTags,
+  fetchFrontierTag,
   fetchFrontierNotificationSwitch,
   setFrontierNotificationSwitch,
   fetchFrontierDaily,
   fetchFrontierWeekly,
   fetchFrontierEvent,
+  fetchFrontierItem,
   fetchFrontierForYou,
   fetchFrontierHot,
   fetchFrontierHotBoard,
@@ -21,12 +24,16 @@ import {
   listFrontierDailies,
   listFrontierFollows,
   listFrontierItems,
+  listFrontierTags,
   operateFrontierItem,
   parseFacts,
   parseFrontierItem,
+  parseFrontierItemDetail,
+  parseFrontierEditorDiagnostics,
   saveFrontierItemToLibrary,
   setFrontierDigestSwitch,
   starFrontierItem,
+  undoFrontierTagChange,
 } from "./frontierClient";
 import { rawFrontierItem as rawItem } from "@/components/frontier/__fixtures__/frontierItems";
 
@@ -46,14 +53,26 @@ afterEach(() => { vi.unstubAllGlobals(); });
 describe("the items list", () => {
   it("asks with every filter named and the page size bounded", async () => {
     fetchMock.mockResolvedValue(reply(200, { data: { items: [rawItem()], nextCursor: "c2", version: 41, mode: "keyword" } }));
-    const page = await listFrontierItems({ view: "all", lane: "safety", specialty: "pharmacy", window: "7d", q: " 司美格鲁肽 ", starred: true, cursor: "c1", limit: 500 });
+    const page = await listFrontierItems({
+      view: "all", lane: "safety", specialties: ["pharmacy", "oncology"], tag: "hcc", evidence: "rct", unread: true, window: "7d", q: " 司美格鲁肽 ", starred: true, cursor: "c1", limit: 500,
+    });
     const url = new URL(requested()[0].url, "http://localhost");
     expect(url.pathname).toBe("/api/frontier/items");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      view: "all", by: "timeline", lane: "safety", specialty: "pharmacy", window: "7d", q: "司美格鲁肽", starred: "1", cursor: "c1", limit: "50",
+      view: "all", by: "timeline", lane: "safety", specialty: "pharmacy,oncology", tag: "hcc", evidence: "rct", unread: "1", window: "7d", q: "司美格鲁肽", starred: "1", cursor: "c1", limit: "50",
     });
     expect(page).toMatchObject({ nextCursor: "c2", version: "41", mode: "keyword", restarted: false });
     expect(page.items).toHaveLength(1);
+  });
+
+  it("reads the list id and each item's slot the server served (contract C); an older server's page has neither", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { items: [{ ...rawItem({ id: "a1" }), slot: "editorial" }, { ...rawItem({ id: "a2" }), slot: null }],
+      nextCursor: null, version: 3, mode: "list", listId: "0f8fad5b-d9cb-469f-a165-70867728950e" } }));
+    const page = await listFrontierItems({ view: "selected" });
+    expect(page.listId).toBe("0f8fad5b-d9cb-469f-a165-70867728950e");
+    expect(page.slots).toEqual({ a1: "editorial", a2: null });
+    fetchMock.mockResolvedValue(reply(200, { data: { items: [rawItem()], nextCursor: null, version: 3, mode: "list" } }));
+    expect((await listFrontierItems({ view: "selected" })).listId).toBeNull();
   });
 
   it("starts over from page one when the cursor has gone stale, and says it did", async () => {
@@ -316,6 +335,20 @@ describe("the routes of the second wave", () => {
     expect(await fetchFrontierEvent("ev2")).toMatchObject({ heat: null, hasPrimary: false, primary: null, institutions72h: { total: 0, byType: [] }, trend: null });
   });
 
+  it("reads the questions of an item and of an event's first-hand report: three at most, short, each once; none is an empty list", async () => {
+    const item = parseFrontierItemDetail(rawItem({ ask: ["这个结果适用于中国患者吗？", " 和标准治疗比差别在哪？ ", "这个结果适用于中国患者吗？", 7, "", "安全性数据有哪些？", "第四个问题？", "字".repeat(61)] }))!;
+    expect(item.ask).toEqual(["这个结果适用于中国患者吗？", "和标准治疗比差别在哪？", "安全性数据有哪些？"]);
+    expect(parseFrontierItemDetail(rawItem({}))!.ask).toEqual([]);
+    expect(parseFrontierItemDetail(rawItem({ ask: "一个问题？" }))!.ask).toEqual([]);
+    fetchMock.mockResolvedValue(reply(200, { data: { event: { id: "ev1", title: "事件", items: [], related: [],
+      ask: { itemId: "a1b2c3d4e5f60718", title: "一手报告", questions: ["问题一？", "问题二？"], extra: 1 } } } }));
+    expect((await fetchFrontierEvent("ev1")).ask).toEqual({ itemId: "a1b2c3d4e5f60718", title: "一手报告", questions: ["问题一？", "问题二？"] });
+    for (const ask of [null, undefined, { itemId: "a1b2c3d4e5f60718", title: "T", questions: [] }, { title: "T", questions: ["问题？"] }, "text"]) {
+      fetchMock.mockResolvedValue(reply(200, { data: { event: { id: "ev1", title: "事件", items: [], related: [], ask } } }));
+      expect((await fetchFrontierEvent("ev1")).ask).toBeNull();
+    }
+  });
+
   it("reads the daily's header and footer: the items it shows, the minutes to read them, the issues on either side", async () => {
     fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-23", sections: [], safety: [], markdown: "# 日报", itemCount: 52,
       readingMinutes: 9, previousDay: "2026-09-22", nextDay: null } } }));
@@ -361,7 +394,17 @@ describe("the routes of the second wave", () => {
     expect(forYou?.items).toHaveLength(8);
     expect(forYou?.items[0].reason).toEqual({ text: "因为你问过：替尔泊肽与心衰", topic: "替尔泊肽与心衰", memoryId: null });
     fetchMock.mockResolvedValue(reply(200, { data: { state: "off", basis: null, paused: true, items: [] } }));
-    expect(await fetchFrontierForYou()).toEqual({ state: "off", basis: null, paused: true, items: [] });
+    expect(await fetchFrontierForYou()).toEqual({ state: "off", basis: null, paused: true, items: [], listId: null, onboarding: false });
+  });
+
+  it("reads what was served: the list id, each entry's slot, the onboarding flag; a slot it does not know is none", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { state: "available", basis: null, onboarding: true, listId: "0f8fad5b-d9cb-469f-a165-70867728950e", items: [
+      { item: rawItem({ id: "fy1" }), reason: { text: "安全警示", topic: "安全警示" }, slot: "must-see", propensity: 1 },
+      { item: rawItem({ id: "fy2" }), reason: { text: "精选", topic: "精选" }, slot: "sponsored" },
+    ] } }));
+    const forYou = await fetchFrontierForYou();
+    expect([forYou?.listId, forYou?.onboarding]).toEqual(["0f8fad5b-d9cb-469f-a165-70867728950e", true]);
+    expect(forYou?.items.map((entry) => entry.slot)).toEqual(["must-see", null]);
   });
 });
 
@@ -398,6 +441,13 @@ describe("state changes", () => {
       { url: "/api/frontier/items/item%2F1/star", method: "POST" },
       { url: "/api/frontier/items/item%2F1/hide", method: "POST" },
     ]);
+  });
+
+  it("send the reason of a hide when there is one, and nothing but an empty body when there is not", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { data: { state: { starred: false, hidden: true, read: false } } }));
+    await hideFrontierItem("item-1");
+    await hideFrontierItem("item-1", "promotional");
+    expect(fetchMock.mock.calls.map(([, init]) => init?.body)).toEqual(["{}", JSON.stringify({ reason: "promotional" })]);
   });
 });
 
@@ -457,4 +507,251 @@ it("weekly and safety settings preserve each other, quiet hours, channels and le
   await expect(setFrontierNotificationSwitch("frontierWeekly", true)).resolves.toBe(true);
   expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ quietHours: current.quietHours, digestTime: current.digestTime, channels: current.channels,
     switches: { ...current.switches, frontierWeekly: true }, expectedRevision: 7 });
+});
+
+
+it("parses bounded editor diagnostics without arbitrary model or error content", () => {
+  expect(parseFrontierEditorDiagnostics({})).toBeNull();
+  const raw = { schemaVersion: 1, outcome: "title-only", attempts: 2, inputSha256: "a".repeat(64),
+    editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00Z", reason: "private error", answer: "private answer",
+    fields: { title_zh: ["language", "private answer", "language"], summary_zh: ["number"] } };
+  const parsed = parseFrontierItem(rawItem({ editorDiagnostics: raw }));
+  expect(parsed?.editorDiagnostics).toEqual({ schemaVersion: 1, outcome: "title-only", attempts: 2,
+    inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00Z", reason: null,
+    fields: { title_zh: ["language"], summary_zh: ["number"] } });
+  expect(JSON.stringify(parsed?.editorDiagnostics)).not.toContain("private");
+});
+
+describe("the reader's blocks (contract B)", () => {
+  const full = () => rawItem({
+    id: "x-post-1",
+    channel: "x", platform: "x",
+    author: { name: "Arena.ai", handle: "@arena", url: "https://x.com/arena", role: "organisation" },
+    thumb: { id: "a".repeat(64), url: "https://tracker.example/a.png", width: 1200, height: 675, alt: "排行榜" },
+    lead: "Arena 宣布模型登顶开源榜首。",
+    reason: "可据此权衡 Agent 场景的性价比。",
+    score: 74, scoreBand: "high",
+    body: { zh: "第一段\n\n第二段", original: "First\n\nSecond", zhKind: "translation", complete: false },
+    media: [
+      { id: "a".repeat(64), url: "/api/frontier/media/aaa", width: 1200, height: 675, alt: "排行榜" },
+      { id: "a".repeat(64), url: "/api/frontier/media/aaa" },
+      { id: "../../etc/passwd" },
+      { id: "b".repeat(64), width: -3, height: "x" },
+    ],
+    quoted: { author: { name: "DeepSeek", handle: "deepseek_ai" }, text: "Big news", translation: "重大消息", url: "javascript:alert(1)" },
+    metrics: { likes: 12, reposts: null, replies: -1, views: 9000.4 },
+    topics: [{ slug: "cardiology", name: "心血管", group: "specialty" }],
+    tags: [{ slug: "eval", name: "#评测" }, { slug: "eval", name: "重复" }, { slug: "agent", name: "Agent" }, { name: "无 slug" }, "旧的字符串", { slug: "a b/c", name: "坏 slug" }, { slug: "deepseek", name: "DeepSeek" }, { slug: "llm", name: "大模型" }, { slug: "fifth", name: "第五个" }],
+    scoreParts: { authority: 24, impact: 22, novelty: 14, relevance: 14 },
+    sameEvent: { itemId: "selected-1", title: "精选收录的那一篇" },
+    followups: { eventId: "ev1", more: true, rows: [
+      { itemId: "f1", title: "后续报道", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "follows" },
+      { itemId: "x-post-1", title: "自己", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "same-event" },
+      { itemId: "f2", title: "没有时间", sourceName: "Arena", at: "not a time" },
+      { itemId: "f3", title: "同事件", sourceName: "", at: "2026-10-19T02:00:00Z", relation: "planet" },
+    ] },
+  });
+
+  it("reads every block of a full item, each field by field", () => {
+    const item = parseFrontierItemDetail(full())!;
+    expect(item.channel).toBe("x");
+    expect(item.platform).toBe("x");
+    expect(item.author).toEqual({ name: "Arena.ai", handle: "arena", url: "https://x.com/arena", role: "organisation" });
+    expect(item.lead).toBe("Arena 宣布模型登顶开源榜首。");
+    expect(item.reason).toBe("可据此权衡 Agent 场景的性价比。");
+    expect(item.score).toBe(74);
+    expect(item.body).toEqual({ zh: "第一段\n\n第二段", original: "First\n\nSecond", zhKind: "translation", complete: false, source: null });
+    expect(item.quoted).toEqual({ author: { name: "DeepSeek", handle: "deepseek_ai" }, text: "Big news", translation: "重大消息", url: null });
+    expect(item.metrics).toEqual({ likes: 12, reposts: null, replies: null, views: 9000 });
+    // Tags are slug and name, each once, at most four; the older string tags and the retired topics are not read.
+    expect(item.tags).toEqual([{ slug: "eval", name: "评测" }, { slug: "agent", name: "Agent" }, { slug: "deepseek", name: "DeepSeek" }, { slug: "llm", name: "大模型" }]);
+    expect("topics" in item).toBe(false);
+    expect(item.scoreParts).toEqual({ authority: 24, impact: 22, novelty: 14, relevance: 14 });
+    expect(item.sameEvent).toEqual({ itemId: "selected-1", title: "精选收录的那一篇" });
+    expect(item.followups).toEqual({ eventId: "ev1", more: true, rows: [
+      { itemId: "f1", title: "后续报道", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "follows" },
+      { itemId: "f3", title: "同事件", sourceName: "", at: "2026-10-19T02:00:00Z", relation: "same-event" },
+    ] });
+  });
+
+  it("serves every image from this deployment's own proxy, by id, once — never from an address the response named", () => {
+    const item = parseFrontierItemDetail(full())!;
+    expect(item.media).toEqual([
+      { id: "a".repeat(64), url: `/api/frontier/media/${"a".repeat(64)}`, width: 1200, height: 675, alt: "排行榜" },
+      { id: "b".repeat(64), url: `/api/frontier/media/${"b".repeat(64)}`, width: null, height: null, alt: null },
+    ]);
+    expect(item.thumb?.url).toBe(`/api/frontier/media/${"a".repeat(64)}`);
+  });
+
+  it("leaves out what the server did not fill, and makes nothing up in its place", () => {
+    const item = parseFrontierItemDetail(rawItem({ summary: "列表里的导读" }))!;
+    expect(item).toMatchObject({
+      lead: "列表里的导读", insight: null, body: null, media: [], quoted: null, metrics: null, tags: [], scoreParts: null, sameEvent: null, followups: null,
+      channel: null, platform: null, author: null, thumb: null,
+    });
+    // A body the server did not call incomplete is complete; a Chinese text with no kind is not called a translation.
+    expect(parseFrontierItemDetail(rawItem({ body: { zh: "中文", original: null } }))!.body).toEqual({ zh: "中文", original: null, zhKind: null, complete: true, source: null });
+    expect(parseFrontierItemDetail(rawItem({ body: { zh: " ", original: "" } }))!.body).toBeNull();
+    // An outlet or a platform this build does not know is not shown under a made-up name.
+    expect(parseFrontierItem(rawItem({ channel: "podcast", platform: "myspace", author: { handle: "nobody" } }))).toMatchObject({ channel: null, platform: null, author: null });
+  });
+
+  it("reads which text a body is, and nothing it does not name", () => {
+    const source = (value: unknown) => parseFrontierItemDetail(rawItem({ body: { zh: "## 方法\n\n正文", original: null, zhKind: "original-zh", source: value } }))!.body!.source;
+    expect(["body", "abstract", "excerpt"].map(source)).toEqual(["body", "abstract", "excerpt"]);
+    expect([undefined, null, "full", "ABSTRACT", 3].map(source)).toEqual([null, null, null, null, null]);
+    // The heading marker is the text's own: the client keeps it for the reader to set, and never strips or adds one.
+    expect(parseFrontierItemDetail(rawItem({ body: { zh: "## 方法\n\n正文", source: "body" } }))!.body!.zh).toBe("## 方法\n\n正文");
+  });
+
+  it("reads 「AI 解读」 and the reports it cites, each field by field", () => {
+    const insight = (value: unknown) => parseFrontierItemDetail(rawItem({ insight: value }))!.insight;
+    expect(insight({
+      text: "  三项试验结果一致[2]，但随访仍短[1]，另见[7]。 ",
+      refs: [
+        { n: 2, publicId: "item-b", title: "第二篇", source: "NEJM", at: "2026-10-20T02:00:00Z" },
+        { n: 1, publicId: "item-a", title: "第一篇", source: "  ", at: "not a time" },
+        { n: 2, publicId: "item-c", title: "同号的第二个", source: "Lancet", at: "2026-10-20T02:00:00Z" },
+        { n: 0, publicId: "item-d", title: "从零", source: "", at: "2026-10-20T02:00:00Z" },
+        { n: 1.5, publicId: "item-e", title: "小数", source: "", at: "2026-10-20T02:00:00Z" },
+        { n: 3, publicId: "", title: "没有文章", source: "", at: "2026-10-20T02:00:00Z" },
+        { n: 4, publicId: "item-f", title: " ", source: "", at: "2026-10-20T02:00:00Z" },
+        "not a ref",
+      ],
+    })).toEqual({
+      text: "三项试验结果一致[2]，但随访仍短[1]，另见[7]。",
+      refs: [
+        { n: 1, publicId: "item-a", title: "第一篇", source: "", at: null },
+        { n: 2, publicId: "item-b", title: "第二篇", source: "NEJM", at: "2026-10-20T02:00:00Z" },
+      ],
+    });
+    // Most items have none; a 解读 without its words is none, and one without refs is still one.
+    for (const value of [undefined, null, "一段话", { text: " " }, { refs: [] }]) expect(insight(value)).toBeNull();
+    expect(insight({ text: "没有引用的解读。" })).toEqual({ text: "没有引用的解读。", refs: [] });
+  });
+
+  it("does not point an item at itself as the one the occurrence selected", () => {
+    expect(parseFrontierItemDetail(rawItem({ id: "self-1", sameEvent: { itemId: "self-1", title: "自己" } }))!.sameEvent).toBeNull();
+  });
+
+  it("reads the detail route through the same parser", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { item: full() } }));
+    const item = await fetchFrontierItem("x-post-1");
+    expect(requested()[0].url).toBe("/api/frontier/items/x-post-1");
+    expect(item.followups?.rows).toHaveLength(2);
+  });
+
+  it("names a channel group in the list's query, and an event's order in the event's", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { data: { items: [], nextCursor: null } }));
+    await listFrontierItems({ view: "all", channel: "social" });
+    expect(new URL(requested()[0].url, "http://localhost").searchParams.get("channel")).toBe("social");
+    await listFrontierItems({ view: "all" });
+    expect(new URL(requested()[1].url, "http://localhost").searchParams.has("channel")).toBe(false);
+    fetchMock.mockImplementation(async () => reply(200, { data: { event: { id: "ev1", title: "事件", items: [], related: [] } } }));
+    await fetchFrontierEvent("ev1", "asc");
+    expect(requested()[2].url).toBe("/api/frontier/events/ev1?order=asc");
+    await fetchFrontierEvent("ev1");
+    expect(requested()[3].url).toBe("/api/frontier/events/ev1");
+  });
+});
+
+describe("an item's specialties, tags and score parts (2026-10-23)", () => {
+  it("reads a retired specialty as its successor or not at all, each once, at most two", () => {
+    const item = parseFrontierItem(rawItem({ specialties: [{ key: "surgery-anesthesia", label: "外科与麻醉" }, { key: "geriatrics", label: "老年" }, "general-surgery", { key: "oncology" }, { key: "cardiology" }] }))!;
+    expect(item.specialties).toEqual([{ key: "general-surgery", label: "普通外科" }, { key: "oncology", label: "肿瘤" }]);
+  });
+
+  it("reads the score's tier from the server, or from the fixed tiers, and its parts only when all four are within their maxima", () => {
+    expect(parseFrontierItem(rawItem({ score: 86, scoreBand: undefined }))!.scoreBand).toBe("high");
+    expect(parseFrontierItem(rawItem({ score: 72, scoreBand: undefined }))!.scoreBand).toBe("medium");
+    expect(parseFrontierItem(rawItem({ score: 86, scoreParts: { authority: 31, impact: 25, novelty: 18, relevance: 12 } }))!.scoreParts).toBeNull();
+    expect(parseFrontierItem(rawItem({ score: 86, scoreParts: { authority: 30, impact: 25, novelty: 18 } }))!.scoreParts).toBeNull();
+    // A safety alert carries no score, and so no parts.
+    expect(parseFrontierItem(rawItem({ safetyAlert: true, score: 90, scoreParts: { authority: 30, impact: 30, novelty: 15, relevance: 15 } }))).toMatchObject({ score: null, scoreParts: null, scoreBand: null });
+  });
+
+  it("reads 「可能改变实践」 as a reason or as nothing", () => {
+    expect(parseFrontierItem(rawItem())!.practice).toBeNull();
+    expect(parseFrontierItem(rawItem({ practice: { reason: " 国内首个获批 " } }))!.practice).toEqual({ reason: "国内首个获批" });
+    for (const bad of [{ reason: "" }, { reason: "   " }, { reason: 7 }, {}, "yes", null, []]) expect(parseFrontierItem(rawItem({ practice: bad }))!.practice).toBeNull();
+  });
+});
+
+describe("the tag tree", () => {
+  it("asks for a specialty's popular tags and for the tags a search names", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { data: { tags: [{ slug: "hcc", name: "肝细胞癌", count: 34 }, { slug: "", name: "坏的" }, { slug: "nash", name: "#非酒精性脂肪肝", count: -1, specialties: ["gastroenterology", "geriatrics"] }] } }));
+    expect(await listFrontierTags({ specialties: ["oncology", "gastroenterology"] })).toEqual([
+      { slug: "hcc", name: "肝细胞癌", count: 34, specialties: [] },
+      { slug: "nash", name: "非酒精性脂肪肝", count: 0, specialties: ["gastroenterology"] },
+    ]);
+    await listFrontierTags({ q: " 肝 ", limit: 8 });
+    const [popular, search] = requested().map((call) => new URL(call.url, "http://localhost"));
+    expect(popular.pathname).toBe("/api/frontier/tags");
+    expect(Object.fromEntries(popular.searchParams)).toEqual({ specialty: "oncology,gastroenterology", limit: "24" });
+    expect(Object.fromEntries(search.searchParams)).toEqual({ q: "肝", limit: "8" });
+  });
+
+  it("reads nothing where the server has no tag tree yet", async () => {
+    fetchMock.mockImplementation(async () => reply(404, { error: "Not found.", code: "not_found" }));
+    expect(await listFrontierTags({ q: "肝" })).toEqual([]);
+    expect(await fetchFrontierTag("hcc")).toBeNull();
+  });
+
+  it("reads one tag, the one a merged slug became, and nothing for a tag that is not there", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { tag: {
+      slug: "hcc", name: "肝细胞癌", nameEn: "Hepatocellular Carcinoma", specialties: [{ key: "oncology", label: "肿瘤" }],
+      broader: { slug: "liver-cancer", name: "肝癌" }, narrower: [], count30d: 34,
+    }, mergedFrom: "liver-cell-cancer" } }));
+    expect(await fetchFrontierTag("liver-cell-cancer")).toEqual({
+      slug: "hcc", name: "肝细胞癌", nameEn: "Hepatocellular Carcinoma", specialties: [{ key: "oncology", label: "肿瘤" }],
+      broader: { slug: "liver-cancer", name: "肝癌" }, narrower: [], count30d: 34, mergedFrom: "liver-cell-cancer",
+    });
+    fetchMock.mockResolvedValueOnce(reply(404, { error: "No such tag.", code: "frontier_tag_not_found" }));
+    expect(await fetchFrontierTag("gone")).toBeNull();
+  });
+
+  it("follows a tag by its slug", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { follow: { id: "9", kind: "tag", key: "hcc", label: "肝细胞癌", muted: false } } }));
+    expect(await addFrontierFollow({ kind: "tag", key: "hcc", label: "肝细胞癌" })).toEqual({ id: "9", kind: "tag", key: "hcc", label: "肝细胞癌", muted: false });
+  });
+
+  it("reads the operators' view of the tree, and takes a change back", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { data: {
+      specialties: [{ key: "oncology", label: "肿瘤", tags: [{ slug: "hcc", name: "肝细胞癌", state: "active", count30d: 34, origin: "seed" }] }],
+      candidates: [{ slug: "car-t", name: "CAR-T 细胞治疗", count30d: 5, sources30d: 3, firstSeen: "2026-10-20T02:00:00Z" }],
+      changes: [{ id: 7, at: "2026-10-22T02:00:00Z", action: "merge", tag: { slug: "liver-cell-cancer", name: "肝细胞性肝癌" }, other: { slug: "hcc", name: "肝细胞癌" }, reason: "同义", undoable: true }],
+    } }));
+    const tree = await fetchFrontierOpsTags();
+    expect(tree.specialties[0].tags[0]).toEqual({ slug: "hcc", name: "肝细胞癌", state: "active", count30d: 34, origin: "seed" });
+    expect(tree.candidates).toEqual([{ slug: "car-t", name: "CAR-T 细胞治疗", count30d: 5, sources30d: 3, firstSeen: "2026-10-20T02:00:00Z" }]);
+    expect(tree.changes[0]).toMatchObject({ id: "7", action: "merge", undoable: true, other: { slug: "hcc", name: "肝细胞癌" } });
+    fetchMock.mockResolvedValueOnce(reply(200, { data: { ok: true } }));
+    await undoFrontierTagChange("7");
+    expect(requested().at(-1)).toEqual({ url: "/api/frontier/ops/tags/changes/7/undo", method: "POST" });
+  });
+});
+
+describe("an item's genre and 「AI 要点」 (ct-write 2026-10-24)", () => {
+  it("reads the server's genre, and code's own answer where a server sends none", async () => {
+    const { parseFrontierItem } = await import("./frontierClient");
+    const base = { id: "g1", titleRaw: "T", url: "https://example.com/1", source: { name: "S" }, timelineAt: "2026-10-24T00:00:00.000Z" };
+    expect(parseFrontierItem({ ...base, genre: "policy", genreLabel: "政策法规" })).toMatchObject({ genre: "policy", genreLabel: "政策法规" });
+    expect(parseFrontierItem({ ...base, genre: "made-up" })).toMatchObject({ genre: "news", genreLabel: "医学新闻" });
+    expect(parseFrontierItem({ ...base, platform: "x" })).toMatchObject({ genre: "social", genreLabel: "社交动态" });
+    expect(parseFrontierItem({ ...base, sourceType: "journal" })).toMatchObject({ genre: "paper", genreLabel: "研究论文" });
+  });
+
+  it("reads a brief field by field and drops what has no words", async () => {
+    const { parseFrontierBrief } = await import("./frontierClient");
+    expect(parseFrontierBrief(null)).toBeNull();
+    expect(parseFrontierBrief({ genre: "paper", points: [{ key: "design", label: "设计" }] })).toBeNull();
+    expect(parseFrontierBrief({ genre: "made-up", points: [{ key: "a", label: "A", text: "x" }] })).toBeNull();
+    expect(parseFrontierBrief({ genre: "paper", points: [{ key: "design", label: "设计与对象", text: "随机试验。" }, { key: "results", label: "主要结果", items: ["一", 2, ""] }],
+      quote: { label: "作者结论", text: "It works.", zh: "有效。" }, about: { publicId: "p1", title: "Original" } })).toEqual({
+      genre: "paper",
+      points: [{ key: "design", label: "设计与对象", text: "随机试验。", items: [] }, { key: "results", label: "主要结果", text: null, items: ["一"] }],
+      quote: { label: "作者结论", text: "It works.", zh: "有效。" },
+      about: { publicId: "p1", title: "Original" },
+    });
+  });
 });

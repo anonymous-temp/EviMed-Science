@@ -2,18 +2,13 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HandbookDrawer, MethodDrawer } from "./PracticeDrawer";
+import { MethodDrawer } from "./PracticeDrawer";
 
 vi.mock("@/lib/memoryClient", () => ({ announceMemoryChanged: vi.fn() }));
 const methods = vi.hoisted(() => ({ retireMethod: vi.fn(), rollbackMethod: vi.fn(), methodVersions: vi.fn(), methodSources: vi.fn() }));
 vi.mock("@/lib/methodsClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")),
   ...methods,
-}));
-const handbooks = vi.hoisted(() => ({ handbookDetail: vi.fn(), handbookVersions: vi.fn(), retireHandbook: vi.fn(), rollbackHandbook: vi.fn() }));
-vi.mock("@/lib/handbooksClient", async () => ({
-  ...(await vi.importActual<typeof import("@/lib/handbooksClient")>("@/lib/handbooksClient")),
-  ...handbooks,
 }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
@@ -171,84 +166,5 @@ describe("one learned method, opened from its row", () => {
     expect(await screen.findByText("暂时读不到以前的版本。")).toBeInTheDocument();
     expect(screen.getByText("1. 固定每个附件的副本。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "回到上一版" })).not.toBeInTheDocument();
-  });
-});
-
-const handbook = {
-  id: "method:capability-handbook:meta-analysis:citations", revision: 5, capabilityId: "meta-analysis", status: "active",
-  title: "每一句结论落回来源", summary: "写结论时同时写出它出自哪篇、哪一句。", whenToUse: "写综述结论时", appliedAt: "2026-09-23T02:00:00Z",
-  source: { projectId: "prj_1", sessionId: "ses_9" }, createdAt: "2026-09-20T02:00:00Z", updatedAt: "2026-09-23T02:00:00Z",
-} as never;
-
-function openHandbook() {
-  const onChanged = vi.fn();
-  const onClose = vi.fn();
-  render(<MemoryRouter><HandbookDrawer handbook={handbook} tool="综合药品评价" onClose={onClose} onChanged={onChanged} /></MemoryRouter>);
-  return { onChanged, onClose };
-}
-
-describe("one capability handbook, opened from its row", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    handbooks.handbookDetail.mockResolvedValue({ ...(handbook as object), body: "model text", steps: "1. 对应每个引用。", sources: [{ projectId: "prj_1", sessionId: "ses_9", title: "儿童疳证中医药新证据", at: "2026-09-22T08:00:00Z" }] });
-    handbooks.handbookVersions.mockResolvedValue({ items: [
-      { version: 2, revision: 9, at: "2026-09-23T02:00:00Z", title: null, current: true },
-      { version: 1, revision: 5, at: "2026-09-20T02:00:00Z", title: null, current: false, steps: "1. 旧的步骤。" },
-    ] });
-  });
-  afterEach(cleanup);
-
-  it("names the research tool it is used in, and reads its steps once they have arrived", async () => {
-    openHandbook();
-    const drawer = screen.getByRole("dialog", { name: "每一句结论落回来源" });
-    expect(within(drawer).getByRole("status")).toHaveTextContent("正在读取");
-    expect(await within(drawer).findByText("1. 对应每个引用。")).toBeInTheDocument();
-    expect(within(drawer).getByText("用在综合药品评价 · 第 2 版 · 9月23日")).toBeInTheDocument();
-    expect(within(drawer).getByText("写综述结论时")).toBeInTheDocument();
-    expect(await within(drawer).findByText("儿童疳证中医药新证据 · 9月22日")).toBeInTheDocument();
-    // Never the model's own text when there are steps, and no state of whether it was measured.
-    expect(drawer.textContent).not.toMatch(/model text|效果待观察|对照评估/);
-  });
-
-  it("has no 「怎么做」 when there are no steps — never the text written for the model", async () => {
-    handbooks.handbookDetail.mockResolvedValue({ ...(handbook as object), body: "model text", steps: null, sources: [] });
-    openHandbook();
-    const drawer = screen.getByRole("dialog", { name: "每一句结论落回来源" });
-    await waitFor(() => expect(within(drawer).queryByRole("status")).not.toBeInTheDocument());
-    expect(within(drawer).queryByText("怎么做")).not.toBeInTheDocument();
-    expect(drawer.textContent).not.toMatch(/model text/);
-  });
-
-  it("goes back to the version before, by naming it", async () => {
-    handbooks.rollbackHandbook.mockResolvedValue({});
-    const { onClose, onChanged } = openHandbook();
-    await userEvent.click(await screen.findByRole("button", { name: "回到上一版" }));
-    await waitFor(() => expect(handbooks.rollbackHandbook).toHaveBeenCalledWith(expect.objectContaining({ id: (handbook as { id: string }).id, revision: 5 }), 5));
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("stops being used at once, and the toast's 撤销 restores the state before", async () => {
-    handbooks.retireHandbook.mockResolvedValue({ ...(handbook as object), status: "retired", revision: 6 });
-    handbooks.rollbackHandbook.mockResolvedValue({});
-    openHandbook();
-    await userEvent.click(await screen.findByRole("button", { name: "不再使用" }));
-    await waitFor(() => expect(handbooks.retireHandbook).toHaveBeenCalled());
-    const [, options] = toasts.success.mock.calls.at(-1)!;
-    options.action.onClick();
-    await waitFor(() => expect(handbooks.rollbackHandbook).toHaveBeenCalledWith(expect.objectContaining({ revision: 6 }), 5));
-  });
-
-  it("reads an earlier version in place", async () => {
-    openHandbook();
-    await userEvent.click(await screen.findByRole("button", { name: "查看" }));
-    expect(screen.getByText("1. 旧的步骤。")).toBeInTheDocument();
-  });
-
-  it("says it could not read the handbook, and still lets it be stopped", async () => {
-    handbooks.handbookDetail.mockRejectedValue(new Error("down"));
-    openHandbook();
-    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "不再使用" })).toBeInTheDocument();
   });
 });

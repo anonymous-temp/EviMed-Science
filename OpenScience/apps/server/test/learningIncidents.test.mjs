@@ -28,16 +28,16 @@ function ledgerRun(scenario, index) {
   };
 }
 
-test("each trigger scenario comes out as the case says: the gate's repairs queue nothing by default, the researcher's corrections always queue", async () => {
-  assert.ok(incident.scenarios.triggers.length >= 4);
+test("each trigger scenario comes out as the case says: the gate's repairs queue nothing, the researcher's corrections always queue", async () => {
+  assert.ok(incident.scenarios.triggers.length >= 3);
   for (const [index, scenario] of incident.scenarios.triggers.entries()) {
     const run = ledgerRun(scenario, index);
     const jobs = { enqueue: async () => ({ id: "job" }) };
     const triggers = new LearningTriggers({
-      jobs, deliveryShare: scenario.shares.delivery, repairShare: scenario.shares.repair,
+      jobs,
       agentRuns: { list: async () => [run], runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: scenario.run.inRunAttempts }] } }) },
     });
-    const result = await triggers.afterRun(project, run, scenario.memoryCorrections ? { corrections: scenario.memoryCorrections } : null);
+    const result = await triggers.afterRun(project, run);
     assert.deepEqual([...result.queued].sort(), [...scenario.expect.queued].sort(), `${scenario.name}: queued`);
     assert.deepEqual(result.sampledOut ?? [], scenario.expect.sampledOut, `${scenario.name}: sampled out`);
   }
@@ -71,17 +71,17 @@ test("the library scenario: every reworded card nobody opened is stopped on its 
   assert.equal(unprovenMerge(taught), false);
 });
 
-test("the distillation scenarios are well formed and cover what the capability is now told: bookkeeping is no_change, a correction is a practice, a handbook fits", () => {
+test("the distillation scenarios are well formed and cover what the capability is now told: bookkeeping is no_change and a correction is a practice", () => {
   const scenarios = incident.scenarios.distillation;
   assert.equal(new Set(scenarios.map((/** @type {any} */ item) => item.name)).size, scenarios.length);
   for (const item of scenarios) {
-    assert.ok(["repair_accepted", "correction", "delivered", "routine"].includes(item.trigger), item.name);
-    assert.ok(["researcher", "reviewer", "run"].includes(item.signal), item.name);
+    assert.ok(["correction", "routine"].includes(item.trigger), item.name);
+    assert.ok(["researcher", "run"].includes(item.signal), item.name);
     assert.ok(item.lesson.length > 40, item.name);
     assert.ok(item.expect && typeof item.expect === "object", item.name);
   }
-  assert.ok(scenarios.some((/** @type {any} */ item) => item.signal === "reviewer" && item.expect.operation === "no_change"), "the gate's bookkeeping");
+  assert.ok(scenarios.some((/** @type {any} */ item) => item.signal === "run" && item.expect.operation === "no_change"), "the gate's bookkeeping");
   assert.ok(scenarios.some((/** @type {any} */ item) => item.signal === "researcher" && item.trigger === "correction" && item.expect.operation === "create"), "a correction");
-  assert.ok(scenarios.some((/** @type {any} */ item) => item.expect.maxHandbookChars === 6000), "a handbook that fits the platform's length");
+  assert.ok(scenarios.every((/** @type {any} */ item) => item.trigger !== "repair_accepted" && item.signal !== "reviewer" && !("maxHandbookChars" in item.expect)), "nothing of the deleted handbook arm");
   assert.match(String(incident.liveCheck), /method-distillation 1\.2\.0/);
 });

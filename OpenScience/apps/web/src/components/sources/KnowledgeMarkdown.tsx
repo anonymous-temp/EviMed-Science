@@ -5,7 +5,7 @@ import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { listParams, readListState, readerPath } from "@/lib/knowledgeNav";
+import { knowledgePath, listParams, readListState, readerPath } from "@/lib/knowledgeNav";
 import { locateSourceQuote, type KnowledgePage, type KnowledgePageLink } from "@/lib/sourceClient";
 import { linkPosition, pageSegments, rawMarkdown, withoutLeadingTitle } from "./knowledgeView";
 
@@ -49,7 +49,7 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
   const [params] = useSearchParams();
   const [open, setOpen] = useState(false);
   if (!link.available || link.status === "source_missing") {
-    return <Tooltip content="这份资料已不在知识库里"><span className="text-text-3">{children}</span></Tooltip>;
+    return <Tooltip content="这份资料已不在知识库里"><span className="text-text-3">{children}{link.checkedAt && <span className="ml-1 text-caption">{`曾核对于 ${new Date(link.checkedAt).toLocaleString("zh-CN")}${link.sourceVersion != null ? ` · 来源第 ${link.sourceVersion} 版` : ""}，当前不可读取`}</span>}</span></Tooltip>;
   }
   const mark = link.status === "present" ? (
     <span role="img" aria-label="原文里找到了这句引文" className="ml-0.5 inline-block align-text-bottom"><CircleCheck size={16} aria-hidden="true" className="text-ok" /></span>
@@ -61,6 +61,7 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
     <>
       <button type="button" className={`${LINK} text-left`} onClick={() => void openQuotation(link.sourceId, link.quote, navigate, listParams(readListState(params)).toString())}>{children}</button>
       {mark}
+      {link.checkedAt && <span className="ml-1 text-caption text-text-3">{`核对于 ${new Date(link.checkedAt).toLocaleString("zh-CN")}${link.sourceVersion != null ? ` · 来源第 ${link.sourceVersion} 版` : ""}`}</span>}
       {link.status === "absent" && open && (
         <span role="note" className="mx-1 rounded-tag bg-warn-soft px-1.5 py-0.5 text-caption text-warn-strong">
           {MISSING_QUOTE}：“{link.quote}”
@@ -71,10 +72,10 @@ function SourceLink({ link, children }: { link: Extract<KnowledgePageLink, { kin
 }
 
 /** A page of the knowledge base opened from a page; one that is not there yet is written as plain text. */
-function PageLinkTo({ link, children }: { link: Extract<KnowledgePageLink, { kind: "page" }>; children: ReactNode }) {
+function PageLinkTo({ link, page, children }: { page: KnowledgePage; link: Extract<KnowledgePageLink, { kind: "page" }>; children: ReactNode }) {
   const [params] = useSearchParams();
   if (!link.exists || !link.sourceId) return <Tooltip content="这一页还没有整理出来"><span className="text-text-2">{children}</span></Tooltip>;
-  return <Link to={readerPath(link.sourceId, readListState(params))} className={LINK}>{children}</Link>;
+  return <Link to={page.address && link.path ? knowledgePath({projectId:page.address.projectId,tree:page.tree,path:link.path}) : readerPath(link.sourceId, readListState(params))} className={LINK}>{children}</Link>;
 }
 
 /**
@@ -124,11 +125,11 @@ export function KnowledgeMarkdown({ page }: { page: KnowledgePage }) {
     const link = page.links[position];
     if (!link) return children;
     if (link.kind === "source") return <SourceLink link={link}>{children}</SourceLink>;
-    if (link.kind === "page") return <PageLinkTo link={link}>{children}</PageLinkTo>;
+    if (link.kind === "page") return <PageLinkTo link={link} page={page}>{children}</PageLinkTo>;
     return /^(https?:|mailto:)/iu.test(link.href)
       ? <a href={link.href} target="_blank" rel="noopener noreferrer" className={LINK}>{children}</a>
       : <>{children}</>;
-  }, [page.links]);
+  }, [page]);
 
   // The graph's relation file is data, not a page: it is shown as it is written, a screenful of lines at a time.
   if (isRelationsFile(page)) return <RawLines text={rawMarkdown(page)} />;

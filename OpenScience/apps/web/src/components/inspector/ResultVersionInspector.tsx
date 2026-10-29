@@ -19,6 +19,42 @@ import { parseFailureMessage } from "@/lib/errorText";
 import { assignResultAnchors, cancelResultReplay, directlyRelatedResults, exportResult, getResultReplay, getResultVersion, listRelatedResultVersions, listResultVersions, readResultBytes, replayEnvironmentLabel, replayErrorText, replayNumbersLabel, replayResult, requestResultRevision,
   resultActionFailure, resultEnvironmentDifference, resultTextDifference, resultValueDifference, resultGapLabel, saveResultBlob, selectionResultAnchor, type ResultAnchor, type ResultReplay, type ResultVersion } from "@/lib/resultProvenance";
 
+/** The existing immutable preview with an explicit one-version read grant and no account-wide mutation or source fallthrough. */
+export function ScopedResultVersionInspector({ path, runId, versionId, read }: {
+  path: string; runId: string; versionId: string; read: () => Promise<{ version: ResultVersion; bytes: Blob }>;
+}) {
+  const [value, setValue] = useState<{ version: ResultVersion; bytes: Blob; text: string | null } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [round, setRound] = useState(0);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    setValue(null); setError(null);
+    void read().then(async value => {
+      if (value.version.versionId !== versionId || value.version.path !== path || value.version.producer.runId !== runId) throw new Error('所选结果与处理记录不一致。');
+      const text = isText(value.version) ? await value.bytes.text() : null;
+      if (current) setValue({ ...value, text });
+    }).catch(failure => { if (current) setError(parseFailureMessage(failure, '此版本')); });
+    return () => { current = false; };
+  }, [path, runId, versionId, read, round]);
+  useEffect(() => {
+    if (!value) { setUrl(null); return; }
+    const next = URL.createObjectURL(value.bytes); setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [value]);
+  if (error) return <div role="alert" className="space-y-2 p-4 text-ui text-error"><p>{error}</p><Button variant="secondary" onClick={() => setRound(n => n + 1)}>重试</Button></div>;
+  if (!value) return <Loading text="正在读取所选结果版本" />;
+  const filename = path.split('/').at(-1) ?? path;
+  const download = () => saveResultBlob(value.bytes, filename);
+  return <div className="space-y-4 p-4 text-ui text-text">
+    <Button variant="secondary" onClick={download}>下载此版本</Button>
+    {value.text !== null ? /\.md$/i.test(path) ? <ReportReader path={path} text={value.text} layout="pane" immutableVersion={value.version} onDownload={download} sourceRunId={null} />
+      : /\.(csv|tsv)$/i.test(path) ? <TablePreview table={parseTableFile(filename, value.text)} /> : <pre className="overflow-auto whitespace-pre-wrap text-ui">{value.text}</pre>
+      : value.version.mimeType.startsWith('image/') && url ? <img src={url} alt={filename} className="max-w-full" />
+        : value.version.mimeType === 'application/pdf' && url ? <iframe title="所选版本 PDF" sandbox="" src={url} className="h-96 w-full" /> : <p>此格式请下载所选版本后查看。</p>}
+  </div>;
+}
+
 /** Immutable result selection lives in the existing history pane. */
 export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy }: {
   path: string; runId?: string; initialVersionId?: string; onLegacy?: () => void;

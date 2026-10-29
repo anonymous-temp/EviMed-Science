@@ -3,7 +3,8 @@
 // not charged under research billing, it did not count against the account's project ceiling, and its runtime
 // took none of the researcher's slots — and the name is typed by the caller of `POST /api/projects`, or derived
 // from the title a researcher gives (an English "Audit trial" becomes `audit-trial`). It is internal now only when
-// its owner is an operator or the deployment's acceptance account.
+// its owner is an operator. (The deployment named an acceptance account as well until 2026-10-25; the acceptance drivers now run in a
+// throwaway account of their own, an ordinary account whose projects are charged and counted.)
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -20,9 +21,9 @@ if (databaseUrl) {
   assert.match(url.pathname, /evimed_test/);
 }
 
-test("the project ceiling counts an ordinary account's acceptance-x project, and not an operator's or the acceptance account's", async () => {
+test("the project ceiling counts an ordinary account's acceptance-x project, and not an operator's", async () => {
   // Development auth signs in as the account `dev`; each app makes it a different kind of account.
-  const kinds = [["an ordinary account", {}, 409], ["an operator", { operatorUsers: ["dev"] }, 200], ["the acceptance account", { acceptanceUsername: "dev" }, 200]];
+  const kinds = [["an ordinary account", {}, 409], ["an operator", { operatorUsers: ["dev"] }, 200]];
   for (const [label, accounts, secondStatus] of kinds) {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-internal-accounts-"));
     const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, maxProjectsPerUser: 2, ...accounts });
@@ -44,7 +45,7 @@ test("the project ceiling counts an ordinary account's acceptance-x project, and
   }
 });
 
-test("an ordinary account's acceptance-x run is charged; an operator's and the acceptance account's are waived as before", {
+test("an ordinary account's acceptance-x run is charged; an operator's is waived as before", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async (t) => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-internal-accounts-billing-"));
@@ -52,9 +53,9 @@ test("an ordinary account's acceptance-x run is charged; an operator's and the a
   const original = EvimedCreditsService.prototype.settleRun;
   EvimedCreditsService.prototype.settleRun = async function (run) { settled.push(run); return { status: "skipped", reason: "test" }; };
   const suffix = randomUUID().replaceAll("-", "");
-  const ids = { ordinary: `ordinary_${suffix}`, operator: `operator_${suffix}`, acceptance: `acceptance_${suffix}` };
+  const ids = { ordinary: `ordinary_${suffix}`, operator: `operator_${suffix}` };
   const app = createWebApiApp({ dataDir, databaseUrl, stateStore: "postgres", requireSharedStateStore: true, runtimeMode: "mock", devAuth: false, authMode: "local",
-    bootstrapUser: "", bootstrapPassword: "", deepseekProviderEnabled: false, researchMemoryEnabled: false, operatorUsers: [ids.operator], acceptanceUsername: ids.acceptance,
+    bootstrapUser: "", bootstrapPassword: "", deepseekProviderEnabled: false, researchMemoryEnabled: false, operatorUsers: [ids.operator],
     evimedCreditsEnabled: true, researchBillingEnabled: true, evimedCreditsPerCny: 1, evimedCreditsUrl: "https://wallet.evimed.com/deduct",
     evimedCreditsBalanceUrl: "https://wallet.evimed.com/balance", evimedApiKey: "internal-accounts-test-only-key",
     evimedCreditsFetch: async () => Response.json({ code: 200, data: { balance: 100, frozen: 0, receiptId: "r" } }) });
@@ -78,5 +79,4 @@ test("an ordinary account's acceptance-x run is charged; an operator's and the a
   const chargedProjects = (userId) => settled.filter((run) => run.userId === userId).map((run) => run.projectId).sort();
   assert.deepEqual(chargedProjects(ids.ordinary), ["acceptance-x", "audit-trial", "default"], "an ordinary account is charged for a project named like a measurement");
   assert.deepEqual(chargedProjects(ids.operator), ["default"], "an operator's measurement projects are waived");
-  assert.deepEqual(chargedProjects(ids.acceptance), ["default"], "the acceptance account's measurement projects are waived");
 });

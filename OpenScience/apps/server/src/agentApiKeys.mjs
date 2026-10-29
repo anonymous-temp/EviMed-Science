@@ -358,22 +358,20 @@ export class AgentApiKeyStore {
  * `only` names one of them: the integrator forgetting one person
  * (`DELETE /api/agent-memory/v1/subject`), by the same path.
  *
- * @param {{ apiKeys: AgentApiKeyStore | null, store: any, memorySubstrate: any, memoryIndexing?: any, capsuleTransfers?: any, nativeMemory?: { erase: (userId: string) => Promise<unknown> } | null }} services
+ * @param {{ apiKeys: AgentApiKeyStore | null, store: any, memoryIndexing?: any, capsuleTransfers?: any, nativeMemory?: { erase: (userId: string) => Promise<unknown> } | null }} services
  * @param {string} ownerId @param {{ only?: string | null }} [options]
  * @returns {Promise<number>} how many accounts were deleted
  */
-export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, memoryIndexing = null, capsuleTransfers = null, nativeMemory = null }, ownerId, { only = null } = {}) {
+export async function deleteSubjectAccounts({ apiKeys, store, memoryIndexing = null, capsuleTransfers = null, nativeMemory = null }, ownerId, { only = null } = {}) {
   if (!apiKeys) return 0;
   let deleted = 0;
   for (const { userId, accountCreatedAt } of await apiKeys.subjectAccounts(ownerId)) {
     if (only !== null && userId !== only) continue;
     const subject = await store.userById(userId);
     if (!subject || subject.authType !== "subject") continue;
-    // Owed to the index in the deletion's own transaction when the deployment
-    // keeps a ledger for it (`prepareAccountDeletion`); otherwise one attempt,
-    // never waited on: the index holds derived copies only.
+    // Owed to the index in the deletion's own transaction when the deployment keeps a ledger for it (`prepareAccountDeletion`): the
+    // index holds derived copies only, and a deployment with no index has nothing of the subject's to withdraw.
     await memoryIndexing?.withdrawals?.migrate();
-    if (!memoryIndexing?.withdrawals) void Promise.resolve(memorySubstrate.forgetUser(userId)).catch(() => false);
     // What the native memory engine holds of the subject goes before the rows that say it was there.
     await nativeMemory?.erase(userId);
     await store.deleteUser(subject, {

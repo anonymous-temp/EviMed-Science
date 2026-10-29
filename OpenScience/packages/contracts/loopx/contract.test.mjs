@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { installLoopx, keptLoopxSkills, pruneSkillInstallReadback, verifyLoopxArchive, verifyLoopxWorkflowSkills } from '../../../deploy/runtime-dsh/install-loopx.mjs';
+import { LOOPX_PROJECT_EDITS, adaptLoopxProjectSkill, hashSkillTree, installLoopx, keptLoopxSkills, pruneSkillInstallReadback, refreshSkillInstallReadback, verifyLoopxArchive, verifyLoopxWorkflowSkills } from '../../../deploy/runtime-dsh/install-loopx.mjs';
 import { verifyHostedLoopx, registerHostedLoopx } from '../../harness-port/src/loopxBootstrap.mjs';
 import { runtimeUiMethodFromPath } from '../../domain/src/runtimeUiSurface.mjs';
 import { isSuccessfulLoopxSkillResult } from '../../harness-port/src/loopxEvents.mjs';
@@ -15,6 +15,28 @@ import { adaptLoopxDriver, grantLoopxVersionExemption, orderLoopxProfileBundles 
 const root = new URL('../../../', import.meta.url);
 const read = file => readFile(new URL(file, root), 'utf8');
 const deps = JSON.parse(await read('deps-version.json'));
+
+const sha = body => createHash('sha256').update(body).digest('hex');
+/** A stand-in for the pinned CLI's `loopx-project` skill: the three places that name the dropped skill, in the shapes the real file has them. */
+const projectSkillBody = [
+  '---',
+  'name: loopx-project',
+  `description: "Use for LoopX project lifecycle work. Ordinary task execution does not require this skill.${LOOPX_PROJECT_EDITS[0].from}"`,
+  '---',
+  '',
+  '# LoopX Project Workflow',
+  '',
+  LOOPX_PROJECT_EDITS[1].from + 'LoopX has two layers:',
+  '',
+  'When a project agent discovers a durable design document that future agents may need, ' + LOOPX_PROJECT_EDITS[2].from + ' Identify the target project first;',
+  '',
+  '```bash',
+  'loopx import-doc-registry-authority --goal-id <STABLE_GOAL_ID> ...',
+  '```',
+  '',
+].join('\n');
+/** What the build makes of it. */
+const editedProjectSkill = LOOPX_PROJECT_EDITS.reduce((text, { from, to }) => text.replace(from, () => to), projectSkillBody);
 
 test('the complete official distribution is pinned and installed before the immutable profile is sealed', async () => {
   const pin = deps.loopx;
@@ -238,7 +260,7 @@ if (argv[0] === 'workflow-skills') {
   const names = ${JSON.stringify(record.installed)};
   for (const name of names) {
     fs.mkdirSync(path.join(target, name), { recursive: true });
-    fs.writeFileSync(path.join(target, name, 'SKILL.md'), 'skill ' + name);
+    fs.writeFileSync(path.join(target, name, 'SKILL.md'), name === 'loopx-project' ? ${JSON.stringify(projectSkillBody)} : 'skill ' + name);
     // What the real CLI does when it copies out of a read-only package: the copies keep their modes.
     fs.chmodSync(path.join(target, name, 'SKILL.md'), 0o444);
     fs.chmodSync(path.join(target, name), 0o555);
@@ -253,7 +275,8 @@ process.exit(2);
 `, { mode: 0o755 });
   const archives = path.join(dir, 'archives');
   await mkdir(archives);
-  const pins = { loopx: { ...deps.loopx } };
+  // The edit is bound to the pinned CLI's real file, which the fake CLI does not write; its own file is bound the same way.
+  const pins = { loopx: { ...deps.loopx, compatibility: { ...deps.loopx.compatibility, skillEdit: { ...deps.loopx.compatibility.skillEdit, sha256: sha(projectSkillBody), adaptedSha256: sha(editedProjectSkill) } } } };
   for (const key of ['wheel', 'plugin']) {
     const body = `archive ${key}`;
     await writeFile(path.join(archives, pins.loopx[key].filename), body);
@@ -269,6 +292,14 @@ process.exit(2);
   assert.deepEqual(present, ['loopx', 'loopx-project'], 'only the kept folders are on disk');
   assert.deepEqual(receipt.skills.map(skill => skill.name), ['loopx', 'loopx-project']);
   assert.deepEqual(receipt.shipped.map(skill => skill.name), record.installed, 'the receipt still says what upstream shipped');
+  // The kept lifecycle skill is what the build made of it: the receipt carries the digest of the edited file and, beside it, the
+  // digest upstream shipped it with; the pointers to the skill the image leaves out are gone from the folder.
+  const edited = await readFile(path.join(dir, 'loopx-root', 'skills', 'loopx-project', 'SKILL.md'), 'utf8');
+  assert.equal(edited, editedProjectSkill);
+  assert.equal(receipt.skills.find(skill => skill.name === 'loopx-project').sha256, sha(editedProjectSkill));
+  assert.equal(receipt.shipped.find(skill => skill.name === 'loopx-project').sha256, sha(projectSkillBody));
+  assert.deepEqual(receipt.edits, [{ skill: 'loopx-project', file: 'SKILL.md', sourceSha256: sha(projectSkillBody), adaptedSha256: sha(editedProjectSkill), edits: LOOPX_PROJECT_EDITS.length }]);
+  assert.equal((await stat(path.join(dir, 'loopx-root', 'skills', 'loopx-project', 'SKILL.md'))).mode & 0o777, 0o444, 'the kept folder is as read-only as the CLI left it');
   assert.deepEqual(receipt.kept, ['loopx', 'loopx-project']);
   assert.deepEqual(receipt.dropped, record.installed.filter(name => !['loopx', 'loopx-project'].includes(name)));
   assert.ok(receipt.shipped.every(skill => /^[a-f0-9]{64}$/.test(skill.sha256)));
@@ -282,6 +313,10 @@ process.exit(2);
   assert.deepEqual(manifest.materialized_skill_ids, ['loopx', 'loopx-project']);
   assert.deepEqual(Object.keys(manifest.skills.items).sort(), ['loopx', 'loopx-project']);
   assert.notEqual(manifest.skills.digest, 'stale');
+  // The edited folder is written back to the manifest as the CLI itself would hash it, so the CLI's own readback check of this
+  // root does not find `loopx-project` modified; the folder the build left alone keeps what the CLI recorded.
+  assert.deepEqual(manifest.skills.items['loopx-project'], hashSkillTree(path.join(dir, 'loopx-root', 'skills', 'loopx-project')));
+  assert.equal(manifest.skills.items.loopx.sha256, 'loopx'.length.toString(16).padStart(64, '0'));
 });
 
 test('the readback manifest digest is the CLI\'s own: the hash of Python\'s sorted json of the items that are left', async t => {
@@ -297,4 +332,76 @@ test('the readback manifest digest is the CLI\'s own: the hash of Python\'s sort
   assert.deepEqual(pruned.materialized_skill_ids, ['loopx', 'loopx-project']);
   assert.equal(pruned.owner, 'x', 'what is not about the skills is left as it was');
   assert.equal(pruneSkillInstallReadback(path.join(dir, 'nowhere'), ['loopx']), false, 'no manifest, nothing to prune');
+});
+
+// Found by the integrated acceptance of 2026-10-17 (r19-accepta, finding 7): the kept `loopx-project` skill told the model to
+// prefer a skill the build leaves out.
+test('the kept loopx-project skill names no skill the image leaves out, and the edit is bound to the pinned CLI\'s bytes', async t => {
+  const pin = deps.loopx.compatibility.skillEdit;
+  assert.equal(pin.skill, 'loopx-project');
+  assert.match(pin.sha256, /^[a-f0-9]{64}$/);
+  assert.match(pin.adaptedSha256, /^[a-f0-9]{64}$/);
+  assert.notEqual(pin.sha256, pin.adaptedSha256);
+  assert.ok(pin.reason.length > 200 && pin.upgradePath.length > 200, 'recorded with the reason and the way out, as the other build-time edits are');
+  const record = JSON.parse(await read('packages/contracts/loopx/workflow-skills.json'));
+  assert.ok(record.kept.includes(pin.skill) && !record.kept.includes('loopx-doc-registry'), 'the edit exists because the other skill is not kept; keeping it makes the edit obsolete');
+  // Each fragment is one pointer to the dropped skill, and none of the replacements names it.
+  for (const { from, to } of LOOPX_PROJECT_EDITS) {
+    assert.match(from, /doc-registry/);
+    assert.doesNotMatch(to, /doc-registry/);
+  }
+
+  const dir = await mkdtemp(path.join(tmpdir(), 'loopx-skill-edit-'));
+  // The folders stay as read-only as the CLI copied them.
+  t.after(() => { execFileSync('chmod', ['-R', 'u+w', dir]); return rm(dir, { recursive: true, force: true }); });
+  const make = async (body) => {
+    const skillsDir = path.join(dir, `skills-${Math.random().toString(16).slice(2)}`);
+    await mkdir(path.join(skillsDir, 'loopx-project'), { recursive: true });
+    await writeFile(path.join(skillsDir, 'loopx-project', 'SKILL.md'), body);
+    await chmod(path.join(skillsDir, 'loopx-project', 'SKILL.md'), 0o444);
+    await chmod(path.join(skillsDir, 'loopx-project'), 0o555);
+    return skillsDir;
+  };
+  const edit = { ...pin, sha256: sha(projectSkillBody), adaptedSha256: sha(editedProjectSkill) };
+
+  const ok = await make(projectSkillBody);
+  const done = adaptLoopxProjectSkill({ skillsDir: ok, edit });
+  assert.equal(done.adaptedSha256, sha(editedProjectSkill));
+  assert.equal(await readFile(path.join(ok, 'loopx-project', 'SKILL.md'), 'utf8'), editedProjectSkill);
+  assert.doesNotMatch(editedProjectSkill, /prefer loopx-doc-registry|load `loopx-doc-registry`|doc-registry skill trigger/);
+  assert.match(editedProjectSkill, /loopx import-doc-registry-authority/, 'the CLI\'s own command stays');
+  assert.equal((await stat(path.join(ok, 'loopx-project'))).mode & 0o777, 0o555, 'the folder is put back as it was');
+  // A file that is not the reviewed one is refused whole, whatever it says; so is one that lost a fragment, or an edit that
+  // does not produce the reviewed result.
+  await assert.rejects(async () => adaptLoopxProjectSkill({ skillsDir: await make(projectSkillBody + 'x'), edit }), /differs from the reviewed compatibility input/);
+  const lost = projectSkillBody.replace(LOOPX_PROJECT_EDITS[1].from, '');
+  await assert.rejects(async () => adaptLoopxProjectSkill({ skillsDir: await make(lost), edit: { ...edit, sha256: sha(lost) } }), /exactly once/);
+  await assert.rejects(async () => adaptLoopxProjectSkill({ skillsDir: await make(projectSkillBody), edit: { ...edit, adaptedSha256: 'f'.repeat(64) } }), /not the reviewed one/);
+  assert.equal(adaptLoopxProjectSkill({ skillsDir: ok, edit: undefined }), null, 'a pin that records no edit changes nothing');
+});
+
+test('the readback manifest holds an edited folder as the CLI hashes it (the tree hash is the CLI\'s own)', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loopx-tree-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const folder = path.join(dir, 'loopx-project');
+  await mkdir(path.join(folder, 'agents'), { recursive: true });
+  await mkdir(path.join(folder, 'references'));
+  for (const [name, body] of [['.loopx-skill-scope', 'x'], ['.loopx-skill-version.json', '{"a": 1}\n'], ['SKILL.md', '# Skill\n\nbody\n'], ['agents/openai.yaml', 'name: x\n'], ['references/a.md', 'one\n'], ['references.txt', 'two\n']]) {
+    await writeFile(path.join(folder, name), body);
+  }
+  // Computed once with `loopx.skill_install_readback.hash_skill_tree` of the pinned CLI on this exact tree. The layout is the
+  // one that tells Python's Path ordering (component by component: `references/a.md` before `references.txt`) from a string sort.
+  const golden = { available: true, file_count: 6, sha256: 'b5794dad333508d71e9988c5ab919bd1f757c8df23ae579338f163a820e5686d' };
+  assert.deepEqual(hashSkillTree(folder), golden);
+  assert.deepEqual(hashSkillTree(path.join(dir, 'nowhere')), { available: false, file_count: 0, sha256: null });
+
+  const item = (file_count, fill) => ({ available: true, file_count, sha256: fill.repeat(64) });
+  await writeFile(path.join(dir, '.loopx-skill-install.json'), JSON.stringify({ owner: 'x', skills: { digest: 'old', items: { loopx: item(2, 'a'), 'loopx-project': item(3, 'b') } } }));
+  assert.equal(refreshSkillInstallReadback(dir, ['loopx-project']), true);
+  const manifest = JSON.parse(await readFile(path.join(dir, '.loopx-skill-install.json'), 'utf8'));
+  assert.deepEqual(manifest.skills.items['loopx-project'], golden);
+  assert.deepEqual(manifest.skills.items.loopx, item(2, 'a'));
+  assert.equal(manifest.owner, 'x');
+  assert.equal(manifest.skills.digest, sha(`{"loopx": {"available": true, "file_count": 2, "sha256": "${'a'.repeat(64)}"}, "loopx-project": {"available": true, "file_count": 6, "sha256": "${golden.sha256}"}}`));
+  assert.equal(refreshSkillInstallReadback(path.join(dir, 'nowhere'), ['loopx-project']), false);
 });

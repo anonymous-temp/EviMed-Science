@@ -1,0 +1,64 @@
+memory_type: observations
+description: |
+  __LANGUAGE__
+  Observations: a NOTE, not a memory. It records that, in a request, the user made a choice of
+  form, tool or method without saying it holds from now on, so that a second conversation can
+  show whether the choice comes back. Nobody reads an observation as a fact about the user:
+  it is never shown, never recalled and never a premise for anything. The platform counts the
+  conversations that wrote the same observation and, when two different ones did, moves it
+  to PREFERENCES itself; this type has nothing to do with that move.
+  Write one when a user-role message asks for work with a specific form, structure, tool,
+  format, length or method and does not call it a rule ("做个 12 个月预算表，要有透视表",
+  "月度汇总请做成折线图，不要表格", "参考文献用 APA"). The condition on one deliverable that the
+  other types never keep (its size, its colours, its page count) may be noted here too, as long
+  as it is a choice about how the work is made.
+  One file per choice, named by the kind of task and the choice. Each conversation that shows
+  the choice adds ITS OWN line to the file, also when a line for the choice already exists:
+  the choice and the kind of task it was shown in, in a few words, with no name, no number and
+  nothing of the work's content ("预算类表格：带透视表（做月度汇总时）"). Reuse the exact topic of an
+  existing observation when it is the same choice; never edit or delete the earlier lines.
+  A different choice, even for the same kind of task, is another file: a line chart asked for
+  after a pivot table does not replace it.
+  Not an observation: a rule or default the user states ("以后…", "一律…", "always…" are ways to
+  say it, not a list to match) or a reshaping after a first draft (-> PREFERENCES or
+  CORRECTIONS); a question, or the topic the user asks about; a fact, an opinion or a plan; a
+  choice whose subject is a person, a health condition, money or a belief; what the assistant
+  did, proposed or produced; the content of the work. When the same choice is already a
+  preference, write no observation.
+
+  __NEVER_KEEP__
+
+  __DECIDE__
+directory: "viking://user/{{ user_space }}/memories/observations"
+filename_template: "{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+
+overview_template: |-
+  # Observations Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+
+fields:
+  - name: topic
+    type: string
+    description: |
+      The kind of task and the choice, written in {{ language }}, a few words
+      ("预算类表格 · 带透视表", "参考文献 · APA"). It identifies the file: reuse the exact topic of an
+      existing observation when the conversation shows the same choice.
+    merge_op: immutable
+
+  - name: content
+    type: string
+    description: |
+      Markdown bullets, one per conversation that showed the choice, oldest first: the choice and
+      the kind of task it was shown in, a few words. Keep every earlier bullet as it is and add
+      this conversation's own bullet at the end. No names, numbers or content of the work.
+      Example:
+      - 预算类表格：带透视表（做 12 个月预算表时）
+      - 预算类表格：带透视表（做月度汇总时）
+    merge_op: patch

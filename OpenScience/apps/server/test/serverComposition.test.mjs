@@ -22,7 +22,7 @@
 // drive" is answered by invoking the callback and watching the SQL the sweep
 // issues, not by trusting a name.
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -69,7 +69,8 @@ const RECURRING_SWEEPS = [
     name: "autopilot agenda scheduling",
     intervalMs: 60_000,
     startupRuns: 1,
-    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda'/,
+    // The scheduling pass itself: the stop-work recovery also reads agendas (queued notices, stopped tasks) with the same opening.
+    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active'/,
   },
   {
     key: "notificationDefaults",
@@ -99,6 +100,7 @@ const RECURRING_SWEEPS = [
 const USER_ID = "composition-user";
 const PROJECT_ID = "composition-project";
 const ACCOUNT_CREATED_AT = "2026-01-01 00:00:00.123456+00";
+const PROJECT_CREATED_AT = "2026-01-02 00:00:00.234567+00";
 
 /** A row as `evimed_product.documents` stores one. */
 function documentRow(kind, id, payload) {
@@ -119,7 +121,7 @@ function documentRow(kind, id, payload) {
  */
 function capsuleFixtureRows() {
   return [
-    documentRow("preferences", `active-capsules:project:${PROJECT_ID}`, { items: [{ capsuleId: "capsule-a", mode: "own" }] }),
+    documentRow("preferences", "active-capsules:account", { items: [{ capsuleId: "capsule-a", mode: "own" }] }),
     documentRow("capsule", "capsule-a", { title: "Work style", description: "", activationMode: "own", imported: false }),
     documentRow("fact", "approved-method", {
       capsuleId: "capsule-a", factKind: "method_preference", layer: "methods",
@@ -162,6 +164,7 @@ class FakePool extends EventEmitter {
     this.calls = [];
     /** @type {any} */
     this.lease = null;
+    this.transactionIsolation = "read committed";
     /** CNY already settled in the rolling window, as the admission check reads it. */
     this.daySpendCny = 0;
     /** Expired rows of `evimed_control.auth_sessions`, as the purge deletes them. */
@@ -176,6 +179,16 @@ class FakePool extends EventEmitter {
     const sql = oneLine(text);
     this.statements.push(sql);
     this.calls.push({ sql, values: Array.isArray(values) ? values : [] });
+    if (sql.startsWith('SELECT u.id AS "ownerId",u.created_at::text AS "ownerCreatedAt", p.id AS "projectId",p.created_at::text AS "projectCreatedAt" FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id')) {
+      const owned = values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1]);
+      return { rows: owned ? [{ ownerId: USER_ID, ownerCreatedAt: ACCOUNT_CREATED_AT, projectId: values[1], projectCreatedAt: PROJECT_CREATED_AT }] : [], rowCount: owned ? 1 : 0 };
+    }
+    if (sql === "SELECT to_regclass('evimed_geo.projects') IS NOT NULL AS present") return { rows: [{ present: this.geoProjects.size > 0 }], rowCount: 1 };
+    if (sql === 'SELECT id FROM evimed_geo.projects WHERE user_id=$1 AND project_id=$2') {
+      const rows = [...this.geoProjects.values()].filter(row => row.user_id === values[0] && row.project_id === values[1]).map(row => ({ id: row.id }));
+      return { rows, rowCount: rows.length };
+    }
+    if (sql === "SELECT current_setting('transaction_isolation') AS isolation") return { rows: [{ isolation: this.transactionIsolation }], rowCount: 1 };
     if (sql === "SELECT clock_timestamp()::timestamptz(3) AS created_at") return { rows: [{ created_at: new Date() }], rowCount: 1 };
     if (/^SELECT \* FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND id=\$3/.test(sql)) {
       const row = this.documents.get(`${values[1]}:${values[2]}`);
@@ -197,7 +210,7 @@ class FakePool extends EventEmitter {
     // Everything below is what the feedback loop needs and nothing else needs:
     // each branch is gated on the one kind it serves, so no statement any other
     // test depends on changes its answer.
-    if (/^INSERT INTO evimed_product\.documents\(user_id,kind,id,payload,project_id\)/.test(sql) && values[1] === "method") {
+    if (/^INSERT INTO evimed_product\.documents\(user_id,kind,id,payload,project_id\)/.test(sql) && ["method", "geo-plan-context"].includes(values[1])) {
       const key = `${values[1]}:${values[2]}`;
       if (this.documents.has(key)) return { rows: [], rowCount: 0 };
       const row = { ...documentRow(values[1], values[2], JSON.parse(values[3])), project_id: values[4] ?? null };
@@ -346,7 +359,7 @@ class FakePool extends EventEmitter {
     }
     if (/^SELECT id, name, password_hash, auth_type, created_at::text AS account_created_at FROM evimed_control\.users WHERE id = \$1/.test(sql)) {
       return values[0] === USER_ID
-        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: "2026-01-01 00:00:00+00" }], rowCount: 1 }
+        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT .* FROM evimed_geo\.projects WHERE id = \$1 AND user_id = \$2 AND deleted_at IS NULL$/.test(sql)) {
@@ -367,7 +380,7 @@ class FakePool extends EventEmitter {
       // The frontier feed's internal project, which its worker finds under
       // the operator account before its first batch.
       return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
-        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, created_at: PROJECT_CREATED_AT, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -495,7 +508,7 @@ async function composedApp(t, overrides = {}, { beforeListen = null } = {}) {
     // something else gets a deployment without a memory store — the state local
     // development runs in — and the two tests that are about memory inject a
     // store at its own interface.
-    researchMemory: { configured: false, async status() { return { configured: false, connected: false, code: "memory_unconfigured", structured: false }; } },
+    memorySettings: { configured: false, async status() { return { configured: false, connected: false, code: "memory_unconfigured", structured: false }; } },
     ...overrides,
   });
 
@@ -645,31 +658,29 @@ test("the reranker and the index strictness reach both recall paths", async (t) 
 
   assert.equal(app.memoryRerank.configured, true,
     "the composition built a reranker that can never run, so the wiring below proves nothing");
-  assert.equal(app.memorySubstrate.rerank, app.memoryRerank,
-    "research recall was given no reranker, so the vector order would stand forever");
+  assert.equal(app.memoryIndexProvider.rerank, app.memoryRerank,
+    "the index provider was given no reranker, so the vector order would stand forever");
   assert.ok(app.memoryIndexing, "the capsule index must be composed when the index provider is active");
   assert.equal(app.memoryIndexing.rerank, app.memoryRerank,
     "capsule recall was given no reranker");
-  assert.equal(app.memorySubstrate.openViking, app.openVikingClient,
-    "both recall paths must address one index");
+  assert.equal(app.memoryIndexProvider.openViking, app.openVikingClient,
+    "the provider and the capsule index must address one index");
   assert.equal(app.memoryIndexing.openViking, app.openVikingClient);
 
-  assert.equal(app.memorySubstrate.strict, true);
   assert.equal(app.capsuleService.strictIndex, true,
     "an operator who asked for strictness got the lexical fallback on the capsule path in silence");
 
-  // One relevance floor for both halves of a recall: the capsule index asked for none (every nearest neighbour however far),
-  // so the recall tool could never say that nothing reached the floor while a capsule held any entry (review M6).
-  assert.equal(app.memorySubstrate.searchMinScore, 0.75);
-  assert.equal(app.memoryIndexing.scoreThreshold, app.memorySubstrate.searchMinScore,
-    "the capsule index was composed without the research recall's relevance floor");
-
-  // And the store both of them hydrate from is the one the routes write to.
-  assert.equal(app.memorySubstrate.store, app.researchMemory);
+  // One relevance floor: the capsule index asked for none (every nearest neighbour however far), so the recall tool could never say
+  // that nothing reached the floor while a capsule held any entry (review M6).
+  assert.equal(app.memoryIndexProvider.searchMinScore, 0.75);
+  assert.equal(app.memoryIndexing.scoreThreshold, app.memoryIndexProvider.searchMinScore,
+    "the capsule index was composed without the provider's relevance floor");
 });
 
 test("startup arms every recurring sweep, and each timer really drives its own sweep", async (t) => {
-  const fixture = await composedApp(t);
+  // The production composition: agenda scheduling is armed only where scheduled tasks are on (OPEN_SCIENCE_AUTOPILOT_ENABLED,
+  // true in every hosted deployment), and the test below holds that it is not armed where they are off.
+  const fixture = await composedApp(t, { autopilotEnabled: true });
   const startup = fixture.evidence();
 
   for (const sweep of RECURRING_SWEEPS) {
@@ -699,8 +710,17 @@ test("startup arms the retry of unconfirmed container removals, and its timer dr
   assert.equal(passes >= 1, true, "no timer at the retry cadence runs the manager's pass");
 });
 
+test("with scheduled tasks off, startup never runs agenda scheduling and arms no timer that drives it", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: false });
+  const scheduling = RECURRING_SWEEPS.find((sweep) => sweep.key === "autopilotSchedule");
+  assert.ok(scheduling);
+  assert.equal(fixture.evidence()[scheduling.key] ?? 0, 0, "a deployment with scheduled tasks off still scheduled agendas at startup");
+  assert.equal(((await fixture.drivers()).get(scheduling.key) ?? []).length, 0, "a timer drives agenda scheduling although scheduled tasks are off");
+});
+
 for (const managedBrowserEnabled of [false, true]) test(`a maintenance pause clears every recurring timer and reopening re-arms them (managed browser=${managedBrowserEnabled})`, async (t) => {
   const fixture = await composedApp(t, {
+    autopilotEnabled: true,
     managedBrowserEnabled,
     managedBrowserCdpUrl: "http://127.0.0.1:9222",
     edgeProxyUrl: "https://proxy.example.org",
@@ -826,8 +846,8 @@ test("the composed autopilot worker asks the queue for verification work and can
 
   const drain = fixture.pool.calls.find((call) => /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
     && Array.isArray(call.values[0]) && call.values[0].includes("memory-index"));
-  assert.deepEqual(drain?.values[0], ["memory-index", "memory-record-index"],
-    "with no index provider composed, nothing else would ever claim these and they accumulate forever");
+  assert.deepEqual(drain?.values[0], ["memory-index"],
+    "with no index provider composed, nothing else would ever claim these and they accumulate forever (`memory-record-index` is a retired kind: start deletes its rows)");
 });
 
 // ---------------------------------------------------------------------------
@@ -873,7 +893,7 @@ test("a verification runs in a workspace that does not contain the report it is 
   for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
 
   const user = await fixture.app.store.userById(USER_ID);
-  assert.equal(user.accountCreatedAt, "2026-01-01 00:00:00+00", "the current-user fixture preserves the database account epoch");
+  assert.equal(user.accountCreatedAt, ACCOUNT_CREATED_AT, "the current-user fixture preserves the database account epoch");
   const project = await fixture.app.store.requireProject(user, PROJECT_ID);
   // The episode's own report, where the episode wrote it.
   await mkdir(path.join(project.workspaceDir, "reports"), { recursive: true });
@@ -1478,310 +1498,7 @@ test("a deployment without the learning loop records the fact and queues nothing
   assert.equal(edit.distillJob, null, "and no job is queued for a loop that does not exist");
 });
 
-/**
- * The three store calls the structured-memory routes make.
- *
- * `getRecord` to read the version the caller claims, `upsertRecord` to write
- * the change, `deleteRecord` to reject one. Everything the routes decide —
- * accepted inference, edit, rejection — is decided from what those return, so a
- * fake at the store's own interface is what this composition needs: the store
- * is in-process now, and a fake HTTP service would be a fake of nothing.
- */
-function researchMemoryDouble(record) {
-  const state = { ...record };
-  let deleted = false;
-  const notFound = () => {
-    const error = new Error("Memory not found.");
-    /** @type {any} */ (error).code = "memory_not_found";
-    /** @type {any} */ (error).status = 404;
-    return error;
-  };
-  return {
-    state,
-    configured: true,
-    async status() { return { configured: true, connected: true, code: null, structured: true }; },
-    async getRecord(_userId, id) {
-      if (deleted || id !== state.id) throw notFound();
-      return { ...state };
-    },
-    async upsertRecord(_userId, input) {
-      Object.assign(state, input, { version: state.version + 1, updatedAt: new Date().toISOString() });
-      return { ...state };
-    },
-    async deleteRecord(_userId, id) {
-      if (deleted || id !== state.id) throw notFound();
-      deleted = true;
-      return true;
-    },
-  };
-}
 
-test("confirming a pending memory over HTTP writes the feedback event the loop needs", async (t) => {
-  // The hop this covers is the one that had no substrate: the route recognized
-  // `acceptedInference` and wrote a record plus an audit line, and nothing
-  // downstream could ever read that. Driven over the real HTTP server, through
-  // the real memory routes, into the ledger the composition root built.
-  const memory = researchMemoryDouble({
-    id: "record_1", scope: "user", scopeId: "", kind: "preference", key: "response.evidence_depth",
-    value: "优先给原始证据", summary: "原始证据优先", origin: "inferred",
-    status: "pending", confidence: 0.7, importance: 0.9, sensitive: false,
-    evidenceCount: 1, version: 1, evidence: [], revisions: [],
-    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
-  });
-  const fixture = await composedApp(t, {
-    researchMemory: memory,
-    // The distillation half of this test needs the loop that claims what the
-    // ledger queues. Off by default, and the ledger is honest about it: with no
-    // claimer composed it enqueues nothing and answers a null job id, so this
-    // has to ask for the deployment it is actually asserting about.
-    learningEnabled: true,
-  });
-  const address = fixture.app.server.address();
-  const headers = {
-    "Content-Type": "application/json",
-    "x-open-science-project": PROJECT_ID,
-    "x-open-science-csrf": "composition-csrf",
-    Cookie: `${fixture.app.config.sessionCookieName}=composition-session`,
-  };
-
-  const confirm = await fetch(`http://127.0.0.1:${address.port}/api/memory/records/record_1`, {
-    method: "PATCH", headers, body: JSON.stringify({ expectedVersion: 1, status: "active" }),
-  });
-  const confirmed = await confirm.json();
-  assert.equal(confirm.status, 200, JSON.stringify(confirmed));
-  assert.equal(confirmed.data.origin, "explicit", "the confirmation itself must still work");
-
-  // And the fact of it, in the ledger, addressed by the record and the version
-  // the change produced.
-  const events = [...fixture.pool.feedback.values()];
-  assert.equal(events.length, 1, "the confirmed inference never reached the feedback ledger");
-  assert.equal(events[0].trigger_kind, "memory-inference-accepted");
-  assert.equal(events[0].user_id, USER_ID);
-  assert.equal(events[0].subject_type, "memory-record");
-  assert.equal(events[0].subject_id, "record_1");
-  assert.equal(events[0].detail.key, "response.evidence_depth");
-
-  // Replaying the same decision is the same event: the ledger is append-only
-  // and its identity is what happened, not when it was written.
-  const replay = await fetch(`http://127.0.0.1:${address.port}/api/memory/records/record_1`, {
-    method: "PATCH", headers, body: JSON.stringify({ expectedVersion: 2, status: "active", value: "只用系统综述" }),
-  });
-  const replayed = await replay.json();
-  assert.equal(replay.status, 200, JSON.stringify(replayed));
-  const triggers = [...fixture.pool.feedback.values()].map((row) => row.trigger_kind).sort();
-  assert.deepEqual(triggers, ["memory-inference-accepted", "memory-value-edited"],
-    "an edit of the value is a different decision from confirming an inference");
-
-  // Rejection is the third decision the loop needs, and deleting is the only
-  // route that produces it. This hop had no coverage anywhere: removing the
-  // call from the DELETE route left the whole server suite green.
-  const removed = await fetch(`http://127.0.0.1:${address.port}/api/memory/records/record_1`, { method: "DELETE", headers });
-  assert.equal(removed.status, 200, await removed.text());
-  const rejection = [...fixture.pool.feedback.values()].find((row) => row.trigger_kind === "memory-rejected");
-  assert.ok(rejection, "deleting a memory never reached the feedback ledger");
-  assert.equal(rejection.subject_type, "memory-record");
-  assert.equal(rejection.subject_id, "record_1");
-  assert.equal(rejection.project_id, PROJECT_ID);
-  assert.equal(rejection.detail.reason, "deleted", "archiving and deleting are the same trigger and different facts");
-  assert.equal(rejection.detail.version, 3, "the version that was deleted is what identifies the event");
-
-  // The route that reports an adoption is reachable and refuses what a client
-  // must not be able to claim.
-  const forged = await fetch(`http://127.0.0.1:${address.port}/api/feedback/events`, {
-    method: "POST", headers, body: JSON.stringify({ trigger: "memory-inference-accepted", runId: "run-1", path: "reports/evidence.md" }),
-  });
-  assert.equal(forged.status, 400);
-  assert.equal((await forged.json()).code, "feedback_event_invalid",
-    "a client that could post its own memory feedback could manufacture the evidence the extractor has to earn");
-
-  // A deliverable it cannot read is one it cannot identify: the content digest
-  // is the event's identity, and it is computed here rather than accepted.
-  const report = (trigger, target, summary, runId = "run-1") => fetch(`http://127.0.0.1:${address.port}/api/feedback/events`, {
-    method: "POST", headers, body: JSON.stringify({ trigger, runId, path: target, ...(summary ? { summary } : {}) }),
-  });
-  const adopt = (target) => report("deliverable-adopted", target);
-
-  const user = await fixture.app.store.userById(USER_ID);
-  const project = await fixture.app.store.requireProject(user, PROJECT_ID);
-
-  // The run id is the caller's own claim, and it ends up in the distillation
-  // payload and in the method document the lesson becomes. It is resolved
-  // through this project's ledger first, exactly as `GET /api/runs/:id/events`
-  // does, so a run this project does not have is refused before anything is
-  // written.
-  const unknownRun = await adopt("reports/evidence.md");
-  assert.equal(unknownRun.status, 404);
-  assert.equal((await unknownRun.json()).code, "agent_run_not_found");
-  await writeFile(path.join(project.metaDir, "runs.jsonl"), `${JSON.stringify({
-    event: "started", id: "run-1", dispatchId: "turn-1", sessionId: "session-1", mode: "open-domain",
-    agentId: null, agentVersion: null, runtimeAgent: null, model: "deepseek/deepseek-v4-pro",
-    createdAt: "2026-09-07T07:00:00.000Z", startedAt: "2026-09-07T07:00:00.000Z",
-  })}\n`, "utf8");
-
-  const missingFile = await adopt("reports/never-written.md");
-  assert.equal(missingFile.status, 404);
-  assert.equal((await missingFile.json()).code, "file_not_found",
-    "a run that exists and a file that does not are different refusals");
-  await mkdir(path.join(project.workspaceDir, "reports"), { recursive: true });
-  await writeFile(path.join(project.workspaceDir, "reports/evidence.md"), "# 证据小结\n效应量 0.74。\n", "utf8");
-  const adopted = await adopt("reports/evidence.md");
-  assert.equal(adopted.status, 201, await adopted.text());
-  const stored = [...fixture.pool.feedback.values()].find((row) => row.trigger_kind === "deliverable-adopted");
-  assert.ok(stored, "the adoption never reached the ledger");
-  assert.equal(stored.subject_id, deliverableSubjectId("run-1", "reports/evidence.md"));
-  assert.match(stored.detail.contentSha256, /^[0-9a-f]{64}$/);
-
-  // Reporting the same adoption again is the same fact.
-  assert.equal((await adopt("reports/evidence.md")).status, 200);
-  assert.equal([...fixture.pool.feedback.values()].filter((row) => row.trigger_kind === "deliverable-adopted").length, 1);
-
-  // And two different edits of the same deliverable are two lessons: an edit is
-  // identified by the content it produced, which is read from the workspace
-  // rather than taken from the client.
-  const edit = async (body, summary) => {
-    await writeFile(path.join(project.workspaceDir, "reports/evidence.md"), body, "utf8");
-    return report("deliverable-edited", "reports/evidence.md", summary);
-  };
-  const revised = "# 证据小结\n效应量 0.74（95% CI 0.61–0.90）。\n";
-  const final = "# 证据小结\n效应量 0.74（95% CI 0.61–0.90）。不给用药建议。\n";
-  assert.equal((await edit(revised, "补上了置信区间。")).status, 201);
-  assert.equal((await edit(final, "删掉了用药建议。")).status, 201);
-  const edits = [...fixture.pool.feedback.values()].filter((row) => row.trigger_kind === "deliverable-edited");
-  assert.equal(edits.length, 2, "a second, different edit must not collapse into the first");
-  assert.notEqual(edits[0].detail.contentSha256, edits[1].detail.contentSha256);
-  // The digest is the deliverable's, read from the workspace. A client-supplied
-  // one would let a caller claim an edit that never happened.
-  assert.deepEqual(
-    edits.map((row) => row.detail.contentSha256).sort(),
-    [revised, final].map((body) => createHash("sha256").update(body).digest("hex")).sort(),
-  );
-  assert.equal([...fixture.pool.jobs.values()].filter((row) => row.kind === "distill").length, 2,
-    "each lesson gets its own distillation");
-});
-
-/**
- * The memory service, as much of it as one extraction run touches: list what is
- * already stored, and upsert what the run produces.
- *
- * Keyed by the canonical identity the real store enforces — scope, scope id,
- * kind and key — because that identity is what makes the second observation of
- * one change an update rather than a second record, which is the property the
- * inbox assertion below rests on. The separator is written as an escape: a raw
- * control byte in a source file is invisible to every reader and every grep.
- *
- * @param {any[]} seed
- */
-function memoryRecordsDouble(seed = []) {
-  /** @type {Map<string, any>} */
-  const records = new Map(seed.map((record) => [record.id, record]));
-  let minted = seed.length;
-  const identity = (record) => [record.scope, record.scopeId ?? "", record.kind, record.key].join("\u0000");
-  return {
-    records,
-    configured: true,
-    async status() { return { configured: true, connected: true, code: null, structured: true }; },
-    async listRecords(_userId, { query = "" } = {}) {
-      const rows = [...records.values()];
-      return query ? rows.filter((row) => row.key.includes(query) || row.value.includes(query)) : rows;
-    },
-    /** @param {string} _userId @param {any} input */
-    async upsertRecord(_userId, input) {
-      const existing = input.id
-        ? records.get(input.id) ?? [...records.values()].find((item) => identity(item) === identity(input))
-        : [...records.values()].find((item) => identity(item) === identity(input));
-      const id = existing?.id ?? `record_${(minted += 1)}`;
-      const written = {
-        ...existing, ...input, id,
-        version: (existing?.version ?? 0) + 1,
-        evidenceCount: (existing?.evidenceCount ?? 0) + 1,
-        evidence: existing?.evidence ?? [],
-        revisions: existing?.revisions ?? [],
-        createdAt: existing?.createdAt ?? "2026-01-01T00:00:00Z",
-        updatedAt: "2026-09-07T08:00:00Z",
-      };
-      records.set(id, written);
-      return written;
-    },
-  };
-}
-
-test("the memory extractor the composition root built reports a rewritten memory into the composed inbox", async (t) => {
-  // The wiring this covers went in dark: `MemoryIntelligence` was built inside
-  // `createWebApiApp` with `notifications: notificationService` and returned by
-  // nothing, so cutting that argument to null left the whole server suite
-  // green -- the third time this project has shipped built, tested and never
-  // composed. Both halves are asserted here: the seam, and one contradiction
-  // driven through the composed objects into the inbox table.
-  const language = {
-    id: "record_1",
-    scope: "user", scopeId: "", kind: "preference", key: "preference.output_language",
-    value: "回答请用中文", summary: "回答语言", origin: "explicit", status: "active",
-    confidence: 1, importance: 0.8, sensitive: false, evidenceCount: 1, version: 1, evidence: [], revisions: [],
-    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
-  };
-  const memory = memoryRecordsDouble([language]);
-  const fixture = await composedApp(t, {
-    researchMemory: memory,
-    deepseekProviderEnabled: true, deepseekApiKey: "composition-extraction-key",
-    // The extraction model, answering with the one candidate this test is
-    // about: the researcher saying the opposite of what they confirmed before.
-    memoryExtractionFetch: async (_input, init) => {
-      const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
-      const first = payload.sources.find((item) => item.role === "user");
-      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [{
-        scope: "user", kind: "preference", key: "preference.output_language",
-        value: "回答请用英文", summary: "回答语言", origin: "explicit",
-        confidence: 1, importance: 0.8, sensitive: false,
-        sourceRef: first.sourceRef, evidenceQuote: first.text,
-      }] }) } }] });
-    },
-  });
-
-  assert.ok(fixture.app.memoryIntelligence, "the extractor must be part of the composition, not a local of createWebApiApp");
-  assert.equal(fixture.app.memoryIntelligence.notifications, fixture.app.notificationService,
-    "the extractor's inbox must be the inbox the rest of the app writes to");
-
-  const project = await composedProject(fixture.dataDir);
-  const result = await fixture.app.memoryIntelligence.recordRun(project, {
-    id: "run-memory", sessionId: "session-memory", status: "succeeded", artifacts: [],
-    startedAt: "2026-09-07T07:59:00.000Z", finishedAt: "2026-09-07T08:00:00.000Z",
-  }, [{ info: { id: "message-1", role: "user" }, parts: [{ type: "text", text: "回答请用英文" }] }]);
-
-  // The write landed, under the key it belongs to: the researcher's own
-  // statement is never held back for approval.
-  assert.equal(result.conflicts.length, 1, "the contradiction was not detected at all");
-  const stored = [...memory.records.values()].find((record) => record.key === "preference.output_language");
-  assert.equal(stored.value, "回答请用英文");
-  assert.equal(stored.status, "active");
-
-  // And the researcher was told, in the table the composed inbox writes to —
-  // that, and nothing else: the write prompt 「刚记住了 …」 was a quiet item
-  // beside it from 2026-09-20 until plan 2026-09-23 §5.8 took it out.
-  const notices = [...fixture.pool.inbox.values()];
-  assert.equal(notices.length, 1, "the conflict notice never reached evimed_inbox.notifications, or something else did");
-  assert.equal(notices[0].user_id, USER_ID);
-  assert.equal(notices[0].notice_type, "notify", "the change already happened; there is nothing left to ask");
-  // 「结论变了」 is one of the three moments the inbox notifies at (C1).
-  assert.equal(notices[0].severity, "attention");
-  assert.equal(notices[0].read_at, null, "it arrives unread");
-  // One action, and it is a link rather than a resolution: the change has
-  // already happened, so a button that posts a decision would promise one
-  // nothing acts on. Without it the inbox said a memory had been rewritten and
-  // gave no way to reach it (2026-09-16 review, M4①).
-  assert.deepEqual(notices[0].actions, [{ id: "open", label: "查看这条记忆", style: "primary" }]);
-  assert.equal(notices[0].source?.type, "memory", "the notice names no record");
-  assert.equal(notices[0].project_id, null, "a user-scoped memory belongs to no project");
-  assert.equal(notices[0].title, "一条记忆已改写");
-  assert.equal(notices[0].body, "「回答请用中文」已改为「回答请用英文」");
-
-  // Observing the same change again is the same inbox item, against the
-  // service's real identity rule rather than a double that only appends.
-  await fixture.app.memoryIntelligence.recordRun(project, {
-    id: "run-memory-2", sessionId: "session-memory", status: "succeeded", artifacts: [],
-    startedAt: "2026-09-08T07:59:00.000Z", finishedAt: "2026-09-08T08:00:00.000Z",
-  }, [{ info: { id: "message-2", role: "user" }, parts: [{ type: "text", text: "回答请用英文" }] }]);
-  assert.equal([...fixture.pool.inbox.values()].length, 1, "one change is one notice, however many runs observe it");
-});
 
 // 「前沿动态」. The module is off by default, so every test above composes a
 // deployment without it; these compose the one that has it — and assert what
@@ -1862,8 +1579,9 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
 
   const off = await composedApp(t);
   // `openList` is false here because this composition configures no OpenList
-  // (openListReadiness.test.mjs covers the probe that turns it on).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: false, zoneSubscription: false, evidenceCommunity: false, geo: false, vcr: false, memoryMap: true, openList: false });
+  // (openListReadiness.test.mjs covers the probe that turns it on); `capsuleShare` is true because sharing is on unless turned off
+  // (2026-10-23).
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: true, zoneSubscription: false, evidenceCommunity: false, geo: false, vcr: false, memoryMap: true, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
@@ -1922,15 +1640,15 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "valueUpkeep", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "signalDiscovery", "signalResults", "signals", "social", "store", "valueUpkeep", "worker"]);
   assert.equal(typeof app.geo.articleExists, "function");
-  // Every slot is filled: the worker with all twelve loops wired (measurement,
-  // orchestration, market) and the value profiles' upkeep, the orchestrator,
+  // Every slot is filled: the worker's registered measurement, orchestration,
+  // market, signal and value-upkeep loops, the orchestrator,
   // the exporter and the market's user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups", "questionBank", "valueUpkeep"], "the question bank's loop is in the table and is not wired while its lever is off");
+    "verify", "reconcile", "topups", "questionBank", "valueUpkeep", "signals"], "the question bank's loop is in the table and is not wired while its lever is off");
   assert.equal(status.loops.valueUpkeep.wired, true, "the value profiles' upkeep is composed with the module (G10c, G10e)");
   assert.equal(typeof app.geo.valueUpkeep.tick, "function");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");
@@ -2439,4 +2157,17 @@ test("a programme step and a channel question are asked of the allowance before 
   balance = { allowed: true };
   assert.deepEqual(await app.geo.orchestrator.dispatchRun({ ...step, dispatchId: "geo-gate-2" }), { runId: "run-gate-1", sessionId: "session-gate-1", status: "running" });
   assert.deepEqual([reserved, runs], [1, 1]);
+});
+
+
+test("composition refuses work when the database reports an unsafe or unknown isolation level", async t => {
+  const f = await composedApp(t);
+  for (const isolation of ["repeatable read", "serializable", undefined]) {
+    f.pool.transactionIsolation = isolation;
+    let entered = false;
+    await assert.rejects(f.app.maintenanceService.withMutation(async () => { entered = true; }), { code: "maintenance_state_invalid" });
+    assert.equal(entered, false);
+    assert.equal(f.app.maintenanceService.activeMutations, 0);
+  }
+  f.pool.transactionIsolation = "read committed";
 });

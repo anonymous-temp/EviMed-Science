@@ -33,6 +33,8 @@ import { VisibilityTab } from "./VisibilityTab";
 const client = vi.hoisted(() => ({
   getGeoValue: vi.fn<(geoId: string) => Promise<unknown>>(async () => ({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } })),
   getGeoEvidence: vi.fn(),
+  listGeoProjects: vi.fn(),
+  getGeoProject: vi.fn(),
   getGeoJourney: vi.fn(),
   getGeoQuestions: vi.fn(),
   getGeoClusters: vi.fn(),
@@ -60,10 +62,24 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 const store = vi.hoisted(() => ({
   select: vi.fn(async (_projectId: string, land?: () => void) => { land?.(); }),
   load: vi.fn(async () => undefined),
+  subscribe: vi.fn(() => () => undefined),
 }));
 vi.mock("@/lib/projects", () => ({
-  useProjectStore: { getState: () => ({ projects: [{ id: "prj_geo_1" }], select: store.select, load: store.load }) },
+  useProjectStore: { getState: () => ({ currentId: "prj_geo_1", switching: null, projects: [{ id: "prj_geo_1" }], select: store.select, load: store.load }), subscribe: store.subscribe },
 }));
+
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
+  getWebProjectId: () => "prj_geo_1",
+}));
+
+// A hand-off opens the module's own conversation through its descriptor and leaves the person's project selection alone.
+const native = vi.hoisted(() => ({ openGeoConversation: vi.fn() }));
+vi.mock("@/lib/geoNativeClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoNativeClient")>()),
+  ...native,
+}));
+const descriptor = (sessionId = "ses_geo_1") => ({ projectId: "prj_geo_1", projectName: "GEO", sessionId, scope: { kind: "geo" as const, geoProjectId: "geo_1", sessionId } });
 
 const download = vi.hoisted(() => ({ downloadArtifact: vi.fn(async () => undefined) }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({
@@ -95,12 +111,29 @@ function renderTab(tab: ReactElement) {
   );
 }
 
+function expectUnsentProjectDraft(text: string) {
+  expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1");
+  const state = JSON.parse(screen.getByTestId("state").textContent ?? "null");
+  expect(state.runtimeUiIntent).toMatchObject({
+    kind: "open", projectId: "prj_geo_1", sessionId: "ses_geo_1", draft: expect.stringContaining(text), scope: descriptor().scope,
+  });
+  expect(state.runtimeUiIntent).not.toHaveProperty("send");
+  expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.objectContaining({ kind: expect.stringMatching(/^(session|primary)$/) }));
+  expect(store.select).not.toHaveBeenCalled();
+  expect(client.runGeoStep).not.toHaveBeenCalled();
+}
+
 const props = (project: GeoProject = geoProject()) => ({ geoId: "geo_1", project });
 
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   client.getGeoValue.mockResolvedValue({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } });
   store.select.mockClear();
+  store.subscribe.mockClear();
+  native.openGeoConversation.mockReset();
+  native.openGeoConversation.mockImplementation(async (_geoId: string, target: { kind: string; sessionId?: string }) => descriptor(target.kind === "session" ? target.sessionId : "ses_geo_1"));
+  client.listGeoProjects.mockResolvedValue([geoProject()]);
+  client.getGeoProject.mockResolvedValue(geoProject());
   download.downloadArtifact.mockClear();
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
   // 问题与回答 reads the groups' counts beside the question set: here, groups nobody has counted yet.
@@ -151,6 +184,20 @@ describe("证据", () => {
     expect(screen.getByText("说明书 · 玛仕度肽注射液说明书（国家药监局 2025） · 成人 · 9月22日核对")).toBeInTheDocument();
     expect(screen.getByText(/证据等级 A/)).toBeInTheDocument();
     expect(screen.getByText("说明书内")).toBeInTheDocument();
+  });
+
+  it("does not call unknown label scope off-label, while preserving explicit label decisions", async () => {
+    client.getGeoEvidence.mockResolvedValue({ ...evidenceFilled, claims: [
+      { ...evidenceFilled.claims[0], id: "unknown-label", statement: "Approved label not checked.", sourceKind: "other", inLabel: null },
+      { ...evidenceFilled.claims[0], id: "known-in-label", statement: "Confirmed in the checked label.", inLabel: true },
+      { ...evidenceFilled.claims[0], id: "known-off-label", statement: "Explicit use outside the checked label.", sourceKind: "regulator", quote: "This study use is not approved in this jurisdiction.", inLabel: false },
+    ] });
+    renderTab(<EvidenceTab {...props()} />);
+    const unknown = await screen.findByRole("button", { name: /Approved label not checked/ });
+    expect(within(unknown.closest("li")!).queryByText("说明书内")).not.toBeInTheDocument();
+    expect(within(unknown.closest("li")!).queryByText("说明书外")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: /Confirmed in the checked label/ }).closest("li")!).getByText("说明书内")).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: /Explicit use outside the checked label/ }).closest("li")!).getByText("说明书外")).toBeInTheDocument();
   });
 
   it("a claim past its validity is marked 待重核, not shown as current", async () => {
@@ -387,6 +434,26 @@ describe("信源", () => {
     expect(conditions.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("continues a source's answer list using its frozen selection and server cursor", async () => {
+    const dxy = sourcesFilled.sources[0];
+    const first = sourceDetailOf(dxy);
+    const last = { ...first.answers[0], snapshotId: "source_last", question: "最后一条原题" };
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValueOnce({ ...first, round: null, scope: { from: "2026-10-01", to: "2026-10-02" },
+      selection: { reference: "gsel_source", roundIds: ["r1", "r2"] }, answerPage: { total: first.answers.length + 1, nextOffset: 200 } })
+      .mockResolvedValueOnce({ ...first, selection: { reference: "gsel_source", roundIds: ["r1", "r2"] }, answers: [last], answerPage: { total: first.answers.length + 1, nextOffset: null } });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    const drawer = await screen.findByRole("dialog", { name: "丁香医生" });
+    await within(drawer).findByRole("region", { name: "引用它的回答" });
+    while (within(drawer).queryByRole("button", { name: /显示更多/ })) await userEvent.click(within(drawer).getByRole("button", { name: /显示更多/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /继续读取回答/ }));
+    expect(await screen.findByRole("link", { name: /最后一条原题/ })).toBeVisible();
+    expect(client.getGeoSource).toHaveBeenLastCalledWith("geo_1", dxy.id, { selectionRef: "gsel_source" }, { answerOffset: 200 });
+    expect(screen.queryByRole("button", { name: /继续读取回答/ })).not.toBeInTheDocument();
+  });
+
   it("says so when the latest round has no answer citing the site, and when nothing has been measured", async () => {
     const dxy = sourcesFilled.sources[0];
     client.getGeoSources.mockResolvedValue(sourcesFilled);
@@ -412,14 +479,14 @@ describe("信源", () => {
     const dialog = await screen.findByRole("dialog", { name: "百度百科" });
     await within(dialog).findByRole("region", { name: "讲错的回答" });
     await userEvent.click(within(dialog).getByRole("button", { name: "在对话中处理" }));
-    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
     // The draft waits in the composer: the intent carries it, and nothing asks the model.
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string } } | null;
     const draft = state?.runtimeUiIntent?.draft ?? "";
     expect(draft).toContain("baike.baidu.com");
     expect(draft).toContain("第 1 句讲错的话");
     expect(draft).toContain("1 个讲错了信尔美");
+    expectUnsentProjectDraft("baike.baidu.com");
     expect(client.runGeoStep).not.toHaveBeenCalled();
   });
 
@@ -798,8 +865,8 @@ describe("总览", () => {
     expect(heading.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The wrong statement carries its correction, with the sentence in the draft; the project's conversation is opened with it unsent.
     await userEvent.click(within(list).getByRole("button", { name: "写纠错稿" }));
-    await waitFor(() => expect(store.select).toHaveBeenCalled());
-    expect(await screen.findByTestId("state")).toHaveTextContent("每天注射一次");
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("每天注射一次"));
+    expectUnsentProjectDraft("每天注射一次");
   });
 
   it("draws no 「需要你」 where nothing is asked, and no list of the wrong statements: those are 准确与安全's", async () => {
@@ -839,6 +906,81 @@ describe("总览", () => {
     expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
     expect(screen.queryByText("这一轮还没有测到同类药的提及率。")).not.toBeInTheDocument();
     expect(trend.closest("section")).toHaveClass("lg:col-span-3");
+  });
+});
+
+describe("总览 while the AI answers cannot be measured", () => {
+  const PAUSED = { state: "paused" as const, since: "2026-10-20T04:00:00.000Z", engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"] };
+  const diagnosisFailed = (project: GeoProject) => {
+    project.needsYou = [{ kind: "step_failed", key: "failed:diagnosis", verb: "retry", object: { type: "step", id: "diagnosis" }, target: { tab: "overview", step: "diagnosis" } }];
+    return project;
+  };
+
+  it("says so in 「需要你」 with the day it stopped and what happens next, promises no next round, and offers no 接着做 that would ask nobody", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue({ ...fallingMonitoring, next: null, measurement: PAUSED });
+    renderTab(<OverviewTab {...props(diagnosisFailed(fallingProject()))} />);
+    const heading = await screen.findByRole("heading", { name: "需要你" });
+    const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
+    const paused = within(list).getByRole("link", { name: /AI 回答测量暂停中（10月20日起）/ });
+    expect(paused).toHaveAttribute("href", "/app/geo/geo_1/visibility#geo-trend");
+    expect(list).toHaveTextContent("测量服务暂时连不上，恢复后自动继续");
+    expect(list).toHaveTextContent("诊断没有做完");
+    expect(list).toHaveTextContent("恢复后再接着做");
+    expect(within(list).queryByRole("button", { name: "接着做" })).not.toBeInTheDocument();
+    const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(trend.parentElement).not.toHaveTextContent("下次");
+    // No code and no host is named.
+    expect(document.body.textContent).not.toMatch(/engine_paused|探测|probe/i);
+  });
+
+  it("offers 接着做 again once the AI can be asked, saying the last round got no answer", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue({ ...fallingMonitoring, measurement: { state: "measuring", since: null, engines: [] } });
+    renderTab(<OverviewTab {...props(diagnosisFailed(fallingProject()))} />);
+    const heading = await screen.findByRole("heading", { name: "需要你" });
+    const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(list).toHaveTextContent("上一轮没有拿到 AI 的回答，接着做会重新测一轮");
+    expect(within(list).getByRole("button", { name: "接着做" })).toBeInTheDocument();
+  });
+
+  it("says the open errors and the ranking were not read, with 重试, instead of leaving them out as none", async () => {
+    client.getGeoDiagnosis.mockRejectedValue(new Error("offline"));
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    renderTab(<OverviewTab {...props(fallingProject())} />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/^用药安全和同类药排名没有读到：/);
+    client.getGeoDiagnosis.mockResolvedValue(severeOne());
+    await userEvent.click(within(alert).getByRole("button", { name: /重试/ }));
+    expect(await screen.findByText(/还有 1 条严重讲错待处理/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+function severeOne() {
+  return diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S3", status: "open" }]);
+}
+
+describe("可见度 when one of its reads failed", () => {
+  it("says the trend was not read, with 重试 — never 「还没有开始持续监测」 — and keeps the engines and pools it did read", async () => {
+    client.getGeoMonitoring.mockRejectedValue(new Error("offline"));
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    expect(await screen.findByText(/^测量趋势没有读到：/)).toBeInTheDocument();
+    expect(screen.queryByText("还没有开始持续监测，第一次复测后这里会画出趋势。")).not.toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "按问句池的品牌提及率" })).toBeInTheDocument();
+  });
+
+  it("says the engines, the pools and the rivals were not read when the diagnosis failed — never a grid of 未测 or 「还没有按问句池测过」", async () => {
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    client.getGeoDiagnosis.mockRejectedValue(new Error("offline"));
+    renderTab(<VisibilityTab {...props()} />);
+    expect(await screen.findByText(/^各引擎的读数没有读到：/)).toBeInTheDocument();
+    expect(screen.getByText(/^按问句池的提及率没有读到：/)).toBeInTheDocument();
+    expect(screen.getByText(/^同类药的提及率没有读到：/)).toBeInTheDocument();
+    expect(screen.queryByText("还没有按问句池测过提及率。")).not.toBeInTheDocument();
+    expect(document.querySelector("[data-heat-row]")).toBeNull();
   });
 });
 
@@ -1060,8 +1202,8 @@ describe("药品价值分析只在依据里", () => {
     expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
     expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
     await userEvent.click(start[0]);
-    await waitFor(() => expect(store.select).toHaveBeenCalled());
-    expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析");
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析"));
+    expectUnsentProjectDraft("请结合现有资料开始药品价值分析");
     // Opened with the brief in the composer; nothing was sent.
     expect(screen.getByTestId("state")).not.toHaveTextContent("\"send\":true");
   });
@@ -1082,11 +1224,13 @@ describe("a hand-off to the conversation that fails", () => {
   it("写纠错稿: says so in a toast and gives the button back, where it used to end in nothing", async () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    store.select.mockRejectedValueOnce(new Error("project is gone"));
+    native.openGeoConversation.mockRejectedValueOnce(new Error("project is gone"));
     renderTab(<AccuracyTab {...props()} />);
     const button = (await screen.findAllByRole("button", { name: "写纠错稿" }))[0];
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.anything());
+    expect(store.select).not.toHaveBeenCalled();
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
@@ -1095,7 +1239,7 @@ describe("a hand-off to the conversation that fails", () => {
   it("在对话中处理: says so in a toast and gives the button back", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
-    store.select.mockRejectedValueOnce(new Error("project is gone"));
+    native.openGeoConversation.mockRejectedValueOnce(new Error("project is gone"));
     renderTab(<SourcesTab {...props()} />);
     await screen.findByText("3 个信源");
     await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
@@ -1104,9 +1248,24 @@ describe("a hand-off to the conversation that fails", () => {
     const button = within(dialog).getByRole("button", { name: "在对话中处理" });
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.anything());
+    expect(store.select).not.toHaveBeenCalled();
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
   });
 });
 
+describe("a role that may not open the conversation", () => {
+  const viewer = () => geoProject({}, { access: { roles: ["viewer"], abilities: ["read"], owner: false } });
+  it("is offered no hand-off it would only be refused: 信源's 在对话中处理", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
+    renderTab(<SourcesTab {...props(viewer())} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    await within(dialog).findByRole("region", { name: "讲错的回答" });
+    expect(within(dialog).queryByRole("button", { name: "在对话中处理" })).not.toBeInTheDocument();
+  });
+});

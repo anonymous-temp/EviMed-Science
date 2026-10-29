@@ -41,7 +41,7 @@ describe("Button", () => {
         </Button>
       </>,
     );
-    // 36 is a page's control height (md); `sm` is 28 with 13 px text, inside a
+    // 36 is a page's control height (md); `sm` is 28 with 14 px text, inside a
     // row (spec §16.3, appendix E #9).
     expect(screen.getByRole("button", { name: "主按钮" })).toHaveClass("bg-accent", "text-accent-fg", "h-control", "text-ui");
     // No outline buttons: the secondary look is a grey ground, and `ghost` is its retired name.
@@ -51,7 +51,7 @@ describe("Button", () => {
       expect(button.className).not.toMatch(/(^|\s)border(\s|$)/);
     }
     expect(screen.getByRole("button", { name: "移除" })).toHaveClass("bg-transparent", "text-danger");
-    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-sm", "text-compact");
+    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-sm", "text-ui");
   });
 
   it("merges caller classes with conflict resolution", () => {

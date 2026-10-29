@@ -1,102 +1,86 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { useId, useLayoutEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useId, useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem } from "@/lib/frontierClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem, type FrontierTagRef } from "@/lib/frontierClient";
+import { trackFrontierItemAction } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import { ScorePill } from "@/components/ui/Score";
 import { Tag } from "@/components/ui/Tag";
-import { Tooltip } from "@/components/ui/Tooltip";
-import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
+import { openItemConversation } from "./frontierAsk";
+import { FrontierHideStrip } from "./FrontierHideStrip";
+import type { FrontierHideStripControls } from "./useFrontierHide";
 import {
   CARD_FLAG_KEYS,
-  EXTERNAL,
+  CARD_MAX_TAGS,
   INLINE_ACTION,
-  cardTags,
-  evidenceTag,
+  PLATFORM_LABELS,
+  PRACTICE_LABEL,
+  SCORE_LABEL,
+  SCORE_NOTE,
+  cardEyebrow,
+  isSocialItem,
+  itemClock,
   itemMarkdown,
-  researchDraft,
-  timeColumn,
-  type CardTag,
+  metaTime,
+  researchQuestion,
+  scoreBand,
+  scoreBreakdown,
 } from "./frontierText";
 
 const eventPath = (id: string) => `/app/frontier/events/${encodeURIComponent(id)}`;
+const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
+/** Where a tag narrows the feed, for a card whose page does not narrow it in place (the linked item). */
+const tagPath = (slug: string) => `/app/frontier?view=all&tag=${encodeURIComponent(slug)}`;
 
 export interface FrontierCardProps {
   item: FrontierItem;
-  expanded?: boolean;
-  onExpand?: () => void;
-  /** Inside a day group the time column is the clock; elsewhere it is the day. */
+  /**
+   * Inside a day group the clock is a column of its own beside the card; in a list that is not cut into days (与我相关, a search, a
+   * linked item) there is no column, and the date is said in the meta row after the source.
+   */
   grouped?: boolean;
   /** Where not every item is 精选 (全部, a search), say which are — the dot, and words for a screen reader. */
   markSelected?: boolean;
-  onStar: (item: FrontierItem) => void | Promise<void>;
+  onStar: (item: FrontierItem) => void;
+  /** 「不感兴趣」: the page hides the item at once (`useFrontierHide`) and says so through `hideStrip`. */
   onHide: (item: FrontierItem) => void;
+  /** While this is set the card is not drawn: in its place one line asks why it was hidden (`FrontierHideStrip`). */
+  hideStrip?: FrontierHideStripControls | null;
   /** 「存入知识库」; absent where this server cannot save yet. */
   onSave?: (item: FrontierItem) => void;
   saving?: boolean;
-  /** The reader followed a link to the original, or to another report of it. */
+  /** The reader opened the item, or followed a link to another report of it. */
   onOpened?: (item: FrontierItem) => void;
-  /** A #tag was pressed: a specialty filters the feed, a disease searches for it. */
-  onTag?: (tag: CardTag) => void;
+  /** A #tag was pressed: the feed narrows to it. Absent: the tag is a link to 全部 with it. */
+  onTag?: (tag: FrontierTagRef) => void;
+  /** A line under the summary that belongs to where the card is shown (a congress hub's design caveat, c3-track). */
+  note?: ReactNode;
 }
 
 /**
- * One item (plan 2026-09-23 §6.2, §6.3): a time column and a dot, who said it
- * and how hard the evidence is, the editorial score, the title, what it says
- * in at most two lines, and a footer — 「另有 N 家报道 ›」 and its #tags on
- * the left, the card's three actions on the right: the star, 「深入研究」 and
- * 「⋯」, always shown (owner, 2026-09-24: actions that appear only under the
- * pointer read as missing).
- *
- * The footer says only what it can do: 「展开摘要」 where the summary is cut, then the star,
- * 「深入研究」 and 「⋯」. The title opens the details drawer where one exists.
- *
- * The title opens the details drawer, whose explicit original link leaves the product; a plain item
- * with nothing to add still opens the original. 「深入研究」 opens a new conversation with a draft question
- * about the item in the composer, to send or rewrite — no menu of prepared
- * questions to choose from first.
- *
- * What the card no longer carries, and where it went: 「为什么值得看」 is the
- * summary's last sentence (the editor writes it so); 「为什么入选」 and
- * 「评估与核对」 are the back office's; the original title, the journal, the
- * authors and the impact factor are in 「⋯ › 详情」; the source type is in the
- * institution's own name; 「精选」 is the dot.
- *
- * A read card's title steps down to the secondary colour; a safety alert says
- * 「安全警示」 first and has no score — it is selected whatever it scored.
+ * What can be done with one item, as the card's ⋯ and the reader's ⋯ both list it: 深入研究 (the card's first entry — the reader has a
+ * button of its own), 整理为证据卡片, 存入知识库 where the deployment can save, 复制为 Markdown, 不感兴趣, then following or muting its
+ * source, its event, its drugs and its specialties; and the other institutions' reports (「另有 N 家报道」) with the way to the whole
+ * event. One list, so the card and the reader never offer an item two different sets of things.
  */
-export function FrontierCard({ item, expanded = false, onExpand, grouped = true, markSelected = false, onStar, onHide, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
-  const titleId = useId();
+export function useItemActions(item: FrontierItem, { reader = false, onHide, onSave, saving = false, onOpened }: {
+  /** The reader's ⋯, beside its own 「深入研究」 button. */
+  reader?: boolean;
+  onHide: (item: FrontierItem) => void;
+  onSave?: (item: FrontierItem) => void;
+  saving?: boolean;
+  onOpened?: (item: FrontierItem) => void;
+}): { more: MenuEntry[]; reports: MenuEntry[]; research: () => void; ask: (question: string | null) => void } {
   const navigate = useNavigate();
   const origin = useFrontierOrigin();
-  const [details, setDetails] = useState(false);
-  const [starPending, setStarPending] = useState(false);
-  // A summary that fits in its three lines has nothing to expand: measure the clamp, not the text.
-  const summary = useRef<HTMLParagraphElement>(null);
-  const [clamped, setClamped] = useState(false);
-  useLayoutEffect(() => {
-    const element = summary.current;
-    if (!element || expanded) return;
-    const measure = () => setClamped(element.scrollHeight > element.clientHeight + 1);
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [expanded, item.summary]);
-  const evidence = evidenceTag(item);
-  const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
-  const tags = cardTags(item);
-  const starred = item.state.starred;
-  const also = item.alsoReportedCount;
-
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(itemMarkdown(item));
+      trackFrontierItemAction("share", item.id, { detail: "markdown" });
       toast.success("已复制");
     } catch {
       toast.error("没有复制成功");
@@ -106,29 +90,25 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
     try { await addFrontierFollow({ kind, key, label, muted }); toast.success(muted ? "已屏蔽" : "已关注"); }
     catch (error) { toast.error(frontierErrorMessage(error)); }
   };
+  // One way into the assistant: 深入研究 is the question that fits the item, 就此提问 one of its own questions or the reader's (`openItemConversation`).
+  const research = () => { trackFrontierItemAction("research", item.id); openItemConversation(navigate, item, researchQuestion(item)); };
+  const ask = (question: string | null) => { trackFrontierItemAction("ask", item.id, { detail: question ? "suggested" : "own" }); openItemConversation(navigate, item, question); };
+  const openEvent = () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); };
   const more: MenuEntry[] = [
-    { label: "详情", onSelect: () => setDetails(true) },
+    ...(reader ? [] : [{ label: "深入研究", onSelect: research }]),
     { label: "整理为证据卡片", onSelect: () => { rememberFrontierPosition(); navigate(`/app/frontier/zones?fromItem=${encodeURIComponent(item.id)}`); } },
     ...(onSave ? [{ label: "存入知识库", disabled: saving, onSelect: () => onSave(item) }] : []),
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },
     "separator",
-    { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
-    { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
-    ...(item.event ? [{ label: "同一事件的全部报道", onSelect: () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); } }, { label: "关注此事件", onSelect: () => void follow("event", item.event!.id, item.title.slice(0, 120)) }] : []),
+    ...(item.source.followable === false ? [] : [
+      { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
+      { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
+    ]),
+    ...(item.event ? [{ label: "同一事件的全部报道", onSelect: openEvent }, { label: "关注此事件", onSelect: () => void follow("event", item.event!.id, item.title.slice(0, 120)) }] : []),
     ...item.entities.drugs.slice(0, 3).map((drug) => ({ label: `关注药物：${drug}`, onSelect: () => void follow("drug", drug, drug) })),
     ...item.specialties.slice(0, 2).map((specialty) => ({ label: `关注专科：${specialty.label}`, onSelect: () => void follow("specialty", specialty.key, specialty.label) })),
   ];
-  const research = () => {
-    rememberFrontierPosition();
-    navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } });
-  };
-  const toggleStar = async () => {
-    if (starPending) return;
-    setStarPending(true);
-    try { await onStar(item); }
-    finally { setStarPending(false); }
-  };
   const reports: MenuEntry[] = [
     ...item.alsoReportedBy.map((mention) => ({
       label: mention.sourceName,
@@ -137,83 +117,160 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
         onOpened?.(item);
       },
     })),
-    ...(item.event ? ["separator" as const, { label: "同一事件的全部报道", onSelect: () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); } }] : []),
+    ...(item.event ? ["separator" as const, { label: "同一事件的全部报道", onSelect: openEvent }] : []),
   ];
+  return { more, reports, research, ask };
+}
+
+/** What sits above the card's stretched link, so a press on it is its own and not the card's. */
+const ABOVE = "relative z-sticky";
+
+/**
+ * One item of the feed (owner, 2026-10-23, after AIHOT's list): the whole card is the way to its addressed reader — the title's link
+ * stretches over it, the ground lightens under the pointer and the title turns the accent — and what else it holds sits above that
+ * link and does its own thing:
+ *
+ *  - the meta row: who said it (the account for a post), in an undated list the date (「肿瘤学年鉴 · 10月20日」, today the clock), one
+ *    eyebrow tag — the evidence type of a paper, else the lane — and the flags that change how to take it; a safety alert says
+ *    「安全警示」 first; at the right 「AI 评分」, whose parts open on hover, focus or a tap;
+ *  - the title in the brand's deep ink (`title-ink`), a read one in the secondary grey; the summary in three lines (two on a phone);
+ *  - at the meta row's right, after the score, ☆ and ⋯ (深入研究 first);
+ *  - a footer only when there is something for it: up to three of its tags, each narrowing the feed to it, and 「另有 N 家报道 ›」.
+ *
+ * In a day group the clock is a column of its own beside the card, with the 精选 dot.
+ *
+ * 不感兴趣 hides the card at once and, while the page says so (`hideStrip`), one line stands in its place (`FrontierHideStrip`).
+ */
+export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag, note }: FrontierCardProps) {
+  const titleId = useId();
+  const origin = useFrontierOrigin();
+  const location = useLocation();
+  const articleState = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: location.pathname.includes("/events/") ? "事件报道" : "前沿动态" } };
+  const eyebrow = cardEyebrow(item);
+  const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
+  const band = scoreBand(item);
+  const tags = item.tags.slice(0, CARD_MAX_TAGS);
+  const starred = item.state.starred;
+  const also = item.alsoReportedCount;
+  const { more, reports } = useItemActions(item, { onHide, onSave, saving, onOpened });
+  // A post is said by its account (「Arena.ai @arena · X」); anything else by its institution.
+  const platform = item.platform ? PLATFORM_LABELS[item.platform] : null;
+  const who = isSocialItem(item) && item.author
+    ? [[item.author.name, item.author.handle ? `@${item.author.handle}` : null].filter(Boolean).join(" "), platform].filter(Boolean).join(" · ")
+    : item.source.name;
+  const when = grouped ? "" : metaTime(item);
+  const [thumbFailed, setThumbFailed] = useState(false);
+
+  // Hidden a moment ago: one line where the card was, to say why or take it back (owner, 2026-10-25).
+  if (hideStrip) return <FrontierHideStrip item={item} grouped={grouped} {...hideStrip} />;
 
   return (
-    <li
-      data-frontier-item={item.id}
-      data-read={item.state.read ? "true" : "false"}
-      className="frontier-feed-card -mx-2 flex rounded-card px-2 transition-all duration-normal hover:bg-surface focus-within:bg-surface max-sm:block"
-    >
-      <div className="mt-4 flex h-6 w-14 shrink-0 items-center justify-between pr-2 max-sm:mb-1 max-sm:mt-3 max-sm:h-auto max-sm:w-auto max-sm:justify-start max-sm:gap-2 max-sm:pr-0">
-        <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{timeColumn(item, grouped)}</time>
-        <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
-        {markSelected && item.selected && <span className="sr-only">精选</span>}
-      </div>
-      <article aria-labelledby={titleId} className="min-w-0 flex-1 border-b border-border pb-5 pt-4 max-sm:pt-0">
+    <li data-frontier-item={item.id} className="flex">
+      {/* On a phone the clock joins the source line (as AIHOT's phone list has it): the column's 56 px go to the source's name. */}
+      {grouped && (
+        <div className="mt-3 hidden h-6 w-14 shrink-0 items-center justify-between pr-2 sm:flex">
+          {/* A day with no hour (the source gave only the date) has no clock; the column and the dot stay. */}
+          {itemClock(item) && <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{itemClock(item)}</time>}
+          <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
+        </div>
+      )}
+      <article
+        aria-labelledby={titleId}
+        className={cn(
+          // `isolate`: what lifts itself over the stretched link stays inside the card, under a sticky day heading. The rule between two
+          // cards is drawn under the words (`before:`), so the ground the pointer lightens keeps its rounded corners.
+          "group relative isolate min-w-0 flex-1 rounded-card px-3 pb-4 pt-3 transition-colors duration-fast hover:bg-surface-2",
+          "before:pointer-events-none before:absolute before:inset-x-3 before:bottom-0 before:h-px before:bg-border before:content-['']",
+          !grouped && "-mx-3",
+        )}
+      >
         <div className="flex min-h-6 items-center gap-2 text-caption text-text-3">
           {item.safetyAlert && <Tag tone="safety">安全警示</Tag>}
-          <span className="min-w-0 truncate font-medium text-text-2">{item.source.name}</span>
+          <span className="min-w-0 truncate">
+            <span>{who}</span>
+            {when && <> · <time dateTime={item.timelineAt} className="tabular-nums">{when}</time></>}
+            {grouped && itemClock(item) && <span className="sm:hidden"> · <span className="tabular-nums">{itemClock(item)}</span></span>}
+          </span>
+          {markSelected && item.selected && <span className="sr-only">精选</span>}
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
-          {evidence && <Tag>{evidence}</Tag>}
+          {eyebrow && <Tag>{eyebrow}</Tag>}
           {flags.map((flag) => (flag.key === "retracted"
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
-          {item.score !== null && (
-            <Tooltip content="编辑评分 · 满分 100">
-              <span aria-label={`编辑评分 ${item.score}`} className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption tabular-nums text-text-3">
-                编辑评分 <strong className="font-semibold text-text-2">{item.score}</strong>
-              </span>
-            </Tooltip>
+          {/* At the right, as AIHOT has them: the score, ☆ and ⋯ — so a card with no tags has no line of its own for two icons. */}
+          <div className={cn("ml-auto flex shrink-0 items-center gap-1", ABOVE)}>
+            {band && item.score !== null && (
+              <ScorePill className="mr-1" label={SCORE_LABEL} value={item.score} tier={band} parts={scoreBreakdown(item)} note={SCORE_NOTE} />
+            )}
+            <IconButton
+              icon={Star}
+              size="sm"
+              label="收藏"
+              aria-pressed={starred}
+              className={starred ? "text-accent [&_svg]:fill-current" : undefined}
+              onClick={() => onStar(item)}
+            />
+            <Menu label="更多操作" items={more} />
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 id={titleId} data-row-title data-prose="" className="mt-1.5 text-body font-semibold leading-6">
+              {/* Content, not provenance: what the item may change, said where the eye starts and not in the meta row, which a phone has no
+                * room for (the source's name went to 「国…」). The reason is on hover; a touch screen reads it in the reader. It sits above the
+                * card's stretched link, or the pointer never reaches it. */}
+              {item.practice && <Tag tone="accent" title={item.practice.reason} className={cn(ABOVE, "mr-2 align-middle")}>{PRACTICE_LABEL}</Tag>}
+              <Link
+                to={articlePath(item.id)}
+                state={articleState}
+                data-card-link=""
+                onClick={() => { rememberFrontierPosition(); onOpened?.(item); }}
+                className={cn(
+                  "rounded outline-none transition-colors duration-fast group-hover:text-accent",
+                  // The link stretches over the card; its focus is the card's ring, not a ring round the words.
+                  "after:absolute after:inset-0 after:rounded-card after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-focus",
+                  item.state.read ? "text-text-2" : "text-title-ink",
+                )}
+              >
+                {item.title}
+              </Link>
+            </h3>
+            {item.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure whitespace-pre-line text-ui text-text-2 sm:line-clamp-3">{item.summary}</p>}
+            {note}
+          </div>
+          {/* The item's first picture, beside the title and not a second link to the same article: the release walk counts a
+            * hidden duplicate link as a control without a name, and each picture height as one more kind of control. A
+            * picture this deployment can no longer serve leaves no empty box. */}
+          {item.thumb && !thumbFailed && (
+            <div className="mt-2 shrink-0 overflow-hidden rounded-card bg-surface-2">
+              <img src={item.thumb.url} alt="" loading="lazy" decoding="async" onError={() => setThumbFailed(true)}
+                className="block h-16 w-24 object-cover sm:h-20 sm:w-32" />
+            </div>
           )}
         </div>
 
-        <h3 id={titleId} data-row-title className="mt-1.5 text-body font-semibold leading-6">
-          <a href={item.url} {...EXTERNAL} onClick={(event) => {
-            if (frontierDetailsOffered(item)) { event.preventDefault(); setDetails(true); }
-            else onOpened?.(item);
-          }} className={cn("rounded outline-none hover:text-accent hover:underline", item.state.read ? "text-text-2" : "text-text")}>
-            {item.title}
-          </a>
-        </h3>
-        {item.summary && <p ref={summary} className={cn("mt-1.5 max-w-measure whitespace-pre-line text-ui leading-6 text-text-2", !expanded && "line-clamp-2")}>{item.summary}</p>}
-
-        <div className="-ml-1 mt-3 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 text-ui text-text-3">
-          {item.summary && onExpand && (clamped || expanded) && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className="text-caption">{expanded ? "收起摘要" : "展开摘要"}</span></button>}
+        {(tags.length > 0 || also > 0) && (
+        <div className="-ml-1 mt-2 flex min-h-6 flex-wrap items-center gap-x-1 text-ui text-text-3">
+          {tags.map((tag) => (onTag ? (
+            <button key={tag.slug} type="button" onClick={() => onTag(tag)} className={cn(INLINE_ACTION, ABOVE, "px-1 hover:text-accent")}>
+              <span className="text-caption">#{tag.name}</span>
+            </button>
+          ) : (
+            <Link key={tag.slug} to={tagPath(tag.slug)} className={cn(INLINE_ACTION, ABOVE, "px-1 hover:text-accent")}>
+              <span className="text-caption">#{tag.name}</span>
+            </Link>
+          )))}
           {also > 0 && (
             <Menu label={`另有 ${also} 家报道`} align="start" items={reports}>
-              <button type="button" className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
+              <button type="button" className={cn(INLINE_ACTION, ABOVE, "px-1 hover:text-text")}>
                 <span className="text-caption">另有 {also} 家报道 ›</span>
               </button>
             </Menu>
           )}
-          {tags.map((tag) => (onTag ? (
-            <Tooltip key={`${tag.kind}-${tag.key}`} content={tag.kind === "specialty" ? `只看${tag.label}` : `搜索“${tag.label}”`}>
-              <button type="button" onClick={() => onTag(tag)} className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
-                <span className="text-caption">#{tag.label}</span>
-              </button>
-            </Tooltip>
-          ) : <span key={`${tag.kind}-${tag.key}`} className="px-1 text-caption">#{tag.label}</span>))}
-          <div className="ml-auto flex items-center gap-1 max-sm:w-full max-sm:justify-end">
-            <Button
-              variant="text"
-              size="sm"
-              aria-label={starred ? "取消收藏" : "收藏"}
-              aria-pressed={starred}
-              aria-busy={starPending}
-              disabled={starPending}
-              className={cn("frontier-star-action", starred && "text-accent [&_svg]:fill-current")}
-              onClick={() => void toggleStar()}
-            >
-              <Star size={16} aria-hidden="true" />
-            </Button>
-            <Button variant="secondary" size="sm" className="frontier-research-action" onClick={research}>深入研究</Button>
-            <Menu label="更多操作" items={more} />
-          </div>
         </div>
+        )}
       </article>
-      {details && <FrontierDetails item={item} onClose={() => setDetails(false)} onOpened={onOpened} />}
     </li>
   );
 }

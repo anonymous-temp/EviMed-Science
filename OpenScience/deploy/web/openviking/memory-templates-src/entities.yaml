@@ -10,10 +10,16 @@ description: |
   The user's own project is not an entity: it is described in PROJECT_CONTEXT. An entity
   the user merely asked a question about (a trial, a drug, a law, a competitor's product)
   gets no card; only what the user states about an entity as part of their own work does.
+  The most useful cards are the organisations and systems the user's work depends on: their
+  employer, department or lab, a journal or client they write for, the software their team
+  uses, a registry or standard they follow. People are never cards: who does what in their work
+  is a working fact of a project (PROJECT_CONTEXT) or of their team (PROJECT_FACTS).
   Entity identity is the referenced real-world object. Merge only explicit aliases of the
   same object; distinct objects stay separate even when they share a theme.
 
   __NEVER_KEEP__
+
+  __DECIDE__
 directory: "viking://user/{{ user_space }}/memories/entities"
 filename_template: "{{ category|lower }}/{{ name|lower }}.md"
 enabled: true

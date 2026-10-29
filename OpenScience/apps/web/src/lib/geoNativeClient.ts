@@ -1,0 +1,23 @@
+import { productRequest } from "./productClient";
+import type { WebAgentRun, WebRuntimeStartStatus, PreservedConversationHistory } from "./apiClient";
+import type { ReplyCheck } from "./replyChecks";
+
+export interface GeoConversationScope { kind: "geo"; geoProjectId: string; sessionId: string }
+export interface GeoConversationDescriptor { scope: GeoConversationScope; projectId: string; projectName: string; sessionId: string }
+export type GeoConversationOpenTarget = { kind: "primary" } | { kind: "context"; referenceId: string } | { kind: "session"; sessionId: string };
+export function openGeoConversation(geoId: string, target: GeoConversationOpenTarget): Promise<GeoConversationDescriptor> {
+  return productRequest(`/geo/projects/${encodeURIComponent(geoId)}/conversation/open`, "POST", { target });
+}
+const base = (scope: GeoConversationScope) => `/geo/projects/${encodeURIComponent(scope.geoProjectId)}/conversation/${encodeURIComponent(scope.sessionId)}`;
+export const geoConversationRuns = (scope: GeoConversationScope) => productRequest<WebAgentRun[]>(`${base(scope)}/runs`);
+export const geoConversationHistory = (scope: GeoConversationScope) => productRequest<PreservedConversationHistory>(`${base(scope)}/history`);
+export const geoConversationStatus = (scope: GeoConversationScope) => productRequest<WebRuntimeStartStatus>(`${base(scope)}/status`);
+export const startGeoConversation = (scope: GeoConversationScope) => productRequest<WebRuntimeStartStatus>(`${base(scope)}/start`, "POST", {});
+/** 「停止」 on the run strip: one run of this conversation, under the module's authority (an editor acts in the owner's runtime). */
+export const stopGeoConversationRun = (scope: GeoConversationScope, runId: string) => productRequest<{ run: WebAgentRun }>(`${base(scope)}/stop`, "POST", { runId });
+export const geoConversationCapability = async (scope: GeoConversationScope) => (await productRequest<{capabilityId:string|null}>(`${base(scope)}/capability`)).capabilityId;
+export const geoConversationChecks = async (scope: GeoConversationScope) => (await productRequest<{checks:ReplyCheck[]}>(`${base(scope)}/reply-checks`)).checks;
+export const geoConversationSources = async (scope: GeoConversationScope) => (await productRequest<{items:Array<{id:string;title:string}>}>(`${base(scope)}/sources`)).items;
+export type GeoConversationSourceScopeMode = "project" | "selected";
+/** A selection names its mode as the personal route's does: `selected` with no ids is "no document", never the whole project. */
+export const geoConversationSourceScope = (scope: GeoConversationScope, sourceIds?: string[], sourceScopeMode?: GeoConversationSourceScopeMode) => productRequest<{sourceScope:string[]|null;sourceScopeMode?:GeoConversationSourceScopeMode;originReference?:null}>(`${base(scope)}/source-scope`, sourceIds === undefined ? "GET" : "PUT", sourceIds === undefined ? undefined : {sourceIds, ...(sourceScopeMode === undefined ? {} : {sourceScopeMode})});

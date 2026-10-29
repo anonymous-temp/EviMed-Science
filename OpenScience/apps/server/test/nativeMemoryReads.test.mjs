@@ -13,6 +13,8 @@ function engine({ count = 20, delay = 5 } = {}) {
   const calls = { tree: 0, read: 0, replace: 0 };
   const sessions = {
     configured: true,
+    engineUser: () => 'u1',
+    userRoot: () => 'viking://user/u1',
     memoryRoot: () => ROOT,
     async tree() {
       calls.tree += 1;
@@ -34,7 +36,7 @@ function engine({ count = 20, delay = 5 } = {}) {
     files: async () => new Map(),
     revisionsOfMany: async () => new Map(),
     sources: async () => [],
-    reject: async () => {}, unreject: async () => {}, addRevision: async () => {}, upsertFile: async () => {}, setSources: async () => {},
+    reject: async () => {}, unreject: async () => {}, addRevision: async () => {}, upsertFile: async () => {}, setSources: async () => {}, syncOrigins: async () => {}, originsOf: async () => new Map(),
   };
   return { files, calls, store: new NativeMemoryStore({ sessions: /** @type {any} */ (sessions), overlay: /** @type {any} */ (overlay) }) };
 }

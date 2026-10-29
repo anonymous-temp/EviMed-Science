@@ -1,9 +1,11 @@
+import { GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, geoScopeFromQuery } from "./geoReadScope.mjs";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
   GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
   GEO_TIERS, geoProducerSettingsIssues, geoVisibleQuestionOfReason, normalizeGeoProducerSettings,
 } from "@evimed/domain";
+import { GEO_ANALYSIS_FIELDS } from "./geoAnalysis.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
@@ -61,8 +63,8 @@ export function geoRoutePattern(pathname) {
   if (parts[0] !== "projects") return "/api/geo/:route";
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
-  const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
+  const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "snapshots", "screenshots", "sources", "tier", "articles", "distribution", "budget",
+    "orders", "owned-links", "source-ownership", "signals", "analysis", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -178,11 +180,16 @@ function money(value, field, zero = false) {
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
  *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
  *     rename?: (ownerId: string, projectId: string, name: string) => Promise<unknown>,
- *     bindSession: (user: any, projectId: string) => Promise<{ sessionId: string, bound: boolean }>,
- *     conversationSessionId?: (user: any, projectId: string) => Promise<string | null>,
+ *     bindSession: (user: any, projectId: string, geoProject?: any) => Promise<{ sessionId: string | null, bound: boolean }>,
+ *     conversationSessionId?: (user: any, geoId: string) => Promise<string | null>,
+ *     openConversation?: (user: any, geoId: string, target: any) => Promise<any>,
+ *     conversationRead?: (user: any, geoId: string, sessionId: string, action: string, body?: any) => Promise<any>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
+ *   selectedExporter?: any,
+ *   signals?: import('./geoSignals.mjs').GeoSignals | null,
+ *   signalResults?: import('./geoSignalResults.mjs').GeoSignalResults | null,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any>,
  *     articleReferences?: (project: any, articleId: string) => Promise<any>, articlePublishable?: (project: any, articleId: string) => Promise<any> } | null,
@@ -219,6 +226,8 @@ export function createGeoRoutes(dependencies) {
       get cards() { return dependencies.cards ?? null; },
       get members() { return dependencies.members ?? null; },
       get market() { return dependencies.market ?? null; },
+      get signals() { return dependencies.signals ?? null; },
+      get signalResults() { return dependencies.signalResults ?? null; },
     };
 
     // --- operators: the platform's marketplace account ---
@@ -303,10 +312,35 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const id = parts[1];
+    if (parts.length === 4 && parts[2] === "conversation" && parts[3] === "open" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["target"]);
+      if (!dependencies.projects?.openConversation) throw UNAVAILABLE();
+      return reply(await dependencies.projects.openConversation(user, id, body.target));
+    }
+    if (parts.length === 5 && parts[2] === "conversation" && dependencies.projects?.conversationRead) {
+      const action = parts[4];
+      if (method === "GET" && ["runs", "history", "capability", "status", "reply-checks", "source-scope", "sources"].includes(action)) {
+        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action));
+      }
+      if (method === "POST" && action === "start") {
+        await bodyOf(req, maxJsonBytes, []);
+        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action));
+      }
+      if (method === "PUT" && action === "source-scope") {
+        return reply(await dependencies.projects.conversationRead(user, id, parts[3], action, await bodyOf(req, maxJsonBytes, ["sourceIds", "sourceScopeMode"])));
+      }
+      // 「停止」 on the run strip of the module's conversation: one run of this conversation, stopped as its own cancel stops it.
+      if (method === "POST" && action === "stop") {
+        const stopped = await dependencies.projects.conversationRead(user, id, parts[3], action, await bodyOf(req, maxJsonBytes, ["runId"]));
+        await audit("geo.conversation.stop", "completed", { userId: user.id, code: id, detail: String(stopped?.run?.id ?? "") });
+        return reply(stopped);
+      }
+      throw new HttpError(404, "not_found", "GEO conversation route not found.");
+    }
     if (parts.length === 2) {
       if (method === "GET") {
-        const view = await service.projectView(user, id);
-        const sessionId = await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        const view = await service.projectView(user, id, geoScopeFromQuery(url.searchParams, []));
+        const sessionId = await dependencies.projects?.conversationSessionId?.(user, id).catch(() => null) ?? null;
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {
@@ -339,7 +373,98 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const tab = parts[2];
+    if (tab === 'runs' && method === 'GET' && hooks.signalResults && parts.length > 3) {
+      if (parts.length === 4) return reply(await hooks.signalResults.record(user, id, null, parts[3]));
+      if (parts[4] === 'results' && [6, 7].includes(parts.length) && (parts.length === 6 || parts[6] === 'raw')) {
+        const value = await hooks.signalResults.version(user, id, null, parts[3], parts[5], { raw: parts.length === 7 });
+        if (parts.length === 6) return reply(value);
+        const { version, bytes } = value;
+        res.writeHead(200, { 'Content-Type': version.mimeType, 'Content-Length': bytes.length,
+          'Content-Disposition': `${url.searchParams.get('download') === '1' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(version.path.split('/').at(-1))}`,
+          'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:", ETag: `"${version.digest}"` });
+        res.end(bytes); return true;
+      }
+      throw new HttpError(404, 'not_found', 'GEO execution route not found.');
+    }
+    if (tab === "signals") {
+      if (!hooks.signals) throw UNAVAILABLE();
+      if (method === "GET" && parts[4] === "runs" && hooks.signalResults) {
+        if (parts.length === 6) return reply(await hooks.signalResults.record(user, id, parts[3], parts[5]));
+        if (parts[6] === "results" && [8, 9].includes(parts.length) && (parts.length === 8 || parts[8] === "raw")) {
+          const value = await hooks.signalResults.version(user, id, parts[3], parts[5], parts[7], { raw: parts.length === 9 });
+          if (parts.length === 8) return reply(value);
+          const { version, bytes } = value;
+          res.writeHead(200, { "Content-Type": version.mimeType, "Content-Length": bytes.length,
+            "Content-Disposition": `${url.searchParams.get("download") === "1" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(version.path.split("/").at(-1))}`,
+            "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
+            "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:", ETag: `"${version.digest}"` });
+          res.end(bytes); return true;
+        }
+      }
+      if (method === "GET" && parts.length === 3) {
+        const query = {};
+        for (const key of url.searchParams.keys()) {
+          if (!["limit", "cursor", "kind", "state", "step", "actionable"].includes(key) || url.searchParams.getAll(key).length !== 1) throw new HttpError(400, "geo_payload_invalid", "Invalid signal query.");
+          query[key] = url.searchParams.get(key);
+        }
+        return reply(await hooks.signals.list(user, id, query));
+      }
+      if (method === "GET" && parts.length === 5 && parts[4] === "members") {
+        const query={};
+        for(const key of url.searchParams.keys()){
+          if(!["side","offset","limit","metricKey","expectedBasisDigest"].includes(key)||url.searchParams.getAll(key).length!==1)throw new HttpError(400,"geo_payload_invalid","Invalid preserved sample query.");
+          query[key]=url.searchParams.get(key);
+        }
+        return reply(await hooks.signals.members(user,id,parts[3],query));
+      }
+      if (method === "GET" && parts.length === 4) return reply(await hooks.signals.detail(user, id, parts[3]));
+      if (method === "POST" && parts.length === 5 && parts[4] === "disposition") {
+        const body = await bodyOf(req, maxJsonBytes, ["expectedRevision", "requestKey", "disposition", "reason"]);
+        return reply(await hooks.signals.disposition(user, id, parts[3], body));
+      }
+      throw new HttpError(404, "not_found", "GEO route not found.");
+    }
+    if (tab === "strategy" && parts.length === 4 && parts[3] === "context" && method === "POST") {
+      if (!service.planContexts) throw UNAVAILABLE();
+      return reply(await service.planContexts.stage(user, id, await readJson(req, maxJsonBytes)));
+    }
     // --- members: colleagues and outside agencies, by role (the owner alone manages them) ---
+    if (method === "POST" && tab === "questions" && (parts.length === 3 || parts.length === 4 && parts[3] === "preview")) {
+      const body = await bodyOf(req, maxJsonBytes, ["rows", "contract", "requestKey", "note"]);
+      return reply(parts.length === 4 ? await service.previewQuestions(user, id, body) : await service.saveQuestions(user, id, body));
+    }
+    if (tab === "diagnosis" && parts.length === 4 && parts[3] === "feedback" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["snapshotId", "statement", "claimId", "statementIdentity", "assessmentVersion", "note", "requestKey", "selectionRef"]);
+      return reply(await service.submitDiagnosisFeedback(user, id, body), 202);
+    }
+    if (tab === "diagnosis" && parts.length === 5 && parts[3] === "reviews" && method === "GET") {
+      const page = {};
+      for (const key of url.searchParams.keys()) {
+        const values = url.searchParams.getAll(key);
+        if (!["feedbackBefore", "historyBefore", "feedbackLimit", "historyLimit"].includes(key) || values.length !== 1
+          || key !== "feedbackBefore" && !/^\d+$/u.test(values[0])) throw new HttpError(400, "geo_read_filter_invalid", "Invalid judgment history page.");
+        page[key] = key === "feedbackBefore" ? values[0] : Number(values[0]);
+      }
+      return reply(await service.readDiagnosisReview(user, id, parts[4], page));
+    }
+    if (method === "POST" && tab === "diagnosis" && parts.length === 4 && parts[3] === "start") {
+      const body = await bodyOf(req, maxJsonBytes, ["version", "requestKey"]);
+      return reply(await service.startDiagnosis(user, id, body));
+    }
+    if (tab === "diagnosis" && parts.length === 5 && parts[4] === "progress" && method === "GET") {
+      const page = /** @type {Record<string, number>} */ ({});
+      for (const key of url.searchParams.keys()) {
+        const values = url.searchParams.getAll(key);
+        if (!["limit", "offset"].includes(key) || values.length !== 1 || !/^\d+$/u.test(values[0])) throw new HttpError(400, "geo_read_filter_invalid", "Progress takes only whole-number limit and offset.");
+        page[key] = Number(values[0]);
+      }
+      return reply(await service.diagnosisProgress(user, id, parts[3], page));
+    }
+    if (tab === "diagnosis" && parts.length === 5 && parts[4] === "recover" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["requestKey", "jobIds", "acknowledgeUnknown"]);
+      return reply(await service.recoverDiagnosis(user, id, parts[3], body));
+    }
     if (tab === "members") {
       if (!hooks.members) throw UNAVAILABLE();
       if (parts.length === 3 && method === "GET") {
@@ -374,38 +499,66 @@ export function createGeoRoutes(dependencies) {
         const raw = url.searchParams.get("version");
         const version = raw == null || raw === "" ? null : Number(raw);
         if (version != null && (!Number.isSafeInteger(version) || version < 1)) throw new HttpError(400, "geo_version_invalid", "version must be a positive whole number.");
-        return reply(await service.questions(user, id, version));
+        const scope = geoScopeFromQuery(url.searchParams);
+        return reply(await service.questions(user, id, [...url.searchParams.keys()].some((key) => key !== "version") ? scope : version));
       }
-      if (tab === "diagnosis") {
-        const round = url.searchParams.get("round");
-        if (round != null && round !== "" && !ID.test(round)) throw new HttpError(404, "geo_round_not_found", "Round not found.");
-        return reply(await service.diagnosis(user, id, round || null));
+      if (tab === "diagnosis") return reply(await service.diagnosis(user, id, geoScopeFromQuery(url.searchParams)));
+      if (tab === "snapshots") {
+        const project = await service.requireProject(user, id);
+        const filter = geoScopeFromQuery(url.searchParams, ["limit", "offset", "member"]);
+        const page = geoReadPage(filter);
+        let member;
+        if (filter.member != null) {
+          try { member = JSON.parse(filter.member); }
+          catch { throw new HttpError(400, "geo_read_filter_invalid", "member must be a JSON metric selector."); }
+          member = normalizeGeoMember(member);
+        }
+        return reply(await service.runtimeRead(project, "snapshots", { ...filter, ...page, ...(member ? { member } : {}) }));
       }
-      if (tab === "sources") return reply(await service.sources(user, id));
+      if (tab === "sources") return reply(await service.sources(user, id, geoScopeFromQuery(url.searchParams, [])));
       // The question group as the spine (rectification 2026-10-14): the groups with what the engines say, the actions by group, and the
       // strategy page's one read.
-      if (tab === "clusters") return reply(await service.clusters(user, id));
+      if (tab === "clusters") return reply(await service.clusters(user, id, geoScopeFromQuery(url.searchParams, [])));
       if (tab === "actions") return reply(await service.actions(user, id));
-      if (tab === "strategy") return reply(await service.strategy(user, id));
+      if (tab === "strategy") return reply(await service.strategy(user, id, geoScopeFromQuery(url.searchParams, ["strategyVersion", "planContextRef", "sourceId", "url"])));
       if (tab === "articles") return reply(await service.articles(user, id));
       if (tab === "distribution") {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
-      if (tab === "monitoring") return reply(await service.monitoring(user, id));
+      if (tab === "analysis") return reply(await service.analysis(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
+      if (tab === "monitoring") return reply(await service.monitoring(user, id, geoScopeFromQuery(url.searchParams, [])));
       // 「AI 运行」: what the programme did in the project's own sessions, apart from the person's conversation — a read-only record, each
       // row named by what it was (the route reason's sentence, never the brief it was sent with) and none of them a place to go.
       if (tab === "runs") {
         const project = await service.requireProject(user, id);
-        const runs = dependencies.projects?.programmeRuns ? await dependencies.projects.programmeRuns(project.userId, project.projectId).catch(() => []) : [];
+        for (const key of url.searchParams.keys()) if (!["limit", "cursor"].includes(key) || url.searchParams.getAll(key).length !== 1) throw new HttpError(400, "geo_payload_invalid", "Invalid execution page.");
+        const limit = Number(url.searchParams.get("limit") ?? 50);
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new HttpError(400, "geo_payload_invalid", "Invalid execution page.");
+        let cursor = null;
+        if (url.searchParams.has("cursor")) try {
+          const raw = url.searchParams.get("cursor");
+          if (raw.length > 1000) throw new Error();
+          cursor = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+          if (!Array.isArray(cursor) || cursor.length !== 3 || cursor[0] !== project.id || typeof cursor[1] !== "string" || typeof cursor[2] !== "string") throw new Error();
+        } catch { throw new HttpError(400, "geo_payload_invalid", "Refresh the execution list."); }
+        const [programme, attended] = await Promise.all([
+          dependencies.projects?.programmeRuns ? dependencies.projects.programmeRuns(project.userId, project.projectId) : [],
+          hooks.signals ? hooks.signals.attendedRuns(project) : [],
+        ]);
+        const all = [...new Map([...programme, ...attended].map(run => [run.runId, run])).values()]
+          .sort((a, b) => String(b.startedAt ?? "").localeCompare(String(a.startedAt ?? "")) || b.runId.localeCompare(a.runId));
+        const runs = all.filter(run => !cursor || String(run.startedAt ?? "") < cursor[1] || String(run.startedAt ?? "") === cursor[1] && run.runId < cursor[2]);
+        const selected = runs.slice(0, limit), last = selected.at(-1);
         return reply({
-          runs: runs.slice(0, 50).map((run) => ({
+          runs: selected.map((run) => ({
             sessionId: String(run.sessionId),
             runId: String(run.runId),
-            label: geoVisibleQuestionOfReason(run.reason),
+            label: 'label' in run ? run.label : geoVisibleQuestionOfReason(run.reason),
             state: ["running", "queued", "starting"].includes(String(run.status)) ? "running" : String(run.status) === "succeeded" ? "finished" : "stopped",
             startedAt: run.startedAt ?? null,
           })),
+          total: all.length, nextCursor: runs.length > limit && last ? Buffer.from(JSON.stringify([project.id, String(last.startedAt ?? ""), last.runId])).toString("base64url") : null,
         });
       }
       // The project's product zone and its cards: each claim with its quotation, its ✓/⚠ and the card revision it stands in.
@@ -424,8 +577,26 @@ export function createGeoRoutes(dependencies) {
       await audit("geo.cards.refresh", "completed", { userId: user.id, code: id, detail: `${result.cards?.length ?? 0}` });
       return reply(result);
     }
+    if (parts.length === 4 && method === "GET" && tab === "distribution" && ["orders", "ledger"].includes(parts[3])) {
+      const input = Object.fromEntries(url.searchParams);
+      return reply(parts[3] === "orders" ? await service.distributionOrders(user, id, input) : await service.distributionLedger(user, id, input));
+    }
+    // The members behind one aggregate cell of the analysis page: a four-part path, so it cannot sit in the three-part block above (it
+    // answered 404 there). The service holds the read ability and the digest check.
+    if (parts.length === 4 && method === "GET" && tab === "analysis" && parts[3] === "members") {
+      return reply(await service.analysisMembers(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
+    }
+    if (parts.length === 4 && method === "GET" && tab === "orders") return reply(await service.distributionOrder(user, id, parts[3], Object.fromEntries(url.searchParams)));
+    if (parts.length === 4 && method === "POST" && tab === "source-ownership" && parts[3] === "read") {
+      return reply(await service.sourceOwnershipRead(user, id, await bodyOf(req, maxJsonBytes, ["target", "beforeRevision"])));
+    }
+    if (parts.length === 3 && method === "POST" && tab === "source-ownership") {
+      const result = await service.sourceOwnershipWrite(user, id, await bodyOf(req, maxJsonBytes, ["target", "relation", "active", "reason", "expectedRevision"]));
+      await audit("geo.source.relationship", "completed", { userId: user.id, code: id, detail: result.relation });
+      return reply(result);
+    }
     if (parts.length === 4 && method === "GET" && tab === "answers") return reply(await service.answer(user, id, parts[3]));
-    if (parts.length === 4 && method === "GET" && tab === "clusters") return reply(await service.cluster(user, id, parts[3]));
+    if (parts.length === 4 && method === "GET" && tab === "clusters") return reply(await service.cluster(user, id, parts[3], geoScopeFromQuery(url.searchParams, [])));
     if (parts.length === 4 && method === "GET" && tab === "actions") return reply(await service.action(user, id, parts[3]));
     // A person's two reversible words about an action: skip it, or send it to another source. Nothing else is written, and neither is
     // an approval — the platform goes on by itself.
@@ -459,12 +630,18 @@ export function createGeoRoutes(dependencies) {
       await audit("geo.owned_link.register", "completed", { userId: user.id, code: id, detail: String(result.id ?? "") });
       return reply(result, 201);
     }
+    if (parts.length === 3 && method === "GET" && tab === "owned-links") return reply(await service.ownedPublicationList(user, id, Object.fromEntries(url.searchParams)));
+    if (parts.length === 4 && method === "GET" && tab === "owned-links") return reply(await service.ownedPublicationDetail(user, id, parts[3], Object.fromEntries(url.searchParams)));
+    if (parts.length === 5 && method === "POST" && tab === "owned-links" && parts[4] === "published-version") {
+      const body = await bodyOf(req, maxJsonBytes, ["requestKey", "expectedRevision", "expectedResultVersionId", "expectedDigest", "resultVersionId", "digest", "publishedAt"]);
+      const result = await service.confirmOwnedPublication(user, id, parts[3], body);
+      await audit("geo.owned_link.version", "completed", { userId: user.id, code: id, detail: parts[3] });
+      return reply(result);
+    }
     // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
     if (parts.length === 4 && method === "GET" && tab === "sources") {
       if (!ID.test(parts[3])) throw new HttpError(404, "geo_source_not_found", "Source not found.");
-      const engine = url.searchParams.get("engine");
-      if (engine != null && engine !== "" && !ID.test(engine)) throw new HttpError(400, "geo_engines_invalid", "engine must be one engine's id.");
-      return reply(await service.source(user, id, parts[3], { engine: engine || null }));
+      return reply(await service.source(user, id, parts[3], geoScopeFromQuery(url.searchParams, GEO_SOURCE_PAGE_FIELDS)));
     }
     if (parts.length === 4 && method === "GET" && tab === "screenshots") {
       const file = await service.screenshotPath(user, id, parts[3]);
@@ -488,6 +665,9 @@ export function createGeoRoutes(dependencies) {
       const body = await bodyOf(req, maxJsonBytes, ["tier"]);
       return reply(await service.setTier(user, id, tier(body.tier)));
     }
+    if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "versions") {
+      return reply(await service.articleVersions(user, id, parts[3]));
+    }
     // What the platform reads in an article's claim references: each against the card revision it cites, and the ones a card's change
     // log says have moved since. A card-layer article is read as the card renders it now.
     if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "references") {
@@ -506,8 +686,8 @@ export function createGeoRoutes(dependencies) {
       return reply(await service.withdrawArticle(user, id, parts[3]));
     }
     if (parts.length === 5 && method === "POST" && tab === "articles" && parts[4] === "release") {
-      await bodyOf(req, maxJsonBytes, []);
-      const result = await service.releaseArticle(user, id, parts[3]);
+      const body = await bodyOf(req, maxJsonBytes, ["expectedResultVersionId", "expectedDigest"]);
+      const result = await service.releaseArticle(user, id, parts[3], body);
       await audit("geo.article.release", "completed", { userId: user.id, code: parts[3], detail: id });
       return reply(result);
     }
@@ -542,7 +722,13 @@ export function createGeoRoutes(dependencies) {
       return reply(await hooks.orchestrator.runStep(asOwner(user, project), project, body.step));
     }
     if (parts.length === 3 && method === "POST" && tab === "export") {
-      const body = await bodyOf(req, maxJsonBytes, ["kind"]);
+      const body = await bodyOf(req, maxJsonBytes, ["kind", "selectionRef", "view", "expectedDigest", "formats"]);
+      if (body.kind === "selected") {
+        const project = await service.requireProject(user, id, "run");
+        if (!dependencies.selectedExporter) throw UNAVAILABLE();
+        return reply(await service.selectedExport(user, project, body, dependencies.selectedExporter));
+      }
+      if (Object.keys(body).some(key => key !== "kind")) throw new HttpError(400, "geo_read_filter_invalid", "Choose a selected export to include analytical scope.");
       if (typeof body.kind !== "string" || !GEO_EXPORT_KINDS.includes(body.kind)) {
         throw new HttpError(400, "geo_export_kind_invalid", `kind must be one of: ${GEO_EXPORT_KINDS.join(", ")}.`);
       }

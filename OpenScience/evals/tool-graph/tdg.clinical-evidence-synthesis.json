@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:84f1755c6ac9333df3179ec5ca420451f9fa1c350597837b129694bc34fc6737",
+  "version": "sha256:cc37ae506a1fcd6a72c8530bc3363218b00e1854fde590d143b80e4e2411531b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -984,7 +984,7 @@
     {
       "name": "mcp__evimed__frontier_search",
       "source": "mcp",
-      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query EviMed's own evidence cards. Use it when a question asks what is new or recent; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card.",
+      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query EviMed's own evidence cards. Use it when a question asks what is new or recent, or to read an item named frontier:<id>; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1011,26 +1011,35 @@
             "type": "string",
             "enum": [
               "cardiology",
-              "oncology",
+              "respiratory",
+              "gastroenterology",
               "endocrinology",
+              "nephrology",
+              "hematology",
+              "rheumatology",
+              "infectious-disease",
               "neurology",
               "psychiatry",
-              "infectious-disease",
-              "respiratory",
-              "critical-care",
-              "gastroenterology",
-              "nephrology",
-              "rheumatology",
-              "hematology",
-              "pediatrics",
+              "oncology",
+              "general-surgery",
+              "orthopedics",
+              "cardiothoracic-surgery",
+              "neurosurgery",
+              "urology",
               "obstetrics-gynecology",
-              "geriatrics",
-              "surgery-anesthesia",
+              "pediatrics",
+              "ophthalmology",
+              "otolaryngology",
+              "stomatology",
+              "dermatology",
+              "critical-care",
+              "anesthesiology",
               "radiology",
+              "laboratory-pathology",
               "pharmacy",
+              "general-practice",
               "tcm",
-              "public-health",
-              "general-practice"
+              "rare-disease"
             ]
           },
           "window": {
@@ -1057,6 +1066,11 @@
             "minimum": 1,
             "maximum": 20,
             "default": 8
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{12,32}$",
+            "description": "One item's id, as in frontier:<id>: reads that item (its text, 导读 and 要点) and takes no other field."
           }
         },
         "additionalProperties": false

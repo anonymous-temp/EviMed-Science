@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { Tag } from "@/components/ui/Tag";
 import type { VcrCurve, VcrIntervalKind, VcrSeries, VcrValueSource } from "@/lib/vcrClient";
 import { markKindOf, SeriesLegend, seriesColor } from "./VcrMarks";
-import { intervalLabel } from "./vcrText";
+import { intervalLabel, intervalLevelText } from "./vcrText";
 import { bandPath, linePath, posX, posY, scaleOf, spanRect, stepPath, type Point, type VcrScale } from "./vcrScale";
 
 /**
@@ -61,7 +61,7 @@ export function strokeOf(series: { source: VcrValueSource | null | undefined; da
 export function bandName(kind: VcrIntervalKind | null | undefined, level?: number | null): string {
   const name = intervalLabel(kind);
   if (!name) return "";
-  return typeof level === "number" && Number.isFinite(level) ? `${level}% ${name}` : name;
+  return `${intervalLevelText(level)}${name}`;
 }
 
 /** The server may say what level a band is; the page never assumes one. */
@@ -271,7 +271,7 @@ export function VcrTrajectoryChart({
                 data-vcr-series-end={line.key}
                 // The name is text, so it wears a text colour — the brand for our line, the metadata grey for a rival's — and not its line's
                 // grey, which is a graphic's (4.2:1 at best) and one more text colour on a page that has five.
-                className={cn("absolute -translate-y-1/2 whitespace-nowrap pl-2 text-caption font-medium", line.ours ? "text-accent" : "text-text-3")}
+                className={cn("absolute -translate-y-1/2 whitespace-nowrap pl-2 text-caption", line.ours ? "text-accent" : "text-text-3")}
                 style={{ left: `${posX(last.x, x)}%`, top: `${posY(last.y as number, y)}%` }}
               >
                 {line.endLabel}

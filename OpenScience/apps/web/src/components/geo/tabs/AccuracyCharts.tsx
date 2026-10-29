@@ -1,4 +1,4 @@
-import type { GeoErrorRow, GeoErrorType } from "@/lib/geoClient";
+import type { GeoErrorRow, GeoErrorType, GeoErrorSummary } from "@/lib/geoClient";
 import { cn } from "@/lib/cn";
 import { BarList } from "@/components/charts/BarList";
 import { ErrorSourceBar, type ErrorSourceCounts } from "@/components/charts/ErrorSourceBar";
@@ -12,10 +12,10 @@ import { errorSourceCounts, type ErrorTrace } from "../spine/errorModel";
 /** What the charts of 准确与安全 share with the list beside them: one narrowing, set from either (rule 7). */
 export interface ErrorChartSelection {
   engine: string | null;
-  type: GeoErrorType | null;
+  type: GeoErrorType | "unknown" | null;
   trace: ErrorTrace | null;
   onEngine: (engine: string | null) => void;
-  onType: (type: GeoErrorType | null) => void;
+  onType: (type: GeoErrorType | "unknown" | null) => void;
   onTrace: (trace: ErrorTrace | null) => void;
 }
 
@@ -24,16 +24,20 @@ const SEVERITY_TONES: Record<SeverityLevel, ShareSegment["tone"]> = { S4: "s3", 
 /** The four charts in a grid that is full: two to a row, the odd one out takes the whole row. */
 export function ErrorCharts({
   errors,
+  summary,
   composition,
   compositionTitle,
   denominator,
+  historical = false,
   selection,
 }: {
   errors: readonly GeoErrorRow[];
-  /** How the round's answers divide: right about us, left us out, wrong about us, wrong about a rival. */
+  summary?: GeoErrorSummary;
+  /** Answer-level composition, including partial, unknown and refused observations. */
   composition: readonly ShareSegment[];
   compositionTitle: string;
   denominator: string | null;
+  historical?: boolean;
   selection: ErrorChartSelection;
 }) {
   const composition_ = (
@@ -41,9 +45,9 @@ export function ErrorCharts({
       title={compositionTitle}
       state={composition.every((segment) => segment.value === 0) ? "empty" : "content"}
       emptyText="这一轮还没有统计出回答的构成。"
-      // Counted by answer, beside a rate counted by statement: the footnote says which, so “讲错 44 次” is not read against
-      // “准确率 68%” as a share of the same thing (G17).
-      footnote={[denominator, "事实准确率按每条陈述计算，和这里按回答计的次数不能互相换算"].filter(Boolean).join(" · ")}
+      footnote={[denominator, historical
+        ? "当前准确率保留历史计算口径；回答核查范围按现有记录显示，两者不作直接换算"
+        : "事实准确率按可判定的回答计算；部分可判定、尚无法判定和拒答分别展示，不视为讲对"].filter(Boolean).join(" · ")}
       height={120}
     >
       <ShareBar label="回答的构成" segments={composition} format={(value) => `${Math.round(value)} 次`} />
@@ -51,16 +55,16 @@ export function ErrorCharts({
   );
   // Two to a row, the two with the most in them first and the two single bars together: a row's cards share its height, and a
   // bar beside a five-row list is a card that is mostly white.
-  const cells: Array<Pick<ChartGridCell, "key" | "node">> = errors.length > 0
+  const cells: Array<Pick<ChartGridCell, "key" | "node">> = (summary?.total ?? errors.length) > 0
     ? [
-      { key: "severity", node: <BySeverity errors={errors} selection={selection} /> },
-      { key: "type", node: <ByType errors={errors} selection={selection} /> },
+      { key: "severity", node: <BySeverity errors={errors} summary={summary} selection={selection} /> },
+      { key: "type", node: <ByType errors={errors} summary={summary} selection={selection} /> },
       { key: "composition", node: composition_ },
-      { key: "source", node: <BySource errors={errors} selection={selection} /> },
+      { key: "source", node: <BySource errors={errors} summary={summary} selection={selection} /> },
     ]
     : [
       { key: "composition", node: composition_ },
-      { key: "severity", node: <BySeverity errors={errors} selection={selection} /> },
+      { key: "severity", node: <BySeverity errors={errors} summary={summary} selection={selection} /> },
     ];
   const rows: ChartGridCell[][] = [];
   for (let at = 0; at < cells.length; at += 2) {
@@ -72,19 +76,19 @@ export function ErrorCharts({
 
 /* ------------------------------------------------------- severity × engine */
 
-function BySeverity({ errors, selection }: { errors: readonly GeoErrorRow[]; selection: ErrorChartSelection }) {
-  const engines = [...new Set(errors.map((error) => error.engine))];
+function BySeverity({ errors, summary, selection }: { errors: readonly GeoErrorRow[]; summary?: GeoErrorSummary; selection: ErrorChartSelection }) {
+  const engines = summary ? Object.keys(summary.byEngine) : [...new Set(errors.map((error) => error.engine))];
   const rows = engines
     .map((engine) => {
       const mine = errors.filter((error) => error.engine === engine);
       const levels: SeverityLevel[] = ["S4", "S3", "S2", "S1", "S0"];
       return {
         engine,
-        total: mine.length,
-        segments: levels.flatMap((level) => {
-          const count = mine.filter((error) => error.severity === level).length;
+        total: summary?.byEngine[engine] ?? mine.length,
+        segments: levels.flatMap<ShareSegment>((level) => {
+          const count = summary ? summary.byEngineSeverity[`${engine}:${level}`] ?? 0 : mine.filter((error) => error.severity === level).length;
           return count > 0 ? [{ key: `${engine}:${level}`, label: level, value: count, tone: SEVERITY_TONES[level] }] : [];
-        }) as ShareSegment[],
+        }).concat((summary?.byEngineSeverity[`${engine}:unknown`] ?? 0) > 0 ? [{ key: `${engine}:unknown`, label: "严重度未知", value: summary!.byEngineSeverity[`${engine}:unknown`], tone: "quiet" }] : []) as ShareSegment[],
       };
     })
     .sort((left, right) => right.total - left.total);
@@ -115,7 +119,7 @@ function BySeverity({ errors, selection }: { errors: readonly GeoErrorRow[]; sel
                 onClick={() => selection.onEngine(chosen ? null : row.engine)}
                 className={cn("flex h-sm w-full items-center gap-4 rounded px-2 hover:bg-surface-2", chosen && "bg-accent-soft")}
               >
-                <span className="w-20 shrink-0 truncate text-left text-compact text-text-2">{engineName(row.engine)}</span>
+                <span className="w-20 shrink-0 truncate text-left text-ui text-text-2">{engineName(row.engine)}</span>
                 <span className="min-w-0 flex-1"><ShareBar label={`${engineName(row.engine)} 的讲错`} segments={row.segments} legend={false} /></span>
                 <span className="w-8 shrink-0 text-right text-ui tabular-nums text-text">{row.total}</span>
               </button>
@@ -129,12 +133,13 @@ function BySeverity({ errors, selection }: { errors: readonly GeoErrorRow[]; sel
 
 /* ---------------------------------------------------------------- by type */
 
-function ByType({ errors, selection }: { errors: readonly GeoErrorRow[]; selection: ErrorChartSelection }) {
+function ByType({ errors, summary, selection }: { errors: readonly GeoErrorRow[]; summary?: GeoErrorSummary; selection: ErrorChartSelection }) {
   const counts = new Map<string, number>();
-  for (const error of errors) counts.set(error.errorType, (counts.get(error.errorType) ?? 0) + 1);
+  if (summary) for (const [key, value] of Object.entries(summary.byType)) counts.set(key, value);
+  else for (const error of errors) counts.set(error.errorType, (counts.get(error.errorType) ?? 0) + 1);
   const rows = [...counts.entries()]
     .flatMap(([type, value]) => {
-      const label = GEO_ERROR_TYPE_WORDS[type as GeoErrorType];
+      const label = GEO_ERROR_TYPE_WORDS[type as GeoErrorType] ?? "类型未知";
       return label ? [{ key: type, label, value, unit: "条" }] : [];
     })
     .sort((left, right) => right.value - left.value);
@@ -145,7 +150,7 @@ function ByType({ errors, selection }: { errors: readonly GeoErrorRow[]; selecti
         label="讲错的类型"
         rows={rows}
         selected={selection.type}
-        onSelect={(key) => selection.onType(key as GeoErrorType | null)}
+        onSelect={(key) => selection.onType(key as GeoErrorType | "unknown" | null)}
         tone="quiet"
       />
     </ChartCard>
@@ -154,8 +159,8 @@ function ByType({ errors, selection }: { errors: readonly GeoErrorRow[]; selecti
 
 /* --------------------------------------------------------------- by source */
 
-function BySource({ errors, selection }: { errors: readonly GeoErrorRow[]; selection: ErrorChartSelection }) {
-  const counts: ErrorSourceCounts = errorSourceCounts(errors);
+function BySource({ errors, summary, selection }: { errors: readonly GeoErrorRow[]; summary?: GeoErrorSummary; selection: ErrorChartSelection }) {
+  const counts: ErrorSourceCounts = summary ? { traced: summary.byTrace.traced ?? 0, unattributable: summary.byTrace.unattributable ?? 0, noRetrieval: summary.byTrace.noRetrieval ?? 0 } : errorSourceCounts(errors);
   const total = counts.traced + counts.unattributable + counts.noRetrieval;
   return (
     <ChartCard

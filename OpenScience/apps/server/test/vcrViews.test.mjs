@@ -935,8 +935,8 @@ test("a patient set's model card says what the model is, where it may be used, a
     evidence: ["code_verification"], missingEvidence: ["seed_reproducible"],
   }, [{ id: "std_1", label: "EV-201" }]);
   assert.equal(card.name, "标题");
-  assert.equal(card.twin, "baseline_conditioned_prediction", "a twin is derived from evidence, never granted");
-  assert.equal(card.twinLabel, "基线条件化预测");
+  assert.equal(card.twin, "scenario_simulation", "an unconditioned model has not demonstrated individual prediction");
+  assert.equal(card.twinLabel, "情景仿真");
   assert.match(String(card.twinReason), /缺少/);
   assert.equal(card.region, "含中国人群");
   assert.deepEqual(card.validation.map((row) => row.label), ["外部验证", "内部验证"], "a key the page has no word for is not printed as a raw id");
@@ -1497,4 +1497,39 @@ test("a registry's design is said in words from the registry's own enumerations,
   assert.equal(registryDesignWords({ phases: [], allocation: null, masking: "" }), null);
   const precedent = presentPrecedent({ id: "p1", registry_id: "NCT1", registry: "clinicaltrials.gov", design: { phases: ["PHASE3"], allocation: "RANDOMIZED", masking: "QUADRUPLE" }, pico: {}, enrollment: {}, sites: {}, results: {} });
   assert.equal(precedent.design, "3 期 · 随机 · 四盲");
+});
+
+
+test("an owned E-value result describes sensitivity without claiming an estimated literature comparison", () => {
+  const raw = { id: "sensitivity_result", kind: "comparator", executionId: "sensitivity_execution", conclusion: "limited", reviewState: "ai_set",
+    measures: [{ name: "e_value", value: 2.61, source: "calculated" }, { name: "e_value_confidence_limit", value: 1.8, source: "calculated" }],
+    diagnostics: { scale: "risk_ratio", rare: false, approximateRiskRatio: 1.6, note: "An E-value is what an unmeasured confounder would have to be, not evidence that none exists." } };
+  const design = { id: "sensitivity_design", version: 1, route: "literature_control", resultId: raw.id, conclusion: "limited", configuration: {}, targetTrial: {} };
+  const before = structuredClone(raw);
+  const bundle = { ...emptyBundle(), comparators: [design], results: [raw], executions: new Map([[raw.executionId, { method: "comparator.evalue" }]]) };
+  const tab = presentComparatorTab(bundle);
+  assert.match(tab.headline, /未测量混杂敏感性分析.*有限制/);
+  assert.doesNotMatch(tab.headline, /文献对照|外部对照|输入为假设/);
+  assert.match(tab.headline, /输入效应值的来源需另行核实/);
+  assert.match(tab.methods[0].note, /不估计治疗效应/);
+  assert.equal(tab.verdict.conclusion, "limited");
+  assert.deepEqual(tab.robustness.rows.map(row => [row.key, row.value.value]), [["e_value", 2.61], ["e_value_confidence_limit", 1.8]]);
+  assert.deepEqual(raw, before);
+  const assumed = presentComparatorTab({ ...bundle, results: [{ ...raw, diagnostics: { ...raw.diagnostics, inputsAssumed: true } }] });
+  assert.match(assumed.headline, /输入为假设/);
+  for (const method of ["comparator.maic", "comparator.rmst", "comparator.map_prior", "unknown.method", null]) {
+    const comparison = presentComparatorTab({ ...bundle, executions: method ? new Map([[raw.executionId, { method }]]) : new Map() });
+    assert.match(comparison.headline, /^文献对照：有限制地估计/);
+    assert.doesNotMatch(comparison.headline, /未测量混杂敏感性分析/);
+  }
+  const mixedRaw = { ...raw, conclusion: "estimable", measures: [...raw.measures,
+    { name: "rmst_difference", value: 2.4, source: "calculated", interval: { kind: "confidence", low: 1.1, high: 3.7, level: 0.95 } }], diagnostics: { tau: 12, timeUnit: "months" } };
+  const mixed = presentComparatorTab({ ...bundle, results: [mixedRaw], executions: new Map([[raw.executionId, { method: "comparator.rmst" }]]) });
+  assert.match(mixed.headline, /^文献对照：可估计.*RMST/);
+  assert.equal(mixed.rmst.value.value, 2.4);
+  assert.equal(mixed.rmst.value.interval.low, 1.1);
+  assert.equal(mixed.rmst.value.interval.level, 95);
+  assert.equal(mixed.robustness.rows[0].value.value, 2.61);
+  const estimable = presentComparatorTab({ ...bundle, results: [{ ...raw, conclusion: "estimable" }] });
+  assert.match(estimable.headline, /未测量混杂敏感性分析：已计算/);
 });

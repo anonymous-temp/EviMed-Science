@@ -25,6 +25,7 @@
  */
 
 export const DOMAIN_VERSION = '0.1.0'
+export { GEO_SIGNAL_KINDS, GEO_SIGNAL_STATES, GEO_SIGNAL_DISPOSITIONS, GEO_SIGNAL_STEPS, GEO_SIGNAL_STATE_LABELS_ZH, geoSignalLifecycle, geoSignalHref } from './src/geoSignals.mjs'
 export { availableRunActions, availableRunStepActions, runIsStalled } from './src/runActions.mjs'
 export { ARTIFACT_ROLES, artifactPresentation, compareArtifacts } from './src/artifactPresentation.mjs'
 export { frontierEventEvidenceCounts } from './src/frontierEventEvidence.mjs'
@@ -36,9 +37,7 @@ export { SOURCE_SCOPE_UNAVAILABLE_CONTEXT, sourceCitationProse, sourceCitationRe
 // knowledgePage — 「知识页」: the product layer around the pages OpenViking's Compile writes — where their mirror lives, how one is read, how a person's edits outlive a recompile
 export {
   KNOWLEDGE_GRAPH_FOLDER,
-  KNOWLEDGE_PAGE_ENGINE_LIMIT,
   KNOWLEDGE_PAGE_FOLDER,
-  KNOWLEDGE_PAGE_SUBMIT_LIMIT,
   KNOWLEDGE_PAGE_TYPES,
   KNOWLEDGE_TREES,
   KNOWLEDGE_USER_EDIT_LIMITS,
@@ -125,7 +124,7 @@ export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.m
 export { safeAppReturnPath } from './src/returnPath.mjs'
 
 
-// toolNames — 28 exports
+// toolNames — 30 exports
 export {
   MCP_MANAGED_JOB_BASE_NAMES,
   MCP_SERVER_NAME,
@@ -140,6 +139,7 @@ export {
   OPENVIKING_MEMORY_TOOL_NAMES,
   KERNEL_MOUNTED_TOOL_NAMES,
   MOUNTED_TOOL_NAMES,
+  PLATFORM_CHOREOGRAPHY_TOOL_NAMES,
   RETIRED_MCP_TOOL_NAMES,
   RETIRED_SOCKET_TOOL_NAMES,
   ROOT_VISIBLE_MCP_BASE_NAMES,
@@ -150,6 +150,7 @@ export {
   isMcpToolName,
   isOpenVikingMemoryToolName,
   isOpenVikingToolName,
+  isPlatformChoreographyTool,
   isSocketToolName,
   mcpToolBaseName,
   mcpToolName,
@@ -302,14 +303,15 @@ export {
   MEMORY_PROMOTION_MIN_OCCURRENCES,
   MEMORY_PROMOTION_MIN_RUNS,
   MAX_ACTIVE_LEARNED_METHODS,
-  METHOD_CONTRIBUTION_MIN_TRIALS,
-  METHOD_CONTRIBUTION_RETIRE_AT,
-  HANDBOOK_TEXT_LIMITS,
   METHOD_HARM_TEST,
+  METHOD_MOUNT,
   METHOD_SCIENTIFIC_HARM_TEST,
+  METHOD_SIMILARITY_PAIR_FLOOR,
+  METHOD_SIMILARITY_TOP_K,
+  METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS,
+  METHOD_UNPROVEN_MERGE_MIN_CARRIED,
   METHOD_UNUSED_RETIRE_LOADS,
   MEMORY_RECENCY_GAMMA_PER_HOUR,
-  MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_RERANK_WEIGHTS,
   MEMORY_STRENGTH_TAU_DAYS,
   METHOD_INDUCTION_MIN_TRAJECTORIES,
@@ -450,6 +452,45 @@ export {
   toolCalls,
   totalOutputTokens,
 } from './src/runTranscript.mjs'
+
+// artifactShape + trajectoryDigest — what the learning loop reads of a run: the person's requests and interventions, the files it
+// left (by structural shape) and the order of the work's tools with the platform's choreography removed
+export {
+  ARTIFACT_SHAPE_LIMITS,
+  ARTIFACT_SHAPE_MATCH_JACCARD,
+  ARTIFACT_SHAPE_MIN_LABELS,
+  artifactShapesMatch,
+  cleanArtifactShape,
+  cleanArtifactShapes,
+  normalizeShapeLabel,
+} from './src/artifactShape.mjs'
+export {
+  TRAJECTORY_ANCHOR_RADIUS,
+  TRAJECTORY_DIGEST_LIMITS,
+  ownTurnStarts,
+  rootSessionOf,
+  steeredMessages,
+  trajectoryDigest,
+  transcriptMessageText,
+} from './src/trajectoryDigest.mjs'
+
+// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent, used)
+export {
+  LEARNING_ACCEPT_VERDICTS,
+  LEARNING_CORRECTION_VERDICTS,
+  LEARNING_EVIDENCE_KINDS,
+  LEARNING_EVIDENCE_LIMITS,
+  LEARNING_EVIDENCE_SUBJECT_TYPE,
+  LEARNING_EVIDENCE_TRIGGER,
+  LEARNING_EVIDENCE_VERDICTS,
+  LEARNING_FOLLOW_UP_WINDOW_MS,
+  LEARNING_RULE_VERDICTS,
+  LEARNING_STEER_VERDICTS,
+  cleanLearningEvidence,
+  isLearningCorrection,
+  isLearningKept,
+  learningRunOutcome,
+} from './src/learningEvidence.mjs'
 
 // skillSupply — a skill package's source, licence, version, scripts, references, dependencies and operations as one
 // record, and whether the deployment can supply what it needs (read as a label by the availability projection)
@@ -758,6 +799,9 @@ export {
 /** @typedef {import('./src/receipt.mjs').DeliveryReceipt} DeliveryReceipt */
 /** @typedef {import('./src/receipt.mjs').DeliveryReceiptEntry} DeliveryReceiptEntry */
 /** @typedef {import('./src/receipt.mjs').ReceiptFile} ReceiptFile */
+/** @typedef {import('./src/artifactShape.mjs').ArtifactShape} ArtifactShape */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryReaction} TrajectoryReaction */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryDigest} TrajectoryDigest */
 /** @typedef {import('./src/runTranscript.mjs').RunEvent} RunEvent */
 /** @typedef {import('./src/runTranscript.mjs').RunTranscript} RunTranscript */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptMessage} TranscriptMessage */
@@ -795,8 +839,6 @@ export {
   formatDependsOn,
   isMethodDigest,
   learnedMethodCardEntry,
-  handbookText,
-  handbookTextFits,
   methodBodySections,
   methodContentDigest,
   mountedMethodDigest,
@@ -816,36 +858,54 @@ export {
   validateMethodSkill,
 } from './src/methodSkill.mjs'
 
+// retiredFeatures — what the platform no longer has, as the literal names a lesson uses for it (a closed list)
+export {
+  RETIRED_FEATURES,
+  methodTextOf,
+  retiredFeaturesIn,
+  retiredFeaturesOfMethod,
+} from './src/retiredFeatures.mjs'
+
 // methodGraph — the lifecycle: counters, promotion, retirement, and the graph
 export {
+  METHOD_APPLIED_OUTCOMES,
   METHOD_COUNT_KINDS,
   METHOD_GRAPH_ISSUE_CODES,
+  METHOD_MOUNT_REASONS,
   METHOD_OBSERVATION_OUTCOMES,
   METHOD_ORIGINS,
   METHOD_RELATION_TYPES,
+  METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_SUCCESS_OUTCOMES,
   computeMethodLevels,
   emptyLearning,
+  foldApplied,
   foldCarried,
+  foldDecided,
   foldEligible,
+  foldExplored,
+  foldLevel,
   foldObservation,
   foldRead,
   foldRelation,
+  isUnprovenMerge,
+  bodyPreservation,
+  storedEvidenceQuotes,
+  METHOD_EVIDENCE_QUOTE_LENGTH,
   restartCarried,
   methodLevel,
   methodStrength,
   promotionVerdict,
-  reflectionDue,
   relationIssues,
   resetLearningForDigest,
   retirementProposal,
   libraryEvictions,
-  methodContribution,
   methodHarmTest,
   scientificRegression,
   successfulFamilies,
   unresolvedConflicts,
   validateMethodGraph,
+  withoutRetiredLearningKeys,
 } from './src/methodGraph.mjs'
 
 // methodFeedback — what later became of the results a learned method was used for: the scientific axis of a method's
@@ -876,37 +936,15 @@ export {
   scientificOutcomes,
 } from './src/methodFeedback.mjs'
 
-// toolGraphSampling — ToolVerse's dependency graph and unlock sampling
+// toolGraph — ToolVerse's tool dependency graph: validation and the deterministic DAG clean-up
 export {
   TOOL_EDGE_SOURCES,
   TOOL_EDGE_STATE_EFFECTS,
   TOOL_EDGE_TYPES,
   TOOL_GRAPH_ISSUE_CODES,
-  chainSpecs,
-  graphCoverage,
-  sampleableEdges,
   sanitizeToolGraph,
-  seededRandom,
-  seededSample,
-  unlockSchedule,
   validateToolGraph,
-} from './src/toolGraphSampling.mjs'
-
-// experienceBullets — the capability handbook's self-maintained section
-export {
-  BULLET_TAGS,
-  EXPERIENCE_SECTION_HEADING,
-  EXPERIENCE_SECTION_NOTE,
-  EXPERIENCE_SUBSECTIONS,
-  curateBullets,
-  harmfulBullets,
-  nextBulletId,
-  onlyExperienceSectionChanged,
-  parseExperienceSection,
-  renderBullet,
-  renderExperienceSection,
-  replaceExperienceSection,
-} from './src/experienceBullets.mjs'
+} from './src/toolGraph.mjs'
 
 /** @typedef {import('./src/methodSkill.mjs').MethodSkillIssue} MethodSkillIssue */
 /** @typedef {import('./src/methodSkill.mjs').MethodPayload} MethodPayload */
@@ -916,11 +954,9 @@ export {
 /** @typedef {import('./src/methodGraph.mjs').MethodObservation} MethodObservation */
 /** @typedef {import('./src/methodGraph.mjs').MethodRelation} MethodRelation */
 /** @typedef {import('./src/methodGraph.mjs').MethodProvenance} MethodProvenance */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraph} ToolGraph */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphNode} ToolGraphNode */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphEdge} ToolGraphEdge */
-/** @typedef {import('./src/toolGraphSampling.mjs').ChainSpec} ChainSpec */
-/** @typedef {import('./src/experienceBullets.mjs').ExperienceBullet} ExperienceBullet */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraph} ToolGraph */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraphNode} ToolGraphNode */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraphEdge} ToolGraphEdge */
 
 export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
 // sourceUnderstanding — 19 exports
@@ -1228,11 +1264,12 @@ export {
   stripPlatformTags,
   unwrapUserWrappers,
 } from './src/memoryVocabulary.mjs'
-// memoryNeverKept — 1 export: what a memory never holds, the one text the native engine's type templates and the legacy
-// extraction's instruction both state.
-export { MEMORY_NEVER_KEPT_TEXT } from './src/memoryNeverKept.mjs'
-// frontierVocabulary — 61 exports: the frontier feed's closed vocabularies
-// (lane, source type, evidence type, specialty, flag, health, egress, access —
+// memoryNeverKept — 2 exports: what a memory never holds and how to decide what it holds, the two texts the native engine's
+// type templates and the legacy extraction's instruction both state.
+export { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT } from './src/memoryNeverKept.mjs'
+// frontierVocabulary — 66 exports: the frontier feed's closed vocabularies
+// (lane, source type, evidence type, specialty, flag, health, egress, access, and since contract 1.5.0 channel, platform
+// and author role —
 // the enums of the knowledge-source plugin's contract), their Chinese labels,
 // the fallbacks for values a newer plugin sends, PubMed publication type →
 // evidence type, the authority score, the heat arithmetic the hot list states
@@ -1240,7 +1277,10 @@ export { MEMORY_NEVER_KEPT_TEXT } from './src/memoryNeverKept.mjs'
 export {
   FRONTIER_ACCESSES,
   FRONTIER_ACCESS_LABELS_ZH,
+  FRONTIER_AUTHOR_ROLES,
   FRONTIER_AUTHORITY_MAX,
+  FRONTIER_CHANNELS,
+  FRONTIER_CHANNEL_LABELS_ZH,
   FRONTIER_BROAD_SAFETY_FLAGS,
   FRONTIER_DATE_PRECISIONS,
   FRONTIER_EGRESSES,
@@ -1277,15 +1317,23 @@ export {
   FRONTIER_MAX_SPECIALTIES,
   FRONTIER_MODEL_FLAGS,
   FRONTIER_OPEN_ACCESS_STATUSES,
+  FRONTIER_PLATFORMS,
+  FRONTIER_PLATFORM_LABELS_ZH,
   FRONTIER_PREPRINT_AUTHORITY_FACTOR,
   FRONTIER_PREPRINT_LANE_SOURCE_TYPES,
+  FRONTIER_FOLLOW_KINDS,
+  FRONTIER_FOLLOW_QUERY_KINDS,
+  FRONTIER_FOLLOW_LABEL_MAX,
   FRONTIER_SCORE_MAXIMA,
   FRONTIER_SELECTED_RULES,
   FRONTIER_SOURCE_LANES,
   FRONTIER_SOURCE_TYPES,
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   FRONTIER_SPECIALTIES,
+  FRONTIER_SPECIALTY_GROUPS,
   FRONTIER_SPECIALTY_LABELS_ZH,
+  FRONTIER_SPECIALTY_RETIRED,
+  FRONTIER_SPECIALTY_SCOPES_ZH,
   FRONTIER_TEXT_STATUSES,
   FRONTIER_VERIFICATIONS,
   FRONTIER_VOCABULARY_FALLBACKS,
@@ -1297,6 +1345,7 @@ export {
   frontierHeatDisplay,
   frontierLabel,
   frontierScoreLevel,
+  frontierSpecialtyKey,
   frontierValue,
   isFrontierMastheadTitle,
   isFrontierValue,
@@ -1304,6 +1353,155 @@ export {
   FRONTIER_NOTICE_KINDS,
   frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
+/** @typedef {import('./src/frontierGenres.mjs').FrontierGenre} FrontierGenre */
+// frontierInteractions — what a 前沿动态 reader did, as the browser sends it and the control plane keeps it: closed event types,
+// surfaces, slots, hide reasons, roles, the seen/dwell/session definitions and the one validator both sides use (ct-track 2026-10-24).
+export {
+  FRONTIER_DEVICE_CLASSES,
+  FRONTIER_DWELL,
+  FRONTIER_FILTER_CONTROLS,
+  FRONTIER_HIDE_REASON_LABELS_ZH,
+  FRONTIER_HIDE_REASONS,
+  FRONTIER_IMPRESSION,
+  FRONTIER_INTERACTION_BATCH,
+  FRONTIER_INTERACTION_CLOCK,
+  FRONTIER_INTERACTION_DROP_REASONS,
+  FRONTIER_INTERACTION_RULES,
+  FRONTIER_INTERACTION_TYPES,
+  FRONTIER_LIST_SURFACES,
+  FRONTIER_ONBOARDING_LIMITS,
+  FRONTIER_ONBOARDING_STEPS,
+  FRONTIER_READ_DEPTHS,
+  FRONTIER_READER_ROLE_LABELS_ZH,
+  FRONTIER_READER_ROLES,
+  FRONTIER_SESSION_IDLE_MS,
+  FRONTIER_SLOTS,
+  FRONTIER_SURFACES,
+  frontierInteraction,
+  isFrontierInteractionType,
+} from './src/frontierInteractions.mjs'
+/** @typedef {import('./src/frontierInteractions.mjs').FrontierInteraction} FrontierInteraction */
+// frontierGenres — 9 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
+// the genres code is sure of, and code's fallback and decision over the editor model's genre.
+export {
+  FRONTIER_CODE_GENRES,
+  FRONTIER_GENRE_BASES,
+  FRONTIER_GENRE_LABELS_ZH,
+  FRONTIER_GENRES,
+  frontierGenreDecision,
+  frontierGenreFallback,
+  frontierItemGenre,
+  isFrontierGenre,
+} from './src/frontierGenres.mjs'
+// frontierMix — 24 exports: the mix of 精选 by genre group (the owner's share ranges of 2026-10-24, the Chinese target of
+// 30 %), the merge rules (a roundup never; a news rewrite or an X post of a paper never over it; a Chinese 解读 beside
+// it), the pure selection of a day's 精选 from its scored candidates (a floor place asks its genre's own bar,
+// `FRONTIER_MIX_GENRE_FLOOR`), and the replay of an exported week through it.
+export {
+  FRONTIER_MIX_CONGRESS_UPLIFT,
+  FRONTIER_MIX_COUNTED_RULES,
+  FRONTIER_MIX_DAY,
+  FRONTIER_MIX_EXCLUSIONS,
+  FRONTIER_MIX_FLOOR_SCORE,
+  FRONTIER_MIX_GENRE_FLOOR,
+  FRONTIER_MIX_GROUP_ORDER,
+  FRONTIER_MIX_GROUPS,
+  FRONTIER_MIX_NEVER,
+  FRONTIER_MIX_PREPRINT_MIN_SCORE,
+  FRONTIER_MIX_PREPRINT_PLACES,
+  FRONTIER_MIX_RULES,
+  FRONTIER_MIX_SOURCE_CAP,
+  FRONTIER_MIX_TOP_JOURNAL_CAP,
+  FRONTIER_MIX_ZH_MARGIN,
+  FRONTIER_MIX_ZH_TARGET,
+  frontierMixGenre,
+  frontierMixGenreFloors,
+  frontierMixGenreFloorScore,
+  frontierMixGroup,
+  frontierMixMergeVerdict,
+  frontierMixReplay,
+  frontierMixSelect,
+  frontierMixSourceCap,
+} from './src/frontierMix.mjs'
+// frontierLeadWatch — 16 exports: what the frontier feed goes looking for and when (lead triggers): the triggers and their
+// shares of a day's searches, the congress calendar (`frontier-congresses.json`) and its windows, the Chinese regulatory
+// and industry watch, a genre group's gap queries, the identifiers a report names, the key a query is deduplicated by, and
+// what is not handed over (a result older than the plugin reads, a host it keeps refusing).
+export {
+  FRONTIER_CONGRESS_WINDOW_DAYS,
+  FRONTIER_CONGRESSES,
+  FRONTIER_LEAD_FRESH_DAYS,
+  FRONTIER_LEAD_GENRE_QUERIES,
+  FRONTIER_LEAD_REFUSED_DAYS,
+  FRONTIER_LEAD_REFUSED_LIMIT,
+  FRONTIER_LEAD_REGULATORY_WATCH,
+  FRONTIER_LEAD_RESULTS_PER_QUERY,
+  FRONTIER_LEAD_SHARES,
+  FRONTIER_LEAD_SKIP_HOSTS,
+  FRONTIER_LEAD_TRIGGERS,
+  frontierActiveCongresses,
+  frontierLeadSkipHost,
+  frontierIdentifierLeads,
+  frontierLeadPlaces,
+  frontierLeadQueryKey,
+} from './src/frontierLeadWatch.mjs'
+// frontierTrack — c3-track 2026-10-25: 追踪, the approvals, guideline updates and congresses of 前沿动态 as views of their own: the
+// approval kinds and the regulators code knows by their source's owner, the limits of the tracker extraction and its version, and
+// the congress calendar's clock (on, coming or just over, in the feed's zone) with the window its items are found in.
+export {
+  FRONTIER_AGENCIES,
+  FRONTIER_AGENCY_ALIASES,
+  FRONTIER_AGENCY_REGIONS,
+  FRONTIER_APPROVAL_AGENCY_KEYS,
+  FRONTIER_APPROVAL_KIND_LABELS_ZH,
+  FRONTIER_APPROVAL_KINDS,
+  FRONTIER_CONGRESS_ITEM_DAYS,
+  FRONTIER_CONGRESS_RECENT_DAYS,
+  FRONTIER_CONGRESS_UPCOMING_DAYS,
+  FRONTIER_TRACK_APPROVAL_DAYS,
+  FRONTIER_TRACK_LIMITS,
+  FRONTIER_TRACK_PAGE,
+  FRONTIER_TRACK_VERSION,
+  frontierAgencyByKey,
+  frontierAgencyOfOwner,
+  frontierCongressById,
+  frontierCongressCode,
+  frontierCongressItemWindow,
+  frontierCongressRecapDays,
+  frontierCongressStatus,
+  frontierCongressSummary,
+  frontierDayIn,
+  frontierDaysBetween,
+  frontierQuoteNamesAgency,
+  frontierShiftDay,
+} from './src/frontierTrack.mjs'
+/** @typedef {import('./src/frontierTrack.mjs').FrontierApprovalKind} FrontierApprovalKind */
+/** @typedef {import('./src/frontierLeadWatch.mjs').FrontierCongress} FrontierCongress */
+// frontierTopics — 20 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
+// labels, the hot lists it is first seen on, a topic's states, its items' roles and origins, the evidence programme's states
+// for it, the limits it lives within, and the outside-event trigger's pure decisions (a candidate, a surge, the title key,
+// an item's role, the names a text holds).
+export {
+  FRONTIER_HOT_BOARDS,
+  FRONTIER_TOPIC_BACKGROUND_DAYS,
+  FRONTIER_TOPIC_CANDIDATE,
+  FRONTIER_TOPIC_DOMAIN_LABELS_ZH,
+  FRONTIER_TOPIC_DOMAINS,
+  FRONTIER_TOPIC_EVIDENCE_GENRES,
+  FRONTIER_TOPIC_ITEM_ROLES,
+  FRONTIER_TOPIC_ITEM_VIA,
+  FRONTIER_TOPIC_LIMITS,
+  FRONTIER_TOPIC_MIN_CONFIDENCE,
+  FRONTIER_TOPIC_PROGRAMME_STATES,
+  FRONTIER_TOPIC_STATUSES,
+  FRONTIER_TOPIC_SURGE,
+  frontierHotTitleKey,
+  frontierTopicItemRole,
+  frontierTopicNamesIn,
+  frontierTopicSurge,
+  isFrontierTopicDomain,
+} from './src/frontierTopics.mjs'
+/** @typedef {import('./src/frontierTopics.mjs').FrontierTopicDomain} FrontierTopicDomain */
 // projectCard — the slots a project's memory is read in: six general ones for any kind of
 // work, the clinical elements as an extension written only when a study was described,
 // `project.ext.<name>` for the extras of other kinds of work, and the one check on a
@@ -1328,11 +1526,29 @@ export {
   projectCardKey,
   projectCardSlotOfKey,
 } from './src/projectCard.mjs'
-// frontierSourceNames — 2 exports: what a reader calls a source — the
+// frontierSelection — 12 exports: what makes an item fit for 精选 in the parts code decides: the ceilings a fixed fact puts on the
+// model's scores (`frontier-selection.json`), the republishers that take no floor place, and the rare practice-changing label's
+// limits and admission (c3-select, 2026-10-25).
+export {
+  FRONTIER_PRACTICE_ELIGIBLE,
+  FRONTIER_PRACTICE_LIMITS,
+  FRONTIER_REPUBLISHERS,
+  FRONTIER_SCORE_TIERS,
+  frontierFloorEligible,
+  frontierPracticeAdmissible,
+  frontierPracticeAdmit,
+  frontierPracticeCap,
+  frontierPracticeReason,
+  frontierRepublisher,
+  frontierScoreCeilings,
+  frontierScoreTier,
+} from './src/frontierSelection.mjs'
+// frontierSourceNames — 3 exports: what a reader calls a source — the
 // institution, by the registry's owner entity, never the feed or interface the
 // plugin reads it through (the table is `frontier-source-names.json`).
 export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
+  frontierIsStreamSource,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
 // geoVocabulary — 84 exports: 「循证 GEO」's closed vocabularies (pools, engines,
@@ -1438,6 +1654,8 @@ export {
   GEO_SOURCE_KIND_LABELS_ZH,
   GEO_SOURCE_LAYERS,
   GEO_SOURCE_LAYER_LABELS_ZH,
+  GEO_SOURCE_RELATIONSHIPS,
+  GEO_SOURCE_RELATIONSHIP_LABELS_ZH,
   GEO_STATEMENT_VERDICTS,
   GEO_STEPS,
   GEO_STEP_ACTION_LABELS_ZH,
@@ -1457,7 +1675,7 @@ export {
   geoVisibleQuestionOfReason,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
-// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
+// geoMetrics — 「循证 GEO」's metric table (the owner's
 // geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
 // provenance), the probe sanity markers (`geo/sanity.json`), and the pure
 // computation — per-scope cells with Wilson intervals and the no-fake-number
@@ -1468,6 +1686,9 @@ export {
 // vocabularies are geoVocabulary's.
 export {
   GEO_METRICS,
+  GEO_MEASUREMENT_METHOD_VERSION,
+  geoAnswerAccuracy,
+  geoJudgementCoverage,
   GEO_METRIC_IDS,
   GEO_METRIC_POOL_IDS,
   GEO_METRIC_SCOPES,
@@ -1476,6 +1697,7 @@ export {
   computeGeoMetrics,
   computeGvi,
   geoCellRows,
+  geoMetricMembers,
   geoCitationHost,
   geoConstant,
   geoMetricDefinition,
@@ -1529,7 +1751,7 @@ export {
   geoTextKey,
   parseGeoActionKey,
 } from './src/geoActions.mjs'
-export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
+export { frontierNoticeTarget, frontierNoticeHref, FRONTIER_ARRIVAL } from './src/frontierPresentation.mjs';
 export { shareNoticeHref } from './src/shareNotice.mjs';
 
 export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence, AGENDA_WEEKDAY_WORDS, describeAgendaSchedule, agendaZoneName, agendaInstantText } from "./src/agendaSchedule.mjs";
@@ -1951,7 +2173,7 @@ export {
   vcrStudyPackageFindings,
 } from './src/vcrContracts.mjs'
 
-export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
+export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_REPORT_EXPORT_FORMATS, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
 
 // numberBinding — the one mechanism by which a number in a report is resolved from a result, not typed (plan 2026-10-02 §11.3 N06;
 // lifted out of the 「虚拟临床研究」 renderer, which keeps its own issue codes and sentences).
@@ -2285,7 +2507,11 @@ export {
   evidenceDisclosure,
   assertEvidenceCardForZone,
   EVIDENCE_CLAIM_LIMIT,
+  EVIDENCE_CLAIMS_MAX_CHARS,
+  EVIDENCE_SOURCE_LIMIT,
+  EVIDENCE_BODY_MAX_CHARS,
   evidenceCardClaims,
+  evidenceCardCarry,
   verifyEvidenceCardClaims,
   EVIDENCE_SIMULATED_VALUE_SOURCES,
   EVIDENCE_DERIVED_ONLY_VALUE_SOURCES,
@@ -2353,3 +2579,6 @@ export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricI
   continuousBaselines, ipcwBrier, evaluateForecast, compareForecasts, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
 
 export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
+export { previewGeoQuestionImport, validateGeoMeasurementContract } from './src/geoQuestionImport.mjs'
+
+export { geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessmentIdentity, geoClaimForStatement, geoEnrichStatementIdentity } from './src/geoClaimAssessment.mjs'

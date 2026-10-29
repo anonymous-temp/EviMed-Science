@@ -2,7 +2,7 @@
   "headline": "4 张假设卡。",
   "status": [
     {
-      "label": "试验先例",
+      "label": "参考试验",
       "value": "3 项"
     },
     {
@@ -530,7 +530,7 @@
       "usedFor": "中位生存时间"
     }
   ],
-  "precedentSources": "3 项试验先例",
+  "precedentSources": "3 项参考试验",
   "precedentNote": null,
   "snapshots": [],
   "intake": {

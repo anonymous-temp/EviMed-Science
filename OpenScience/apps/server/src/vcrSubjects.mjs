@@ -22,7 +22,7 @@
  * @module vcrSubjects
  */
 
-import { lineageNode } from "@evimed/domain";
+import { lineageNode, VCR_JOB_METHODS, validateScenario, canonicalScenarioJson, VCR_LONGITUDINAL_JOBS, validateLongitudinalScenario, VCR_SCENARIO_SCHEMAS, vcrLocationIsValid } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_SUBJECT_KINDS, vcrJobObjectKind } from "./vcrJobs.mjs";
@@ -63,6 +63,18 @@ export const VCR_KEPT_TABLES = Object.freeze(/** @type {Record<string, readonly 
   generate_patients: ["virtual-patients"], generate_patients_continuous: ["virtual-patients"], generate_patients_binary: ["virtual-patients"],
   generate_patients_longitudinal: ["virtual-patients"],
 }));
+
+/** Public identity of the exact generated table currently attached to one population version.
+ * @param {any} population @param {any} result @param {any} execution
+ */
+export function vcrPopulationGenerationInput(population, result, execution) {
+  if (!population || population.kind === "real" || !result || result.id !== population.resultId || result.subjectId !== population.id || result.kind !== "population") return null;
+  const kind = Object.keys(VCR_KEPT_TABLES).find(key => VCR_JOB_METHODS[key] === execution?.method);
+  if (!kind || !["generate_population", "literature_population", "synthesize_population"].includes(kind)) return null;
+  const table = list(result.tables).find(entry => VCR_KEPT_TABLES[kind].includes(entry.name) && String(entry.location).startsWith("derived/") && vcrLocationIsValid(entry.location) && /^[a-f0-9]{64}$/.test(String(entry.sha256)));
+  return table ? { populationId: population.id, populationVersion: Number(population.version), resultId: result.id,
+    table: table.name, inputId: `${result.id}:${table.name}`, sha256: table.sha256 } : null;
+}
 
 /** The population `kind` each population job computes: a job for another kind is not about this population. */
 const POPULATION_KIND_OF_JOB = Object.freeze(/** @type {Record<string, string>} */ ({
@@ -220,7 +232,9 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
   /** @type {Record<string, any> | undefined} */
   let row;
   if (subjectId) {
-    row = rows.find((entry) => entry.id === subjectId);
+    row = typeof store.methodConfigurationObject === "function"
+      ? await store.methodConfigurationObject(store, study.id, objectKind, subjectId, {}, "", null)
+      : rows.find((entry) => entry.id === subjectId);
     if (!row) {
       throw new VcrSubjectError("vcr_simulate_subject_unknown",
         `subjectId ${String(subjectId).slice(0, 60)} 不是本研究的${OBJECT_WORDS_ZH[objectKind]}。${holdings(objectKind, current)}`);
@@ -242,7 +256,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
   return {
     objectKind, row,
     detail: {
-      subjectId: String(row.id), resultKind: objectKind, node: lineageNode(/** @type {any} */ (nodeKind), String(row.id), Number(row.version)),
+      subjectId: String(row.id), resultKind: kind === "population_quality" ? "population_quality" : objectKind, node: lineageNode(/** @type {any} */ (nodeKind), String(row.id), Number(row.version)),
       step: STEP_OF[objectKind], ...(stage ? { stage } : {}), supersedes: await vcrObjectLine(store, study.id, objectKind, row),
       ...(VCR_KEPT_TABLES[kind] ? { keepTables: [...VCR_KEPT_TABLES[kind]] } : {}),
     },
@@ -372,4 +386,61 @@ async function backfillStudy({ store, studyId, apply }) {
     });
   }
   return { studyId, assigned, unmatched, unsuperseded, resuperseded, landed: landed.map(({ objectId, resultId }) => ({ objectId, resultId })) };
+}
+
+/**
+ * Save a named, immutable configuration version before enqueueing. Retrying with the returned subjectId and identical settings
+ * is a no-op; changed settings create a new object version. The job queue still owns input grants and execution admission.
+ * @param {{ store: any, study: any, userId: string, method: string, name: string, scenario: Record<string, any>, subjectId?: string | null, model?: any }} input
+ */
+export async function prepareVcrMethodConfiguration({ store, study, userId, method, name, scenario, subjectId = null, model = null }) {
+  const kind = Object.entries(VCR_JOB_METHODS).find(([, value]) => value === method)?.[0];
+  const objectKind = kind ? vcrJobObjectKind(kind) : null;
+  if (!kind || method === "evidence.reconstruct_km" || method === "matching.evaluate") {
+    throw new VcrSubjectError("vcr_job_kind_invalid", "This method uses its specialized input flow.");
+  }
+  const issues = Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind) ? validateLongitudinalScenario(method, scenario) : validateScenario(method, scenario);
+  if (issues.length) throw new VcrSubjectError("vcr_job_scenario_invalid", issues.map(issue => `${issue.field}: ${issue.detail}`).join("; "));
+  if (!objectKind) {
+    if (subjectId || model) throw new VcrSubjectError("vcr_simulate_subject_unknown", "This method does not use a study configuration object or reference model.");
+    return { subjectId: null, objectKind: null, version: null };
+  }
+  return store.transaction(async (/** @type {any} */ client) => {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-vcr-method-configuration:${study.id}`]);
+  const previous = await store.methodConfigurationObject(client, study.id, objectKind, subjectId, scenario, name, model);
+  if (subjectId && !previous) throw new VcrSubjectError("vcr_simulate_subject_unknown", "The configuration is not an object of this study for this method.");
+  if (previous && objectKind === "population" && POPULATION_KIND_OF_JOB[kind] && previous.kind !== POPULATION_KIND_OF_JOB[kind]) {
+    throw new VcrSubjectError("vcr_simulate_subject_unknown", "The population kind does not match this method.");
+  }
+  if (method === "population.quality") {
+    if (!subjectId || !previous) throw new VcrSubjectError("vcr_simulate_subject_required", "Select the existing population whose quality this method evaluates.");
+    return { subjectId: String(previous.id), objectKind, version: Number(previous.version) };
+  }
+  const previousScenario = previous ? objectKind === "patient_set" ? previous.scenario
+    : objectKind === "population" ? previous.definition : objectKind === "design_grid"
+      ? { ...object(previous.dimensions).base, designs: object(previous.dimensions).designs, truths: previous.truthScenarios } : previous.configuration : null;
+  if (previous && canonicalScenarioJson(previousScenario) === canonicalScenarioJson(scenario)
+    && (previous.name ?? previous.label ?? name) === name && (previous.modelId ?? null) === (model?.id ?? null)
+    && (previous.modelVersion ?? null) === (model?.version ?? null)) {
+    return { subjectId: String(previous.id), objectKind, version: Number(previous.version) };
+  }
+  const schema = object(/** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[method]);
+  if (objectKind === "population" && !POPULATION_KIND_OF_JOB[kind] && !previous) {
+    throw new VcrSubjectError("vcr_simulate_subject_required", "Select the existing population whose quality this method evaluates.");
+  }
+  const base = { studyId: study.id, userId, name };
+  let saved;
+  if (objectKind === "patient_set") saved = await store.savePatientSet({ ...base, scenario,
+    populationId: previous?.populationId ?? null, modelId: model?.id ?? null, modelVersion: model?.version ?? null }, { client });
+  else if (objectKind === "population") saved = await store.savePopulation({ ...base,
+    kind: POPULATION_KIND_OF_JOB[kind] ?? previous?.kind ?? "scenario", definition: scenario, snapshotId: previous?.snapshotId ?? null }, { client });
+  else if (objectKind === "trial_scenario") saved = await store.saveTrialScenario({ ...base, label: name,
+    design: object(scenario.design).kind ?? object(object(object(schema.fields).design).fields).kind?.default, endpointType: object(scenario.endpoint).type,
+    configuration: scenario, assumptionIds: previous?.assumptionIds ?? [], comparatorId: previous?.comparatorId ?? null }, { client });
+  else if (objectKind === "comparator") saved = await store.saveComparatorDesign({ ...base, route: previous?.route ?? (method === "design.procova" || method === "comparator.prognostic_adjustment" ? "prognostic_adjustment"
+      : method === "comparator.map_prior" ? "hybrid_control" : ["comparator.maic", "comparator.evalue", "comparator.maic_time_to_event"].includes(method) ? "literature_control" : "external_control"),
+    estimand: scenario.estimand ?? object(object(schema.fields).estimand).default ?? null, configuration: scenario, targetTrial: previous?.targetTrial ?? {} }, { client });
+  else saved = await store.saveDesignGrid({ ...base, dimensions: { base: Object.fromEntries(Object.entries(scenario).filter(([key]) => key !== "designs" && key !== "truths")), designs: scenario.designs ?? [] }, truthScenarios: scenario.truths ?? [], cells: [] }, { client });
+  return { subjectId: String(saved.id), objectKind, version: Number(saved.version) };
+  });
 }

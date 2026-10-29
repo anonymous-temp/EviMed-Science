@@ -15,7 +15,9 @@
  *
  * The budget is spent in the mount's order, which is the build spec's 「你本次
  * 明说的 > 你自己的 > 对方的 > 平台默认」: the person's own capsule methods, then
- * the methods learnt from their work, then what a received pack brings.
+ * the methods learnt from their work, then what a received pack brings, then the
+ * platform's own starter methods (`officialPacks.mjs`) of the conversation scope —
+ * for an account that holds them, which an integration's subject account does not.
  *
  * One thing differs from the mount, on purpose:
  *
@@ -26,6 +28,9 @@
  *    what its doctors choose from, and the key that asks already reads the
  *    institution's memory by leaving the header off.
  *
+ * An account's memory is the engine's own files, read through the store the memory page uses (`nativeRecallSource`). The legacy
+ * engine's PostgreSQL copies, which this half read for an account that was not on the native engine, are gone (2026-10-25).
+ *
  * Reading a method here counts nothing. A counter write per recall is a
  * revision per recall on the method's document — the churn the memory audit
  * found (77 revisions, 2 bodies) — and a count the CDSS cannot see cannot be
@@ -34,6 +39,7 @@
  * @module agentMemoryRecall
  */
 
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
 import { cleanMethodDisplay } from "@evimed/domain";
@@ -52,6 +58,43 @@ export const AGENT_RECALL_METHOD_MODES = Object.freeze(["all", "own", "capsules"
 
 /** The capsule half's own ceiling (`CapsuleService.recall`). */
 const CAPSULE_RECALL_MAX_LIMIT = 30;
+
+/** The longest one native memory's text is in a recall: a file is the whole of one topic, and an answer is a few lines. */
+const NATIVE_RECALL_CHARS = 2_000;
+/** The most native memories one recall reads before the union with the capsule's facts is cut to `limit`. */
+const NATIVE_RECALL_READ = 50;
+
+/**
+ * The memory half of a recall, in the shape `recallAcrossMemory` takes it in: what the memory page's search finds (the words over
+ * every memory's text, joined with the engine's own semantic search), the account's memories and this project's, never a
+ * sensitive one. A native memory has no validity interval, so there is no time a question can be asked about.
+ * @param {{ search: (userId: string, query: string) => Promise<{ items: any[] }> }} nativeMemory
+ * @param {{ recallEnabled?: boolean }} [options] the deployment's recall switch (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`)
+ */
+export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) {
+  return {
+    recallEnabled,
+    /** @param {string} userId @param {string} query @param {{ projectId?: string | null }} [scope] */
+    async recall(userId, query, { projectId = null } = {}) {
+      const found = await nativeMemory.search(userId, query);
+      return (found.items ?? [])
+        .filter((record) => record.sensitive !== true && record.status === "active"
+          && (record.scope === "user" || (record.scope === "project" && projectId != null && record.scopeId === projectId)))
+        .slice(0, NATIVE_RECALL_READ)
+        .map((record) => ({
+          id: String(record.id),
+          memoryType: "native",
+          kind: record.kind,
+          scope: record.scope,
+          content: [...String(record.value ?? "").replace(/<!-- MEMORY_FIELDS[\s\S]*?-->/g, "").trim()].slice(0, NATIVE_RECALL_CHARS).join(""),
+          updatedAt: record.updatedAt ?? null,
+          confidence: record.confidence ?? null,
+          importance: record.importance ?? null,
+          origin: record.origin,
+        }));
+    },
+  };
+}
 
 /** @param {string} text */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -89,6 +132,8 @@ async function ownMethods(learning, userId, projectId, budget) {
   /** @type {Map<string, any>} */
   const documents = new Map();
   const reading = {
+    // What a shared GEO project learnt stays out of the account's own methods here as in a mount.
+    contextProvenance: learning.contextProvenance ?? null,
     getMethod: (/** @type {string} */ owner, /** @type {string} */ id) => learning.getMethod(owner, id),
     approvedMethods: async (/** @type {string} */ owner) => {
       const found = await learning.approvedMethods(owner);
@@ -151,13 +196,13 @@ async function capsuleMethods(capsules, userId, projectId, selection, titles, bo
 /**
  * One recall for an agent that is not ours.
  *
- * @param {{ capsules: any, memorySubstrate?: any, learning?: any }} services
+ * @param {{ capsules: any, memory?: any, learning?: any }} services
  * @param {{ user: any, institution?: any }} accounts `user` is null for a subject that has no memory yet;
  *   `institution` is the key's own account, when the request names a subject
  * @param {{ query: string, projectId?: string | null, limit?: number, factKinds?: string[], since?: string | null, scope?: string,
  *   capsuleIds?: readonly string[], methods?: string }} input
  */
-export async function recallForAgent({ capsules, memorySubstrate = null, learning = null }, { user, institution = null }, input) {
+export async function recallForAgent({ capsules, memory = null, learning = null }, { user, institution = null }, input) {
   const limit = Math.max(1, Math.min(50, Math.trunc(Number(input.limit ?? 10)) || 10));
   const methodMode = input.methods ?? "all";
   if (!AGENT_RECALL_METHOD_MODES.includes(methodMode)) throw new HttpError(400, "agent_memory_payload_invalid", "Invalid methods mode.");
@@ -169,13 +214,13 @@ export async function recallForAgent({ capsules, memorySubstrate = null, learnin
   let recalled;
   if (!named) {
     recalled = user
-      ? /** @type {any} */ (await recallAcrossMemory({ capsules, memorySubstrate }, user, { ...input, limit }))
+      ? /** @type {any} */ (await recallAcrossMemory({ capsules, memory }, user, { ...input, limit }))
       : { items: [], mode: "none", contextOnly: true, sources: { memory: 0, capsule: 0 } };
   } else {
     const scope = input.scope ?? "all";
-    const memory = scope === "capsule" || !user
+    const memories = scope === "capsule" || !user
       ? { items: [] }
-      : await recallAcrossMemory({ capsules: null, memorySubstrate }, user, { ...input, limit, scope: "conversation" });
+      : await recallAcrossMemory({ capsules: null, memory }, user, { ...input, limit, scope: "conversation" });
     /** @type {any[]} */
     const capsuleItems = [];
     let mode = "none";
@@ -198,10 +243,10 @@ export async function recallForAgent({ capsules, memorySubstrate = null, learnin
       }
     }
     recalled = {
-      items: [...memory.items, ...capsuleItems].slice(0, limit),
+      items: [...memories.items, ...capsuleItems].slice(0, limit),
       mode,
       contextOnly: true,
-      sources: { memory: memory.items.length, capsule: capsuleItems.length },
+      sources: { memory: memories.items.length, capsule: capsuleItems.length },
     };
   }
 
@@ -223,9 +268,17 @@ export async function recallForAgent({ capsules, memorySubstrate = null, learnin
         fromCapsules.push(...await capsuleMethods(capsules, user.id, input.projectId ?? null, null, titles));
       }
     }
+    // The platform's own methods, last: the account's enabled official packs, those that are for the conversation. An institution's named
+    // capsules are somebody else's shelf and bring none.
+    /** @type {any[]} */
+    const platform = methodMode === "all" && !named && capsules && user && typeof capsules.officialMethods === "function"
+      ? (await capsules.officialMethods(user.id).catch(() => [])).filter((/** @type {any} */ method) => method.scope.includes("conversation")).map((/** @type {any} */ method) => ({
+        source: "official", id: method.key, capsuleId: method.capsuleId, title: method.description, summary: null, whenToUse: method.whenToUse, content: method.body,
+        digest: `sha256:${sha256(method.body)}`, bytes: Buffer.byteLength(method.body, "utf8"), since: null, received: true, contextOnly: true }))
+      : [];
     // One budget, in the mount's order: the person's own capsule methods,
-    // their learned methods, then a received pack's.
-    const ordered = [...fromCapsules.filter((method) => !method.received), ...own, ...fromCapsules.filter((method) => method.received)];
+    // their learned methods, a received pack's, then the platform's.
+    const ordered = [...fromCapsules.filter((method) => !method.received), ...own, ...fromCapsules.filter((method) => method.received), ...platform];
     let bytes = 0;
     for (const method of ordered) {
       if (methods.length >= MAX_MOUNTED_CAPSULE_METHODS) break;

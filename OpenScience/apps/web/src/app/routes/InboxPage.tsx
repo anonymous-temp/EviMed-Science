@@ -1,5 +1,5 @@
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
-import { frontierNoticeHref, shareNoticeHref } from "@evimed/domain";
+import { frontierNoticeHref, shareNoticeHref, geoSignalHref } from "@evimed/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
@@ -33,6 +33,8 @@ import { usePageScroll } from "@/lib/pageScroll";
 import { toast } from "@/lib/toast";
 import { useOperator } from "@/lib/useOperator";
 import { cn } from "@/lib/cn";
+import { taskPath } from "@/lib/taskLocation";
+import { scopedConversationPath } from "@/lib/runtimeUiNavigation";
 
 type Filter = "all" | "unread";
 
@@ -371,7 +373,7 @@ export function InboxPage() {
               <>
                 {pinnedEntries.length > 0 && (
                   <section aria-labelledby="inbox-pinned" className="mb-4">
-                    <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption font-medium text-danger-strong">
+                    <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption text-danger-strong">
                       <ShieldAlert size={16} aria-hidden="true" />需要优先查看 · 未读 {safetyUnread} 条
                     </h2>
                     <List label="需要优先查看">{pinnedEntries.map(entryRow)}</List>
@@ -425,6 +427,10 @@ function InboxGroupRow({ group, name, busy, onOpen, onRead }: { group: InboxGrou
 /** Where an item's action goes when it is navigation rather than a decision. */
 function actionHref(item: InboxItem, action: InboxAction): string | null {
   if (action.id !== "open" || !item.source) return null;
+  if (item.source.type === "system" && /^autopilot-task:[A-Za-z0-9_-]{1,160}$/.test(item.source.id)) {
+    const path = taskPath(item.source.id.slice("autopilot-task:".length));
+    return item.projectId ? scopedConversationPath(path, item.projectId) : path;
+  }
   // A digest is either an autopilot briefing or the frontier daily of a day;
   // the daily names itself `frontier-daily:<YYYY-MM-DD>`, the key it is pushed
   // under, and opens on that issue.
@@ -441,7 +447,11 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   // A memory's confirm, correct and delete controls are on its own page.
   if (item.source.type === "memory") return `/app/memory?record=${encodeURIComponent(item.source.id)}`;
   // A 循证 GEO notice names the page it is about: `<geoId>/<tab>[/<item>]`.
-  if (item.source.type === "geo" && /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/.test(item.source.id)) return `/app/geo/${item.source.id}`;
+  if (item.source.type === "geo") {
+    const signal = geoSignalHref(item.source.id);
+    if (signal) return signal;
+    if (/^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/.test(item.source.id)) return `/app/geo/${item.source.id}`;
+  }
   // A 虚拟临床研究 notice names a study and, optionally, its tab: `<studyId>[/<tab>]`.
   // The study page's address has exactly those two segments, so a third one —
   // or anything that is not an id — is not an address and opens nothing.

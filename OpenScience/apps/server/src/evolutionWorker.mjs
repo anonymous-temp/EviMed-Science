@@ -175,6 +175,7 @@ export class EvolutionWorker {
     const quarter = `${local.getUTCFullYear()}-Q${Math.floor(local.getUTCMonth()/3)+1}`;
     const MINUTE = 60_000, DAY = 86_400_000;
     await this.every('reconcile', { ms: MINUTE }, async () => { await this.service.reconcileQueued?.(); });
+    await this.every('module-policy-basis', { ms: MINUTE }, async () => { await this.service.callbacks?.reconcileModulePolicyBasis?.(); });
     await this.every('retirements', { ms: MINUTE }, async () => {
       for (const tool of await this.service.tools()) if (tool.payload.status === 'retired' && tool.payload.retirement?.state !== 'complete') {
         await this.service.enqueue('maintain', { action: 'retirement-reconcile', toolId: tool.id }, `retirement:${tool.id}:${day}`);
@@ -204,7 +205,6 @@ export class EvolutionWorker {
     const paused = Boolean(this.config.evolutionSearchPaused);
     if (!paused) await this.every('scout', { ms: DAY, key: day }, () => this.service.enqueue('scout', { action: 'daily-scan', day }, `daily-scout:${day}`));
     await this.every('daily-events', { ms: DAY, key: day }, async () => {
-      await this.service.ingestEvent({id:`handbook-scan:${day}`,type:"handbook-gap-scan"});
       await this.service.ingestEvent({ id: `source-facts:${day}`, type: 'source-facts-scan', origin: 'tool-result' });
       await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
       if (this.service.callbacks?.scanLeadSources) await this.service.ingestEvent({ id: `lead-sources:${day}`, type: 'lead-source-scan', origin: 'platform-inference' });

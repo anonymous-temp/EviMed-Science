@@ -106,3 +106,21 @@ def test_feed_plans_are_conditional_page_requests():
     assert planned.conditional is True and planned.api is False  # robots.txt applies to website feeds
     _, output = parsed("rss/cdc-eid-ahead-of-print")
     assert len(output.entries) == 35
+
+
+def test_pr_newswire_is_read_through_its_six_medical_subject_feeds():
+    """ct-src 2026-10-24: the all-health feed mixed fitness, dentistry, insurance and securities-lawsuit notices into 20
+    items; the medical subject feeds carry none of them and a day each. The row plans the six, and the recorded answers
+    parse."""
+    from knowledge_plugin.model import SourceState
+
+    case = load_case("rss/prnewswire-medical-subfeeds")
+    adapter = REGISTRY[case.source.access]
+    planned = [spec.url for spec in adapter.plan(case.source, SourceState(None, None, None, None, None, {}), case.now)]
+    assert [url.rsplit("/", 1)[1] for url in planned] == [
+        "pharmaceuticals-list.rss", "biotechnology-list.rss", "clinical-trials-medical-discoveries-list.rss",
+        "fda-approval-list.rss", "international-medical-approval-list.rss", "medical-equipment-list.rss"]
+    assert "health-latest-news-list.rss" not in " ".join(planned)
+    entries = [entry for result in case.results() for entry in adapter.parse(result, case.source, case.now).entries]
+    assert len(entries) == 120 and all(entry.url.startswith("https://www.prnewswire.com/news-releases/") for entry in entries)
+    assert len({entry.url for entry in entries}) > 60, "the six feeds overlap only partly"

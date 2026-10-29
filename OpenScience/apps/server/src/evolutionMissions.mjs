@@ -1,8 +1,10 @@
 import {policyPriority,EVOLUTION_STAGNANT_ROUNDS} from './evolutionPolicy.mjs';
 import {evolutionOpportunitySource} from './evolutionGrowth.mjs';
+import {evolutionSignalTrigger, evolutionTriggersCurrent} from './evolutionSignalTriggers.mjs';
 import { createHash } from 'node:crypto';
 import { canonicalJson, selectEvolutionCandidate, evolutionNoiseBand, evolutionProposalIssues, evolutionNormalizeProposal, evolutionMechanismLimit, evolutionProposalDescriptionLength, EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT, EVOLUTION_PROPOSAL_FIELD_BUDGET, selectEvolutionParent } from '@evimed/domain';
 import { evolutionKey, evolutionToolArchiveId } from './evolutionService.mjs';
+import { evolutionRecordPin } from './evolutionRecordPins.mjs';
 import { evolutionPriorityBreakdown } from './evolutionScout.mjs';
 import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs';
@@ -114,7 +116,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const previous = await service.get(id), P = (await policy.current()).policy;
       const features = input.features ?? {};
       const breakdown = evolutionPriorityBreakdown(features, P.weights);
-      const signature = digest([input.evidenceRoots ?? [], input.prerequisites ?? [], features]);
+      const signature = digest([input.evidenceRoots ?? [], input.triggerRefs ?? [], input.prerequisites ?? [], features]);
       if (previous?.payload.resourceSignature === signature) return previous;
       // A new signature reopens a dossier, and ends a deferral (`defer`); a review input waiting for a person, or work a person adopted, is not made void by new evidence.
       return service.save('dossier', id, { ...previous?.payload, ...input, resourceSignature: signature, opportunity: true,
@@ -218,10 +220,12 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     if (config.evolutionSearchPaused) return { paused: true };
     for (const signal of await signals.aggregate()) {
       const p = signal.payload;
-      await opportunity({ moduleId: p.moduleId, sources: [evolutionOpportunitySource(p.kind)],
-        taskFamily: p.codes, mechanismFamily: p.kind, evidenceRoots: [signal.id], features: { distinctAccounts: p.distinctAccounts, runtimeFailures: p.occurrences,
+      if (p.state === 'inactive') continue;
+      const source = evolutionOpportunitySource(p.kind);
+      await opportunity({ moduleId: p.moduleId, sources: [source],
+        taskFamily: p.codes, mechanismFamily: p.kind, evidenceRoots: [signal.id], triggerRefs: [evolutionSignalTrigger(signal)], features: { distinctAccounts: p.distinctAccounts, runtimeFailures: source === 'repair' ? p.occurrences : 0,
           ...(p.accountClass === 'operator' ? { accountClass: 'operator', demandFloor: (signals.floors ?? evolutionAccountFloors(config)).operator } : {}),
-          coverageGap: p.kind === 'unmet-demand' }, cheapestNextStep: 'reproduce-on-public-analogue', failureHypotheses: ['private-demand-may-not-transfer'] });
+          coverageGap: source === 'demand' }, cheapestNextStep: 'reproduce-on-public-analogue', failureHypotheses: ['private-demand-may-not-transfer'] });
     }
     const capabilityMap = await map.rebuild();
     const enabled = Object.entries(adapterRegistry).filter(([,adapter]) => adapter.enabled).map(([id]) => id);
@@ -230,8 +234,11 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const thisWeek = all.filter(row => row.payload.week === week);
     // Published, impossible and answered-by-a-review-input (`run`) opportunities are done, whether the operator has answered the input or not
     // (`adopted` is work to implement, `declined` is closed until what it rests on changes); a deferred one waits for its wake conditions.
-    const dossiers = (await service.dossiers())
-      .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review', 'adopted', 'declined'].includes(row.payload.status) && !row.payload.deferred);
+    const dossiers = [];
+    for (const row of await service.dossiers()) {
+      if (row.payload.opportunity === true && !['published', 'impossible', 'review', 'adopted', 'declined'].includes(row.payload.status)
+        && !row.payload.deferred && await evolutionTriggersCurrent(service, row.payload)) dossiers.push(row);
+    }
     const created = [];
     const busy = new Set(all.filter(row => !TERMINAL.has(row.payload.status)).map(row => `${row.payload.moduleId}:${row.payload.opportunityId}`));
     // The modules' weekly missions are paid out of the loops' reserve of the day (`budgetRoom`), shared out evenly: with every module enabled each can be funded
@@ -259,6 +266,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
         cycle: `${week}:${selected?.revision ?? 0}`, kind: pending ? 'acquire-resource' : selected ? 'research' : 'baseline-audit',
         category: pending ? 'exploration' : selected ? 'research' : 'maintenance', borrowUnused: true, budgetCny: weeklyBudget,
         taskFamily: selected?.payload.taskFamily ?? null, mechanismFamily:selected?.payload.mechanismFamily??null,sources: selected?.payload.sources ?? [],
+        triggerRefs: selected?.payload.triggerRefs ?? [],
         wakeConditions: pending ? [] : selected?.payload.wakeConditions ?? [], prerequisites: selected?.payload.prerequisites ?? [],
         cheapestNextStep: selected?.payload.cheapestNextStep, baseline: await service.get(`evolution-module-policy-${moduleId}`) });
       if (row.id) { created.push(row.id); await queue(row); }
@@ -296,15 +304,31 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
   async function publish(moduleId, candidate, result) {
     if (!validateModuleEvolutionPolicy(moduleId, candidate.policy)) return { status: 'review', reason: 'code-change-requires-release-pr' };
     return service.withLock(`module-policy-activation:${moduleId}`,async()=>{
+      const basis = moduleId === 'geo' ? service.callbacks.policyBasis : null;
+      if(moduleId==='geo'&&!basis)return{status:'review',reason:'public-basis-unavailable'};
+      const activate = async () => {
       const verdict=await service.get(result.verdictId);
       if(verdict?.payload.promote!==true||verdict.payload.auditOnly===true||verdict.payload.confirmatory!==true||verdict.payload.receiptValid!==true||verdict.payload.firstAttempt!==true||verdict.payload.moduleId!==moduleId||verdict.payload.candidateId!==candidate.id||verdict.payload.candidateHash!==digest(candidate))throw new Error('Activation requires the immutable matching verdict.');
       const id=`evolution-module-policy-${moduleId}`,previous=await service.get(id);
-      if(previous?.payload.candidateId===candidate.id&&previous.payload.verdictId===verdict.id)return{status:'published',revisionId:`${previous.id}:${previous.revision}`};
+      if(basis){
+        const decision=await basis.validateVerdict(verdict,candidate);
+        if(!decision.usable){if(previous?.payload.candidateId===candidate.id&&previous.payload.verdictId===verdict.id)await basis.reconcile();return{status:'review',reason:decision.reason};}
+      }
+      if(previous?.payload.candidateId===candidate.id&&previous.payload.verdictId===verdict.id){
+        if(previous.payload.status!=='active')return{status:'review',reason:'public-basis-reconfirmation-required'};
+        return{status:'published',revisionId:`${previous.id}:${previous.revision}`};
+      }
       const mission=await service.get(verdict.payload.missionId);
       const baselineRevision=mission?.payload.baseline?.revisionId;
-      if(previous&&baselineRevision!==previous.payload.revisionId||!previous&&baselineRevision&&!baselineRevision.startsWith('default:')&&baselineRevision!=='code-default')return{status:'review',reason:'baseline-changed-reconfirmation-required'};
-      const row=await service.save('module-policy',id,{policy:candidate.policy,candidateId:candidate.id,revisionId:candidate.id,verdictId:verdict.id,status:'active',previousRevision:previous?.revision??null,activatedAt:service.now().toISOString()},previous);
+      const activePrevious=previous?.payload.status==='active'?previous:null;
+      const sameBaseline=activePrevious&&(baselineRevision===`${activePrevious.id}:${activePrevious.revision}`
+        ||baselineRevision===activePrevious.payload.revisionId&&digest(mission?.payload.baseline?.policy)===digest(activePrevious.payload.policy));
+      if(activePrevious&&!sameBaseline||!activePrevious&&baselineRevision&&!baselineRevision.startsWith('default:')&&baselineRevision!=='code-default')return{status:'review',reason:'baseline-changed-reconfirmation-required'};
+      const row=await service.save('module-policy',id,{policy:candidate.policy,candidateId:candidate.id,revisionId:candidate.id,verdictId:verdict.id,
+        ...(basis?{validationRefs:verdict.payload.validationRefs,verdictRef:evolutionRecordPin(verdict)}:{}),status:'active',previousRevision:previous?.revision??null,activatedAt:service.now().toISOString()},previous);
       return{status:'published',revisionId:`${row.id}:${row.revision}`};
+      };
+      return basis ? basis.stable(activate) : activate();
     });
   }
 
@@ -356,6 +380,24 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
   async function run({ missionId }, context = {}) {
     let mission = await service.get(missionId);
     if (!mission || TERMINAL.has(mission.payload.status)) return mission;
+    const triggerDossier = mission.payload.opportunityId ? await service.get(mission.payload.opportunityId) : null;
+    const triggerBasis = { ...triggerDossier?.payload, ...(mission.payload.triggerRefs?.length ? { triggerRefs: mission.payload.triggerRefs } : {}) };
+    if (!await evolutionTriggersCurrent(service, triggerBasis)) {
+      const receipt = mission.payload.failureReproductionReceiptId ? await service.get(mission.payload.failureReproductionReceiptId) : null;
+      const baseline = mission.payload.preparedCandidateState?.baseline ?? mission.payload.baseline;
+      const cachedBatch = mission.payload.moduleId === 'geo' && mission.payload.candidate
+        ? await taskPool.findBatch?.({ candidateId: mission.payload.candidate.id, epoch: mission.payload.epoch }) : null;
+      const cachedVerdict = cachedBatch ? await service.get(`evolution-verdict-${evolutionKey([mission.payload.candidate.id,cachedBatch.id])}`) : null;
+      const verdict = cachedVerdict ?? (mission.payload.moduleId === 'geo' && mission.payload.verdictId && mission.payload.candidate
+        ? await service.get(mission.payload.verdictId) : null);
+      const publicVerdict = verdict?.payload.missionId === missionId
+        && (await service.callbacks.policyBasis?.validateVerdict(verdict, mission.payload.candidate, { activation: false }))?.usable === true;
+      const reproductionValid = validEvolutionFailureReproduction(receipt?.payload, { missionId, moduleId: mission.payload.moduleId, baseline })
+        && (mission.payload.moduleId !== 'geo' || (await service.callbacks.policyBasis?.checkReproduction({ mission, baseline, receipt }))?.usable === true);
+      if (!publicVerdict && !reproductionValid) {
+        return update(mission, { status: 'waiting_resource', reason: 'source-trigger-withdrawn' });
+      }
+    }
     if(config.evolutionSearchPaused)return update(mission,{status:'paused',resumeStatus:mission.payload.status});
     if(mission.payload.status==='paused')mission=await update(mission,{status:mission.payload.resumeStatus??'ready'});
     mission=await fund(mission);
@@ -428,7 +470,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       if (candidate?.proposal) candidate = { ...candidate, proposal: evolutionNormalizeProposal(candidate.proposal) };
       const issues = evolutionProposalIssues({ ...candidate.proposal, round: mission.payload.round, rounds: mission.payload.maxRounds });
       if(issues.length)return retryProposal(mission,candidate,'proposal-metadata',issues);
-      const previous = (await service.list('archive')).find(row => row.payload.candidateHash === digest(candidate.policy ?? candidate.files));
+      const previous = (await service.list('archive')).find(row => row.payload.validationState !== 'invalidated' && row.payload.candidateHash === digest(candidate.policy ?? candidate.files));
       if (previous) return update(mission, { status: 'rejected', completed: true, result: { outcome: 'insufficient-evidence', reason: 'duplicate-candidate', previousId: previous.id } });
       const reviewed = await screen?.({ candidate, mission: mission.payload });
       if(reviewed?.passed!==true)return retryProposal(mission,candidate,'candidate-screen',reviewed??null);
@@ -444,11 +486,19 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const repair=mission.payload.sources?.includes('repair')||mission.payload.kind==='repair'||candidate.proposal?.opportunityKind==='repair';
       if(repair){
         let receipt=mission.payload.failureReproductionReceiptId?await service.get(mission.payload.failureReproductionReceiptId):null;
+        if(receipt && mission.payload.moduleId==='geo'){
+          const validity=await service.callbacks.policyBasis?.checkReproduction({mission,baseline:preparedState.baseline,receipt});
+          if(!validity?.usable)return update(mission,{status:'waiting_resource',reason:validity?.reason??'public-basis-unavailable'});
+        }
         if(!validEvolutionFailureReproduction(receipt?.payload,{missionId,moduleId:mission.payload.moduleId,baseline:preparedState.baseline})){
           const reproduced=await service.callbacks.reproduceEvolutionFailure?.({missionId,moduleId:mission.payload.moduleId,candidate,baseline:preparedState.baseline,taskFamily:mission.payload.taskFamily,opportunityId:mission.payload.opportunityId},context);
           receipt=reproduced?.status==='reproduced'&&reproduced.receiptId?await service.get(reproduced.receiptId):null;
           if(!validEvolutionFailureReproduction(receipt?.payload,{missionId,moduleId:mission.payload.moduleId,baseline:preparedState.baseline}))return update(mission,{status:'waiting_resource',reason:'repair-failure-reproduction-required'});
           mission=await update(mission,{failureReproductionReceiptId:receipt.id});
+        }
+        if(mission.payload.moduleId==='geo'){
+          const validity=await service.callbacks.policyBasis?.checkReproduction({mission,baseline:preparedState.baseline,receipt});
+          if(!validity?.usable)return update(mission,{status:'waiting_resource',reason:validity?.reason??'public-basis-unavailable'});
         }
       }
       const tasksPrepared=await service.callbacks.prepareModuleTasks?.({...mission.payload,moduleId:mission.payload.moduleId,missionId,candidate,phase:'development'},context);
@@ -456,7 +506,12 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const anchors=mission.payload.smokeCaseIds?await Promise.all(mission.payload.smokeCaseIds.map(id=>service.get(id))):(await service.list('task')).filter(row=>row.payload.moduleId===mission.payload.moduleId&&row.payload.pool==='development'&&(row.payload.baselineKnownCorrect===true||row.payload.curriculum?.destination==='regression-anchor')).slice(0,4);
       if(anchors.length<2||anchors.some(row=>!row)||!adapter.smoke)return update(mission,{status:'waiting_resource',reason:'known-correct-smoke-cases-incomplete'});
       const smokeInput={missionId,userId:await service.owner(),projectId:mission.projectId,batch:anchors.map(row=>({...row.payload,id:row.id,equivalentVariant:null})),...context};
-      if(!mission.payload.smokeCaseIds)mission=await update(mission,{smokeCaseIds:anchors.map(row=>row.id)});
+      if(!mission.payload.smokeCaseIds)mission=await update(mission,{smokeCaseIds:anchors.map(row=>row.id),smokeCaseRefs:anchors.map(evolutionRecordPin)});
+      else if(mission.payload.moduleId==='geo'&&!mission.payload.smokeCaseRefs)return update(mission,{status:'waiting_resource',reason:'public-smoke-basis-unpinned'});
+      if(mission.payload.moduleId==='geo')for(const [index,anchor] of anchors.entries()){
+        const validity=await service.callbacks.policyBasis?.checkTask(anchor,{role:'anchor',reference:mission.payload.smokeCaseRefs[index]});
+        if(!validity?.usable)return update(mission,{status:'waiting_resource',reason:validity?.reason??'public-basis-unavailable'});
+      }
       const smokeBatch={id:`evolution-smoke-${evolutionKey([mission.id,digest(candidate)])}`};
       const runSmoke=arm=>adapter.smoke({...smokeInput,arm,candidate:arm==='baseline'?preparedState.baseline:candidate,checkpointUnit:(key,operation)=>taskPool.executeUnit(smokeBatch,`${arm}:${key}`,operation)});
       let baselineSmoke,candidateSmoke;
@@ -478,19 +533,31 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       await service.save('archive', candidate.id, { candidateHash: digest(candidate.policy ?? candidate.files), candidate, moduleId: mission.payload.moduleId,
         taskFamily:mission.payload.taskFamily??null,epoch:mission.payload.epoch,parentId: preparedState.parentId, missionId: mission.id, status: 'frozen', evaluatedDescendants: 0, promotedDescendants: 0 });
     }
-    const tasksPrepared=await service.callbacks.prepareModuleTasks?.({...mission.payload,moduleId:mission.payload.moduleId,missionId,candidate,phase:'confirmation',freezeAt:candidate.frozenAt},context);
-    if(tasksPrepared&&tasksPrepared.status!=='ready')return update(mission,{status:'waiting_confirmation',reason:tasksPrepared.reason??'confirmation-task-preparation'});
+    let batch=await taskPool.findBatch?.({candidateId:candidate.id,epoch:mission.payload.epoch});
+    if(!batch){
+      const tasksPrepared=await service.callbacks.prepareModuleTasks?.({...mission.payload,moduleId:mission.payload.moduleId,missionId,candidate,phase:'confirmation',freezeAt:candidate.frozenAt},context);
+      if(tasksPrepared&&tasksPrepared.status!=='ready')return update(mission,{status:'waiting_confirmation',reason:tasksPrepared.reason??'confirmation-task-preparation'});
+    }
     const evaluatorCompatibility=digest([mission.payload.moduleId,mission.payload.taskFamily??null,mission.payload.epoch,adapter.evaluatorVersion??'unversioned',mission.payload.successConditions]);
     const minimum = { frontier: 30, geo: 30, autopilot: 20, runtime: 10 }[mission.payload.moduleId] ?? 2;
-    const batch = await taskPool.assemble({ candidateId: candidate.id, lineageId: candidate.lineageId ?? mission.id, moduleId: mission.payload.moduleId,
+    batch ??= await taskPool.assemble({ candidateId: candidate.id, lineageId: candidate.lineageId ?? mission.id, moduleId: mission.payload.moduleId,
       frozenAt: candidate.frozenAt, modelReleasedAt: mission.payload.modelReleasedAt, epoch: mission.payload.epoch, minimum, slices: mission.payload.successConditions.slices ?? [] });
     if (!batch.id) return update(mission, { status: 'waiting_confirmation', waiting: batch.payload });
     const previousVerdict=await service.get(`evolution-verdict-${evolutionKey([candidate.id,batch.id])}`);
     if(previousVerdict){
       if(previousVerdict.payload.candidateHash!==digest(candidate)||previousVerdict.payload.missionId!==missionId)throw new Error('Sealed verdict belongs to another candidate.');
       const p=previousVerdict.payload;
+      if(mission.payload.moduleId==='geo'){
+        const basis=service.callbacks.policyBasis;
+        const decision=basis?await basis.validateVerdict(previousVerdict,candidate,{activation:p.promote&&!p.auditOnly}):{usable:false,reason:'public-basis-unavailable'};
+        if(!decision.usable)return update(mission,{status:'waiting_resource',reason:decision.reason});
+      }
       if(batch.payload.status!=='complete')await taskPool.finish(batch,{verdictId:previousVerdict.id,outcome:p.outcome,reason:p.reason,promote:p.promote,scope:p.scope??null});
       return finalizeMission(mission,candidate,previousVerdict,adapter);
+    }
+    if(mission.payload.moduleId==='geo'){
+      const validity=await service.callbacks.policyBasis?.checkInputs({mission,candidate,batch});
+      if(!validity?.usable)return update(mission,{status:'waiting_resource',reason:validity?.reason??'public-basis-unavailable'});
     }
     const begun = await taskPool.begin(batch);
     if (!['started','resumed'].includes(begun.status)) return update(mission, { status: 'waiting_confirmation', reason: 'previous-attempt-needs-reconciliation' });
@@ -498,6 +565,10 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const baselines = [], measurements = [];
     // Fixed predeclared sequence alternates the candidate's one attempt with the unchanged baseline's three repeats.
     for (const [repeat,role] of ['baseline', 'candidate', 'baseline', 'baseline'].entries()) {
+      if(mission.payload.moduleId==='geo'){
+        const validity=await service.callbacks.policyBasis?.checkInputs({mission,candidate,batch});
+        if(!validity?.usable)return update(await service.get(missionId),{status:'waiting_resource',reason:validity?.reason??'public-basis-unavailable'});
+      }
       let evaluated;
       try{
         evaluated = await adapter.evaluate({ ...common, candidate: role === 'candidate' ? candidate : { policy: mission.payload.baseline?.policy ?? {}, revisionId: mission.payload.baseline?.revisionId }, role, arm:role, repeat,
@@ -536,9 +607,16 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const auditOnly=mission.payload.auditOnly===true;
     const evaluationReceiptHash=digest({candidateHash:digest(candidate),batch:batch.payload,measured,baselines,evaluatorCompatibility});
     const verdictId = `evolution-verdict-${evolutionKey([candidate.id,batch.id])}`;
+    let validationRefs=null;
+    if(mission.payload.moduleId==='geo'){
+      const basis=service.callbacks.policyBasis;
+      const sealed=basis?await basis.seal({mission,candidate,batch,measured,baselines,evaluatorCompatibility,evaluationReceiptHash}):{status:'waiting',reason:'public-basis-unavailable'};
+      if(sealed.status!=='sealed')return update(mission,{status:'waiting_resource',reason:sealed.reason});
+      validationRefs=sealed.validationRefs;
+    }
     await service.save('candidate-verdict', verdictId, { ...selection, moduleId: mission.payload.moduleId, candidateId: candidate.id, candidateHash: digest(candidate), missionId,
       evaluatorCompatibility,taskFamily:mission.payload.taskFamily??null,auditOnly,parentId:candidate.parentId??mission.payload.sourceCandidateIds?.[0]??null,sourceCandidateIds:mission.payload.sourceCandidateIds??[],epoch: mission.payload.epoch, score, baseline, delta, historicalBest, evidenceTier: measured.evidenceTier ?? 'model', batchId: batch.id,
-      evaluationReceiptHash,modelScoredLabel:measured.evidenceTier==='model',deterministicChecksPassed:deterministic.nonInferior,deterministic,receiptValid: true, confirmatory: true, firstAttempt: true, mechanismContributions:candidate.proposal.mechanisms?.length===1?{[candidate.proposal.mechanisms[0]]:score-baseline}:{},equivalentScore,equivalentBaseline,passed: selection.promote, measured, baselines, at: service.now().toISOString() });
+      evaluationReceiptHash,...(validationRefs?{validationRefs}:{}),modelScoredLabel:measured.evidenceTier==='model',deterministicChecksPassed:deterministic.nonInferior,deterministic,receiptValid: true, confirmatory: true, firstAttempt: true, mechanismContributions:candidate.proposal.mechanisms?.length===1?{[candidate.proposal.mechanisms[0]]:score-baseline}:{},equivalentScore,equivalentBaseline,passed: selection.promote, measured, baselines, at: service.now().toISOString() });
     await taskPool.finish(batch, { verdictId, ...selection });
     return finalizeMission(mission,candidate,await service.get(verdictId),adapter);
   }

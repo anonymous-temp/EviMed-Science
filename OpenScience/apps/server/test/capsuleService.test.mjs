@@ -4,21 +4,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CapsuleService } from "../src/capsuleService.mjs";
+import { makeCapsule, makePack } from "./helpers/capsuleFixtures.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 const USER = "user_1";
 
-test("a capsule is used as one's own or as a reference; 合并参考 is stored and read as a reference", async () => {
+test("a pack is enabled as a reference, and a retired 合并参考 reads as one", async () => {
   // Nothing ever told `blend` apart from `guest` — every reader asks only
-  // "own or not" — so the page offers two (2026-09-19 plan §3.3 #4).
+  // "own or not" — so the page offers two (2026-09-19 plan §3.3 #4), and the
+  // one way to put a pack in force stores `guest`.
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
-  const mine = await service.create(USER, { title: "我的记忆胶囊" });
-  const theirs = await service.create(USER, { title: "李主任的工作方式" });
-  await service.activate(USER, mine.id, { mode: "own" });
-  await service.activate(USER, theirs.id, { mode: "blend" });
+  const mine = await service.ownCapsule(USER, { create: true });
+  const theirs = await makePack(service, USER, { title: "李主任的工作方式" });
+  await service.activate(USER, theirs.id);
   const stored = [...documents.rows.values()].find((row) => row.kind === "preferences");
-  assert.deepEqual(stored.payload.items.map((item) => item.mode), ["own", "guest"], "a request for blend is stored as what it meant");
+  assert.deepEqual(stored.payload.items.map((item) => item.mode), ["own", "guest"]);
 
   // An activation written before the change still says `blend`; no migration.
   stored.payload.items = [{ capsuleId: mine.id, mode: "own" }, { capsuleId: theirs.id, mode: "blend" }];
@@ -27,14 +28,12 @@ test("a capsule is used as one's own or as a reference; 合并参考 is stored a
   // A mode this build does not know contributes as a reference, never as an identity.
   stored.payload.items = [{ capsuleId: theirs.id, mode: "merged-v3" }];
   assert.deepEqual((await service.active(USER)).items.map((item) => item.mode), ["guest"]);
-
-  await assert.rejects(service.activate(USER, mine.id, { mode: "merged-v3" }), { code: "capsule_payload_invalid" });
 });
 
 test("a reference capsule's facts are recalled as a reference, and never render as the researcher's own profile", async () => {
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
-  const theirs = await service.create(USER, { title: "李主任的工作方式" });
+  const theirs = await makePack(service, USER, { title: "李主任的工作方式" });
   await service.addEntry(USER, theirs.id, { factKind: "profile", layer: "profile", content: "心内科主任，二十年临床经验" });
   await service.addEntry(USER, theirs.id, { factKind: "method_preference", layer: "methods", content: "超说明书用药先查说明书修订史" });
   // Stored the old way.
@@ -58,7 +57,7 @@ test("a runtime note takes effect at once as the assistant's note, and is never 
   // be an instruction in every later run.
   assert.deepEqual(await selectCapsuleMethods(service, { userId: USER, projectId: "project_1" }), []);
   // What the researcher wrote themselves does mount.
-  const own = (await service.active(USER, "project_1")).items[0].capsuleId;
+  const own = (await service.active(USER)).items[0].capsuleId;
   await service.addEntry(USER, own, { factKind: "method_preference", layer: "methods", content: "先查异质性再合并" });
   assert.deepEqual((await selectCapsuleMethods(service, { userId: USER, projectId: "project_1" })).map((method) => method.content),
     ["先查异质性再合并"]);
@@ -86,7 +85,7 @@ test("a retraction retires what nobody touched, and only annotates what the rese
 test("one click undoes an entry's last change, and undoing its creation removes it", async () => {
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
-  const capsule = await service.create(USER, { title: "我的记忆胶囊" });
+  const capsule = await service.ownCapsule(USER, { create: true });
   const entry = await service.addEntry(USER, capsule.id, { factKind: "preference", layer: "profile", content: "结论先行" });
   const edited = await service.updateEntry(USER, capsule.id, entry.id, { content: "结论先行，再给证据表", expectedRevision: entry.revision });
   const undone = await service.undoEntry(USER, capsule.id, entry.id, { expectedRevision: edited.revision });
@@ -105,18 +104,17 @@ test("「我的记忆胶囊」 is one capsule per person: made once, in force ac
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
   assert.equal(await service.ownCapsule(USER), null, "reading does not make one");
-  const theirs = await service.create(USER, { title: "李主任的工作方式" });
-  await documents.put(USER, "capsule", theirs.id, { ...theirs.payload, imported: true }, { expectedRevision: theirs.revision });
-  await service.activate(USER, theirs.id, { mode: "guest" });
+  const theirs = await makePack(service, USER, { title: "李主任的工作方式" });
+  await service.activate(USER, theirs.id);
 
   const [first, second] = await Promise.all([service.ownCapsule(USER, { create: true }), service.ownCapsule(USER, { create: true })]);
   assert.equal(first.id, second.id, "two first visits are one capsule");
   assert.equal(first.payload.title, "我的记忆胶囊");
-  const active = await service.active(USER, null);
+  const active = await service.active(USER);
   assert.deepEqual(active.items.map((item) => [item.capsuleId, item.mode]), [[first.id, "own"], [theirs.id, "guest"]]);
 
   // In the trash, it comes back rather than being made twice.
-  await service.remove(USER, first.id, (await service.get(USER, first.id)).revision);
+  await documents.remove(USER, "capsule", first.id, (await service.get(USER, first.id)).revision);
   const back = await service.ownCapsule(USER, { create: true });
   assert.equal(back.id, first.id);
   assert.equal(back.deletedAt, null);
@@ -163,13 +161,13 @@ test("a received pack is trusted whole: scanned once, enabled and disabled in on
   assert.equal(before.scanned, false);
   assert.equal(before.waiting, 4);
 
-  await assert.rejects(service.enableReceived(USER, (await service.create(USER, { title: "mine" })).id), { code: "capsule_not_received" });
+  await assert.rejects(service.enableReceived(USER, (await makeCapsule(service, USER, { title: "mine" })).id), { code: "capsule_not_received" });
   const enabled = await service.enableReceived(USER, pack.id, { projectId: "project_1" });
   assert.equal(enabled.enabled, true);
   assert.deepEqual(enabled.counts, { method_preference: 1, writing_style: 1 });
   assert.deepEqual(enabled.scan.dropped.map((item) => [item.id, item.code]).sort(), [["f2", "instructs_agent"], ["f4", "names_platform_tool"]]);
   assert.deepEqual(judged.sort(), ["f1", "f2", "f3"], "the closed sets ran first; the model saw only the rest");
-  assert.deepEqual((await service.active(USER, null)).items.map((item) => [item.capsuleId, item.mode]), [["pack-1", "guest"]],
+  assert.deepEqual((await service.active(USER)).items.map((item) => [item.capsuleId, item.mode]), [["pack-1", "guest"]],
     "in force account-wide, as a reference: methods and standards, never an identity");
   assert.equal((await documents.get(USER, "fact", "f2")).payload.status, "retired");
   // Scanned once: a second enable asks nothing of the model.
@@ -177,11 +175,10 @@ test("a received pack is trusted whole: scanned once, enabled and disabled in on
   await service.enableReceived(USER, pack.id, { projectId: "project_1" });
   assert.deepEqual(judged, []);
 
-  // One click out: every list, the account's and a project's.
-  await service.activate(USER, pack.id, { mode: "guest", projectId: "project_1" });
+  // One click out: the account's list, and a project's own list an earlier release left and the fold into one capsule has not reached yet.
+  await documents.put(USER, "preferences", "active-capsules:project:project_1", { items: [{ capsuleId: pack.id, mode: "guest" }] }, { expectedRevision: 0, projectId: "project_1" });
   assert.deepEqual(await service.disable(USER, pack.id), { disabled: true, lists: 2 });
-  assert.deepEqual((await service.active(USER, null)).items, []);
-  assert.deepEqual((await service.active(USER, "project_1")).items, []);
+  assert.deepEqual((await service.active(USER)).items, []);
   assert.equal((await service.received(USER))[0].enabled, false);
 
   // A trial conversation is handed the pack as context, framed as someone else's.
@@ -199,9 +196,9 @@ test("a received pack is trusted whole: scanned once, enabled and disabled in on
   assert.equal(await service.trialContext(USER, "missing"), "");
 });
 
-// Build spec §9.4 #6: 「启用范围可选账号或某个项目」. Every enable was
-// account-wide until 2026-09-28.
-test("a received pack can be put in force in one project only, and is then in force there and nowhere else", async () => {
+// 2026-10-24, the owner's ruling (「记忆胶囊有必要按项目拆分吗，没必要吧」): a pack is enabled for the account, so it is in force in every
+// project. It could be enabled for one project alone until then (build spec §9.4 #6).
+test("a received pack is enabled for the whole account, and is in force, recalled and mounted in every project", async () => {
   const { selectCapsuleMethods } = await import("../src/capsuleMethods.mjs");
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
@@ -211,23 +208,22 @@ test("a received pack can be put in force in one project only, and is then in fo
   await documents.put(USER, "fact", "g1", { capsuleId: pack.id, factKind: "method_preference", layer: "methods", content: "先画 PRISMA 流程图",
     origin: "system", status: "approved", contextOnly: true, provenance: [{ type: "import", id: "s:g1" }] }, { expectedRevision: 0 });
 
-  await assert.rejects(service.enableReceived(USER, pack.id, { onlyProject: true }), { code: "capsule_payload_invalid" }, "one project needs its name");
-  const enabled = await service.enableReceived(USER, pack.id, { projectId: "project_1", onlyProject: true });
+  // The project the person is in is only where the scan is metered: it changes nothing about where the pack is in force.
+  const enabled = await service.enableReceived(USER, pack.id, { projectId: "project_1" });
   assert.equal(enabled.enabled, true);
-  assert.equal(enabled.enabledIn, "project");
-  assert.deepEqual((await service.active(USER, null)).items, [], "not account-wide");
-  assert.deepEqual((await service.active(USER, "project_1")).items.map((item) => [item.capsuleId, item.mode]), [["pack-3", "guest"]]);
-  // In force in that project — recalled and mounted there — and not in another.
-  assert.equal((await service.recall(USER, { query: "PRISMA", projectId: "project_1" })).items.length, 1);
-  assert.equal((await service.recall(USER, { query: "PRISMA", projectId: "project_2" })).items.length, 0);
-  assert.deepEqual((await selectCapsuleMethods(service, { userId: USER, projectId: "project_1" })).map((method) => method.id), ["g1"]);
-  assert.deepEqual(await selectCapsuleMethods(service, { userId: USER, projectId: "project_2" }), []);
-  assert.equal((await service.received(USER, { projectId: "project_2" }))[0].enabled, false, "the shelf reads in force where it is read from");
+  assert.equal("enabledIn" in enabled, false, "there is no 'only here' to report");
+  assert.deepEqual((await service.active(USER)).items.map((item) => [item.capsuleId, item.mode]), [["pack-3", "guest"]]);
+  assert.equal(documents.rows.has(JSON.stringify([USER, "preferences", "active-capsules:project:project_1"])), false, "no list of a project's own is written");
+  for (const projectId of ["project_1", "project_2", null]) {
+    assert.equal((await service.recall(USER, { query: "PRISMA", projectId })).items.length, 1, `recalled in ${projectId ?? "no project"}`);
+    assert.deepEqual((await selectCapsuleMethods(service, { userId: USER, projectId })).map((method) => method.id), ["g1"], `mounted in ${projectId ?? "no project"}`);
+  }
+  assert.equal((await service.received(USER))[0].enabled, true);
 
-  // Account-wide on top, and one click out of both.
-  assert.equal((await service.enableReceived(USER, pack.id, { projectId: "project_2" })).enabledIn, "account");
-  assert.deepEqual(await service.disable(USER, pack.id), { disabled: true, lists: 2 });
-  assert.equal((await service.received(USER, { projectId: "project_1" }))[0].enabledIn, null);
+  // One click out, for every project at once.
+  assert.deepEqual(await service.disable(USER, pack.id), { disabled: true, lists: 1 });
+  assert.equal((await service.received(USER))[0].enabled, false);
+  assert.equal((await service.recall(USER, { query: "PRISMA", projectId: "project_2" })).items.length, 0);
 });
 
 test("a pack whose scan did not finish is in force as context, and mounts nothing unjudged until a later scan judges it", async () => {
@@ -348,6 +344,37 @@ test("all of a capsule's notes are read, past the first page, newest first, in f
   assert.deepEqual((await service.mine(USER, { limit: 3 })).entries.map((entry) => entry.payload.content), ["偏好 5", "偏好 4", "偏好 3"], "bounded, newest kept");
 });
 
+test("a note an outside agent proposed is listed apart as waiting for the researcher, recalled by nobody until confirmed, and joins the notes in force when it is", async () => {
+  // The agent-memory API's `/note` writes with `review: true`: the platform's own notes take effect at once, a third party's wait.
+  // They were stored and shown nowhere (2026-10-23): `mine` listed only what was approved.
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const own = await service.ownCapsule(USER, { create: true });
+  const stated = await service.addEntry(USER, own.id, { factKind: "preference", layer: "profile", content: "抗凝证据先看指南" });
+  const proposed = await service.note(USER, "project_1", { factKind: "preference", content: "抗凝报告先给结论", review: true });
+  assert.equal(proposed.payload.status, "candidate");
+
+  const before = await service.mine(USER);
+  assert.deepEqual(before.entries.map((entry) => entry.id), [stated.id], "what counts the notes in force counts no proposal");
+  assert.deepEqual(before.candidates.map((entry) => [entry.id, entry.payload.status]), [[proposed.id, "candidate"]]);
+  assert.deepEqual(before.forgotten, []);
+  assert.deepEqual((await service.recall(USER, { query: "抗凝报告", projectId: "project_1" })).items.map((item) => item.id), [], "a proposal is no memory yet");
+
+  // 确认: the entry's own status path, and it is in force.
+  await service.updateEntry(USER, proposed.payload.capsuleId, proposed.id, { status: "approved", expectedRevision: proposed.revision });
+  const after = await service.mine(USER);
+  assert.deepEqual(after.entries.map((entry) => entry.id).sort(), [proposed.id, stated.id].sort());
+  assert.deepEqual(after.candidates, []);
+  assert.deepEqual((await service.recall(USER, { query: "抗凝报告", projectId: "project_1" })).items.map((item) => item.id), [proposed.id]);
+
+  // 不要: retired, which 已忘记的内容 lists and restores.
+  const second = await service.note(USER, "project_1", { factKind: "preference", content: "抗凝报告全用英文", review: true });
+  await service.updateEntry(USER, second.payload.capsuleId, second.id, { status: "retired", expectedRevision: second.revision });
+  const refused = await service.mine(USER);
+  assert.deepEqual(refused.candidates, []);
+  assert.deepEqual(refused.forgotten.map((entry) => entry.id), [second.id]);
+});
+
 // 2026-10-10 review C-3: a received pack's title, author label and entries were put into the trial block raw, so a
 // pack could close <evimed-capsule-trial> early and speak outside it, or open a platform block of its own.
 test("a received pack's text cannot close the trial block or open a platform block", async () => {
@@ -367,51 +394,186 @@ test("a received pack's text cannot close the trial block or open a platform blo
   assert.match(context, /合并前先报告 I²/, "the method itself still reaches the trial");
 });
 
-// 2026-10-10 review M-8: the notes capsule was put in force only when the project's active list was EMPTY, so with a
-// received pack already enabled for the project a note was stored, approved, in a capsule nothing read — and the
-// gateway still told the model `takesEffect: true`.
-test("a note lands in force even when a received pack already occupies the project's list, and never displaces it", async () => {
+// 2026-10-10 review M-8 asked that a note taking effect be true: it is approved and sits in a capsule that is read. Since 2026-10-24 a
+// note is an entry of the person's one capsule, labelled with its project; the capsule is in force in every project, and the label says
+// which project's conversations read the note.
+test("a note is an entry of the one capsule labelled with its project: read there, in no other project, beside an enabled pack", async () => {
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
   const pack = await documents.put(USER, "capsule", "pack-n", { title: "李主任的工作方式", imported: true, activationMode: "guest" }, { expectedRevision: 0 });
-  await service.activate(USER, pack.id, { mode: "guest", projectId: "project_1" });
+  await service.activate(USER, pack.id);
 
   const note = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  assert.equal(note.projectId, "project_1", "the document's own project, which a project's deletion cascades on");
+  assert.equal(note.payload.projectId, "project_1");
+  assert.ok(String(note.payload.capsuleId).startsWith("account-capsule:"), "in the account's capsule: no capsule of the project's own");
+  assert.equal([...documents.rows.values()].some((row) => row.kind === "capsule" && String(row.id).startsWith("runtime-notes:")), false);
   const recalled = await service.recall(USER, { query: "结论", projectId: "project_1" });
-  assert.deepEqual(recalled.items.map((item) => item.id), [note.id], "what the assistant noted is read by the next recall");
-  assert.equal(await service.inForce(USER, "project_1", note.payload.capsuleId), true);
-  assert.equal(await service.inForce(USER, "project_2", note.payload.capsuleId), false, "in force where it was noted, not in another project");
-  assert.deepEqual((await service.active(USER, "project_1")).items.map((item) => [item.capsuleId === pack.id ? "pack" : "notes", item.mode]),
-    [["notes", "own"], ["pack", "guest"]], "the researcher's own first, the borrowed pack kept");
-  // The profile reads own capsules; the note is theirs to the platform's predicate.
+  assert.deepEqual(recalled.items.map((item) => item.id), [note.id], "what the assistant noted is read by the next recall of its project");
+  assert.deepEqual((await service.recall(USER, { query: "结论", projectId: "project_2" })).items, [], "another project's conversation does not read it");
+  assert.deepEqual((await service.recall(USER, { query: "结论" })).items, [], "nor one in no project");
+  assert.equal(await service.inForce(USER, note.payload.capsuleId), true);
+  assert.deepEqual((await service.active(USER)).items.map((item) => [item.capsuleId === pack.id ? "pack" : "own capsule", item.mode]),
+    [["own capsule", "own"], ["pack", "guest"]], "the researcher's own first, the borrowed pack kept");
+  // The profile reads the own capsule: the note's project's block has it, another project's does not.
   assert.equal((await service.profileFacts(USER, "project_1", ["preference"])).length, 1);
+  assert.equal((await service.profileFacts(USER, "project_2", ["preference"])).length, 0);
+  assert.equal((await service.profileFacts(USER, null, ["preference"])).length, 0);
 
-  // A second note, and the same note again, change nothing about what is in force.
+  // An entry with no project is the whole account's: every project reads it.
+  const own = await service.ownCapsule(USER);
+  await service.addEntry(USER, own.id, { factKind: "preference", layer: "profile", content: "称呼我张医生" });
+  for (const projectId of ["project_1", "project_2", null]) {
+    assert.equal((await service.recall(USER, { query: "张医生", projectId })).items.length, 1, `read in ${projectId ?? "no project"}`);
+  }
+
+  // A second note, and the same note again, change nothing about what is in force and make no second entry.
   await service.note(USER, "project_1", { factKind: "preference", content: "表格优先" });
-  await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
-  assert.equal((await service.active(USER, "project_1")).items.length, 2);
+  const again = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  assert.equal(again.id, note.id);
+  assert.equal((await service.active(USER)).items.length, 2);
+  // The same words in another project are that project's own note.
+  const other = await service.note(USER, "project_2", { factKind: "preference", content: "回答先给结论" });
+  assert.notEqual(other.id, note.id);
+  assert.deepEqual((await service.recall(USER, { query: "结论", projectId: "project_2" })).items.map((item) => item.id), [other.id]);
 });
 
-test("a note stored in a capsule that cannot be put in force says so instead of claiming to be in force", async () => {
+test("a note written before the project's capsule was folded away is found again by its old id, and is not written twice", async () => {
+  const { createHash } = await import("node:crypto");
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
-  for (let index = 1; index <= 8; index += 1) {
-    const pack = await documents.put(USER, "capsule", `pack-${index}`, { title: `参考胶囊 ${index}`, imported: true, activationMode: "guest" }, { expectedRevision: 0 });
-    await service.activate(USER, pack.id, { mode: "guest", projectId: "project_1" });
-  }
-  const note = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
-  assert.equal(note.payload.status, "approved", "the note is kept — the researcher sees it among their own");
-  assert.equal(await service.inForce(USER, "project_1", note.payload.capsuleId), false, "but eight capsules are already in force here, and none is evicted for it");
-  assert.equal((await service.active(USER, "project_1")).items.length, 8);
-  assert.deepEqual((await service.recall(USER, { query: "结论", projectId: "project_1" })).items, []);
+  const hash = (parts) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+  const notesCapsule = `runtime-notes:${createHash("sha256").update("project_1").digest("hex")}`;
+  const kept = await documents.put(USER, "fact", `runtime-note:${hash([notesCapsule, "preference", "回答先给结论"])}`,
+    { capsuleId: notesCapsule, factKind: "preference", layer: "knowledge", content: "回答先给结论", origin: "inferred", status: "approved", contextOnly: true,
+      provenance: [{ type: "source", id: "runtime-project:project_1" }] }, { expectedRevision: 0, projectId: "project_1" });
+  const found = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  assert.equal(found.id, kept.id);
+  assert.equal([...documents.rows.values()].filter((row) => row.kind === "fact").length, 1);
 });
 
-test("an own capsule in force account-wide is in force for a project, and so is a project's note beside it", async () => {
+test("the person's own capsule always has a place among the eight in force: seven packs fit beside it, an eighth is refused, and a note takes effect", async () => {
   const documents = productDocumentsDouble();
   const service = new CapsuleService(/** @type {any} */ (documents));
   const own = await service.ownCapsule(USER, { create: true });
-  assert.equal(await service.inForce(USER, "project_1", own.id), true);
+  for (let index = 1; index <= 7; index += 1) {
+    const pack = await documents.put(USER, "capsule", `pack-${index}`, { title: `参考胶囊 ${index}`, imported: true, activationMode: "guest" }, { expectedRevision: 0 });
+    await service.activate(USER, pack.id);
+  }
+  const eighth = await documents.put(USER, "capsule", "pack-8", { title: "参考胶囊 8", imported: true, activationMode: "guest" }, { expectedRevision: 0 });
+  await assert.rejects(service.activate(USER, eighth.id), { code: "capsule_activation_limit" });
   const note = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
-  assert.equal(await service.inForce(USER, "project_1", note.payload.capsuleId), true);
-  assert.equal(await service.inForce(USER, "project_1", "missing-capsule"), false);
+  assert.equal(note.payload.status, "approved");
+  assert.equal(note.payload.capsuleId, own.id);
+  assert.equal(await service.inForce(USER, note.payload.capsuleId), true);
+  assert.equal((await service.active(USER)).items.length, 8);
+  assert.deepEqual((await service.recall(USER, { query: "结论", projectId: "project_1" })).items.map((item) => item.id), [note.id]);
+  // A capsule that is not in the list is not in force, and neither is one that was taken down.
+  assert.equal(await service.inForce(USER, "missing-capsule"), false);
+});
+
+test("an own capsule in force account-wide is in force in every project, and so is a project's note in it", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const own = await service.ownCapsule(USER, { create: true });
+  assert.equal(await service.inForce(USER, own.id), true);
+  const note = await service.note(USER, "project_1", { factKind: "preference", content: "回答先给结论" });
+  assert.equal(await service.inForce(USER, note.payload.capsuleId), true);
+  assert.equal(note.payload.capsuleId, own.id, "one capsule");
+  assert.equal(await service.inForce(USER, "missing-capsule"), false);
+});
+
+/** A received pack of one method, approved and scanned, as an import leaves it. */
+async function receivedPack(documents, id, title, content) {
+  const pack = await documents.put(USER, "capsule", id, { title, description: "", imported: true, activationMode: "guest",
+    transfer: { issuerTrust: "verified" }, scan: { kept: [`${id}-f`], unchecked: [], dropped: [], model: "ok", checkedAt: "2026-10-23T00:00:00.000Z" } }, { expectedRevision: 0 });
+  await documents.put(USER, "fact", `${id}-f`, { capsuleId: id, factKind: "method_preference", layer: "methods", content,
+    origin: "system", status: "approved", contextOnly: true, provenance: [{ type: "import", id: `s:${id}` }] }, { expectedRevision: 0 });
+  return pack;
+}
+
+// 2026-10-23 review S8 and build spec §9.4 #6: making a capsule one's own wiped every pack the person had enabled, and a pack
+// enabled later was read after the ones before it though the later one is the one that wins a disagreement.
+test("making the person's own capsule keeps the packs in force, and the pack enabled last is read first", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  await receivedPack(documents, "pack-a", "甲的做法", "先写目标试验");
+  await receivedPack(documents, "pack-b", "乙的做法", "先写分析计划");
+  const order = async () => (await service.active(USER)).items.map((item) => [item.capsuleId, item.mode]);
+
+  await service.enableReceived(USER, "pack-a");
+  await service.enableReceived(USER, "pack-b");
+  assert.deepEqual(await order(), [["pack-b", "guest"], ["pack-a", "guest"]], "the one enabled last first");
+
+  const mine = await service.ownCapsule(USER, { create: true });
+  assert.deepEqual(await order(), [[mine.id, "own"], ["pack-b", "guest"], ["pack-a", "guest"]], "own first, nobody turned off");
+  await service.enableReceived(USER, "pack-a");
+  assert.deepEqual(await order(), [[mine.id, "own"], ["pack-a", "guest"], ["pack-b", "guest"]], "enabling a pack again puts it first among the packs, under the person's own");
+  // Recall reads the capsules in that order: the pack enabled last answers first.
+  const found = await service.recall(USER, { query: "先写" });
+  assert.deepEqual(found.items.map((item) => item.capsuleId), ["pack-a", "pack-b"]);
+});
+
+test("the limit of eight capsules in force holds for enabling packs", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  for (let index = 0; index < 8; index += 1) await receivedPack(documents, `pack-${index}`, `包 ${index}`, `做法 ${index}`);
+  for (let index = 0; index < 7; index += 1) await service.enableReceived(USER, `pack-${index}`);
+  await service.ownCapsule(USER, { create: true });
+  await assert.rejects(service.enableReceived(USER, "pack-7"), { code: "capsule_activation_limit" });
+});
+
+// A runtime that is up mounted the methods in force when it launched: enabling or disabling a pack must tell it, or the pack's
+// methods keep running after "disable" (review S6) and a freshly enabled one waits for a restart.
+test("enabling and disabling a pack tell the runtimes that are up, and a refresh that fails never fails the click", async () => {
+  const { capsuleStewardshipMetricFamilies, resetCapsuleShareMetrics } = await import("../src/capsuleShareMetrics.mjs");
+  resetCapsuleShareMetrics();
+  const documents = productDocumentsDouble();
+  const told = [];
+  let failing = false;
+  const service = new CapsuleService(/** @type {any} */ (documents), { onActivationChanged: async (change) => { told.push(change); if (failing) throw new Error("no runtime"); } });
+  await receivedPack(documents, "pack-a", "甲的做法", "先写目标试验");
+
+  await service.enableReceived(USER, "pack-a");
+  assert.deepEqual(told.splice(0), [{ userId: USER, capsuleId: "pack-a", change: "enabled" }], "the account's list: every project's runtime of the account");
+
+  await service.disable(USER, "pack-a");
+  assert.deepEqual(told.splice(0), [{ userId: USER, capsuleId: "pack-a", change: "disabled" }], "told once, however many lists the pack was in");
+  // A pack that was in force in no list leaves nothing to tell.
+  await service.disable(USER, "pack-a");
+  assert.deepEqual(told.splice(0), []);
+
+  failing = true;
+  const enabled = await service.enableReceived(USER, "pack-a");
+  assert.equal(enabled.enabled, true, "the click stood");
+  assert.equal((await service.disable(USER, "pack-a")).disabled, true);
+  const counted = Object.fromEntries(capsuleStewardshipMetricFamilies().find((family) => family.name === "open_science_capsule_runtime_refresh_total").series
+    .map((row) => [row.labels?.outcome, row.value]));
+  assert.deepEqual(counted, { asked: 2, failed: 2 });
+  resetCapsuleShareMetrics();
+});
+
+// 2026-10-23 review S10: an enable from somewhere that names no project left the pack `model: "unavailable"` and every entry
+// `unscanned` — context only, never mounted — until a later enable from a project.
+test("a scan with no project in view is metered to the account's own default project and still judges the entries", async () => {
+  const { CapsuleScanner } = await import("../src/capsuleScan.mjs");
+  const documents = productDocumentsDouble();
+  /** @type {any[]} */ const calls = [];
+  const scanner = new CapsuleScanner({ deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", deepseekModel: "deepseek-v4-flash" }, {
+    callModel: async (_deps, call) => {
+      calls.push(call);
+      const entries = JSON.parse(call.body.messages[1].content).entries;
+      return { choices: [{ message: { content: JSON.stringify({ verdicts: entries.map((item) => ({ id: item.id, instructing: false, reason: "", quote: "" })) }) } }] };
+    },
+  });
+  const service = new CapsuleService(/** @type {any} */ (documents), { scanner });
+  const pack = await documents.put(USER, "capsule", "pack-n", { title: "无项目的包", description: "", imported: true, activationMode: "guest", transfer: { issuerTrust: "verified" } }, { expectedRevision: 0 });
+  await documents.put(USER, "fact", "n1", { capsuleId: pack.id, factKind: "method_preference", layer: "methods", content: "先写目标试验",
+    origin: "system", status: "candidate", contextOnly: true, provenance: [{ type: "import", id: "s:n1" }] }, { expectedRevision: 0 });
+  const enabled = await service.enableReceived(USER, pack.id);
+  assert.equal(enabled.scan.model, "ok");
+  assert.equal(calls.length, 1);
+  assert.deepEqual([calls[0].userId, calls[0].projectId, calls[0].purpose], [USER, "default", "capsule-scan"]);
+  const entry = await documents.get(USER, "fact", "n1");
+  assert.equal(entry.payload.unscanned, undefined, "judged, so it may be mounted");
 });

@@ -485,6 +485,219 @@
    "gzip": false,
    "bytes": 6884,
    "sha256": "932ae87adabf56b92cb62cee188bbfe760050ff98fbace1eafbbd349677c70c6"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1056/nejmicm2609443?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1056/nejmicm2609443?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:27:50+00:00",
+   "file": "12.json",
+   "gzip": false,
+   "bytes": 1347,
+   "sha256": "d465a3d67a8bc4857785ef98d86f78edf67ae707d48d72fd254a6ee0be4fc187"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1056/nejmicm2609443?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1056/nejmicm2609443?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:27:51+00:00",
+   "file": "13.json",
+   "gzip": false,
+   "bytes": 219,
+   "sha256": "cdc69aee6a496cedabbc88610cd6b727aebde32a9e95bb1e3202b94951dfd425"
+  },
+  {
+   "method": "GET",
+   "url": "http://www.nejm.org/doi/10.1056/NEJMicm2609443",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 403,
+   "final_url": "https://www.nejm.org/doi/10.1056/NEJMicm2609443",
+   "headers": {
+    "content-type": "text/html; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:27:54+00:00",
+   "file": "14.html",
+   "gzip": false,
+   "bytes": 5662,
+   "sha256": "540bb09279525242822789b966bfda6fc8ff122c1b9fa54769133ee3487bbbd8",
+   "error": {
+    "outcome": "challenge",
+    "detail": "cloudflare"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1056/nejmp2605442?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1056/nejmp2605442?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:27:56+00:00",
+   "file": "15.json",
+   "gzip": false,
+   "bytes": 1337,
+   "sha256": "79aa564df88308a9ac511b6f8a87510133afb8048ab5f7d7fa2f333d01386fd6"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1056/nejmp2605442?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1056/nejmp2605442?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:27:57+00:00",
+   "file": "16.json",
+   "gzip": false,
+   "bytes": 215,
+   "sha256": "bee2ca5d1abd0dbab8ae1a08749a563440b3e063dffa91b13f1ed950d182895f"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.3389/fphar.2026.1852584?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.3389/fphar.2026.1852584?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:27:59+00:00",
+   "file": "17.json",
+   "gzip": false,
+   "bytes": 4859,
+   "sha256": "9331bf62288a26492da950f3948a2db36922b0742800833fab5b25a8a50d0ed6"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.3389/fphar.2026.1852584?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.3389/fphar.2026.1852584?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:00+00:00",
+   "file": "18.json",
+   "gzip": false,
+   "bytes": 245,
+   "sha256": "843593d01bc6430a4515845846128c236ef4482f0abec2c55195076de2ca2d97"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.frontiersin.org/articles/10.3389/fphar.2026.1852584/full",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 200,
+   "final_url": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2026.1852584/full",
+   "headers": {
+    "content-type": "text/html;charset=utf-8",
+    "etag": "\"7\""
+   },
+   "fetched_at": "2026-10-22T15:28:03+00:00",
+   "file": "19.html.gz",
+   "gzip": true,
+   "bytes": 344259,
+   "sha256": "7c0f15dc19a57b16c794f1d7feec79f122c39ff73f2179d0e63f10116af9af51",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "5bcf1794891b1606612083b9501ebec72620f8f2034915de7ebc581b6f44e6e5"
+  }
+ ],
+ "extensions": [
+  {
+   "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+   "recorded_at": "2026-10-22T15:28:04+00:00",
+   "reason": "the paper text chain (rt-papers): OpenAlex, the journal's feeds and the landing page for the entries without an abstract, and the open-access check of the others",
+   "exchanges": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+   ],
+   "results_at_recording": [
+    {
+     "status": "pending",
+     "text_kind": "none",
+     "fetched_from": null,
+     "notes": [
+      "landing_challenge:direct",
+      "landing_challenge",
+      "indexed_without_abstract"
+     ]
+    },
+    {
+     "status": "pending",
+     "text_kind": "none",
+     "fetched_from": null,
+     "notes": [
+      "landing_challenge_cached",
+      "indexed_without_abstract"
+     ]
+    },
+    {
+     "status": "available",
+     "text_kind": "abstract",
+     "fetched_from": "pubmed",
+     "notes": []
+    },
+    {
+     "status": "available",
+     "text_kind": "full",
+     "fetched_from": "landing",
+     "notes": []
+    },
+    {
+     "status": "available",
+     "text_kind": "abstract",
+     "fetched_from": "pubmed",
+     "notes": []
+    }
+   ]
   }
  ]
 }

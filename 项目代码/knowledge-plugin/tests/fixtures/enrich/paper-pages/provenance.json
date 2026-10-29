@@ -1,0 +1,261 @@
+{
+ "case": "enrich/paper-pages",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-22T15:25:42+00:00",
+ "pages": {
+  "nejm-original-article": {
+   "doi": "10.1056/nejmoa2605659",
+   "egress": "browser",
+   "url": "http://www.nejm.org/doi/10.1056/NEJMoa2605659",
+   "exchange": 1,
+   "outcome": "ok"
+  },
+  "pnas-research-article": {
+   "doi": "10.1073/pnas.2613776123",
+   "egress": "browser",
+   "url": "https://pnas.org/doi/10.1073/pnas.2613776123",
+   "exchange": 3,
+   "outcome": "ok"
+  },
+  "bmjopen-research": {
+   "doi": "10.1136/bmjopen-2026-123573",
+   "egress": "direct",
+   "url": "https://bmjopen.bmj.com/lookup/doi/10.1136/bmjopen-2026-123573",
+   "exchange": 5,
+   "outcome": "ok"
+  },
+  "plos-medicine-research": {
+   "doi": "10.1371/journal.pmed.1005265",
+   "egress": "direct",
+   "url": "https://dx.plos.org/10.1371/journal.pmed.1005265",
+   "exchange": 7,
+   "outcome": "ok"
+  },
+  "mdpi-ijms-article": {
+   "doi": "10.3390/ijms27209345",
+   "egress": "direct",
+   "url": "https://www.mdpi.com/1422-0067/27/20/9345",
+   "exchange": 9,
+   "outcome": "blocked:http_403"
+  }
+ },
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1056/nejmoa2605659?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1056/nejmoa2605659?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:25:09+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 217,
+   "sha256": "adb208b6a96738de90cefb183aec66a1753f0ddd2c04c67c6095c2f353af5474"
+  },
+  {
+   "method": "GET",
+   "url": "http://www.nejm.org/doi/10.1056/NEJMoa2605659",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "dom",
+   "status": 200,
+   "final_url": "https://www.nejm.org/doi/10.1056/NEJMoa2605659",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-10-22T15:25:12+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "150.0.7871.114",
+   "file": "02.html.gz",
+   "gzip": true,
+   "bytes": 154189,
+   "sha256": "d13c15f7c29fb2ecd94ba5c684308ce9213997fe8b91ca1536107b206091ee12",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "f4573f34e4f84e2c785a9b271a4f995913e57b0377d6d278fe4fe6e7c337338b"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1073/pnas.2613776123?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1073/pnas.2613776123?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:25:16+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 218,
+   "sha256": "6c161427616a2bddfee62c2ca43ea21bcb2aeeb06dd88dbbbc6af131b6d75a52"
+  },
+  {
+   "method": "GET",
+   "url": "https://pnas.org/doi/10.1073/pnas.2613776123",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "dom",
+   "status": 200,
+   "final_url": "https://www.pnas.org/doi/10.1073/pnas.2613776123",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-10-22T15:25:19+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "150.0.7871.114",
+   "file": "04.html.gz",
+   "gzip": true,
+   "bytes": 444936,
+   "sha256": "cec95351fb47c9e4e14862306f485d44bcdc22bedcc36c81f34ee85ed80da104",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "c8cdfc7266321b69230d95fed9f16f27949fe46e2bc7c270afabd4cb9e36e4f5"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1136/bmjopen-2026-123573?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1136/bmjopen-2026-123573?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:25:27+00:00",
+   "file": "05.json",
+   "gzip": false,
+   "bytes": 240,
+   "sha256": "6e2d12f552c05309b50a198394344418afb1207ca88605eaa4a8ea3dee27c96a"
+  },
+  {
+   "method": "GET",
+   "url": "https://bmjopen.bmj.com/lookup/doi/10.1136/bmjopen-2026-123573",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 200,
+   "final_url": "https://bmjopen.bmj.com/content/16/10/e123573",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-10-22T15:25:30+00:00",
+   "file": "06.html.gz",
+   "gzip": true,
+   "bytes": 207813,
+   "sha256": "22071c19dbb23b047427e6d979d9544a9c4f386a56e58aac5788b3ddcdc25919",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "433957f28b56d9a650cd4097a1ea10569f9c0a922830d45e3c5ddae9392335b4"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1371/journal.pmed.1005265?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1371/journal.pmed.1005265?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:25:34+00:00",
+   "file": "07.json",
+   "gzip": false,
+   "bytes": 227,
+   "sha256": "7dca79cad983355c40cab639a73d82786e4269b789fd9983e1258a6efe440256"
+  },
+  {
+   "method": "GET",
+   "url": "https://dx.plos.org/10.1371/journal.pmed.1005265",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 200,
+   "final_url": "https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1005265",
+   "headers": {
+    "content-type": "text/html;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:25:37+00:00",
+   "file": "08.html.gz",
+   "gzip": true,
+   "bytes": 227983,
+   "sha256": "b811fda3a31d8125ea419aaa81bd9f78406db69c283b50d7d264ed317f8ed484",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "aa4b11e08ec3829d41295717e27db1fec75b959e5b20e754f2162264f332f0dc"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.3390/ijms27209345?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.3390/ijms27209345?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:25:39+00:00",
+   "file": "09.json",
+   "gzip": false,
+   "bytes": 212,
+   "sha256": "e2e83891b08b7d10c6692269547059de159a4cbcbb6e01557ea4646ab954f15c"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.mdpi.com/1422-0067/27/20/9345",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 403,
+   "final_url": "https://www.mdpi.com/1422-0067/27/20/9345",
+   "headers": {
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-10-22T15:25:42+00:00",
+   "file": "10.html",
+   "gzip": false,
+   "bytes": 400,
+   "sha256": "ad101127a191c815d0913427544aa590726144c6a391ffc1b731a2ed4bde596a",
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  }
+ ]
+}

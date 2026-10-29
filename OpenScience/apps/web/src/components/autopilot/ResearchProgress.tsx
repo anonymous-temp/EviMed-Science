@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { LoadError } from "@/components/cards/LoadError";
 import { ClampedText } from "./ClampedText";
-import { FOUND_PREFIX, MATERIAL_STATE, needsMaterial, unresolvedText } from "./taskPresentation";
+import { cancellationPending, FOUND_PREFIX, MATERIAL_STATE, needsMaterial, unresolvedText } from "./taskPresentation";
 
 /**
  * What the researcher reads about the question itself: what was found, what is
@@ -24,7 +24,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
   if (!state) return null;
   const waiting = needsMaterial(agenda);
   const section = (label: string, items: string[]) => items.length > 0 && <section aria-label={label} className="space-y-1">
-    <h3 className="text-caption font-medium text-text-3">{label}</h3>
+    <h3 className="text-caption text-text-3">{label}</h3>
     <ul className="space-y-1 text-ui text-text">{items.map(item => <li key={item} className="leading-relaxed"><ClampedText text={item} lines={3} /></li>)}</ul>
   </section>;
   return <div className="space-y-4">
@@ -32,7 +32,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
     {section("已发现", state.found.map(item => `${FOUND_PREFIX[item.check]}${item.statement}`))}
     {section("尚未解决", state.unresolved.map(unresolvedText))}
     <section aria-label="补充材料" className="space-y-2">
-      <h3 className="text-caption font-medium text-text-3">补充材料</h3>
+      <h3 className="text-caption text-text-3">补充材料</h3>
       {state.materials.length > 0 && <ul className="space-y-1">{state.materials.map(item => <li key={item.sourceId} className="flex items-center gap-2 text-ui text-text">
         <FileText size={16} className="shrink-0 text-text-3" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
@@ -40,7 +40,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
         <IconButton icon={X} label={`移除 ${item.name}`} size="sm" disabled={busy} onClick={() => onRemove(item.sourceId)} />
       </li>)}</ul>}
       <div className="flex flex-wrap gap-1">
-        <Button variant={waiting ? "secondary" : "text"} size="sm" disabled={busy} onClick={onAdd}>{waiting ? "补充材料并继续" : "添加材料"}</Button>
+        <Button variant={waiting ? "secondary" : "text"} size="sm" disabled={busy} onClick={onAdd}>{waiting ? (agenda.payload.schedulingAvailable === false || cancellationPending(agenda)) ? "补充材料" : "补充材料并继续" : "添加材料"}</Button>
         <Button variant="text" size="sm" disabled={busy} onClick={onPick}>从知识库选择</Button>
       </div>
     </section>

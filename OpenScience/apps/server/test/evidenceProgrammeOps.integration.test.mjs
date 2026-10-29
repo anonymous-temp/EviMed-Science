@@ -100,7 +100,7 @@ test("a reader that fails is counted, the day goes on without that signal, and t
   unwire();
 });
 
-test("the operator's view: the day's decision with who chose and what became of each action, the six zones with who may write them, today's budget", options, async () => {
+test("the operator's view: the day's decision with who chose and what became of each action, the seven zones with who may write them, today's budget", options, async () => {
   wire();
   // One zone is an operator's own and not yet re-owned; the other two imported ones do not exist.
   await fx.importedZone("房颤抗凝", { owner: fx.operatorId, kind: "user" });
@@ -121,7 +121,7 @@ test("the operator's view: the day's decision with who chose and what became of 
   assert.ok(action.episodeId && action.agendaId, "the episode it started");
   assert.equal(action.outcome, null, "not settled yet");
   const byKey = Object.fromEntries(overview.zones.map((/** @type {any} */ zone) => [zone.key, zone]));
-  assert.equal(overview.zones.length, 6);
+  assert.equal(overview.zones.length, 7, "the six the selector chooses among and 「热点求证」, which answers the day's hot topic");
   assert.deepEqual([byKey.nsclc.writable, byKey.nsclc.owner, byKey.nsclc.blockedBy], [true, "platform", null]);
   assert.deepEqual([byKey["af-anticoagulation"].writable, byKey["af-anticoagulation"].owner, byKey["af-anticoagulation"].blockedBy], [false, "other", "zone_not_publisher_owned"]);
   assert.deepEqual([byKey["cardiorenal-ckd"].zoneId, byKey["cardiorenal-ckd"].blockedBy], [null, "zone_unavailable"]);

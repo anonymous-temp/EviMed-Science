@@ -1,15 +1,17 @@
 /** Shared, model-independent document conversion vocabulary. */
 export const DOCUMENT_EXPORT_VERSION = 1;
 export const DOCUMENT_RENDERER_VERSION = 'pandoc-chromium-v1';
-export const DOCUMENT_EXPORT_FORMATS = Object.freeze(['docx', 'pdf', 'html']);
+export const DOCUMENT_REPORT_EXPORT_FORMATS = Object.freeze(['docx', 'pdf', 'html']);
+export const DOCUMENT_EXPORT_FORMATS = Object.freeze([...DOCUMENT_REPORT_EXPORT_FORMATS, 'csv', 'xlsx']);
 export const DOCUMENT_EXPORT_MIME = Object.freeze({
+  csv: 'text/csv; charset=utf-8', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   pdf: 'application/pdf', html: 'text/html; charset=utf-8',
 });
 /** @param {unknown} value @returns {string[]} */
 export function documentExportFormats(value) {
-  if (!Array.isArray(value) || !value.length || value.length > 3 || value.some(x => !DOCUMENT_EXPORT_FORMATS.includes(x))) {
-    throw new TypeError('Choose docx, pdf or html.');
+  if (!Array.isArray(value) || !value.length || value.length > DOCUMENT_EXPORT_FORMATS.length || value.some(x => !DOCUMENT_EXPORT_FORMATS.includes(x))) {
+    throw new TypeError('Choose docx, pdf, html, csv or xlsx.');
   }
   return DOCUMENT_EXPORT_FORMATS.filter(x => value.includes(x));
 }
@@ -24,7 +26,7 @@ export function documentExportDigest(value) {
 export const DOCUMENT_EXPORT_ERROR_MESSAGES = Object.freeze({
   document_export_unavailable: '当前无法访问或导出这份文稿。',
   document_export_request_invalid: '导出请求无效，请重新选择文稿和格式。',
-  document_export_format_invalid: '请选择 Word、PDF 或 HTML 格式。',
+  document_export_format_invalid: '请选择 Word、PDF、HTML、CSV 或 Excel 格式。',
   document_format_unsupported: '请从 Markdown 或纯文本文稿导出。',
   document_export_too_large: '这个格式的文件超出导出大小限制，其他已完成格式仍可下载。',
   document_source_changed: '文稿已有变化，请从当前文稿重新导出。',

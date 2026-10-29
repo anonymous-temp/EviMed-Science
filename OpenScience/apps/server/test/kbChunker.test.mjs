@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { KB_CHUNK_TARGET_TOKENS, chunkDocument, documentTerms, estimateTokens, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "../src/kbChunker.mjs";
 import { sourcePageForOffset } from "@evimed/domain";
-import { searchTokens } from "../src/memoryRecallPolicy.mjs";
+import { searchTokens } from "../src/searchTokens.mjs";
 
 test("a page map cuts the document page by page, and every chunk is an exact slice", () => {
   const text = "第一页：抗凝治疗概述。\n第二页：利伐沙班 15 mg 每日一次。\n第三页：出血处理。";
@@ -13,13 +13,13 @@ test("a page map cuts the document page by page, and every chunk is an exact sli
     { page: 3, start: 33, end: 33, status: "ocr_failed" },
     { page: 4, start: 33, end: text.length, status: "ok" },
   ];
-  const chunks = chunkDocument({ text, pageMap, title: "房颤指南" });
+  const chunks = chunkDocument({ text, pageMap });
   assert.deepEqual(chunks.map((chunk) => [chunk.page, text.slice(chunk.start, chunk.end)]), [
     [1, "第一页：抗凝治疗概述。\n"],
     [2, "第二页：利伐沙班 15 mg 每日一次。\n"],
     [4, "第三页：出血处理。"],
   ], "an empty page has nothing to index");
-  assert.equal(chunks[0].prefix, "房颤指南");
+  assert.equal(chunks[0].prefix, "");
   assert.deepEqual(chunks.map((chunk) => chunk.ordinal), [0, 1, 2]);
 });
 
@@ -27,7 +27,7 @@ test("text no page claims is still indexed: a gap belongs to the page after it, 
   const text = "前言，不在任何一页。\n\n第一页正文。\n\n第二页正文。\n\n附录：解析器没有分页的结尾。";
   const page = (body) => ({ start: text.indexOf(body), end: text.indexOf(body) + body.length });
   const pageMap = [{ page: 1, ...page("第一页正文。"), status: "ok" }, { page: 2, ...page("第二页正文。"), status: "ok" }];
-  const chunks = chunkDocument({ text, pageMap, title: "t" });
+  const chunks = chunkDocument({ text, pageMap });
   assert.deepEqual(chunks.map((chunk) => [chunk.page, text.slice(chunk.start, chunk.end)]), [
     [1, "前言，不在任何一页。\n\n第一页正文。"],
     [2, "第二页正文。"],
@@ -41,8 +41,8 @@ test("text no page claims is still indexed: a gap belongs to the page after it, 
 
 test("without pages, headings start chunks and carry their path into the prefix", () => {
   const text = "# 抗凝治疗\n\n总述段落。\n\n## 剂量\n\n利伐沙班 20 mg。\n\n## 出血\n\n停药并评估。\n";
-  const chunks = chunkDocument({ text, title: "指南" });
-  assert.deepEqual(chunks.map((chunk) => chunk.prefix), ["指南 › 抗凝治疗", "指南 › 抗凝治疗 › 剂量", "指南 › 抗凝治疗 › 出血"]);
+  const chunks = chunkDocument({ text });
+  assert.deepEqual(chunks.map((chunk) => chunk.prefix), ["抗凝治疗", "抗凝治疗 › 剂量", "抗凝治疗 › 出血"]);
   assert.ok(text.slice(chunks[1].start, chunks[1].end).startsWith("## 剂量"));
   assert.ok(text.slice(chunks[1].start, chunks[1].end).includes("利伐沙班 20 mg。"));
 });
@@ -50,7 +50,7 @@ test("without pages, headings start chunks and carry their path into the prefix"
 test("a long section is cut near the target at sentence ends, and a table is never cut", () => {
   const sentence = "利伐沙班用于非瓣膜性房颤的卒中预防，剂量按肾功能调整。";
   const text = `# 章节\n\n${sentence.repeat(120)}\n\n${Array.from({ length: 400 }, (_, row) => `| 行${row} | 数值${row} |`).join("\n")}\n`;
-  const chunks = chunkDocument({ text, title: "t" });
+  const chunks = chunkDocument({ text });
   const paragraphChunks = chunks.filter((chunk) => !text.slice(chunk.start, chunk.end).includes("| 行"));
   assert.ok(paragraphChunks.length >= 2, "the long paragraph was cut");
   for (const chunk of paragraphChunks) {

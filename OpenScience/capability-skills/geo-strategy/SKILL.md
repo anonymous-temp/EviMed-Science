@@ -193,3 +193,26 @@ names, no ids.
 Then `evimed_submit_deliverable{deliverableId}`. There is one implementation of
 its rules. A number labelled measured without its denominator, or a target not
 labelled forecast, must be fixed; the rest is advice.
+
+## Selected implementation plans
+
+When the control plane supplies `<evimed_geo_plan_context>`, its reference names
+one submitted native request and a frozen input. Read `strategy` and `targets`
+with `filter.planContextRef` (or the explicit `strategyVersion`). Keep its exact
+groups, source/page focus, question versions and planning targets. Never claim
+that current data were the historical input.
+
+Write the normal `deliverables/<deliverable-id>/strategy.json` and `geo-strategy.md`.
+The actual producing run imports that file with its consumed input reference.
+A runtime project token cannot attest a particular concurrent tool call, so
+scoped gateway writes of strategy/actions/targets return `geo_plan_file_required`;
+complete the existing file-delivery path instead. Staging alone starts no work.
+Do not mutate target configuration, budget, payment or publication implicitly.
+
+An action may carry `work` (`mode: new|modify_existing`, exact `articleId`,
+`resultVersionId`, `digest` for modification, `audience`, `outputs`), `sequence`,
+`timing` (dates or an ordered `durationDays` range and basis), `effort`
+(`unit: hours|days`, low/high and basis), and `estimate` (`currency: CNY`, low/high,
+nonempty preserved source-price or supplied-quote references, assumptions/date).
+Source refs may include the exact observed URL. Unsupported amounts remain null,
+never zero; target values are plans and no action promises causal improvement.

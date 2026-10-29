@@ -113,6 +113,47 @@ test("geo-insight: the reference pack is accepted with nothing to say about it",
   assert.equal(verdict.metrics.geoControlGroups, 3);
 });
 
+test("geo-insight: explicit unknown label status is valid without becoming off-label", async () => {
+  const pack = insightPack();
+  const library = JSON.parse(pack["claims.json"]);
+  const publicPath = ".evimed-sources/web-pages/public-info/page.md";
+  const publicText = "Public medicine information does not establish an approved-label comparison.";
+  library.claims = [claim({ sourceKind: "other", artifactPath: publicPath, quote: publicText, inLabel: null,
+    inLabelNote: "Approved label not checked; unknown does not mean off-label." })];
+  pack["claims.json"] = JSON.stringify(library);
+  const verdict = gate("geo-insight-pack", pack, await declaredOutputs("geo-insight"), { sourceArtifacts: { [publicPath]: publicText } });
+  assert.equal(verdict.ok, true, JSON.stringify(verdict.issues));
+  assert.equal(verdict.issues.some((entry) => entry.code === "geo_claim_library_notice"), false, JSON.stringify(verdict.issues));
+  assert.equal(JSON.parse(pack["claims.json"]).claims[0].inLabel, null);
+  assert.equal(verdict.metrics.geoClaimsVerified, 1);
+});
+
+test("geo-insight: explicit in-label and evidenced off-label decisions remain valid", async () => {
+  for (const inLabel of [true, false]) {
+    const pack = insightPack();
+    const library = JSON.parse(pack["claims.json"]);
+    const regulatorPath = ".evimed-sources/regulators/test/label-scope.md";
+    const regulatorText = "The study use is outside the approved indication in this jurisdiction.";
+    library.claims = [inLabel ? claim({ inLabel }) : claim({ inLabel, sourceKind: "regulator", artifactPath: regulatorPath,
+      statement: "The regulator identifies this study use as outside the checked label.", quote: regulatorText, sourceRef: "Synthetic regulatory scope notice, version 1" })];
+    pack["claims.json"] = JSON.stringify(library);
+    const verdict = gate("geo-insight-pack", pack, await declaredOutputs("geo-insight"), { sourceArtifacts: { ...INSIGHT_SOURCES, [regulatorPath]: regulatorText } });
+    assert.equal(verdict.issues.some((entry) => entry.code === "geo_claim_library_notice"), false, JSON.stringify(verdict.issues));
+    assert.equal(JSON.parse(pack["claims.json"]).claims[0].inLabel, inLabel);
+  }
+});
+
+test("geo-insight: omitted or invalid label statuses still receive a schema notice", async () => {
+  for (const inLabel of [undefined, "false", "unknown", 0, {}, []]) {
+    const pack = insightPack();
+    const library = JSON.parse(pack["claims.json"]);
+    library.claims = [claim({ inLabel })];
+    pack["claims.json"] = JSON.stringify(library);
+    const verdict = gate("geo-insight-pack", pack, await declaredOutputs("geo-insight"), { sourceArtifacts: INSIGHT_SOURCES });
+    assert.equal(verdict.issues.some((entry) => entry.code === "geo_claim_library_notice"), true, String(inLabel));
+  }
+});
+
 test("geo-insight: a quote that is not in the preserved source it names must be fixed", async () => {
   const pack = insightPack();
   const library = JSON.parse(pack["claims.json"]);

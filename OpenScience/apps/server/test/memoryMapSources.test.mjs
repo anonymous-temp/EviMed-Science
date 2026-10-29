@@ -5,15 +5,16 @@ import test from "node:test";
 
 import { buildMemoryMap } from "../src/memoryMap.mjs";
 import { bucketsOf, createActivitySource, memoryEventsOf } from "../src/memoryMapSources/activity.mjs";
-import { requestMemo } from "../src/memoryMapSources/common.mjs";
-import { createDocumentsSource, documentNode } from "../src/memoryMapSources/documents.mjs";
+import { recencyWeight, requestMemo } from "../src/memoryMapSources/common.mjs";
+import { createCapsuleNotesSource, capsuleNotesContribution } from "../src/memoryMapSources/capsuleNotes.mjs";
+import { createDocumentsSource, documentKindCounts, documentNode } from "../src/memoryMapSources/documents.mjs";
 import {
   createKnowledgeGraphSource, documentIdOfUri, entityTypeOf, graphFromCompile, parseEntity, parseFrontmatter, parseRelations, parseWikiPage, resolveLink,
 } from "../src/memoryMapSources/knowledgeGraph.mjs";
 import { createMethodsSource } from "../src/memoryMapSources/methods.mjs";
 import { createNativeMemorySource } from "../src/memoryMapSources/nativeMemory.mjs";
-import { createRecordLinks } from "../src/memoryMapSources/recordLinks.mjs";
-import { createRecordsSource, recordsContribution } from "../src/memoryMapSources/records.mjs";
+import { createNativeRecordLinks } from "../src/memoryMapSources/recordLinks.mjs";
+import { recordsContribution } from "../src/memoryMapSources/records.mjs";
 import { createRunsSource, workDimension, workOf } from "../src/memoryMapSources/runs.mjs";
 import { createTopicsSource } from "../src/memoryMapSources/topics.mjs";
 
@@ -29,22 +30,22 @@ function record(overrides = {}) {
     revisions: [], ...overrides,
   };
 }
-const request = (overrides = {}) => ({ user, projects, projectId: null, range: { from: null, to: "2026-10-12", unit: "month" }, timeZone: "UTC", now: NOW, engine: "postgres", focus: null, memo: requestMemo(), ...overrides });
+const request = (overrides = {}) => ({ user, projects, projectId: null, range: { from: null, to: "2026-10-12", unit: "month" }, timeZone: "UTC", now: NOW, focus: null, memo: requestMemo(), ...overrides });
 
-test("the records source reads the store once for the nodes and once for what the others share, and nothing it does is a write", async () => {
+test("the memory source reads the engine's files once for a request, draws what can be drawn, and nothing it does is a write", async () => {
   let reads = 0;
-  const researchMemory = {
-    mapRecords: async (userId, options) => { reads += 1; assert.equal(userId, "usr_1"); assert.equal(options.projectId, "prj_a"); return [record({ id: "a", scope: "project", scopeId: "prj_a" }), record({ id: "b", sensitive: true })]; },
-    mapLinks: async (_userId, ids) => { assert.deepEqual(ids, ["a"], "a sensitive memory is not even asked about"); return { sources: [], conflicts: [], usage: { a: { count: 10 } } }; },
-  };
-  const source = createRecordsSource({ researchMemory });
+  const source = createNativeMemorySource({ readMemories: async (seen) => {
+    reads += 1;
+    assert.equal(seen.user.id, "usr_1");
+    return { records: [record({ id: "a", scope: "project", scopeId: "prj_a" }), record({ id: "b", sensitive: true })], sources: [], conflicts: [], usage: { a: { count: 10 } } };
+  } });
   const asked = request({ projectId: "prj_a" });
   const contribution = await source.read(asked);
-  await createDocumentsSource({ sources: { list: async () => ({ items: [] }) }, researchMemory }).read(asked);
-  assert.equal(reads, 1, "the second source reuses the first's read");
-  assert.deepEqual(contribution.nodes.map((node) => node.id), ["memory:a"]);
-  assert.equal(contribution.nodes[0].weight, 0.75, "importance 0.5 and use at its ceiling");
-  assert.equal(source.applies(request({ engine: "native" })), false, "an account on the native engine has no PostgreSQL records");
+  assert.equal(reads, 1);
+  assert.deepEqual(contribution.nodes.map((node) => node.id), ["memory:a"], "a sensitive memory is never drawn");
+  assert.equal(contribution.nodes[0].weight, recencyWeight("2026-09-01T01:00:00Z", NOW), "a file has no use counter: its mark says how recent it is");
+  assert.equal(source.applies(), true);
+  assert.equal(createNativeMemorySource().applies(), false, "a deployment with no memory engine draws no memories");
 });
 
 test("what a memory rests on becomes a mark: a document by its id, a work by its DOI, a card or a news item by its kind", () => {
@@ -71,16 +72,14 @@ test("the documents source titles the documents and tells a memory's placeholder
     ] : [] }),
     get: async (_userId, id) => { if (id === "src_other") return { id, projectId: "prj_z", createdAt: "2026-08-01T00:00:00Z", deletedAt: null, payload: { title: "别处的资料", paths: ["z.pdf"] } }; throw new Error("not found"); },
   };
-  const researchMemory = {
-    mapRecords: async () => [record()],
-    mapLinks: async () => ({ sources: [
-      { recordId: "rec_1", type: "knowledge_source", id: "src_other", state: "current", linkedAt: null },
-      { recordId: "rec_1", type: "knowledge_source", id: "src_1", state: "current", linkedAt: null },
-      { recordId: "rec_1", type: "knowledge_source", id: "src_missing", state: "current", linkedAt: null },
-    ], conflicts: [], usage: {} }),
-  };
+  const named = [
+    { recordId: "rec_1", type: "knowledge_source", id: "src_other", state: "current", linkedAt: null },
+    { recordId: "rec_1", type: "knowledge_source", id: "src_1", state: "current", linkedAt: null },
+    { recordId: "rec_1", type: "knowledge_source", id: "src_missing", state: "current", linkedAt: null },
+  ];
+  const memory = createNativeMemorySource({ readMemories: async () => ({ records: [record()], sources: named, conflicts: [], usage: {} }) });
   const asked = request();
-  const map = await buildMemoryMap({ sources: [createRecordsSource({ researchMemory }), createDocumentsSource({ sources, researchMemory })] }, { ...asked, projects, include: "nodes,edges" });
+  const map = await buildMemoryMap({ sources: [memory, createDocumentsSource({ sources, namedSources: async () => named })] }, { ...asked, projects, include: "nodes,edges" });
   const labels = Object.fromEntries(map.nodes.filter((node) => node.type === "document").map((node) => [node.id, node.label]));
   assert.deepEqual(labels, { "document:src_1": "GOLD 2025 报告", "document:src_other": "别处的资料", "document:src_missing": "一份资料" },
     "a deleted document is not listed, one the memory names is looked up, and one that is gone keeps its place with a plain name");
@@ -103,9 +102,9 @@ test("the files the engine compiled are pages and entities on the map, never doc
     },
     get: async (_userId, id) => mirrored.find((item) => item.id === id) ?? upload(id, id),
   };
-  const researchMemory = { mapRecords: async () => [record()], mapLinks: async () => ({ sources: [{ recordId: "rec_1", type: "knowledge_source", id: "src_w2", state: "current", linkedAt: null }], conflicts: [], usage: {} }) };
+  const memorySettings = { mapRecords: async () => [record()], mapLinks: async () => ({ sources: [{ recordId: "rec_1", type: "knowledge_source", id: "src_w2", state: "current", linkedAt: null }], conflicts: [], usage: {} }) };
   const products = { entities: [{ path: "entities/aspirin.md", text: ENTITY_ASPIRIN }], relations: "", pages: [{ uri: "entity/aspirin.md", text: WIKI_ASPIRIN }, { uri: "index.md", text: WIKI_INDEX }] };
-  const map = await buildMemoryMap({ sources: [createDocumentsSource({ sources, researchMemory }), createKnowledgeGraphSource({ fetchProducts: async () => products })] },
+  const map = await buildMemoryMap({ sources: [createDocumentsSource({ sources, memorySettings }), createKnowledgeGraphSource({ fetchProducts: async () => products })] },
     { ...request({ projectId: "prj_a" }), projects, include: "summary,nodes" });
   const countOf = (type) => map.nodes.filter((node) => node.type === type).length;
   assert.deepEqual(map.nodes.filter((node) => node.type === "document").map((node) => node.id).sort(), ["document:src_u1", "document:src_u2"], "only what the researcher put in is a document");
@@ -113,6 +112,73 @@ test("the files the engine compiled are pages and entities on the map, never doc
   assert.ok(countOf("page") >= 2 && countOf("entity") >= 1, "the compiled files are drawn once, as pages and entities");
   assert.deepEqual(asked, [null, "next"], "the second page was read because the first held only compiled files");
   assert.equal(map.nodes.some((node) => node.id === "document:src_w2"), false, "a compiled file a memory names is not looked up as a document either");
+});
+
+test("the inventory of the knowledge is the knowledge base's own count of each project, not the page of marks, and the compiled files are not in it", async () => {
+  const doc = (id, projectId, at) => ({ id, projectId, createdAt: at, deletedAt: null, payload: { title: id, docType: "published-paper", paths: [`${id}.pdf`] } });
+  // Two projects: one holds 250 documents of which the page reads 100 (the newest), the other has 3 and 40 compiled files.
+  const sources = {
+    list: async (_userId, { projectId }) => (projectId === "prj_a"
+      ? { items: [doc("src_1", "prj_a", "2026-10-10T00:00:00Z"), doc("src_2", "prj_a", "2026-10-10T05:00:00Z"), doc("src_3", "prj_a", "2026-10-01T00:00:00Z")], counts: { all: 250, literature: 200, table: 30, document: 20, page: 0, note: 0, image: 0, wiki: 0 }, nextCursor: null }
+      : { items: [], counts: { all: 43, literature: 1, table: 0, document: 2, page: 0, note: 0, image: 0, wiki: 40 }, nextCursor: null }),
+  };
+  const found = await createDocumentsSource({ sources }).read(request({ projects: [{ id: "prj_a", name: "甲" }, { id: "prj_b", name: "乙" }] }));
+  assert.deepEqual(found.facets.documentTypes, [{ id: "literature", label: "文献与指南", count: 201 }, { id: "table", label: "数据表", count: 30 }, { id: "document", label: "文档", count: 22 }]);
+  assert.deepEqual(found.facets.projectDocuments, [{ id: "prj_a", count: 250 }, { id: "prj_b", count: 3 }], "a project's documents without its compiled pages and entities");
+  // The days are what the page read, one for each document added.
+  assert.deepEqual(found.buckets.map((day) => [day.t, day.document]), [["2026-10-01", 1], ["2026-10-10", 2]]);
+  // A list with no database behind it has no counts: the inventory is what was read.
+  assert.deepEqual([...documentKindCounts({ items: [] }, [doc("src_1", "p", "2026-01-01T00:00:00Z")])], [["literature", 1]]);
+  // And the aggregator keeps it whole beside the marks: the project's count is the knowledge base's, the types add up across sources.
+  const map = await buildMemoryMap({ sources: [createDocumentsSource({ sources })] }, { user, projects: [{ id: "prj_a", name: "甲" }, { id: "prj_b", name: "乙" }], now: NOW, include: "summary,facets,buckets" });
+  assert.deepEqual(map.facets.projects.map((project) => [project.id, project.documents]), [["prj_a", 250], ["prj_b", 3]]);
+  assert.deepEqual(map.facets.documentTypes.map((type) => [type.id, type.count]), [["literature", 201], ["table", 30], ["document", 22]]);
+  assert.equal(map.summary.documents, 3, "the headline's marks are the ones drawn");
+  assert.equal(map.buckets.series.reduce((sum, day) => sum + day.document, 0), 3);
+});
+
+const NOTE = (id, over = {}, payload = {}) => ({ id, revision: 1, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", deletedAt: null, projectId: null,
+  payload: { capsuleId: "cap_1", factKind: "preference", layer: "profile", content: "报告先写结论，再给依据。", status: "approved", origin: "explicit", provenance: [], ...payload }, ...over });
+
+test("the notes of the account's own capsule are memories on the map and in its growth", async () => {
+  const entries = [
+    NOTE("e1"),
+    NOTE("e2", { projectId: "prj_a", createdAt: "2026-10-05T00:00:00Z" }, { factKind: "project_fact", layer: "knowledge", content: "纳入标准：年龄 ≥ 18 岁。" }),
+    NOTE("e3", {}, { status: "retired" }),
+    NOTE("e4", { deletedAt: "2026-10-06T00:00:00Z" }),
+    NOTE("e5", {}, { factKind: "writing_style", content: "  " }),
+    NOTE("e6", { createdAt: "2026-10-08T00:00:00Z" }, { factKind: "writing_style", layer: "profile", content: "引用写到页码。" }),
+  ];
+  const source = createCapsuleNotesSource({ capsules: { mine: async (userId, options) => { assert.equal(userId, "usr_1"); assert.ok(options.limit > 0); return { entries }; } } });
+  {
+    const found = await source.read(request());
+    assert.deepEqual(found.nodes.map((node) => node.id), ["memory:entry:e1", "memory:entry:e2", "memory:entry:e6"], "retired, deleted and empty notes are not drawn");
+    const [first, project, style] = found.nodes;
+    assert.deepEqual(first.open, { kind: "entry", id: "e1" });
+    assert.equal(first.type, "memory");
+    assert.equal(first.projectId, null);
+    assert.equal(project.projectId, "prj_a");
+    assert.equal(style.group, "写作习惯", "a kind of the capsule's own has a word");
+    assert.deepEqual(found.edges.map((edge) => [edge.from, edge.to, edge.type]), [
+      ["memory:entry:e1", "you:account", "belongs-to"], ["memory:entry:e2", "project:prj_a", "belongs-to"], ["memory:entry:e6", "you:account", "belongs-to"]]);
+    assert.deepEqual(found.events.map((event) => [event.ref, event.change, event.lane]), [["memory:entry:e1", "created", "account"], ["memory:entry:e2", "created", "project:prj_a"], ["memory:entry:e6", "created", "account"]]);
+    assert.deepEqual(found.buckets.map((day) => [day.t, day.memory]), [["2026-10-01", 1], ["2026-10-05", 1], ["2026-10-08", 1]]);
+    // They are counted in the aspects the memory page files them under (a writing habit is a habit).
+    const aspects = Object.fromEntries(found.facets.dimensions[0].axes.map((axis) => [axis.id, axis.count]));
+    assert.deepEqual([aspects["aspect:preference"], aspects["aspect:habit"], aspects["aspect:project"]], [1, 1, 1]);
+  }
+  // Narrowed to a project, its notes alone.
+  assert.deepEqual((await source.read(request({ projectId: "prj_a" }))).nodes.map((node) => node.id), ["memory:entry:e2"]);
+  assert.equal(createCapsuleNotesSource({ capsules: null }).applies(), false);
+  // Beside the memories they are one picture: the headline counts both, the radar adds both, the kinds and the person's own facet follow.
+  const records = recordsContribution([record({ id: "rec_9", kind: "preference", createdAt: "2026-09-01T00:00:00Z" })], {}, { now: NOW, timeZone: "UTC" });
+  const both = await buildMemoryMap({ sources: [{ name: "records", read: async () => records }, source] }, { user, projects, now: NOW, include: "summary,facets,events" });
+  assert.equal(both.summary.memories, 4);
+  assert.deepEqual(both.facets.aboutYou.map((kind) => [kind.id, kind.count]), [["preference", 2], ["writing_style", 1]], "what is about the person, by kind; the project's note is not");
+  assert.equal(both.facets.dimensions.find((dimension) => dimension.id === "memory").axes.find((axis) => axis.id === "aspect:preference").count, 2);
+  assert.equal(both.facets.dimensions.find((dimension) => dimension.id === "memory").total, 4);
+  assert.equal(both.events.filter((event) => event.change === "created").length, 4);
+  assert.equal(capsuleNotesContribution([], { now: NOW, timeZone: "UTC", projectId: null }).nodes.length, 0);
 });
 
 test("a documents read that failed in every project is the source's failure; one project failing is only its own", async () => {
@@ -189,8 +255,10 @@ test("the calendar counts events by day in the researcher's zone, and only the l
     { at: "2025-09-01T00:00:00Z", type: "memory" }, { at: "2027-01-01T00:00:00Z", type: "memory" },
   ];
   assert.deepEqual(bucketsOf(events, "Asia/Shanghai", NOW), [
-    { t: "2026-10-12", memory: 1, run: 2, method: 0, feedback: 0 },
+    { t: "2026-10-12", memory: 1, run: 2, method: 0, feedback: 0, document: 0 },
   ], "17:30Z is already the 12th in Shanghai; a year ago and the future are not drawn");
+  assert.deepEqual(bucketsOf([{ at: "2026-10-11T08:00:00Z", type: "document" }, { at: "2026-10-11T09:00:00Z", type: "document" }], "UTC", NOW),
+    [{ t: "2026-10-11", memory: 0, run: 0, method: 0, feedback: 0, document: 2 }], "a document added is a day's own count");
   assert.deepEqual(bucketsOf(events, "UTC", NOW).map((bucket) => [bucket.t, bucket.memory, bucket.run]), [["2026-10-11", 1, 1], ["2026-10-12", 0, 1]]);
   const memories = memoryEventsOf([record({ id: "a", scope: "project", scopeId: "prj_a", kind: "decision" })]);
   assert.deepEqual(memories.map((event) => [event.ref, event.lane, event.kind, event.change]), [["memory:a", "project:prj_a", "decision", "created"]]);
@@ -202,38 +270,23 @@ test("the topics source serves the grouping as it stands and never groups: membe
     read: async (userId, records) => { assert.equal(userId, "usr_1"); assert.deepEqual(records.map((entry) => entry.id), ["a"], "only what can be drawn is offered"); return { status: "stale", topics: [{ id: "topic:aaaaaaaaaa", label: "回答风格", weight: 1, trend: 0, members: ["a"] }] }; },
     refresh: async () => { throw new Error("a read must never group"); },
   };
-  const researchMemory = { mapRecords: async () => [record({ id: "a" }), record({ id: "b", sensitive: true })] };
-  const found = await createTopicsSource({ topics, researchMemory }).read(request());
+  const accountRecords = async (userId) => { assert.equal(userId, "usr_1"); return [record({ id: "a" }), record({ id: "b", sensitive: true })]; };
+  const source = createTopicsSource({ topics, accountRecords });
+  const found = await source.read(request());
   assert.deepEqual(found.facets.topics[0].members, ["memory:a"]);
   assert.equal(found.facts.topicsStatus, "stale");
-  assert.equal(createTopicsSource({ topics: { configured: false }, researchMemory }).applies(request()), false);
-});
-
-test("the topics are one view for both kinds of account: an account on the second engine is grouped from the memories that engine keeps", async () => {
-  const seen = [];
-  const topics = {
-    configured: true,
-    read: async (userId, records) => { seen.push([userId, records.map((entry) => entry.id)]); return { status: "ready", topics: [{ id: "topic:bbbbbbbbbb", label: "报告格式", weight: 2, trend: 1, members: records.map((entry) => entry.id) }] }; },
-  };
-  // The store's own rows are another engine's: never asked for this account.
-  const researchMemory = { mapRecords: async () => assert.fail("the older engine's rows are not this account's memories") };
-  const accountRecords = async (userId) => { assert.equal(userId, "usr_1"); return [record({ id: "nm_file", summary: "回答格式" }), record({ id: "nm_secret", sensitive: true })]; };
-  const source = createTopicsSource({ topics, researchMemory, accountRecords });
-  const asked = request({ engine: "native" });
-  assert.equal(source.applies(asked), true, "it no longer stands aside for the second engine");
-  const found = await source.read(asked);
-  assert.deepEqual(seen, [["usr_1", ["nm_file"]]], "only what can be drawn is offered");
-  assert.deepEqual(found.facets.topics[0].members, ["memory:nm_file"]);
-  assert.equal(found.facts.topicsStatus, "ready");
+  assert.equal(source.applies(), true);
+  assert.equal(createTopicsSource({ topics: { configured: false }, accountRecords }).applies(request()), false);
+  assert.equal(createTopicsSource({ topics, accountRecords: null }).applies(request()), false, "no memory engine, no topics");
 });
 
 // ------------------------------------------------------ the native memory seam
 
 const NATIVE_FIXTURE = {
   records: [
-    record({ id: "nat_1", scope: "user", kind: "profile", summary: "后端工程师，主要写 Go 和 SQL", createdAt: "2026-08-01T00:00:00Z" }),
+    record({ id: "nat_1", scope: "user", kind: "profile", summary: "后端工程师，主要写 Go 和 SQL", createdAt: "2026-08-01T00:00:00Z", updatedAt: "2026-08-01T00:00:00Z" }),
     record({ id: "nat_2", scope: "project", scopeId: "prj_a", kind: "decision", summary: "迁移先做只读副本", createdAt: "2026-09-01T00:00:00Z", status: "superseded", supersededBy: "nat_3", invalidSince: "2026-09-20T00:00:00Z" }),
-    record({ id: "nat_3", scope: "project", scopeId: "prj_a", kind: "decision", summary: "迁移直接切主库", createdAt: "2026-09-20T00:00:00Z" }),
+    record({ id: "nat_3", scope: "project", scopeId: "prj_a", kind: "decision", summary: "迁移直接切主库", createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" }),
     record({ id: "nat_4", scope: "project", scopeId: "prj_b", kind: "project_fact", summary: "另一个项目" }),
     record({ id: "nat_s", sensitive: true }),
   ],
@@ -241,30 +294,31 @@ const NATIVE_FIXTURE = {
   conflicts: [], usage: { nat_1: { count: 4 } },
 };
 
-test("the native memory seam draws an account's memories exactly as the PostgreSQL source does, from whatever reader is wired in", async () => {
-  const asked = request({ engine: "native" });
+test("the memory seam draws an account's memories by the one function, from whatever reader is wired in", async () => {
+  const asked = request();
   const unwired = createNativeMemorySource();
   assert.equal(unwired.applies(asked), false, "until a reader is wired the seam stands aside");
   const wired = createNativeMemorySource({ readMemories: async (seen) => { assert.equal(seen.user.id, "usr_1"); return NATIVE_FIXTURE; } });
   assert.equal(wired.applies(asked), true);
-  assert.equal(wired.applies(request()), false, "an account on PostgreSQL is not read from files");
 
   const native = await wired.read(asked);
-  const same = recordsContribution(NATIVE_FIXTURE.records, NATIVE_FIXTURE, { now: NOW, timeZone: "UTC" });
-  assert.deepEqual(native, same, "one function draws both engines' memories");
+  // The one difference is a mark's size: a file has no importance or use counter of its own, so it says how recent the file is.
+  const same = recordsContribution(NATIVE_FIXTURE.records, NATIVE_FIXTURE, { now: NOW, timeZone: "UTC", weigh: (record) => recencyWeight(record.updatedAt ?? record.createdAt ?? null, NOW) });
+  assert.deepEqual(native, same, "the seam adds nothing to what the one function draws");
+  const sizes = native.nodes.filter((node) => node.type === "memory").map((node) => node.weight);
+  assert.ok(new Set(sizes).size > 1, "the marks of the files are not all one size");
   assert.ok(!native.nodes.some((node) => node.id === "memory:nat_s"), "a sensitive memory is not drawn from files either");
   assert.equal(native.nodes.find((node) => node.id === "memory:nat_3").reason, "source-changed");
   assert.equal(native.lanes.length, 1);
   assert.equal(native.lanes[0].segments.length, 2);
 
-  const narrowed = await wired.read(request({ engine: "native", projectId: "prj_a" }));
+  const narrowed = await wired.read(request({ projectId: "prj_a" }));
   assert.deepEqual(narrowed.nodes.filter((node) => node.type === "memory").map((node) => node.id).sort(), ["memory:nat_2", "memory:nat_3"]);
 
-  const map = await buildMemoryMap({ sources: [createRecordsSource({ researchMemory: { mapRecords: async () => { throw new Error("must not be read"); } } }), wired] },
-    { user, projects, now: NOW, engine: "native", include: "summary,nodes" });
-  assert.deepEqual(map.missing, [], "the PostgreSQL source stood aside for this account");
+  const map = await buildMemoryMap({ sources: [wired] }, { user, projects, now: NOW, include: "summary,nodes" });
+  assert.deepEqual(map.missing, []);
   assert.equal(map.summary.memories, 3);
-  const broken = await buildMemoryMap({ sources: [createNativeMemorySource({ readMemories: async () => { throw new Error("files unreadable"); } })] }, { user, projects, now: NOW, engine: "native" });
+  const broken = await buildMemoryMap({ sources: [createNativeMemorySource({ readMemories: async () => { throw new Error("files unreadable"); } })] }, { user, projects, now: NOW });
   assert.deepEqual(broken.missing, ["native-memory"]);
 });
 
@@ -421,38 +475,23 @@ test("the knowledge-graph seam stands aside until a reader is wired, then draws 
 
 // ------------------------------------------------------------- the drawer's links
 
-test("a memory's links: what it rests on, what it replaced and what replaced it, who it disagrees with, and the conversations it was handed to", async () => {
-  const researchMemory = {
-    sourceLinks: async () => [
-      { type: "knowledge_source", id: "src_1", state: "retracted" }, { type: "doi", id: "10.1/x", state: "current" }, { type: "evidence_card", id: "card_1", state: "unknown" },
-    ],
-    recordNeighbours: async () => ({
-      replaced: [record({ id: "old", status: "superseded", summary: "旧说法", invalidSince: "2026-09-01T00:00:00Z" })],
-      replacedBy: record({ id: "new", summary: "新说法" }),
-      conflicts: [record({ id: "foe", sensitive: true, summary: "不能说", value: "不能说" })],
-    }),
-  };
-  const agentRuns = { researcherRuns: async (project) => [
-    { id: "r1", sessionId: "ses_1", title: "心衰指南", finishedAt: "2026-10-01T00:00:00Z", recalledMemories: [{ id: "rec_1" }, { id: "other" }] },
-    { id: "r2", sessionId: "ses_2", title: "没用到", finishedAt: "2026-10-02T00:00:00Z", recalledMemories: [{ id: "other" }] },
-    { id: "r3", sessionId: "ses_3", title: "删掉的", finishedAt: "2026-10-03T00:00:00Z", deleted: true, recalledMemories: [{ id: "rec_1" }] },
-    { id: "r4", sessionId: "ses_4", question: "后来的问题", finishedAt: "2026-10-04T00:00:00Z", recalledMemories: [{ id: "rec_1" }], project },
-  ] };
-  const sources = { get: async (_user, id) => ({ id, payload: { title: "GOLD 报告", paths: ["g.pdf"] } }) };
-  const links = createRecordLinks({ researchMemory, sources, agentRuns, projectOf: async (_u, id) => ({ id }), listProjects: async () => [{ id: "prj_a" }] });
-  const found = await links(user, record({ scope: "project", scopeId: "prj_a" }));
+test("a memory's links: what it rests on, from the overlay's record; a file of the engine has no replacement, disagreement or hand-over record", async () => {
+  const seen = [];
+  const nativeMemory = { sourceLinks: async (userId, id) => {
+    seen.push([userId, id]);
+    return [{ type: "knowledge_source", id: "src_1", state: "retracted" }, { type: "doi", id: "10.1/x", state: "current" }, { type: "evidence_card", id: "card_1", state: "unknown" }];
+  } };
+  const links = createNativeRecordLinks({ nativeMemory });
+  const found = await links(user, "native:viking://user/memories/profile.md#abc");
+  assert.deepEqual(seen, [["usr_1", "native:viking://user/memories/profile.md#abc"]]);
   assert.deepEqual(found.rests.map((rest) => [rest.type, rest.state, rest.title, rest.href]), [
-    ["knowledge_source", "retracted", "GOLD 报告", "/app/files/src_1"], ["doi", "current", "10.1/x", "https://doi.org/10.1/x"], ["evidence_card", "unknown", null, null],
+    ["knowledge_source", "retracted", null, "/app/files/src_1"], ["doi", "current", "10.1/x", "https://doi.org/10.1/x"], ["evidence_card", "unknown", null, null],
   ]);
-  assert.deepEqual(found.replaced.map((entry) => [entry.id, entry.text, entry.to]), [["old", "旧说法", "2026-09-01T00:00:00.000Z"]]);
-  assert.equal(found.replacedBy.text, "新说法");
-  assert.deepEqual(found.conflicts.map((entry) => [entry.id, entry.sensitive, entry.text]), [["foe", true, ""]], "a sensitive neighbour carries no words");
-  assert.deepEqual(found.usedIn.map((entry) => [entry.sessionId, entry.title]), [["ses_4", "后来的问题"], ["ses_1", "心衰指南"]], "newest first; a deleted conversation and one that never used it are not listed");
+  assert.deepEqual([found.replaced, found.replacedBy, found.conflicts, found.usedIn], [[], null, [], []], "said empty, not guessed");
   assert.ok(!JSON.stringify(found).match(/count|次/u), "how often is the platform's, not the researcher's");
 
-  const failing = createRecordLinks({
-    researchMemory: { sourceLinks: async () => { throw new Error("x"); }, recordNeighbours: async () => { throw new Error("y"); } },
-    agentRuns: { researcherRuns: async () => { throw new Error("z"); } }, projectOf: async (_u, id) => ({ id }), listProjects: async () => [{ id: "prj_a" }],
-  });
-  assert.deepEqual(await failing(user, record()), { rests: [], replaced: [], replacedBy: null, conflicts: [], usedIn: [] }, "each part stands or falls by itself");
+  const many = createNativeRecordLinks({ nativeMemory: { sourceLinks: async () => Array.from({ length: 12 }, (_, index) => ({ type: "doi", id: `10.1/${index}`, state: "current" })) } });
+  assert.equal((await many(user, "x")).rests.length, 8, "the section lists a few");
+  const failing = createNativeRecordLinks({ nativeMemory: { sourceLinks: async () => { throw Object.assign(new Error("gone"), { status: 404 }); } } });
+  await assert.rejects(() => failing(user, "x"), { status: 404 });
 });

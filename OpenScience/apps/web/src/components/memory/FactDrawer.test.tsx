@@ -13,7 +13,7 @@ vi.mock("@/lib/apiClient", async () => ({
   webErrorMessage: (_error: unknown, overrides?: { fallback?: string }) => overrides?.fallback ?? "操作未完成，请重试。",
 }));
 const client = vi.hoisted(() => ({
-  announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(), settleMemoryConflict: vi.fn(),
+  announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(),
   retireCapsuleEntry: vi.fn(), undoCapsuleEntry: vi.fn(), fetchMemorySources: vi.fn(),
 }));
 vi.mock("@/lib/memoryClient", () => client);
@@ -30,21 +30,21 @@ vi.mock("@/lib/toast", () => ({ toast: toasts }));
 const navigation = vi.hoisted(() => ({ select: vi.fn() }));
 vi.mock("@/lib/projects", () => ({ useProjectStore: { getState: () => ({ select: navigation.select }) } }));
 
-/** A structured record with only the fields a drawer reads. */
+/** A record with only the fields a drawer reads: a sentence of the profile document (a file memory has no `document` and is drawn as its text). */
 function record(overrides: Record<string, unknown> = {}) {
   return {
     id: "mem_1", scope: "user", scopeId: "", kind: "preference", key: "preference.x",
     value: "", summary: "证据先用表格", status: "active", origin: "explicit",
     confidence: 1, importance: 0.5, sensitive: false, evidenceCount: 1,
     evidence: [], revisions: [], version: 1, createdAt: "2026-09-12T02:00:00Z", updatedAt: "2026-09-12T02:00:00Z", lastConfirmedAt: null, expiresAt: null,
-    provenance: { basis: "stated", observations: 2, runs: 2, conversations: 1 },
+    provenance: { basis: "stated", observations: 2, runs: 2, conversations: 1 }, document: { id: "nm_profile" },
     ...overrides,
   } as never;
 }
 
-function fact(overrides: Record<string, unknown> = {}, formerly: unknown[] = []): FactItem {
+function fact(overrides: Record<string, unknown> = {}): FactItem {
   const stored = record(overrides) as { summary: string };
-  return { kind: "record", key: "record:mem_1", group: "self", section: "preference", projectId: null, at: "", text: stored.summary, record: stored, formerly } as never;
+  return { kind: "record", key: "record:mem_1", group: "self", section: "preference", projectId: null, at: "", text: stored.summary, record: stored } as never;
 }
 
 /** Where the router is, so a test can say where a click went. */
@@ -139,7 +139,7 @@ describe("one memory, opened from its row", () => {
     open(fact({
       status: "superseded", invalidSince: "2026-10-03T02:00:00Z", version: 2,
       revisions: [{ version: 1, value: "旧", summary: "旧", status: "active", changedAt: "2026-09-20T02:00:00Z", reason: "x" }],
-    }, []));
+    }));
     const bar = screen.getByRole("img", { name: "有效期：9月12日起，10月3日止，中间改过 1 次" });
     expect(within(bar.parentElement!).getByText("9月12日")).toBeInTheDocument();
     expect(within(bar.parentElement!).getByText("10月3日")).toBeInTheDocument();
@@ -258,122 +258,6 @@ describe("one memory, opened from its row", () => {
     // The 「⋯」 of a memory always holds 「不再记这条」; the undo is in it only once there is a change to take back.
     expect(within(await openMenu()).queryByRole("menuitem", { name: "撤销上次改动" })).not.toBeInTheDocument();
   });
-
-  // Review R12 (owner ruling of 2026-10-10): the medicine-safety hold is retired, so what waits to be confirmed is a proposal an
-  // outside agent made, and it says only that. A sensitive one still says what confirming does before it does it.
-  it("shows what waits to be confirmed in plain words, and asks before a sensitive one takes effect, by either path", async () => {
-    api.updateStructuredMemory.mockImplementation(async (value: object, update: object) => ({ ...value, ...update }));
-    open(fact({ id: "mem_sensitive", summary: "我在服用某种药物。", status: "pending", sensitive: true }));
-    expect(screen.getByText("待确认")).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/用药安全/);
-    await userEvent.click(screen.getByRole("button", { name: "确认" }));
-    const dialog = await screen.findByRole("alertdialog", { name: "确认这条敏感记忆？" });
-    // Both recall paths drop a sensitive record whatever its status.
-    expect(dialog).toHaveTextContent("敏感记忆不会被自动用于后续研究");
-    expect(dialog.textContent).not.toMatch(/隐私保护/);
-    expect(api.updateStructuredMemory).not.toHaveBeenCalled();
-    await userEvent.click(within(dialog).getByRole("button", { name: "确认保留" }));
-    await waitFor(() => expect(api.updateStructuredMemory).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "mem_sensitive" }), expect.objectContaining({ status: "active" })));
-
-    // 编辑 goes through the same dialog.
-    cleanup();
-    vi.clearAllMocks();
-    open(fact({ id: "mem_sensitive", summary: "我在服用某种药物。", status: "pending", sensitive: true }));
-    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    expect(await screen.findByText("确认这条敏感记忆？")).toBeInTheDocument();
-    expect(api.updateStructuredMemory).not.toHaveBeenCalled();
-  });
-
-  it("shows a fact another replaced as what it was, and does not offer to edit what is no longer in force", () => {
-    open(fact({ status: "superseded", supersededBy: "mem_9", invalidSince: "2026-09-01T00:00:00Z", createdAt: "2026-03-02T00:00:00Z" }));
-    expect(screen.getByText(/曾经如此：证据先用表格（3月2日～9月1日）/)).toBeInTheDocument();
-    expect(screen.getByText("已被替代")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "忘记" })).toBeInTheDocument();
-  });
-});
-
-// F1: what N13 recorded about a memory — a disagreement, an interval, a source
-// that changed — is in its drawer, and a disagreement is the researcher's to settle.
-describe("a memory that is uncertain says why, and a disagreement is settled by the researcher", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
-  afterEach(cleanup);
-
-  const side = (patch: Record<string, unknown> = {}) => ({
-    id: "mem_2", status: "active", scope: "user", scopeId: "", origin: "inferred", sensitive: false,
-    text: "证据先用列表", createdAt: "2026-09-01T00:00:00Z", ...patch,
-  });
-  const relations = (patch: Record<string, unknown> = {}) => ({
-    validity: { from: null, until: null }, caveats: [], conflicts: [], sources: [], ...patch,
-  });
-
-  it("says nothing on a memory with nothing to say", () => {
-    open(fact({ relations: relations() }));
-    expect(screen.queryByText("有冲突")).not.toBeInTheDocument();
-    expect(screen.queryByText("和另一条说法不一致")).not.toBeInTheDocument();
-  });
-
-  it("labels each reason in a few words, and keeps the sentence", () => {
-    open(fact({ relations: relations({ caveats: ["source_retracted", "source_expired", "source_changed", "not_yet_valid"],
-      sources: [{ type: "doi", id: "10.1/a", state: "retracted" }] }) }));
-    const drawer = screen.getByRole("dialog");
-    for (const text of ["来源已撤回", "来源已过期", "来源已更改", "尚未生效"]) expect(within(drawer).getByText(text)).toBeInTheDocument();
-    expect(within(drawer).getByText("证据先用表格")).toBeInTheDocument();
-    // The interface does not explain the system: no identifier, no state name.
-    expect(drawer.textContent).not.toMatch(/10\.1\/a|retracted|source_/);
-  });
-
-  it("shows the other statement of a disagreement and offers 「以这条为准」 on either side", async () => {
-    client.settleMemoryConflict.mockResolvedValue({ kept: { id: "mem_1" }, superseded: { id: "mem_2", version: 5 } });
-    client.undoMemoryRecord.mockResolvedValue({ undone: "restored", record: null, restored: [] });
-    const { onChanged } = open(fact({ relations: relations({ caveats: ["conflict"], conflicts: [side()] }) }));
-    const drawer = screen.getByRole("dialog");
-    expect(within(drawer).getByText("有冲突")).toBeInTheDocument();
-    expect(within(drawer).getByText("另一条：“证据先用列表”")).toBeInTheDocument();
-    const choices = within(drawer).getAllByRole("button", { name: /^以这条为准/ });
-    expect(choices).toHaveLength(2);
-    expect(choices[0]).toHaveAccessibleName("以这条为准：证据先用表格");
-    expect(choices[1]).toHaveAccessibleName("以这条为准：证据先用列表");
-
-    // This statement holds: it is the one kept.
-    await userEvent.click(choices[0]);
-    await waitFor(() => expect(client.settleMemoryConflict).toHaveBeenCalledWith("mem_1", "mem_2"));
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    // The replaced statement is kept, and the toast takes the decision back.
-    const [message, options] = toasts.success.mock.calls.at(-1)!;
-    expect(message).toBe("已按这条为准");
-    options.action.onClick();
-    await waitFor(() => expect(client.undoMemoryRecord).toHaveBeenCalledWith("mem_2", 5));
-
-    // The other statement holds: it is the one kept.
-    await userEvent.click(choices[1]);
-    await waitFor(() => expect(client.settleMemoryConflict).toHaveBeenLastCalledWith("mem_2", "mem_1"));
-  });
-
-  it("says so when it could not be settled, and changes nothing on the page", async () => {
-    client.settleMemoryConflict.mockRejectedValue(new Error("refused"));
-    const { onChanged } = open(fact({ relations: relations({ caveats: ["conflict"], conflicts: [side()] }) }));
-    await userEvent.click(screen.getAllByRole("button", { name: /^以这条为准/ })[0]);
-    await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("操作未完成，请重试。"));
-    expect(onChanged).not.toHaveBeenCalled();
-  });
-
-  it("does not offer to settle against a memory still waiting for confirmation, nor show a sensitive one's words", () => {
-    open(fact({ relations: relations({ caveats: ["conflict"], conflicts: [side({ status: "pending" })] }) }));
-    expect(screen.getByText("另一条：“证据先用列表”")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^以这条为准/ })).not.toBeInTheDocument();
-    cleanup();
-    open(fact({ relations: relations({ caveats: ["conflict"], conflicts: [side({ sensitive: true, text: "" })] }) }));
-    expect(screen.getByText("另一条：这是一条敏感记忆")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /^以这条为准/ })).toHaveLength(2);
-  });
-
-  it("offers nothing to settle on a memory that is itself waiting", () => {
-    open(fact({ status: "pending", relations: relations({ caveats: ["conflict"], conflicts: [side()] }) }));
-    expect(screen.queryByRole("button", { name: /^以这条为准/ })).not.toBeInTheDocument();
-  });
 });
 
 describe("a note of the researcher's own capsule, opened from its row", () => {
@@ -419,6 +303,30 @@ describe("a note of the researcher's own capsule, opened from its row", () => {
     const [, options] = toasts.success.mock.calls.at(-1)!;
     options.action.onClick();
     await waitFor(() => expect(client.undoCapsuleEntry).toHaveBeenCalledWith("cap_1", expect.objectContaining({ id: "entry_1", revision: 2 })));
+  });
+
+  it("shows a note an outside agent proposed as waiting for confirmation: 确认 takes it, 不要 puts it away with an undo, and a note in force has neither", async () => {
+    const proposed = (): FactItem => note({ payload: { capsuleId: "cap_1", factKind: "preference", layer: "profile", content: "报告先给结论。", status: "candidate", origin: "inferred", provenance: [] } });
+    product.updateCapsuleEntry.mockResolvedValue({});
+    const first = open(proposed());
+    const drawer = screen.getByRole("dialog", { name: "偏好" });
+    expect(within(drawer).getByText("待确认")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/外部|代理|agent|推断|提议/i);
+    await userEvent.click(within(drawer).getByRole("button", { name: "确认" }));
+    await waitFor(() => expect(product.updateCapsuleEntry).toHaveBeenCalledWith("cap_1", "entry_1", { status: "approved", expectedRevision: 1 }));
+    await waitFor(() => expect(first.onChanged).toHaveBeenCalled());
+    expect(toasts.success).toHaveBeenCalledWith("已确认");
+    cleanup();
+    client.retireCapsuleEntry.mockResolvedValue({ id: "entry_1", revision: 2 });
+    const second = open(proposed());
+    await userEvent.click(screen.getByRole("button", { name: "不要" }));
+    await waitFor(() => expect(client.retireCapsuleEntry).toHaveBeenCalledWith("cap_1", "entry_1", 1));
+    expect(second.onClose).toHaveBeenCalled();
+    expect(toasts.success.mock.calls.at(-1)![1].action.label, "restorable from 已忘记的内容 and by the toast").toBe("撤销");
+    cleanup();
+    open(note());
+    expect(screen.queryByText("待确认")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "不要" })).not.toBeInTheDocument();
   });
 
   it("offers to undo the last change only once it has had one", async () => {

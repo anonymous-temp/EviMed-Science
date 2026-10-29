@@ -2,8 +2,8 @@
  * The one pattern that decides whether a piece of captured text is too
  * sensitive to be stored, recalled, or distilled into a method.
  *
- * Hidden knowledge: this used to live inside `memoryIntelligence.mjs`, which
- * was fine while memory extraction was the only thing that captured a
+ * Hidden knowledge: this used to live inside the platform's own memory extraction, which
+ * was fine while that was the only thing that captured a
  * researcher's own words. It stopped being fine the moment distillation began
  * reading transcripts too: two captures of the same sentence would have been
  * screened by two regexes, and the one that drifted would be the one nobody

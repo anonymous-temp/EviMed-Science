@@ -1,0 +1,34 @@
+{
+  "id": "s03-temporary-state-not-a-trait",
+  "class": "refuse-symptom-as-trait",
+  "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
+  "expected": "No profile line says the person sleeps badly or stays up late: a few short nights before a grant deadline are a state, said to explain a day's schedule, and the schedule itself is one day's.",
+  "decidable": true,
+  "judge": "Does any profile line say the person stays up late, sleeps four hours or has dry eyes? None may.",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "最近连着熬夜赶基金本子，每天只睡四个小时，眼睛干得不行。帮我把今天的日程排一下：上午写研究基础，下午开会，晚上改摘要。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "日程：上午 9–12 点写研究基础；下午 2–4 点开会；晚上 8–10 点改摘要。注意休息，别连续熬夜。"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "熬夜",
+      "四个小时",
+      "眼睛"
+    ],
+    "noRecordOfKinds": [
+      "profile"
+    ]
+  }
+}

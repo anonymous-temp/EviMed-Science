@@ -86,8 +86,8 @@ describe("FilterChips", () => {
     // Six inline chips and the 「更多」 chip.
     expect(chips).toHaveLength(7);
     for (const chip of chips) expect(chip.className).not.toMatch(BORDER);
-    // 28 px and 13 px text (spec §20.3, appendix E #10).
-    for (const chip of chips) expect(chip).toHaveClass("h-sm", "text-compact");
+    // 28 px and 14 px text (spec §20.3, appendix E #10; 13 until R19.2).
+    for (const chip of chips) expect(chip).toHaveClass("h-sm", "text-ui");
     // Under a finger the hit area is 40 high; chips sit 4 px apart, so it grows up and down and never sideways.
     for (const chip of chips) expect(chip).toHaveClass("coarse:before:-inset-y-1.5", "coarse:before:inset-x-0");
     expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");

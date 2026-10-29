@@ -24,22 +24,31 @@
  * (`src/learnedMethods.mjs`): the reading is the one trace that says a learned
  * method was used.
  *
+ * What a conversation is shown of them is decided when it begins, not when the runtime does. The control plane rewrites the mounted
+ * directory for the first prompt of each conversation (`RuntimeManager.refreshCapsuleMethods`: the methods nearest to what is asked,
+ * what they reuse, one slot of exposure) and writes `_selection.json` beside it — what to list, in order, and why each learned method is
+ * there. This row reads it when the conversation's first prompt is claimed, keeps what it read for that conversation (a running turn,
+ * and the rest of the conversation, keep what they began with; it is read again at the first turn after the selection has changed),
+ * puts it in the methods section of that conversation's system prompt (replaced in the assembly, so the first request carries it),
+ * and records it as that conversation's receipt with the reasons. What the runtime was launched with is the fallback for a
+ * conversation nobody prepared, and for a control plane that predates the selection file.
+ *
  * Two switches, because the row carries two things. The memory half — the
- * recall and note tools — is the model's way into the person's memory, and an
- * account whose memory OpenViking's native engine keeps already has one: the
- * official plugin's five `mcp__openviking__*` tools. Both sets side by side made
- * the model call both every time, the old one answering nothing (LAB-MEM,
- * 2026-10-13), so that half stands aside for such an account (`memoryEnabled`).
- * The other half — the user's methods, the conversation's scope and the
- * handbook context — is not memory and stays (`enabled`).
+ * recall and note tools — is the model's way into the person's memory, and a
+ * deployment that keeps it in OpenViking's engine (every deployment with one: the legacy engine that
+ * did not was deleted on 2026-10-25) already has one: the official plugin's five `mcp__openviking__*`
+ * tools. Both sets side by side made the model call both every time, the old one answering nothing
+ * (LAB-MEM, 2026-10-13), so that half stands aside there (`memoryEnabled`); it is the capsule's own
+ * recall and notes only where there is no engine.
+ * The other half — the user's methods and the conversation's scope — is not memory and stays (`enabled`).
  *
  * @module @evimed/dsh-socket/plugins/capsule
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
-import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onPreStep, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
-import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
-import { isLearnedMethod } from '../src/learnedMethods.mjs'
+import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onClaimedPromptAssemble, onPreStep, parentSessionOf, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
+import { skillBodyDigestAsync } from '../src/digest.mjs'
+import { isLearnedMethod, isOfficialMethod } from '../src/learnedMethods.mjs'
 import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from '@evimed/domain'
 
@@ -53,6 +62,12 @@ export const inject = ['tools', 'systemPrompt']
  *  guidance (120) and the answer persona (121), inside DSH's tool-guidance band. */
 export const METHODS_SECTION_NAME = 'evimed:capsule-methods'
 export const METHODS_SECTION_ORDER = 130
+
+/** The file the control plane writes beside the mounted methods: what to list, in order, and why each learned method is there. */
+export const SELECTION_FILE = '_selection.json'
+
+/** How many conversations' selections are kept: only a conversation still being prompted needs its own. */
+const SNAPSHOT_LIMIT = 256
 
 /** Provided in the preset's realm when the recall and note tools are registered; absent when the memory half is off. */
 export const MEMORY_SERVICE = 'evimedCapsuleMemory'
@@ -73,7 +88,7 @@ const METHODS_SECTION_MAX_CHARS = 12_000
 
 export const Config = Schema.object({
   enabled: Schema.boolean().default(true)
-    .description('Off registers nothing: no recall or note tool, no methods section, no conversation or handbook context (EVIMED_CAPSULE_ENABLED=0). Delegation then stops handing children the recall tool.'),
+    .description('Off registers nothing: no recall or note tool, no methods section, no conversation context (EVIMED_CAPSULE_ENABLED=0). Delegation then stops handing children the recall tool.'),
   memoryEnabled: Schema.boolean().default(true)
     .description('The memory half: the recall and note tools. Off when the deployment switches it off (EVIMED_CAPSULE_MEMORY_ENABLED=0) and for an account on the native memory engine, whose one memory entrance is the OpenViking plugin (the launch plan sets EVIMED_MEMORY_GATEWAY_URL). The methods and the context stay; delegation stops handing children the recall tool.'),
   methodsDir: Schema.string().default('')
@@ -93,20 +108,22 @@ export const Config = Schema.object({
  */
 export async function apply(ctx, config) {
   if (config.enabled === false) return
+  // What the runtime was launched with: the fallback for a conversation nobody prepared (below), and the list a plugin that predates the
+  // per-conversation mount is read as.
   const methods = await loadMethods(ctx, config.methodsDir)
   ctx.provide('evimedCapsuleMethods', methods, true)
   // The root session's receipt of what it carries, in the run-state
   // projection beside the delegation receipts (`evidence-store`).
   if (methods.length) ctx.get('evimedDiagnostics')?.mountedMethods?.(methods.map((method) => ({ name: method.name, digest: method.digest })))
-  // A method that cannot be listed costs that method, never the session.
-  if (methods.length) {
-    try {
-      const text = methodsSectionText(methods, config.methodsDir)
-      ctx.effect(() => registerSection(ctx, { name: METHODS_SECTION_NAME, order: METHODS_SECTION_ORDER, text }))
-    } catch (error) {
-      ctx.get('evimedDiagnostics')?.degrade?.(`capsule methods not listed: ${errorMessage(error)}`)
-    }
+  // A method that cannot be listed costs that method, never the session. The section is registered when there is nothing to list too:
+  // it holds the place a conversation's own list is put in (`conversationMethods`).
+  try {
+    const text = methods.length ? methodsSectionText(methods, config.methodsDir) : ''
+    ctx.effect(() => registerSection(ctx, { name: METHODS_SECTION_NAME, order: METHODS_SECTION_ORDER, text }))
+  } catch (error) {
+    ctx.get('evimedDiagnostics')?.degrade?.(`capsule methods not listed: ${errorMessage(error)}`)
   }
+  if (config.methodsDir) conversationMethods(ctx, config, methods)
 
   // Reported, not returned from. With the memory half on, the two tools below
   // are registered whether or not a memory service is configured: absence is
@@ -140,12 +157,18 @@ export async function apply(ctx, config) {
       // Memory is an enhancement: the conversation goes on without it, and
       // says so where an operator looks.
       if (!response.ok) ctx.get('evimedDiagnostics')?.degrade?.(`conversation context not read: ${response.message}`)
-      return { allow: true, discardOnReject: true, onEntered: () => {
+      // The block the control plane handed this conversation (the project's card, the capsule's profile) counts as held only once the
+      // step that carries it has entered: a step the kernel rejects is asked again and handed it again (`capsuleGateway.mjs`, `session-attached`).
+      const digest = response.ok && text && typeof response.data?.resident?.digest === 'string' && /^[a-f0-9]{64}$/.test(response.data.resident.digest) ? response.data.resident.digest : ''
+      return { allow: true, discardOnReject: true, onEntered: async () => {
         asked.add(key)
         if (asked.size > 1_000) {
           const oldest = asked.values().next().value
           if (oldest !== undefined) asked.delete(oldest)
         }
+        if (!digest) return
+        const noted = await callControlPlane(ctx, config, 'session-attached', { sessionId: step.sessionId, digest })
+        if (!noted.ok) ctx.get('evimedDiagnostics')?.degrade?.(`conversation context receipt not recorded: ${noted.message}`)
       } }
     }, (payload) => ({
       first: Number(payload?.turn ?? 0) <= 1 && Number(payload?.step ?? 0) <= 1,
@@ -153,46 +176,108 @@ export async function apply(ctx, config) {
     })))
   }
 
-  // Native inputs bypass shell dispatch. Only messages removed from this step's
-  // inbox are eligible; a queued future input is never selected from history.
-  if (config.recallUrl) {
-    /** @type {Set<string>} */ const attached = new Set()
-    ctx.effect(() => onPreStep(ctx, async (step, payload) => {
-      if (!step.root || !payload?.agent || !step.sessionId) return { allow: true }
-      const key = (/** @type {string} */ requestId) => JSON.stringify([step.sessionId, step.turn, requestId])
-      const inputs = await Promise.all(stepUserInputs(payload).filter(input => !attached.has(key(input.requestId)))
-        .map(async input => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
-      if (!inputs.length) return { allow: true }
-      const response = await callControlPlane(ctx, config, 'handbook-context', { sessionId: step.sessionId, inputs })
-      if (!response.ok) {
-        ctx.get('evimedDiagnostics')?.degrade?.(`native handbook context not read: ${response.message}`)
-        return { allow: true }
-      }
-      const contexts = Array.isArray(response.data?.contexts) ? response.data.contexts : []
-      /** @type {{requestId:string,digest:string}[]} */ const receipts = []
-      let bytes = 0
-      for (const item of contexts.slice(0, 16)) {
-        if (!inputs.some(input => input.requestId === item?.requestId) || receipts.some(receipt => receipt.requestId === item.requestId)
-          || typeof item.context !== 'string' || !item.context || !/^[a-f0-9]{64}$/.test(item.digest)) continue
-        bytes += new TextEncoder().encode(item.context).length + 1
-        if (bytes > 8192) break
-        injectContext(payload.agent, item.context, name)
-        receipts.push({ requestId: item.requestId, digest: item.digest })
-      }
-      return { allow: true, discardOnReject: true, onEntered: async () => {
-        if (!receipts.length) return
-        for (const receipt of receipts) attached.add(key(receipt.requestId))
-        while (attached.size > 1000) {
-          const oldest = attached.values().next().value
-          if (oldest === undefined) break
-          attached.delete(oldest)
-        }
-        const acknowledged = await callControlPlane(ctx, config, 'handbook-attached', { sessionId: step.sessionId, receipts })
-        if (!acknowledged.ok) ctx.get('evimedDiagnostics')?.degrade?.(`native handbook attachment not recorded: ${acknowledged.message}`)
-      } }
-    }, payload => ({ first: false, root: !isSubagentSession(payload?.agent) })))
-  }
+  // This service reads only the control-plane snapshot authenticated by the
+  // workload gateway. Capsule methods and their prose cannot supply a route.
+  if (config.recallUrl) ctx.provide('evimedNativeRoute', async (/** @type {string} */ sessionId, /** @type {{requestId:string,textDigest:string}[]} */ inputs) => {
+    const response = await callControlPlane(ctx, config, 'native-route', { sessionId, inputs })
+    if (!response.ok) throw new Error(response.message)
+    return Array.isArray(response.data?.routes) ? response.data.routes : []
+  }, true)
+}
 
+/**
+ * What the conversation is shown of the mounted methods, decided when it begins.
+ *
+ * A snapshot per root session, taken at its first assembly in this runtime (so a conversation that was resumed after the runtime
+ * restarted is given one too) and renewed at the first turn after the control plane wrote another selection (`_selection.json`'s version).
+ * The methods section of every assembly of that agent, and of its children, is replaced with the snapshot's, and the snapshot is the
+ * conversation's receipt (`evimedDiagnostics.sessionMethods`) and what its delegations carry (`evimedCapsuleMethods.forSession`).
+ * A failure anywhere here leaves the conversation with what the runtime was launched with.
+ * @param {any} ctx @param {Config} config @param {MountedMethod[]} launched
+ */
+function conversationMethods(ctx, config, launched) {
+  /** @type {Map<string, { methods: MountedMethod[], text: string, version: string | null, turn: number }>} */
+  const snapshots = new Map()
+  /** The newest snapshot any conversation took: what a child of a conversation with none is given. @type {{ methods: MountedMethod[], text: string } | null} */
+  let latest = null
+  /** @param {string} sessionId @returns {string} */
+  const rootOf = (sessionId) => sessionId
+  // The methods of one conversation, asked of the list the row already provides (`evimedCapsuleMethods`), which stays what the runtime
+  // was launched with for every reader that takes it as a list. Not a service of its own: a provided service belongs to the
+  // preset's isolation realms, and this is the same list asked by session.
+  Object.defineProperty(launched, 'forSession', {
+    value: (/** @type {string} */ sessionId) => snapshots.get(rootOf(String(sessionId ?? '')))?.methods ?? latest?.methods ?? launched,
+    enumerable: false,
+    configurable: true,
+  })
+  ctx.effect(() => onClaimedPromptAssemble(ctx, async (agent, claimed, assembly) => {
+    try {
+      const child = isSubagentSession(agent)
+      const root = child ? parentSessionOf(agent) : String(agent?.session?.id ?? '')
+      if (!root || !Array.isArray(assembly?.sections)) return false
+      let snapshot = snapshots.get(root)
+      const turnStart = !child && claimed.inputs.length > 0
+      let selection = /** @type {Selection | null | undefined} */ (undefined)
+      if (turnStart && snapshot && snapshot.turn !== claimed.turn) {
+        // A new turn: the selection the control plane has written since this conversation took its own renews it; the same one only
+        // notes the turn. A running turn never reaches here: its steps claim nothing.
+        selection = await readSelection(ctx, config.methodsDir)
+        if (selection && selection.version !== snapshot.version) snapshot = undefined
+        else snapshot.turn = claimed.turn
+      }
+      if (!snapshot && !child) {
+        if (selection === undefined) selection = await readSelection(ctx, config.methodsDir)
+        const taken = await loadMethods(ctx, config.methodsDir, selection)
+        snapshot = { methods: taken, text: taken.length ? methodsSectionText(taken, config.methodsDir) : '', version: selection?.version ?? null, turn: claimed.turn }
+        snapshots.delete(root)
+        snapshots.set(root, snapshot)
+        while (snapshots.size > SNAPSHOT_LIMIT) snapshots.delete(/** @type {string} */ (snapshots.keys().next().value))
+        latest = { methods: snapshot.methods, text: snapshot.text }
+        // This conversation's receipt: the methods it was given, and why each card was there.
+        ctx.get('evimedDiagnostics')?.sessionMethods?.(root, taken.map((method) => ({ name: method.name, digest: method.digest, reason: method.reason })))
+      }
+      const text = (snapshot ?? latest)?.text
+      if (typeof text !== 'string') return false
+      const section = assembly.sections.find((/** @type {any} */ entry) => entry?.name === METHODS_SECTION_NAME)
+      // Cards are literal text: a description with braces in it must not be read as a prompt variable.
+      if (section) { section.text = text; section.interpolate = false }
+    } catch (error) {
+      ctx.get('evimedDiagnostics')?.degrade?.(`conversation methods not read: ${errorMessage(error)}`)
+    }
+    return false
+  }))
+}
+
+/**
+ * @typedef {object} Selection
+ * @property {string} version
+ * @property {{ directory: string, reason: string | null }[]} entries  in the order they are listed
+ */
+
+/**
+ * The selection file the control plane wrote beside the methods, or null when there is none (a control plane that predates it) or it
+ * cannot be read: the caller lists the directories then, as it always did.
+ * @param {any} ctx @param {string} directory
+ * @returns {Promise<Selection | null>}
+ */
+async function readSelection(ctx, directory) {
+  if (!directory) return null
+  const text = await readFileAt(ctx, directory, SELECTION_FILE)
+  if (!text) return null
+  try {
+    const parsed = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.methods)) return null
+    const entries = []
+    for (const entry of parsed.methods) {
+      const directoryName = String(entry?.directory ?? '')
+      // A name the control plane wrote is a directory under this one, never a path out of it.
+      if (!directoryName || /[\\/]/.test(directoryName) || directoryName.startsWith('.')) continue
+      entries.push({ directory: directoryName, reason: typeof entry?.reason === 'string' && entry.reason ? entry.reason : null })
+    }
+    return { version: String(parsed.version ?? ''), entries }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -227,7 +312,6 @@ async function registerMemoryTools(ctx, config) {
       query: { type: 'string', required: true, description: '要回忆什么。' },
       factKinds: { type: 'array', items: { type: 'string' }, description: '限定事实种类，例如 preference、stance、project_fact。' },
       since: { type: 'string', description: 'ISO 日期；只看这之后记录的内容。' },
-      asOf: { type: 'string', description: 'ISO 日期；问题所指的时间点（默认现在）。只对用户的科研记忆记录生效：返回当时有效的那一版。' },
       scope: { type: 'string', enum: ['capsule', 'conversation', 'all'], description: '检索范围，默认 all。capsule 只搜记忆胶囊里的事实；conversation 只搜用户的科研记忆记录；all 两者都搜。' },
       limit: { type: 'number', description: '要几条；不填用默认，超过上限按上限给。' },
     },
@@ -239,8 +323,6 @@ async function registerMemoryTools(ctx, config) {
         factKinds: args.factKinds ?? [],
         since: args.since ?? null,
         scope: args.scope ?? 'all',
-        // Only when the question names a time: the gateway reads absence as now.
-        ...(args.asOf ? { asOf: args.asOf } : {}),
         // Only when the model asked for a number: absence is the default.
         ...(Number.isFinite(Number(args.limit)) && Number(args.limit) >= 1 ? { limit: Math.trunc(Number(args.limit)) } : {}),
       })
@@ -280,30 +362,37 @@ async function registerMemoryTools(ctx, config) {
  * And the path of its file in the container, which is what a learned method's
  * card names (`src/learnedMethods.mjs`) and what the control plane recognises
  * a session opening (`methodObservations.mjs`).
- * @param {any} ctx @param {string} directory
- * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string }[]>}
+ * @param {any} ctx @param {string} directory @param {Selection | null} [selection] what to list, when the caller has already read it (null: every directory)
+ * @returns {Promise<MountedMethod[]>}
  */
-async function loadMethods(ctx, directory) {
+async function loadMethods(ctx, directory, selection = undefined) {
   if (!directory) return []
-  /** @type {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string }[]} */
+  // The selection names what to list and why; without one (or one that cannot be read) every directory is listed, as it always was.
+  const picked = selection === undefined ? await readSelection(ctx, directory) : selection
+  const entries = picked
+    ? picked.entries
+    : (await listDirAt(ctx, directory, '.')).filter((entry) => entry.directory).map((entry) => ({ directory: entry.name, reason: /** @type {string | null} */ (null) }))
+  /** @type {MountedMethod[]} */
   const methods = []
-  for (const entry of await listDirAt(ctx, directory, '.')) {
-    if (!entry.directory) continue
-    const body = await readFileAt(ctx, directory, `${entry.name}/SKILL.md`)
+  for (const entry of entries) {
+    const body = await readFileAt(ctx, directory, `${entry.directory}/SKILL.md`)
     if (!body) continue
     const front = parseFrontmatter(body)
     methods.push({
-      name: String(front.name ?? entry.name),
+      name: String(front.name ?? entry.directory),
       description: String(front.description ?? ''),
       whenToUse: String(front.whenToUse ?? ''),
       body,
       digest: await skillBodyDigestAsync(body),
-      directory: entry.name,
-      path: `${directory.replace(/\/+$/, '')}/${entry.name}/SKILL.md`,
+      directory: entry.directory,
+      path: `${directory.replace(/\/+$/, '')}/${entry.directory}/SKILL.md`,
+      reason: entry.reason,
     })
   }
   return methods
 }
+
+/** @typedef {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string, reason?: string | null }} MountedMethod */
 
 /**
  * What the model is told a mounted method is: where it came from, and nothing
@@ -320,7 +409,9 @@ async function loadMethods(ctx, directory) {
 export function mountedMethodDescription(method) {
   const note = isLearnedMethod(method)
     ? '这是 EviMed 从这位用户以往的研究里学到的做法。'
-    : '这是用户启用的记忆胶囊里的做法。'
+    : isOfficialMethod(method)
+      ? '这是 EviMed 平台给每位用户的默认做法。'
+      : '这是用户启用的记忆胶囊里的做法。'
   const own = method.description || `用户自己的方法：${method.name}`
   return `${own.slice(0, Math.max(0, 1024 - note.length - 1))}\n${note}`
 }

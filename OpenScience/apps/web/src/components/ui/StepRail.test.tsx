@@ -27,6 +27,15 @@ const rail = (extra: Partial<React.ComponentProps<typeof StepRail>> = {}) => (
 );
 
 describe("StepRail", () => {
+  it("keeps every workflow step and its state visible on mobile when requested", () => {
+    narrow();
+    render(rail({ visible: true, showState: true, activeSteps: ["questions"] }));
+    const nav = screen.getByRole("navigation", { name: "进度" });
+    expect(within(nav).getAllByRole("listitem")).toHaveLength(6);
+    expect(within(nav).getByText("进行中")).not.toHaveClass("sr-only");
+    expect(within(nav).getByRole("link", { name: /问题/ })).toHaveAttribute("aria-current", "step");
+    expect(within(nav).queryByRole("button")).toBeNull();
+  });
   it("is one row of steps, each saying its state in words for a reader who cannot see the mark", () => {
     const { container } = render(rail());
     const nav = container.querySelector("[data-step-rail]") as HTMLElement;

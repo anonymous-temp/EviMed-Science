@@ -1,4 +1,4 @@
-"""The text rule for journal and preprint entries: pending → available, or unavailable after 5 days.
+"""The text rule for journal and preprint entries: pending → available, or unavailable after 14 days (5 until 2026-10-22).
 
 The plugin does not bump an entry's revision when its text arrives, so a journal entry must not
 answer ``available`` before there is an abstract or an excerpt: the platform would publish a
@@ -50,9 +50,9 @@ async def test_available_as_soon_as_an_abstract_exists():
     assert rct.retry_after_s is None
 
 
-async def test_unavailable_with_enrichment_after_five_days():
+async def test_unavailable_with_enrichment_after_fourteen_days():
     case = load_case(CASE)
-    _, results = await answers(first_seen(case, IMAGE) + timedelta(days=5, seconds=1))
+    _, results = await answers(first_seen(case, IMAGE) + timedelta(days=14, seconds=1))
     image = results[IMAGE]
     assert image.status == "unavailable" and image.retry_after_s is None
     assert image.enrichment["publication_types"] == ["Case Reports", "Journal Article"]
@@ -62,7 +62,7 @@ async def test_unavailable_with_enrichment_after_five_days():
 
 async def test_the_retry_never_overshoots_the_horizon():
     case = load_case(CASE)
-    _, results = await answers(first_seen(case, IMAGE) + timedelta(days=5) - timedelta(minutes=30))
+    _, results = await answers(first_seen(case, IMAGE) + timedelta(days=14) - timedelta(minutes=30))
     assert results[IMAGE].status == "pending" and results[IMAGE].retry_after_s == 30 * 60
 
 

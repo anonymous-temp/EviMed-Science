@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
+import { FRONTIER_HIDE_REASONS } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
@@ -63,6 +64,26 @@ function serviceFor({ config: configOverrides = {}, ...overrides } = {}) {
 /** @param {Record<string, string>} values */
 const params = (values = {}) => new URLSearchParams(values);
 
+test("c3-select: a card carries 「可能改变实践」 only once it was admitted, and an item of a stream is named for its journal", options, async () => {
+  await insertSource(database, "pubmed-core", { name: "PubMed 检索流 · 核心临床期刊", access: "eutils-query", owner_entity: "U.S. National Library of Medicine" });
+  const admitted = await insertItem(database, { selected: true, timelineAt: "2026-09-22T03:00:00Z", title: "Approval with a label", scores: { authority: 24, impact: 20, novelty: 12, relevance: 12 } });
+  const proposed = await insertItem(database, { selected: true, timelineAt: "2026-09-22T02:50:00Z", title: "Proposal not admitted" });
+  const streamed = await insertItem(database, { selected: true, sourceId: "pubmed-core", timelineAt: "2026-09-22T02:40:00Z", title: "A paper found by the stream" });
+  const bare = await insertItem(database, { selected: true, sourceId: "pubmed-core", timelineAt: "2026-09-22T02:30:00Z", title: "A paper without a journal" });
+  await database.query("UPDATE evimed_frontier.items SET practice_changing = true, practice_zh = $2 WHERE id = $1", [admitted.id, "国内首个获批，改变一线用药选择。"]);
+  await database.query("UPDATE evimed_frontier.items SET practice_changing = false, practice_zh = $2 WHERE id = $1", [proposed.id, "held, not admitted"]);
+  await database.query("UPDATE evimed_frontier.item_texts SET journal = 'The lancet. Gastroenterology & hepatology' WHERE item_id = $1", [streamed.id]);
+  const answer = await serviceFor().listItems(reader, params());
+  const card = (/** @type {string} */ id) => answer.body.items.find((entry) => entry.id === id);
+  assert.deepEqual(card(admitted.publicId).practice, { reason: "国内首个获批，改变一线用药选择。" });
+  assert.equal(card(proposed.publicId).practice, null, "a proposal that was not admitted is never served");
+  assert.equal(card(streamed.publicId).source.name, "The lancet. Gastroenterology & hepatology", "the journal, not 「PubMed」 or the stream");
+  assert.equal(card(bare.publicId).source.name, "PubMed", "a stream's item without a journal reads as its institution");
+  assert.equal(card(admitted.publicId).source.name, "NEJM Journal", "any other source keeps the registry's name");
+  const detail = await serviceFor().getItem(reader, streamed.publicId);
+  assert.equal(detail.body.item.source.name, "The lancet. Gastroenterology & hepatology");
+});
+
 test("the selected view lists selected, published items of enabled sources, newest first, with the card's fields", options, async () => {
   const selected = await insertItem(database, { selected: true, selectedRule: "threshold", timelineAt: "2026-09-22T03:00:00Z",
     title: "SGLT2 in heart failure", titleZh: "SGLT2 抑制剂用于心衰", summaryZh: "导读", reasonZh: "理由", specialties: ["cardiology", "bogus"],
@@ -98,7 +119,7 @@ test("the selected view lists selected, published items of enabled sources, newe
   assert.deepEqual(card.alsoReportedBy, [{ sourceId: "lancet", sourceName: "The Lancet", url: "https://lancet.example.org/1" }],
     "the primary source never reports itself");
   assert.equal(card.alsoReportedCount, 1);
-  assert.deepEqual(card.source, { id: "nejm", name: "NEJM Journal", homepage: "https://nejm.example.org/", platformProduced: false });
+  assert.deepEqual(card.source, { id: "nejm", name: "NEJM Journal", homepage: "https://nejm.example.org/", platformProduced: false, followable: true });
   assert.deepEqual(card.state, { starred: false, hidden: false, read: false });
   assert.equal(card.selectedRule, "threshold");
   assert.equal(card.timelineAt, "2026-09-22T03:00:00.000Z");
@@ -228,6 +249,48 @@ test("a reader's stars, hides and reads: hidden items leave lists unless the lis
   await assert.rejects(service.setItemState(reader, "nosuchitem0000", "star"), { code: "frontier_item_not_found" });
   const prefs = await database.query("SELECT state_version FROM evimed_frontier.user_prefs WHERE user_id=$1", [reader.id]);
   assert.equal(Number(prefs.rows[0].state_version), 5, "every write moved the reader's state version");
+});
+
+test("a hide keeps the reason it was given: a later one replaces it, one without leaves it, an unhide clears it, an unknown word is refused (c2-hide)", options, async () => {
+  const item = await insertItem(database, { selected: true, title: "Reasoned" });
+  const service = serviceFor();
+  const stored = async (user = reader) => {
+    const row = (await database.query(`SELECT hidden_at, hidden_reason FROM evimed_frontier.user_state us JOIN evimed_frontier.items i ON i.id = us.item_id
+      WHERE us.user_id = $1 AND i.public_id = $2`, [user.id, item.publicId])).rows[0];
+    return row ? [row.hidden_at !== null, row.hidden_reason] : null;
+  };
+  // Hidden at once with no reason (the card's first request), then the reason the reader chose a moment later.
+  assert.deepEqual(await service.setItemState(reader, item.publicId, "hide"), { state: { starred: false, hidden: true, read: false } });
+  assert.deepEqual(await stored(), [true, null]);
+  const firstAt = (await database.query("SELECT hidden_at FROM evimed_frontier.user_state WHERE user_id = $1", [reader.id])).rows[0].hidden_at;
+  assert.deepEqual(await service.setItemState(reader, item.publicId, "hide", { reason: "promotional" }), { state: { starred: false, hidden: true, read: false } });
+  assert.deepEqual(await stored(), [true, "promotional"], "a reason on an item that is already hidden is set");
+  assert.deepEqual((await database.query("SELECT hidden_at FROM evimed_frontier.user_state WHERE user_id = $1", [reader.id])).rows[0].hidden_at, firstAt,
+    "the first time counts: the reason does not move when it was hidden");
+  await service.setItemState(reader, item.publicId, "hide");
+  assert.deepEqual(await stored(), [true, "promotional"], "a hide with no reason leaves the reason it has");
+  await service.setItemState(reader, item.publicId, "hide", { reason: "low-quality" });
+  assert.deepEqual(await stored(), [true, "low-quality"], "a later reason replaces the earlier");
+  await service.setItemState(reader, item.publicId, "star");
+  await service.setItemState(reader, item.publicId, "read");
+  assert.deepEqual(await stored(), [true, "low-quality"], "a star or a read says nothing of the hide");
+  await service.setItemState(reader, item.publicId, "unhide");
+  assert.deepEqual(await stored(), [false, null], "an unhide clears the reason with the hide");
+  await service.setItemState(reader, item.publicId, "hide");
+  assert.deepEqual(await stored(), [true, null], "hidden again, it starts with none");
+  // One reader's word is theirs alone.
+  await service.setItemState(other, item.publicId, "hide", { reason: "source" });
+  assert.deepEqual([await stored(), await stored(other)], [[true, null], [true, "source"]]);
+  // Every closed word is accepted; anything else is refused by name before the table's own check could.
+  for (const reason of FRONTIER_HIDE_REASONS) {
+    await service.setItemState(reader, item.publicId, "hide", { reason });
+    assert.deepEqual(await stored(), [true, reason]);
+  }
+  for (const reason of ["boring", "", "SOURCE"]) {
+    await assert.rejects(service.setItemState(reader, item.publicId, "hide", { reason }), { status: 400, code: "frontier_payload_invalid" }, reason);
+  }
+  await assert.rejects(service.setItemState(reader, item.publicId, "star", { reason: "source" }), { status: 400, code: "frontier_payload_invalid" });
+  assert.deepEqual(await stored(), [true, FRONTIER_HIDE_REASONS.at(-1)], "a refused call changed nothing");
 });
 
 test("search runs the keyword leg, widens 精选 to 全部, marks selected items, and pages by rank", options, async () => {
@@ -396,21 +459,23 @@ test("the sources list names each feed and its institution, with its selected it
   assert.deepEqual([nejm.displayName, nejm.selected30d], ["NEJM Journal", 0], "an institution the table does not name keeps the registry's name");
 });
 
-test("a card carries the editorial total and its band against the selection line; a safety alert carries neither", options, async () => {
+test("a card carries the AI 评分, its tier (76 / 60, owner 2026-10-23, moved with the score 2026-10-25) and its four parts; a safety alert carries none of them", options, async () => {
   const scored = async (title, total, overrides = {}) => {
     const row = await insertItem(database, { title, selected: true, ...overrides });
     await database.query("UPDATE evimed_frontier.items SET score_total = $2 WHERE id = $1", [row.id, total]);
     return row;
   };
-  await scored("Top", 86, { timelineAt: "2026-09-22T03:00:00Z" });
-  await scored("Middle", 64, { timelineAt: "2026-09-22T02:00:00Z" });
-  await scored("Low", 41, { timelineAt: "2026-09-22T01:00:00Z" });
+  const top = await scored("Top", 86, { timelineAt: "2026-09-22T03:00:00Z" });
+  await database.query("UPDATE evimed_frontier.items SET score_authority = 30, score_impact = 26, score_novelty = 18, score_relevance = 12 WHERE id = $1", [top.id]);
+  await scored("Middle", 74, { timelineAt: "2026-09-22T02:00:00Z" });
+  await scored("Low", 54, { timelineAt: "2026-09-22T01:00:00Z" });
   await scored("Alert", 90, { timelineAt: "2026-09-22T00:30:00Z", safetyAlert: true, selectedRule: "safety-bypass" });
-  const cards = async (config) => Object.fromEntries((await serviceFor({ config }).listItems(reader, params({ view: "all" }))).body.items
-    .map((item) => [item.titleRaw, [item.score, item.scoreBand]]));
-  assert.deepEqual(await cards({}), { Top: [86, "high"], Middle: [64, "medium"], Low: [41, "low"], Alert: [null, null] },
-    "at or above the line (70 unless set) is high, from 60 medium, below low");
-  assert.deepEqual((await cards({ frontierSelectThreshold: 90 })).Top, [86, "medium"], "the band reads the deployment's own line");
+  const listed = (await serviceFor({ config: { frontierSelectThreshold: 90 } }).listItems(reader, params({ view: "all" }))).body.items;
+  const cards = Object.fromEntries(listed.map((item) => [item.titleRaw, [item.score, item.scoreBand]]));
+  assert.deepEqual(cards, { Top: [86, "high"], Middle: [74, "medium"], Low: [54, "low"], Alert: [null, null] },
+    "the tiers are fixed, whatever the deployment's selection line");
+  assert.deepEqual(listed.find((item) => item.titleRaw === "Top").scoreParts, { authority: 30, impact: 26, novelty: 18, relevance: 12 });
+  assert.equal(listed.find((item) => item.titleRaw === "Alert").scoreParts, null);
 });
 
 test("a source reaches a reader by its institution: the card, and 「另有 N 家」 counted by institution, never a feed of the card's own", options, async () => {
@@ -456,4 +521,26 @@ test("search by time: the items the words match, newest first; by relevance othe
   await assert.rejects(service.listItems(reader, params({ view: "all", q: "司美格鲁肽", limit: "2", cursor: paged.body.nextCursor })),
     { code: "invalid_cursor" }, "a cursor of the time order is not one of the relevance order");
   await assert.rejects(service.listItems(reader, params({ sort: "random" })), { code: "frontier_query_invalid" });
+});
+
+
+test("editor diagnostics survive a new service and expose only bounded metadata", options, async () => {
+  const inserted = await insertItem(database, { title: "Original headline", verification: "title-only" });
+  const unknown = await serviceFor().getItem(reader, inserted.publicId);
+  assert.equal(unknown.body.item.editorDiagnostics, null, "historical rejection reasons are unknown");
+  const metadata = { schemaVersion: 1, outcome: "title-only", attempts: 2, inputSha256: "a".repeat(64),
+    editorVersion: "policy:v2", checkedAt: NOW.toISOString(), reason: null,
+    fields: { title_zh: ["language", "private answer"], summary_zh: ["number"] }, answer: "private answer", error: "private error" };
+  await database.query("UPDATE evimed_frontier.items SET editor_diagnostics=$2::jsonb WHERE id=$1", [inserted.id, JSON.stringify(metadata)]);
+  const reopened = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try {
+    await migrateFrontier(reopened, { dimension: 1024 });
+    const raw = (await reopened.query("SELECT editor_diagnostics FROM evimed_frontier.items WHERE id=$1", [inserted.id])).rows[0];
+    assert.equal(raw.editor_diagnostics.attempts, 2);
+    const answer = await serviceFor().getItem(reader, inserted.publicId);
+    assert.deepEqual(answer.body.item.editorDiagnostics, { schemaVersion: 1, outcome: "title-only", attempts: 2,
+      inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: NOW.toISOString(), reason: null,
+      fields: { title_zh: ["language"], summary_zh: ["number"] } });
+    assert.ok(!JSON.stringify(answer.body.item.editorDiagnostics).includes("private"));
+  } finally { await reopened.close(); }
 });

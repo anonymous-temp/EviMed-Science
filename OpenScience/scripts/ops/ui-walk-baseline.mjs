@@ -4,7 +4,7 @@
  *
  * `scripts/ops/ui-walk-baseline.json` is what the release walk accepts for now: a finding it does not name fails the walk, and an entry
  * says who owns the debt and the day it stops being accepted. The first walk of a new regime has a long list of findings that nobody can write
- * by hand, so this reads the report of a rehearsal (`rewalk.sh <tag> <candidate walk>`, the owner-view account on the live release) and
+ * by hand, so this reads the report of a rehearsal (`rewalk.sh <tag> <candidate walk>`, a throwaway account on the live release) and
  * proposes one entry for each finding that no entry accepted:
  *
  *   - a finding with a number (`type-pairs`, `rows-ceiling`, `axe`, `orphan-sentence`, …) becomes `rule` + `max`: the page may only get better;

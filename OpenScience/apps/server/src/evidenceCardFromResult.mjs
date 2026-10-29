@@ -33,6 +33,7 @@ import { createHash } from "node:crypto";
 import {
   EVIDENCE_AI_STEPS,
   EVIDENCE_CLAIM_LIMIT,
+  EVIDENCE_SOURCE_LIMIT,
   doiOf,
   evidenceCardClaims,
   evidencePublicExcerpt,
@@ -57,7 +58,7 @@ const MAX_MATRIX_BYTES = 8 * 1024 * 1024;
 const MAX_MATRIX_CLAIMS = 500;
 /** The longest preserved text a card source keeps (the zone service's own bound); a longer source is cited with its excerpt. */
 const MAX_SOURCE_TEXT = 2_000_000;
-const MAX_CARD_SOURCES = 50;
+const MAX_CARD_SOURCES = EVIDENCE_SOURCE_LIMIT;
 
 /**
  * Why a claim of the matrix did not reach the card. Reported with the card so the dialog can say what was left out and

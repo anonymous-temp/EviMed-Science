@@ -1,6 +1,6 @@
 # EviMed Science (hosted SaaS)
 
-Brand name: **EviMed** — a general-purpose agent platform first and, on top of it, a professional layer for evidence-based medicine (owner, 2026-10-12).
+Brand name: **EviMed Science** — a general-purpose agent platform first and, on top of it, a professional layer for evidence-based medicine (owner, 2026-10-12).
 (Bundle identifier stays `com.ai4s.workbench` and
 internal `@ai4s/*` package names are unchanged — display branding only.)
 
@@ -116,14 +116,26 @@ per-project workspace + JSONL provenance.
 - **Reuse upstream with the narrowest adapter.** Before building a piece, find the one that already does it
   (a DSH row or plugin, an official skill, a mature library, OpenViking's native engine); a mismatch with a
   boundary we drew is an adapter, a shim or a template with a stated date of deletion, not a rebuild.
-- **OpenViking is an engine, not only an index** (v0.5.0, `packages/contracts/openviking/README.md` is the
-  division of labour). An account's memory is on one of two engines: `legacy` (PostgreSQL records, OpenViking
-  only their derived recall index) or `native` (the engine extracts, merges and recalls; the runtime's official
+- **OpenViking is an engine, not only an index** (v0.5.1.1, `packages/contracts/openviking/README.md` is the
+  division of labour; the identity shim of v0.5.0 is deleted, and a write-back to a knowledge page is a checked write). Every account's memory is the engine's own: it extracts, merges and recalls; the runtime's official
   plugin reaches it through a loopback bridge and the control plane's memory gateway; PostgreSQL keeps a thin
-  overlay). The knowledge base pushes every readable document to the engine as a Resource, and the official
+  overlay. Without OpenViking memory is off as a status, never a fallback (the control plane's own records engine was
+  deleted on 2026-10-25). The knowledge base pushes every readable document to the engine as a Resource, and the official
   `llm-wiki` and `knowledge-graph` skills compile the wiki and the graph, mirrored back into the product
   ledger; quotation checks on them are ✓ / ⚠ labels, not a condition. The engine's model calls go through our
   model gateway; the runtime holds no key; the volume is backed up.
+- **Memory keeps what the person stated, confirmed or corrected** — and the constraints they gave for a named piece of
+  work — and never what a document, a tool, a web page, the platform or the assistant said. The two shared blocks of
+  `packages/domain/src/memoryNeverKept.mjs` (what is never kept, how to decide) are the one place the policy is written; a
+  change to them is replayed on `evals/memory-write-quality` (every case, a failing one three times) and the never side
+  only gets better. A native memory has no expiry date and nothing promises one.
+- **A person has one capsule**; a project is a label on its entries, a received pack is enabled for the whole account, and a
+  native account reaches its capsule through the memory gateway's `search` and a profile block, never a second recall
+  tool. A capsule is context, never permission (below).
+- **The learning loop learns only from the researcher's own work.** A script or eval that starts a run marks it
+  `automated` (`apps/server/test/automatedDrivers.test.mjs` holds the list); evidence is the person's own words, checked
+  as a substring of what they wrote, or their opening a delivered file, and silence is unknown, never approval; nothing is withheld from a run on purpose to measure a method; a method takes
+  effect at once and every automatic stop or change is restorable in one click and carries its reason.
 - Keep the artifact schema and workflow templates stable and versioned.
 
 ## Frontend conventions (design system)
@@ -148,7 +160,7 @@ per-project workspace + JSONL provenance.
   (12/13/14/16/18/20/24/32/40) as `text-badge/meta/caption/compact/ui/body/
   wordmark/section/heading/title/doc-title/display/metric/metric-lg/hero`, still
   at most four size × weight pairs per page, and **32/40 on data pages only**;
-  weights 400/500/600; a line of text at most 40 CJK characters (`max-w-measure`
+  weights 400/600 for Chinese (`font-medium` is an ESLint error); a line of text at most 40 CJK characters (`max-w-measure`
   560 / `-body` 640). **Three columns through `PageShell`**: `max-w-read` 720
   (answers, reports), `max-w-page` 1040 (lists), `max-w-wide` 1200 (dashboards);
   its header is one line with **no subtitle**. Radii: `rounded-tag` 6, `rounded`
@@ -164,18 +176,18 @@ per-project workspace + JSONL provenance.
   `Delta`, `ChartCard`, `DataTable`, plus `Menu`, `Switch`, `SearchInput`) is in
   `DESIGN.md`; ESLint rejects a hand-made bordered pill or bordered button
   outside `components/ui/`.
-- **The interface never explains the system** (2026-09-23 plan): no subtitle, no hint
+- **The interface never explains the system** (2026-09-23 plan; blanket hint/subtitle prohibitions superseded for useful task guidance by the October 20 ruling below): no subtitle, no hint
   under a card title, no 「为什么入选」; no internal state as text (已交付, 核对 N 条,
   用过 N 次, token, tok/s, API names, ids). Say what the user can do and the result.
   The example pills on a blank conversation tell the user what can be asked; that is not
   explaining the system. Nothing shows back-office provenance, an engine name or a file address.
-- **Page structure** (2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page is one list of one
+- **Page structure** (one-object and drawer restrictions qualified by the October 20 workbench ruling below; 2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page is one list of one
   kind of object (a data page — the 记忆地图, the knowledge base's reader and graph — is the one
-  exception, `DESIGN.md` rule 1), detail opens in the right-hand drawer, the header is the title, the scope
+  exception, `DESIGN.md` rule 1), short record detail opens in a drawer; articles and documents have addressed reading pages, and conversations remain in their project workspace. The header is the title, the scope
   and at most one primary button, and nothing that looks clickable may be silent.
   `scripts/ops/ui-walk.mjs` measures it on the live pages after every release.
   Since R19 (2026-10-14) a page is **composed from slots**, not drawn: `PageShell` takes `scope`, `steps`, `activity`,
-  `tabs`, `toolbar` and `headline` and renders them in one fixed order, the steps, tabs and toolbar in one sticky band;
+  `tabs`, `toolbar` and `headline` and renders them in one fixed order, the appropriate workflow selector, view navigation and toolbar in one band without redundant step/tab bars (owner, 2026-10-19);
   the pieces are `Toolbar`, `StepRail`, `StepState`, `ActivityStrip`, `Note`, `Headline`, `Section`, `FactList`,
   `ChartGrid`, `Outline`, `MasterDetail`, `ScopeMenu` and `StateScreen` in `components/ui/`. A page does not write its own
   filter row, step rail, tab bar or standalone grey sentence. `DESIGN.md` 「页面结构」 holds the six templates and rules 7–13;
@@ -258,3 +270,15 @@ preparation job and the live probe with rollback are what still refuse.
 - Do not write inferences as verified facts; tie conclusions to code or data.
 
 - The root `AGENTS.md` owner decisions dated 2026-09-29 govern this subtree: preserve usable partial research, avoid whole-package methodological vetoes or human adjudication requirements, apply autonomous learning across capabilities, and honor the settled product/operations choices.
+
+## Owner decisions adopted 2026-10-20
+
+These presentation decisions supersede conflicting September 23, October 7/8 and October 14/19 rules precisely as described below. Earlier records remain historical; this is an acceptance target, not a claim that the implementation has passed. See `../docs/superpowers/plans/2026-10-19-workflow-rectification.md`, October 20 owner review.
+
+- Global home, logo and New Conversation open the general AI assistant without inherited GEO/study title, progress or specialist binding. Resume-project links are explicit; preserve history, drafts and native tabs. The VCR home lists studies and progress with one New Study action. Methods, reference search and population templates are contextual tools, not competing study-home tabs; retain compatible links and saved objects.
+- Keep the seven VCR and eight GEO steps reachable with visible current/completed/waiting state and next actions, including during conversation. The October 19 compact-control ruling removes redundant navigation, but a compact selector alone cannot be the only discoverable workflow. Use one conversation and one native composer; remove the redundant Chat button when it is open. Preserve project identity, results, actual run history and the native DSH right pane.
+- Research Tools is the existing shared discovery surface for task-oriented methods, visible on its initial screen and reused inside study steps. This supersedes the October 14 fixed catalogue inventory as a restriction on those method entries. Small calculations need not traverse a full study. Show a short purpose, required inputs, expected outputs and reachable next action; meaningful examples, missing prerequisites and remedies are explicitly permitted. The older blanket no-hint/no-purpose-text rule applies only to explanations of implementation, not useful task guidance.
+- Related inputs, configuration, progress and result tables/plots belong together in one analysis workbench in the main area, with responsive tabs where useful. This is an explicit exception to the older one-object/one-shape rule, not permission to stack unrelated metadata. Long method configuration and literature-to-parameter mapping use the main area; drawers hold only short previews or small edits. Do not repurpose the native right pane or add another file/browser system.
+- Share reference-trial search across global AI, Research Tools and the study evidence context, with Use in This Study. Distinguish live results from saved status and source failures. Literature parameters retain values, units, passages, missing fields and destination mapping; registration alone never claims executability. Retain configuration/source versions and immutable historical results.
+- The study population step owns criteria, source data, included/excluded/unknown counts, selected version and cohort results. Select account-level reusable template versions from that step, preserve Save as Template/Use Template and compatible links, and recalculate changed criteria as a new version without overwriting history.
+- Keep design tokens, default Chinese UI, keyboard/mobile access, ordinary-account access and user/project/tenant boundaries. Technical implementation, source-proof machinery and operator jargon stay out of UI; scientific sources needed to judge or reuse parameters remain available in context. No added approval ceremony or clinical delivery gate. Preserve existing quality budgets and acceptance checks; do not weaken them merely to pass unusable UI. A measured workbench-specific template change must express this connected workflow, not excuse unrelated stacked content.

@@ -76,10 +76,10 @@ describe("a tile", () => {
     expect(screen.getByText("假设")).toBeInTheDocument();
   });
 
-  it("gives a word standing in for a number the placeholder size, not the metric size", () => {
+  it("gives a word standing in for a number the section size (18 / 600), not the metric size", () => {
     render(<VcrStat label="真实外部对照" value={value({ value: null, text: "不可估计", source: "observed" })} />);
     const printed = screen.getByText("不可估计");
-    expect(printed.closest("[data-stat-value]")).toHaveClass("text-heading");
+    expect(printed.closest("[data-stat-value]")).toHaveClass("text-section");
     expect(printed.closest("[data-stat-value]")).not.toHaveClass("text-metric");
   });
 });

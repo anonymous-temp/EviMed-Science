@@ -81,17 +81,22 @@ test(
     const first = open();
     const capabilities = await migrateFrontier(first, { dimension: 1024 });
     const created = await inventory(first);
-    // 23 feed/reader tables, seventeen native evidence/editorial tables (the topic requests' related links among them)
-    // and two exposure attribution tables, plus the optional vector table.
+    // 24 feed/reader tables (the monthlies of 2026-10-22 among them), seventeen native evidence/editorial tables (the topic
+    // requests' related links among them), two exposure attribution tables, the tag tree's four (2026-10-23) and what each
+    // reader was served and did (interactions, list_serves; ct-track 2026-10-24), the hot-event topics and their items (c2-base
+    // 2026-10-25), a typed follow's matches and the congress recaps (c3-base 2026-10-25), plus the optional vector table. (The
+    // topics' sightings are frontierTopics.mjs's own migration, not this one.)
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 43 : 42,
+      capabilities.vector ? 54 : 53,
       created.tables.join(),
     );
     for (const table of [
       "evidence_topic_request_links",
       "exposure_snapshots",
       "exposures",
+      "interactions",
+      "list_serves",
       "sources",
       "entries",
       "items",
@@ -115,6 +120,7 @@ test(
       "user_profiles",
       "user_prefs",
       "weeklies",
+      "monthlies",
       "evidence_zones",
       "evidence_cards",
       "evidence_zone_follows",
@@ -128,6 +134,14 @@ test(
       "evidence_change_log",
       "evidence_challenges",
       "evidence_upkeep_state",
+      "tags",
+      "tag_aliases",
+      "item_tags",
+      "tag_changes",
+      "topics",
+      "topic_items",
+      "follow_matches",
+      "congress_recaps",
     ]) {
       assert.ok(created.tables.includes(table), `${table} was not created`);
     }

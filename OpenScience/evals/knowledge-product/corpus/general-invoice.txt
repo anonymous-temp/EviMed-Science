@@ -1,0 +1,3 @@
+Benchmark fixture only; not real organizational policy or clinical evidence.
+Topic: invoice.
+Which invoice field is mandatory? Answer: purchase order number.

@@ -1,0 +1,137 @@
+{
+ "case": "enrich/paper-fulltext-epmc",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-22T15:28:55+00:00",
+ "note": "Unpaywall asked without a contact address (no secret read): its 422 is recorded as it came",
+ "rows": [
+  {
+   "entry_id": "j-1471-2288:95e16cbe319ad0568be5a6cd1dd35948",
+   "revision": 1,
+   "source_id": "j-1471-2288",
+   "external_key": "10.1186/s12874-024-02160-2",
+   "identity_key": "doi:10.1186/s12874-024-02160-2",
+   "url": "https://doi.org/10.1186/s12874-024-02160-2",
+   "canonical_url": "https://doi.org/10.1186/s12874-024-02160-2",
+   "doi": "10.1186/s12874-024-02160-2",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2024-02-29T08:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "1471-2288",
+    "issns": [
+     "1471-2288"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org"
+    ]
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "full",
+   "fetched_from": "europepmc-fulltext",
+   "abstract_chars": 1545,
+   "body_chars": 43261,
+   "notes": [
+    "unpaywall_http-error:http_422"
+   ]
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1186%2Fs12874-024-02160-2%22%5Bdoi%5D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1186%2Fs12874-024-02160-2%22%5Bdoi%5D",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:55+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 212,
+   "sha256": "6474672f97a56a75eebbaae569a1b8f600d12d8b51610a39c8445ec699de9ca4"
+  },
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=38429679",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=38429679",
+   "headers": {
+    "content-type": "text/xml; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:57+00:00",
+   "file": "02.xml",
+   "gzip": false,
+   "bytes": 13965,
+   "sha256": "29233c361f0a7fa0ccfac689c3e1998fce59887020b9efe4a216d48af9948cd2"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.1186/s12874-024-02160-2",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 422,
+   "final_url": "https://api.unpaywall.org/v2/10.1186/s12874-024-02160-2",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:58+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 142,
+   "sha256": "75bb31e6c19a124e5df7f10ee8215d6b6c3f15f6b33ef563b6b18507221c766a",
+   "error": {
+    "outcome": "http-error",
+    "detail": "http_422"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10905822/fullTextXML",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10905822/fullTextXML",
+   "headers": {
+    "content-type": "application/xml"
+   },
+   "fetched_at": "2026-10-22T15:29:00+00:00",
+   "file": "04.xml.gz",
+   "gzip": true,
+   "bytes": 373466,
+   "sha256": "ab645fc8aeae70dfbb2e47083f4d8616d428767c011e0f24362e828d29a33afd"
+  }
+ ]
+}

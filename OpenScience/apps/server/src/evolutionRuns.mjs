@@ -124,7 +124,7 @@ export function createEvolutionRuns({ config, store, registry, runtimeManager, r
         const marker = issueModelGatewayBudgetMarker({ secret: config.modelGatewaySigningSecret, userId, projectId, runId: reusedScope?.runId ?? dispatchId, ...scope });
         return runtimeManager.dispatchPrompt(project, session.id, { text: `${repairText || brief}\n\n<evimed-evolution>${dispatchId}</evimed-evolution>\n\n${marker}`,
           system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, strictContext: true,
-          agent: selected.runtimeAgent, model: "deepseek/deepseek-flash", runId: run.id, allowBounded: true,
+          agent: selected.runtimeAgent, model: "deepseek/deepseek-flash", runId: run.id, allowBounded: true, unattended: true,
           requestId: run.kernelRequestIds?.at(-1) });
       });
       return nativeConversation ? {...dispatched,nativeScope} : dispatched;

@@ -29,6 +29,8 @@ import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { ORDER_SELECT, mapOrder } from "./geoMarketStore.mjs";
 import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 
+/** A round (aliased `r`) that heard an answer — a valid or refused one, what every number is made of. */
+const ANSWERED = `EXISTS (SELECT 1 FROM evimed_geo.snapshots answered WHERE answered.round_id = r.id AND answered.status IN ('valid', 'refusal'))`;
 /** The rounds that measure the whole question set. */
 const HEADLINE_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
 /** The rounds a group's series is drawn from: the full ones, and the checks after a publication (flagged by their kind). */
@@ -54,8 +56,8 @@ const GROUP_ID_SHAPE = /^ggr_[0-9a-f]+$/i;
  */
 function cellOf(row) {
   if (!row) return { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent", dataType: "measured", reason: null };
-  return { value: num(row.value), numerator: num(row.numerator), denominator: num(row.denominator), ciLow: num(row.ci_low), ciHigh: num(row.ci_high),
-    status: String(row.status), dataType: String(row.data_type ?? "measured"), reason: text(row.reason) };
+  return { value: num(row.value), numerator: num(row.numerator), denominator: num(row.denominator), ciLow: num(row.ci_low ?? row.ciLow), ciHigh: num(row.ci_high ?? row.ciHigh),
+    status: String(row.status), dataType: String(row.data_type ?? row.dataType ?? "measured"), reason: text(row.reason) };
 }
 
 /**
@@ -133,16 +135,19 @@ export class GeoSpine {
     const [strategy, targets, headline, baseline] = await Promise.all([
       this.store.latestStrategy(geoId),
       this.store.latestTargets(geoId),
-      this.#query(`SELECT id, kind, set_version, sample_date::text AS day, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
-        AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...HEADLINE_KINDS]]),
-      this.#query(`SELECT id, kind, set_version, sample_date::text AS day, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'single_step')
-        AND status IN ('done', 'partial') ORDER BY finished_at ASC NULLS LAST, created_at ASC LIMIT 1`, [geoId]),
+      // A round that heard no answer (its engines paused, 2026-10-25) is neither the latest reading nor the baseline: it measured nothing.
+      this.#query(`SELECT r.id, r.kind, r.set_version, r.sample_date::text AS day, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
+        AND r.kind = ANY($2::text[]) AND r.status IN ('done', 'partial') AND ${ANSWERED}
+        ORDER BY r.finished_at DESC NULLS LAST, r.created_at DESC LIMIT 1`, [geoId, [...HEADLINE_KINDS]]),
+      this.#query(`SELECT r.id, r.kind, r.set_version, r.sample_date::text AS day, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
+        AND r.kind IN ('baseline', 'single_step') AND r.status IN ('done', 'partial') AND ${ANSWERED}
+        ORDER BY r.finished_at ASC NULLS LAST, r.created_at ASC LIMIT 1`, [geoId]),
     ]);
     const latestRound = headline.rows[0] ?? null;
     const baselineRound = baseline.rows[0] ?? null;
 
     const readingRows = (await this.#query(`SELECT DISTINCT ON (m.group_id, m.metric_id, m.round_id) m.group_id, m.metric_id, m.round_id, r.kind, r.sample_date::text AS day,
-        m.numerator, m.denominator, m.value, m.status
+        m.numerator, m.denominator, m.value, m.status, m.method_version
       FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
       WHERE m.geo_project_id = $1 AND m.scope = 'group' AND m.group_id IS NOT NULL AND m.metric_id = ANY($2::text[])
         AND m.variant IS NULL AND m.rival IS NULL AND m.arm IS NULL AND m.engine IS NULL
@@ -151,7 +156,7 @@ export class GeoSpine {
     const readings = readingRows.map((row) => ({
       groupId: String(currentOf.get(String(row.group_id)) ?? row.group_id), metricId: String(row.metric_id), roundId: String(row.round_id), date: text(row.day),
       kind: String(row.kind), k: num(row.numerator), n: num(row.denominator), value: num(row.value), status: String(row.status),
-      coverage: coverageKeyOf(coverages.get(String(row.round_id))),
+      coverage: coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
     }));
 
     const poolReadings = (await this.#query(`SELECT DISTINCT ON (m.pool, m.metric_id) m.pool, m.metric_id, m.value, m.status, m.numerator, m.denominator, m.round_id
@@ -177,7 +182,7 @@ export class GeoSpine {
     const errorRows = (await this.#query(`SELECT e.id, e.fingerprint, e.engine, e.question_id, e.first_snapshot_id, e.last_snapshot_id, e.statement, e.error_type,
         e.severity, e.claim_id, e.cited_source, e.action, e.status, e.materials, e.created_at, q.group_id
       FROM evimed_geo.errors e LEFT JOIN evimed_geo.questions q ON q.id = e.question_id
-      WHERE e.geo_project_id = $1 ORDER BY e.created_at DESC LIMIT 1000`, [geoId])).rows;
+      WHERE e.geo_project_id = $1 AND e.judgment_state='active' ORDER BY e.created_at DESC LIMIT 1000`, [geoId])).rows;
     const errors = errorRows.map((row) => ({
       id: String(row.id), fingerprint: text(row.fingerprint), engine: String(row.engine), questionId: text(row.question_id),
       groupId: row.group_id ? String(currentOf.get(String(row.group_id)) ?? row.group_id) : null,
@@ -509,7 +514,7 @@ export class GeoSpine {
    * It replaces the page's use of the all-sources endpoint.
    * @param {Awaited<ReturnType<GeoSpine["load"]>>} spine @param {Awaited<ReturnType<GeoSpine["actions"]>>} derived
    */
-  async strategy(spine, derived) {
+  async strategy(spine, derived, selected = null) {
     const strategy = spine.strategy;
     const geoId = spine.project.id;
     const tier = String(spine.project.tier);
@@ -517,7 +522,7 @@ export class GeoSpine {
     const roundIds = [...new Set(rounds.map((round) => /** @type {{ id: string }} */ (round).id))];
     /** @type {Map<string, any>} */
     const readings = new Map();
-    if (roundIds.length) {
+    if (!selected && roundIds.length) {
       const rows = (await this.#query(`SELECT DISTINCT ON (m.round_id, m.scope, coalesce(m.pool, ''), m.metric_id) m.round_id, m.scope, m.pool, m.metric_id, m.numerator,
           m.denominator, m.value, m.ci_low, m.ci_high, m.status, m.data_type, m.reason
         FROM evimed_geo.metrics m WHERE m.geo_project_id = $1 AND m.round_id = ANY($2::text[]) AND m.scope IN ('project', 'pool') AND m.variant IS NULL AND m.rival IS NULL
@@ -525,8 +530,13 @@ export class GeoSpine {
         ORDER BY m.round_id, m.scope, coalesce(m.pool, ''), m.metric_id, m.computed_at DESC`, [geoId, roundIds])).rows;
       for (const row of rows) readings.set(`${row.round_id}\u0000${row.scope === "project" ? "all" : row.pool}\u0000${row.metric_id}`, row);
     }
-    /** @param {{ id: string, sampleDate: string | null } | null} round @param {string} pool @param {string} metricId */
-    const readingOf = (round, pool, metricId) => {
+    /** @param {{ id: string, sampleDate: string | null } | null} round @param {string} pool @param {string} metricId @param {boolean} [selectedLatest] */
+    const readingOf = (round, pool, metricId, selectedLatest = false) => {
+      if (selected) {
+        if (!selectedLatest) return null;
+        const row = selected.computed.cells.find(cell => cell.metricId === metricId && !cell.engine && !cell.variant && !cell.rival && !cell.arm && (pool === "all" ? cell.scope === "project" : cell.scope === "pool" && cell.pool === pool));
+        return row ? { ...cellOf({ ...row, numerator: row.numerator, denominator: row.denominator }), date: round?.sampleDate ?? null, roundId: round?.id ?? null } : null;
+      }
       if (!round) return null;
       const row = readings.get(`${round.id}\u0000${pool}\u0000${metricId}`);
       return row ? { ...cellOf(row), date: round.sampleDate, roundId: round.id } : null;
@@ -544,10 +554,10 @@ export class GeoSpine {
       const chosen = entry.tiers[tier] ?? null;
       const dueAt = baselineDate && chosen?.horizonWeeks != null ? new Date(Date.parse(`${baselineDate}T00:00:00Z`) + chosen.horizonWeeks * 7 * 86_400_000).toISOString().slice(0, 10) : null;
       return { ...entry, target: chosen?.target ?? null, horizonWeeks: chosen?.horizonWeeks ?? null, dueAt,
-        baseline: readingOf(spine.rounds.baseline, entry.pool, entry.metricId), latest: readingOf(spine.rounds.latest, entry.pool, entry.metricId) };
+        baseline: readingOf(spine.rounds.baseline, entry.pool, entry.metricId), latest: readingOf(spine.rounds.latest, entry.pool, entry.metricId, true) };
     }).sort((left, right) => left.metricId.localeCompare(right.metricId) || left.pool.localeCompare(right.pool));
 
-    const retrieval = (await this.#query(`SELECT DISTINCT ON (m.engine) m.* FROM evimed_geo.metrics m
+    const retrieval = selected ? selected.computed.cells.filter(cell => cell.metricId === GEO_VIEW_METRIC_IDS.retrieval && cell.scope === "engine") : (await this.#query(`SELECT DISTINCT ON (m.engine) m.* FROM evimed_geo.metrics m
         JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
       WHERE m.geo_project_id = $1 AND m.scope = 'engine' AND m.metric_id = $2 AND m.pool IS NULL AND m.arm IS NULL AND m.variant IS NULL AND m.rival IS NULL
         AND m.group_id IS NULL AND m.status <> 'absent' ORDER BY m.engine, m.computed_at DESC`, [geoId, GEO_VIEW_METRIC_IDS.retrieval, [...HEADLINE_KINDS]])).rows;
@@ -598,8 +608,12 @@ export class GeoSpine {
         placements: rows.reduce((/** @type {number | null} */ max, row) => (row.placements == null ? max : Math.max(max ?? 0, row.placements)), null),
         budgetCny: rows.reduce((/** @type {number | null} */ max, row) => (row.budgetCny == null ? max : Math.max(max ?? 0, row.budgetCny)), null),
         targetCount: rows.length,
+        targetNotes: (Array.isArray(written?.targets) ? written.targets : []).flatMap((/** @type {any} */ target) => {
+          const metricId = text(target?.metricId), note = text(target?.note);
+          return metricId && note ? [{ metricId, name: geoMetricName(metricId), pool: text(target.pool), note }] : [];
+        }),
       };
-    }).filter((entry) => entry.targetCount > 0 || entry.name || entry.buys);
+    }).filter((entry) => entry.targetCount > 0 || entry.name || entry.buys || entry.summary || entry.targetNotes.length > 0);
     const gaps = Array.isArray(strategy?.gaps) ? strategy.gaps : [];
     return {
       version: strategy?.version ?? null, createdAt: strategy?.createdAt ?? null, runId: strategy?.runId ?? null, summary: strategy?.summary ?? null,
@@ -639,7 +653,8 @@ export class GeoSpine {
   }
 
   /**
-   * One short count per programme step, for the rail.
+   * One short count per programme step, for the rail. A round that heard no answer is not counted among the measurements
+   * (2026-10-25: rounds whose engines were all paused were counted as monitoring done).
    * @param {string} geoId
    * @returns {Promise<Record<string, { text: string, count: number, unit: string } | null>>}
    */
@@ -656,7 +671,8 @@ export class GeoSpine {
         (SELECT count(*) FROM evimed_geo.articles WHERE geo_project_id = $1 AND status <> 'withdrawn')::integer AS articles,
         ((SELECT count(*) FROM evimed_geo.orders WHERE geo_project_id = $1 AND state IN ('published', 'verified', 'settled'))
           + (SELECT count(*) FROM evimed_geo.owned_links WHERE geo_project_id = $1 AND status = 'active'))::integer AS published,
-        (SELECT count(*) FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step') AND status IN ('done', 'partial'))::integer AS rounds`,
+        (SELECT count(*) FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind IN ('baseline', 'weekly', 'single_step') AND r.status IN ('done', 'partial')
+           AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal')))::integer AS rounds`,
     [geoId])).rows[0] ?? {};
     const counts = { claims: num(row.claims), stages: num(row.stages), groups: num(row.groups), answers: num(row.answers), sources: num(row.sources),
       articles: num(row.articles), published: num(row.published), rounds: num(row.rounds) };

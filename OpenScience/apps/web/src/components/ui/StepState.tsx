@@ -122,7 +122,7 @@ export function StepState(props: StepStateProps) {
   if (phase === "queued") {
     return (
       <div data-step-state="queued" role="status" className={SHELL}>
-        <p className="text-ui font-medium text-text">{`${step}，排队中`}</p>
+        <p className="text-ui font-semibold text-text">{`${step}，排队中`}</p>
         <p className="text-caption text-text-3">{after ? `“${after}”做完后自动开始。` : "轮到它时会自动开始。"}</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {conversation}
@@ -136,7 +136,7 @@ export function StepState(props: StepStateProps) {
     const detail = counts && counts.total > 0 ? `${phaseName ? `${phaseName} ` : ""}${NUMBER.format(counts.done)} / ${NUMBER.format(counts.total)}` : phaseName;
     return (
       <div data-step-state="running" role="status" className={SHELL}>
-        <p className="flex items-center gap-2 text-ui font-medium text-text">
+        <p className="flex items-center gap-2 text-ui font-semibold text-text">
           <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running" />
           {`正在${step}`}
         </p>
@@ -154,7 +154,7 @@ export function StepState(props: StepStateProps) {
   if (phase === "failed") {
     return (
       <div data-step-state="failed" role="status" className={SHELL}>
-        <p className="flex items-center gap-2 text-ui font-medium text-text">
+        <p className="flex items-center gap-2 text-ui font-semibold text-text">
           <TriangleAlert size={20} aria-hidden="true" className="text-warn" />
           {`${step}没有完成`}
         </p>

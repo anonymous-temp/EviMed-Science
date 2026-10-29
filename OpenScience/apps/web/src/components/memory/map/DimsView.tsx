@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { MapChart } from "@/components/charts/MapChart";
 import { mapPalette } from "@/components/charts/map/palette";
-import { radarOption, radarState, radarValue } from "@/components/charts/map/radarOption";
+import { dimensionBarOption, radarOption, radarState, radarValue } from "@/components/charts/map/radarOption";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { ChartGrid, type ChartGridCell } from "@/components/ui/ChartGrid";
 import { useColorScheme } from "@/lib/colorScheme";
@@ -10,20 +10,21 @@ import type { MapDimension } from "@/lib/memoryMapClient";
 /**
  * 「维度」: two radars with fixed, named axes (spec §2, V3) — what the researcher has been doing with the platform, and which
  * aspects of them it remembers. Each prints its numbers at the vertices and keeps the previous period as a ghost on the same scale.
- * A radar that would say nothing is not drawn: a sentence stands in its place. Pressing an axis narrows the map to it (the
+ * Sparse observations use bars with the same values and selection actions. Pressing an axis narrows the map to it (the
  * aspects count memories, so they narrow the list; an axis of the work counts conversations and narrows nothing).
  */
 function Radar({ dimension, selected, onAxis }: { dimension: MapDimension; selected: string | null; onAxis: (id: string | null) => void }) {
   const scheme = useColorScheme();
   const state = radarState(dimension);
+  const hasValues = dimension.total > 0 || dimension.previousTotal > 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const option = useMemo(() => (state.drawable ? radarOption(dimension, mapPalette()) : null), [dimension, state.drawable, scheme]);
+  const option = useMemo(() => (state.drawable ? radarOption(dimension, mapPalette()) : hasValues ? dimensionBarOption(dimension, mapPalette()) : null), [dimension, state.drawable, hasValues, scheme]);
   const byName = new Map(dimension.axes.map((axis) => [axis.label, axis]));
   const axisOf = (name: unknown) => byName.get(String(name ?? "").split("\n")[0]);
   return (
-    <ChartCard level={2} title={dimension.title} state={state.drawable ? "content" : "empty"} emptyText={state.sentence}
-      footnote={state.drawable ? `虚线是${dimension.previous}。` : undefined}>
-      <div data-radar={dimension.id} className="space-y-2">
+    <ChartCard level={2} title={dimension.title} state={hasValues ? "content" : "empty"} emptyText={state.sentence}
+      footnote={state.drawable ? `虚线是${dimension.previous}。` : hasValues ? `灰色是${dimension.previous}。` : undefined}>
+      <div data-radar={dimension.id} data-dimension-view={state.drawable ? "radar" : "bars"} className="space-y-2">
         <MapChart
           kind={`radar-${dimension.id}`} option={option} height={330}
           on={{ click: (params: { componentType?: string; name?: string }) => { const axis = axisOf(params?.name); if (axis) onAxis(selected === axis.id ? null : axis.id); } }}

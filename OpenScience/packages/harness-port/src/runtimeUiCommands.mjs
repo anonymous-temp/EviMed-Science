@@ -608,7 +608,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       if (!model) return null;
       // The name gives way first on a short line: the suffix is what says the
       // conversation is not on the defaults, and it is short.
-      const labelNode = h('span', { style: { display: 'inline-flex', minWidth: 0, fontWeight: 500 } },
+      const labelNode = h('span', { style: { display: 'inline-flex', minWidth: 0 } },
         h('span', { style: starterText }, model.title),
         suffix ? h('span', { style: { flex: 'none', whiteSpace: 'nowrap' } }, ` · ${suffix}`) : null);
       return h('span', {
@@ -684,13 +684,15 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         selection?.originReference ? h('button', { type: 'button', 'data-evimed-origin-reference': true,
           style: { ...chipStyle, ...textButton, flex: '0 1 auto', minWidth: 0, fontSize: '12px', maxWidth: barChipBudget },
           'aria-label': `来自：${selection.originReference.title}`,
-          onClick: () => kit.hub.send('open-event', { eventId: selection.originReference.id }) }, h('span', { style: starterText }, '来自：', selection.originReference.title)) : null,
+          onClick: () => (selection.originReference.kind === 'frontier-item'
+            ? kit.hub.send('open-item', { itemId: selection.originReference.id })
+            : kit.hub.send('open-event', { eventId: selection.originReference.id })) }, h('span', { style: starterText }, '来自：', selection.originReference.title)) : null,
         selection?.sourceIds?.length ? h('span' , { style: { ...chipStyle, flex: 'none', whiteSpace: 'nowrap' }, 'data-evimed-source-scope': selection.sourceIds.length },
         h('span', null, `${selection.sourceIds.length} 份资料`),
         h('button', { type: 'button', style: textButton, 'aria-label': failed ? '移除资料范围失败，重试' : '移除资料范围',
           onClick: async () => {
             try {
-              const result = await kit.hub.request('source-scope', { sessionId: selection.sessionId, sourceIds: [] });
+              const result = await kit.hub.request('source-scope', { sessionId: selection.sessionId, sourceIds: [], sourceScopeMode: 'project' });
               if (!result.ok) setFailed(true);
             } catch { setFailed(true); }
           },

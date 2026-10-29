@@ -1008,7 +1008,7 @@ function databaseResearchSession(row) {
     runtimeAgent: row.runtime_agent,
     // The documents this conversation is limited to (a jsonb array of ids), or null for all of them.
     originReference: conversationReference(row.origin_reference),
-    sourceScope: Array.isArray(row.source_scope) && row.source_scope.length ? Object.freeze([...row.source_scope]) : null,
+    sourceScope: Array.isArray(row.source_scope) ? Object.freeze([...row.source_scope]) : null,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   });

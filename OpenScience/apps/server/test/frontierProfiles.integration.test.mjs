@@ -1,5 +1,5 @@
-// 「与你相关」 against a real PostgreSQL and a real memory store (build spec D.4;
-// rebuilt 2026-09-24): a profile from the reader's memory of every provenance,
+// 「与你相关」 against a real PostgreSQL and the memory engine's files (build spec D.4; rebuilt
+// 2026-09-24, read from the engine's files since 2026-10-25): a profile from the reader's memory lines,
 // their recent questions and the items they starred or opened; every item of
 // the window ranked by phrase vectors, no phrase picking more than two; what
 // they hid pushing its near-duplicates out; each memory reason re-checked
@@ -7,12 +7,15 @@
 // basis without vectors; and a profile due at the next round once its inputs
 // change.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
-import { FrontierProfiles, encodeVector } from "../src/frontierProfiles.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { FRONTIER_RANKING, FrontierProfiles, encodeVector } from "../src/frontierProfiles.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { NativeMemoryOverlay } from "../src/nativeMemoryOverlay.mjs";
+import { migrateNativeMemory } from "../src/nativeMemoryPersistence.mjs";
 import { insertSource } from "./helpers/frontierFixtures.mjs";
 import { insertComposedItem, resetFrontier, testEmbedder, vectorAt } from "./helpers/frontierComposeFixtures.mjs";
 
@@ -28,29 +31,64 @@ const suffix = randomUUID().slice(0, 8);
 const users = { reader: `reader_${suffix}`, paused: `paused_${suffix}`, empty: `empty_${suffix}`, fresh: `fresh_${suffix}` };
 const NOW = new Date("2026-09-22T04:00:00Z");
 const hoursAgo = (hours) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
-const CONFIG = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierAudience: "all", kbEmbeddingDimension: 1024 };
+// The fixture's scores (50-99) are drawn for a selection line of 82, the default until c3-select moved it to 64; the line is pinned here so the
+// pool of items "of 精选 quality" is the one the assertions count.
+const CONFIG = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierAudience: "all", kbEmbeddingDimension: 1024, frontierSelectThreshold: 82 };
 let database;
 let memory;
+let overlay;
 const memories = {};
 
-const evidence = (quote) => ({ sourceType: "conversation_message", sourceRef: "sessions/ses_1/messages/m1", quote, observedAt: NOW.toISOString(), weight: 1 });
+/**
+ * The memory engine's side, in memory: the files of each reader, and what the store would answer for them. A change is made the way the
+ * engine's store makes one — the file, and the overlay's record of it (its file row and a revision), which is what the profile's memory
+ * mark reads. The mark moving under the real store's operations is held in frontierProfileMark.integration.test.mjs.
+ */
+const held = new Map();
+const nativeMemory = {
+  configured: true,
+  failing: false,
+  async files(/** @type {string} */ userId) {
+    if (nativeMemory.failing) throw Object.assign(new Error("the engine is down"), { code: "memory_engine_unavailable" });
+    return structuredClone(held.get(userId) ?? []);
+  },
+};
+const lineId = (uri, text) => `native:${uri}#${createHash("sha256").update(text).digest("hex").slice(0, 12)}`;
+/** Write (or replace) one memory file of a reader, with one line of text; returns the profile's name for the line. */
+async function writeFile(userId, rel, type, text, { projectId = null } = {}) {
+  const uri = `viking://user/${userId}/memories/${rel}`;
+  const files = held.get(userId) ?? [];
+  const at = files.findIndex((file) => file.uri === uri);
+  const body = `- ${text}`;
+  const file = { uri, type, body, hash: createHash("sha256").update(body).digest("hex"), sensitive: false, projectId, modTime: NOW.toISOString() };
+  if (at >= 0) files[at] = file; else files.push(file);
+  held.set(userId, files);
+  await overlay.upsertFile({ userId, uri, memoryType: type, body, ...(projectId ? { projectId } : {}) });
+  await overlay.addRevision({ userId, uri, memoryType: type, change: at >= 0 ? "updated" : "added", actor: "engine", reason: "", before: null, after: body });
+  return { id: lineId(uri, text), uri, text };
+}
+/** Take a file out of a reader's memory, as a forget does: the file is gone and the overlay says so. */
+async function dropFile(userId, uri) {
+  const type = held.get(userId).find((file) => file.uri === uri).type;
+  held.set(userId, held.get(userId).filter((file) => file.uri !== uri));
+  await overlay.removeFile(userId, uri);
+  await overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "user", reason: "forgotten", before: "x", after: null });
+}
 
 before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 2_000 });
   await migrateFrontier(database, { dimension: 1024 });
   for (const id of Object.values(users)) await database.query("INSERT INTO evimed_control.users(id, name, auth_type) VALUES ($1, $1, 'development')", [id]);
-  memory = new ResearchMemoryStore({}, { database });
-  memories.project = await memory.upsertRecord(users.reader, { scope: "user", kind: "project_fact", key: "project.sglt2",
-    value: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析", summary: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析",
-    origin: "explicit", status: "active", confidence: 1, importance: 0.9 }, evidence("我在做 SGLT2 心衰的 Meta 分析"));
-  memories.profile = await memory.upsertRecord(users.reader, { scope: "user", kind: "profile", key: "profile.department",
-    value: "心内科主治医师", summary: "心内科主治医师", origin: "explicit", status: "active", confidence: 1, importance: 0.8 }, evidence("我是心内科的"));
-  memories.inferred = await memory.upsertRecord(users.reader, { scope: "user", kind: "preference", key: "preference.oncology",
-    value: "可能关注肿瘤免疫", summary: "可能关注肿瘤免疫", origin: "inferred", status: "active", confidence: 0.4, importance: 0.3 },
-  { sourceType: "assistant_message", sourceRef: "sessions/ses_1/messages/m2", quote: "肿瘤", observedAt: NOW.toISOString(), weight: 0.5 });
-  await memory.upsertRecord(users.paused, { scope: "user", kind: "profile", key: "profile.department", value: "肿瘤科", summary: "肿瘤科",
-    origin: "explicit", status: "active", confidence: 1, importance: 0.8 }, evidence("我是肿瘤科的"));
+  // The memory schema is the settings store's (the server migrates it first); a database of its own has none yet.
+  await migrateMemorySettings(database);
+  await migrateNativeMemory(database);
+  memory = new MemorySettingsStore({}, { database });
+  overlay = new NativeMemoryOverlay({ database });
+  memories.project = await writeFile(users.reader, "projects/sglt2.md", "project_context", "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析");
+  memories.profile = await writeFile(users.reader, "profile.md", "profile", "心内科主治医师");
+  memories.inferred = await writeFile(users.reader, "preferences/oncology.md", "preferences", "可能关注肿瘤免疫");
+  await writeFile(users.paused, "profile.md", "profile", "肿瘤科");
   await memory.updateSettings(users.paused, { recallPaused: true });
 });
 
@@ -91,7 +129,7 @@ const PHRASES = [
 ];
 
 function profiles({ embedder = { ...testEmbedder, embedQuery: async (text) => PHRASES.find((phrase) => phrase.text === text)?.vector ?? vectorAt(0, 9) },
-  researchMemory = memory, budget = async () => ({ state: "ok" }), now = () => NOW, phrases = PHRASES } = {}) {
+  memorySettings = memory, budget = async () => ({ state: "ok" }), now = () => NOW, phrases = PHRASES } = {}) {
   const calls = [];
   const editor = {
     available: true,
@@ -102,7 +140,8 @@ function profiles({ embedder = { ...testEmbedder, embedQuery: async (text) => PH
           memoryId: phrase.source === "memory" ? memories[phrase.memory].id : "" })) };
     },
   };
-  return { calls, profiles: new FrontierProfiles({ database, researchMemory, editor, embedder, config: CONFIG, budget, now,
+  // The exploration draw takes the first of its pool, so a test knows which item it is.
+  return { calls, profiles: new FrontierProfiles({ database, memorySettings, nativeMemory, editor, embedder, config: CONFIG, budget, now, random: () => 0,
     conversations: async (userId) => RUNS[userId] ?? [] }) };
 }
 
@@ -152,7 +191,7 @@ test("a profile from memory of every provenance, the reader's questions and what
   assert.deepEqual(await reader.refreshUser(users.reader), { state: "available", phrases: 3 });
   assert.equal(calls.length, 1, "one model call for the whole profile");
   assert.deepEqual(calls[0].memories.map((entry) => entry.id).sort(), [memories.profile.id, memories.project.id, memories.inferred.id].sort(),
-    "an inferred memory feeds the ranking too");
+    "every line of the three files feeds the ranking");
   assert.deepEqual(calls[0].questions.map((entry) => entry.text), ["替尔泊肽对射血分数保留心衰的住院结局有什么证据？"],
     "a deleted conversation, an internal project's and one older than 30 days are not read");
   assert.deepEqual(calls[0].items, [{ text: "非奈利酮用于射血分数保留心衰", starred: true }, { text: "房颤消融术后抗凝时长", starred: false }],
@@ -162,7 +201,7 @@ test("a profile from memory of every provenance, the reader's questions and what
   assert.deepEqual(stored.phrases.map((phrase) => [phrase.source, phrase.memoryId === "" ? "" : "memory"]),
     [["memory", "memory"], ["memory", "memory"], ["question", ""]], "each phrase keeps where it came from");
   assert.equal(typeof stored.phrases[0].vector, "string", "the phrase vectors are kept with the profile for the reranks");
-  assert.match(stored.memory_mark, /^3:\d+:/, "the memory it was read from, as a mark");
+  assert.match(stored.memory_mark, /^3:[\d.]+:\d+$/, "the memory it was read from, as a mark: three files, the latest change, the newest revision");
 
   const answer = await reader.forYou({ id: users.reader }, hydrate);
   assert.equal(answer.state, "available");
@@ -170,11 +209,17 @@ test("a profile from memory of every provenance, the reader's questions and what
   assert.deepEqual(answer.items.map((entry) => [entry.item.title, entry.reason.topic, entry.reason.source]), [
     ["Tirzepatide HFpEF", "替尔泊肽与心衰", "question"],
     ["SGLT2 in HF", "SGLT2 抑制剂与心衰", "memory"],
-    ["Clinic", "心内科临床", "memory"],
     ["Oncology", "SGLT2 抑制剂与心衰", "memory"],
+    ["Clinic", "心内科临床", "memory"],
     ["Between", "心内科临床", "memory"],
-  ], "by cosine with a tenth of the editorial score; another specialty's item is a candidate; the first phrase full, Kidney is left out; "
-    + "far, muted, older than seven days, starred and opened left out");
+    ["Far", "心血管", "specialty"],
+  ], "by cosine with the editorial share; another specialty's item is a candidate; the first phrase full, Kidney is left out; each topic's "
+    + "entries together, in the order of its best; the specialty the model read (心血管, finally used) brings in Far, of 精选 quality, which no "
+    + "phrase is near; muted, older than seven days, starred and opened left out");
+  assert.deepEqual(answer.items.map((entry) => entry.slot), ["personal", "personal", "personal", "personal", "personal", "personal"],
+    "nothing outside the profile is good enough to explore with, and no safety alert is in the window");
+  assert.equal(answer.policy, FRONTIER_RANKING.policy);
+  assert.equal(answer.onboarding, false, "a reader the platform knows is not asked");
   assert.equal(answer.items[0].reason.memoryId, null, "a question names no memory");
   assert.equal(answer.items[1].reason.memoryId, memories.project.id);
 });
@@ -206,15 +251,13 @@ test("a reason whose memory is gone takes its item with it at once; a question's
   await database.query("INSERT INTO evimed_frontier.user_follows (user_id, kind, key, label, muted) VALUES ($1, 'source', 'muted', 'Muted', true)", [users.reader]);
   const { profiles: reader } = profiles();
   await reader.refreshUser(users.reader);
-  const doomed = await memory.upsertRecord(users.reader, { scope: "user", kind: "profile", key: "profile.department", value: "心内科主治医师",
-    summary: "心内科主治医师", origin: "explicit", status: "archived", confidence: 1, importance: 0.8 }, null, { expectedVersion: memories.profile.version });
-  assert.equal(doomed.status, "archived");
+  // The reader forgets the profile file: its line, and the two items that rested on it, leave at once, with no refresh in between.
+  await dropFile(users.reader, memories.profile.uri);
   const answer = await reader.forYou({ id: users.reader }, hydrate);
-  assert.deepEqual(answer.items.map((entry) => entry.item.title), ["Tirzepatide HFpEF", "SGLT2 in HF", "Oncology"]);
+  assert.deepEqual(answer.items.map((entry) => entry.item.title), ["Tirzepatide HFpEF", "SGLT2 in HF", "Oncology", "Far"]);
   assert.equal(reader.counters.reasonsDropped, 2);
   // Put it back for the tests after this one.
-  memories.profile = await memory.upsertRecord(users.reader, { scope: "user", kind: "profile", key: "profile.department", value: "心内科主治医师",
-    summary: "心内科主治医师", origin: "explicit", status: "active", confidence: 1, importance: 0.8 }, null, { expectedVersion: doomed.version });
+  memories.profile = await writeFile(users.reader, "profile.md", "profile", "心内科主治医师");
   // Recall paused after the ranking was cached: the block is off at once, not at the next refresh.
   await memory.updateSettings(users.reader, { recallPaused: true });
   try {
@@ -224,14 +267,17 @@ test("a reason whose memory is gone takes its item with it at once; a question's
   }
 });
 
-test("off for a reader who paused recall; nothing yet for one with nothing to read; a star is enough; unavailable while the memory store fails", options, async () => {
+test("off for a reader who paused recall; nothing yet for one with nothing to read; a star is enough; unavailable while the memory engine fails", options, async () => {
   const items = await seedItems();
   const { calls, profiles: reader } = profiles();
   assert.deepEqual(await reader.refreshUser(users.paused), { state: "off", reason: "recall-paused" });
   assert.deepEqual(await reader.forYou({ id: users.paused }, hydrate), { state: "off", basis: null, paused: true, items: [] });
   assert.deepEqual(await reader.refreshUser(users.empty), { state: "off", reason: "no-signal" });
-  assert.deepEqual(await reader.forYou({ id: users.empty }, hydrate), { state: "available", basis: null, items: [] },
-    "nothing yet is not a state of its own");
+  const nothing = await reader.forYou({ id: users.empty }, hydrate);
+  assert.deepEqual([nothing.state, nothing.basis, nothing.onboarding], ["available", null, true],
+    "nothing yet is not a state of its own, and a reader the platform knows nothing of is asked");
+  assert.deepEqual(nothing.items.map((entry) => [entry.item.title, entry.slot, entry.reason.topic, entry.propensity]), [["Muted", "explore", "精选", 0.333333]],
+    "no item of the window is 精选, so the block is the exploration entry alone: the best of three items of 精选 quality, drawn with its probability");
   assert.equal(calls.length, 0, "no model call for a reader with nothing to read");
   // A reader with no memory and no conversation, who starred one item.
   await mark(users.fresh, items.starred.id, "starred_at");
@@ -239,12 +285,18 @@ test("off for a reader who paused recall; nothing yet for one with nothing to re
   assert.equal(calls.length, 1);
   assert.deepEqual([calls[0].memories, calls[0].questions, calls[0].items],
     [[], [], [{ text: "非奈利酮用于射血分数保留心衰", starred: true }]]);
-  const broken = profiles({ researchMemory: { configured: true, settings: async () => ({ recallPaused: false, pausedProjects: [] }),
-    listAllRecords: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); } } }).profiles;
-  await assert.rejects(broken.refreshUser(users.reader), { code: "memory_unavailable" });
+  nativeMemory.failing = true;
+  const broken = profiles().profiles;
+  await assert.rejects(broken.refreshUser(users.reader), { code: "memory_engine_unavailable" });
   assert.equal(broken.state(), "unavailable");
-  assert.deepEqual(await broken.forYou({ id: users.reader }, hydrate), { state: "unavailable", basis: null, items: [] });
-  const modelless = new FrontierProfiles({ database, researchMemory: memory, config: { frontierAudience: "all" } });
+  // What does not come from memory is still served while the store is down: the editor's and the exploration entry.
+  const degraded = await broken.forYou({ id: users.reader }, hydrate);
+  assert.deepEqual([degraded.state, degraded.items.map((entry) => entry.slot)], ["available", ["explore"]]);
+  nativeMemory.failing = false;
+  // A store that cannot say whether the reader paused recall answers nothing it cannot stand behind.
+  const silent = profiles({ memorySettings: { configured: true, settings: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); } } }).profiles;
+  assert.deepEqual(await silent.forYou({ id: users.reader }, hydrate), { state: "unavailable", basis: null, items: [] });
+  const modelless = new FrontierProfiles({ database, memorySettings: memory, config: { frontierAudience: "all" } });
   assert.equal(modelless.state(), "off");
   assert.deepEqual(await modelless.forYou({ id: users.reader }, hydrate), { state: "off", basis: null, items: [] });
 });
@@ -259,7 +311,8 @@ test("without vectors the phrases are matched as keywords and the answer says so
   await reader.refreshUser(users.reader);
   const first = await reader.forYou({ id: users.reader }, hydrate);
   assert.equal(first.basis, "tags");
-  assert.deepEqual(first.items.map((entry) => [entry.item.title, entry.reason.memoryId]), [["HF", memories.project.id]]);
+  assert.deepEqual(first.items.map((entry) => [entry.item.title, entry.reason.memoryId, entry.reason.source]),
+    [["HF", memories.project.id, "memory"], ["Other", null, "specialty"]], "a keyword hit, then the specialty's item of 精选 quality");
   const before = (await database.query("SELECT for_you_at FROM evimed_frontier.user_profiles WHERE user_id = $1", [users.reader])).rows[0].for_you_at;
   now = new Date(NOW.getTime() + 7 * 3_600_000);
   await insertComposedItem(database, { specialties: ["cardiology"], sourceId: "stat", sourceType: "media", title: "New", titleZh: "心衰新药上市",
@@ -309,8 +362,7 @@ test("the round: missing and day-old profiles, and — at the next round, not th
   assert.ok(afterStar.calls[0].items.some((item) => item.text === "Clinic" && item.starred), "the star is read");
 
   // A new memory, written by any writer: marked by the round itself.
-  await memory.upsertRecord(users.reader, { scope: "user", kind: "project_fact", key: "project.af", value: "在做房颤消融的队列研究",
-    summary: "在做房颤消融的队列研究", origin: "inferred", status: "active", confidence: 0.6, importance: 0.5 }, evidence("房颤消融"));
+  await writeFile(users.reader, "projects/af.md", "project_context", "在做房颤消融的队列研究");
   minute += 5;
   const afterMemory = profiles({ now: clock });
   assert.equal((await afterMemory.profiles.refreshDue()).refreshed, 1, "a memory change makes the profile due");
@@ -345,15 +397,178 @@ test("a profile stored before the other signals existed reads as memory reasons,
   await database.query(`INSERT INTO evimed_frontier.user_profiles (user_id, specialties, phrases, for_you, computed_at, for_you_at)
     VALUES ($1, '{cardiology}', $2::jsonb, $3::jsonb, $4, $4)`, [users.reader,
     JSON.stringify([{ text: "SGLT2 抑制剂与心衰", memoryId: memories.project.id, kind: "project_fact", vector: encodeVector(vectorAt(1)) }]),
-    JSON.stringify({ state: "available", basis: "vector", items: [{ itemId: items.exact.publicId, text: "SGLT2 抑制剂与心衰", memoryId: memories.project.id,
-      kind: "project_fact" }], computedAt: NOW.toISOString() }), NOW]);
+    JSON.stringify({ state: "available", basis: "vector", policy: FRONTIER_RANKING.policy, items: [{ itemId: items.exact.publicId, text: "SGLT2 抑制剂与心衰",
+      memoryId: memories.project.id, kind: "project_fact" }], computedAt: NOW.toISOString() }), NOW]);
   const { profiles: reader } = profiles();
   const answer = await reader.forYou({ id: users.reader }, hydrate);
-  assert.deepEqual(answer.items.map((entry) => [entry.item.title, entry.reason.memoryId, entry.reason.source]),
-    [["SGLT2 in HF", memories.project.id, "memory"]]);
+  assert.deepEqual(answer.items.map((entry) => [entry.item.title, entry.reason.memoryId, entry.reason.source, entry.slot]),
+    [["SGLT2 in HF", memories.project.id, "memory", "personal"]], "a cached entry with no source or slot reads as a memory reason, personal");
+  // A ranking cached under another policy (or none) is ranked again at once, so a list is never recorded under a policy that did not make it.
+  await database.query("UPDATE evimed_frontier.user_profiles SET for_you = for_you - 'policy' WHERE user_id = $1", [users.reader]);
+  const reranked = await reader.forYou({ id: users.reader }, hydrate);
+  assert.equal(reranked.policy, FRONTIER_RANKING.policy);
+  assert.ok(reranked.items.length > 1, "ranked again with the current policy");
   const round = profiles();
   await round.profiles.refreshDue();
   assert.equal(round.calls.length, 1, "no mark yet: due at the first round");
   assert.deepEqual([round.calls[0].memories.some((entry) => entry.id === memories.inferred.id), round.calls[0].questions.length], [true, 1],
     "read again with every signal");
+});
+
+/** A tag of the tree, active, and the items carrying it. @param {string} slug @param {string} name @param {string[]} itemIds */
+async function tagItems(slug, name, itemIds) {
+  const tag = (await database.query(`INSERT INTO evimed_frontier.tags (slug, name, state, origin) VALUES ($1, $2, 'active', 'seed')
+    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`, [slug, name])).rows[0].id;
+  for (const itemId of itemIds) {
+    await database.query("INSERT INTO evimed_frontier.item_tags (item_id, tag_id, rank, origin) VALUES ($1, $2, 0, 'edit') ON CONFLICT DO NOTHING", [itemId, tag]);
+  }
+  return tag;
+}
+
+test("a reader the model knows nothing of is ranked from what they stated: onboarding, a follow, the must-see, the editor and one drawn entry", options, async () => {
+  await insertSource(database, "fda", { name: "FDA", lane: "regulatory", source_type: "regulator", authority: 5, owner_entity: "us-fda" });
+  const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3) };
+  const items = {
+    alert: await insertComposedItem(database, { sourceId: "fda", lane: "safety", sourceType: "regulator", evidenceType: null, safetyAlert: true, selected: true,
+      title: "Class I recall", visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) }),
+    tagged: await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Empagliflozin outcomes", scoreTotal: 50 }),
+    followed: await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "STAT story", scoreTotal: 45 }),
+    cardioPick: await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology pick", specialties: ["cardiology"], scoreTotal: 88, selected: true }),
+    cardioWeak: await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology weak", specialties: ["cardiology"], scoreTotal: 40 }),
+    otherPick: await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Oncology pick", specialties: ["oncology"], scoreTotal: 95, selected: true }),
+    unmatched: await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Nephrology good", specialties: ["nephrology"], scoreTotal: 85 }),
+  };
+  const slug = `sglt2-${suffix}`;
+  await tagItems(slug, "SGLT2 抑制剂", [items.tagged.id]);
+  const { FrontierTagStore } = await import("../src/frontierTags.mjs");
+  const reader = new FrontierProfiles({ database, memorySettings: memory, editor: { available: true, extractProfile: async () => ({ phrases: [], specialties: [], error: null }) },
+    embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG, now: () => NOW, random: () => 0, tags: new FrontierTagStore({ database, now: () => NOW }) });
+  const before = await reader.forYou({ id: users.fresh }, hydrate);
+  assert.equal(before.onboarding, true, "nothing known and nothing answered: the card is shown");
+  assert.deepEqual(before.items.map((entry) => [entry.item.title, entry.slot]).slice(0, 1), [["Class I recall", "must-see"]]);
+  await reader.savePrefs(users.fresh, { role: "pharmacist", specialties: ["cardiology"], interests: [slug], done: true });
+  await database.query("INSERT INTO evimed_frontier.user_follows (user_id, kind, key, label) VALUES ($1, 'source', 'stat', 'STAT')", [users.fresh]);
+  const answer = await reader.forYou({ id: users.fresh }, hydrate);
+  assert.equal(answer.onboarding, false, "answered: never asked again");
+  assert.deepEqual(answer.items.map((entry) => [entry.item.title, entry.slot, entry.reason.topic, entry.reason.source]), [
+    ["Class I recall", "must-see", "安全警示", "must-see"],
+    ["Empagliflozin outcomes", "personal", "SGLT2 抑制剂", "interest"],
+    ["STAT story", "personal", "STAT", "follow"],
+    ["Nephrology good", "explore", "其他领域精选", "explore"],
+    ["Cardiology pick", "personal", "心血管", "specialty"],
+    ["Oncology pick", "editorial", "精选", "editorial"],
+  ], "the alert first; what they stated, in rank order, each topic once; the one good item nothing matched, drawn, at the first boundary from the "
+    + "fourth place; the editor's pick in the room left; a weak item of their specialty is not 精选 quality");
+  const drawn = answer.items.find((entry) => entry.slot === "explore");
+  assert.equal(drawn.propensity, 1, "a pool of one");
+  assert.ok(answer.items.every((entry) => typeof entry.score === "number"));
+  const prefs = await reader.prefs(users.fresh);
+  assert.deepEqual([prefs.role, prefs.specialties, prefs.interests, prefs.interestTags], ["pharmacist", ["cardiology"], [slug], [{ slug, name: "SGLT2 抑制剂" }]]);
+  // Changed an hour later from 管理关注: the answer moves, its first time stays (a changed answer is not a second onboarding).
+  const later = new FrontierProfiles({ database, memorySettings: memory, config: CONFIG, now: () => new Date(NOW.getTime() + 3_600_000), tags: reader.tags });
+  const changed = await later.savePrefs(users.fresh, { specialties: ["cardiology", "oncology"], done: true });
+  assert.deepEqual([changed.specialties, changed.onboardedAt], [["cardiology", "oncology"], prefs.onboardedAt]);
+  // Skipping is an answer too, for a reader who has not given one.
+  await reader.savePrefs(users.empty, { skipped: true });
+  assert.equal((await reader.forYou({ id: users.empty }, hydrate)).onboarding, false);
+});
+
+test("what the reader reads leans their block: papers read to the end come before news scrolled past, of the same score and reason", options, async () => {
+  const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), specialties: ["cardiology"], selected: true, scoreTotal: 88 };
+  const news = await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "Cardiology news" });
+  const paper = await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology trial" });
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+    now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
+  await reader.savePrefs(users.fresh, { specialties: ["cardiology"], done: true });
+  const neutral = await reader.forYou({ id: users.fresh }, hydrate);
+  assert.deepEqual(neutral.items.map((entry) => entry.item.title), ["Cardiology news", "Cardiology trial"], "no history and no role: a tie, the older row first");
+  // Their last weeks: papers seen, opened and read to the end; news seen and never opened.
+  const history = [];
+  for (let index = 0; index < 4; index += 1) {
+    const read = await insertComposedItem(database, { sourceId: "nejm", title: `Old trial ${index}`, visibleAt: hoursAgo(24 * 9), timelineAt: hoursAgo(24 * 9) });
+    const skipped = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: `Old news ${index}`, visibleAt: hoursAgo(24 * 9), timelineAt: hoursAgo(24 * 9) });
+    history.push([read.id, "paper", "impression"], [read.id, "paper", "open"], [read.id, "paper", "reach-end"], [skipped.id, "news", "impression"]);
+  }
+  for (const [index, [itemId, genre, type]] of history.entries()) {
+    await database.query(`INSERT INTO evimed_frontier.interactions (user_id, client_id, type, surface, item_id, genre, session_id, client_at)
+      VALUES ($1, $2, $3, 'feed', $4, $5, 'ses_00000001', $6)`, [users.fresh, `evt_${suffix}_h${index}`, type, itemId, genre, hoursAgo(24 * 8)]);
+  }
+  await database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [users.fresh]);
+  const leaning = await reader.forYou({ id: users.fresh }, hydrate);
+  assert.deepEqual(leaning.items.map((entry) => entry.item.title), ["Cardiology trial", "Cardiology news"]);
+  assert.ok(news && paper);
+});
+
+/** A reader's hide of an item, as the table keeps it: when, and the reason they gave (none is null). */
+async function hide(userId, item, { daysAgo = 5, reason = null } = {}) {
+  await database.query(`INSERT INTO evimed_frontier.user_state (user_id, item_id, hidden_at, hidden_reason) VALUES ($1, $2, $3, $4)
+    ON CONFLICT (user_id, item_id) DO UPDATE SET hidden_at = EXCLUDED.hidden_at, hidden_reason = EXCLUDED.hidden_reason`,
+  [userId, item.id, hoursAgo(24 * daysAgo), reason]);
+}
+
+test("what the reader said was not their specialty lowers it for them for ninety days, except what they stated (c2-hide)", options, async () => {
+  const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), selected: true, sourceId: "nejm" };
+  const oncology = await insertComposedItem(database, { ...recent, title: "Oncology A", specialties: ["oncology"], scoreTotal: 88 });
+  await insertComposedItem(database, { ...recent, title: "Oncology B", specialties: ["oncology"], scoreTotal: 86 });
+  await insertComposedItem(database, { ...recent, title: "Cardiology A", specialties: ["cardiology"], scoreTotal: 80 });
+  assert.ok(oncology);
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+    now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
+  const order = async (userId = users.fresh) => {
+    await database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [userId]);
+    return (await reader.forYou({ id: userId }, hydrate)).items.map((entry) => entry.item.title);
+  };
+  assert.deepEqual(await order(), ["Oncology A", "Oncology B", "Cardiology A"], "by the editor's score while nobody has said anything");
+  // Three oncology items hidden as 「不是我的专科」, and three more hidden for other reasons, which say nothing of a specialty.
+  const said = [];
+  for (let index = 0; index < 3; index += 1) {
+    said.push(await insertComposedItem(database, { ...recent, title: `Said ${index}`, specialties: ["oncology"], scoreTotal: 70 }));
+    await hide(users.fresh, said[index], { reason: "not-my-specialty" });
+    await hide(users.fresh, await insertComposedItem(database, { ...recent, title: `Other ${index}`, specialties: ["oncology"], scoreTotal: 70 }),
+      { reason: ["already-seen", "promotional", null][index] });
+  }
+  assert.deepEqual(await order(), ["Cardiology A", "Oncology A", "Oncology B"],
+    "three hides take twelve points off the specialty: the 80 now leads the 88 and the 86; the other reasons moved nothing");
+  assert.ok((await reader.rank(users.fresh)).policy === FRONTIER_RANKING.policy);
+  assert.ok(reader.counters.demotedRanks >= 1);
+  // One that is older than the window is forgotten; another reader's word is not this reader's.
+  for (const item of said) await hide(users.fresh, item, { reason: "not-my-specialty", daysAgo: FRONTIER_RANKING.notMySpecialty.windowDays + 1 });
+  assert.deepEqual(await order(), ["Oncology A", "Oncology B", "Cardiology A"], "ninety days and it is no longer said");
+  for (const item of said) await hide(users.paused, item, { reason: "not-my-specialty" });
+  assert.deepEqual(await order(), ["Oncology A", "Oncology B", "Cardiology A"], "what another reader said is theirs");
+  // What they stated in onboarding stands over a hide of one item: oncology is theirs, so those hides lower nothing.
+  for (const item of said) await hide(users.fresh, item, { reason: "not-my-specialty" });
+  assert.deepEqual(await order(), ["Cardiology A", "Oncology A", "Oncology B"]);
+  await reader.savePrefs(users.fresh, { specialties: ["oncology"], done: true });
+  const stated = await order();
+  assert.equal(stated[0], "Oncology A", `the reader's own specialty is not lowered (${stated.join(", ")})`);
+});
+
+test("「看过了」 keeps an item out and counts against no genre; any other hide is one more failure of it (c2-hide)", options, async () => {
+  const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), selected: true, specialties: ["cardiology"] };
+  await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "Cardiology news", scoreTotal: 88 });
+  await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology trial", scoreTotal: 76 });
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+    now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
+  await reader.savePrefs(users.fresh, { specialties: ["cardiology"], done: true });
+  // Their last week: four news items seen, then hidden — with the reason in both records the way the page writes it.
+  const history = [];
+  for (let index = 0; index < 4; index += 1) {
+    const old = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: `Old news ${index}`, visibleAt: hoursAgo(24 * 9), timelineAt: hoursAgo(24 * 9) });
+    await hide(users.fresh, old, { daysAgo: 8, reason: "already-seen" });
+    history.push([old.id, "impression", null], [old.id, "hide", "already-seen"]);
+  }
+  for (const [index, [itemId, type, detail]] of history.entries()) {
+    await database.query(`INSERT INTO evimed_frontier.interactions (user_id, client_id, type, surface, item_id, genre, detail, session_id, client_at)
+      VALUES ($1, $2, $3, 'feed', $4, 'news', $5, 'ses_00000001', $6)`, [users.fresh, `evt_${suffix}_s${index}`, type, itemId, detail, hoursAgo(24 * 8)]);
+  }
+  const order = async () => {
+    await database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [users.fresh]);
+    return (await reader.forYou({ id: users.fresh }, hydrate)).items.map((entry) => entry.item.title);
+  };
+  assert.deepEqual(await order(), ["Cardiology news", "Cardiology trial"],
+    "four news items seen and hidden as already seen: the genre is lowered only by the impressions, not enough to pass a trial 12 points behind");
+  await database.query("UPDATE evimed_frontier.user_state SET hidden_reason = NULL WHERE user_id = $1 AND hidden_reason = 'already-seen'", [users.fresh]);
+  await database.query("UPDATE evimed_frontier.interactions SET detail = NULL WHERE user_id = $1 AND type = 'hide'", [users.fresh]);
+  assert.deepEqual(await order(), ["Cardiology trial", "Cardiology news"], "the same four hides with no reason are four failures of the genre, and the trial passes");
 });

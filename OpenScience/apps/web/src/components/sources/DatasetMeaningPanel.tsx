@@ -77,7 +77,7 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
       <EvolutionPanel projectId={projectId} dataset={evolutionDataset} />
       <div className="space-y-2">
         <h3 className="font-semibold">数据含义{asset.title ? ` · ${asset.title}` : ""}</h3>
-        {outdated && <p className="max-w-measure font-medium">这份文件不是记录含义时读的那一版，下面的含义可能已不适用，先核对再用。</p>}
+        {outdated && <p className="max-w-measure font-semibold">这份文件不是记录含义时读的那一版，下面的含义可能已不适用，先核对再用。</p>}
         {inferred.length > 0 && <div><Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmInferred(inferred)}>确认这些含义</Button></div>}
         <DatasetFacts facts={asset.facts} />
       </div>
@@ -87,7 +87,7 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
             <DatasetFacts facts={table.facts} />
             {table.variables.map((variable) => (
               <div key={variable.name} className="space-y-1">
-                <p className="font-medium">{variable.name}</p>
+                <p className="font-semibold">{variable.name}</p>
                 <DatasetFacts facts={variable.facts} />
               </div>
             ))}
@@ -96,7 +96,7 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
       ))}
       {asset.joins.length > 0 && (
         <div className="space-y-2">
-          <h4 className="font-medium">表间关联</h4>
+          <h4 className="font-semibold">表间关联</h4>
           {asset.joins.map((join) => (
             <div key={join.id} className="space-y-1">
               <p>{`${join.left.table}（${join.left.columns.join("、")}）→ ${join.right.table}（${join.right.columns.join("、")}）`}</p>
@@ -141,7 +141,7 @@ function LastCheck({ asset }: { asset: DatasetMeaningAsset }) {
   const when = `${formatDay(check.checkedAt)} ${formatClock(check.checkedAt)}`.trim();
   return (
     <div className="space-y-2">
-      <h4 className="font-medium">{`最近一次检查 · ${when}`}</h4>
+      <h4 className="font-semibold">{`最近一次检查 · ${when}`}</h4>
       {check.findings.length === 0 && check.notChecked.length === 0 && <p className="text-text-3">没有发现需要处理的变化。</p>}
       {check.findings.length > 0 && (
         <ul className="max-w-measure space-y-1">

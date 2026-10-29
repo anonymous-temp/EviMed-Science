@@ -12,7 +12,11 @@ const mocks = vi.hoisted(() => ({
   readArtifact: vi.fn(),
   readClaimVerification: vi.fn(),
   openRunProject: vi.fn(),
+  signalResult: vi.fn(),
+  signalBytes: vi.fn(),
 }));
+
+vi.mock('@/lib/geoSignalsClient', async original => ({ ...await original<typeof import('@/lib/geoSignalsClient')>(), getGeoSignalResult: mocks.signalResult, readGeoSignalResultBytes: mocks.signalBytes }));
 
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sourceClient")>()),
@@ -66,6 +70,25 @@ beforeEach(() => {
   });
   mocks.readClaimVerification.mockResolvedValue(null);
   mocks.openRunProject.mockResolvedValue(false);
+});
+
+it('uses only the precise GEO result grant and never selects an equally named personal workspace', async () => {
+  const signal = `gs_${'a'.repeat(64)}`, version = `rv_${'b'.repeat(64)}`, path = 'deliverables/shared/report.txt';
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:shared') });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+  mocks.signalResult.mockResolvedValue({ versionId: version, projectId: 'owner-project', path, producer: { kind: 'runtime', runId: 'run_shared', sessionId: 'owner-session' }, mimeType: 'text/plain' });
+  mocks.signalBytes.mockResolvedValue({ text: async () => 'Shared immutable result' });
+  renderAt(`/app/runs/run_shared/files/${path}?version=${version}&geoProject=geo_shared&signal=${signal}`);
+  expect(await screen.findByText('Shared immutable result')).toBeTruthy();
+  expect(mocks.signalResult).toHaveBeenCalledWith('geo_shared', signal, 'run_shared', version);
+  expect(mocks.signalBytes).toHaveBeenCalledWith('geo_shared', signal, 'run_shared', version);
+  expect(mocks.listWebAgentRuns).not.toHaveBeenCalled(); expect(mocks.openRunProject).not.toHaveBeenCalled(); expect(mocks.readArtifact).not.toHaveBeenCalled();
+});
+
+it('an incomplete GEO grant never falls through to an account-owned file', async () => {
+  renderAt('/app/runs/run_shared/files/report.txt?geoProject=geo_shared');
+  expect(await screen.findByRole('alert')).toHaveTextContent('结果链接不完整');
+  expect(mocks.listWebAgentRuns).not.toHaveBeenCalled(); expect(mocks.readArtifact).not.toHaveBeenCalled(); expect(mocks.signalResult).not.toHaveBeenCalled();
 });
 
 describe("RunFilePage", () => {

@@ -1,0 +1,8 @@
+{
+  "name": "method-conditional",
+  "note": "An example of the variant-file shape: a method edit (every place the method names is written only when the person gave its content). `methodReplace` applies to every case whose method contains the text and must match at least one.",
+  "methodReplace": [
+    ["每条先写结论，再写依据。", "每条先写结论；用户给了依据才写依据，没给就只写结论。"]
+  ],
+  "methodAppend": ""
+}

@@ -13,7 +13,6 @@ import test from "node:test";
 import { AGENT_KEY_SCOPES } from "../src/agentApiKeys.mjs";
 import { createAgentMemoryRoutes, AGENT_MEMORY_PATH } from "../src/agentMemoryRoutes.mjs";
 import { agentMemoryOpenApi } from "../src/agentMemoryOpenApi.mjs";
-import { MemoryIntelligence } from "../src/memoryIntelligence.mjs";
 import { HttpError } from "../src/security.mjs";
 
 const config = { agentMemoryApiEnabled: true, maxJsonBytes: 1_048_576 };
@@ -75,31 +74,24 @@ function fixture(overrides = {}) {
       if (!found) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
       return { id, payload: { title: found.title } };
     },
-    async note(userId, projectId, input) { calls.push(["note", userId, projectId, input]); return { id: "entry_1", ...input }; },
+    async note(userId, projectId, input) { calls.push(["note", userId, projectId, input]); return { id: "entry_1", revision: 1, ...input }; },
   };
-  const researchMemory = {
+  const memorySettings = {
     configured: true,
-    async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return overrides.records ?? []; },
     async settings(userId) { calls.push(["settings", userId]); return { learningPaused: false, recallPaused: false }; },
     async updateSettings(userId, input) { calls.push(["updateSettings", userId, input]); return { learningPaused: Boolean(input.learningPaused), recallPaused: Boolean(input.recallPaused) }; },
-    async recordUsage() { return {}; },
-    async recentChanges() { return []; },
-    async getRecord(userId, id) {
-      const found = (overrides.records ?? []).find((item) => item.id === id);
-      if (!found) throw new HttpError(404, "memory_not_found", "Memory not found.");
-      return found;
-    },
-    async upsertRecord(userId, next, _evidence, options) { calls.push(["upsertRecord", userId, next, options]); return { ...next, version: next.version + 1 }; },
   };
-  const memoryIntelligence = {
-    async recordRun(project, run, messages, options) {
-      calls.push(["recordRun", project.id, run.sessionId, messages, options]);
-      return { proposed: 2, extracted: 1, activated: 0, pending: 1, rejected: 1 };
-    },
+  // The engine's store: nothing here writes a memory, so a handler that tried to would fail the test by calling a method that is not there.
+  const nativeMemory = {
+    configured: true,
+    async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return overrides.records ?? []; },
+    async search(userId, query) { calls.push(["search", userId, query]); return { items: overrides.found ?? [] }; },
+    async changes() { return []; },
+    async setLearning(userId, on) { calls.push(["setLearning", userId, on]); },
+    overlay: { async admission() { return null; } },
   };
   const routes = createAgentMemoryRoutes({
-    config: { ...config, ...overrides.config }, apiKeys, store, researchMemory, capsules,
-    memoryIntelligence: overrides.memoryIntelligence ?? memoryIntelligence, memorySubstrate: overrides.memorySubstrate ?? null,
+    config: { ...config, ...overrides.config }, apiKeys, store, memorySettings, capsules, nativeMemory,
     deleteSubject: async (ownerId, subjectAccountId) => { calls.push(["deleteSubject", ownerId, subjectAccountId]); return 1; },
     audit: async (event, status, details) => { calls.push(["audit", event, status, details]); },
   });
@@ -150,89 +142,52 @@ test("a scope the key does not carry is refused before the store is touched", as
   assert.ok(!calls.some((entry) => entry[0] === "note"));
 });
 
-test("records default to active, because a pending record is a proposal nobody agreed to", async () => {
-  const { routes, calls } = fixture();
-  await routes(request(`${AGENT_MEMORY_PATH}/records`), response());
-  assert.deepEqual(calls.find((entry) => entry[0] === "listRecords")[2].statuses, ["active"]);
-  await routes(request(`${AGENT_MEMORY_PATH}/records?status=pending`), response());
-  assert.deepEqual(calls.filter((entry) => entry[0] === "listRecords").at(-1)[2].statuses, ["pending"]);
+test("records are the engine's files, all in force: a status that excludes active finds none, and the engine is asked for the key's own account", async () => {
+  const { routes, calls } = fixture({ records: [{ id: "nm_a", kind: "preference", scope: "user", value: "v", status: "active" }] });
+  const listed = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/records`), listed);
+  assert.deepEqual(listed.captured.body.data.map((record) => record.id), ["nm_a"]);
+  assert.equal(calls.find((entry) => entry[0] === "listRecords")[1], "u1");
+  const before = calls.filter((entry) => entry[0] === "listRecords").length;
+  const pending = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/records?status=pending`), pending);
+  assert.deepEqual(pending.captured.body.data, [], "a proposal is a staged note, never a record");
+  assert.equal(calls.filter((entry) => entry[0] === "listRecords").length, before, "and the engine is not asked");
 });
 
-test("an episode goes through the platform's own extractor, carrying which turns were the user's", async () => {
+test("an episode is staged as a candidate note, carrying which turns were the user's, and writes no memory", async () => {
   const { routes, calls } = fixture();
   const res = response();
   await routes(request(`${AGENT_MEMORY_PATH}/episodes`, {
     projectId: "p9", sessionId: "s1",
     messages: [{ role: "user", text: "我只用中文。" }, { role: "assistant", text: "好的。" }],
   }), res);
-  const recorded = calls.find((entry) => entry[0] === "recordRun");
-  assert.equal(recorded[1], "p9");
-  // The sender, not the role string alone: origin is decided from who said it,
-  // and machine text arriving as the user's words is the failure that matters.
-  assert.deepEqual(recorded[3].map((message) => message.sender), ["user", "assistant"]);
+  const staged = calls.find((entry) => entry[0] === "note");
+  assert.equal(staged[2], "p9");
+  assert.equal(staged[3].origin, "inferred");
+  assert.equal(staged[3].review, true, "held for the owner");
+  // The sender, not the role string alone: only the person's own words are ever forwarded on confirmation.
+  assert.deepEqual(staged[3].externalSession.messages.map((message) => message.sender), ["user", "assistant"]);
   assert.equal(res.captured.status, 202);
-  assert.equal(res.captured.body.data.activated, 0);
-  // Held for the owner, by the one argument that says so: the extractor is the
-  // platform's own, and without it what it writes takes effect.
-  assert.deepEqual(recorded[4], { holdForOwner: true });
+  const data = res.captured.body.data;
+  assert.deepEqual([data.activated, data.extracted, data.pending, data.state], [0, 0, 1, "pending_confirmation"]);
+  assert.deepEqual(data.confirm, { path: `${AGENT_MEMORY_PATH}/notes/entry_1/confirm`, expectedRevision: 1 });
+  // Nothing reached the engine's files or the account's switches.
+  assert.ok(!calls.some((entry) => ["listRecords", "search", "setLearning", "updateSettings"].includes(entry[0])));
+  assert.match(agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 }).info.description, /stays a pending candidate/, "and the description says what the code does");
 });
 
-test("what an episode yields waits for the account owner, and a memory already in force is never changed by one", async () => {
-  // The real extractor, a store double and a model double: the property is the
-  // records written, not the arguments passed. Until 2026-09-27 this surface
-  // promised `pending` while the extractor it called activated everything.
-  const records = new Map();
-  let nextId = 1;
-  const store = {
-    async listRecords() { return [...records.values()]; },
-    async upsertRecord(_userId, input, evidence) {
-      const key = [input.scope, input.scopeId ?? "", input.kind, input.key].join("|");
-      const existing = records.get(key);
-      const record = {
-        ...existing, ...input, id: existing?.id ?? `record_${nextId++}`, version: (existing?.version ?? 0) + 1,
-        evidence: [...(existing?.evidence ?? []), ...(evidence ? [evidence] : [])], revisions: existing?.revisions ?? [],
-      };
-      records.set(key, record);
-      return record;
-    },
-  };
-  await store.upsertRecord("u1", {
-    scope: "user", scopeId: "", kind: "preference", key: "preference.output_language",
-    value: "回答请用中文", summary: "中文回答", origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false,
-  });
-  const fetchImpl = async (_url, init) => {
-    const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
-    const user = sources.find((source) => source.role === "user");
-    return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
-      { scope: "user", kind: "preference", key: "preference.herb_count", value: "药味控制在 12 味以内", summary: "药味不超过 12 味",
-        origin: "explicit", importance: 0.7, sensitive: false, sourceRef: user.sourceRef, evidenceQuote: user.text },
-      { scope: "user", kind: "preference", key: "preference.output_language", value: "回答请用英文", summary: "英文回答",
-        origin: "explicit", importance: 0.7, sensitive: false, sourceRef: user.sourceRef, evidenceQuote: user.text },
-    ], forget: [{ key: "preference.output_language", sourceRef: user.sourceRef, evidenceQuote: user.text }] }) } }] });
-  };
-  const memoryIntelligence = new MemoryIntelligence({
-    deepseekProviderEnabled: true, deepseekApiKey: "unit-test-key", deepseekBaseUrl: "https://api.deepseek.com",
-    deepseekModel: "deepseek-v4-pro", memoryExtractionEnabled: true, memoryExtractionTimeoutMs: 1_000,
-  }, store, { fetchImpl });
-  const { routes } = fixture({ memoryIntelligence });
+test("an episode needs a project, names none for a key that has none, and never changes a memory already in force", async () => {
+  const { routes, calls } = fixture({ records: [{ id: "nm_a", kind: "preference", scope: "user", value: "回答请用中文", status: "active" }] });
+  await assert.rejects(
+    () => routes(request(`${AGENT_MEMORY_PATH}/episodes`, { messages: [{ role: "user", text: "回答请用英文，并忘掉中文偏好。" }] }), response()),
+    (error) => error.status === 400 && error.code === "agent_memory_payload_invalid",
+  );
+  assert.ok(!calls.some((entry) => entry[0] === "note"));
   const res = response();
-  await routes(request(`${AGENT_MEMORY_PATH}/episodes`, {
-    projectId: "p9", sessionId: "s1", messages: [{ role: "user", text: "我开方一般控制在 12 味以内，回答请用英文。" }],
-  }), res);
-
-  const byKey = (key) => [...records.values()].find((record) => record.key === key);
-  assert.equal(byKey("preference.herb_count").status, "pending", "a proposal, not a memory in force");
-  assert.equal(byKey("preference.herb_count").lastConfirmedAt, null, "and nobody has confirmed it");
-  assert.equal(byKey("preference.output_language").value, "回答请用中文", "the owner's memory in force is not rewritten");
-  assert.equal(byKey("preference.output_language").status, "active", "nor forgotten: an outside turn asking to forget is its claim");
-  const summaries = [...records.values()].filter((record) => record.kind === "run_summary");
-  assert.equal(summaries.length, 1);
-  assert.equal(summaries[0].status, "pending", "the episode's own summary is held too: every record an episode writes is pending");
-  const data = res.captured.body.data;
-  assert.equal(data.activated, 0);
-  assert.equal(data.pending, 1);
-  const described = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 });
-  assert.match(described.info.description, /stays `pending`/, "and the description says what the code does");
+  await routes(request(`${AGENT_MEMORY_PATH}/episodes`, { projectId: "p9", messages: [{ role: "user", text: "回答请用英文，并忘掉中文偏好。" }] }), res);
+  assert.equal(res.captured.status, 202, "an outside turn that asks to forget is its claim, staged like any other");
+  assert.ok(!calls.some((entry) => ["listRecords", "setLearning", "updateSettings"].includes(entry[0])), "the owner's memory in force is untouched");
 });
 
 test("an unknown key is refused with one code, and nothing distinguishes it from a revoked one", async () => {
@@ -257,22 +212,23 @@ test("the description is built from the vocabularies the handlers validate again
   assert.match(document.components.securitySchemes.agentApiKey.description, new RegExp(AGENT_KEY_SCOPES[0]));
   // The one promise the whole surface rests on, written where an integrator
   // reads it rather than only where it is enforced.
-  assert.match(document.info.description, /stays `pending`/);
+  assert.match(document.info.description, /stays a pending candidate/);
   assert.equal(agentMemoryOpenApi({ basePath: "/x", rateLimitPerMinute: 7 }).servers[0].url, "/x");
 });
 
-test("recall answers from the records as well as the capsule, and each item says where it came from", async () => {
-  // The same promise the runtime tool makes: an external agent's `recall`
-  // reaches the account's structured memory, not only the capsule facts, and
-  // can tell the two apart by `source` rather than by guessing from the shape.
-  const memorySubstrate = {
-    async recall() { return [{ id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured" }]; },
-  };
-  const { routes, calls } = fixture({ memorySubstrate });
+test("recall answers from the engine's memory as well as the capsule, and each item says where it came from", async () => {
+  // The same promise the runtime tool makes: an external agent's `recall` reaches the account's memory files, not only the capsule
+  // facts, and can tell the two apart by `source` rather than by guessing from the shape.
+  const found = [
+    { id: "nm_a", value: "回答尽量简短", kind: "preference", scope: "user", status: "active" },
+    { id: "nm_s", value: "一个敏感的事实", kind: "profile", scope: "user", status: "active", sensitive: true },
+    { id: "nm_p", value: "另一个项目的约定", kind: "project_fact", scope: "project", scopeId: "other", status: "active" },
+  ];
+  const { routes, calls } = fixture({ found });
   const res = response();
   await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "简短" }), res);
   assert.equal(res.captured.status, 200);
-  assert.deepEqual(res.captured.body.data.items.map((item) => [item.source, item.id]), [["memory", "record:r1"]]);
+  assert.deepEqual(res.captured.body.data.items.map((item) => [item.source, item.id]), [["memory", "nm_a"]], "a sensitive memory and another project's are not recalled");
   assert.deepEqual(res.captured.body.data.sources, { memory: 1, capsule: 0 });
   assert.equal(res.captured.body.data.contextOnly, true);
   assert.equal(calls.find((entry) => entry[0] === "recall")[2].scope, "capsule", "the capsule half is asked for the capsule only");
@@ -287,12 +243,12 @@ test("an integration key speaks for the doctor it names, and every read and writ
   await routes(request(`${AGENT_MEMORY_PATH}/episodes`, { messages: [{ role: "user", text: "我一般开 12 味以内。" }] }, "evk_good", "POST", as("doc-7")), response());
   assert.equal(calls.find((entry) => entry[0] === "recall")[1], subjectIdOf("doc-7"));
   assert.equal(calls.find((entry) => entry[0] === "listRecords")[1], subjectIdOf("doc-7"));
-  const note = calls.find((entry) => entry[0] === "note");
+  const [note, episode] = calls.filter((entry) => entry[0] === "note");
   assert.deepEqual([note[1], note[2]], [subjectIdOf("doc-7"), "default"], "a subject's note lands in its one project");
-  assert.equal(calls.find((entry) => entry[0] === "recordRun")[1], "default", "and so does an episode that names none");
+  assert.deepEqual([episode[1], episode[2]], [subjectIdOf("doc-7"), "default"], "and so does an episode that names none");
   // Only writes make an account; the reads found the one that exists.
   assert.deepEqual(calls.filter((entry) => entry[0] === "subjectAccount").map((entry) => entry[1]), ["u1", "u1"]);
-  assert.ok(!calls.some((entry) => ["recall", "listRecords", "note", "recordRun"].includes(entry[0]) && entry[1] === "u1"),
+  assert.ok(!calls.some((entry) => ["recall", "listRecords", "note"].includes(entry[0]) && entry[1] === "u1"),
     "nothing reached the institution's own account");
 });
 
@@ -408,12 +364,13 @@ test("every operation the root lists is described, and nothing is described that
 });
 
 test("the dashboard is a read, the acts on it need memory.manage, and a key without it touches nothing", async () => {
-  const records = [{ id: "r2", kind: "preference", scope: "user", key: "k", value: "v", summary: "s", origin: "inferred", status: "pending", version: 1, revisions: [], evidence: [], provenance: { basis: "inferred" } }];
+  const records = [{ id: "nm_a", kind: "preference", scope: "user", key: "k", value: "v", summary: "s", origin: "explicit", status: "active", version: 1, revisions: [], evidence: [], provenance: { basis: "stated" } }];
   const readOnly = fixture({ scopes: ["memory.read", "memory.write"], records });
   const board = response();
   await readOnly.routes(request(`${AGENT_MEMORY_PATH}/dashboard`), board);
-  assert.deepEqual(board.captured.body.data.pending.map((item) => item.id), ["r2"]);
-  for (const [method, path, body] of [["POST", "/records/r2/confirm", { expectedVersion: 1 }], ["PATCH", "/records/r2", { expectedVersion: 1, summary: "x" }],
+  assert.deepEqual(board.captured.body.data.records.map((item) => item.id), ["nm_a"]);
+  assert.deepEqual(board.captured.body.data.pending, [], "nothing in the engine waits: its files are in force when written");
+  for (const [method, path, body] of [["POST", "/records/nm_a/forget", { expectedVersion: 1 }], ["PATCH", "/records/nm_a", { expectedVersion: 1, value: "x" }],
     ["PUT", "/settings", { recallPaused: true }], ["POST", "/methods/m1/retire", { expectedRevision: 1 }], ["POST", "/notes/n1/confirm", { expectedRevision: 1 }]]) {
     await assert.rejects(
       () => readOnly.routes(request(`${AGENT_MEMORY_PATH}${path}`, body, "evk_good", method), response()),
@@ -421,17 +378,19 @@ test("the dashboard is a read, the acts on it need memory.manage, and a key with
       `${method} ${path}`,
     );
   }
-  assert.ok(!readOnly.calls.some((entry) => ["upsertRecord", "updateSettings"].includes(entry[0])));
+  assert.ok(!readOnly.calls.some((entry) => ["updateSettings", "setLearning"].includes(entry[0])));
 
   const manager = fixture({ records });
-  const confirmed = response();
-  await manager.routes(request(`${AGENT_MEMORY_PATH}/records/r2/confirm`, { expectedVersion: 1 }), confirmed);
-  const write = manager.calls.find((entry) => entry[0] === "upsertRecord");
-  assert.deepEqual([write[2].status, write[2].origin], ["active", "explicit"]);
-  const audited = manager.calls.find((entry) => entry[0] === "audit");
-  assert.deepEqual([audited[1], audited[2], audited[3].target, audited[3].keyId], ["agent-memory.memory.record.confirm", "completed", "r2", "agk_1"]);
   await manager.routes(request(`${AGENT_MEMORY_PATH}/settings`, { learningPaused: true }, "evk_good", "PUT"), response());
   assert.deepEqual(manager.calls.find((entry) => entry[0] === "updateSettings")[2], { learningPaused: true });
+  assert.deepEqual(manager.calls.find((entry) => entry[0] === "setLearning").slice(1), ["u1", false], "the pause is the engine's own policy too");
+  const audited = manager.calls.find((entry) => entry[0] === "audit");
+  assert.deepEqual([audited[1], audited[2], audited[3].keyId], ["agent-memory.settings.update", "completed", "agk_1"]);
+  // A record id the engine did not mint is no memory of the account's.
+  await assert.rejects(
+    () => manager.routes(request(`${AGENT_MEMORY_PATH}/records/rec_legacy/confirm`, { expectedVersion: 1 }), response()),
+    (error) => error.status === 404 && error.code === "memory_not_found",
+  );
 });
 
 test("an observation needs memory.observe, is refused before any account is made, and lands in the subject's account", async () => {
@@ -480,22 +439,9 @@ test("forgetting one person is an integration key's act on a named subject, and 
   assert.ok(audit.length > 0 && audit.every((line) => !line.includes("doc-7")), "the HIS identifier never reaches an audit line");
 });
 
-test("recall may name the time its question is about; the answer is the account's records at that time", async () => {
-  const asked = [];
-  const memorySubstrate = {
-    async recall(_userId, _query, scope) {
-      asked.push(scope);
-      return [{ id: "record:r1", content: "利伐沙班 20 mg", kind: "project_fact", scope: "project", memoryType: "structured", caveats: ["not_yet_valid"] }];
-    },
-  };
-  const { routes } = fixture({ memorySubstrate });
-  const res = response();
-  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "剂量", scope: "conversation", asOf: "2025-06-30" }), res);
-  assert.equal(res.captured.status, 200);
-  assert.equal(asked[0].asOf, Date.parse("2025-06-30T23:59:59.999Z"));
-  assert.equal(res.captured.body.data.asOf, "2025-06-30T23:59:59.999Z");
-  const [item] = res.captured.body.data.items;
-  assert.deepEqual([item.uncertain, item.caveats, item.contextOnly], [true, ["not_yet_valid"], true]);
-  await assert.rejects(() => routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", asOf: "last spring" }), response()),
+
+test("recall no longer takes a time to read as of: the records engine that answered it is gone, and an unknown field is refused", async () => {
+  const { routes } = fixture();
+  await assert.rejects(() => routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "剂量", asOf: "2025-06-30" }), response()),
     (error) => error.status === 400 && error.code === "agent_memory_payload_invalid");
 });

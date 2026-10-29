@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
-import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
+import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, GEO_ROUTE_ERROR_CODES, knownErrorCodeMessage } from "@evimed/domain";
 import { createGeoRoutes, geoRoutePattern } from "../src/geoRoutes.mjs";
 import { GeoService, geoAudienceAllows, geoMetricFamilies, geoReadiness } from "../src/geoService.mjs";
 import { readFile } from "node:fs/promises";
@@ -51,6 +51,7 @@ test("a GEO path's metric label folds every id, so a dashboard row is a route", 
     ["/api/geo/projects", "/api/geo/projects"],
     ["/api/geo/projects/geo_abc", "/api/geo/projects/:id"],
     ["/api/geo/projects/geo_abc/diagnosis", "/api/geo/projects/:id/diagnosis"],
+    ["/api/geo/projects/geo_abc/snapshots", "/api/geo/projects/:id/snapshots"],
     ["/api/geo/projects/geo_abc/answers/s_1", "/api/geo/projects/:id/answers/:item"],
     ["/api/geo/projects/geo_abc/questions/gq_1/unmeasure", "/api/geo/projects/:id/questions/:item/:action"],
     ["/api/geo/projects/geo_abc/whatever-this-is", "/api/geo/projects/:id/:route"],
@@ -73,6 +74,47 @@ test("the CSRF check is repeated, a path id is held to its shape, and creation w
   await assert.rejects(routes(request("GET", "/api/geo/market"), response()), { status: 403, code: "geo_operator_required" });
 });
 
+test("the members behind an analysis cell are a four-part GET, and the query reaches the service as the page sent it", async () => {
+  const reads = /** @type {any[]} */ ([]);
+  const service = {
+    allows: (/** @type {any} */ user) => geoAudienceAllows(config, user),
+    isOperator: () => false,
+    async analysisMembers(/** @type {any} */ user, /** @type {string} */ id, /** @type {any} */ input) { reads.push([user.id, id, input]); return { items: [], total: 0 }; },
+  };
+  const { routes } = fixture({ service });
+  const res = response();
+  assert.equal(await routes(request("GET", "/api/geo/projects/geo_abc/analysis/members?viewId=V02&rowKey=r1&columnKey=answers&offset=50&expectedDigest=" + "a".repeat(64)), res), true);
+  assert.equal(res.status, 200, "this path answered 404 when its branch sat inside the three-part block");
+  assert.deepEqual(res.json(), { data: { items: [], total: 0 } });
+  assert.equal(reads.length, 1);
+  assert.deepEqual(reads[0].slice(0, 2), ["reader", "geo_abc"]);
+  assert.equal(reads[0][2].rowKey, "r1");
+  assert.equal(reads[0][2].columnKey, "answers");
+  // Only a read: the same path with another verb is not found, and a longer path is not this route.
+  await assert.rejects(routes(request("POST", "/api/geo/projects/geo_abc/analysis/members", {}), response()), { status: 404 });
+  await assert.rejects(routes(request("GET", "/api/geo/projects/geo_abc/analysis/members/extra"), response()), { status: 404 });
+});
+
+test("the module conversation's 停止 names one run of that conversation, and nothing else reaches the stop", async () => {
+  const seen = /** @type {any[]} */ ([]);
+  const audits = /** @type {any[]} */ ([]);
+  const { routes } = fixture({
+    audit: async (/** @type {string} */ event, /** @type {string} */ status, /** @type {any} */ details) => { audits.push([event, status, details]); },
+    projects: { conversationRead: async (/** @type {any} */ user, /** @type {string} */ geoId, /** @type {string} */ sessionId, /** @type {string} */ action, /** @type {any} */ body) => {
+      seen.push([user.id, geoId, sessionId, action, body]);
+      return { run: { id: body.runId, status: "canceled" }, cancellation: { root: "canceled", children: [] } };
+    } },
+  });
+  const res = response();
+  assert.equal(await routes(request("POST", "/api/geo/projects/geo_1/conversation/ses_1/stop", { runId: "run_1" }), res), true);
+  assert.deepEqual(seen, [["reader", "geo_1", "ses_1", "stop", { runId: "run_1" }]]);
+  assert.equal(res.json().data.cancellation.root, "canceled");
+  assert.deepEqual(audits, [["geo.conversation.stop", "completed", { userId: "reader", code: "geo_1", detail: "run_1" }]]);
+  await assert.rejects(routes(request("POST", "/api/geo/projects/geo_1/conversation/ses_1/stop", { runId: "run_1", projectId: "other" }), response()), { status: 400 });
+  await assert.rejects(routes(request("GET", "/api/geo/projects/geo_1/conversation/ses_1/stop"), response()), { status: 404, code: "not_found" });
+  assert.equal(seen.length, 1);
+});
+
 test("every code the routes and the service answer with is registered", async () => {
   // The refusals a request can meet: an HttpError, directly or through the
   // service's `failure` helper. Readiness codes are the readiness board's.
@@ -91,7 +133,7 @@ test("every code the routes and the service answer with is registered", async ()
   const unregistered = [...emitted].filter((code) => !ALL_ERROR_CODES.includes(code)).sort();
   assert.deepEqual(unregistered, [], `emitted but not registered: ${unregistered.join(", ")}`);
   // A page's refusal is a page's; the one tool code the service throws is the runtime read's own.
-  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code) && !GEO_MEDIA_MARKET_ERROR_CODES.includes(code)), ["geo_read_what_invalid"]);
+  assert.deepEqual([...emitted].filter((code) => !GEO_ROUTE_ERROR_CODES.includes(code) && !GEO_MEDIA_MARKET_ERROR_CODES.includes(code)), ["geo_read_filter_invalid", "geo_read_what_invalid"]);
 });
 
 test("readiness: off is green and says so; on it is red only for the module's own invariants", async () => {
@@ -177,12 +219,23 @@ test("the evimed-geo alerts read series the module exports", async () => {
   const group = rules.groups.find((entry) => entry.name === "evimed-geo");
   assert.ok(group, "an evimed-geo rule group exists");
   const alerts = new Map(group.rules.map((rule) => [rule.alert, rule]));
-  assert.deepEqual([...alerts.keys()].sort(), ["GeoProbeEnginesPaused", "GeoProbeLoopStalled", "GeoUrgentFindingsOpen"]);
+  assert.deepEqual([...alerts.keys()].sort(),
+    ["GeoProbeEnginesPaused", "GeoProbeHostDown", "GeoProbeLoopStalled", "GeoSocialCrawlerDown", "GeoUrgentFindingsOpen"]);
+  // The two external services are read by Prometheus's own blackbox jobs, not by a series this module exports.
+  const prometheus = JSON.parse(await readFile(new URL("../../../deploy/web/monitoring/prometheus.json", import.meta.url), "utf8"));
+  const jobs = new Set((prometheus.scrape_configs ?? []).map((config) => config.job_name));
+  const blackbox = new Map([["GeoProbeHostDown", "geo-probe-host"], ["GeoSocialCrawlerDown", "geo-social-crawler"]]);
   const exported = new Set(geoMetricFamilies(true, {
     tables: { projects: 1, active: 1, openErrors: 1, urgentErrors: 1, safetyStops: 0, openRounds: 0 }, service: {}, social: null,
     worker: { loops: { probe: { wired: true, stalled: false, lastOkAt: null, last: { paused: 0 } } } },
   }).map((family) => family.name));
   for (const rule of group.rules) {
+    if (blackbox.has(rule.alert)) {
+      const job = blackbox.get(rule.alert);
+      assert.match(String(rule.expr), new RegExp(`probe_success\\{job="${job}"\\}`), `${rule.alert} reads its blackbox job`);
+      assert.ok(jobs.has(job), `${rule.alert} reads ${job}, which prometheus.json does not scrape`);
+      continue;
+    }
     const names = [...String(rule.expr).matchAll(/\b(open_science_geo_[a-z_]+)/g)].map((match) => match[1]);
     assert.ok(names.length > 0, `${rule.alert} reads no GEO series`);
     for (const name of names) assert.ok(exported.has(name), `${rule.alert} reads ${name}, which geoMetricFamilies does not export`);
@@ -377,4 +430,130 @@ test("the service renames the owner's project for an editor, after the GEO row i
   await assert.rejects(geo.updateProject({ id: "reader" }, "geo_mine", { name: "x" }, { renameControlProject: rename }), { status: 403 });
   await assert.rejects(geo.updateProject({ id: "owner" }, "geo_mine", { name: "x" }), { status: 503, code: "geo_unavailable" });
   assert.equal(calls.length, 1, "a refusal wrote nothing more");
+});
+
+test('structured judgment feedback keeps its exact fields and review history stays on the authorized service boundary', async () => {
+  const calls = [];
+  const service = {
+    allows: () => true,
+    submitDiagnosisFeedback: async (user, id, input) => { calls.push({ user, id, input }); return { id: 'feedback', jobId: 'job' }; },
+    readDiagnosisReview: async (user, id, snapshotId, page) => { calls.push({ user, id, snapshotId, page }); return { feedback: [] }; },
+  };
+  const { routes } = fixture({ service });
+  const body = { snapshotId: 'snap1', statement: 'Original sentence', claimId: 'claim1', assessmentVersion: 'a'.repeat(64), note: 'Different conditions', requestKey: 'request_123' };
+  const post = response();
+  await routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', body), post);
+  assert.equal(post.status, 202); assert.deepEqual(calls[0].input, body);
+  const get = response();
+  await routes(request('GET', '/api/geo/projects/geo_1/diagnosis/reviews/snap1?historyBefore=8&feedbackBefore=feedback1'), get);
+  assert.equal(calls[1].snapshotId, 'snap1');
+  assert.deepEqual(calls[1].page, { historyBefore: 8, feedbackBefore: 'feedback1' });
+  await assert.rejects(routes(request('GET', '/api/geo/projects/geo_1/diagnosis/reviews/snap1?unknown=1'), response()), { status: 400 });
+  await assert.rejects(routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', { ...body, resolved: true }), response()), { status: 400 });
+});
+
+test('signal routes keep read selectors and reversible dispositions closed; no arbitrary execution state is accepted', async () => {
+  const calls = [], signalId = `gs_${'a'.repeat(64)}`;
+  const signals = { list: async (...args) => { calls.push(['list', ...args]); return { items: [], total: 0 }; },
+    detail: async (...args) => { calls.push(['detail', ...args]); return { id: signalId }; },
+    disposition: async (...args) => { calls.push(['disposition', ...args]); return { id: signalId, state: 'ignored' }; } };
+  const { routes } = fixture({ signals });
+  await routes(request('GET', '/api/geo/projects/geo_1/signals?state=pending&limit=5&actionable=true'), response());
+  assert.deepEqual(calls[0], ['list', { id: 'reader' }, 'geo_1', { state: 'pending', limit: '5', actionable: 'true' }]);
+  await routes(request('GET', `/api/geo/projects/geo_1/signals/${signalId}`), response());
+  assert.equal(calls[1][3], signalId);
+  const body = { expectedRevision: 1, requestKey: 'ignore', disposition: 'ignored' };
+  await routes(request('POST', `/api/geo/projects/geo_1/signals/${signalId}/disposition`, body), response());
+  assert.deepEqual(calls[2].at(-1), body);
+  await assert.rejects(routes(request('GET', '/api/geo/projects/geo_1/signals?state=pending&state=completed'), response()), { status: 400 });
+  await assert.rejects(routes(request('POST', `/api/geo/projects/geo_1/signals/${signalId}/disposition`, { ...body, runId: 'forged', completed: true }), response()), { status: 400 });
+});
+
+test('execution history unions exact attended runs and pages beyond fifty without repeating tied timestamps', async () => {
+  const runs = Array.from({ length: 61 }, (_, index) => ({ runId: `run_${String(index).padStart(3, '0')}`, sessionId: 'same-session', startedAt: '2026-10-24T00:00:00Z', status: 'succeeded', reason: null }));
+  const service = { allows: () => true, requireProject: async () => ({ id: 'geo_1', userId: 'owner', projectId: 'control' }) };
+  const { routes } = fixture({ service, projects: { programmeRuns: async () => runs }, signals: { attendedRuns: async () => [{ ...runs[2], label: 'Exact signal handling' }] } });
+  const first = response(); await routes(request('GET', '/api/geo/projects/geo_1/runs'), first);
+  const page = first.json().data; assert.equal(page.total, 61); assert.equal(page.runs.length, 50); assert.ok(page.nextCursor);
+  const next = response(); await routes(request('GET', `/api/geo/projects/geo_1/runs?cursor=${encodeURIComponent(page.nextCursor)}`), next);
+  assert.equal(next.json().data.runs.length, 11);
+  assert.equal(new Set([...page.runs, ...next.json().data.runs].map(run => run.runId)).size, 61);
+  assert.equal(next.json().data.runs.find(run => run.runId === runs[2].runId).label, 'Exact signal handling');
+});
+
+test('scoped signal run and immutable raw routes retain caller identity and sandbox the exact returned bytes', async () => {
+  const calls = [], signalId = `gs_${'a'.repeat(64)}`, versionId = `rv_${'b'.repeat(64)}`;
+  const signalResults = { record: async (...args) => { calls.push(args); return { runId: 'run_actual' }; }, version: async (...args) => {
+    calls.push(args); return { version: { path: 'report.html', mimeType: 'text/html', digest: 'c'.repeat(64) }, bytes: Buffer.from('<p>Saved result</p>') };
+  } };
+  const { routes } = fixture({ signals: {}, signalResults });
+  await routes(request('GET', `/api/geo/projects/geo_1/signals/${signalId}/runs/run_actual`), response());
+  assert.deepEqual(calls[0], [{ id: 'reader' }, 'geo_1', signalId, 'run_actual']);
+  const out = response(); let headers;
+  out.writeHead = function(status, value) { this.status = status; headers = value; return this; };
+  await routes(request('GET', `/api/geo/projects/geo_1/signals/${signalId}/runs/run_actual/results/${versionId}/raw?download=1`), out);
+  assert.deepEqual(calls[1], [{ id: 'reader' }, 'geo_1', signalId, 'run_actual', versionId, { raw: true }]);
+  assert.equal(out.body, '<p>Saved result</p>'); assert.equal(headers['Cache-Control'], 'private, no-store');
+  assert.match(headers['Content-Security-Policy'], /^sandbox; default-src 'none'/); assert.match(headers['Content-Disposition'], /^attachment;/);
+  await routes(request('GET', '/api/geo/projects/geo_1/runs/run_actual'), response());
+  assert.deepEqual(calls[2], [{ id: 'reader' }, 'geo_1', null, 'run_actual']);
+});
+
+
+test("planning boundary errors belong to the closed registry and tell the person how to recover", async()=>{
+  const emitted = new Set();
+  for (const file of ["../src/geoPlanContext.mjs","../src/geoService.mjs","../src/geoGateway.mjs","../src/runtimeUiServer.mjs","../src/server.mjs","../src/geoDeliveryImport.mjs","../src/geoPreservedRunImport.mjs","../src/geoAnalysisFrozenPages.mjs","../src/geoSignalInputs.mjs","../src/geoSignals.mjs"]) {
+    const source = await readFile(new URL(file,import.meta.url),"utf8");
+    for (const [,code] of source.matchAll(/["'](geo_(?:plan_|strategy_)[a-z0-9_]+)["']/g)) emitted.add(code);
+  }
+  assert.ok(emitted.size>=15);
+  for (const code of emitted) {assert.ok(ALL_ERROR_CODES.includes(code),code);assert.match(knownErrorCodeMessage(code) ?? "",/[\u4e00-\u9fff]/,code);}
+});
+
+test('distribution history and source annotations use project routes with bounded bodies and CSRF', async () => {
+  const calls = [];
+  const service = { allows: () => true,
+    distributionOrders: async (...args) => { calls.push(['orders', ...args]); return { items: [], total: 0 }; },
+    distributionLedger: async (...args) => { calls.push(['ledger', ...args]); return { items: [], total: 0 }; },
+    distributionOrder: async (...args) => { calls.push(['order', ...args]); return { order: { id: args[2] } }; },
+    sourceOwnershipRead: async (...args) => { calls.push(['ownership-read', ...args]); return { current: null, history: { items: [] } }; },
+    sourceOwnershipWrite: async (...args) => { calls.push(['ownership-write', ...args]); return { relation: 'own' }; },
+  };
+  const f = fixture({ service });
+  for (const suffix of ['distribution/orders?limit=1&cursor=next', 'distribution/ledger?limit=2', 'orders/order_1?limit=3']) {
+    assert.equal(await f.routes(request('GET', `/api/geo/projects/geo_1/${suffix}`), response()), true);
+  }
+  assert.deepEqual(calls.slice(0, 3), [['orders', { id: 'reader' }, 'geo_1', { limit: '1', cursor: 'next' }], ['ledger', { id: 'reader' }, 'geo_1', { limit: '2' }], ['order', { id: 'reader' }, 'geo_1', 'order_1', { limit: '3' }]]);
+  const target = { kind: 'page', value: 'https://example.com/article?id=one' };
+  await f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership/read', { target }), response());
+  await f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership', { target, relation: 'own', expectedRevision: 0 }), response());
+  assert.deepEqual(calls.at(-1), ['ownership-write', { id: 'reader' }, 'geo_1', { target, relation: 'own', expectedRevision: 0 }]);
+  assert.equal(f.calls.filter(row => row[0] === 'csrf').length, 5);
+  await assert.rejects(f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership', { target, relation: 'own', expectedRevision: 0, forged: true }), response()), { status: 400 });
+  await assert.rejects(f.routes(request('POST', '/api/geo/projects/geo_1/source-ownership/read', { target: { kind: 'page', value: 'x'.repeat(70000) } }), response()), { status: 413 });
+});
+
+test('owned publication updates preserve the explicit old and new pins at the guarded HTTP boundary', async () => {
+  const calls = [];
+  const service = { allows: () => true,
+    ownedPublicationList: async (...args) => { calls.push(['list', ...args]); return { items: [], total: 0 }; },
+    ownedPublicationDetail: async (...args) => { calls.push(['detail', ...args]); return { revision: 0 }; },
+    confirmOwnedPublication: async (...args) => { calls.push(['confirm', ...args]); return { revision: 2 }; },
+  };
+  const f = fixture({ service });
+  await f.routes(request('GET', '/api/geo/projects/geo_1/owned-links?limit=1&cursor=older'), response());
+  await f.routes(request('GET', '/api/geo/projects/geo_1/owned-links/link_1?beforeRevision=3'), response());
+  const input = { requestKey: 'publication-update', expectedRevision: 0, expectedResultVersionId: 'v1', expectedDigest: '1'.repeat(64), resultVersionId: 'v2', digest: '2'.repeat(64), publishedAt: '2026-10-23T00:00:00Z' };
+  await f.routes(request('POST', '/api/geo/projects/geo_1/owned-links/link_1/published-version', input), response());
+  assert.deepEqual(calls, [['list', { id: 'reader' }, 'geo_1', { limit: '1', cursor: 'older' }], ['detail', { id: 'reader' }, 'geo_1', 'link_1', { beforeRevision: '3' }], ['confirm', { id: 'reader' }, 'geo_1', 'link_1', input]]);
+  assert.equal(f.calls.filter(row => row[0] === 'csrf').length, 3);
+  await assert.rejects(f.routes(request('POST', '/api/geo/projects/geo_1/owned-links/link_1/published-version', { ...input, autopublish: true }), response()), { status: 400 });
+});
+
+test('preserved signal member pages use a closed read-only authenticated route',async()=>{
+ const calls=[],signalId='gs_'+'a'.repeat(64),basis='b'.repeat(64);
+ const {routes}=fixture({signals:{members:async(...args)=>{calls.push(args);return {items:[],total:0,nextOffset:null};}}});
+ await routes(request('GET',`/api/geo/projects/geo_1/signals/${signalId}/members?side=before&offset=20&limit=20&expectedBasisDigest=${basis}`),response());
+ assert.equal(calls[0][1],'geo_1');assert.equal(calls[0][2],signalId);assert.deepEqual(calls[0][3],{side:'before',offset:'20',limit:'20',expectedBasisDigest:basis});
+ for(const query of ['side=before&side=after','side=before&round=latest'])await assert.rejects(routes(request('GET',`/api/geo/projects/geo_1/signals/${signalId}/members?${query}`),response()),{status:400});
 });

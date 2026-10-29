@@ -92,7 +92,7 @@ export function metaLine(source: SourceRecord, { showShared = true }: { showShar
     display.typeShort,
     display.site ?? "",
     length,
-    ORIGIN_LABEL[display.origin] ?? "上传",
+    (ORIGIN_LABEL[display.origin] ?? "上传") === display.typeShort ? "" : (ORIGIN_LABEL[display.origin] ?? "上传"),
     showShared && display.shared ? "所有项目可用" : "",
   ].filter(Boolean).join(" · ");
 }
@@ -109,7 +109,7 @@ export function readerMeta(source: SourceRecord): string {
     display.site ?? "",
     humanSize(display.size),
     display.pages ? `${display.pages} 页` : "",
-    ORIGIN_LABEL[display.origin] ?? "上传",
+    (ORIGIN_LABEL[display.origin] ?? "上传") === display.typeShort ? "" : (ORIGIN_LABEL[display.origin] ?? "上传"),
     display.shared ? "所有项目可用" : "",
     formatDay(source.createdAt),
   ].filter(Boolean).join(" · ");

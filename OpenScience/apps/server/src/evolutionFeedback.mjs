@@ -2,8 +2,8 @@ import { isInternalProject } from './internalProjects.mjs';
 import { evolutionKey } from './evolutionService.mjs';
 
 /** Consume only already-recorded user actions; adoption is delivery feedback, not proof of scientific correctness.
- * @param {{service:any,maintenance:any,resolvePositiveEvidence?:any,observeHandbookOutcome?:((input:any)=>Promise<any>)|null}} dependencies */
-export function createEvolutionFeedback({ service, maintenance, resolvePositiveEvidence=null, observeHandbookOutcome=null }) {
+ * @param {{service:any,maintenance:any,resolvePositiveEvidence?:any}} dependencies */
+export function createEvolutionFeedback({ service, maintenance, resolvePositiveEvidence=null }) {
   return {
     /** Trusted receipt arrival can precede or follow a researcher adoption. @param {any} run */
     async observeVerifiedRun(run) {
@@ -31,7 +31,6 @@ export function createEvolutionFeedback({ service, maintenance, resolvePositiveE
         const id=`evolution-feedback-${evolutionKey([proof.evidenceId,use.toolId,run.id])}`;
         const prior=await service.get(id,run.userId);if(prior?.payload.status==='applied')continue;
         await maintenance.observe(use.toolId,{runId:run.id,userId:run.userId,invoked:true,outcome:'accepted',corrected:false,positiveEvidence:proof,causalBenefit:'verified',at:proof.at});
-        if(observeHandbookOutcome)await observeHandbookOutcome({toolId:use.toolId,runId:run.id,outcome:'useful',evidence:{attributable:true,resultId:proof.resultId,independent:true}});
         await service.save('feedback',id,{projectId:run.projectId,runId:run.id,toolId:use.toolId,evidenceId:proof.evidenceId,status:'applied',origin:'trusted-replay'},prior,run.userId);observed++;
       }
       return {observed};
@@ -66,7 +65,6 @@ export function createEvolutionFeedback({ service, maintenance, resolvePositiveE
           positiveEvidence, causalBenefit: positiveEvidence?.verified===true?'verified':'unproven' });
         await service.save('feedback', id, { projectId: event.projectId, runId: event.runId, toolId,
           sourceEventId: event.id, feedbackKind: event.trigger, outcome, corrected, status: 'applied', origin: 'user-statement' }, prior, event.userId);
-        if(observeHandbookOutcome)await observeHandbookOutcome({toolId,runId:event.runId,outcome:corrected?'harmful':positiveEvidence?.verified===true?'useful':'unknown',evidence:positiveEvidence?{attributable:true,resultId:positiveEvidence.resultId,independent:true}:null});
         observed++;
       }
       return { observed };

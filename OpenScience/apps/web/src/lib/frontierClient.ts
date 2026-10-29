@@ -24,26 +24,41 @@
  *    wave-two readers below return `null` for both, so a block that has
  *    nothing behind it is hidden or says 「还在准备」, and never breaks the page.
  *  - Nothing a response carries is rendered unread. Items are parsed field by
- *    field, so a field the page does not know — a dimension's score, a model
- *    name — never reaches the DOM. Since 2026-09-24 a card shows one number,
- *    the editorial total (`score`, plan 2026-09-23 §6.2 编辑评分) with its
- *    band; the four dimensions behind it stay words (`levels`), and that is
- *    enforced here, not remembered at each render. A link is kept only when it
- *    is http(s).
+ *    field, so a field the page does not know — a model name — never reaches
+ *    the DOM. A card shows one number, 「AI 评分」 (`score`, 0–100) in its
+ *    band; since 2026-10-23 its four parts (`scoreParts`, maxima in
+ *    `FRONTIER_SCORE_MAXIMA`) are what its breakdown draws, and they are read
+ *    only from that field. A link is kept only when it is http(s).
  *  - Heat is shown as the server shows it: a whole number (heat × 10), with
  *    the hot list's rank change, badge and trend, and the event page's side
  *    column. How it is computed, in the reader's words, is `@evimed/domain`'s
  *    `FRONTIER_HEAT_METHOD_ZH`, stated from the same numbers (no longer on the page).
  */
 import {
+  FRONTIER_EVIDENCE_TYPE_LABELS_ZH,
+  FRONTIER_EVIDENCE_TYPES as EVIDENCE_TYPE_KEYS,
+  FRONTIER_FOLLOW_KINDS,
+  FRONTIER_FOLLOW_LABEL_MAX,
+  FRONTIER_FOLLOW_QUERY_KINDS,
+  FRONTIER_GENRE_LABELS_ZH,
+  FRONTIER_GENRES,
+  FRONTIER_HIDE_REASONS,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANE_LABELS_ZH,
   FRONTIER_LANES as LANE_KEYS,
+  FRONTIER_SCORE_MAXIMA,
+  FRONTIER_SCORE_TIERS,
   FRONTIER_SPECIALTIES as SPECIALTY_KEYS,
+  FRONTIER_SPECIALTY_GROUPS as SPECIALTY_GROUP_TABLE,
   FRONTIER_SPECIALTY_LABELS_ZH,
+  frontierGenreFallback,
+  frontierSpecialtyKey,
 } from "@evimed/domain";
-import { WebApiError, webErrorMessage } from "./apiClient";
+import { WebApiError, webApiBase, webErrorMessage } from "./apiClient";
 import { productRequest } from "./productClient";
+
+/** One of the reasons a reader may give for hiding an item (`@evimed/domain` `FRONTIER_HIDE_REASONS`). */
+export type FrontierHideReason = (typeof FRONTIER_HIDE_REASONS)[number];
 
 /* ---------------------------------------------------------------- vocabulary */
 
@@ -64,10 +79,36 @@ export const FRONTIER_LANES: readonly FrontierLabelled[] = Object.freeze(
   LANE_KEYS.map((key) => ({ key, label: FRONTIER_LANE_LABELS_ZH[key] })),
 );
 
-/** The twenty-one specialties the dropdown offers, in the vocabulary's order. */
+/** The thirty specialties (owner, 2026-10-23), in the order the 「专科」 panel lists them. */
 export const FRONTIER_SPECIALTIES: readonly FrontierLabelled[] = Object.freeze(
   SPECIALTY_KEYS.map((key) => ({ key, label: FRONTIER_SPECIALTY_LABELS_ZH[key] })),
 );
+
+/** The 「专科」 panel's groups — 内科, 外科, 妇儿, 五官与皮肤, 医技与其他 — each with its specialties in panel order. */
+export const FRONTIER_SPECIALTY_GROUPS: ReadonlyArray<{ key: string; label: string; specialties: readonly string[] }> = Object.freeze(
+  SPECIALTY_GROUP_TABLE.map((group) => ({ key: group.key, label: group.label, specialties: [...group.specialties] })),
+);
+
+/** The evidence types a reader filters by (「证据类型」), strongest forms first. */
+export const FRONTIER_EVIDENCE_TYPES: readonly FrontierLabelled[] = Object.freeze(
+  EVIDENCE_TYPE_KEYS.map((key) => ({ key, label: FRONTIER_EVIDENCE_TYPE_LABELS_ZH[key] })),
+);
+
+/**
+ * A specialty a link or a stored item names, as this build reads it: itself, its successor (外科与麻醉 → 普通外科), or nothing
+ * (公共卫生 is a lane, 老年 a population tag) — `@evimed/domain`'s `frontierSpecialtyKey`.
+ */
+export function readSpecialtyKey(value: unknown): string | null {
+  return frontierSpecialtyKey(value);
+}
+
+/** The four parts of 「AI 评分」, in the order its breakdown draws them, with each one's maximum. */
+export const FRONTIER_SCORE_PARTS: ReadonlyArray<{ key: keyof FrontierScoreParts; label: string; max: number }> = Object.freeze([
+  { key: "impact", label: "实践影响", max: FRONTIER_SCORE_MAXIMA.impact },
+  { key: "authority", label: "权威性", max: FRONTIER_SCORE_MAXIMA.authority },
+  { key: "novelty", label: "新颖性", max: FRONTIER_SCORE_MAXIMA.novelty },
+  { key: "relevance", label: "国内相关性", max: FRONTIER_SCORE_MAXIMA.relevance },
+]);
 
 /**
  * Item flags, for the one case the server sent a key without its word. The
@@ -86,8 +127,20 @@ export type FrontierAxis = "timeline" | "published";
 export type FrontierWindow = "24h" | "3d" | "7d" | "30d";
 export const FRONTIER_WINDOWS: readonly FrontierWindow[] = Object.freeze(["24h", "3d", "7d", "30d"]);
 export type FrontierLevel = "high" | "medium" | "low";
-/** The band an editorial score reads in: at or above the selection line, from 60 up to it, below 60. */
+/** The tier 「AI 评分」 reads in (2026-10-23): `high` from 85, `medium` from 70, `low` below. */
 export type FrontierScoreBand = "high" | "medium" | "low";
+/** 「AI 评分」's four parts; their maxima are `FRONTIER_SCORE_MAXIMA` (30 / 30 / 20 / 20) and they add up to the score. */
+export interface FrontierScoreParts {
+  authority: number;
+  impact: number;
+  novelty: number;
+  relevance: number;
+}
+/** One of an item's tags, as the list and the reader both carry it (`#肝细胞癌`): the slug filters the feed by it. */
+export interface FrontierTagRef {
+  slug: string;
+  name: string;
+}
 export type FrontierVerification = "pending" | "passed" | "repaired" | "title-only";
 export type FrontierDatePrecision = "instant" | "day" | "inferred";
 export type FrontierSearchMode = "list" | "keyword" | "hybrid";
@@ -103,15 +156,57 @@ export interface FrontierItemState {
 /** One enrichment fact: a word, a number, a yes/no, a list, or a small record of those. */
 export type FrontierFact = string | number | boolean | string[] | Record<string, string | number | boolean>;
 
+const EDITOR_DIAGNOSTIC_CODES = ["passed", "empty", "length", "link", "language", "number", "marks", "source_missing", "answer_invalid", "withheld", "not_checked"] as const;
+type EditorDiagnosticCode = typeof EDITOR_DIAGNOSTIC_CODES[number];
+export interface FrontierEditorDiagnostics {
+  schemaVersion: 1;
+  outcome: "passed" | "repaired" | "title-only" | "pending" | "deferred" | "stale";
+  attempts: number | null;
+  inputSha256: string | null;
+  editorVersion: string | null;
+  checkedAt: string;
+  reason: "provider_unavailable" | "call_failed" | "budget" | "peak" | "throttled" | "unavailable" | "retry_exhausted" | "source_changed" | null;
+  fields: { title_zh: EditorDiagnosticCode[]; summary_zh: EditorDiagnosticCode[] };
+}
+
+/** Rebuild the allow-listed shape rather than forwarding unknown server keys. */
+export function parseFrontierEditorDiagnostics(value: unknown): FrontierEditorDiagnostics | null {
+  const raw = record(value);
+  const outcome = orNull(raw?.outcome, ["passed", "repaired", "title-only", "pending", "deferred", "stale"] as const);
+  const checkedAt = moment(raw?.checkedAt);
+  if (raw?.schemaVersion !== 1 || !outcome || !checkedAt) return null;
+  const fields = record(raw.fields);
+  const codes = (value: unknown): EditorDiagnosticCode[] => Array.isArray(value)
+    ? [...new Set(value.flatMap((code) => { const known = orNull(code, EDITOR_DIAGNOSTIC_CODES); return known ? [known] : []; }))].slice(0, EDITOR_DIAGNOSTIC_CODES.length) : [];
+  return { schemaVersion: 1, outcome, checkedAt,
+    attempts: typeof raw.attempts === "number" && Number.isInteger(raw.attempts) && raw.attempts >= 0 && raw.attempts <= 3 ? raw.attempts : null,
+    inputSha256: typeof raw.inputSha256 === "string" && /^[a-f0-9]{64}$/.test(raw.inputSha256) ? raw.inputSha256 : null,
+    editorVersion: typeof raw.editorVersion === "string" && /^[a-zA-Z0-9._:-]{1,160}$/.test(raw.editorVersion) ? raw.editorVersion : null,
+    reason: orNull(raw.reason, ["provider_unavailable", "call_failed", "budget", "peak", "throttled", "unavailable", "retry_exhausted", "source_changed"] as const),
+    fields: { title_zh: codes(fields?.title_zh), summary_zh: codes(fields?.summary_zh) } };
+}
+
+/** What an item is as a reader names it (研究论文, 政策法规, 行业动态 …; `@evimed/domain` `FRONTIER_GENRES`). */
+export type FrontierGenre = typeof FRONTIER_GENRES[number];
+
 /** One published item, as `GET /api/frontier/items` returns it (build spec B.6). */
 export interface FrontierItem {
   id: string;
+  /**
+   * What the item is (ct-write 2026-10-24): the server's genre, which decides how its reader lays it out; from a server that sends
+   * none, code's own answer from the item's fields (`frontierGenreFallback`). Never null.
+   */
+  genre: FrontierGenre;
+  /** The genre in the reader's words (「研究论文」). */
+  genreLabel: string;
   /** What the card leads with: the Chinese title, else the original. */
   title: string;
   titleRaw: string;
   titleZh: string | null;
   summary: string | null;
   reason: string | null;
+  /** 「可能改变实践」 (c3-select): the label and its one-line reason, only once the day's mix admitted it; content, not provenance. */
+  practice: { reason: string } | null;
   lang: string;
   lane: string;
   laneLabel: string;
@@ -124,7 +219,8 @@ export interface FrontierItem {
   flags: FrontierLabelled[];
   entities: { drugs: string[]; trials: string[]; orgs: string[]; diseases: string[] };
   /** `platformProduced`: the source's content is EviMed's own (contract 1.3.0) — shown as 「EviMed 出品」, never as another institution's report. */
-  source: { id: string; name: string; homepage: string | null; platformProduced: boolean };
+  /** `followable`: false for a stream (a PubMed or OpenAlex query) shown by the item's journal — a follow or mute would act on the whole stream. */
+  source: { id: string; name: string; homepage: string | null; platformProduced: boolean; followable?: boolean };
   url: string;
   doi: string | null;
   pmid: string | null;
@@ -137,15 +233,20 @@ export interface FrontierItem {
   selectedRule: string | null;
   safetyAlert: boolean;
   verification: FrontierVerification;
+  editorDiagnostics?: FrontierEditorDiagnostics | null;
   /**
-   * The editorial total, 0–100 (「编辑评分 · 满分 100」): null for a safety
-   * alert, which is not scored for a reader, and for an item not scored in full.
+   * 「AI 评分」, 0–100: null for a safety alert, which is not scored for a
+   * reader, and for an item not scored in full.
    */
   score: number | null;
-  /** The band `score` reads in; null with no score. */
+  /** The tier `score` reads in; null with no score. */
   scoreBand: FrontierScoreBand | null;
-  /** The four dimensions in words. The numbers behind them never leave the server. */
+  /** The four parts of `score`, for its breakdown; null with no score, or from a server that does not send them. */
+  scoreParts: FrontierScoreParts | null;
+  /** The four dimensions in words (the older shape; the breakdown reads `scoreParts`). */
   levels: { authority: FrontierLevel | null; impact: FrontierLevel | null; novelty: FrontierLevel | null; relevance: FrontierLevel | null };
+  /** The item's active tags, in order, at most four (`#肝细胞癌`); empty from a server that sends none. */
+  tags: FrontierTagRef[];
   openAccess: { status: string; pdfUrl: string | null } | null;
   /**
    * The plugin's enrichment as facts, by the plugin's own keys — the ones this
@@ -163,12 +264,159 @@ export interface FrontierItem {
   event: { id: string; title: string } | null;
   /** The reader's own marks; `read` is what greys a card's title. */
   state: FrontierItemState;
+  /** What kind of outlet published it (contract 1.4.0); null from a server or an entry that does not say. */
+  channel: FrontierChannel | null;
+  /** Where a post was published (X, 微信, 小红书 …); `web` for an ordinary page; null where unknown. */
+  platform: FrontierPlatform | null;
+  /** Who wrote or posted it, where the source names someone: a social post's account, an article's byline. */
+  author: FrontierAuthor | null;
+  /** The card's picture: the item's first image, or null. */
+  thumb: FrontierMedia | null;
 }
 
-/** `GET /api/frontier/items/:id` adds the stored texts: the original abstract and, once written, the shared Chinese one. */
+/** The outlets the knowledge plugin names (contract 1.4.0 `channel`). */
+export const FRONTIER_CHANNELS = ["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"] as const;
+export type FrontierChannel = typeof FRONTIER_CHANNELS[number];
+/** The platforms a post can come from (contract 1.4.0 `platform`). */
+export const FRONTIER_PLATFORMS = ["x", "wechat", "xiaohongshu", "douyin", "zhihu", "weibo", "bilibili", "channels", "web"] as const;
+export type FrontierPlatform = typeof FRONTIER_PLATFORMS[number];
+
+/**
+ * The feed's channel filter (`?channel=`): 文献, 资讯, 社媒, 官方. Which outlets each one holds is the server's mapping (literature is
+ * journal + preprint + registry + guideline, …); the page only names the group.
+ */
+export const FRONTIER_CHANNEL_FILTERS = ["literature", "news", "social", "official"] as const;
+export type FrontierChannelFilter = typeof FRONTIER_CHANNEL_FILTERS[number];
+
+export interface FrontierAuthor {
+  name: string;
+  /** The account's handle, without the 「@」. */
+  handle: string | null;
+  url: string | null;
+  role: "organisation" | "person" | null;
+}
+
+/** One stored image: served by the control plane at `/api/frontier/media/<id>`, signed in and cached a day. */
+export interface FrontierMedia {
+  id: string;
+  url: string;
+  width: number | null;
+  height: number | null;
+  alt: string | null;
+}
+
+/** Which text a body is (contract B `body.source`): the article's own text, the paper's abstract, or an excerpt of either. */
+export const FRONTIER_BODY_SOURCES = ["body", "abstract", "excerpt"] as const;
+export type FrontierBodySource = typeof FRONTIER_BODY_SOURCES[number];
+
+/**
+ * The full text the plugin kept (contract B `body`): the Chinese — an AI translation, or the original where it is Chinese already —
+ * and the original. `complete` is false while the translation covers only part of the original. Paragraphs are separated by a blank
+ * line; one that starts `## ` is a section heading of a full text, and a paragraph of an abstract may start with its own `Heading: `.
+ * `source` says which text it is; null from a server that does not say.
+ */
+export interface FrontierBody {
+  zh: string | null;
+  original: string | null;
+  zhKind: "translation" | "original-zh" | null;
+  complete: boolean;
+  source: FrontierBodySource | null;
+}
+
+/** A report 「AI 解读」 relies on: `[n]` in its text names it, and it opens as its own article (`publicId`). */
+export interface FrontierInsightRef {
+  n: number;
+  publicId: string;
+  title: string;
+  /** The institution or account that published it; empty where the server named none. */
+  source: string;
+  at: string | null;
+}
+
+/**
+ * 「AI 解读」 (contract B `insight`): one paragraph on what the item means, for a selected item whose material supports one — most
+ * items have none. A related report it relies on is marked `[n]` in the text and is the entry of `refs` with that `n`.
+ */
+export interface FrontierInsight {
+  text: string;
+  refs: FrontierInsightRef[];
+}
+
+/** One typed field of 「AI 要点」: its label (per genre: 研究问题, 发文机关与文号 …) and a sentence, or a few one-sentence items. */
+export interface FrontierBriefPoint {
+  key: string;
+  label: string;
+  text: string | null;
+  items: string[];
+}
+
+/**
+ * 「AI 要点」 (contract B `brief`): the item's facts as the fields its genre is read by, under the one-paragraph 导读. `quote` is a
+ * run of the source's own words (the authors' conclusion, a recommendation with its grade, the label's warning) with its Chinese
+ * where the source is not Chinese; `about` is the report a commentary reads, opening as its own article.
+ */
+export interface FrontierBrief {
+  genre: FrontierGenre;
+  points: FrontierBriefPoint[];
+  quote: { label: string; text: string; zh: string | null } | null;
+  about: { publicId: string; title: string } | null;
+}
+
+/** The post an X post quotes, or the source a WeChat repost names. */
+export interface FrontierQuoted {
+  author: { name: string; handle: string | null };
+  text: string;
+  translation: string | null;
+  url: string | null;
+}
+
+export interface FrontierMetrics {
+  likes: number | null;
+  reposts: number | null;
+  replies: number | null;
+  views: number | null;
+}
+
+/** One development of the event an item belongs to (「事件后续」): its own article, newest first, the item itself excluded. */
+export interface FrontierFollowup {
+  itemId: string;
+  title: string;
+  sourceName: string;
+  at: string;
+  /** `same-event`: another report of the same occurrence; `follows`: what happened next. */
+  relation: "same-event" | "follows";
+}
+
+export interface FrontierFollowups {
+  eventId: string;
+  rows: FrontierFollowup[];
+  /** The event has more developments than these. */
+  more: boolean;
+}
+
+/**
+ * `GET /api/frontier/items/:id` (contract B): the stored texts — the original abstract and, once written, the shared Chinese one —
+ * and the reader's blocks. A field the server cannot fill is null (or, for a list, empty) and the reader leaves its block out:
+ * nothing here is ever made up on this side.
+ */
 export interface FrontierItemDetail extends FrontierItem {
   abstract: string | null;
   abstractZh: string | null;
+  /** 「AI 导读」: one paragraph of three to five sentences, answer first. The list's `summary` where the server sends no `lead`. */
+  lead: string | null;
+  /** 「AI 要点」, for a selected, near-line or safety item whose source supported its fields; null otherwise. */
+  brief: FrontierBrief | null;
+  /** 「AI 解读」, where the server wrote one; null for most items. */
+  insight: FrontierInsight | null;
+  body: FrontierBody | null;
+  media: FrontierMedia[];
+  quoted: FrontierQuoted | null;
+  metrics: FrontierMetrics | null;
+  /** This item reports an occurrence whose selected report is another item. */
+  sameEvent: { itemId: string; title: string } | null;
+  followups: FrontierFollowups | null;
+  /** Up to three questions a reader may put to the assistant about this item (「就此提问」); empty where none were written. */
+  ask?: string[];
 }
 
 export interface FrontierItemsQuery {
@@ -177,12 +425,21 @@ export interface FrontierItemsQuery {
   view?: FrontierView;
   by?: FrontierAxis;
   lane?: string | null;
-  specialty?: string | null;
+  /** Any of these specialties (`specialty=a,b`). */
+  specialties?: readonly string[];
+  /** One tag's slug: items with it, with a tag merged into it, or with a narrower one under it. */
+  tag?: string | null;
+  /** One evidence type (`FRONTIER_EVIDENCE_TYPES`). */
+  evidence?: string | null;
+  /** Only what this reader has not opened. */
+  unread?: boolean;
   window?: FrontierWindow | null;
   q?: string | null;
   starred?: boolean;
   /** Official safety alerts only, from every lane (the rail's 安全警示). */
   safety?: boolean;
+  /** One group of outlets (文献, 资讯, 社媒, 官方); every outlet when absent. */
+  channel?: FrontierChannelFilter | null;
   /** A search's order; relevance unless `time` (the words' matches, newest first). */
   sort?: FrontierSearchSort;
   cursor?: string | null;
@@ -190,10 +447,15 @@ export interface FrontierItemsQuery {
   limit?: number;
 }
 
-export interface FrontierExposure { token: string; surface: string; policyRevisionId: string; candidateIds: string[] }
+/** Why an entry is where it is in a served list (contract C); a chronological list's entries have none. */
+export type FrontierSlot = "editorial" | "personal" | "must-see" | "explore";
+const FRONTIER_SLOT_WORDS = ["editorial", "personal", "must-see", "explore"] as const;
 
 export interface FrontierItemsPage {
-  exposure?: FrontierExposure;
+  /** The server's id of this answer: what an impression or an open names back (contract C). Absent from an older server. */
+  listId?: string | null;
+  /** Each entry's slot by item id. */
+  slots?: Record<string, FrontierSlot | null>;
   items: FrontierItem[];
   nextCursor: string | null;
   /** The content version the page was read at; compared with `/status`. */
@@ -268,12 +530,55 @@ export interface FrontierSources {
   sources: FrontierSource[];
 }
 
+/** How the words of a typed follow were read (c3-watch): the kind, and the first names of each thing it is about. */
+export interface FrontierFollowReading {
+  kind: (typeof FRONTIER_FOLLOW_QUERY_KINDS)[number];
+  concepts: string[][];
+}
+
 export interface FrontierFollow {
   id: string;
-  kind: "topic" | "specialty" | "drug" | "source" | "event";
+  /**
+   * `tag`: one of the tag tree's tags, keyed by its slug (2026-10-23). `query`: words the reader typed (a drug, a trial, a question;
+   * c3-watch, 2026-10-25), its `key` the words case-folded and `query` how they were read.
+   */
+  kind: "topic" | "specialty" | "drug" | "source" | "event" | "tag" | "query";
   key: string;
   label: string;
   muted: boolean;
+  /**
+   * How many items arrived for it since the reader last looked, where the server says so (c2-band, 2026-10-25): 关注's list shows it
+   * beside the follow. Absent from a server that does not count, and then no number is shown. The server stops counting at 99.
+   */
+  newItems?: number;
+  /** Only a typed follow: how its words were read. */
+  query?: FrontierFollowReading;
+}
+
+/** The longest a typed follow may be (`@evimed/domain`). */
+export const FOLLOW_LABEL_MAX = FRONTIER_FOLLOW_LABEL_MAX;
+
+/** One row of `GET /api/frontier/tags`: a tag, how many items carried it in the last 30 days, and (for a search) its specialties. */
+export interface FrontierTagCount extends FrontierTagRef {
+  count: number;
+  specialties: string[];
+}
+
+/** `GET /api/frontier/tags/:slug`: one tag, where it sits in the tree, and `mergedFrom` when the slug asked for was merged into it. */
+export interface FrontierTagDetail extends FrontierTagRef {
+  nameEn: string | null;
+  specialties: FrontierLabelled[];
+  broader: FrontierTagRef | null;
+  narrower: FrontierTagRef[];
+  count30d: number;
+  mergedFrom: string | null;
+}
+
+/** `GET /api/frontier/ops/tags` (operators): each specialty's active tags, the candidates, and the recent changes. */
+export interface FrontierOpsTags {
+  specialties: Array<{ key: string; label: string; tags: Array<FrontierTagRef & { state: string; count30d: number; origin: string | null }> }>;
+  candidates: Array<FrontierTagRef & { count30d: number; sources30d: number; firstSeen: string | null }>;
+  changes: Array<{ id: string; at: string | null; action: string; tag: FrontierTagRef; other: FrontierTagRef | null; reason: string | null; undoable: boolean }>;
 }
 
 /*
@@ -290,11 +595,14 @@ export interface FrontierFollow {
  * so the block has nothing for them until they switch it on.
  */
 export interface FrontierForYou {
-  exposure?: FrontierExposure;
+  /** The server's id of this answer (contract C). */
+  listId?: string | null;
+  /** Show the onboarding card: the reader has neither answered nor skipped it, and the platform knows too little of them. */
+  onboarding?: boolean;
   state: "available" | "unavailable" | "off";
   basis: "vector" | "tags" | null;
   paused: boolean;
-  items: Array<{ item: FrontierItem; reason: { text: string; topic: string | null; memoryId: string | null } }>;
+  items: Array<{ item: FrontierItem; reason: { text: string; topic: string | null; memoryId: string | null }; slot?: FrontierSlot | null }>;
 }
 
 /** What makes an event's first-hand material first-hand: 「含原始论文」「含官方公告」…. */
@@ -346,6 +654,8 @@ export interface FrontierHotEvent {
  * month the moment it was computed, over the window from `since`.
  */
 export interface FrontierHotBoard {
+  /** The server's id of this answer, as this reader was served it (contract C). */
+  listId?: string | null;
   window: FrontierHotWindow;
   takenAt: string | null;
   since: string | null;
@@ -353,6 +663,8 @@ export interface FrontierHotBoard {
 }
 
 export type FrontierEventRole = "primary" | "report" | "background";
+/** The order of an event's reports: newest first (the default) or oldest first. */
+export type FrontierEventOrder = "desc" | "asc";
 
 /** `GET /api/frontier/events/:id` (a merged id answers 308, which `fetch` follows). */
 export interface FrontierEvent {
@@ -388,6 +700,8 @@ export interface FrontierEvent {
   trend?: FrontierTrendPoint[] | null;
   items: Array<FrontierItem & { role: FrontierEventRole }>;
   related: Array<{ id: string; title: string; relation: string; at: string | null }>;
+  /** The questions of the event's first-hand report, with that report; null where it has none (「就此提问」). */
+  ask?: { itemId: string; title: string; questions: string[] } | null;
 }
 
 /** One row of `GET /api/frontier/dailies`. */
@@ -422,12 +736,18 @@ export interface FrontierFollowedZone {
   cards: Array<{ id: string; title: string; summary: string; change: "new" | "updated"; revision: number; updatedAt: string | null }>;
 }
 
+/** One typed follow with news, as the daily page lists it. */
+export interface FrontierFollowedQuery { id: string; label: string; newItems: number }
+
 /**
  * `GET /api/frontier/dailies/:day`. The header reads 「9月23日 周三 · {itemCount} 条 · 约 {readingMinutes} 分钟」;
  * `previousDay` / `nextDay` are the nearest issues on either side (a quiet day has none), null at either end.
  * `markdown` is the issue as it reads now — the institutions' names, no withdrawn item — ready to copy.
  */
 export interface FrontierDaily {
+  /** The server's id of this answer and each item's slot (contract C). */
+  listId?: string | null;
+  slots?: Record<string, FrontierSlot | null>;
   day: string;
   windowStart: string | null;
   windowEnd: string | null;
@@ -437,6 +757,8 @@ export interface FrontierDaily {
   safety: FrontierItem[];
   /** This reader's followed zones' new and changed cards; absent from a server that does not send it. */
   followedZones?: FrontierFollowedZone[];
+  /** The things this reader typed to follow that have items they have not opened (c3-watch): each links to its feed. Theirs alone. */
+  followedQueries?: FrontierFollowedQuery[];
   aiMinute: string | null;
   markdown: string;
   /** The items the issue shows now. */
@@ -472,6 +794,17 @@ const count = (value: unknown): number => (typeof value === "number" && Number.i
 const strings = (value: unknown, max = 50): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim() !== "").slice(0, max) : []);
 const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? value as T : fallback);
 const orNull = <T extends string>(value: unknown, allowed: readonly T[]): T | null => (allowed.includes(value as T) ? value as T : null);
+
+/** Each served entry's slot by its id, from a list answer's raw entries (what `frontierTracking` registers). */
+function slotsOf(rows: unknown): Record<string, FrontierSlot | null> {
+  const slots: Record<string, FrontierSlot | null> = {};
+  for (const entry of Array.isArray(rows) ? rows : []) {
+    const row = record(entry);
+    const itemId = text(row?.id);
+    if (row && itemId) slots[itemId] = orNull(row.slot, FRONTIER_SLOT_WORDS);
+  }
+  return slots;
+}
 /** A whole number the server computed — a heat shown, hours on the list — or null when it sent none. */
 const whole = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null);
 /** A rank: a whole number from 1, or null. */
@@ -527,6 +860,103 @@ function labelled(value: unknown, fallback: Readonly<Record<string, string>>, ma
     if (out.length >= max) break;
   }
   return out;
+}
+
+/**
+ * An item's specialties: each key read through `readSpecialtyKey` (a retired one is its successor or nothing), labelled from this
+ * build's table, each once, at most two (`FRONTIER_MAX_SPECIALTIES`).
+ */
+function parseSpecialties(value: unknown): FrontierLabelled[] {
+  if (!Array.isArray(value)) return [];
+  const out: FrontierLabelled[] = [];
+  for (const entry of value) {
+    const key = readSpecialtyKey(text(record(entry)?.key) ?? text(entry));
+    if (!key || out.some((specialty) => specialty.key === key)) continue;
+    out.push({ key, label: SPECIALTY_LABELS[key] ?? key });
+    if (out.length >= 2) break;
+  }
+  return out;
+}
+
+/** A tag's slug, as the server writes it (lower-case letters, digits and dashes): what an address and a follow carry. Anything else names no tag. */
+const TAG_SLUG = /^[a-z0-9][a-z0-9-]{1,79}$/;
+
+/** One tag reference — a slug and a name — or null. */
+function parseTagRef(value: unknown): FrontierTagRef | null {
+  const raw = record(value);
+  const slug = text(raw?.slug)?.trim();
+  const name = text(raw?.name)?.trim().replace(/^#+/, "");
+  return slug && name && TAG_SLUG.test(slug) ? { slug, name: name.slice(0, 40) } : null;
+}
+
+/** An item's tags, in order, each once, at most four; a server that sends none (or the older `string[]`) gives none. */
+function parseTags(value: unknown): FrontierTagRef[] {
+  if (!Array.isArray(value)) return [];
+  const out: FrontierTagRef[] = [];
+  for (const entry of value) {
+    const tag = parseTagRef(entry);
+    if (!tag || out.some((known) => known.slug === tag.slug)) continue;
+    out.push(tag);
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+/** 「可能改变实践」 as the server sends it: `{ reason }` with a reason a reader can read, else none (a label without its reason is not shown). */
+function parsePractice(value: unknown): { reason: string } | null {
+  const raw = record(value);
+  const reason = raw ? text(raw.reason)?.trim() ?? null : null;
+  return reason ? { reason } : null;
+}
+
+/** The tier of a score (`FRONTIER_SCORE_TIERS`: 76 / 60), for a server that sent a score and no tier. */
+export function scoreTier(score: number): FrontierScoreBand {
+  return score >= FRONTIER_SCORE_TIERS.high ? "high" : score >= FRONTIER_SCORE_TIERS.medium ? "medium" : "low";
+}
+
+/** The four parts of a score, each a whole number within its maximum; null when any is missing. */
+function parseScoreParts(value: unknown): FrontierScoreParts | null {
+  const raw = record(value);
+  if (!raw) return null;
+  const parts: Partial<FrontierScoreParts> = {};
+  for (const { key, max } of FRONTIER_SCORE_PARTS) {
+    const part = raw[key];
+    if (typeof part !== "number" || !Number.isFinite(part) || part < 0 || part > max) return null;
+    parts[key] = Math.round(part);
+  }
+  return parts as FrontierScoreParts;
+}
+
+/** A stored image's id: the hash of its bytes, as the plugin names it. Anything else addresses nothing. */
+const MEDIA_ID = /^[A-Za-z0-9_-]{8,128}$/;
+
+/**
+ * Where the browser reads a stored image: this deployment's own signed-in proxy (`GET /api/frontier/media/:id`), built from the id —
+ * never an address a response named, so an image is always this origin's and never a tracker's.
+ */
+export function frontierMediaUrl(mediaId: string): string {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  return `${root}/frontier/media/${encodeURIComponent(mediaId)}`;
+}
+
+/** A pixel size the server measured, or null. */
+const pixels = (value: unknown): number | null => (typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 20_000 ? value : null);
+
+function parseMedia(value: unknown): FrontierMedia | null {
+  const raw = record(value);
+  const mediaId = text(raw?.id)?.trim();
+  if (!raw || !mediaId || !MEDIA_ID.test(mediaId)) return null;
+  return { id: mediaId, url: frontierMediaUrl(mediaId), width: pixels(raw.width), height: pixels(raw.height), alt: text(raw.alt)?.trim().slice(0, 300) ?? null };
+}
+
+/** A handle as people write it after the 「@」: the plugin may or may not send the sign. */
+const handleOf = (value: unknown): string | null => text(value)?.trim().replace(/^@+/, "").slice(0, 80) || null;
+
+function parseAuthor(value: unknown): FrontierAuthor | null {
+  const raw = record(value);
+  const name = text(raw?.name)?.trim();
+  if (!raw || !name) return null;
+  return { name: name.slice(0, 120), handle: handleOf(raw.handle), url: safeLink(raw.url), role: orNull(raw.role, ["organisation", "person"] as const) };
 }
 
 const LEVELS = ["high", "medium", "low"] as const;
@@ -598,13 +1028,19 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     return name && link ? [{ sourceId: text(mention?.sourceId) ?? "", sourceName: name, url: link }] : [];
   }).slice(0, 5);
   const score = typeof raw.score === "number" && Number.isFinite(raw.score) && raw.score >= 0 && raw.score <= 100 ? Math.round(raw.score) : null;
+  const flags = labelled(raw.flags, FLAG_LABELS);
+  const genre = orNull(raw.genre, FRONTIER_GENRES) ?? frontierGenreFallback({ platform: text(raw.platform), channel: text(raw.channel),
+    sourceType: text(raw.sourceType), evidenceType: text(raw.evidenceType), flags: flags.map((flag) => flag.key), safetyAlert: raw.safetyAlert === true, lane });
   return {
     id,
+    genre,
+    genreLabel: text(raw.genreLabel) ?? FRONTIER_GENRE_LABELS_ZH[genre],
     title: text(raw.title) ?? titleZh ?? titleRaw,
     titleRaw,
     titleZh,
     summary: text(raw.summary),
     reason: text(raw.reason),
+    practice: parsePractice(raw.practice),
     lang: text(raw.lang) ?? "und",
     lane,
     laneLabel: text(raw.laneLabel) ?? LANE_LABELS[lane] ?? "",
@@ -613,15 +1049,16 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     evidenceType: text(raw.evidenceType),
     evidenceTypeLabel: text(raw.evidenceTypeLabel),
     evidenceBasis: orNull(raw.evidenceBasis, ["pubmed-types", "registry", "model"] as const),
-    specialties: labelled(raw.specialties, SPECIALTY_LABELS, 3),
-    flags: labelled(raw.flags, FLAG_LABELS),
+    specialties: parseSpecialties(raw.specialties),
+    flags,
     entities: {
       drugs: strings(entities?.drugs, 20),
       trials: strings(entities?.trials, 20),
       orgs: strings(entities?.orgs, 20),
       diseases: strings(entities?.diseases, 20),
     },
-    source: { id: text(source?.id) ?? "", name: sourceName, homepage: safeLink(source?.homepage), platformProduced: source?.platformProduced === true },
+    source: { id: text(source?.id) ?? "", name: sourceName, homepage: safeLink(source?.homepage), platformProduced: source?.platformProduced === true,
+      followable: source?.followable !== false },
     url,
     doi: text(raw.doi),
     pmid: text(raw.pmid),
@@ -634,9 +1071,11 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     selectedRule: text(raw.selectedRule),
     safetyAlert: raw.safetyAlert === true,
     verification: oneOf(raw.verification, ["pending", "passed", "repaired", "title-only"] as const, "pending"),
+    editorDiagnostics: parseFrontierEditorDiagnostics(raw.editorDiagnostics),
     // A safety alert carries no score for a reader, whatever a server sent.
     score: raw.safetyAlert === true ? null : score,
-    scoreBand: raw.safetyAlert === true || score === null ? null : orNull(raw.scoreBand, ["high", "medium", "low"] as const),
+    scoreBand: raw.safetyAlert === true || score === null ? null : orNull(raw.scoreBand, ["high", "medium", "low"] as const) ?? scoreTier(score),
+    scoreParts: raw.safetyAlert === true || score === null ? null : parseScoreParts(raw.scoreParts),
     levels: {
       authority: orNull(levels?.authority, LEVELS),
       impact: orNull(levels?.impact, LEVELS),
@@ -650,7 +1089,145 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     alsoReportedCount: Math.max(count(raw.alsoReportedCount), alsoReportedBy.length),
     event: event && text(event.id) && text(event.title) ? { id: text(event.id)!, title: text(event.title)! } : null,
     state: { starred: state?.starred === true, hidden: state?.hidden === true, read: state?.read === true },
+    channel: orNull(raw.channel, FRONTIER_CHANNELS),
+    platform: orNull(raw.platform, FRONTIER_PLATFORMS),
+    author: parseAuthor(raw.author),
+    thumb: parseMedia(raw.thumb),
+    tags: parseTags(raw.tags),
   };
+}
+
+/** The longest body the plugin sends (contract A: ≤ 40 000 characters). */
+const BODY_MAX = 40_000;
+/** 「AI 解读」 is one paragraph of at most 360 characters (contract B); anything far past that is not one, and is cut, never shown whole. */
+const INSIGHT_MAX = 1_200;
+/** The most reports one 解读 cites, and the highest `[n]` it can name. */
+const INSIGHT_REFS = 12;
+const INSIGHT_N = 99;
+
+/**
+ * 「AI 解读」 and the reports it cites. A ref without its number, its article or its title is dropped (its `[n]` then reads as plain
+ * text), and so is a second ref under a number already taken; the rest are ordered by number.
+ */
+function parseInsight(value: unknown): FrontierInsight | null {
+  const raw = record(value);
+  const body = text(raw?.text)?.trim();
+  if (!raw || !body) return null;
+  const taken = new Set<number>();
+  const refs = (Array.isArray(raw.refs) ? raw.refs : []).flatMap((entry) => {
+    const ref = record(entry);
+    const n = ref?.n;
+    const publicId = text(ref?.publicId)?.trim();
+    const title = text(ref?.title)?.trim();
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > INSIGHT_N || taken.has(n) || !publicId || !title) return [];
+    taken.add(n);
+    return [{ n, publicId: publicId.slice(0, 128), title: title.slice(0, 300), source: text(ref?.source)?.trim().slice(0, 120) ?? "", at: moment(ref?.at) }];
+  }).sort((a, b) => a.n - b.n).slice(0, INSIGHT_REFS);
+  return { text: body.slice(0, INSIGHT_MAX), refs };
+}
+
+/** What one 要点 field holds at most: a sentence, a few items (a roundup lists more), and a quotation. */
+const BRIEF_TEXT_MAX = 400;
+const BRIEF_ITEMS_MAX = 6;
+const BRIEF_QUOTE_MAX = 600;
+
+/**
+ * 「AI 要点」, field by field: a point without its key, its label or any words is dropped, and so is the whole brief when nothing is
+ * left; a quotation without its words is no quotation.
+ */
+export function parseFrontierBrief(value: unknown): FrontierBrief | null {
+  const raw = record(value);
+  const genre = orNull(raw?.genre, FRONTIER_GENRES);
+  if (!raw || !genre) return null;
+  const points = (Array.isArray(raw.points) ? raw.points : []).flatMap((entry): FrontierBriefPoint[] => {
+    const point = record(entry);
+    const key = text(point?.key);
+    const label = text(point?.label);
+    const words = text(point?.text)?.trim().slice(0, BRIEF_TEXT_MAX) || null;
+    const items = strings(point?.items, BRIEF_ITEMS_MAX).map((item) => item.slice(0, BRIEF_TEXT_MAX));
+    return key && label && (words || items.length) ? [{ key, label, text: words, items: words ? [] : items }] : [];
+  });
+  const quote = record(raw.quote);
+  const quoted = text(quote?.text)?.trim();
+  const about = record(raw.about);
+  const brief: FrontierBrief = {
+    genre,
+    points,
+    quote: quoted && text(quote?.label) ? { label: text(quote?.label)!, text: quoted.slice(0, BRIEF_QUOTE_MAX), zh: text(quote?.zh)?.trim().slice(0, BRIEF_QUOTE_MAX) || null } : null,
+    about: about && text(about.publicId) && text(about.title) ? { publicId: text(about.publicId)!, title: text(about.title)! } : null,
+  };
+  return brief.points.length || brief.quote ? brief : null;
+}
+
+/** A count the source showed, or null where it showed none. */
+const tally = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null);
+
+/**
+ * One item as its reader reads it (contract B): the list's fields, the stored abstract, and the reader's blocks, each parsed field by
+ * field. What is missing or malformed is null (or empty) — the block it would fill is left out, and nothing is guessed in its place.
+ */
+export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | null {
+  const item = parseFrontierItem(value);
+  const raw = record(value);
+  if (!item || !raw) return null;
+  const body = record(raw.body);
+  const zh = text(body?.zh)?.slice(0, BODY_MAX) ?? null;
+  const original = text(body?.original)?.slice(0, BODY_MAX) ?? null;
+  const quoted = record(raw.quoted);
+  const quotedAuthor = record(quoted?.author);
+  const quotedName = text(quotedAuthor?.name)?.trim() || handleOf(quotedAuthor?.handle);
+  const quotedText = text(quoted?.text);
+  const metrics = record(raw.metrics);
+  const counted = metrics ? { likes: tally(metrics.likes), reposts: tally(metrics.reposts), replies: tally(metrics.replies), views: tally(metrics.views) } : null;
+  const same = record(raw.sameEvent);
+  const followups = record(raw.followups);
+  return {
+    ...item,
+    abstract: text(raw.abstract),
+    abstractZh: text(raw.abstractZh),
+    lead: text(raw.lead) ?? item.summary,
+    brief: parseFrontierBrief(raw.brief),
+    insight: parseInsight(raw.insight),
+    body: zh || original ? {
+      zh,
+      original,
+      zhKind: zh ? orNull(body?.zhKind, ["translation", "original-zh"] as const) : null,
+      // Incomplete only where the server says so: a translation is never called partial on a guess.
+      complete: body?.complete !== false,
+      source: orNull(body?.source, FRONTIER_BODY_SOURCES),
+    } : null,
+    media: (Array.isArray(raw.media) ? raw.media : []).map(parseMedia).filter((media): media is FrontierMedia => media !== null)
+      .filter((media, index, all) => all.findIndex((other) => other.id === media.id) === index).slice(0, 8),
+    quoted: quotedName && quotedText ? {
+      author: { name: quotedName, handle: handleOf(quotedAuthor?.handle) },
+      text: quotedText.slice(0, BODY_MAX),
+      translation: text(quoted?.translation)?.slice(0, BODY_MAX) ?? null,
+      url: safeLink(quoted?.url),
+    } : null,
+    metrics: counted && Object.values(counted).some((entry) => entry !== null) ? counted : null,
+    sameEvent: same && text(same.itemId) && text(same.title) && text(same.itemId) !== item.id ? { itemId: text(same.itemId)!, title: text(same.title)! } : null,
+    followups: followups && text(followups.eventId) ? {
+      eventId: text(followups.eventId)!,
+      rows: (Array.isArray(followups.rows) ? followups.rows : []).flatMap((entry) => {
+        const row = record(entry);
+        const rowId = text(row?.itemId);
+        const title = text(row?.title);
+        const at = moment(row?.at);
+        if (!rowId || !title || !at || rowId === item.id) return [];
+        return [{ itemId: rowId, title, sourceName: text(row?.sourceName) ?? "", at, relation: oneOf(row?.relation, ["same-event", "follows"] as const, "same-event") }];
+      }).slice(0, 8),
+      more: followups.more === true,
+    } : null,
+    ask: parseAskQuestions(raw.ask),
+  };
+}
+
+/** The questions the server wrote for an item: at most three short lines; whatever else a server sent is not a question. */
+function parseAskQuestions(value: unknown): string[] {
+  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+    const question = typeof entry === "string" ? entry.replace(/\s+/g, " ").trim() : "";
+    return question && [...question].length <= 60 ? [question] : [];
+  }).filter((question, index, all) => all.indexOf(question) === index).slice(0, 3);
 }
 
 function parseItems(value: unknown): FrontierItem[] {
@@ -659,9 +1236,9 @@ function parseItems(value: unknown): FrontierItem[] {
 
 function parseItemsPage(value: unknown, restarted: boolean): FrontierItemsPage {
   const raw = record(value) ?? {};
-  const exposure = record(raw.exposure);
   return {
-    exposure: exposure && text(exposure.token) ? exposure as unknown as FrontierExposure : undefined,
+    listId: text(raw.listId),
+    slots: slotsOf(raw.items),
     items: parseItems(raw.items),
     nextCursor: text(raw.nextCursor),
     version: version(raw.version),
@@ -770,6 +1347,7 @@ function parseHotBoard(value: unknown, window: FrontierHotWindow): FrontierHotBo
   const raw = record(value) ?? {};
   const rows = Array.isArray(raw.events) ? raw.events : Array.isArray(raw.items) ? raw.items : [];
   return {
+    listId: text(raw.listId),
     window: oneOf(raw.window, FRONTIER_HOT_WINDOWS, window),
     takenAt: moment(raw.takenAt),
     since: moment(raw.since),
@@ -803,7 +1381,7 @@ function parseEvent(value: unknown): FrontierEvent | null {
     status: oneOf(raw.status, ["developing", "settled"] as const, "developing"),
     lane,
     laneLabel: text(raw.laneLabel) ?? LANE_LABELS[lane] ?? "",
-    specialties: labelled(raw.specialties, SPECIALTY_LABELS, 3),
+    specialties: parseSpecialties(raw.specialties),
     sourceCount72h: count(raw.sourceCount72h),
     reportCount: count(raw.reportCount),
     firstAt: moment(raw.firstAt),
@@ -832,7 +1410,17 @@ function parseEvent(value: unknown): FrontierEvent | null {
       const relatedTitle = text(link?.title);
       return relatedId && relatedTitle ? [{ id: relatedId, title: relatedTitle, relation: text(link?.relation) ?? "related", at: moment(link?.at) }] : [];
     }),
+    ask: parseEventAsk(raw.ask),
   };
+}
+
+/** The questions of an event's first-hand report: its public id, its title and up to three questions; null with none. */
+function parseEventAsk(value: unknown): { itemId: string; title: string; questions: string[] } | null {
+  const raw = record(value);
+  const itemId = text(raw?.itemId);
+  const title = text(raw?.title);
+  const questions = parseAskQuestions(raw?.questions);
+  return itemId && title && questions.length > 0 ? { itemId, title, questions } : null;
 }
 
 function parseFollowedZones(value: unknown): FrontierFollowedZone[] {
@@ -850,6 +1438,16 @@ function parseFollowedZones(value: unknown): FrontierFollowedZone[] {
   });
 }
 
+function parseFollowedQueries(value: unknown): FrontierFollowedQuery[] {
+  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+    const row = record(entry);
+    const followId = text(row?.id);
+    const label = text(row?.label);
+    const count = row?.newItems;
+    return followId && label && typeof count === "number" && Number.isInteger(count) && count > 0 ? [{ id: followId, label, newItems: count }] : [];
+  }).slice(0, 12);
+}
+
 function parseDaily(value: unknown): FrontierDaily | null {
   const raw = record(value);
   const day = text(raw?.day);
@@ -863,7 +1461,11 @@ function parseDaily(value: unknown): FrontierDaily | null {
     const items = parseItems(section?.items);
     return items.length > 0 ? [{ lane, laneLabel: text(section?.laneLabel) ?? LANE_LABELS[lane] ?? "", items }] : [];
   });
+  const leadRaw = record(raw.lead)?.item;
   return {
+    listId: text(raw.listId),
+    slots: { ...slotsOf(leadRaw ? [leadRaw] : []), ...slotsOf(raw.safety),
+      ...Object.assign({}, ...(Array.isArray(raw.sections) ? raw.sections : []).map((section) => slotsOf(record(section)?.items))) },
     day,
     windowStart: moment(raw.windowStart),
     windowEnd: moment(raw.windowEnd),
@@ -876,6 +1478,7 @@ function parseDaily(value: unknown): FrontierDaily | null {
     sections,
     safety: parseItems(raw.safety),
     followedZones: parseFollowedZones(raw.followedZones),
+    followedQueries: parseFollowedQueries(raw.followedQueries),
     aiMinute: text(raw.aiMinute),
     markdown: typeof raw.markdown === "string" ? raw.markdown : "",
     itemCount: count(raw.itemCount),
@@ -946,7 +1549,10 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   params.set("view", query.view ?? "selected");
   params.set("by", query.by ?? "timeline");
   if (query.lane) params.set("lane", query.lane);
-  if (query.specialty) params.set("specialty", query.specialty);
+  if (query.specialties?.length) params.set("specialty", query.specialties.join(","));
+  if (query.tag) params.set("tag", query.tag);
+  if (query.evidence) params.set("evidence", query.evidence);
+  if (query.unread) params.set("unread", "1");
   if (query.follow) params.set("follow", query.follow);
   if (query.window) params.set("window", query.window);
   const q = query.q?.trim();
@@ -955,6 +1561,7 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   if (q && query.sort === "time") params.set("sort", "time");
   if (query.starred) params.set("starred", "1");
   if (query.safety) params.set("safety", "1");
+  if (query.channel) params.set("channel", query.channel);
   if (query.cursor) params.set("cursor", query.cursor);
   params.set("limit", String(Math.min(50, Math.max(1, Math.floor(query.limit ?? 30)))));
   return params.toString();
@@ -979,10 +1586,9 @@ export async function listFrontierItems(query: FrontierItemsQuery = {}): Promise
 }
 
 export async function fetchFrontierItem(itemId: string): Promise<FrontierItemDetail> {
-  const raw = record(await productRequest<unknown>(`/frontier/items/${id(itemId)}`));
-  const item = parseFrontierItem(raw?.item);
+  const item = parseFrontierItemDetail(record(await productRequest<unknown>(`/frontier/items/${id(itemId)}`))?.item);
   if (!item) throw new WebApiError("The frontier item was malformed.", { status: 502 });
-  return { ...item, abstract: text(record(raw?.item)?.abstract), abstractZh: text(record(raw?.item)?.abstractZh) };
+  return item;
 }
 
 export async function fetchFrontierSources(): Promise<FrontierSources> {
@@ -995,12 +1601,13 @@ export async function fetchFrontierSources(): Promise<FrontierSources> {
   };
 }
 
-async function itemAction(itemId: string, action: "star" | "unstar" | "hide" | "unhide" | "read"): Promise<FrontierItemState> {
-  return parseState(await productRequest<unknown>(`/frontier/items/${id(itemId)}/${action}`, "POST", {}));
+async function itemAction(itemId: string, action: "star" | "unstar" | "hide" | "unhide" | "read", body: Record<string, string> = {}): Promise<FrontierItemState> {
+  return parseState(await productRequest<unknown>(`/frontier/items/${id(itemId)}/${action}`, "POST", body));
 }
 export const starFrontierItem = (itemId: string) => itemAction(itemId, "star");
 export const unstarFrontierItem = (itemId: string) => itemAction(itemId, "unstar");
-export const hideFrontierItem = (itemId: string) => itemAction(itemId, "hide");
+/** 「不感兴趣」, with the reader's reason when they gave one (`FRONTIER_HIDE_REASONS`); a later call with a reason sets it on an item already hidden. */
+export const hideFrontierItem = (itemId: string, reason?: FrontierHideReason) => itemAction(itemId, "hide", reason ? { reason } : {});
 export const unhideFrontierItem = (itemId: string) => itemAction(itemId, "unhide");
 export const markFrontierItemRead = (itemId: string) => itemAction(itemId, "read");
 
@@ -1008,8 +1615,18 @@ function parseFollow(value: unknown): FrontierFollow | null {
   const follow = record(value);
   const followId = text(follow?.id) ?? (typeof follow?.id === "number" ? String(follow.id) : null);
   const key = text(follow?.key);
-  const kind = orNull(follow?.kind, ["topic", "specialty", "drug", "source", "event"] as const);
-  return followId && key && kind ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true } : null;
+  const kind = orNull(follow?.kind, FRONTIER_FOLLOW_KINDS);
+  const fresh = typeof follow?.newItems === "number" && Number.isInteger(follow.newItems) && follow.newItems > 0 ? follow.newItems : undefined;
+  const reading = record(follow?.query);
+  const concepts = (Array.isArray(reading?.concepts) ? reading.concepts : []).flatMap((names): string[][] => {
+    const kept = (Array.isArray(names) ? names : []).filter((name): name is string => typeof name === "string" && name.length > 0).slice(0, 3);
+    return kept.length ? [kept] : [];
+  }).slice(0, 3);
+  const query = kind === "query" && reading && concepts.length
+    ? { kind: orNull(reading.kind, FRONTIER_FOLLOW_QUERY_KINDS) ?? "topic", concepts } satisfies FrontierFollowReading : undefined;
+  return followId && key && kind
+    ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true, ...(fresh ? { newItems: fresh } : {}), ...(query ? { query } : {}) }
+    : null;
 }
 
 export const FRONTIER_FOLLOWS_CHANGED = "evimed:frontier-follows-changed";
@@ -1019,7 +1636,10 @@ export async function listFrontierFollows(): Promise<FrontierFollow[]> {
   return (Array.isArray(raw?.follows) ? raw.follows : []).map(parseFollow).filter((follow): follow is FrontierFollow => follow !== null);
 }
 
-/** Follow — or, with `muted`, see less of — a topic, specialty, drug, source or event. Following again updates, never duplicates. */
+/**
+ * Follow — or, with `muted`, see less of — a topic, specialty, drug, source or event; or, as `query`, words the reader typed (the label
+ * is what they wrote, the server reads it). Following again updates, never duplicates.
+ */
 export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; key: string; label: string; muted?: boolean }): Promise<FrontierFollow> {
   const follow = parseFollow(record(await productRequest<unknown>("/frontier/follows", "POST", {
     kind: input.kind, key: input.key, label: input.label, muted: input.muted === true,
@@ -1029,9 +1649,112 @@ export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; k
   return follow;
 }
 
+/** A follow was looked at: the counts beside the follows are read again. Not `FRONTIER_FOLLOWS_CHANGED`: no list of items changes with it. */
+export const FRONTIER_FOLLOWS_SEEN = "evimed:frontier-follows-seen";
+
+/** The reader opened a follow's feed: what arrived before now stops counting as new (c3-watch). Never throws: a count that stays is not worth an error. */
+export async function markFrontierFollowSeen(followId: string): Promise<void> {
+  try {
+    await productRequest<unknown>(`/frontier/follows/${id(followId)}/seen`, "POST", {});
+    window.dispatchEvent(new Event(FRONTIER_FOLLOWS_SEEN));
+  } catch {
+    /* the count stays until the next look */
+  }
+}
+
 export async function removeFrontierFollow(followId: string): Promise<void> {
   await productRequest<unknown>(`/frontier/follows/${id(followId)}`, "DELETE");
   window.dispatchEvent(new Event(FRONTIER_FOLLOWS_CHANGED));
+}
+
+/* ----------------------------------------------------------------------- tags */
+
+function parseTagCount(value: unknown): FrontierTagCount | null {
+  const tag = parseTagRef(value);
+  if (!tag) return null;
+  const raw = record(value)!;
+  return { ...tag, count: count(raw.count), specialties: strings(raw.specialties, 30).flatMap((key) => readSpecialtyKey(key) ?? []) };
+}
+
+/**
+ * `GET /api/frontier/tags`: the active tags of some specialties, most used in the last 30 days first (the 「专科」 panel's 热门标签),
+ * or the tags whose name or an alias holds some words (the search box's suggestions). Empty where the route answers nothing.
+ */
+export async function listFrontierTags({ specialties = [], q = "", limit = 24 }: { specialties?: readonly string[]; q?: string; limit?: number }): Promise<FrontierTagCount[]> {
+  const params = new URLSearchParams();
+  if (specialties.length) params.set("specialty", specialties.join(","));
+  const words = q.trim().slice(0, 40);
+  if (words) params.set("q", words);
+  params.set("limit", String(Math.min(50, Math.max(1, Math.floor(limit)))));
+  const raw = await optional(async () => record(await productRequest<unknown>(`/frontier/tags?${params.toString()}`)));
+  return (Array.isArray(raw?.tags) ? raw.tags : []).map(parseTagCount).filter((tag): tag is FrontierTagCount => tag !== null).slice(0, limit);
+}
+
+/** A tag that is not there: unknown, or retired without a successor (404 `frontier_tag_not_found`). */
+function tagGone(error: unknown): boolean {
+  return error instanceof WebApiError && error.status === 404 && error.code === "frontier_tag_not_found";
+}
+
+/** `GET /api/frontier/tags/:slug`: the tag, or — for a slug merged into another — that one with `mergedFrom`; null for a tag that is not there. */
+export async function fetchFrontierTag(slug: string): Promise<FrontierTagDetail | null> {
+  try {
+    const answer = record(await productRequest<unknown>(`/frontier/tags/${id(slug)}`));
+    const raw = record(answer?.tag);
+    const tag = parseTagRef(raw);
+    if (!tag || !raw) return null;
+    return {
+      ...tag,
+      nameEn: text(raw.nameEn),
+      specialties: parseSpecialties(raw.specialties),
+      broader: parseTagRef(raw.broader),
+      narrower: (Array.isArray(raw.narrower) ? raw.narrower : []).map(parseTagRef).filter((entry): entry is FrontierTagRef => entry !== null).slice(0, 50),
+      count30d: count(raw.count30d),
+      // Beside the tag (as the server sends it) or in it.
+      mergedFrom: text(answer?.mergedFrom) ?? text(raw.mergedFrom),
+    };
+  } catch (error) {
+    if (tagGone(error) || frontierAbsence(error)) return null;
+    throw error;
+  }
+}
+
+/** `GET /api/frontier/ops/tags` (operators). */
+export async function fetchFrontierOpsTags(): Promise<FrontierOpsTags> {
+  const raw = record(await productRequest<unknown>("/frontier/ops/tags")) ?? {};
+  const list = (value: unknown) => (Array.isArray(value) ? value : []);
+  return {
+    specialties: list(raw.specialties).flatMap((entry) => {
+      const specialty = record(entry);
+      const key = text(specialty?.key);
+      if (!specialty || !key) return [];
+      return [{
+        key,
+        label: text(specialty.label) ?? SPECIALTY_LABELS[key] ?? key,
+        tags: list(specialty.tags).flatMap((value) => {
+          const tag = parseTagRef(value);
+          const row = record(value);
+          return tag && row ? [{ ...tag, state: text(row.state) ?? "active", count30d: count(row.count30d), origin: text(row.origin) }] : [];
+        }),
+      }];
+    }),
+    candidates: list(raw.candidates).flatMap((value) => {
+      const tag = parseTagRef(value);
+      const row = record(value);
+      return tag && row ? [{ ...tag, count30d: count(row.count30d), sources30d: count(row.sources30d), firstSeen: moment(row.firstSeen) }] : [];
+    }),
+    changes: list(raw.changes).flatMap((value) => {
+      const row = record(value);
+      const changeId = text(row?.id) ?? (typeof row?.id === "number" ? String(row.id) : null);
+      const tag = parseTagRef(row?.tag);
+      if (!row || !changeId || !tag) return [];
+      return [{ id: changeId, at: moment(row.at), action: text(row.action) ?? "", tag, other: parseTagRef(row.other), reason: text(row.reason), undoable: row.undoable === true }];
+    }),
+  };
+}
+
+/** `POST /api/frontier/ops/tags/changes/:id/undo` (operators): takes a change of the tag tree back. */
+export async function undoFrontierTagChange(changeId: string): Promise<void> {
+  await productRequest<unknown>(`/frontier/ops/tags/changes/${id(changeId)}/undo`, "POST", {});
 }
 
 /**
@@ -1056,10 +1779,12 @@ export function fetchFrontierForYou(): Promise<FrontierForYou | null> {
       const item = parseFrontierItem(row?.item);
       const reason = record(row?.reason);
       const because = text(reason?.text);
-      return item && because ? [{ item, reason: { text: because, topic: text(reason?.topic), memoryId: text(reason?.memoryId) } }] : [];
+      return item && because ? [{ item, reason: { text: because, topic: text(reason?.topic), memoryId: text(reason?.memoryId) },
+        slot: orNull(row?.slot, FRONTIER_SLOT_WORDS) }] : [];
     }).slice(0, 8);
     return {
-      exposure: record(raw.exposure) && text(record(raw.exposure)?.token) ? raw.exposure as FrontierExposure : undefined,
+      listId: text(raw.listId),
+      onboarding: raw.onboarding === true,
       state: oneOf(raw.state ?? raw.status, ["available", "unavailable", "off"] as const, "off"),
       basis: orNull(raw.basis, ["vector", "tags"] as const),
       paused: raw.paused === true,
@@ -1088,8 +1813,8 @@ export async function fetchFrontierHot(): Promise<FrontierHotEvent[] | null> {
  * A merged event's old id answers 308, which `fetch` follows; the event that
  * comes back carries the surviving id.
  */
-export async function fetchFrontierEvent(eventId: string): Promise<FrontierEvent> {
-  const event = parseEvent(record(await productRequest<unknown>(`/frontier/events/${id(eventId)}`))?.event);
+export async function fetchFrontierEvent(eventId: string, order?: FrontierEventOrder): Promise<FrontierEvent> {
+  const event = parseEvent(record(await productRequest<unknown>(`/frontier/events/${id(eventId)}${order ? `?order=${order}` : ""}`))?.event);
   if (!event) throw new WebApiError("The frontier event was malformed.", { status: 502 });
   return event;
 }
@@ -1226,10 +1951,312 @@ export async function setFrontierNotificationSwitch(key: FrontierNotificationSwi
   return saved.switches[key] ?? saved.switches.frontier !== false;
 }
 
-export async function reportFrontierExposure(token: string, items: {id: string; position: number}[]): Promise<void> {
-  await productRequest("/frontier/exposures", "POST", { token, items });
-}
-
 export function markFrontierEventRead(eventId: string, mark: Record<string, string>): Promise<unknown> {
   return productRequest(`/frontier/events/${id(eventId)}/read`, "POST", { mark });
+}
+
+/* ------------------------------------------------------------------- hot-event topics (c2-leads 2026-10-25) */
+
+/**
+ * A hot-event topic (contract §T): the general medical question a public event raised — its title is the question — the event
+ * in one attributed line, its field, and, when written, one overview citing the topic's items by number; `card` is the
+ * evidence programme's official card for it, when there is one. Never the names of the event's people.
+ */
+export type FrontierTopicSummary = {
+  id: string;
+  title: string;
+  question: string;
+  peg: { text: string; source: { name: string; url: string | null; date: string | null } } | null;
+  domain: string;
+  domainLabel: string;
+  surge: boolean;
+  firstSeenAt: string | null;
+  acceptedAt: string | null;
+  status: "active" | "closed";
+  itemCount: number;
+  overview: { text: string; refs: Array<{ n: number; itemId: string; title: string; sourceName: string }> } | null;
+  card: { id: string; title: string; href: string } | null;
+};
+
+/** What an item is to a topic: a report on the question, a piece of primary evidence, or background. */
+export type FrontierTopicRole = "report" | "evidence" | "background";
+
+export type FrontierTopicPage = { topic: FrontierTopicSummary; items: Array<{ role: FrontierTopicRole; item: FrontierItem }> };
+
+const TOPIC_ROLES: readonly FrontierTopicRole[] = ["report", "evidence", "background"];
+
+/** One topic as the server sends it, or null when it is not one. */
+export function parseFrontierTopic(value: unknown): FrontierTopicSummary | null {
+  const raw = record(value);
+  const topicId = text(raw?.id);
+  const title = text(raw?.title);
+  if (!raw || !topicId || !/^[a-z0-9]{12,32}$/.test(topicId) || !title) return null;
+  const peg = record(raw.peg);
+  const pegSource = record(peg?.source);
+  const overview = record(raw.overview);
+  const card = record(raw.card);
+  const href = text(card?.href);
+  return {
+    id: topicId,
+    title,
+    question: text(raw.question) ?? title,
+    peg: peg && text(peg.text) ? { text: String(peg.text), source: { name: text(pegSource?.name) ?? "", url: safeLink(pegSource?.url), date: text(pegSource?.date) } } : null,
+    domain: text(raw.domain) ?? "other",
+    domainLabel: text(raw.domainLabel) ?? "其他",
+    surge: raw.surge === true,
+    firstSeenAt: moment(raw.firstSeenAt),
+    acceptedAt: moment(raw.acceptedAt),
+    status: raw.status === "closed" ? "closed" : "active",
+    itemCount: count(raw.itemCount),
+    overview: overview && text(overview.text) ? {
+      text: String(overview.text),
+      refs: (Array.isArray(overview.refs) ? overview.refs : []).flatMap((entry) => {
+        const ref = record(entry);
+        const n = typeof ref?.n === "number" && Number.isInteger(ref.n) && ref.n > 0 ? ref.n : null;
+        const itemId = text(ref?.itemId);
+        return n && itemId ? [{ n, itemId, title: text(ref?.title) ?? "", sourceName: text(ref?.sourceName) ?? "" }] : [];
+      }),
+    } : null,
+    // Only an address inside the app is followed: a card is read on the evidence zone's own page.
+    card: card && text(card.id) && text(card.title) && href && href.startsWith("/app/frontier/zones/") ? { id: String(card.id), title: String(card.title), href } : null,
+  };
+}
+
+/**
+ * The topics 热榜 shows: the active ones (the default) or the recent ones, closed included. Null where the route does not
+ * exist yet or the module is off.
+ */
+export function fetchFrontierTopics(status: "active" | "recent" = "active", limit = 10): Promise<FrontierTopicSummary[] | null> {
+  return optional(async () => {
+    const raw = record(await productRequest<unknown>(`/frontier/topics?status=${status}&limit=${Math.min(30, Math.max(1, Math.floor(limit)))}`));
+    return (Array.isArray(raw?.topics) ? raw.topics : []).map(parseFrontierTopic).filter((topic): topic is FrontierTopicSummary => topic !== null);
+  });
+}
+
+/** One topic page: the topic and its items by role, each the feed's own item. */
+export async function fetchFrontierTopic(topicId: string): Promise<FrontierTopicPage> {
+  const raw = record(await productRequest<unknown>(`/frontier/topics/${id(topicId)}`));
+  const topic = parseFrontierTopic(raw?.topic);
+  if (!topic) throw new WebApiError("The frontier topic was malformed.", { status: 502 });
+  const items = (Array.isArray(raw?.items) ? raw.items : []).flatMap((entry) => {
+    const row = record(entry);
+    const item = parseFrontierItem(row?.item);
+    const role = TOPIC_ROLES.find((value) => value === row?.role);
+    return item && role ? [{ role, item }] : [];
+  });
+  return { topic, items };
+}
+
+/* ------------------------------------------------------------------------------------------------ 追踪 (c3-track) */
+
+/**
+ * 追踪 (c3-track 2026-10-25): the approvals, the guideline updates and the congresses, and one congress's hub. Each list row is the
+ * feed's own item with the fields of its record (`items.track_facts`), which the server checked against the item's text; a congress
+ * is a row of the calendar with its status on the day and the number of its items. Like the other wave-two readers, a list returns
+ * null where the route does not exist yet or the module is off.
+ */
+export const FRONTIER_TRACK_SEGMENTS = ["approvals", "guidelines", "congresses"] as const;
+export type FrontierTrackSegment = typeof FRONTIER_TRACK_SEGMENTS[number];
+
+export interface FrontierTrackAgency { key: string; label: string; region: string; regionLabel: string; count: number }
+export interface FrontierApprovalRow {
+  item: FrontierItem;
+  /** The day the row is dated by: the decision's own day where the text gave one, the item's day otherwise. */
+  at: string;
+  approval: string;
+  approvalLabel: string;
+  agency: { key: string; label: string } | null;
+  drug: string;
+  indication: string | null;
+}
+export interface FrontierApprovals {
+  items: FrontierApprovalRow[];
+  nextCursor: string | null;
+  from: string;
+  agencies: FrontierTrackAgency[];
+  /** The year's count by agency, and the first day the count reaches back to. */
+  ytd: { year: number; since: string | null; total: number; byAgency: Array<{ key: string; label: string; count: number }> };
+  listId: string | null;
+}
+export interface FrontierGuidelineRow {
+  item: FrontierItem;
+  at: string;
+  body: string | null;
+  scope: string | null;
+  recommendations: Array<{ text: string; grade: string | null }>;
+}
+export interface FrontierGuidelines {
+  items: FrontierGuidelineRow[];
+  nextCursor: string | null;
+  specialties: Array<{ key: string; label: string; count: number }>;
+  listId: string | null;
+}
+export type FrontierCongressStatus = "ongoing" | "upcoming" | "recent";
+export interface FrontierCongress {
+  id: string;
+  /** 「ESMO 2026」. */
+  code: string;
+  name: string;
+  nameEn: string;
+  start: string;
+  end: string;
+  city: string | null;
+  specialty: string | null;
+  specialtyLabel: string | null;
+  status: FrontierCongressStatus;
+  itemCount: number;
+}
+export interface FrontierCongressRecap {
+  text: string;
+  at: string | null;
+  refs: Array<{ n: number; itemId: string; title: string; sourceName: string }>;
+}
+export interface FrontierCongressHub {
+  congress: Omit<FrontierCongress, "itemCount" | "status"> & { status: FrontierCongressStatus | "later" | "past"; sourceUrl: string | null; abstractsAt: string | null };
+  itemCount: number;
+  days: Array<{ day: string; recap: FrontierCongressRecap | null; items: Array<{ item: FrontierItem; caveat: string | null }> }>;
+  listId: string | null;
+}
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const day = (value: unknown): string | null => (typeof value === "string" && DAY_PATTERN.test(value) ? value : null);
+const FRONTIER_CONGRESS_STATUSES = ["ongoing", "upcoming", "recent"] as const;
+
+function parseTrackAgency(value: unknown): { key: string; label: string } | null {
+  const row = record(value);
+  const key = text(row?.key), label = text(row?.label);
+  return key && label ? { key: key.slice(0, 24), label: label.slice(0, 40) } : null;
+}
+
+export function parseFrontierApprovals(value: unknown): FrontierApprovals {
+  const raw = record(value) ?? {};
+  const items = (Array.isArray(raw.items) ? raw.items : []).flatMap((entry): FrontierApprovalRow[] => {
+    const row = record(entry);
+    const item = parseFrontierItem(row?.item);
+    const at = day(row?.at), drug = text(row?.drug);
+    return item && at && drug ? [{ item, at, approval: text(row?.approval) ?? "other", approvalLabel: text(row?.approvalLabel) ?? "审批动态",
+      agency: parseTrackAgency(row?.agency), drug: drug.slice(0, 200), indication: text(row?.indication)?.slice(0, 200) ?? null }] : [];
+  });
+  const ytd = record(raw.ytd) ?? {};
+  return {
+    items,
+    nextCursor: text(raw.nextCursor),
+    from: day(raw.from) ?? "",
+    agencies: (Array.isArray(raw.agencies) ? raw.agencies : []).flatMap((entry): FrontierTrackAgency[] => {
+      const row = record(entry);
+      const key = text(row?.key), label = text(row?.label);
+      return key && label ? [{ key, label, region: text(row?.region) ?? "other", regionLabel: text(row?.regionLabel) ?? "其他", count: count(row?.count) }] : [];
+    }).slice(0, 30),
+    ytd: {
+      year: count(ytd.year), since: day(ytd.since), total: count(ytd.total),
+      byAgency: (Array.isArray(ytd.byAgency) ? ytd.byAgency : []).flatMap((entry) => {
+        const agency = parseTrackAgency(entry);
+        return agency ? [{ ...agency, count: count(record(entry)?.count) }] : [];
+      }).slice(0, 30),
+    },
+    listId: text(raw.listId),
+  };
+}
+
+export function parseFrontierGuidelines(value: unknown): FrontierGuidelines {
+  const raw = record(value) ?? {};
+  return {
+    items: (Array.isArray(raw.items) ? raw.items : []).flatMap((entry): FrontierGuidelineRow[] => {
+      const row = record(entry);
+      const item = parseFrontierItem(row?.item);
+      const at = day(row?.at);
+      if (!item || !at) return [];
+      const recommendations = (Array.isArray(row?.recommendations) ? row.recommendations : []).flatMap((rec) => {
+        const point = record(rec);
+        const body = text(point?.text);
+        return body ? [{ text: body.slice(0, 240), grade: text(point?.grade)?.slice(0, 60) ?? null }] : [];
+      }).slice(0, 5);
+      return [{ item, at, body: text(row?.body)?.slice(0, 200) ?? null, scope: text(row?.scope)?.slice(0, 200) ?? null, recommendations }];
+    }),
+    nextCursor: text(raw.nextCursor),
+    specialties: (Array.isArray(raw.specialties) ? raw.specialties : []).flatMap((entry) => {
+      const row = record(entry);
+      const key = text(row?.key), label = text(row?.label);
+      return key && label ? [{ key, label, count: count(row?.count) }] : [];
+    }).slice(0, 40),
+    listId: text(raw.listId),
+  };
+}
+
+function parseCongress(value: unknown): FrontierCongress | null {
+  const row = record(value);
+  const idValue = text(row?.id), start = day(row?.start), end = day(row?.end), name = text(row?.name);
+  if (!idValue || !start || !end || !name) return null;
+  return {
+    id: idValue, code: text(row?.code) ?? name, name: name.slice(0, 120), nameEn: text(row?.nameEn)?.slice(0, 160) ?? "", start, end,
+    city: text(row?.city)?.slice(0, 60) ?? null, specialty: text(row?.specialty), specialtyLabel: text(row?.specialtyLabel)?.slice(0, 40) ?? null,
+    status: oneOf(row?.status, FRONTIER_CONGRESS_STATUSES, "recent"), itemCount: count(row?.itemCount),
+  };
+}
+
+export function parseFrontierCongressHub(value: unknown): FrontierCongressHub | null {
+  const raw = record(value);
+  const congress = parseCongress(raw?.congress);
+  if (!raw || !congress) return null;
+  const header = record(raw.congress);
+  return {
+    congress: { ...congress, status: oneOf(header?.status, [...FRONTIER_CONGRESS_STATUSES, "later", "past"] as const, "recent"), sourceUrl: safeLink(header?.sourceUrl), abstractsAt: day(header?.abstractsAt) },
+    itemCount: count(raw.itemCount),
+    days: (Array.isArray(raw.days) ? raw.days : []).flatMap((entry): FrontierCongressHub["days"] => {
+      const row = record(entry);
+      const when = day(row?.day);
+      if (!when) return [];
+      const recap = record(row?.recap);
+      const body = text(recap?.text);
+      return [{
+        day: when,
+        recap: body ? { text: body.slice(0, 1200), at: moment(recap?.at), refs: (Array.isArray(recap?.refs) ? recap.refs : []).flatMap((ref) => {
+          const mark = record(ref);
+          const n = count(mark?.n), itemId = text(mark?.itemId);
+          return n > 0 && itemId ? [{ n, itemId, title: text(mark?.title) ?? "", sourceName: text(mark?.sourceName) ?? "" }] : [];
+        }) } : null,
+        items: (Array.isArray(row?.items) ? row.items : []).flatMap((it) => {
+          const parsed = record(it);
+          const item = parseFrontierItem(parsed?.item);
+          return item ? [{ item, caveat: text(parsed?.caveat)?.slice(0, 260) ?? null }] : [];
+        }),
+      }];
+    }),
+    listId: text(raw.listId),
+  };
+}
+
+/** 审批: the approvals of the last 90 days, a page at a time; optionally one agency's. Null where the route does not exist. */
+export function listFrontierApprovals({ agency = null, cursor = null }: { agency?: string | null; cursor?: string | null } = {}): Promise<FrontierApprovals | null> {
+  return optional(async () => {
+    const query = new URLSearchParams();
+    if (agency) query.set("agency", agency);
+    if (cursor) query.set("cursor", cursor);
+    return parseFrontierApprovals(await productRequest<unknown>(`/frontier/track/approvals${query.toString() ? `?${query}` : ""}`));
+  });
+}
+
+/** 指南: the guideline updates, newest first, a page at a time; optionally one specialty's. */
+export function listFrontierGuidelines({ specialty = null, cursor = null }: { specialty?: string | null; cursor?: string | null } = {}): Promise<FrontierGuidelines | null> {
+  return optional(async () => {
+    const query = new URLSearchParams();
+    if (specialty) query.set("specialty", specialty);
+    if (cursor) query.set("cursor", cursor);
+    return parseFrontierGuidelines(await productRequest<unknown>(`/frontier/track/guidelines${query.toString() ? `?${query}` : ""}`));
+  });
+}
+
+/** 会议: the congresses on now, coming in the next 60 days and ended within the last 30. */
+export function listFrontierCongresses(): Promise<FrontierCongress[] | null> {
+  return optional(async () => {
+    const raw = record(await productRequest<unknown>("/frontier/track/congresses"));
+    return (Array.isArray(raw?.congresses) ? raw.congresses : []).map(parseCongress).filter((congress): congress is FrontierCongress => congress !== null);
+  });
+}
+
+/** One congress's hub. Throws every refusal: its page says something different for each (the module off, not built yet, no such congress). */
+export async function fetchFrontierCongress(congressId: string): Promise<FrontierCongressHub> {
+  const hub = parseFrontierCongressHub(await productRequest<unknown>(`/frontier/track/congresses/${id(congressId)}`));
+  if (!hub) throw new WebApiError("The frontier congress was malformed.", { status: 502 });
+  return hub;
 }

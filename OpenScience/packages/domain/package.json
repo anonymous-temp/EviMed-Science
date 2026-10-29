@@ -14,11 +14,13 @@
     "./answer-evidence-grade": "./src/answerEvidenceGrade.mjs",
     "./clinical-evidence": "./src/clinicalEvidence.mjs",
     "./entity-keys": "./src/entityKeys.mjs",
+    "./follow-up-examples": "./src/followUpExamples.mjs",
     "./method-records": "./src/methodRecords.mjs",
     "./research-tools": "./src/researchToolDisplay.mjs",
     "./runtime-inventory": "./src/runtimeInventory.mjs",
     "./result-provenance": "./src/resultProvenance.mjs",
     "./skill-display": "./src/skillDisplay.mjs",
+    "./platform-skill-policy": "./src/platformSkillPolicy.mjs",
     "./skill-packages": "./src/skillPackages.mjs",
     "./package.json": "./package.json"
   },

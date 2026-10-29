@@ -4,6 +4,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  EVIDENCE_BODY_MAX_CHARS,
+  EVIDENCE_CLAIMS_MAX_CHARS,
+  EVIDENCE_CLAIM_LIMIT,
+  EVIDENCE_SOURCE_LIMIT,
+  GEO_CARD_HELD_REASONS_ZH,
   GEO_COMPARISON_EVIDENCE_TYPES,
   GEO_COMPARISON_EVIDENCE_TYPE_LABELS_ZH,
   evidenceCardClaims,
@@ -339,4 +344,100 @@ test('an article leaves with its references off, its author named, the relation 
   assert.ok(company.endsWith(`${GEO_AI_LABEL_ZH}\n`), 'a draft a run wrote always carries the label')
   const none = geoPublishableText({ text: '一句话。', producer: { kind: 'enterprise', name: '某某', relation: 'none' }, aiGenerated: false })
   assert.equal(none, '一句话。\n\n出品：某某\n', 'no relation line where there is none, and no label on text no AI wrote')
+})
+
+// A group above one card's bounds (2026-10-19: the evidence programme's cards of 64-78 claims were refused whole by the zone; this is
+// the same gap in the GEO plan). The group keeps what stands best and holds the rest, and the card it makes is one the contract takes.
+
+/** @param {number} count @param {(n: number) => Record<string, any>} over */
+function bigGroup(count, over) {
+  const facts = Array.from({ length: count }, (_, n) => `Fact ${n} of the trial.`)
+  const sourceText = facts.join('\n')
+  return Array.from({ length: count }, (_, n) => claim({
+    claimKey: `k${String(n).padStart(3, '0')}`, statement: `结论 ${n}。`, quote: facts[n], sourceRef: '来源 A', sourceText, sourceKind: 'literature', inLabel: false,
+    clinicalQuestion: '同一个问题', ...over(n),
+  }))
+}
+
+/** What the zone holds a card to, read off a planned card. @param {any} card */
+function assertWithinBounds(card) {
+  const { claims, sources, body } = card.payload
+  assert.ok(claims.length <= EVIDENCE_CLAIM_LIMIT, `${claims.length} claims`)
+  assert.ok(sources.length <= EVIDENCE_SOURCE_LIMIT, `${sources.length} sources`)
+  assert.ok(JSON.stringify(claims).length <= EVIDENCE_CLAIMS_MAX_CHARS, 'claim characters')
+  assert.ok(body.length <= EVIDENCE_BODY_MAX_CHARS, 'body characters')
+  assert.equal(evidenceCardClaims(claims, sources.length).length, claims.length, 'the contract takes the claims')
+  assert.equal(card.map.length, claims.length)
+}
+
+test('a group of more claims than one card carries keeps the most a card holds and holds the rest as card_limit', () => {
+  const { cards, held } = geoCardPlan({ claims: bigGroup(75, () => ({})), producer, authors, reviewers, now: NOW })
+  assert.equal(cards.length, 1, 'still one card per question')
+  assertWithinBounds(cards[0])
+  assert.equal(cards[0].payload.claims.length, EVIDENCE_CLAIM_LIMIT)
+  assert.equal(held.length, 15)
+  assert.ok(held.every((entry) => entry.reason === 'card_limit' && entry.message === GEO_CARD_HELD_REASONS_ZH.card_limit))
+  assert.match(cards[0].payload.summary, /60 条/, 'the summary counts what the card holds')
+})
+
+test('a group citing more sources than one card cites keeps the claims of the first sources it can', () => {
+  const claims = bigGroup(56, (n) => ({ sourceRef: `来源 ${n}`, sourceLabel: `来源 ${n}` })).map((one, n) => ({ ...one, sourceText: `Fact ${n} of the trial.` }))
+  const { cards, held } = geoCardPlan({ claims, producer, authors, reviewers, now: NOW })
+  assertWithinBounds(cards[0])
+  assert.equal(cards[0].payload.sources.length, EVIDENCE_SOURCE_LIMIT)
+  assert.equal(held.length, 6)
+  assert.ok(held.every((entry) => entry.reason === 'card_limit'))
+})
+
+test('a group whose claims are too long together for the card keeps those that fit, by the claims\' characters', () => {
+  const long = 'Q'.repeat(2000)
+  const claims = bigGroup(55, () => ({})).map((one) => ({ ...one, quote: long, sourceText: `${long}\n${one.sourceText}`, statement: '长'.repeat(400) }))
+  const { cards, held } = geoCardPlan({ claims, producer, authors, reviewers, now: NOW })
+  assertWithinBounds(cards[0])
+  assert.ok(cards[0].payload.claims.length < 55 && cards[0].payload.claims.length > 30, `${cards[0].payload.claims.length} claims`)
+  assert.equal(held.length, 55 - cards[0].payload.claims.length)
+  assert.ok(JSON.stringify(cards[0].payload.claims).length > EVIDENCE_CLAIMS_MAX_CHARS - 5000, 'it kept as many as fit')
+})
+
+test('a group whose statements make a body longer than the card allows keeps those that fit', () => {
+  const claims = bigGroup(58, () => ({})).map((one) => ({ ...one, statement: '长'.repeat(1500) }))
+  const { cards, held } = geoCardPlan({ claims, producer, authors, reviewers, now: NOW })
+  assertWithinBounds(cards[0])
+  assert.equal(cards[0].payload.claims.length, Math.floor(EVIDENCE_BODY_MAX_CHARS / (1500 + 3)) , 'each line is two characters and a newline over the statement')
+  assert.equal(held.length, 58 - cards[0].payload.claims.length)
+})
+
+test('what a full card leaves out is the weaker: the label first, then a comparison that bears weight, then the kind of source, then the key', () => {
+  // 60 plain claims (k000-k059), one unanchored comparison (k060 sorts before the key z), and a head-to-head claim and a label
+  // claim whose keys sort last: 63 claims for a card of 60.
+  const facts = Array.from({ length: 61 }, (_, n) => `Fact ${n} of the trial.`)
+  const plain = (/** @type {number} */ n, /** @type {Record<string, any>} */ over = {}) => claim({
+    claimKey: `k${String(n).padStart(3, '0')}`, statement: `结论 ${n}。`, quote: facts[n], sourceRef: '来源 A', sourceText: facts.join('\n'), sourceKind: 'literature',
+    inLabel: false, journeyStage: '治疗选择', clinicalQuestion: '同一个问题', ...over,
+  })
+  const claims = [
+    ...Array.from({ length: 60 }, (_, n) => plain(n)),
+    plain(60, { claimKey: 'a-unanchored', comparisonType: 'unanchored_reference' }),
+    plain(0, { claimKey: 'z-h2h', comparisonType: 'head_to_head' }),
+    claim({ claimKey: 'z-label', sourceRef: '来源 B', sourceText: LABEL_TEXT, journeyStage: '治疗选择', clinicalQuestion: '同一个问题' }),
+  ]
+  const { cards, held } = geoCardPlan({ claims, producer, authors, reviewers, now: NOW })
+  assertWithinBounds(cards[0])
+  const keys = cards[0].map.map((entry) => entry.claimKey)
+  assert.ok(keys.includes('z-label') && keys.includes('z-h2h'), 'the label claim and the head-to-head claim stay although their keys come last')
+  assert.deepEqual(held.map((entry) => entry.claimKey).sort(), ['a-unanchored', 'k058', 'k059'], 'the unanchored comparison goes first, then the last keys of the rest')
+  assert.deepEqual(cards[0].payload.publicView.labelSays.claimIds.every((/** @type {string} */ id) => cards[0].payload.claims.some((/** @type {any} */ made) => made.claimId === id)), true, 'the label panel names kept claims')
+  const again = geoCardPlan({ claims: [...claims].reverse(), producer, authors, reviewers, now: NOW })
+  assert.deepEqual(again, { cards, held }, 'the same input keeps the same claims')
+})
+
+test('a source kind decides between claims that are otherwise equal, a guideline before a trial before other literature', () => {
+  const claims = [
+    ...bigGroup(60, () => ({ sourceKind: 'other' })),
+    ...bigGroup(2, () => ({ sourceKind: 'guideline' })).map((one, n) => ({ ...one, claimKey: `z-g${n}`, id: `g${n}` })),
+  ]
+  const { cards, held } = geoCardPlan({ claims, producer, authors, reviewers, now: NOW })
+  const keys = cards[0].map.map((entry) => entry.claimKey)
+  assert.ok(keys.includes('z-g0') && keys.includes('z-g1'))
+  assert.deepEqual(held.map((entry) => entry.claimKey).sort(), ['k058', 'k059'])
 })

@@ -1,3 +1,4 @@
+import { FRONTIER_INTERACTION_RETENTION_DAYS } from "./frontierInteractions.mjs";
 import { FRONTIER_PROJECT_ID, FRONTIER_PROJECT_NAME } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -49,11 +50,18 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 /** Rows one retention statement removes at most. */
 const RETENTION_BATCH = 5_000;
-const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "cleanup"]);
+const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "tags", "leads", "topics", "cleanup"]);
+/** How often the tag tree's upkeep looks whether its daily or weekly part is due (frontierTagUpkeep.mjs). */
+const TAGS_CHECK_MS = 15 * 60_000;
+/** How often the lead triggers look whether a search is due (frontierLeads.mjs `FRONTIER_LEADS_CHECK_MS`). */
+const LEADS_CHECK_MS = 15 * 60_000;
+/** How often the hot-event topics read the hot lists and look for new events (frontierTopics.mjs, c2-leads 2026-10-25). */
+const TOPICS_CHECK_MS = 15 * 60_000;
 /** What one `processBatch()` reports (package E's pipeline), summed per worker
  *  for the status and the metrics. A key it does not report stays 0. */
 export const PIPELINE_OUTCOMES = Object.freeze(["claimed", "promoted", "published", "merged", "screenedOut", "held", "failed",
-  "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane"]);
+  "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane", "genreFloor", "zhTarget", "eventPrimary", "translated", "tidied",
+  "tidyDropped", "leads", "insights", "retagged", "studyFacts", "faithChecked", "faithMismatched", "faithRepaired", "faithTrimmed", "faithUnchecked"]);
 
 /**
  * The internal project the feed's model calls are billed to, under the first
@@ -87,11 +95,11 @@ const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" 
 
 export class FrontierWorker {
   /**
-   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
+   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, tags?: any, leads?: any, topics?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
    *   pollMs?: number, leaseMs?: number, pluginPollMs?: number, mirrorMs?: number, cleanupMs?: number, concurrency?: number,
    *   canRun?: () => boolean, now?: () => Date, report?: (loop: string, code: string) => void }} dependencies
    */
-  constructor({ ingest, pipeline = null, composer = null, evidence = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
+  constructor({ ingest, pipeline = null, composer = null, evidence = null, tags = null, leads = null, topics = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
     pluginPollMs = 60_000, mirrorMs = HOUR_MS, cleanupMs = HOUR_MS, concurrency = 2, canRun = () => true,
     now = () => new Date(), report = () => {} }) {
     if (!ingest || !database) throw new TypeError("The frontier worker needs the ingest and the product database.");
@@ -111,6 +119,12 @@ export class FrontierWorker {
     this.composeLoops = typeof composer?.tickChain === "function" ? (composer.chains ?? []).map((/** @type {string} */ chain) => ({ chain, loop: `compose-${chain}` })) : [];
     const loopNames = [...LOOPS.filter((loop) => loop !== "compose" || !this.composeLoops.length), ...this.composeLoops.map(({ loop }) => loop)];
     this.evidence = evidence;
+    /** The tag tree's upkeep (`FrontierTagUpkeep`): its daily and weekly parts, when due; null runs none. */
+    this.tags = tags && typeof tags.tick === "function" ? tags : null;
+    /** The lead triggers (`FrontierLeads`, ct-mix 2026-10-24): their searches and hand-overs, when due; null runs none. */
+    this.leads = leads && typeof leads.tick === "function" ? leads : null;
+    /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): the hot lists read, new events judged, items joined, overviews; null runs none. */
+    this.topics = topics && typeof topics.tick === "function" ? topics : null;
     this.database = database;
     this.ensureOwner = ensureOwner;
     this.pollMs = pollMs;
@@ -132,10 +146,10 @@ export class FrontierWorker {
     /** @type {Record<string, { startedAt: number | null, lastRunAt: string | null, lastOkAt: string | null, lastError: string | null, runs: number, failures: number }>} */
     this.loops = Object.fromEntries(loopNames.map((loop) => [loop, { startedAt: null, lastRunAt: null, lastOkAt: null, lastError: null, runs: 0, failures: 0 }]));
     /** When each periodic loop last started (epoch ms); 0 = due now. */
-    this.lastStarted = { mirror: 0, pull: 0, cleanup: 0 };
+    this.lastStarted = { mirror: 0, pull: 0, cleanup: 0, tags: 0, leads: 0, topics: 0 };
     /** What the pipeline's batches have done since start (plan §10.3.1's outcomes). */
     this.pipelineTotals = Object.fromEntries([["batches", 0], ...PIPELINE_OUTCOMES.map((key) => [key, 0])]);
-    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0 };
+    this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0, interactions: 0, listServes: 0 };
   }
 
   /** The code of a loop whose last run failed, or null when every loop's last run succeeded. */
@@ -182,7 +196,7 @@ export class FrontierWorker {
     return running;
   }
 
-  /** @param {"mirror" | "pull" | "cleanup"} loop @param {number} interval */
+  /** @param {"mirror" | "pull" | "cleanup" | "tags" | "leads" | "topics"} loop @param {number} interval */
   #due(loop, interval) {
     const at = this.now().getTime();
     if (this.lastStarted[loop] && at - this.lastStarted[loop] < interval) return false;
@@ -224,6 +238,18 @@ export class FrontierWorker {
       if (!this.composeLoops.length && !this.running.compose) started.push(this.#run("compose", () => this.composer.tick()));
     }
     if (this.evidence && !this.running.evidence) started.push(this.#run("evidence", () => this.evidence.tick()));
+    // The tag tree's upkeep spends model money under the owner's project, like processing.
+    if (this.tags && (this.owner || !this.ensureOwner) && !this.running.tags && this.#due("tags", TAGS_CHECK_MS)) {
+      started.push(this.#run("tags", () => /** @type {any} */ (this.tags).tick()));
+    }
+    // The lead triggers spend search money under the owner's project, like processing.
+    if (this.leads && (this.owner || !this.ensureOwner) && !this.running.leads && this.#due("leads", LEADS_CHECK_MS)) {
+      started.push(this.#run("leads", () => /** @type {any} */ (this.leads).tick()));
+    }
+    // The hot-event topics spend model money under the owner's project, like processing.
+    if (this.topics && (this.owner || !this.ensureOwner) && !this.running.topics && this.#due("topics", TOPICS_CHECK_MS)) {
+      started.push(this.#run("topics", () => /** @type {any} */ (this.topics).tick()));
+    }
     if (!this.running.cleanup && this.#due("cleanup", this.cleanupMs)) {
       started.push(this.#run("cleanup", async () => ({ ...(await this.cleanup()), recounted: await this.recountSelected() })));
     }
@@ -278,8 +304,13 @@ export class FrontierWorker {
     // once it has this record), so it is kept as long as the logs beside it and no longer (review 2026-10-10, D-09).
     const exposures = await this.database.query(`DELETE FROM evimed_frontier.exposures WHERE id IN (
       SELECT id FROM evimed_frontier.exposures WHERE exposed_at < $1::timestamptz ORDER BY exposed_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
+    // What readers were served and did (frontierInteractions.mjs, ct-track 2026-10-24): two seasons of reading, then gone.
+    const interactions = await this.database.query(`DELETE FROM evimed_frontier.interactions WHERE id IN (
+      SELECT id FROM evimed_frontier.interactions WHERE client_at < $1::timestamptz ORDER BY client_at LIMIT ${RETENTION_BATCH})`, [before(FRONTIER_INTERACTION_RETENTION_DAYS)]);
+    const listServes = await this.database.query(`DELETE FROM evimed_frontier.list_serves WHERE list_id IN (
+      SELECT list_id FROM evimed_frontier.list_serves WHERE served_at < $1::timestamptz ORDER BY served_at LIMIT ${RETENTION_BATCH})`, [before(FRONTIER_INTERACTION_RETENTION_DAYS)]);
     const removed = { entries: entries.rowCount ?? 0, itemChanges: Number(itemChanges.rows?.[0]?.removed ?? 0), hotSnapshots: hotSnapshots.rowCount ?? 0,
-      exposures: exposures.rowCount ?? 0 };
+      exposures: exposures.rowCount ?? 0, interactions: interactions.rowCount ?? 0, listServes: listServes.rowCount ?? 0 };
     for (const [key, value] of Object.entries(removed)) this.retentionTotals[key] += value;
     return removed;
   }
@@ -320,6 +351,10 @@ export class FrontierWorker {
       // The editorial loops the compose hook drives (frontierComposer.mjs).
       composer: this.composer?.status?.() ?? null,
       evidence: this.evidence?.status?.() ?? null,
+      leads: this.leads?.status?.() ?? null,
+      topics: this.topics?.status?.() ?? null,
+      // 追踪 (c3-track 2026-10-25): the approval and guideline records and the congress recaps the pipeline writes.
+      track: this.pipeline?.track?.status?.() ?? null,
     };
   }
 

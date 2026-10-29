@@ -11,7 +11,7 @@ import { gunzipSync } from "node:zlib";
 import { nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
@@ -31,12 +31,11 @@ async function fixture(t, { native = true } = {}) {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-native-app-"));
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl, ovNativeMemoryEnabled: native, openVikingSessions,
+    stateStore: "postgres", requireSharedStateStore: true, databaseUrl,
+    // A deployment without the engine has neither the flag nor a sessions client (OpenViking is not configured).
+    ...(native ? { memoryEngineEnabled: true, openVikingSessions } : { memoryEngineEnabled: false }),
   });
-  // The memory schema is migrated the first time anything asks, and its migration marks every account that already exists
-  // as `legacy` (an account that predates the column). A deployment's schema is there long before a new account is, so the
-  // fixture's account must not be the one the first migration of a fresh database finds.
-  await migrateResearchMemory(app.store.database);
+  await migrateMemorySettings(app.store.database);
   const username = `native${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const user = await app.store.createUser(username, PASSWORD, "Native fixture");
   const address = await app.listen(0, "127.0.0.1");
@@ -53,16 +52,16 @@ async function fixture(t, { native = true } = {}) {
   return { app, base, headers, user, stub, engineUser, sessions: openVikingSessions, seed: (rel, text, extra) => stub.seedMemory(engineUser, rel, text, extra) };
 }
 
-test("a new account takes the deployment's default engine, and the page reads the engine's files", options, async (t) => {
+test("the page reads the engine's files, and the dispatch hands nothing of memory that the engine does not", options, async (t) => {
   const { app, base, headers, user, seed } = await fixture(t);
-  assert.equal(await app.researchMemory.memoryEngine(user.id), "native");
   seed("preferences/tone.md", "Plain language, no flattery.", { type: "preferences" });
   const profile = await (await fetch(`${base}/api/memory/profile`, { headers })).json();
-  assert.equal(profile.data.engine, "native");
+  assert.equal("engine" in profile.data, false, "one engine: the page says nothing of which");
   assert.equal(profile.data.groups.preference.length, 1);
-  assert.equal((await (await fetch(`${base}/api/memory/settings`, { headers })).json()).data.engine, "native");
-  // The run-end extraction and the dispatch's profile give nothing to a native account: the engine does both.
-  assert.equal((await app.residentProfiles.forDispatch(user.id, "default", null, { })).block ?? "", "");
+  assert.equal("engine" in (await (await fetch(`${base}/api/memory/settings`, { headers })).json()).data, false);
+  // The run-end extraction and the dispatch's profile give nothing of the engine's own files: the engine does both.
+  const project = await app.store.createProject(await app.store.userById(user.id), "memory-profile", "Memory profile");
+  assert.equal((await app.residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: null })).text, "");
 });
 
 test("the map draws a native account from the engine's files, with the same document", options, async (t) => {
@@ -92,8 +91,10 @@ test("deleting a project takes the engine's memories tagged with it and its conv
 });
 
 test("the export carries the engine's pack, and deleting the account erases what the engine holds of it", options, async (t) => {
-  const { base, headers, user, stub, engineUser, seed } = await fixture(t);
+  const { app, base, headers, user, stub, engineUser, seed } = await fixture(t);
   seed("preferences/tone.md", "Plain.", { type: "preferences" });
+  // The account is known to the engine's overlay once a conversation has reached it (a run, the gateway); this fixture writes the file directly.
+  await app.nativeMemory.overlay.noteRegistered(user.id);
   const exported = await fetch(`${base}/api/account/export`, { headers });
   assert.equal(exported.status, 200);
   const tar = gunzipSync(Buffer.from(await exported.arrayBuffer()));
@@ -105,21 +106,24 @@ test("the export carries the engine's pack, and deleting the account erases what
   assert.ok(![...stub.files.keys()].some((uri) => uri.startsWith(`viking://user/${engineUser}/`)), "and holds none of its files");
 });
 
-test("readiness says how many accounts the path walk looked at", options, async (t) => {
+test("readiness says the memory engine is on, and what the overlay's worker did on its last pass", options, async (t) => {
   const { base, headers } = await fixture(t);
   const ready = await (await fetch(`${base}/api/ready`, { headers })).json();
   const memory = (ready.data?.checks ?? ready.checks ?? ready.data ?? {}).memory;
-  assert.ok(memory?.native?.enginePaths, JSON.stringify(ready).slice(0, 400));
-  assert.ok(memory.native.enginePaths.examined.native + memory.native.enginePaths.examined.undecided >= 1, "the walk looked at the account (one nothing has asked about yet is undecided)");
-  assert.equal(memory.native.enginePaths.both, 0);
+  assert.equal(memory?.engine, "on", JSON.stringify(ready).slice(0, 400));
+  assert.ok(memory.native?.worker, "the worker's last pass is reported, never required");
+  assert.equal("enginePaths" in memory.native, false, "there is no second path to walk");
 });
 
-test("with the native engine off, an account is on the legacy path and the page says so", options, async (t) => {
-  const { app, base, headers, user } = await fixture(t, { native: false });
-  assert.equal(await app.researchMemory.memoryEngine(user.id), "legacy");
-  const profile = await (await fetch(`${base}/api/memory/profile`, { headers })).json();
-  assert.notEqual(profile.data.engine, "native");
-  assert.equal((await fetch(`${base}/api/memory/remember`, { method: "POST", headers, body: JSON.stringify({ text: "x" }) })).status, 400);
+test("with no memory engine, the memory page and the remember action say so by name, and readiness says memory is off", options, async (t) => {
+  const { base, headers } = await fixture(t, { native: false });
+  const profile = await fetch(`${base}/api/memory/profile`, { headers });
+  assert.equal(profile.status, 503);
+  assert.equal((await profile.json()).code, "memory_engine_unavailable");
+  const remember = await fetch(`${base}/api/memory/remember`, { method: "POST", headers, body: JSON.stringify({ text: "x" }) });
+  assert.equal(remember.status, 503);
+  const ready = await (await fetch(`${base}/api/ready`, { headers })).json();
+  assert.equal((ready.data?.checks ?? ready.checks ?? ready.data ?? {}).memory?.engine, "off");
 });
 
 test("the drawer's links for a native memory are the sources it names; the other three relations are empty", options, async (t) => {
@@ -136,26 +140,29 @@ test("the drawer's links for a native memory are the sources it names; the other
 test("the conversation's forget tool is the page's own deletion: the file leaves, its lines are rejected, and the page can bring it back", options, async (t) => {
   const { app, user, engineUser, seed, sessions } = await fixture(t);
   const uri = seed("preferences/units.md", "Metric units.", { type: "preferences" });
-  const forgotten = await app.nativeMemory.forget({ id: user.id }, { id: "p1" }, uri);
+  const project = await app.store.createProject(await app.store.userById(user.id), "p1", "Memory edits");
+  const forgotten = await app.nativeMemory.forget({ id: user.id }, project, uri);
   assert.deepEqual(forgotten, { removed: true });
   assert.equal(await sessions.read(user.id, uri), null);
   assert.ok((await app.nativeMemory.overlay.rejectedFingerprints(user.id, "preferences")).size >= 1);
   const restored = await app.nativeMemory.undo(user.id, nativeFileId(uri), {});
   assert.equal(restored.undone, "restored");
   assert.equal(await sessions.read(user.id, uri), "Metric units.");
-  assert.deepEqual(await app.nativeMemory.forget({ id: user.id }, { id: "p1" }, `viking://user/${engineUser}/memories/preferences/none.md`), { removed: false });
+  assert.deepEqual(await app.nativeMemory.forget({ id: user.id }, project, `viking://user/${engineUser}/memories/preferences/none.md`), { removed: false });
 });
 
-test("the timeline of a native account is derived from the files' revisions, with the same events as another store's", options, async (t) => {
-  const { base, headers, seed } = await fixture(t);
+test("the map's events of a native account are derived from the files' revisions, with the same events as another store's", options, async (t) => {
+  const { app, base, headers, user, seed } = await fixture(t);
   const uri = seed("preferences/format.md", "Short answers.", { type: "preferences" });
   const record = (await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.find((item) => item.uri === uri);
   const edited = await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, { method: "PATCH", headers,
     body: JSON.stringify({ value: "Short answers, then detail.", expectedVersion: record.version }) });
   assert.equal(edited.status, 200);
-  const timeline = (await (await fetch(`${base}/api/memory/timeline`, { headers })).json()).data;
-  const memory = timeline.items.filter((item) => item.type === "memory");
-  assert.ok(memory.length >= 1, JSON.stringify(timeline.items.map((item) => item.type)));
-  assert.ok(memory.some((item) => item.change === "updated" && /Short answers/.test(item.before) && /then detail/.test(item.after)), JSON.stringify(memory));
-  assert.ok(timeline.density.some((day) => day.memory >= 1));
+  // Keep the fixture inside the observation window even when the local DB clock is slightly ahead of the API clock.
+  await app.store.database.query("UPDATE evimed_memory.native_revisions SET changed_at=$3 WHERE user_id=$1 AND uri=$2", [user.id, uri, new Date(Date.now() - 60_000).toISOString()]);
+  const map = (await (await fetch(`${base}/api/memory/map?include=events,buckets`, { headers })).json()).data;
+  const memory = map.events.filter((event) => event.type === "memory");
+  assert.ok(memory.length >= 1, JSON.stringify(map.events.map((event) => event.type)));
+  assert.ok(memory.some((event) => event.change === "updated" && /then detail/.test(event.text)), JSON.stringify(memory));
+  assert.ok(map.buckets.series.some((day) => day.memory >= 1), JSON.stringify(map.buckets));
 });

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { HttpError, safeId } from "./security.mjs";
 
 function remotePathOf(value) {
@@ -136,6 +137,21 @@ export class OpenListSourceConnector {
   async stat(userId, value) {
     const item = await this.client.stat(this.scoped(userId, value));
     return { ...item, path: this.relative(userId, item.path) };
+  }
+
+  /** Capture only the exact registered provider version. @param {string} userId @param {any} input */
+  async capture(userId, input) {
+    const remote = input.connector.id;
+    const current = await this.stat(userId, remote);
+    const expected = `sha256:${input.sha256}`;
+    if (current.providerHash?.toLowerCase() !== expected || current.size !== input.size) {
+      throw new HttpError(409, "openlist_source_changed", "The OpenList file changed before capture.");
+    }
+    const bytes = await this.read(userId, remote);
+    if (bytes.length !== input.size || createHash("sha256").update(bytes).digest("hex") !== input.sha256) {
+      throw new HttpError(409, "openlist_source_changed", "The OpenList bytes do not match the registered version.");
+    }
+    return bytes;
   }
 
   async read(userId, value) { return this.client.read(this.scoped(userId, value)); }

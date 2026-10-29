@@ -17,13 +17,13 @@ describe("the address a sign-in goes back to", () => {
   });
 
   it("falls to the front door for a next that is missing or hostile", () => {
-    expect(LOGIN_DEFAULT_RETURN).toBe("/app/chat");
-    expect(loginReturnTarget("")).toBe("/app/chat");
+    expect(LOGIN_DEFAULT_RETURN).toBe("/app/home");
+    expect(loginReturnTarget("")).toBe("/app/home");
     for (const next of [
       "//evil.example", "/\\evil.example", "/\t/evil.example", "https://evil.example", "javascript:alert(1)", "/login", "/app/../login", "/app/%2e%2e/login",
       "/app/%2f%2fevil.example", "/app/%5cevil.example", "/app//evil.example", "/app/chat%0d%0a", "/app/聊天",
     ]) {
-      expect(loginReturnTarget(new URLSearchParams({ next }))).toBe("/app/chat");
+      expect(loginReturnTarget(new URLSearchParams({ next }))).toBe("/app/home");
     }
   });
 });

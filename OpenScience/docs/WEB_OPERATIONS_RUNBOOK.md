@@ -181,6 +181,22 @@ services with `compose up --no-build --pull never`. The host preflight keeps a
 10 GiB default floor and refuses overrides below 5 GiB. Build/transfer success
 alone is not deployment or OPS03 acceptance.
 
+## Knowledge and memory consistency operations (2026-10-23)
+
+Knowledge resources and native memories use the same OpenViking service, with different authority and namespaces. The deployment has one upstream account; EviMed users and project subscopes remain opaque mapped identities. PostgreSQL owns source eligibility, versions, personal-library membership, capsule activation and the native-memory overlay. Native memory text remains engine-owned. A personal library shares only within its owning EviMed account.
+
+Source registration publishes immutable version paths before advancing the ledger. The existing source-sync job ledger also carries revision-bound source/library lifecycle work. A remote runtime replica is acknowledged only after its current runtime identity and content digest are verified. Deferred, failed and uncertain work remain observable and retryable; a stale generation cannot make itself current. Do not delete immutable originals to repair an index.
+
+The operator metrics distinguish `source_sync`, `wiki_compile`, `capsule_index`, `native_extraction` and `native_admission` through `open_science_knowledge_queue_*`: observation availability, retained item states, unresolved age, attempts beyond the first, and last successful completion. A missing/unreadable ledger is unknown, not a healthy zero. Counts contain no account/source identifiers. These durable gauges complement the existing process counters and platform-purpose cost ledger; upstream calls without trustworthy tenant attribution remain platform costs. Alert thresholds for shared-engine latency must come from the controlled load run, not an invented SLA.
+
+Before publication migration, run `scripts/ops/source-publication-inventory.mjs` with the configured database and an optional protected roots manifest. It is read-only and reports merged-note ambiguity, conflicting families and original-byte hash mismatches. Preserve its report privately. A hash mismatch cannot be repaired by silently overwriting the only original; restore verified historical bytes when available and retain unresolved evidence otherwise.
+
+An empty explicitly selected-source scope returns no knowledge. Clearing that restriction uses `sourceScopeMode: "project"`; `"selected"` with an empty list remains empty. Source revocation immediately removes retrieval eligibility even if asynchronous engine deletion is delayed. Historical chat text and previously exported files are not remotely erased.
+
+Knowledge-page edits retain the unsaved draft and its original citation mapping when recompilation creates a new source version. The reader offers an explicit comparison before another save. Current quotation labels include verification time and source version; reparse changes invalidate the cached check. Missing locators remain unknown.
+
+Native external episodes stay candidate notes until an existing confirmation route is called. Durable admission preserves the candidate revision, native session/task and resulting record IDs; ambiguous append/commit outcomes are inspected before retry. Use-memory and learn-memory remain separate controls. A snapshot rechecks native file hashes before capsule publication; share revocation prevents future imports, not erasure of recipient copies already imported.
+
 ## Full rebuild on the isolated CI runner
 
 For a dependency upgrade, push the reviewed candidate to a `codex/release-*`
@@ -205,6 +221,45 @@ services: validate those against the candidate's protected configuration before
 opening traffic. Preserve tenant volumes, credentials and tested backups;
 recreate the selected services using `--no-build --pull never`, then complete
 the deployment checks below. Keep other products on a shared host untouched.
+
+For the owner-authorized test-stage cutover without rollback retention, a first
+import may instead use the verified private loopback registry. This bootstrap is
+separate from `release-images.mjs`'s measured-pull procedure: a new image cannot
+have a previous target-engine peak or target-host smoke result. Keep that
+command's evidence requirements unchanged. Bind the successful CI artifact to
+its exact source, config and ordered layers. Any private skill overlay must be
+assembled outside the serving host, limited to the approved data paths and seed
+seal, with unchanged execution configuration and a recorded base-to-final digest
+chain. Pull only the final single-platform manifest digest.
+
+Before this bootstrap, derive a conservative storage upper bound from verified
+blob sizes, expanded layer entries, block allocation and metadata, the actual
+storage driver, retained compressed content, concurrent downloads and unpacking
+or snapshot copies. Include bounded smoke/log writes and an explicit growth
+reserve. Each physical filesystem must retain at least **5 GiB plus that growth
+reserve**, matching the existing hard minimum; this explicitly replaces the
+archive path's 10 GiB floor for this scoped procedure. Missing bounds or capacity
+refuse the operation. Authorized old-runtime removal may precede the import
+after baseline evidence is saved; count only actually reclaimed space.
+
+Monitor the owned digest pull and subsequent smoke from before their first
+writes through completion. Unreadable capacity/identity probes or a breached
+reserve stop the owned operation; confirm daemon work stopped before retrying.
+After import, verify the exact native image config, platform and ordered rootfs,
+then run the original smoke, relocated seed/seal and effective private-skill
+catalogue checks before activation. Record admission **upper bounds** separately
+from sampled observations of this transfer; neither is fabricated prior peak
+evidence. Preserve all tenant data and unrelated services.
+
+The knowledge-source plugin is a separate thirteenth image: the Web workflow's
+full twelve-image archive does not include `docker-compose.knowledge.yml`.
+The independent `knowledge-plugin` workflow tests it against disposable
+PostgreSQL, qualifies the built amd64 image with crawling disabled, and exports
+`evimed-knowledge-plugin-release-<sha>` on the same tagged release pushes. Bind
+its checksum, native config digest, ordered layers, source revision and workflow
+receipt before changing `EVIMED_KNOWLEDGE_PLUGIN_IMAGE`; a Web archive alone
+cannot deliver a plugin source change. Its qualification uses only disposable
+credentials and does not certify production crawl or browser/relay access.
 
 For a drained switch, acquire a durable maintenance lease under the deployment
 lock, verify that its activity is known and idle, and pass the same request ID
@@ -442,32 +497,54 @@ stderr; restarting it releases them.
 
 The switch runs `scripts/ops/ui-walk.mjs` in a throwaway container of the
 release's runtime image (it carries Node, Chromium and the Playwright driver;
-the host has none of them) with host networking, as the account
-`/srv/evimed-science/shared/ui-walk.env` names. Without that file the switch
-prints `UI WALK NOT RUN` and exits 0. Set it up once:
+the host has none of them) with host networking, and the file
+`scripts/ops/throwaway-account.mjs` mounted beside it. Without
+`/srv/evimed-science/shared/ui-walk.env` the switch prints `UI WALK NOT RUN` and
+exits 0. Set it up once; it names the address and the switches and **no account
+and no password**:
 
 ```bash
-read -rsp "acceptance account password: " walk_password; echo
-printf '%s\n' "$walk_password" | sudo sh -c 'umask 077; cat > /srv/evimed-science/shared/secrets/ui-walk-password'
-unset walk_password
 sudo tee /srv/evimed-science/shared/ui-walk.env >/dev/null <<'EOF'
 OPEN_SCIENCE_WALK_BASE_URL=https://<the public origin, as a browser reaches it from this host>
-OPEN_SCIENCE_WALK_USER=<owner-account>
-OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=/srv/evimed-science/shared/secrets/ui-walk-password
 OPEN_SCIENCE_WALK_CHAT=1
 EOF
 sudo chmod 0600 /srv/evimed-science/shared/ui-walk.env
 ```
 
-The password file is mounted read-only into the walk and never passed as a
-value. The walk refuses every `start_runtime` a page makes (the shell warms
+The walk signs in as nobody (owner, 2026-10-25: production keeps no test
+account). It registers an account of its own through the product's
+self-registration (`walk-<UTC yyyymmddHHMM>-<6 hex>`, a random password held in
+memory and never printed or written), walks as it, and deletes it through the
+product's own `DELETE /api/account` at the end, on a pass, a failure and an
+interrupt. Its output has one line `account created: walk-…` and one
+`account deleted: walk-…`; an account it cannot delete is a `FAIL account walk-…
+was NOT deleted (<the product's reason>)` line and a failed walk, because nobody
+can sign in to it again: an operator removes it (the id says when it was made).
+So the deployment must take new accounts (`OPEN_SCIENCE_SELF_REGISTRATION_ENABLED`,
+on by default); a deployment that does not stops the walk before any page with
+`registering walk-… was refused (403 self_registration_disabled)`. The account
+holds nothing, so the pages that need an object of the account's own (a GEO
+project, a study, a received pack, a finished PDF in the knowledge base) are
+reported as coverage gaps, as they are for any account without them; the
+`fixture` profile is where those pages are read with data. The release switch
+empties `OPEN_SCIENCE_WALK_USER` and `OPEN_SCIENCE_WALK_PASSWORD_FILE` whatever
+the file says, and the production walk refuses both when it is started by hand
+(they belong to the `fixture` profile: the account a local control plane was
+seeded with); an `ui-walk.env` written before 2026-10-25 that still names an
+account and a password file is shorter now, and its password file can be
+deleted. The walk refuses every `start_runtime` a page makes (the shell warms
 the account's default runtime from every page) and counts them in its report;
 only the chat page, walked when `OPEN_SCIENCE_WALK_CHAT=1`, may start the
-runtime it needs. With the chat page asked for, the walk also waits up to 135 s
+runtime it needs, and a new account has none: the walk starts it through the API
+first, while the browser is idle, because the host's network changes when an
+account's first runtime container starts and Chromium aborts what it is loading
+then. With the chat page asked for, the walk also waits up to 135 s
 for the shell to give up on a cleanup the walk itself reports as unfinished
 (`OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips the wait). The base URL
-must be the public origin — logout is checked against it — so if this host
+must be the public origin, so if this host
 cannot reach its own public address, add that name to the host's `/etc/hosts`.
+A host script that runs the walk by hand (a `rewalk.sh`) mounts both
+`ui-walk.mjs` and `throwaway-account.mjs` into `/walk`, as the switch does.
 
 What the walk writes, and what it fails on (R19). Report, pictures and facts go
 to `/srv/evimed-science/shared/ui-walk/<release>/`: `report.json`, and for every
@@ -496,9 +573,9 @@ reached`) is a failure that no entry accepts. The baseline is carried inside
 names another, `none` accepts nothing.
 
 The baseline has two sets of debts. `OPEN_SCIENCE_WALK_PROFILE=owner` (the
-default) is the release walk on the owner-view account, whose empty pages
-cannot be observed: an entry for `not-observable` or `not-walked` may be given
-to it. `fixture` is the local walk on the data-rich fixture (`--url` of a
+default; the name is the one the baseline files carry) is the production release
+walk on a throwaway account that holds nothing, whose empty pages cannot be
+observed: an entry for `not-observable` or `not-walked` may be given to it. `fixture` is the local walk on the data-rich fixture (`--url` of a
 harness control plane), which accepts no coverage gap. **Rehearse before a
 candidate that changes the walk or the pages is switched**: the host's
 `rewalk.sh <tag> <candidate ui-walk.mjs>` (a host script, not in this
@@ -687,20 +764,18 @@ not sufficient containment for those events.
   non-secret status directory read-only. Web verifies its age, restore/cleanup
   proof and actual PostgreSQL system identifier, database OID and name. The
   tracked empty default directory preserves non-PostgreSQL local deployment;
-  it is not a production restore receipt. This database dump carries research
-  memory, whose notes and structured records are rows in the `evimed_memory`
-  schema. It does not cover separate attachment volumes, the OpenViking engine
-  volume or OpenList configuration. The engine volume has a capture of its own
-  since v0.5.0 (next item): it holds native memory and compiled knowledge that
-  exist nowhere else. The copies of PostgreSQL's records it also holds are
-  rebuilt after a restore of either side with
-  `pnpm rebuild:memory-index --all`. A memory's validity (`valid_from`,
-  `invalid_since`), what replaced it (`superseded_by`), the statements it
-  disagrees with (`record_conflicts`) and the sources it rests on
-  (`record_sources`, by `src_` id or DOI) are columns and tables of that same
-  schema, so the dump carries them and a restore needs nothing more; the index
-  holds each memory's text and nothing else, and recall decides validity and
-  conflict from PostgreSQL when it reads.
+  it is not a production restore receipt. This database dump carries what
+  PostgreSQL holds about memory: the person's switches, the overlay of facts
+  about the engine's memory files (its commit ledger, file revisions, source
+  links, the forgotten list) and the memory capsules, all in the `evimed_memory`
+  and `evimed_product` schemas. It does not cover separate attachment volumes,
+  the OpenViking engine volume or OpenList configuration. The engine volume has
+  a capture of its own since v0.5.0 (next item): it holds native memory and
+  compiled knowledge that exist nowhere else. The capsule facts it also holds as
+  a recall index are rebuilt after a restore of either side with
+  `pnpm rebuild:memory-index --all`; a source's state on a memory file
+  (`retracted`, `changed`, `expired`, `removed`) is a row of the overlay, so the
+  dump carries it and a restore needs nothing more.
 - The dump also leaves out the rows of `evimed_frontier.item_vectors`, the
   frontier feed's embeddings (derived from the items the dump does carry, and
   otherwise the largest table in every retained archive). The table's
@@ -745,38 +820,9 @@ not sufficient containment for those events.
   Readiness does not read this receipt: an outage of the plugin database
   degrades 「前沿动态」, not the platform, and the unit's own failure is what
   `systemctl --failed` shows.
-- The retired usememos store still has tables in the `public` schema of the
-  platform database (twelve on 2026-09-26, carried into every nightly backup,
-  read by nothing) and credential files under `shared/secrets`. Retire them
-  once research memory's import is accepted:
-
-  ```bash
-  cd /srv/evimed-science/current/OpenScience
-  sudo python3 scripts/ops/retire-usememos-tables.py            # dry run: tables and row counts
-  sudo python3 scripts/ops/retire-usememos-tables.py --apply    # archive, verify, drop
-  ```
-
-  It refuses unless every table in `public` is one usememos (or the EviMed
-  import beside it) created, printing any other name (`--also NAME` admits one
-  after a look); dumps exactly those tables, encrypts the dump with the backup
-  passphrase and decrypts it back before dropping anything; and drops them in
-  one statement without CASCADE. The archive stays in
-  `shared/backups/usememos-retired/` (0700; archive 0600, with its `.sha256`),
-  outside the thirty-day rotation. An account erased from the platform takes its
-  rows out of these tables while they exist; the archive is a dump and cannot be
-  edited in place, so the platform records each erased account by the two digests
-  the retired store knew it by (`evimed_memory.retired_erasures`) and
-
-  ```bash
-  sudo python3 scripts/ops/retire-usememos-tables.py --forget-erased
-  ```
-
-  re-seals every archive against that ledger (restores it into a scratch database
-  of the same server, deletes those rows, dumps, encrypts, decrypts back, replaces
-  the archive and its `.sha256`, drops the scratch database; an archive with
-  nothing to forget is left untouched; the role needs `CREATEDB`). Run it after
-  accounts have been erased, and before an archive is restored anywhere. Then the
-  credential files, once nothing names them:
+- The retired usememos service left credential files under `shared/secrets` and orphaned `web_evimed-memos-*` volumes on a host that
+  ran it (its tables, and the script that archived them, are gone: production never held either). Remove the files once nothing names
+  them:
 
   ```bash
   sudo ls -l /srv/evimed-science/shared/secrets/memos-*
@@ -855,20 +901,20 @@ not sufficient containment for those events.
   docker volume rm web_evimed-openviking-data && docker volume create web_evimed-openviking-data
   sudo node --env-file=deploy/web/.env scripts/ops/openviking-backup.mjs restore "$A" web_evimed-openviking-data
   $COMPOSE up -d --no-build --pull never evimed-openviking
-  pnpm rebuild:memory-index --all   # the copies of PostgreSQL's records, which may be older than PostgreSQL
+  pnpm rebuild:memory-index --all   # the capsule facts' recall index, which may be older than PostgreSQL
   ```
 
   `restore` refuses a volume that holds anything, and checks every file
   against the archive's manifest as it lands. Wait for
   `checks.memoryIndex.engine.ok` in `/api/ready` before declaring it done: the
-  engine's own facts (version, templates, skills, the Compile shim) are read
+  engine's own facts (version, templates, skills, Compile's identity) are read
   again within five minutes. Drilled 2026-10-13 on a check container started
   from this repository's compose definition: 180 of 180 files of 8 accounts
   byte-identical, tags and search results unchanged, every engine fact true
   (`.evimed-local/acceptance/course-correction-20261012/live/ovbase/backup-restore/`).
-  A volume written by v0.5.0 is not readable by v0.4.x: going back below the
-  pin is a restore of a copy taken under the older release, never a downgrade
-  in place.
+  A volume written by v0.5.0 is not readable by v0.4.x, nor one written by
+  v0.5.1.1 by v0.5.0: going back below the pin is a restore of a copy taken
+  under the older release, never a downgrade in place.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,
@@ -1062,6 +1108,25 @@ so it holds nothing and the conversation stays open; a person's cancel holds the
 asked for). The study page reads `activity` / `next` / `stepSummaries` from `GET /api/vcr/studies/:id`; a press of a step answers
 `{ accepted, runId, step, queuedBehind }` and no session to go to.
 
+### `memory_gateway_unauthenticated` and `evimed_workload_token_invalid` in bursts (2026-10-19)
+
+A runtime that is being stopped — the platform's evidence runtime yielded at the ceiling, an idle runtime past its
+timeout, the runtimes of an account or project being deleted — is taken out of the runtime manager before its container
+stops, and while the container shuts down the OpenViking memory plugin flushes its sessions and the tool servers finish
+their calls. Those requests carry a token whose runtime is no longer active, and every gateway refuses them by name:
+`open_science_workload_token_refusals_total{reason="runtime"}`, `open_science_memory_gateway_refusals_total{code="memory_gateway_unauthenticated"}`,
+`evimed_workload_token_invalid` on `/internal/tooluniverse/v1/rpc`. Nothing is lost: a platform-started turn's own messages
+are never forwarded to the engine, an attended turn is committed by the control plane a few seconds after it ends
+(`nativeTurnCommit.mjs`), and the engine's idle commit takes whatever stays pending. Measured on R19.1: 27 of 28 memory
+refusals fell in the half hour the acceptance runs deleted their throwaway accounts, the rest while the evidence runtime was
+yielded, none in seven hours of researchers' use. A refusal with `reason` other than `runtime`, or a burst while no runtime
+is stopping, is not this and is worth a look.
+
+`open_science_attendance_receipt_write_failures_total{origin="native"|"dispatch"}` counts the signed attendance receipts
+(`.evimed-brief/attendance/`) the control plane could not write, or mirror to a remote runtime, before forwarding a prompt.
+The prompt is forwarded anyway; the turn reads as unattended (no question to the person, no task changes) unless its native
+route snapshot proves a person. A steady rise means the workspace disk or the AgentBay file API is failing, not the receipts.
+
 ### NCBI's file server refuses a public GEO file
 
 `gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
@@ -1117,6 +1182,103 @@ inferences the researcher's own later message made their own word; nothing asks 
 medicine it names any more: a record parked under that rule is put in force the next time it is observed, or when its owner
 confirms it on the memory page.
 
+Since 2026-10-24 the block of a conversation inside a project also leads with that project's card (the six general slots, at most 1,500
+characters, handed once per conversation, never for the default or an internal project or an unattended turn; the read is bounded by
+`OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS`, default 1500), and a native account's block carries its own capsule's profile entries
+beside the plugin's listing. `open_science_memory_resident_card_total{outcome}` counts the card read (`read`, `empty`, `unread`,
+`timeout`); a `timeout` that grows means the card read is slower than its bound and conversations start without it.
+
+### Memory, the capsule and the learning loop: what to read after the 2026-10-23/24 rectification
+
+The legacy memory engine (2026-10-25). Every account's memory is OpenViking's, and a deployment without OpenViking has memory off (`/api/ready`
+`checks.memory.engine` is `off`; a status, never a fallback). The first start after the release runs `legacyMemoryRetirement.mjs` once,
+under an advisory lock, and says what it did in one `legacy memory:` log line and in `open_science_legacy_memory_retirement_total{outcome}`:
+`dropped` (the five record tables and the two engine columns of `evimed_memory.settings` were empty and are gone), `kept_records` or
+`kept_legacy_accounts` (a table or an account row still holds legacy data: nothing is dropped, the account export carries the records as
+`legacyRecords`, and a person decides), `absent` (nothing to do), `index_withdrawals_queued` (the index's copies of the retired records,
+`memories/evimed/{user,project,session}` of every account, were queued once for withdrawal through the ledger the index worker drains;
+the capsule's own tree is never named), `jobs_deleted` (queued `memory-record-index` jobs, which nothing claims any more) and `failed`
+(the next start asks again). Rows that exist are never deleted by it.
+
+Native memory, as of 2026-10-25. Counters of what the memory package added: `open_science_native_memory_observations_total{outcome}` (a note two conversations wrote
+was `promoted` to a preference, held back as `empty`, or the pass `failed`; a note one conversation wrote is not counted), `…_reset_sweeps_total{outcome}` and
+`…_reset_swept_files_total` (an extraction a reset found running: its files taken out when it ended, a task the engine no longer held, still `waiting`; a sweep that stays
+`waiting` for a day closes as `unknown`), `…_extraction_failures_total{reason}` (`budget_exhausted` is v0.5.2's fail-fast on an output that ran out of room), `…_privacy_config_deletes_total{outcome}`
+(`failed` above 0: the engine answered something but 404 to the deletion of a session's privacy configuration), `…_policy_syncs_total{outcome}` (`rewritten`: an account's stored type
+allowlist predated a type and was rewritten), `…_forget_duplicates_total{outcome}`, `…_recall_notes_total{outcome}` and `…_imports_total{outcome}` (`rate_limited` above 0 means
+`OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR` is low). `evimed_memory.native_files.last_recalled_at` and `recall_count` say when and how often a file was recalled; nothing acts on them (the
+retention period stays unset). `evimed_memory.native_reset_tombstones` holds what a reset could not wait for; `native_line_origins` the first commit of each line; `native_imports` the
+import offers waiting an hour.
+
+Native memory. `node scripts/ops/native-commit-report.mjs --user <id> --since <date> --text` says why a commit wrote nothing
+(`proposed_nothing`: the model proposed nothing; `only_skipped`: the engine refused, with its reason codes; `--backfill` writes the facts
+onto ledger rows settled before the column existed; the engine's task records are kept about a day, the diff's own
+`skipped_operations` answers after that). `node scripts/ops/native-silent-zero-audit.mjs --days 14 --min-commits 1` lists the accounts
+whose commits all extracted nothing (report only). Counters: `open_science_native_memory_commit_operations_total{outcome}`
+(`wrote`, `wrote_and_skipped`, `only_skipped`, `proposed_nothing`), `…_skipped_operations_total{reason}`,
+`…_rejection_judge_total{outcome}` (`over_budget` above 0 means `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS`, 40 per account
+per UTC day, is too low) and `…_consolidation_total{outcome}`. A removed line's normalised words (at most 400 characters) are kept on its
+rejection row so that a reworded repeat is caught; they are never shown and go with the rejection (the person's restatement, a reset,
+the account). The native 重读旧记忆 is on by default since the lab probe of 2026-10-24 (the request accepted, the task done in 8 s, its result recorded
+as `packages/contracts/openviking/fixtures/memory/consolidation-task.json`): at most once per account every
+`OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS` (7) days and only after its files changed. Watch `…_consolidation_total` go
+`submitted` then `completed`, read the revisions (`reason='consolidation'`, actor `engine`) in `evimed_memory.native_revisions`, and undo
+one from the page; `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=false` turns it off. No retention period is promised for a native
+memory; none is configured.
+
+The capsule. The first start of a release that carries `capsuleOneCapsule.mjs` writes one stderr line per account with something to fold
+(`capsule one-capsule: user=… notes_capsules=N entries=N lists=N left=N`, and `dropped_from_force=<capsule>@<project>,…` when a project's
+packs did not fit the account's eight); none repeats on the next start. After it, as SQL: `select count(*) from evimed_product.documents
+where kind='capsule' and id like 'runtime-notes:%' and deleted_at is null` and the same for `kind='preferences' and id like
+'active-capsules:project:%'` are 0, and the former notes are facts of `account-capsule:%` with a `project_id`. The folded capsules are in
+the trash, restorable; there is no reverse pass. `open_science_memory_index_withdrawals_pending` returns to 0 within minutes (the emptied
+capsules' index subtrees are withdrawn). `open_science_capsule_runtime_refresh_total{outcome=asked|failed}` counts the refreshes that
+enabling or disabling a pack asks of the account's running runtimes. `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` is on by default, so a
+deployment's private override that pins it `false` turns sharing off by value: check `GET /api/me` → `features.capsuleShare`.
+
+The official starter packs (2026-10-25). The folder `capsules/official/` (one folder per pack, one `<method>.md` per method, `pack.json` for the card) is
+published at every start by the publisher account 「EviMed 证据中心」: a pack whose content hash is the one already published is left alone, a changed one is
+scanned once, sealed and signed, and continues the version before it (`open_science_official_pack_publications_total{result}`, `…_scans_total{model}`,
+`…_adoptions_total{result}`, `…_source_issues_total{issue}`: a pack the folder reader refused is named there and in one stderr line `official pack <id>: …`). Every ordinary
+account gets its copy when it first reads its capsules, enabled, apart from the eight in force; a pack it switched off stays off across versions. The mount offers
+an official method last and below the person's own: `open_science_official_method_mount_total{result}` counts what was offered and what a person's own method
+about the same thing kept out (`leftOutPersonal`; the closeness is in the run's receipt), and `deltaUnread` when it could not be read; `…_method_opened_total` and `…_method_applied_total{outcome}` count the runs that opened one and what the person did next. Outcomes of the runs that opened one are folded across accounts into one
+record per method body; harm shown by the same sequential test a learned method's own runs go through stops that body for everyone
+(`…_method_stopped_total`). `node scripts/ops/official-packs.mjs` reads the published packs and every body with outcomes or a stop; `--restore
+<official:pack:method> <body hash>` gives a stopped body back, counted from nothing. A person's general method can join the pack 「大家的做法」 after the
+promotion gates (`OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` on, `…_PER_DAY` 3; it needs the learning loop, the official packs and a review provider that is not DeepSeek, and
+asks nothing of a model otherwise): `open_science_official_promotion_total{state}`, `…_rejected_total{reason}`, `…_activated_total`, `…_harm_checks_total{outcome}`,
+`…_harm_check_skipped_total{reason}` (J23 ships uncalibrated, so the harm check reads `skipped` until it is calibrated), `…_reviewer_configured`. No notice names an account.
+The capability-handbook arm is gone: the start deletes any `capability-handbook` / `handbook-candidate` method record and `evolution-handbook-*` record left in
+a database, cancels the arm's queued jobs and says it in one stderr line `handbook arm retired: …`; `handbook arm: N platform handbook tool(s) are still
+published` means the evolution module still serves handbook tools, which it retires through its own review.
+
+The learning loop. `node scripts/ops/learning-evidence-report.mjs [--user <id>] [--json]` reads the evidence ledger (read-only);
+`node scripts/ops/learning-sweep.mjs --all` is a report for every account that holds a method naming a retired feature, `--user
+<id> --apply` retires them restorably (reason `stale_feature`), `--user <id> --restore` gives back everything it put away. Counters: `open_science_learning_evidence_total{evidence,verdict}`, `…_evidence_last_at{account}` (the time of an
+account's last learning evidence, the account as twelve hex characters), `…_lessons_total{trigger}`, `…_trigger_refused_total{reason}`,
+`…_evidence_failed_total{reason}` (`adopt_unconfirmed`: the second reading of an `adopt` said something that is not accept, preference, correction or adopt; `adopt_without_delivery`), `…_follow_up_judge_total{outcome}` (`adopt_confirmed` / `adopt_disagreed` are the second reading of an `adopt` with the examples in the other order; `examples_embedding` / `examples_ngram` say how the request's nearest examples were chosen: the knowledge base's embedder, or character n-grams when it is down; `steer_judged`), `…_evidence_quotes_total{outcome}`, `…_mount_selected_total{reason}`, `…_mount_ranked_total`,
+`…_method_applied_total{outcome}`, `…_consolidate_noop_total{reason}`, `…_relations_total{type}`, `…_replay_total{outcome}` and `…_replay_judged_total{verdict}`
+(the replay of a rewritten method against up to five runs the person accepted: two grounded contradictions take the newer version out, restorably),
+`…_script_total{outcome}` (the programs a clean run carried, found by format and normalised by Python in the runtime controller's disposable container; the same
+program in three runs of two conversations queues one `script` lesson, whose occurrences are `evimed_learning.script_uses`) and `…_code_skill_total{outcome}`
+(a method that carries scripts is written only after its scripts and their tests have run there: `failed` writes no method, `unavailable` retries the lesson) and the
+retirement codes `superseded`, `unproven_merge_expired`, `library_cap`, `replay_regressed`; `open_science_learning_spend_cny` is where the follow-up judge's calls show (purpose `learning`).
+The job kind `learning-evidence` is the settling of a run 30 minutes after it ended; a memory reset cancels it with the rest of the
+account's learning. Evidence kinds are `steer` (read by the same judge when the run finishes, at most the newest three, in the background: a steer
+the judge could not read is kept unjudged and is a correction), `follow-up` (verdicts `correction`, `preference`, `rejection`, `accept`, `none` and `adopt`),
+`result-corrected`, `used` (the owner opened or downloaded a delivered file of a finished run through `/api/files/preview|download` or the kernel
+frame's file panel; once per run, no words) and `silent`. Since 2026-10-25 silence is unknown, not approval: a run is clean (for a routine, a script
+lesson and a method's `appliedClean`) only when it was accepted, adopted or used and never corrected, so an account whose files nobody opens and whose
+next messages are about other things teaches no routine. An `adopt` makes the run clean and queues a `distill` lesson with trigger `adopted` at
+once; the judge's example bank is `packages/domain/src/follow-up-examples.json`, calibrated with `node evals/follow-up-judge/run.mjs`. The report script
+counts `kept 30d` (acceptances, adoptions and uses) beside `corrected 30d`. `OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE` is gone: a run's `delivered` sample no longer exists. A `consolidate` job with
+`action: "replay"` is one rewrite's replay (queued by a distillation that amended a method and by a pass that merged methods; its result names `outcome`,
+`replayed`, `contradictions` and, when it took the newer version out, `reason: "replay_regressed"` and `restored: "rollback" | "retire"`). The
+consolidation pass's result lives on the job (`evimed_product.jobs`, `kind='consolidate'`): `shortlist.mode`, `shortlist.topScore`, `shortlist.p50` and `shortlist.p90` (the cosines of each method's
+five nearest neighbours, the ones the 0.50 candidate floor refused included: move the floor by them, not by a guess), `groupsFormed`, `groups`, `skippedUnchanged`, `noop[]`, `relations`, `levels`; a second pass in the
+same hour must skip every group and dispatch no `method-relations` run.
+
 ### The knowledge base's document types after R10
 
 Until R10 the first pass called every PDF or Word file a published paper, every table 「队列数据」 and read a file named `review` or
@@ -1134,16 +1296,20 @@ report's `format` count: those documents were not named by the judge, and a 「�
 readable document's captured text is pushed to the engine as a resource (`ov-resource-sync` jobs, reconciled every
 `OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS`), and OpenViking's own Compile writes the project's wiki and its knowledge graph
 with the official `llm-wiki` and `knowledge-graph` skills. `knowledgePageService.mjs` only schedules it and keeps the product's
-copy. A round runs per project, ten minutes after the last change to its documents (`..._DEBOUNCE_MS`) and only once five
-documents are readable (`..._MIN_SOURCES`), within the account's `knowledge` caps (`..._DAILY_LIMIT_CNY` 10, `..._WEEKLY_LIMIT_CNY`
-40; 0 = no cap), and not at all once the target holds 100 typed pages — the engine's own limit of 128 is destructive at this pin,
-so the state reads `limited` and what is compiled stays as it is. After each task the service mirrors the engine's files by content
+copy. A round runs per project, ten minutes after the last change to its documents (`..._DEBOUNCE_MS`) and only once one
+document is readable (`..._MIN_SOURCES`, default 1), within the account's `knowledge` caps (`..._DAILY_LIMIT_CNY` 10,
+`..._WEEKLY_LIMIT_CNY` 40; 0 = no cap). There is no page limit at v0.5.1.1 (the platform's own stop at 100 typed pages was removed on
+2026-10-23: a target of 140 pages was compiled twice with no page changed), but a compile reads the whole existing wiki, so a large
+wiki costs more per round, and the caps move now that the tokens are read from `meta.pipeline.tokens` — watch the `knowledge`
+purpose's spend for the first week. A `completed` task can be partial (`warnings` on the status and on the round) and about one compile
+in four of a small corpus wrote only `index.md`; a person's save that meets a page the engine changed since is dropped and counted
+(`open_science_knowledge_mirror_total{event="write_back_conflict"}`), because the next round re-applies their blocks. After each task the service mirrors the engine's files by content
 hash into the knowledge base under `knowledge-base/wiki/` and `knowledge-base/kg/` (the 知识页 filter of 知识库), puts back a
 person's edits a recompile dropped, and labels each quotation ✓ or ⚠ against the document it names; a label never withholds a
 page. A changed, replaced, removed or retracted document labels the pages that link to it and queues the next round. The engine
 down stops compiling and nothing else: uploads, search and the pages already mirrored are unaffected. The engine's model calls
 are the platform's cost under the `knowledge` purpose (see "The model path" in `WEB_DEPLOYMENT.md`). To read it: `GET
-/api/knowledge-pages?projectId=` (state, last compiled, pages against the limit), the `wiki-compile` and `ov-resource-sync` jobs,
+/api/knowledge-pages?projectId=` (state, last compiled, pages), the `wiki-compile` and `ov-resource-sync` jobs,
 and `checks.memoryIndex.engine` in `/api/ready`. `evals/knowledge-pages` is the offline instrument for whether pages help an
 answer; its 2026-10-12 run, on the pages of the self-built compiler since removed, did not show pages raising cross-document
 answer quality over a decomposition instruction (+0.014, interval −0.053 to 0.085), so their value is browsing, accumulation
@@ -1151,6 +1317,12 @@ and the graph.
 
 `OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` (default off since 2026-10-13) is whether each readable document's summary and key claims
 are written into the memory capsule's `sources` layer. Off stops new writes only; what was written goes when its document does.
+
+### The frontier feed's use and supply, and indexing the public evidence pages (2026-10-22)
+
+`GET /api/ops/frontier-usage?days=14` (1 to 90, the scrape token like `/api/ops/metrics`; 404 `frontier_not_enabled` while the feed is off) gives, per day in the feed's time zone and newest first: distinct readers, item reads, event reads, stars, follows, the frontier's inbox notices by family (`daily`, `weekly`, `safety`, `zone`) and outcome (`delivered`, `opened`, `feishu_delivered`, `feishu_opened`), the frontier model's requests and settled spend against the day's budget; and, once, the mirrored sources by state, health and type, the discovery counts and the paid providers' last 24 hours as the knowledge plugin reports them. A figure that could not be read is `{ value: null, reason }`, never 0: a plugin older than contract 1.4.0 has no `providers` or `discovery`, a deployment without the inbox has no notice figures. Everything is counted from tables the feed already holds, so three figures are not what a log would say: an item's read is the reader's last open of it (opening it again later moves it to the later day), a star or follow taken back is not counted, and `feishu_opened` is an inbox item that was sent on Feishu and has been read (the app marks it, Feishu does not report a tap). `/api/ops/metrics` carries today and yesterday of the same figures as `open_science_frontier_usage_*`, plus `open_science_frontier_discovery_today{stage}` and `open_science_frontier_provider_*{provider}`; no label holds an account or a day.
+
+Indexing the public evidence pages needs, together: `OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED=true`, `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE=true`, `OPEN_SCIENCE_PUBLIC_URL` (canonical, Open Graph and sitemap addresses) and, on the numeric address whose own `/evidence/` is another product's, `OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH=/evimed-evidence`. With them, a page carries no `noindex` (a new author's pages, a withdrawn card and the topic-request list still do), `<base>/sitemap.xml` lists the pages with their `lastmod`, and the application's own `GET /robots.txt` (the host's root: Caddy and the installed nginx site pass `/` to the application, so nothing in either was changed) names it and keeps crawlers off `/app/`, `/api/`, `/internal/`, `/evolution/` and `<base>/api/`. Check on the host with `curl -si https://<host>/robots.txt` and `curl -si https://<host><base>/sitemap.xml`; on a shared host also `grep -rn robots /etc/nginx/`, because another product's `location = /robots.txt` would answer before the application does. A bare IP address is indexed poorly by search engines whatever the pages say: a domain is what makes them count.
 
 ### Specialist job slots on a small host
 
@@ -1552,6 +1724,39 @@ another channel. To prove the row on a deployment, export a replayed engine resu
 run the verifier on the ZIP, rebuild the engine at the recorded code digests and
 compare the numbers it writes with `verify.py --compare`.
 
+### Finished-run inventory and capture repair
+
+These operations reuse existing run ledgers, result versions and immutable result snapshots. They do not rerun a model,
+change a run's original status, verification, notices, completion time or usage, or publish a card by force.
+
+- An authenticated owner may `POST /api/agent-runs/<run-id>/artifacts/refresh` with
+  `{ "projectId": "<owned-project>", "expectedTranscriptSha256": "<retained-transcript-sha256>" }` and the normal CSRF token.
+  The retained raw transcript must match its ledger receipt and run header. Successful presentation witnesses and bounded
+  files written during that run are joined to its inventory; paths, links and file hashes are checked. The appended
+  `artifacts-refreshed` event records discovery evidence only. An original `unverified` label remains `unverified`.
+- A signed-in member of `operatorUsers`, with CSRF, may `POST /api/ops/result-capture-repairs`. First send
+  `{ "action": "plan", "userId": "<owner>", "projectId": "<project>", "runId": "<finished-run>" }`.
+  This dry run returns `receiptSha256`, `planSha256` and the exact original file/source hashes. An optional
+  `expectedReceiptSha256` also checks a previously recorded receipt identity. Inspect this plan, then send the same target
+  with `action: "apply"`, `expectedReceiptSha256` and `expectedPlanSha256` set to those exact values. Changed receipt,
+  output or preserved-source bytes refuse the stale plan. The plan has no clock expiry. One original clinical matrix,
+  at most 64 files and 48 preserved sources are eligible in one request; existing storage and metadata limits still apply.
+- Apply fills missing captures through the normal capture service and reuses existing immutable version identities.
+  Existing frozen quotation verdicts are reused. If none was ever persisted, a deterministic verdict over the exact
+  preserved sources is recorded with `origin: "capture-repair"`, its time and verifier version; it is not a historical verdict.
+  The matrix row records a successful repair receipt. Its generation depends on the original run/receipt and exact
+  matrix/sibling version identities and digests, so retries cannot mint a new generation by advancing the clock.
+- Only for a programme-owned project, apply may include `resettle: true`. A verified repair generation allows one normal
+  settlement of an exhausted `no_evidence_matrix` outcome. Original attempts and outcome history remain recorded; normal
+  claim, source, clinical and supersession checks still decide publication. Replaying the same generation does not enqueue
+  research or settle it again. Every settlement holds a scoped PostgreSQL episode lock and commits the card and outcome in
+  one existing transaction; losing its owner rolls both back, allowing the pending generation to recover safely after restart.
+
+A missing, corrupted, linked or no-longer-authorized snapshot cannot become evidence by repairing bookkeeping. Capture
+repair refuses incomplete preservation. Result reads retain usable files with an unknown/unavailable review. Account
+exports hydrate authorized compact reviews into the existing inline format; unavailable review content is cleared and
+counted in `omissions`, while other usable records remain exportable. Account/archive size limits remain unchanged.
+
 ## Research allowance billing
 
 The account page uses CNY research allowance. The existing EviMed wallet remains
@@ -1889,3 +2094,17 @@ what already runs and `onArrival` what the input turns on. An independently labe
 matching set is evaluated with
 `node evals/vcr-matching/run_matching_evaluation.mjs --dataset <set.json>`; the report
 carries the file's SHA-256 so the holdout can be frozen before tuning.
+
+### Release gate model counter endpoint
+
+The standalone `node scripts/ops/deepseek-kernel-release-gate.mjs` operator command requires
+`OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL`, for example
+`http://open-science-release-receipt:8798/internal/model/v1`. Configure the same fixed
+address in the receipt operator and runtime controller. It is disabled when unset;
+ordinary runtimes keep `OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL`.
+The address requires HTTP, an explicit port and the exact `/internal/model/v1` path,
+without credentials, query or fragment. The hostname must resolve from runtime containers
+to the operator running the counter. The gate binds that port and fails if occupied;
+it never switches to a random port. Invalid configuration is rejected before paid provider
+compatibility calls. Only explicit release-gate projects may select this model destination;
+knowledge, memory and other auxiliary gateways retain their normal addresses.

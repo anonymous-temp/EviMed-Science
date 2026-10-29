@@ -320,7 +320,7 @@ describe("知识库", () => {
 
     it.each([
       ["a saved page", page, "网页 · nmpa.gov.cn · 链接"],
-      ["a note", note, "笔记 · 300 B · 笔记"],
+      ["a note", note, "笔记 · 300 B"],
       ["a cloud-drive document", policy, "制度文件 · 42 页 · 网盘"],
     ])("says where %s came from", async (_name, source, meta) => {
       mocks.listSources.mockResolvedValue(listing([source]));
@@ -397,6 +397,20 @@ describe("知识库", () => {
       await menuOf(sheet.display.title);
       await userEvent.click(await screen.findByRole("menuitem", { name: "改为仅本项目" }));
       await waitFor(() => expect(mocks.removeFromLibrary).toHaveBeenCalledWith("src_sheet"));
+    });
+
+    it("removes only the deleted source from selected references", async () => {
+      renderPage();
+      await userEvent.click(await screen.findByRole("checkbox", { name: `选择“${guideline.display.title}”` }));
+      await userEvent.click(screen.getByRole("checkbox", { name: `选择“${sheet.display.title}”` }));
+      await menuOf(guideline.display.title);
+      await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+      mocks.listSources.mockResolvedValue(listing([sheet]));
+      await userEvent.click(await screen.findByRole("button", { name: "删除" }));
+      await waitFor(() => expect(screen.getByRole("group", { name: "所选资料" })).toHaveTextContent("已选 1 份"));
+      await userEvent.click(within(screen.getByRole("group", { name: "所选资料" })).getByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+      expect(JSON.parse(screen.getByTestId("location").dataset.state!).runtimeUiIntent.references).toEqual([{ id: sheet.id, title: sheet.display.title }]);
     });
 
     it("deletes after a confirmation", async () => {
@@ -482,18 +496,18 @@ describe("知识库", () => {
       expect(strip.closest("[data-activity='strip']")).toHaveTextContent("已有 13 页，53 个实体");
     });
 
-    it("draws one dot beside the title when the page limit is reached, with the sentence and nothing to press; a failed round offers 重新整理 from the dot", async () => {
+    it("a failed round offers 重新整理 from the dot beside the title", async () => {
       context.features = { knowledgePages: true };
-      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "page_limit" });
-      renderPage();
-      const dot = await screen.findByRole("img", { name: /页数已到上限，不再整理新的内容/u });
-      expect(dot.closest("[data-page-header]")).not.toBeNull();
-      expect(screen.queryByRole("button", { name: /重新整理/ })).toBeNull();
-      cleanup();
       mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "failed" });
       mocks.requestKnowledgeCompile.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
       renderPage();
-      await userEvent.click(await screen.findByRole("button", { name: /上次整理没有完成/u }));
+      const dot = await screen.findByRole("button", { name: /上次整理没有完成/u });
+      // The row's 28 px icon button at the interface's type size, not a hand-drawn circle of its own: one look for one job (the release
+      // walk of evimed-b559d4b7ebd0-1 counted the 24 px circle as a ninth kind of control on the graph tab).
+      expect(dot.closest("[data-page-header]")).not.toBeNull();
+      expect(dot).toHaveClass("h-sm", "w-7", "rounded", "text-ui");
+      expect(dot).not.toHaveClass("rounded-full");
+      await userEvent.click(dot);
       expect(await screen.findByText(/上次整理没有完成/u, { selector: "[role=menu] *" })).toBeInTheDocument();
       await userEvent.click(await screen.findByRole("menuitem", { name: "重新整理" }));
       await waitFor(() => expect(mocks.requestKnowledgeCompile).toHaveBeenCalledWith("default"));

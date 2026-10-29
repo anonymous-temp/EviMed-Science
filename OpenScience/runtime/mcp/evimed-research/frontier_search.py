@@ -23,6 +23,10 @@ address or identifiers and cites that original. So the result carries no
 list), and a preprint's flag says 「尚未经同行评议」 in the words an answer
 has to use for it.
 
+A conversation opened from an item of the feed names it as `frontier:<id>` (c3-ask 2026-10-25). `id` reads that one item: the text
+the platform holds for it (a full text, an abstract or an excerpt, cut at 6,000 characters), its 导读 and 要点, its source, date
+and the original's address -- still a lead: the answer says the text is what the feed holds and that the original is cited.
+
 The runtime does not know where the feed lives. It posts to the server's own
 route with the same runtime token as the public-source gateway, and the
 server answers from the module's published items as the account running this
@@ -54,14 +58,18 @@ TIMEOUT_SECONDS = 15
 # schema and holds these copies equal to the domain's.
 LANES = ("evidence", "guideline", "regulatory", "safety", "pipeline", "public-health", "research", "ai")
 SPECIALTIES = (
-    "cardiology", "oncology", "endocrinology", "neurology", "psychiatry", "infectious-disease", "respiratory",
-    "critical-care", "gastroenterology", "nephrology", "rheumatology", "hematology", "pediatrics",
-    "obstetrics-gynecology", "geriatrics", "surgery-anesthesia", "radiology", "pharmacy", "tcm", "public-health",
-    "general-practice",
+    "cardiology", "respiratory", "gastroenterology", "endocrinology", "nephrology", "hematology", "rheumatology",
+    "infectious-disease", "neurology", "psychiatry", "oncology", "general-surgery", "orthopedics",
+    "cardiothoracic-surgery", "neurosurgery", "urology", "obstetrics-gynecology", "pediatrics", "ophthalmology",
+    "otolaryngology", "stomatology", "dermatology", "critical-care", "anesthesiology", "radiology",
+    "laboratory-pathology", "pharmacy", "general-practice", "tcm", "rare-disease",
 )
 WINDOWS = ("24h", "3d", "7d", "30d")
 MODES = ("selected", "all")
 GATEWAY_CODE = re.compile(r"^frontier_[a-z0-9_]{1,60}$")
+# A public item id, as the feed's addresses and `frontier:<id>` spell it.
+ITEM_ID = re.compile(r"^[a-z0-9]{12,32}$")
+TEXT_KINDS = {"body": "full text", "abstract": "abstract", "excerpt": "excerpt of the page", "summary": "source summary"}
 # How a flag reads to the model. The feed's own label for a preprint is
 # 「未经同行评议」; an answer has to say 「尚未经同行评议」, so the flag says it
 # in those words (plan §4.8).
@@ -84,7 +92,7 @@ def tool_definitions():
             "description": (
                 "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory "
                 "and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query "
-                "EviMed's own evidence cards. Use it when a question asks what is new or recent; settled knowledge does not need it. "
+                "EviMed's own evidence cards. Use it when a question asks what is new or recent, or to read an item named frontier:<id>; settled knowledge does not need it. "
                 "Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card."
             ),
             "inputSchema": {
@@ -106,6 +114,11 @@ def tool_definitions():
                         "description": "selected: the editors' picks; all: everything collected.",
                     },
                     "limit": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": 8},
+                    "id": {
+                        "type": "string",
+                        "pattern": ITEM_ID.pattern,
+                        "description": "One item's id, as in frontier:<id>: reads that item (its text, 导读 and 要点) and takes no other field.",
+                    },
                 },
                 "additionalProperties": False,
             },
@@ -132,6 +145,13 @@ def _gateway():
 
 def _validated(arguments: dict) -> dict:
     payload = {}
+    if arguments.get("id") is not None:
+        item_id = arguments["id"]
+        if not isinstance(item_id, str) or not ITEM_ID.match(item_id):
+            raise FrontierSearchError("frontier_search_id_invalid", "id must be the public id of an item, as in frontier:<id>.")
+        if any(key != "id" and value is not None for key, value in arguments.items()):
+            raise FrontierSearchError("frontier_search_request_invalid", "id reads one item and takes no other field.")
+        return {"id": item_id}
     q = arguments.get("q")
     if q is not None:
         text = " ".join(q.split()) if isinstance(q, str) else ""
@@ -261,6 +281,94 @@ def _card(entry: dict) -> dict:
     return shown
 
 
+def _topic(entry: dict) -> dict:
+    """One hot-event topic as the model is shown it (c2-leads 2026-10-25): an index entry — the general medical question a
+    public event raised, its field, the attributed line on the event, its overview and the items it holds. The items are
+    what a run reads and cites; the instruction travels with every topic."""
+    shown = {"kind": "topic", "title": entry.get("title")}
+    for key in ("question", "domainLabel", "status"):
+        if entry.get(key):
+            shown[key] = entry[key]
+    peg = entry.get("peg") if isinstance(entry.get("peg"), dict) else None
+    if peg and peg.get("text"):
+        source = peg.get("source") if isinstance(peg.get("source"), dict) else {}
+        shown["event"] = peg["text"] + (" (%s)" % source["name"] if source.get("name") else "")
+    overview = entry.get("overview") if isinstance(entry.get("overview"), dict) else None
+    if overview and overview.get("text"):
+        shown["overview"] = overview["text"]
+    accepted = _minute(entry.get("acceptedAt"))
+    if accepted:
+        shown["since"] = accepted
+    items = []
+    for item in entry.get("items") or []:
+        if isinstance(item, dict) and item.get("title"):
+            items.append({key: item[key] for key in ("role", "title", "source", "url") if item.get(key)})
+    shown["items"] = items
+    shown["instruction"] = "EviMed's own index of a public event's medical question, not evidence: read the items' originals and cite those."
+    return shown
+
+
+def _read(data: dict) -> dict:
+    """One item read by its id: the lead as a search shows it, with the 导读, the 要点 and the text the platform holds. The text is
+    what the feed keeps -- a full text, an abstract or an excerpt -- never a substitute for the original, which is what a run cites."""
+    entry = data.get("item") if isinstance(data.get("item"), dict) else None
+    if entry is None:
+        raise FrontierSearchError(
+            "frontier_search_item_not_found",
+            "That item is not in 前沿动态 any more: read the original from the link the conversation has, or search the feed.",
+        )
+    shown = _item(entry)
+    if entry.get("lead"):
+        shown["lead"] = entry["lead"]
+    points = entry.get("points") if isinstance(entry.get("points"), dict) else None
+    if points:
+        fields = []
+        for point in points.get("points") or []:
+            if isinstance(point, dict) and point.get("label"):
+                kept = {key: point[key] for key in ("label", "text", "items") if point.get(key)}
+                if len(kept) > 1:
+                    fields.append(kept)
+        if fields:
+            shown["points"] = fields
+        quote = points.get("quote") if isinstance(points.get("quote"), dict) else None
+        if quote and quote.get("text"):
+            shown["authorsConclusion"] = quote["text"]
+    text = entry.get("text") if isinstance(entry.get("text"), str) and entry["text"].strip() else None
+    kind = TEXT_KINDS.get(entry.get("textKind"), "text")
+    next_actions = []
+    warnings = []
+    if text:
+        shown["text"] = text
+        shown["textKind"] = kind
+        if entry.get("textLanguage") and entry["textLanguage"] != "und":
+            shown["textLanguage"] = entry["textLanguage"]
+        length = entry.get("textLength") if isinstance(entry.get("textLength"), int) else len(text)
+        if entry.get("textTruncated"):
+            shown["textTruncated"] = "the first %d of %d characters" % (len(text), length)
+            warnings.append("The text is cut at %d of %d characters: read the original for the rest." % (len(text), length))
+        if kind != "full text":
+            warnings.append("The feed holds only the %s of this item, not its full text: say so where the answer rests on more than it shows." % kind)
+        summary = "Read the 前沿动态 item \"%s\" (%s, %d characters)." % (shown.get("title"), kind, len(text))
+    else:
+        summary = "Read the 前沿动态 item \"%s\"; the feed holds no text for it." % shown.get("title")
+        warnings.append("The feed holds no text for this item: read the original through its url, doi or pmid.")
+    next_actions.append(
+        "This is a lead: the 导读 and 要点 are the feed's own reading. Read the original through its url, doi or pmid for anything "
+        "beyond the text above, and cite that original, never this feed."
+    )
+    if any(isinstance(flag, dict) and flag.get("key") == "preprint" for flag in entry.get("flags") or []):
+        next_actions.append("Say 「尚未经同行评议」 wherever this preprint is used.")
+    if any(isinstance(flag, dict) and flag.get("key") in CAUTION_FLAGS for flag in entry.get("flags") or []):
+        warnings.append("This item is retracted or under an expression of concern: do not use it as support.")
+    return {
+        "status": "success",
+        "summary": summary,
+        "data": {"asOf": _minute(data.get("asOf")), "item": shown},
+        "warnings": warnings,
+        "next_actions": next_actions,
+    }
+
+
 def _scope(query: dict) -> str:
     """The filters an answer covers, in the words of its summary line."""
     parts = ["the editors' picks" if query.get("mode") == "selected" else "all collected items"]
@@ -277,6 +385,7 @@ def _answer(data: dict) -> dict:
     items = [_item(entry) for entry in entries]
     card_entries = [entry for entry in data.get("cards") or [] if isinstance(entry, dict)]
     cards = [_card(entry) for entry in card_entries]
+    topics = [_topic(entry) for entry in data.get("topics") or [] if isinstance(entry, dict)]
     scope = _scope(query)
     search_mode = data.get("searchMode")
     skipped = data.get("unselectedSkipped")
@@ -293,10 +402,13 @@ def _answer(data: dict) -> dict:
         )
     if data.get("cardsUnavailable"):
         warnings.append("Evidence cards could not be searched this time; the items are unaffected, and no card matching is not implied.")
+    if data.get("topicsUnavailable"):
+        warnings.append("Hot-event topics could not be searched this time; the items are unaffected.")
     if not items:
         summary = "No item in 前沿动态%s (%s)." % (subject, scope)
-        if cards:
-            summary = "No item in 前沿动态%s (%s); %d evidence card(s) match." % (subject, scope, len(cards))
+        if cards or topics:
+            summary = "No item in 前沿动态%s (%s)%s%s." % (subject, scope, "; %d evidence card(s) match" % len(cards) if cards else "",
+                                                         "; %d hot-event topic(s) match" % len(topics) if topics else "")
         else:
             warnings.append(
                 "An empty feed is not evidence that nothing happened: it holds only what its sources published in the window."
@@ -312,7 +424,7 @@ def _answer(data: dict) -> dict:
             "; %s search" % search_mode if query.get("q") and search_mode else "",
             "; more match" if data.get("more") else "",
             "; %d evidence card(s) match" % len(cards) if cards else "",
-        )
+        ) + ("" if not topics else " %d hot-event topic(s) match." % len(topics))
         next_actions.append(
             "These are leads: read the original through its url, doi or pmid before relying on an item, and cite that "
             "original, never this feed or its digest."
@@ -348,10 +460,18 @@ def _answer(data: dict) -> dict:
         body["cards"] = cards
         body["cardCount"] = len(cards)
         body["cardsMore"] = bool(data.get("cardsMore"))
+    if "topics" in data:
+        body["topics"] = topics
+        body["topicCount"] = len(topics)
+    if topics:
+        next_actions.append(
+            "Hot-event topics are EviMed's own index of a public event's medical question: read the items each lists and cite "
+            "their originals, never the topic; say nothing of the event's people beyond the attributed line."
+        )
     if isinstance(skipped, int):
         body["unselectedSkipped"] = skipped
     return {
-        "status": "success" if items or cards else "warning",
+        "status": "success" if items or cards or topics else "warning",
         "summary": summary,
         "data": body,
         "warnings": warnings,
@@ -406,6 +526,10 @@ def search(arguments: dict) -> dict:
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise FrontierSearchError("frontier_search_response_invalid", "The 前沿动态 search gateway returned a non-JSON answer.") from error
     data = parsed.get("data") if isinstance(parsed, dict) else None
+    if "id" in payload:
+        if not isinstance(data, dict):
+            raise FrontierSearchError("frontier_search_response_invalid", "The 前沿动态 search gateway returned no item.")
+        return _read(data)
     if not isinstance(data, dict) or not isinstance(data.get("items"), list):
         raise FrontierSearchError("frontier_search_response_invalid", "The 前沿动态 search gateway returned no items.")
     return _answer(data)

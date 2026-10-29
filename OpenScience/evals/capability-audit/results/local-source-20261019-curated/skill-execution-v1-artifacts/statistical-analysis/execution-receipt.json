@@ -1,0 +1,29 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1421,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/statistical-analysis/results.json",
+      "sha256": "560249662b5a1436b3ea7b0c081000bc9ecb19143e15041cfc1921bcd895b89a"
+    },
+    {
+      "bytes": 1842,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/statistical-analysis/statistical-analysis-report.md",
+      "sha256": "ed3b711f61e33bda05eac5af3b5157ac1654bee48cd5f237c7f2e02d10c32704"
+    }
+  ],
+  "finishedAt": "2026-10-19T12:53:50.768326Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "statistical-analysis",
+  "startedAt": "2026-10-19T12:53:50.766156Z",
+  "status": "success",
+  "summary": "Executed the bounded deterministic baseline for statistical-analysis and wrote 2 verified artifacts.",
+  "warnings": []
+}

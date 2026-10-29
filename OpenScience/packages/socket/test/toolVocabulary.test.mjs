@@ -15,36 +15,12 @@ import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import { SOCKET_TOOL_NAME_LIST } from "@evimed/domain";
-import { __setHarnessModule, loadHarnessModule } from "@evimed/harness-port";
+import { loadHarnessModule } from "@evimed/harness-port";
 import { buildCiteTools, resolveConfig } from "dsh-cite";
 
 import { AGENT_PLUGIN_IDS, PLUGIN_SPECIFIERS } from "../index.mjs";
 
-/** The upstream shape the compaction engine extends; the real one ships only
- *  in the runtime image. Enough for the `structured` policy to mount, which is
- *  the only policy that registers the compaction request tool. */
-class BaseCompactionEngine {
-  static inject = ["llm"];
-  static Config = {};
-  /** @param {any} ctx @param {any} config */
-  constructor(ctx, config) {
-    this.ctx = ctx;
-    this.config = config;
-  }
-  /** @param {any} _input @param {any} _agent @param {AbortSignal} [_signal] */
-  async summarize(_input, _agent, _signal) { return null; }
-  async compactIfNeeded() { return null; }
-  async compactRegion() { return null; }
-  async compactNow() { return null; }
-}
-
-/** Every agent-scope row switched on, with the policy that mounts every tool. */
-const CONFIG = {
-  "evimed-compaction": { policy: "structured" },
-};
-
 test("every socket tool name is registered by a plugin, and every plugin's tool is in the vocabulary", async () => {
-  __setHarnessModule("@deepseek-ai/dsh-compaction-basic", { BasicCompactionEngine: BaseCompactionEngine });
   const { Context } = await loadHarnessModule("@deepseek-ai/cordis");
   const { ToolRuntime } = await loadHarnessModule("@deepseek-ai/dsh-tools");
   const ctx = new Context();
@@ -57,7 +33,7 @@ test("every socket tool name is registered by a plugin, and every plugin's tool 
   for (const id of AGENT_PLUGIN_IDS) {
     const specifier = PLUGIN_SPECIFIERS[/** @type {keyof typeof PLUGIN_SPECIFIERS} */ (id)];
     const plugin = await import(new URL(specifier, new URL("../", import.meta.url)).href);
-    await ctx.plugin(plugin, /** @type {Record<string, any>} */ (CONFIG)[id] ?? {});
+    await ctx.plugin(plugin, {});
   }
   await new Promise((resolve) => setTimeout(resolve, 20));
   const registered = [...runtime.view().visible.keys()];

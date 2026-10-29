@@ -833,7 +833,6 @@ function notices_of(module) {
 test("R10 the backfill gives the results the old path left without a subject the design they were computed for, undoes the supersessions that crossed designs, and a second run changes nothing", options, async () => {
   const module = compose({ dispatch: false });
   const study = await makeStudy("backfill");
-  await store.updateStudy(study.id, { status: "paused" }, study.userId);
   const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "trial_scenario", items: conversationDesigns, data: null });
   const [a, b, c] = written.ids;
 
@@ -859,6 +858,15 @@ test("R10 the backfill gives the results the old path left without a subject the
   made.push(await legacy("design_simulation", 2, designOf(2, "design_simulation"), power(0.905)));
   made.push(await legacy("design_simulation", 1, { ...designOf(1, "design_simulation"), accrual: { kind: "uniform", duration: 18, followup: 12 } }, power(0.917)));
   assert.equal((await store.results(study.id, "trial_scenario")).length, 1, "the old path: seven results, one of them current, whichever design it was for");
+
+  // Historical work was created while editable; repairing its metadata must also work after pause.
+  await store.updateStudy(study.id, { status: "paused" }, study.userId);
+  const history = await store.one(`SELECT
+    (SELECT count(*)::integer FROM evimed_vcr.jobs WHERE study_id=$1) AS jobs,
+    (SELECT count(*)::integer FROM evimed_vcr.executions WHERE study_id=$1) AS executions`, [study.id]);
+  assert.deepEqual(history, { jobs: 7, executions: 7 });
+  await assert.rejects(module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_analytic",
+    scenario: designOf(0, "design_analytic"), inputs: [], internal: true }), { code: "vcr_study_paused" });
 
   const report = await backfillResultSubjects({ store, studyId: study.id });
   assert.equal(report.apply, false);
@@ -888,6 +896,12 @@ test("R10 the backfill gives the results the old path left without a subject the
   }
   const everyStudy = await backfillResultSubjects({ store });
   assert.ok(!everyStudy.studies.some((entry) => entry.studyId === study.id), "and the study is no longer one with results left to give a subject");
+  assert.equal((await store.studyById(study.id)).status, "paused", "metadata repair never resumes the programme");
+  assert.equal((await store.allResults(study.id)).length, 7, "all historical results are retained");
+  assert.deepEqual(await store.one(`SELECT
+    (SELECT count(*)::integer FROM evimed_vcr.jobs WHERE study_id=$1) AS jobs,
+    (SELECT count(*)::integer FROM evimed_vcr.executions WHERE study_id=$1) AS executions`, [study.id]), history,
+  "backfill and refused enqueue create no new jobs or executions");
 });
 
 test("R10 a computation of a step the researcher asked for with 「让 AI 做」 ends in one notice when the design's last stage lands; the programme's own recomputation after a change tells nobody", options, async () => {

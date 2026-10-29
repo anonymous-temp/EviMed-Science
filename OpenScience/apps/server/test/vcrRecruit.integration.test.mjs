@@ -370,3 +370,24 @@ test("deleting a study takes its matching and referral rows and leaves the audit
   assert.equal(Number(after.rows[0].episodes), 0);
   assert.ok(Number(after.rows[0].audit) > 0, "the audit outlives the object it describes");
 });
+
+test("exit source dates survive database timezones and the first report is not the earliest observation window", options, async () => {
+  const dateStudy = `std-dates-${run}`;
+  await database.query(`INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name) VALUES ($1, $2, $3, $4)`, [dateStudy, USER, `prj-dates-${run}`, "Calendar dates"]);
+  for (const timezone of ["Asia/Shanghai", "America/Los_Angeles", "UTC"]) {
+    const zoned = new VcrMatchStore({ database: { transaction: async (operation) => database.transaction(async (client) => {
+      await client.query("SELECT set_config('TimeZone', $1, true)", [timezone]);
+      return operation(client);
+    }) } });
+    const subjectKey = `date-${timezone.replaceAll("/", "-")}`;
+    const first = await zoned.saveFollowupEpisode({ userId: USER, episode: { studyId: dateStudy, subjectKey, kind: "study_specific",
+      windowStart: "2026-05-01", windowEnd: "2026-08-01", exitDate: "2026-08-01", exitReason: "Original report" } });
+    assert.equal(first.exitDate, "2026-08-01");
+    assert.equal(first.windowEnd.toISOString(), "2026-08-01T00:00:00.000Z", timezone);
+    await zoned.saveFollowupEpisode({ userId: USER, episode: { studyId: dateStudy, subjectKey, kind: "study_specific",
+      windowStart: "2026-01-01", windowEnd: "2026-08-09", exitDate: "2026-08-09", exitReason: "Later report" } });
+    assert.notEqual((await zoned.listFollowupEpisodes({ studyId: dateStudy, subjectKey }))[0].id, first.id, "the observation timeline can put the later report first");
+    assert.equal((await zoned.firstTrialExit({ studyId: dateStudy, subjectKey })).id, first.id, "fidelity always uses the original report");
+    assert.equal(await zoned.firstTrialExit({ studyId: "std-other", subjectKey }), null);
+  }
+});

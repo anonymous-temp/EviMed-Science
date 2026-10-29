@@ -100,6 +100,8 @@ COPY --from=build /app/scripts/runtime/extensions/cowork ./scripts/runtime/exten
 COPY --from=build /app/packages/domain/index.mjs ./packages/domain/index.mjs
 COPY --from=build /app/packages/domain/src ./packages/domain/src
 COPY --from=build /app/packages/contracts/healthflux/candidates.json ./packages/contracts/healthflux/candidates.json
+# The OpenViking compile scope proof the control plane and the runtime controller read when they load (openVikingCompileExecution.mjs).
+COPY --from=build /app/packages/contracts/openviking/compile-scope-proof.json ./packages/contracts/openviking/compile-scope-proof.json
 COPY --from=build /app/packages/harness-port/index.mjs /app/packages/harness-port/seam-manifest.json ./packages/harness-port/
 COPY --from=build /app/packages/harness-port/src ./packages/harness-port/src
 COPY --from=build /app/packages/socket/index.mjs /app/packages/socket/cordis.patch.yml ./packages/socket/
@@ -112,6 +114,8 @@ COPY --from=build /app/packages/socket/presets/evimed-universal/agent.cordis.yml
 # a missing file the day the module first meets real data.
 COPY --from=build /app/scripts/vcr ./scripts/vcr
 COPY --from=build /app/content/evidence ./content/evidence
+# The platform's official starter packs (capsules/official/), read and published once at start (`officialPackSources.mjs`).
+COPY --from=build /app/capsules ./capsules
 # Public evaluator code and capability dependency inventory; hidden case bodies are deployment state.
 COPY --from=build /app/evals/paper-gold/*.mjs ./evals/paper-gold/
 COPY --from=build /app/evals/paper-gold/economics-reference-manifest.json /app/evals/paper-gold/calibration-manifest.json /app/evals/paper-gold/calibration-replacements.json /app/evals/paper-gold/scoped-research-manifest.json /app/evals/paper-gold/aggregate-candidate-cards.json /app/evals/paper-gold/aligned-faers-manifest.json /app/evals/paper-gold/score_existing_methods.py /app/evals/paper-gold/aggregate_reference.py /app/evals/paper-gold/darth_reference_export.R ./evals/paper-gold/

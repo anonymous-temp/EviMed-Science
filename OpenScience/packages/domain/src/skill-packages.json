@@ -114,7 +114,7 @@
       "name": "autopilot-episode",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:74f2af57b1b9f7f176231b9161ee2c849f917bd2d7cffdacaf7de4b63c214f3d",
+      "digest": "sha256:8938fb5b35a813afe6929e21d6f3a3d20f3b6c793c14b861b398bef853d6f4b9",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -123,7 +123,7 @@
       "name": "biomedical-database-search",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:704108efeb9b7a2ab0030de6ec326097df09ed9cd209adba01aa88b73f2781ce",
+      "digest": "sha256:f449fba1ad5499529bf864d349daf5afa7e9e6d99b323b88a79d9a0fb23979f4",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -132,7 +132,7 @@
       "name": "citation-integrity",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:eeff30b26ee459ce2527a387ab0811527930a760cfd87398770e44da3367a580",
+      "digest": "sha256:331994cb632cecb29f3d5e98824c2d744ca6b3f5784624ce9ce01ba6d107f5e9",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -141,7 +141,7 @@
       "name": "deep-research",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:9dd9c587a9948808e6adb9f58b8a1cd7b5efbe159f0b3d293baf13bdd33672b4",
+      "digest": "sha256:f724f36aad77701cf7d1d4cc64a606ec27bbca1cab304de06a2a08d49fc922e2",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -150,7 +150,7 @@
       "name": "geo-drug-value",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:e4b461d0e5573497bd4ba930fb5d7e5baeb759def4acd09cdf2328bfe616e979",
+      "digest": "sha256:496468d26f8ed86bd4457b4bfd4e3c53480a494d57744c0422671ddee6aac3a3",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -160,7 +160,7 @@
       "origin": "capability-skill",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"declared"},
-      "digest": "sha256:332a4890c1491a7769e306d4944644d877b7c585453d48f6dc2e40290bb30f20",
+      "digest": "sha256:7d1f69c4ab647299cd12ce66fa53cf92851114e6d0b6a4ed07e1edbfc127daaa",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -169,13 +169,13 @@
       "name": "reporting-guidelines",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:1f0647f79f71eae2be4f473fcea2c83697ada413bbc2ef9cbcf9722d84f471d8",
+      "digest": "sha256:865bd7da5c55f36de3419b795d0c4ae6a9990d25526a02601f37d01cf990192a",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"checklists/consort-2025.md","sha256":"705a8b9141b267055acc1912051802bb933162be142a6f2bffa56240aa083a95"},
-        {"path":"checklists/prisma-2020.md","sha256":"b213a33838197bd165aa26e81c016f79a133d30a2ca62234d05c94e94feebd96"},
-        {"path":"checklists/strobe-mr.md","sha256":"d883c41cf19b6524eed89fd9db53e60ff01bda6c5a451feb06aa6c2c87d92db6"},
-        {"path":"checklists/tripod-ai.md","sha256":"46840d6f0d0ac36d8f0a20cfec403ceca5e6d24be24f7489c5a0afdd3cef8a7f"}
+        {"path":"checklists/consort-2025.md","sha256":"074cebbc1e3f0ef41260d58bd38316c8653603de7e755b702a8b58fb54b26323"},
+        {"path":"checklists/prisma-2020.md","sha256":"d23f29baa005bc959c057c9e1a274c4537c0c03a33b3fc9bc9df426fb0718622"},
+        {"path":"checklists/strobe-mr.md","sha256":"9e3db82a4feb5091f36c9512be8cc0ddca6e660c7ae6d26e993e39c9ba14abd1"},
+        {"path":"checklists/tripod-ai.md","sha256":"99ef011dd12a89ab164542f4ddc66aa3208d5e09cd6cab3d6f1e9e02262a9e21"}
       ]
     },
     {
@@ -185,9 +185,9 @@
       "origin": "capability",
       "version": "1.3.1",
       "source": {"kind":"release"},
-      "digest": "sha256:77280ac1de8fbd8af947565b35fb30fa0b117e04bce84766654a0d1cadc9e551",
+      "digest": "sha256:b5471729c593ecbbb7f3c54718b558f3243533d64f9cfb740b41ab3ef621ac9a",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"4155296060a7960e33950b91ac182bb4eb9f6d9b340842720450209243991dad"}],
+      "references": [{"path":"capability.yaml","sha256":"1517263bb755e7ac905949ac452d8e0a51ff45b77e26f569c528eb949b65c1d4"}],
       "dependencies": [
         {"kind":"platform-tool","name":"adr_case_query","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"adr_signal_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -232,9 +232,9 @@
       "origin": "capability",
       "version": "1.1.1",
       "source": {"kind":"release"},
-      "digest": "sha256:d5a43595ea1dcfac428d36bfd2d2bc0de26f4a49931f45608604d0f96b62ef75",
+      "digest": "sha256:1742cb21ff0afa132a26bbf697eaf43bb98790116317b1d27a747c12dbe48e44",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"90a82656dbaddba71073693a3b901b985ac807d0455448b94fd3d06fa9b108f5"}],
+      "references": [{"path":"capability.yaml","sha256":"0fe560a61f4ea259092b6ddf8d652dbbfadf240ac7e0f8e2acf81da3a5f51063"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -262,9 +262,9 @@
       "origin": "capability",
       "version": "2.17.1",
       "source": {"kind":"release"},
-      "digest": "sha256:3b2876227d2dc876ffa62d8d05ea0bb7cd72e2c796988748e238f78a4b122e45",
+      "digest": "sha256:4fab994da1acee68bdba1f61d8b72e4ec43a6d3f630ef7eb4531d41d26b06896",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"07f997d1a3647c83cf6677c9f888531e713b40291801e8709a10bc75d679f48e"}],
+      "references": [{"path":"capability.yaml","sha256":"951379c1e5d43d2bf761d30f980fb98c30aea4a76c0ebdbd31d52763ccf9ab49"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_snapshot","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -303,9 +303,9 @@
       "origin": "capability",
       "version": "2.5.1",
       "source": {"kind":"release"},
-      "digest": "sha256:71aa57f67e7a2d4dfb694931d20b3009951d19893b234d23796e09b09b924d75",
+      "digest": "sha256:e3f5d81f960877948671710f60c24cf00e3d8f4df46be2e3a334038dd763fd4c",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"404a4b9edd9aee02eaa43ab282ed0b59ec7c7722aaf472880e0e76cebcb3299b"}],
+      "references": [{"path":"capability.yaml","sha256":"dd1507ee79bae9136365b0373277cbbf776a4a5e53a308443d4a94b3aa51e4ea"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -359,14 +359,14 @@
       "origin": "capability",
       "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:c7a0c513f11f80d5cb463c76440fea211e9549271ac1864f7a06419062195989",
+      "digest": "sha256:846aeed570a4ae897d0e2a3e5259d65345549108bad1dc9700872e5c99a22df3",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
-        {"path":"scripts/evidence_floor.py","sha256":"6f84568286ddbfde9bc8cb14e1af444fd94221303d4e1a89834c2d2a2ee071c9"},
-        {"path":"scripts/preflight.py","sha256":"a83494d3e6e569ea03a7e610780450e4a683e4a163595da8c05d21da85d11a6d"},
-        {"path":"scripts/profile_dataset.py","sha256":"a222fceda5eb448aef146e198f402bfdea6469deea21c6439912fa725bece14d"}
+        {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
+        {"path":"scripts/preflight.py","sha256":"d8b6628c3b7652b420c1f988689fc2a1bee6b6a2d59d6658a423f793d944908a"},
+        {"path":"scripts/profile_dataset.py","sha256":"0185bb0c32c0ec8562f2583ee55d8f91e01553b6190eb52bbc53c32fcbe4aa25"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"947873b0f974f44879d34e85f6936a08f4e02559342c24e3cec31db5dcf9130c"}],
+      "references": [{"path":"capability.yaml","sha256":"f2161169e7967f39f542a0ee21ecf31cf054af6efb6a11a13b6be4d8cfaa3677"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -417,9 +417,9 @@
       "origin": "capability",
       "version": "2.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:35d41c87b60add14c6916f63f400cbc840de2468c8d8ecee0877313eadcee17d",
+      "digest": "sha256:249d3486293f07c178509f5f4a807f9371bb0afc0a914c8ba3d39a5e78c79175",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"3cf7020090d46515c1dde6b542081757c0125ee1beee11398320ef61c892d89d"}],
+      "references": [{"path":"capability.yaml","sha256":"410ee13d5b3a8c13db8948ec61e281ebbbc3bf91dce9e164e317d0a1a916bcb7"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -471,9 +471,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:5eba269f1a0ffdae66de2b357ce8acc8b408c2d22c141b25ff3d2b97b6681fb3",
+      "digest": "sha256:37aea7a6b6b9c4c9d47ea09220519bdb611ad89972e8909ddc631142e2b96a7f",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"d1b42dd00087e5ddabef768fec8612a392ee9321d2aa5585e70c9c7d1e70b0af"}],
+      "references": [{"path":"capability.yaml","sha256":"846d4e906d8cd0aa2e2901d06632d2043b1f693b450d2e0a86b195d230e93dc4"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -507,9 +507,9 @@
       "origin": "capability",
       "version": "1.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:42b7f19594b76f40a45126f4886b18c9cb4e4318c82969134516f55f4064224f",
+      "digest": "sha256:b46e731d8253acb40c113c8c28e1b29adb7332c3980730b1532faaeaa030eb6c",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"a941fe3161db9c6c8b478f21a252c4bb443beec772690e90a73702feb6332c34"}],
+      "references": [{"path":"capability.yaml","sha256":"7ed583932e5d16d23bc9ac8d91c33d3fdaa5f2d0b5cbfc519a1cd612a595ca4a"}],
       "dependencies": [
         {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"locate_quote","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -534,10 +534,10 @@
       "origin": "capability",
       "version": "1.0.1",
       "source": {"kind":"release"},
-      "digest": "sha256:118690728584e2e41bad6d129766140356bf3bfe922de003d31c593b07cf6cee",
+      "digest": "sha256:86e3912583ad4e088f908b6295fb0c33a411e95ee975bced2e598aacbb5dc16e",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/verify_result.py","sha256":"9256510fa99e6c74ff649d8b23a90e10ec9978b2676cbc85f084c4e41584a0dc"}],
-      "references": [{"path":"capability.yaml","sha256":"8075e425fb068e63a6e0386c099342f651a5a30f7484a9e390c458f6655e42da"}],
+      "scripts": [{"path":"scripts/verify_result.py","sha256":"3fb75ee936ad10beb61da36019a7fea735656ac8dc29acbbaa903e41b5c29fcb"}],
+      "references": [{"path":"capability.yaml","sha256":"6211f39cf878c7574f58254baf5f0a040d03ec6982be41666f7a51e5634c440e"}],
       "dependencies": [
         {"kind":"platform-tool","name":"gene_expression_differential","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"gene_expression_series","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -572,11 +572,11 @@
       "id": "capability/geo-content",
       "name": "geo-content",
       "origin": "capability",
-      "version": "2.3.2",
+      "version": "2.3.4",
       "source": {"kind":"release"},
-      "digest": "sha256:ecc9da8c5df2f16b4883cc765f47ada611ab01a133a33cc061360d3fa68f9d31",
+      "digest": "sha256:629567e7930530080bc33739abc9f9b9e1d3cdd9d815434f2ce4b2050de8300c",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"dd5e22516ae5eeb780605190a7879c8d67ea6ae651087b01ebfafb3d6bb51b20"}],
+      "references": [{"path":"capability.yaml","sha256":"3016a0fe58180d0e76cfb8517dfeeac1796d201382e0fb90ed217233962ecca4"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -612,11 +612,11 @@
       "id": "capability/geo-insight",
       "name": "geo-insight",
       "origin": "capability",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "source": {"kind":"release"},
-      "digest": "sha256:80db0326d3c5708cddc60182efe378499e2373ba51169de52890e83d7c0ef0ff",
+      "digest": "sha256:ba322a14b15568f3c3f0c52b1f2e908b9800dca34e7b55104e2fa048076ee6f8",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"af4e46d379072261bea24bfb92c92c75b11f2b08728807850de376d5b137e258"}],
+      "references": [{"path":"capability.yaml","sha256":"47b1416e26d973553594ca2f3ffe38a9d28dbb785eb6b140d6b09a8dec77d1c5"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -654,11 +654,11 @@
       "id": "capability/geo-proposal",
       "name": "geo-proposal",
       "origin": "capability",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "source": {"kind":"release"},
-      "digest": "sha256:c9819445be03a23a991df298c33f9ea049882ecf7a82280de58e9ab3ca394b49",
+      "digest": "sha256:1432ae3b33309af8cc3836167b73ab6e1549c4c8283e66a0bf7af8397f9868a7",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"de0ce6a5dfe8553bf73d0240420a2a308a61d6652cd990765a21e84b9ebbbe20"}],
+      "references": [{"path":"capability.yaml","sha256":"e96ceb7095f49e5b8970b50928f7df36475b5fe435f0348cae0c30fce4ceb902"}],
       "dependencies": [
         {"kind":"platform-tool","name":"geo_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"geo_write","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -683,9 +683,9 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:ac3780341bf45019389d861ae2d1579baeb43b72bd1e17db50130fdde180622e",
+      "digest": "sha256:3f6a72096c45da9c653cc8174403898f3f8e3e752e28bd22ae4073f6626551e4",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"8011b26594cb776da6b3eb569b0dc462a1e95cbccee3bf1ffa6afca034c13073"}],
+      "references": [{"path":"capability.yaml","sha256":"b8a605d6ee2a98396d8c90ed478080c4edb2b6e3569d3b5015fc7ead468d5c31"}],
       "dependencies": [
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"geo_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -716,9 +716,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:8fdeb70097599d708b9a96749d36f3c8933d1724b013b9953fa5e045c81f1f6a",
+      "digest": "sha256:fab37d7bace6853cc39eff5b715504bfca5d9810065a437e09258962318fb57f",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"dba20c6e724ea3a1c5c9e5b6b13216829f1263e4ba3c12985cdc37dae164177c"}],
+      "references": [{"path":"capability.yaml","sha256":"c56c77213c3a36606ac7de334c8c9d28a0576afb2bfbfd32c9bb19303a040000"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -758,9 +758,9 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f1687f6d82ca6fe9cb8bf82c32613035ba334da1590f24081028a15f71ddd693",
+      "digest": "sha256:3a65460d9ec032b2048635af85c6b2f77445ff049050e24a982a4274daf1c99e",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"4d356e02b504e0c2f48977c4cf1bc96d36d8b47f067513e76462d8a342c403d9"}],
+      "references": [{"path":"capability.yaml","sha256":"4bfd0255d107d5e6b6df487cb7108076453d4ca837010ffa730552eb32574dea"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -788,9 +788,9 @@
       "origin": "capability",
       "version": "1.1.4",
       "source": {"kind":"release"},
-      "digest": "sha256:6e3ccfacbf5f9558877f31da8d41f9dfbae2c731261a60480eeb82e90337807c",
+      "digest": "sha256:54935347ea97e37cbcfbfb95c189970b295f542ce98c29a761cc73f12909efc9",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"827f7adb79741bafaf2caf3ba7cdfb50b7aadbd375c6f2f09ae797bde719600d"}],
+      "references": [{"path":"capability.yaml","sha256":"7335c284d7467d6ffcd667847e963645637be157624bd279ca7989df4a026aa7"}],
       "dependencies": [{"kind":"platform-tool","name":"meta_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}],
       "operations": [
         {
@@ -809,16 +809,16 @@
       "id": "capability/method-distillation",
       "name": "method-distillation",
       "origin": "capability",
-      "version": "1.3.0",
+      "version": "1.6.1",
       "source": {"kind":"release"},
-      "digest": "sha256:82f40e63c809dbe38a3bf7061c1927c597effba2bd97fd2bbdd84aa3f5533479",
+      "digest": "sha256:84a1eefbc2e09856d563d671f1f451ee4dfb72af4af6d2cf2361f848081da029",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"b17a2fe503ad3a53c145c5ea0c4e4e81457861f4b6c06365b90d62cff455eaba"}],
+      "references": [{"path":"capability.yaml","sha256":"b2e37c55c2aacb7d7c916813b1f4bc64af520a50849b624dcc0926c27d5b423c"}],
       "operations": [
         {
           "name": "method-candidate",
           "kind": "deliverable",
-          "summary": "Induce one reusable method — how this person does this kind of work — from one run's transcript, feedback and repair rounds, and propose exactly one of create, amend, merge or no change.",
+          "summary": "Induce one reusable method — how this person does this kind of work — from a run's trajectory digest, the excerpts anchored on what the person did to it, feedback and corrections, or a program their runs keep carrying, and propose exactly one of create, amend, merge or no change.",
           "accepts": ["distillationInput"],
           "produces": ["SKILL.md","method-candidate.json","distillation-notes.md"]
         }
@@ -829,11 +829,11 @@
       "id": "capability/method-relations",
       "name": "method-relations",
       "origin": "capability",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:9c781c451bef77f4cf4a6430cd6e76b5e3723506525a20a6ba3c3b00b8ecc00e",
+      "digest": "sha256:655860abf91e5ea84135a47843d320fda04b34bedb1140c55ebd5539721e5628",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"db6f88852a6b9f1dbca0dae85814872b3bc086e3e4b73158906a22ea7b663038"}],
+      "references": [{"path":"capability.yaml","sha256":"a656c27962902f665765f67c53fddf2317644e156904ab737b6b9458a5af2027"}],
       "operations": [
         {
           "name": "method-relations",
@@ -851,9 +851,9 @@
       "origin": "capability",
       "version": "2.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:e40fd30145c426f5ad93201d2f9e3753ac99630d1339d70664292ce9309b966a",
+      "digest": "sha256:0346733116a47aa07d37168a2c9035269bcd9357ebb9fe7e4ba006d08695486f",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"df1051b57ea4d87cbc5f98815596e40a20f4c8f78891e56bec4d2afdf9019942"}],
+      "references": [{"path":"capability.yaml","sha256":"6e4d51d1e02819b242ec7ac82b0f70a18e00c3c0d7bc6714df4f3bcd9bf7259a"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -890,9 +890,9 @@
       "origin": "capability",
       "version": "1.0.2",
       "source": {"kind":"release"},
-      "digest": "sha256:609ad080e0b8e69b1393b05f5aa05d57f8578631beb9fe8ac7c31639f9d8ccc9",
+      "digest": "sha256:09a286418c64f8d233dc93d3148e354ef2aabf2baecd86cbb4f1375cefea7f47",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"571d4ffcf7805dd3782f2ef81ee0bc64f3c3376a826538c47da703c0741c4277"}],
+      "references": [{"path":"capability.yaml","sha256":"136a2478be427275a75c2d104d72887251bdc69e2d035fd475c4a706b05208f8"}],
       "dependencies": [
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -919,9 +919,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:ffe7225b834d1c7be3b49647adadade10f98d70074326cb7f2d22e741baf7a06",
+      "digest": "sha256:2b4831024b0fea43270fc2cdd8612cf420e05512518b2325c9ad799670a729d4",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"f10c89c9f661a9a2dc5508eac40842873d86d5afc11105dfa1d9de33006a3db4"}],
+      "references": [{"path":"capability.yaml","sha256":"0c578a32a7044a84c1a21ec05ad5ddfa783ea92df16dfb8aa06e04cada5e6dca"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -967,13 +967,13 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:baa9d0caa29a3d5d8543e0a1cd2adf52f90a146658e12dbe011771161f7ca302",
+      "digest": "sha256:95688f245e7b86e1c794a536037cf2dd2b01238fcbca9dc3b47c63bfac1f8842",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
-        {"path":"scripts/evidence_floor.py","sha256":"6f84568286ddbfde9bc8cb14e1af444fd94221303d4e1a89834c2d2a2ee071c9"},
-        {"path":"scripts/preflight.py","sha256":"3a31e67c5c3cb3ee88c0a7aaa492bf7c54ae623d9e69561a7c8be7a8d96c93ca"}
+        {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
+        {"path":"scripts/preflight.py","sha256":"f263b76c7a42afe7cd2b06375299889df21181cd0f1534305e57fee0a8faff2c"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"eb6dd9c1d05260dc6331dfbbb25f439cf18558f619a5a7e44eaf36114598c8b5"}],
+      "references": [{"path":"capability.yaml","sha256":"021ef9f97cf274d576e005933fb54a9b3f28cc79f67ce177fb2563600e27919c"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1007,9 +1007,9 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:4aa60ee6f61c57ebab2c42f32509f09eae5b6da88fa1010b2049d4a8f685c399",
+      "digest": "sha256:bb55c19a3df7f818fefa53bdf93056cf72e9616addc83f9de08b6e3e8c4c05a1",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"085ace25908c66d26ecc3fc71c6a60d242a1b80bc167ef859672d3186e442a03"}],
+      "references": [{"path":"capability.yaml","sha256":"8f2ce80fd424c2a18ea6ff52efc870f68c40c3ccb436f28740f6586bfab5493a"}],
       "operations": [
         {
           "name": "source-understanding",
@@ -1027,15 +1027,15 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:6594cc1ddc70d42d17f8563f89f2a7e9b8eec51db94ec43c89ce8d99e852f4bb",
+      "digest": "sha256:5d7379451e3cb9c93ef96cdf9d1a79400758b5dec87a874be01a10f9212c7877",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
-        {"path":"scripts/analysis_methods.py","sha256":"fcecca6b5daf4cf09f387f332648de8982d73a005926ddb90744e6f0f6cac24a"},
-        {"path":"scripts/run_analysis.py","sha256":"4ea12091477882f43b1bcb8e6b1b2c68640630081af8008ba7f07e8785f25fc1"}
+        {"path":"scripts/analysis_methods.py","sha256":"e71ff10c840b7fb96003b341da4dd56d3d77ac9ea0d6023cdc712783fe5fd0c2"},
+        {"path":"scripts/run_analysis.py","sha256":"ec1666014d8a9bcb4cb223653977601d2449f41fb485ceca0334e9fb634ff321"}
       ],
       "references": [
-        {"path":"capability.yaml","sha256":"8ee69b697ee8896117260fff775c8e75abc207d2da1332481fd7d3e340657d25"},
-        {"path":"scripts/analysis_method_records.json","sha256":"2101018a78447d0cd4d396c360d6d35cb2f1edc7edab271854562c281ec2d77f"}
+        {"path":"capability.yaml","sha256":"0446e7f80b8e2d67efd370a6cc21362e24882b0f3518ce0551a572cb0dde5205"},
+        {"path":"scripts/analysis_method_records.json","sha256":"e6322249429c5b9ca80216314ea41480f70de1985150b7ba94658ec5d47664d2"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1064,9 +1064,9 @@
       "origin": "capability",
       "version": "1.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:12ad1e806b2864559a093b9a2c6990195386a71493030f02cc2f5832b66ad9e9",
+      "digest": "sha256:6e6199caadafa3b4032cc55bc5c4de3689ad5137dc22bf73e983c31b5bb13a93",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"8e0f79059552a5acbebafa4e83a573e773141b1c57a7b5c6357e6e6b5339fb0d"}],
+      "references": [{"path":"capability.yaml","sha256":"8734aea15097525a2aade3d20a961aa0ca795431ad3023763325d2d101dbf99d"}],
       "operations": [
         {
           "name": "evolution-tool-candidate",
@@ -1084,9 +1084,9 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:d7c9e73b370f16c41b9e7c61e4365459a37e6cf3769f243fc768ecd75898cbb1",
+      "digest": "sha256:9391940d7a6e7f333e07a300836aad4a263e233857a829b1c684b2c3c6a54351",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"d1a2f7ab060ba35511267b7cb745259ebfec15e1594015bd7e8bd5007a6b2f5a"}],
+      "references": [{"path":"capability.yaml","sha256":"8b5df0588fcd81857c29fbf864b45cc01ee22b40b0782115e23094df7ac6b827"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1137,9 +1137,9 @@
       "origin": "capability",
       "version": "1.3.0",
       "source": {"kind":"release"},
-      "digest": "sha256:be45b6be9f3cdfbae1c7987f8c49257159ff20159fd659fae476012303449cd8",
+      "digest": "sha256:7039b7761561991faf68aef12ec2bff013bb4f919f7b6d4ff8d4a93a30b3e010",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"555e9726aa28f80b60a4af6605019d9e9a3c582886517903292ea559b66dd8c5"}],
+      "references": [{"path":"capability.yaml","sha256":"d3a35159b0cfbb67f7698f7ab28dfe56de7c5eaf98a87de747d0575f3c2c0cf0"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1182,9 +1182,9 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f6a628229534b89bb1ae99bc13f2b9cea6423306a8ae964b89126bd5234f91f6",
+      "digest": "sha256:1fc11ef39df8f94a3bcda4d44488cbe2a6fa53821593eeb8e08b8eea8080342a",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"dd242de191062511886889ab321126a913e195e9aca81105cd9b0ce4ab40fc6a"}],
+      "references": [{"path":"capability.yaml","sha256":"3c5e1aa2b528c497098c0feac0068a2cc81eda56a9b69612a639a1d0d592fba3"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1216,9 +1216,9 @@
       "origin": "capability",
       "version": "1.1.2",
       "source": {"kind":"release"},
-      "digest": "sha256:b3160a8bc195d126349b2a5eba5758b4fcb2a7f0cc273bf722fbe3c492c6160e",
+      "digest": "sha256:53974699f37be559e748284bf8d59e6e9f8c3edda4b2a699c7b64fbff27eb709",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"3f08371d65ea5254b6743ade77316c6460e93f9d7bbd9f15dc7522d86f607e93"}],
+      "references": [{"path":"capability.yaml","sha256":"cb35e9f41281043aea8dc1c1d1e1218476529df98cadb57b56af8d9e77e97663"}],
       "dependencies": [
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1246,9 +1246,9 @@
       "origin": "capability",
       "version": "1.3.4",
       "source": {"kind":"release"},
-      "digest": "sha256:c521e6e8facab159dd20d2ab41e23d521ca30f5e0d00a4b3f976138cada5a4b9",
+      "digest": "sha256:775e3e2f67d0a49ce41e6600fc873acb4d35c5b06ba648d0ff27f26ce03c8215",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"aa2f23c36cd0f334c6a67eac82b9db667883f2f4c0c2b4b7ab417c2de0f71f0f"}],
+      "references": [{"path":"capability.yaml","sha256":"93335324494b06a22341f21a804c4b3d0e492c1631ae615f60578bb649ee5aed"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"evidence_pool","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1801,16 +1801,34 @@
       "id": "curated/biosequence-analysis",
       "name": "biosequence-analysis",
       "origin": "curated",
-      "source": {"kind":"derived","path":"biopython","package":"scientific-agent-skills"},
+      "version": "1.5",
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/biopython",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:4529e8872fa33e7af4a0f3d7042dde7cbb52b9ba69d47b7195453584b30e3dad",
+      "digest": "sha256:db53343f6aaaf33ee8ba730a1fc33c48af025bbb8cb15813a9b5adcbccd464d1",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agents/openai.yaml","sha256":"56cc41590230210038fa61b796d43e37f10aae1025006031e839bd56fb1fddb3"}],
+      "references": [
+        {"path":"agents/openai.yaml","sha256":"56cc41590230210038fa61b796d43e37f10aae1025006031e839bd56fb1fddb3"},
+        {"path":"references/advanced.md","sha256":"d1cf9047ec67c87fe82da2665eabecf09dce95a258691570ea664de097763493"},
+        {"path":"references/alignment.md","sha256":"e47263f09d365b320099e8939488496257b83e157270276c73835ae884e155be"},
+        {"path":"references/blast.md","sha256":"a0b72ff4e89e91ab766a4f327f0ae440c70fc7277ad151ca00206078dfc55757"},
+        {"path":"references/databases.md","sha256":"a64a4c7f32c14b7880c10cde4677c45938c79bfd05bafe7ca9afb7f8d9476099"},
+        {"path":"references/phylogenetics.md","sha256":"c940bfead88e0b7f4e3d6da192f4a7790cda927ca0547548a828da4c3ad3f129"},
+        {"path":"references/review.md","sha256":"8cc46d96da575ce554088ebf55609c8562c65c10fc3aaeea595bbfddb6649cd9"},
+        {"path":"references/sequence_io.md","sha256":"2fba4dbe55dbddd08cc221b0d8aa763efa02a7bb89da85ba88e3a4a2294ea251"},
+        {"path":"references/structure.md","sha256":"f694063b158779cd816a410851e53c2c1bfd565341a7dff94dceaa82b98f5559"}
+      ],
       "dependencies": [
+        {"kind":"python-package","name":"Bio","supply":"image","optional":true,"basis":"observed","evidence":"SKILL.md (instructions)"},
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {
@@ -2412,15 +2430,52 @@
       "id": "curated/hypothesis-development",
       "name": "hypothesis-development",
       "origin": "curated",
-      "source": {"kind":"derived","path":"hypogenic+hypothesis-generation","package":"scientific-agent-skills"},
+      "version": "2.4",
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/hypothesis-generation",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:195ab52dfbb08d5c3c7ff47bf6667704228c5691b8226fc8d800d91254ee5ead",
+      "digest": "sha256:43662deb119bde500b751028286433e93d13e8f5fb66ac3402f188d1b8fe90b5",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agents/openai.yaml","sha256":"10fd780a98c018225c01f6e110d5a675548a4c907c98e0bcbaec34aa3a5fdb16"}],
+      "scripts": [
+        {"path":"scripts/_common.py","sha256":"7a41a5f9b97092ee188d45959f38f92a4215d4f298dd04fd0f2817e9f607e74e"},
+        {"path":"scripts/audit_evidence_ledger.py","sha256":"18fc0a947fec34ea573eb824f540ce6ccb351aed5e08fc80ae476c2150aef2bb"},
+        {"path":"scripts/check_falsification_controls.py","sha256":"9baea063c8ea22ed6083102d16104e14e6a7e5c139dfedc4a0620a5e7717d934"},
+        {"path":"scripts/check_operationalization.py","sha256":"efc093f4b58b23e095238e60badef04d34dfb012b7958e1326a1f7d58ed5edd6"},
+        {"path":"scripts/generate_preregistration_scaffold.py","sha256":"c5c8a43772e11fa6b6011dc7593540f73dd838228499c093bddf4764da503f04"},
+        {"path":"scripts/lint_causal_claims.py","sha256":"561186e71f7c0b573f7ba45ef0009460c1398048929ed55fad53a65cda56dafe"},
+        {"path":"scripts/validate_hypothesis_schema.py","sha256":"2bf9d43471d0404c8bb13e57910d3448dcaf4ad86c022d3c5975b70988589801"},
+        {"path":"scripts/validate_prediction_matrix.py","sha256":"05b773e5b7f82e6c2c04b24772fd6726701608fcf53c73379f4158097116771e"}
+      ],
+      "references": [
+        {"path":"agents/openai.yaml","sha256":"10fd780a98c018225c01f6e110d5a675548a4c907c98e0bcbaec34aa3a5fdb16"},
+        {"path":"assets/evidence_ledger_template.csv","sha256":"1ec5cc4ada96e05041c67865bcdfd3bb0a4f7cc92f24ca1ce7a826028a41d3de"},
+        {"path":"assets/falsification_controls_template.json","sha256":"beea4e2be3b5abdad1014934a7c2fe1f9f00f07b3270119cfeb8134a94603e26"},
+        {"path":"assets/hypothesis_record_template.json","sha256":"73f080a6696c415f228b38100bb7b0f6bc89ad2c7997bf50d62b585b0bc8fe0c"},
+        {"path":"assets/operationalization_template.json","sha256":"36ecdbd91c022554e60db646b548f5694d8409277a5b15fdf309d86f8c1e3070"},
+        {"path":"assets/prediction_rival_matrix_template.csv","sha256":"ccf6cb53c048a9f4d60788a8ec73c5d683ec549dab7df95b30282f6c0963653a"},
+        {"path":"assets/preregistration_scaffold_template.md","sha256":"fa577c7413435054ed927a9a925abc2f3a99373e55431eb6407425670276d87b"},
+        {"path":"assets/search_boundary_template.json","sha256":"b885d4e252c0df7010d8fca3dab7e3fef49e9f386b7a1b15240531ce374bf6ec"},
+        {"path":"assets/source_ledger.csv","sha256":"9543f313b9cffec9bd2cf39376edca86d39c10635b447fa7689147931d8c4813"},
+        {"path":"references/causal_inference_and_claims.md","sha256":"0162cd131dd12c6235a3b78c033c685abd80e98d5f40f9fb297b4d8104f85122"},
+        {"path":"references/concepts_and_workflow.md","sha256":"a86a8f464fb555212e79bf13e307f3c129e9c853069856eb3c93c3c8a60bb7fc"},
+        {"path":"references/ethics_safety_and_ai.md","sha256":"81d5691cd46d646ead2db50635bdcc07755e5f738b040c2ad707ac3b0eda034d"},
+        {"path":"references/experimental_design_patterns.md","sha256":"83c0c75c7b1edadc92e4ae23607624277c19955fc6a71ee0313b6efc51e4e939"},
+        {"path":"references/hypothesis_quality_criteria.md","sha256":"12698b549f77a6ee64807b959093f39628fe3d47aa9a00a9b235681bf0b09269"},
+        {"path":"references/literature_search_strategies.md","sha256":"2a34fa0645f854093aea2d867059bae563c795f1935ba4b9c6d494bdc389fdcb"},
+        {"path":"references/preregistration_and_open_science.md","sha256":"33788e3cd4eeb62e80e9fb952e3bfb532320d373e7b00ed7c0a75b4200ccdbf4"},
+        {"path":"references/security_validation.md","sha256":"e816a06c0665e083aacae5dfcad20351a2392e9ce211f80a4e7a5a9d53e21be9"},
+        {"path":"references/source_ledger.md","sha256":"b0281b810134599210f905f967267f0b44638676f673fca7528275f8e5042e55"},
+        {"path":"references/tool_reference.md","sha256":"e701b78cae8bc73598151844670928c5c234b0baf03e67673fa3532e18ea835d"}
+      ],
       "dependencies": [
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
@@ -2451,6 +2506,87 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["results.json","hypothesis-development-report.md","execution-receipt.json"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "audit_evidence_ledger",
+          "kind": "script",
+          "summary": "Audit a local evidence ledger and dated search boundary without networking.",
+          "entrypoint": "scripts/audit_evidence_ledger.py",
+          "params": [
+            {"name":"ledger","type":"string","required":true,"description":"Local evidence ledger CSV"},
+            {"name":"search_boundary","type":"string","required":true,"description":"Local search-boundary JSON"},
+            {"name":"--record","type":"string","description":"Optional local hypothesis record JSON for cross-checks"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "check_falsification_controls",
+          "kind": "script",
+          "summary": "Audit falsifiers, discriminating tests, nulls, and controls without scoring.",
+          "entrypoint": "scripts/check_falsification_controls.py",
+          "params": [
+            {"name":"checklist","type":"string","required":true,"description":"Local falsification/control checklist JSON"},
+            {"name":"--record","type":"string","description":"Optional local hypothesis record JSON for cross-checks"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "check_operationalization",
+          "kind": "script",
+          "summary": "Audit a local operationalization and measurement checklist without scoring.",
+          "entrypoint": "scripts/check_operationalization.py",
+          "params": [
+            {"name":"checklist","type":"string","required":true,"description":"Local operationalization checklist JSON"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "generate_preregistration_scaffold",
+          "kind": "script",
+          "summary": "Generate a deterministic local Markdown preregistration scaffold.",
+          "entrypoint": "scripts/generate_preregistration_scaffold.py",
+          "params": [
+            {"name":"record","type":"string","required":true,"description":"Local hypothesis record JSON"},
+            {"name":"--output","type":"string","required":true,"description":"Output Markdown path"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "lint_causal_claims",
+          "kind": "script",
+          "summary": "Lexically lint causal versus associational claims in bounded Markdown.",
+          "entrypoint": "scripts/lint_causal_claims.py",
+          "params": [
+            {"name":"document","type":"string","required":true,"description":"Local Markdown document"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "validate_hypothesis_schema",
+          "kind": "script",
+          "summary": "Validate a structured hypothesis record without judging scientific merit.",
+          "entrypoint": "scripts/validate_hypothesis_schema.py",
+          "params": [
+            {"name":"record","type":"string","required":true,"description":"Local hypothesis record JSON"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
+        },
+        {
+          "name": "validate_prediction_matrix",
+          "kind": "script",
+          "summary": "Validate a prediction/rival-hypothesis CSV without ranking candidates.",
+          "entrypoint": "scripts/validate_prediction_matrix.py",
+          "params": [
+            {"name":"matrix","type":"string","required":true,"description":"Local prediction/rival matrix CSV"},
+            {"name":"--record","type":"string","description":"Optional local hypothesis record JSON for cross-checks"},
+            {"name":"--output","type":"string","description":"Optional local JSON report"},
+            {"name":"--force","type":"boolean","description":"Replace an existing output file"}
+          ]
         }
       ]
     },
@@ -2460,7 +2596,13 @@
       "name": "markdown-mermaid-writing",
       "origin": "curated",
       "version": "1.3",
-      "source": {"kind":"derived","path":"markdown-mermaid-writing","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/markdown-mermaid-writing",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -2640,7 +2782,13 @@
       "name": "matplotlib",
       "origin": "curated",
       "version": "1.4",
-      "source": {"kind":"derived","path":"matplotlib","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/matplotlib",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -2688,6 +2836,36 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["figure.png","figure.svg"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "plot_template",
+          "kind": "script",
+          "entrypoint": "scripts/plot_template.py",
+          "params": [
+            {
+              "name": "--plot-type",
+              "type": "string",
+              "default": "all",
+              "values": ["line","scatter","bar","histogram","heatmap","contour","box","violin","3d","all"],
+              "description": "Type of plot to create"
+            },
+            {"name":"--style","type":"string","default":"default","description":"Matplotlib style to use"},
+            {"name":"--output","type":"string","default":"plot.png","description":"Output filename"},
+            {"name":"--no-show","type":"boolean","description":"Save without opening an interactive window"}
+          ]
+        },
+        {
+          "name": "style_configurator",
+          "kind": "script",
+          "entrypoint": "scripts/style_configurator.py",
+          "params": [
+            {"name":"--preset","type":"string","description":"Use a predefined style preset"},
+            {"name":"--output","type":"string","description":"Save style to .mplstyle file"},
+            {"name":"--preview","type":"boolean","description":"Show style preview"},
+            {"name":"--list","type":"boolean","description":"List available presets"},
+            {"name":"--interactive","type":"boolean","description":"Run in interactive mode"},
+            {"name":"--no-show","type":"boolean","description":"Save a requested preview without opening a window"}
+          ]
         }
       ]
     },
@@ -2791,7 +2969,13 @@
       "name": "pathway-enrichment",
       "origin": "curated",
       "version": "1.3",
-      "source": {"kind":"derived","path":"pathway-enrichment","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/pathway-enrichment",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -2838,6 +3022,27 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["results.json","pathway-enrichment-report.md","execution-receipt.json"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "run_enrichment",
+          "kind": "script",
+          "entrypoint": "scripts/run_enrichment.py",
+          "params": [
+            {"name":"--libraries","type":"string","description":"Enrichr names or local GMT paths; human default: Hallmark 2020 + GO BP 2026."},
+            {"name":"--organism","type":"string","default":"human","values":["human","mouse","fly","yeast","worm","fish"]},
+            {"name":"--outdir","type":"string","default":"enrichment_results"},
+            {"name":"--fdr","type":"number","default":0.05},
+            {"name":"--genes","type":"string","required":true,"description":"Text gene list or CSV/TSV with header."},
+            {"name":"--background","type":"string","description":"Tested gene universe; required with local GMT."},
+            {"name":"--deseq2","type":"string","description":"CSV with gene index and signed Wald stat (not LRT stat)."},
+            {"name":"--rnk","type":"string","description":"Two columns: gene,score; comma or tab separated."},
+            {"name":"--min-size","type":"integer","default":15},
+            {"name":"--max-size","type":"integer","default":500},
+            {"name":"--permutations","type":"integer","default":1000},
+            {"name":"--seed","type":"integer","default":123},
+            {"name":"--threads","type":"integer","default":4}
+          ],
+          "limits": ["必须且只能给出其中一个：--deseq2、--rnk"]
         }
       ]
     },
@@ -2987,15 +3192,39 @@
       "id": "curated/research-grant-development",
       "name": "research-grant-development",
       "origin": "curated",
-      "source": {"kind":"derived","path":"research-grants","package":"scientific-agent-skills"},
+      "version": "1.5",
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/research-grants",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:eb7dc366fd08711d94a486c3212a8554ee170d6f8517baac9229ef67a929d215",
+      "digest": "sha256:258bbf4f1884da4d885e94f40f13627e406bb0635c6b38a424914d515fb94f8d",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agents/openai.yaml","sha256":"3470232f46eb8db6469c19ac5c50b882a6af46adb64a9c4ccc88297e0b5a2ce3"}],
+      "references": [
+        {"path":"agents/openai.yaml","sha256":"3470232f46eb8db6469c19ac5c50b882a6af46adb64a9c4ccc88297e0b5a2ce3"},
+        {"path":"assets/budget_justification_template.md","sha256":"a65ce61ac86ff3971f64d735854f8b9b53af93d3c0614e7c391d908c8b28ff45"},
+        {"path":"assets/nih_specific_aims_template.md","sha256":"f960b6410bf6c4a8ebfcb23d069ccdaae5692c38b61d55662ce21a06eaa49696"},
+        {"path":"assets/nsf_project_summary_template.md","sha256":"a8c5c638df67fa54f8bb8ab8c4d92bc9a10c471afcbf73e15b6e173c33d8c788"},
+        {"path":"references/README.md","sha256":"c1dc961d3ea576cd4d06e76a47d1a4236b7e9d77bf90a612302125938db9bc5c"},
+        {"path":"references/broader_impacts.md","sha256":"de888b798004a3c0174d8dfd99626c8654a9ca53f78e2dcd4d2e242bed9873e1"},
+        {"path":"references/core_components.md","sha256":"eefc46d059c3f6bffa329250f5c796fe1a86cc552fb766672fad834763eae28a"},
+        {"path":"references/darpa_guidelines.md","sha256":"f7bc5c2d0b461275599a157a074a90b71169415ebdeea3417549952b09598fc6"},
+        {"path":"references/doe_guidelines.md","sha256":"79e4afebf7fb71dabfc661144913d0d6af9583072e52b8405a67f2932b5ac5d7"},
+        {"path":"references/nih_guidelines.md","sha256":"ff3f8dda0a2f77743401b44caff6c4f94471fb0348e2d4abf4f7b86e8874f285"},
+        {"path":"references/nsf_guidelines.md","sha256":"78fe17b0e5798767e6ff9074f28d6b8d154dbe256b9d36dcbdaa78fbd6b73f24"},
+        {"path":"references/nstc_guidelines.md","sha256":"852b3bdcd990a17b9164680b4bf344f0800e551d4126310531f7c1d2be7f6c35"},
+        {"path":"references/proposal_types_and_resubmission.md","sha256":"267d3c8688407620c3cf633a0b4e18730c4d65b5380531796d1e8b4a4da9db1f"},
+        {"path":"references/review_criteria.md","sha256":"e6d6b9822ee6cb744eff39a79a7502c3ce6668c76ae49a5f652793421e81a458"},
+        {"path":"references/specific_aims_guide.md","sha256":"58e4bd4e03dffe99476454a2af0b92ea79eff2b8ef897fa40207e8d3403bc7a6"},
+        {"path":"references/writing_principles.md","sha256":"718b079d8f93df8ce4bd44767b3d794ddde7ebe5901a9957caf7b2ace9c5bda8"}
+      ],
       "dependencies": [
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
@@ -3270,7 +3499,13 @@
       "name": "statistical-power",
       "origin": "curated",
       "version": "1.3",
-      "source": {"kind":"derived","path":"statistical-power","package":"scientific-agent-skills"},
+      "source": {
+        "kind": "repository",
+        "repository": "K-Dense-AI/scientific-agent-skills",
+        "commit": "526ebce143bc326f44471554e33d66a19c840360",
+        "path": "skills/statistical-power",
+        "package": "scientific-agent-skills"
+      },
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -3326,6 +3561,21 @@
           "accepts": ["JSON request object (.json)","table (.csv, .tsv, .jsonl)"],
           "produces": ["power-analysis.md","power-curve.csv","power-curve.png"],
           "limits": ["输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB","表格最多 200000 行、2000 列","文本字段最多 2000000 个字符","基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"]
+        },
+        {
+          "name": "export_power_analysis",
+          "kind": "script",
+          "summary": "Export a reproducible two-group power analysis as Markdown, CSV, and PNG.",
+          "entrypoint": "scripts/export_power_analysis.py",
+          "params": [
+            {"name":"--output-dir","type":"path","required":true},
+            {"name":"--effect-size","type":"string","default":0.5},
+            {"name":"--alpha","type":"string","default":0.05},
+            {"name":"--target-power","type":"string","default":0.8},
+            {"name":"--minimum-n","type":"string","default":10},
+            {"name":"--maximum-n","type":"string","default":120},
+            {"name":"--step","type":"string","default":5}
+          ]
         }
       ]
     },
@@ -3430,9 +3680,9 @@
       "origin": "evimed",
       "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f44d1e464b40a143330f1466fc11567944b22c05a95307e6bd2dfb95fbd689d6",
+      "digest": "sha256:7a3fa7a8d623b01ef7f815109c558b58c73bcc9c65ad70cdc9b9013c1bcbe226",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"agent.yaml","sha256":"22faeb3219983c1375713338b1b84978f6fa8002eea05c3f2e79f277c480d425"}]
+      "references": [{"path":"agent.yaml","sha256":"e8b2a1b5103af83bbb7a957858c6c0c6fd49e72e77fc5282d876bf64361929ad"}]
     },
     {
       "schemaVersion": 1,

@@ -34,7 +34,7 @@ def test_the_committed_registry_is_a_fresh_deterministic_build():
 def test_every_row_validates(document):
     rows = load_registry(REGISTRY, {})
     # 722 before 2026-10-10; the single arXiv discovery query is replaced by the 28 ai-discovery rows (tests/adapters/test_ai_discovery.py)
-    assert len(rows) == len(document["sources"]) == 749
+    assert len(rows) == len(document["sources"]) == 755        # ct-src 2026-10-24: six NMPA lists
     assert sum(r.enabled for r in rows) >= 256
 
 
@@ -111,7 +111,9 @@ def test_the_plan_decisions_hold(document):
     # so it is mixed too; 20 pure safety feeds remain
     recalls = by_id["fda-recalls-safety-alerts"]
     assert recalls["safety_feed"] is False and recalls["lane"] == "mixed"
-    assert sum(1 for s in sources if s["safety_feed"]) == 20
+    # ct-src 2026-10-24: NMPA's device recall list is one more (every row of it is a recall notice)
+    assert by_id["nmpa-device-recalls"]["safety_feed"] is True and by_id["nmpa-device-recalls"]["lane"] == "safety"
+    assert sum(1 for s in sources if s["safety_feed"]) == 21
     assert by_id["evimed-chictr"]["config"]["url"].endswith("/ai-api/review/api/clinical-trial")   # v1: sponsor present
     for sid in ("natcm-notices", "most-tztg", "nmpa-gd-mirror", "csco-news", "gd-pharm-society-notifications", "cntcm-news",
                 "nhsa-policy-regulations", "cdr-adr-notices", "zhongguokexuebao", "chinacdc-notifiable-disease", "china-cdc-news"):
@@ -225,12 +227,29 @@ def good_row(document):
     (lambda r: r.update(enabled=True, egress="browser", access="browser-list"), "without a list configuration"),
     (lambda r: r.update(poll_floor_s=60), "poll_floor_s"),
     (lambda r: r.update(surprise=1), "unknown field"),
+    (lambda r: r["config"].update(abstract_feed=["http://feeds.example.org/rss"]), "one to four https URLs"),
+    (lambda r: r["config"].update(abstract_feed="https://feeds.example.org/rss"), "journal entries only"),
 ])
 def test_the_validator_catches(document, mutate, expected):
     row = good_row(document)
     mutate(row)
     problems = validate_row(row)
     assert any(expected in p for p in problems), problems
+
+
+def test_the_journal_feeds_the_paper_text_chain_reads(document):
+    """rt-papers (2026-10-22): the journals whose publishers' feeds carry text name them (``config.abstract_feed``),
+    each measured (``tools/measure_abstract_feeds.py``); The Lancet's, NEJM's, the AHA's, ACP's, JACC's, RSNA's, ASCO's
+    and the AAN's feeds are disallowed by their robots.txt, LWW's answer a challenge, and none is named."""
+    rows = {s["id"]: s for s in document["sources"] if (s.get("config") or {}).get("abstract_feed")}
+    assert len(rows) == 58 and all(r["source_type"] == "journal" and r["enabled"] for r in rows.values())
+    assert rows["j-0098-7484"]["config"]["abstract_feed"][0] == "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml"
+    assert rows["j-0016-5085"]["config"]["abstract_feed"] == ["https://www.gastrojournal.org/inpress.rss",
+                                                              "https://www.gastrojournal.org/current.rss"]
+    disallowed = ("thelancet.com/rss", "nejm.org/action", "ahajournals.org/action", "acpjournals.org/action",
+                  "jacc.org/action", "pubs.rsna.org/action", "ascopubs.org/action", "neurology.org/action",
+                  "journals.lww.com")
+    assert not any(part in url for r in rows.values() for url in r["config"]["abstract_feed"] for part in disallowed)
 
 
 def test_duplicate_ids_are_refused(document):

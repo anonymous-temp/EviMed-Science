@@ -25,7 +25,8 @@ within the poll, and a transient failure (``policy.is_transient``) is re-sent up
 jittered wait; re-sends are requests in the fetch log but do not use up ``max_pages``. The plugin's
 own budget refusals (``host-budget``) reschedule without counting as the source's failure.
 
-The same process also runs the text worker (on-demand enrichment for ``/text``), the hourly
+The same process also runs the text worker (on-demand enrichment for ``/text``; a WeChat article's text is
+bought through the social collector, never read as a page — ``social.wechat``), the hourly
 retention purge (fetches 14 d, entries 30 d after delivery or 90 d when their text was asked for,
 seen_keys 400 d), the hourly health re-check (``recheck_health``: the 24 h window moves on without a
 poll) and a registry watcher that re-syncs when the file changes.
@@ -51,12 +52,13 @@ from psycopg.types.json import Jsonb
 from . import policy
 from .db import meta_get, meta_set
 from .fetch import ProtectedFetcher, is_empty_shell
-from .model import NEUTRAL_DETAILS, EntryTextResult, FetchError, SourceState, RequestSpec
+from .model import NEUTRAL_DETAILS, UNPOLLED_ACCESSES, EntryTextResult, FetchError, SourceState, RequestSpec
 from .normalize import Rejected, drop_boilerplate_summaries, prepare
-from .registry import RegistryError, load_registry, source_from_row, sync_registry
+from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
-from .store import (StoreResult, claim_texts, insert_fetch, reliability_24h, reliability_24h_all, save_text_result,
-                    store_entries, text_failure)
+from .social.wechat import is_article as is_wechat_article
+from .store import (StoreResult, claim_texts, reopen_top_journal_texts, insert_fetch, redeliver, reliability_24h, reliability_24h_all,
+                    save_text_result, store_entries, text_failure, text_outcomes, text_outcomes_all)
 
 log = logging.getLogger("knowledge_plugin.scheduler")
 
@@ -69,6 +71,8 @@ PURGE_BATCH = 5000
 ADAPTER_MISSING_RETRY_S = 3600
 LEASE_RENEW_EVERY = 20
 TEXT_BATCH = 20
+SOCIAL_EVERY_S = 60.0
+LEADS_EVERY_S = 60.0
 
 
 def _utcnow() -> datetime:
@@ -118,6 +122,9 @@ class Crawler:
         self.last_error: str | None = None
         self.last_error_at: datetime | None = None
         self.polls_total: Counter = Counter()
+        self._social = None
+        self._leads = None
+        self._hot_lists = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -133,7 +140,16 @@ class Crawler:
             asyncio.create_task(self._loop("maintenance", self.maintenance, MAINTENANCE_EVERY_S, initial_delay=60.0)),
             asyncio.create_task(self._loop("health", self.recheck_health, HEALTH_RECHECK_EVERY_S, initial_delay=120.0)),
             asyncio.create_task(self._loop("source-requests", self.pull_source_requests, 86400.0, initial_delay=90.0)),
+            asyncio.create_task(self._loop("medical-discovery", self.discover_medical_sources, 3600.0, initial_delay=180.0)),
+            asyncio.create_task(self._loop("source-discovery", self.discover_sources, 3600.0, initial_delay=300.0)),
             asyncio.create_task(self._loop("registry", self.watch_registry, REGISTRY_WATCH_EVERY_S, initial_delay=REGISTRY_WATCH_EVERY_S)),
+            # fr-social 2026-10-22: X, WeChat and the six platforms (contract 1.5.0), read by their own collector.
+            asyncio.create_task(self._loop("social", self.collect_social, SOCIAL_EVERY_S, initial_delay=30.0)),
+            # ct-mix 2026-10-24: the addresses the platform's lead triggers handed over (contract 1.6.0), a few a minute.
+            asyncio.create_task(self._loop("leads", self.read_leads, LEADS_EVERY_S, initial_delay=45.0)),
+            # c2-leads 2026-10-25: the public hot lists (contract 1.7.0), every KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S.
+            asyncio.create_task(self._loop("hot-lists", self.read_hot_lists, float(self._settings.hot_lists_interval_s),
+                                           initial_delay=20.0)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
                  self._settings.concurrency, self._settings.text_concurrency, sorted(self._adapters) or "none")
@@ -201,14 +217,27 @@ class Crawler:
                 return await (await conn.execute(
                     """WITH candidates AS (
                          SELECT DISTINCT ON (coalesce(host, id)) id, priority, next_poll_at
-                           FROM evimed_knowledge.sources
-                          WHERE enabled AND retired_at IS NULL AND next_poll_at <= %(now)s
+                           FROM evimed_knowledge.sources candidate
+                          WHERE enabled AND operator_enabled IS DISTINCT FROM false
+                            AND retired_at IS NULL AND next_poll_at <= %(now)s
+                            AND NOT (access = ANY(%(social)s))
+                            AND (NOT (config ? 'medical_parent') OR EXISTS (
+                              SELECT 1 FROM evimed_knowledge.sources parent
+                               WHERE parent.id = candidate.config->>'medical_parent'
+                                 AND parent.enabled AND parent.operator_enabled IS DISTINCT FROM false
+                                 AND parent.retired_at IS NULL))
                             AND (lease_until IS NULL OR lease_until < %(now)s)
                             AND NOT (coalesce(host, id) = ANY(%(busy)s))
                           ORDER BY coalesce(host, id), priority, next_poll_at),
                        picked AS (
                          SELECT s.id FROM evimed_knowledge.sources s JOIN candidates c ON c.id = s.id
-                          WHERE s.enabled AND s.next_poll_at <= %(now)s
+                          WHERE s.enabled AND s.operator_enabled IS DISTINCT FROM false AND NOT (s.access = ANY(%(social)s))
+                            AND s.retired_at IS NULL AND s.next_poll_at <= %(now)s
+                            AND (NOT (s.config ? 'medical_parent') OR EXISTS (
+                              SELECT 1 FROM evimed_knowledge.sources parent
+                               WHERE parent.id = s.config->>'medical_parent'
+                                 AND parent.enabled AND parent.operator_enabled IS DISTINCT FROM false
+                                 AND parent.retired_at IS NULL))
                             AND (s.lease_until IS NULL OR s.lease_until < %(now)s)
                           ORDER BY c.priority, c.next_poll_at
                           LIMIT %(limit)s
@@ -219,7 +248,7 @@ class Crawler:
                        RETURNING s.*""",
                     {"now": self._clock(), "limit": limit, "worker": self._settings.worker_id,
                      "until": self._clock() + timedelta(seconds=self._settings.lease_s),
-                     "busy": list(busy_hosts or [])},
+                     "busy": list(busy_hosts or []), "social": sorted(UNPOLLED_ACCESSES)},
                 )).fetchall()
 
     async def _poll_guarded(self, row: dict) -> None:
@@ -507,7 +536,8 @@ class Crawler:
                     enabled=row["enabled"], last_ok_at=row["last_ok_at"], failing_since=failing_since, now=started,
                     successes_24h=successes, failure_episodes_24h=episodes,
                     drifted=policy.is_drifted(row["access"], row["last_nonempty_at"], row["zero_streak"],
-                                              row["ever_dated"], row["undated_streak"]))
+                                              row["ever_dated"], row["undated_streak"]),
+                    text_failing=policy.text_failing(await text_outcomes(conn, row["id"])))
                 await conn.execute(
                     """UPDATE evimed_knowledge.sources SET lease_owner = NULL, lease_until = NULL, next_poll_at = %s,
                               last_attempt_at = %s, consecutive_failures = %s, failing_since = %s,
@@ -549,7 +579,8 @@ class Crawler:
                 successes, episodes = await reliability_24h(conn, row["id"], started)
                 health = policy.health_state(enabled=row["enabled"], last_ok_at=started, failing_since=None,
                                              now=started, successes_24h=successes, failure_episodes_24h=episodes,
-                                             drifted=drifted)
+                                             drifted=drifted,
+                                             text_failing=policy.text_failing(await text_outcomes(conn, row["id"])))
                 await conn.execute(
                     """UPDATE evimed_knowledge.sources SET lease_owner = NULL, lease_until = NULL,
                               next_poll_at = %(next)s, poll_interval_s = %(interval)s, empty_polls = %(empty)s,
@@ -580,6 +611,11 @@ class Crawler:
         limit = TEXT_BATCH if self._enrich_batch is not None else self._settings.text_concurrency
         async with self._pool.connection() as conn:
             jobs = await claim_texts(conn, limit, self._clock(), self._settings.lease_s)
+        if not jobs:
+            return
+        for job in [job for job in jobs if is_wechat_article(job.get("url"))]:
+            await self.wechat_text_one(job)
+        jobs = [job for job in jobs if not is_wechat_article(job.get("url"))]
         if not jobs:
             return
         if self._enrich_batch is not None and len(jobs) > 1:
@@ -617,8 +653,17 @@ class Crawler:
         async with self._pool.connection() as conn:
             for job, result in zip(jobs, results, strict=True):
                 statuses.append(await save_text_result(conn, job, result, now))
+                await self._deliver_upgrade(conn, job, result, now)
         log.info("texts: %s", dict(Counter(statuses)))
         return statuses
+
+    @staticmethod
+    async def _deliver_upgrade(conn, job: dict, result: EntryTextResult, now: datetime) -> None:
+        """An index's abstract replaced a provisional text (``enrich``: the upgrade): the entry is delivered again as
+        its next revision, so the platform reads the new text."""
+        if job.get("upgrade") and result.abstract and "upgraded" in result.notes:
+            revision = await redeliver(conn, job["entry_id"], now)
+            log.info("text %s upgraded, delivered again as revision %s", job["entry_id"], revision)
 
     async def enrich_one(self, job: dict) -> str:
         now = self._clock()
@@ -645,7 +690,30 @@ class Crawler:
                 return await text_failure(conn, job, f"enrich_failed:{type(error).__name__}", now)
         async with self._pool.connection() as conn:
             status = await save_text_result(conn, job, result, now)
+            await self._deliver_upgrade(conn, job, result, now)
         log.info("text %s %s via %s", job["entry_id"], status, result.fetched_from or "-")
+        return status
+
+    async def wechat_text_one(self, job: dict) -> str:
+        """A WeChat article's text, bought through Dajiala by the social collector (fr-ext 2026-10-22): mp.weixin.qq.com
+        refuses every page read in its robots.txt, so the page reader answered "unavailable" and a body lost to a
+        provider hiccup at collection was never recovered."""
+        now = self._clock()
+        try:
+            async with asyncio.timeout(ENRICH_TIMEOUT_S):
+                result = await self.social().wechat_text(job, now)
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            async with self._pool.connection() as conn:
+                return await text_failure(conn, job, "wechat_text_timeout", now)
+        except Exception as error:
+            log.exception("wechat text of %s failed", job["entry_id"])
+            async with self._pool.connection() as conn:
+                return await text_failure(conn, job, f"wechat_text_failed:{type(error).__name__}", now)
+        async with self._pool.connection() as conn:
+            status = await save_text_result(conn, job, result, now)
+        log.info("text %s %s via dajiala (%s)", job["entry_id"], status, ",".join(result.notes) or "-")
         return status
 
     # ------------------------------------------------------------------ maintenance
@@ -679,6 +747,9 @@ class Crawler:
                         if purged_max > watermark:
                             await meta_set(conn, "purged_through_seq", purged_max)
             done["entries"] = purged
+            reopened = await reopen_top_journal_texts(conn, now)
+            if reopened:
+                done["texts_reopened"] = reopened
             deleted = await (await conn.execute(
                 """DELETE FROM evimed_knowledge.seen_keys WHERE (source_id, key_sha256) IN (
                      SELECT source_id, key_sha256 FROM evimed_knowledge.seen_keys WHERE last_seen_at < %s LIMIT %s)
@@ -711,6 +782,7 @@ class Crawler:
         changed = 0
         async with self._pool.connection() as conn:
             counts = await reliability_24h_all(conn, now)
+            text_reads = await text_outcomes_all(conn)
             rows = await (await conn.execute(
                 """SELECT id, health, last_ok_at, failing_since, access, last_nonempty_at, zero_streak, ever_dated,
                           undated_streak, updated_at
@@ -724,7 +796,8 @@ class Crawler:
                     enabled=True, last_ok_at=row["last_ok_at"], failing_since=row["failing_since"], now=now,
                     successes_24h=successes, failure_episodes_24h=episodes,
                     drifted=policy.is_drifted(row["access"], row["last_nonempty_at"], row["zero_streak"],
-                                              row["ever_dated"], row["undated_streak"]))
+                                              row["ever_dated"], row["undated_streak"]),
+                    text_failing=policy.text_failing(text_reads.get(row["id"], ())))
                 if health == row["health"]:
                     continue
                 result = await conn.execute(
@@ -738,6 +811,49 @@ class Crawler:
                     log.info("health %s: %s -> %s (24 h: %s ok, %s failure episodes)",
                              row["id"], row["health"], health, successes, episodes)
         return changed
+
+    def social(self):
+        """The social collector (``knowledge_plugin.social``), made on first use; its loop and the WeChat texts share it
+        (one Dajiala pause, one body bound)."""
+        if self._social is None:
+            from .social.collector import SocialCollector
+            self._social = SocialCollector(self._settings, self._pool, self._fetcher, clock=self._clock)
+        return self._social
+
+    async def collect_social(self) -> dict:
+        """One tick of the social collector (``knowledge_plugin.social``): the social read methods are never claimed above."""
+        return await self.social().tick()
+
+    async def read_leads(self) -> dict:
+        """One tick of the leads loop (``leads.py``): queued addresses read under the plugin's rules and emitted."""
+        if not self._settings.leads_enabled:
+            return {"status": "disabled"}
+        if self._leads is None:
+            from .leads import LeadReader
+            self._leads = LeadReader(self._settings, self._pool, self._fetcher, collector=self.social(), clock=self._clock)
+        return await self._leads.tick()
+
+    async def read_hot_lists(self) -> dict:
+        """One round of the hot-list loop (``hotlists.py``): each configured board read, its snapshot kept 72 hours."""
+        if not self._settings.hot_lists_enabled:
+            return {"status": "disabled"}
+        if self._hot_lists is None:
+            from .hotlists import HotListReader
+            self._hot_lists = HotListReader(self._settings, self._pool, self._fetcher, clock=self._clock)
+        return await self._hot_lists.tick()
+
+    async def discover_medical_sources(self) -> dict:
+        from .medical_discovery import run_daily_discovery
+        return await run_daily_discovery(self._settings, self._pool, self._fetcher, self._clock)
+
+    async def discover_sources(self) -> dict:
+        """Automatic source discovery and the source lifecycle (``discovery.py``), hourly; each step once a day."""
+        if not self._settings.discovery_enabled:
+            return {"status": "disabled"}
+        from .discovery import parse_caps, run_discovery
+        return await run_discovery(self._settings, self._pool, self._fetcher, self._clock,
+                                   caps=parse_caps(self._settings.discovery_caps),
+                                   outbound_pages=self._settings.discovery_outbound_pages)
 
     async def pull_source_requests(self) -> dict:
         """Read the platform's public wish list through the same protected fetch boundary."""
@@ -759,19 +875,27 @@ class Crawler:
             return {"status": "deferred", "reason": "manifest_invalid"}
         if not isinstance(document, dict) or not isinstance(document.get("sources"), list):
             return {"status": "deferred", "reason": "manifest_invalid"}
-        base = load_registry(self._settings.registry_path)
         async with self._pool.connection() as conn:
-            saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
-            saved_rows, _ = admitted_requests(saved, base)
-            admitted, dispositions = admitted_requests(document, [*base, *saved_rows])
-            all_rows = [*base, *saved_rows, *admitted]
-            await sync_registry(conn, all_rows, self._clock())
-            retained = [row for row in saved.get("sources", []) if isinstance(row, dict)]
-            accepted_ids = {row.source.id for row in admitted}
-            retained.extend(row for row in document["sources"][:25] if isinstance(row, dict) and row.get("id") in accepted_ids)
-            await meta_set(conn, "source_requests_admitted", {"sources": retained})
-            await meta_set(conn, "source_requests_dispositions", {"at": self._clock().isoformat(), "items": dispositions})
-        return {"status": "complete", "admitted": len(admitted), "dispositions": dispositions}
+            async with conn.transaction():
+                from .dynamic_registry import lock_registry, sync_dynamic_registry
+                await lock_registry(conn)
+                base = load_registry(self._settings.registry_path)
+                saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
+                saved_rows, _ = admitted_requests(saved, base)
+                admitted, dispositions = admitted_requests(document, [*base, *saved_rows])
+                retained = [row for row in saved.get("sources", []) if isinstance(row, dict)]
+                accepted_ids = {row.source.id for row in admitted}
+                retained.extend(row for row in document["sources"][:25] if isinstance(row, dict) and row.get("id") in accepted_ids)
+                await meta_set(conn, "source_requests_admitted", {"sources": retained})
+                await meta_set(conn, "source_requests_dispositions", {"at": self._clock().isoformat(), "items": dispositions})
+                await sync_dynamic_registry(conn, base, self._clock())
+                # Any other lane is a candidate of the discovery's request line, validated and tried like the rest.
+                from .discovery import shanghai_day, upsert_candidates
+                from .discovery_lines import request_candidates
+                requested = await upsert_candidates(conn, request_candidates(document), self._clock(),
+                                                    shanghai_day(self._clock()))
+        return {"status": "complete", "admitted": len(admitted), "dispositions": dispositions,
+                "candidates": requested.get("request", 0)}
 
     async def watch_registry(self) -> None:
         path = self._settings.registry_path
@@ -787,15 +911,11 @@ class Crawler:
             return
         self._registry_mtime = mtime
         try:
-            rows = load_registry(path)
+            async with self._pool.connection() as conn:
+                from .dynamic_registry import sync_dynamic_registry
+                await sync_dynamic_registry(conn, lambda: load_registry(path), self._clock())
         except RegistryError as error:
             log.error("registry file changed but is invalid; keeping the loaded registry: %s", error)
-            return
-        async with self._pool.connection() as conn:
-            from .source_requests import admitted_requests
-            saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
-            admitted, _ = admitted_requests(saved, rows)
-            await sync_registry(conn, [*rows, *admitted], self._clock())
 
 
 def _load_enricher() -> tuple[Callable | None, Callable | None]:

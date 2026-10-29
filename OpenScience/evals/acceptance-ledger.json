@@ -357,11 +357,10 @@
       },
       "relatedEvidence": [
         "capabilities/method-distillation/capability.yaml",
-        "evals/method-quality/splits.json",
         "PROGRESS.md@2026-09-07 13:45",
         "PROGRESS.md@2026-09-07 11:30"
       ],
-      "note": "Internal: dispatched only by a distill job, never by a user request; exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). Accepted on production 2026-09-27: distill job f72bd0e3 (trigger repair_accepted, from a clinical-evidence-synthesis run in the acceptance account's audit-worker-probe project) dispatched run_7ce89c98b111 (1.1.0), which succeeded and verified in 3 minutes (¥0.30) on its second submission, and the job wrote its candidate as method:handbook:review-finding-repair-sweep (revision 1) — the 1.1.0 handbook operation. Its transcript is complete and no tool call named the gate. The package (SKILL.md, method-candidate.json, distillation-notes.md) equals its receipt; the frozen input, a digest of the researcher's run, stays with the platform. 10 of 23 production runs since 2026-09-21 succeeded; the 13 failures were the first day's runtime_* and required_skill_missing while the loop was being made to run. The four earlier distill jobs still on record applied theirs too: claim-verdict-audit created (run_f3af9f1fc406) and amended (run_af450bc68549), reporting-checklist-addressability created (run_dcef2a4299b2), and one no_change (run_ba77fd66c85c). The job-level harness (evals/method-quality, run_paired.py) evaluates methods, not this delivery; since 2026-09-21 no evaluation is queued automatically."
+      "note": "Internal: dispatched only by a distill job, never by a user request; exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). Accepted on production 2026-09-27: distill job f72bd0e3 (trigger repair_accepted, from a clinical-evidence-synthesis run in the acceptance account's audit-worker-probe project) dispatched run_7ce89c98b111 (1.1.0), which succeeded and verified in 3 minutes (¥0.30) on its second submission, and the job wrote its candidate as method:handbook:review-finding-repair-sweep (revision 1) — the 1.1.0 handbook operation. Its transcript is complete and no tool call named the gate. The package (SKILL.md, method-candidate.json, distillation-notes.md) equals its receipt; the frozen input, a digest of the researcher's run, stays with the platform. 10 of 23 production runs since 2026-09-21 succeeded; the 13 failures were the first day's runtime_* and required_skill_missing while the loop was being made to run. The four earlier distill jobs still on record applied theirs too: claim-verdict-audit created (run_f3af9f1fc406) and amended (run_af450bc68549), reporting-checklist-addressability created (run_dcef2a4299b2), and one no_change (run_ba77fd66c85c). The job-level harness (evals/method-quality) evaluates methods, not this delivery; since 2026-09-21 no evaluation is queued automatically."
     },
     {
       "id": "method-relations",
@@ -377,7 +376,6 @@
       "relatedEvidence": [
         "evals/method-quality/results/2026-09-27-method-relations-screen/run.json",
         "capabilities/method-relations/capability.yaml",
-        "evals/method-quality/splits.json",
         "PROGRESS.md@2026-09-07 11:30"
       ],
       "note": "Internal: dispatched only by a consolidate job; exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). All four production runs succeeded (decide 09-21, 09-22, 09-26; screen 09-27). Evidence is the decide run of 2026-09-26 (run_750263e09fae, 1.0.0, 2 minutes, ¥0.17), dispatched by integrate job 951f6e71 for the newly created reporting-checklist-addressability: accepted on its first submission, and the job applied its answer (relations 0, neighbours 1 — the two methods are not related, and nothing was written). Its package equals its archived receipt; its transcript was not kept, so whether it read the gate cannot be checked. The screen run of 2026-09-27 (run_aba2ab612b91, all three candidate pairs dropped, applied by consolidate job bb03844b) is kept beside it but not cited: its transcript shows it read the method-relations validator in contractRegistry.mjs eight times through a slashless directory the read guard missed (fixed in 7f6298bf5). The build action has not run in production."
@@ -584,9 +582,9 @@
     {
       "id": "general-tasks",
       "evalHarness": "evals/general-tasks",
-      "caseCount": 28,
+      "caseCount": 29,
       "kinds": {
-        "general": 22,
+        "general": 23,
         "medical": 6
       },
       "families": {
@@ -606,15 +604,67 @@
         "scheduled": 1,
         "web-lookup": 2,
         "web-report": 2,
-        "writing": 4
+        "writing": 5
       },
       "arms": {
-        "A": "native control: the seven switchable first-party socket plugins and the citation tools off, the persona replaced by one neutral sentence (22 general cases)",
+        "A": "native control: the seven switchable first-party socket plugins and the citation tools off, the persona replaced by one neutral sentence (23 general cases)",
         "B": "the tree as given",
         "C": "a corrected tree, run by the controller with the same command"
       },
       "command": "node evals/general-tasks/runner/run.mjs --tree <OpenScience checkout> --arm B --out <dir>",
-      "note": "Not a capability: the general-task baseline of the 2026-10-12 course correction (general-agent.md GA30). Twenty-two general tasks and six medical controls against a real DSH kernel and DeepSeek through the real control plane; deterministic judges first, an offline model judge per task family second. It sits beside the capability rows because it answers the same kind of question for the platform as a whole: what a plain request gets today. Results are recorded under .evimed-local/acceptance/course-correction-20261012/live/eval/<arm>/."
+      "note": "Not a capability: the general-task baseline of the 2026-10-12 course correction (general-agent.md GA30). Twenty-three general tasks and six medical controls against a real DSH kernel and DeepSeek through the real control plane; deterministic judges first, an offline model judge per task family second. It sits beside the capability rows because it answers the same kind of question for the platform as a whole: what a plain request gets today. Results are recorded under .evimed-local/acceptance/course-correction-20261012/live/eval/<arm>/."
+    },
+    {
+      "id": "capsule-longitudinal",
+      "evalHarness": "evals/capsule-longitudinal",
+      "caseCount": 11,
+      "kinds": {
+        "scenario": 11
+      },
+      "scenarios": {
+        "S1": "format preference and no invention",
+        "S2": "project connection",
+        "S3": "edit obedience",
+        "S4": "delete obedience",
+        "S5": "source shown",
+        "S6": "correction non-recurrence",
+        "S7": "cross-project leakage",
+        "S8": "explicit keep-this-way (needs the adopt verdict)",
+        "S9": "import from another assistant (needs the import route)",
+        "S10": "sharing",
+        "S11": "misconception"
+      },
+      "command": "python3 evals/capsule-longitudinal/run.py --key-file <deepseek key, for the model judge only>   # on the serving host",
+      "note": "Not a capability: the memory capsule measured end to end on the hosted path (2026-10-25, the memory-capsule next round). Eleven scenarios, each on its own throwaway account registered at the start and deleted at the end, every turn typed into the native composer of a real browser (the only path the follow-up judge, the turn commit and the learning evidence exist on). Answers the owner's four memory questions on the deployed product: remembers what was said, connects to the project, obeys edits and deletions, shows where a thing came from; and whether a learned or shared method is mounted. S8 and S9 report not_available on a tree without the adopt verdict or the import route. Results are written to evals/capsule-longitudinal/results/<date>-<release>.json; the controller runs it."
+    },
+    {
+      "id": "remembered-format",
+      "evalHarness": "evals/remembered-format",
+      "caseCount": 30,
+      "kinds": {
+        "pair": 30
+      },
+      "arms": {
+        "current": "the persona and the guidance of the tree under test (read from the checkout)",
+        "variant": "the same texts with the edits of a --variant-file (variants/pre-2026-10-24.json reproduces the guidance before the fix)"
+      },
+      "command": "python3 evals/remembered-format/run.py --key-file <path> --samples 3 [--arms current,pre-1024 --variant-file evals/remembered-format/variants/pre-2026-10-24.json]",
+      "note": "Not a capability: thirty paired cases (a remembered layout with every place's content given, and with some places' content not given) sent straight to DeepSeek as the runtime builds the request, scoring what the guidance costs (given items missing) against what it prevents (statements the person never gave, invented numbers, a place filled without a source). Extends the 2026-10-24 A/B that measured invented statements per report 3.6 to 0.75 on one genre."
+    },
+    {
+      "id": "follow-up-judge",
+      "evalHarness": "evals/follow-up-judge",
+      "caseCount": 129,
+      "kinds": {
+        "accept": 22,
+        "adopt": 25,
+        "correction": 32,
+        "none": 22,
+        "preference": 18,
+        "rejection": 10
+      },
+      "command": "node evals/follow-up-judge/run.mjs --key-file <path> [--embed-key-file <path>] [--no-examples] [--instructions-file <txt>]",
+      "note": "Not a capability: the calibration set of the follow-up judge (apps/server/src/learningEvidence.mjs): labelled next-messages in Chinese and English over correction, preference, rejection, accept, none and adopt, read by the module's own readFollowUp (nearest examples, FollowUpJudge, a second reading of every adopt, followUpVerdictFrom). Split once in split.json: the train part is the judge's example bank (packages/domain/src/follow-up-examples.json), the held-out part is what is scored. Reports per-class precision and recall, the confusion matrix, quotation validity and the precision of adopt on its own, because adopt makes a method out of one conversation. Fifteen cases are marked ambiguous with the labeller's reason for the controller to review."
     }
   ]
 }

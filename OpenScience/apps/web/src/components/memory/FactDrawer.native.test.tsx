@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { FactDrawer } from "./FactDrawer";
+import { FactDrawer, memorySource } from "./FactDrawer";
 import { factItems } from "./memoryItems";
 import { nativeFile, nativeProfile, nativeProfileLine } from "./__fixtures__/memoryProfiles";
 
@@ -14,7 +14,7 @@ vi.mock("@/lib/apiClient", async () => ({
   deleteStructuredMemory: api.deleteStructuredMemory,
 }));
 const client = vi.hoisted(() => ({
-  announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(), settleMemoryConflict: vi.fn(),
+  announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(),
   retireCapsuleEntry: vi.fn(), undoCapsuleEntry: vi.fn(), fetchMemorySources: vi.fn(),
 }));
 vi.mock("@/lib/memoryClient", () => client);
@@ -22,7 +22,8 @@ vi.mock("@/lib/sourceClient", () => ({ getSource: vi.fn() }));
 vi.mock("@/lib/productClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/productClient")>("@/lib/productClient")), updateCapsuleEntry: vi.fn(), productErrorMessage: () => "操作未完成，请重试。" }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
-vi.mock("@/lib/projects", () => ({ useProjectStore: { getState: () => ({ select: vi.fn() }) } }));
+const projects = vi.hoisted(() => ({ select: vi.fn(() => Promise.resolve()) }));
+vi.mock("@/lib/projects", () => ({ useProjectStore: { getState: () => projects } }));
 vi.mock("@/components/markdown-viewer/MarkdownViewer", () => ({ MarkdownViewer: ({ children }: { children: string }) => <div data-testid="file-text">{children}</div> }));
 vi.mock("./RelatedSection", () => ({ RelatedSection: () => null }));
 
@@ -82,6 +83,69 @@ describe("a memory kept as a file, opened from its row", () => {
     const [, options] = toasts.success.mock.calls[0];
     options.action.onClick();
     await waitFor(() => expect(client.undoMemoryRecord).toHaveBeenCalledWith(file.id, 99));
+  });
+
+  it("names the conversation a memory came out of, without a quotation the engine never kept", () => {
+    const file = nativeFile("回答结构", "- 先给结论。", { evidence: [
+      { sourceType: "conversation", sourceRef: "sessions/session_ab12/commits/archive_001", quote: "", observedAt: "2026-10-12T02:00:00Z", weight: 1, fingerprint: "revision:7", projectId: "prj_7" },
+    ], evidenceCount: 1 });
+    show(file, { conversations: { session_ab12: "三期临床试验方案" } });
+    const drawer = screen.getByRole("dialog");
+    expect(within(drawer).getByRole("button", { name: /^来源对话：《三期临床试验方案》（\d+月\d+日）$/ })).toBeInTheDocument();
+    expect(within(drawer).queryByText("“”")).not.toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/commits|archive_|session_ab12|revision/);
+    // A conversation the control plane could not name is still the link back to it.
+    cleanup();
+    show(file);
+    expect(screen.getByRole("button", { name: /^来源对话（/ })).toBeInTheDocument();
+    // And a memory with no conversation has no such line.
+    cleanup();
+    show(nativeFile("回答结构", "- 先给结论。"));
+    expect(screen.queryByRole("button", { name: /^来源对话/ })).not.toBeInTheDocument();
+  });
+
+  it("says what a memory the platform wrote from the person's own act was written from, with no conversation to open", () => {
+    const evidence = (label: string, sourceType: string) => ({ sourceType, sourceRef: `${sourceType}s/evimed-${sourceType}-ab`, quote: "", observedAt: "2026-10-25T02:00:00Z", weight: 1, fingerprint: "revision:9", label });
+    show(nativeFile("回答结构", "- 先给结论。", { evidence: [evidence("从其他 AI 导入", "import")], evidenceCount: 1 }));
+    expect(within(screen.getByRole("dialog")).getByText(/^从其他 AI 导入（\d+月\d+日）$/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^来源对话/ })).not.toBeInTheDocument();
+    cleanup();
+    show(nativeFile("预算表", "- 预算类表格一律带透视表。", { evidence: [evidence("你在两次对话里都这样做", "repetition")], evidenceCount: 1 }));
+    expect(within(screen.getByRole("dialog")).getByText(/^你在两次对话里都这样做（/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog").textContent).not.toMatch(/evimed-|imports\/|repetitions\//);
+  });
+
+  it("opens the conversation in the project it was held in, even for a memory that belongs to no project", () => {
+    const file = nativeFile("回答结构", "- 先给结论。", { evidence: [
+      { sourceType: "conversation", sourceRef: "sessions/session_ab12/commits/archive_001", quote: "", observedAt: "2026-10-12T02:00:00Z", weight: 1, fingerprint: "revision:7", projectId: "prj_7" },
+    ], evidenceCount: 1 });
+    expect(memorySource(file)).toEqual({ sessionId: "session_ab12", at: "2026-10-12T02:00:00Z", projectId: "prj_7" });
+    expect(memorySource(nativeFile("回答结构", "- 先给结论。"))).toBeNull();
+  });
+
+  it('uses the source correlation key when two projects share a session id, keeping its original conversation link', async () => {
+    const conversations = { 'source-a': '项目甲的来源', 'source-b': '项目乙的来源', shared: '错误的旧标题' };
+    for (const [projectId, titleKey, title] of [['project-a', 'source-a', '项目甲的来源'], ['project-b', 'source-b', '项目乙的来源']]) {
+      const file = nativeFile('项目事实', '- 项目事实。', { evidence: [{ sourceType: 'conversation', sourceRef: 'sessions/shared/commits/archive_001',
+        quote: '', observedAt: null, weight: 1, fingerprint: titleKey, projectId, conversationTitleKey: titleKey }], evidenceCount: 1 });
+      show(file, { conversations });
+      const link = screen.getByRole('button', { name: new RegExp(title) });
+      await userEvent.click(link);
+      expect(projects.select).toHaveBeenLastCalledWith(projectId, expect.any(Function));
+      expect(memorySource(file)).toEqual(expect.objectContaining({ projectId, sessionId: 'shared', titleKey }));
+      expect(document.body.textContent).not.toContain('错误的旧标题');
+      cleanup();
+    }
+  });
+
+  it('an unknown qualified source never borrows a bare title from another project', () => {
+    const file = nativeFile('历史事实', '- 历史事实。', { evidence: [{ sourceType: 'conversation', sourceRef: 'sessions/shared/commits/archive_001',
+      quote: '', observedAt: null, weight: 1, fingerprint: 'old-source', projectId: 'historical', conversationTitleKey: 'old-incarnation' }], evidenceCount: 1 });
+    show(file, { conversations: { shared: '另一项目的标题', 'new-incarnation': '新项目的标题' } });
+    expect(screen.getByRole('button', { name: /^来源对话/ })).toBeInTheDocument();
+    expect(memorySource(file)).toEqual(expect.objectContaining({ projectId: 'historical', sessionId: 'shared' }));
+    expect(document.body.textContent).not.toContain('另一项目的标题');
+    expect(document.body.textContent).not.toContain('新项目的标题');
   });
 
   it("shows nothing of the engine: no address, no file name, no kind of account", () => {

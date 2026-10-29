@@ -45,6 +45,17 @@ modes can still contain:
   financial-record retention schedule must describe this distinct retention.
   Rows charged to the simulated wallet are marked `simulated` and are not money;
   the simulated wallet itself (balance and top-ups) is removed with the account.
+- Memory. A conversation's memory is kept per account: for an account on the native engine in OpenViking's volume (`web_evimed-openviking-data`,
+  in the backup) with a thin overlay in PostgreSQL (revisions behind undo and the forgotten list, the commit ledger, the rejection list, which
+  holds a removed line's normalised words, never shown, until the person restates it, resets or the account is erased); for an account on the
+  earlier engine in `evimed_memory`; the capsule's entries, the methods learned from the person's work and the evidence rows that taught them in
+  `evimed_product` and the feedback ledger. Memory keeps what the person stated, confirmed or corrected and the constraints they gave for a
+  piece of work; it does not keep passwords, identity-document or bank-account numbers, other people's identity, what a document or web page
+  said, or sensitive personal information (health, religion, politics and the like) unless the person says to remember it. The person sees,
+  changes and deletes it on the 记忆胶囊 page and resets it there; the account page says so in plain words (设置 › 账户 › 记忆). Memory is
+  not used to train a model; the learning loop reads the account's own work and writes the account's own methods, and an operator's acceptance traffic never teaches it. Account deletion and a memory reset erase the engine's
+  sessions and files and the overlay with them. **No retention period is configured or promised for a native memory**; a retention rule is
+  deferred, so the deployment's privacy notice must not state one for it.
 
 Operators must treat this directory as sensitive research data. The MVP includes
 project-level and current-account self-service export and deletion, but does

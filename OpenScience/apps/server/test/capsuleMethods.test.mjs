@@ -17,7 +17,9 @@ import {
   renderCapsuleMethod,
   runtimeCapsuleMethodsDir,
   selectCapsuleMethods,
+  SELECTION_FILE,
 } from "../src/capsuleMethods.mjs";
+import { createMethodSimilarity } from "../src/methodSimilarity.mjs";
 import { learnedMethodCardEntry } from "@evimed/domain";
 import { learnedMethodDirectoryName } from "../src/learnedMethodMount.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
@@ -48,13 +50,13 @@ function entry(id, overrides = {}) {
  * an opaque cursor for the next one — because the bug this fixture exists to
  * catch is a reader that takes the first page and stops.
  */
-function fakeCapsules({ projectItems = [], accountItems = [], byCapsule = {}, missing = [] } = {}) {
+function fakeCapsules({ accountItems = [], byCapsule = {}, missing = [] } = {}) {
   const calls = [];
   return {
     calls,
-    async active(userId, projectId = null) {
-      calls.push(`active:${userId}:${projectId ?? "account"}`);
-      return { record: null, items: projectId == null ? accountItems : projectItems };
+    async active(userId) {
+      calls.push(`active:${userId}`);
+      return { record: null, items: accountItems };
     },
     async entries(userId, capsuleId, options = {}) {
       calls.push(`entries:${capsuleId}:${options.limit ?? ""}:${options.cursor ?? ""}`);
@@ -134,7 +136,7 @@ test("two approved work-style entries mount as two read-only SKILL.md files with
   const { project, directory } = await scratchProject();
   try {
     const capsules = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+      accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
       byCapsule: {
         "capsule-a": [
           entry("m2", { content: "先写结论，再列证据。", factKind: "writing_style" }),
@@ -183,9 +185,8 @@ test("two approved work-style entries mount as two read-only SKILL.md files with
     assert.equal((await stat(path.join(directory, "m1", "SKILL.md"))).mode & 0o777, 0o444);
     assert.equal((await stat(path.join(directory, "m1"))).mode & 0o777, 0o700);
     assert.equal((await stat(directory)).mode & 0o777, 0o700);
-    // Account-wide and project-scoped activations are both read, the way
-    // `CapsuleService.recall` reads them.
-    assert.deepEqual(capsules.calls.slice(0, 2), ["active:alice:paper1", "active:alice:account"]);
+    // The account's one list is read, the way `CapsuleService.recall` reads it.
+    assert.deepEqual(capsules.calls.slice(0, 1), ["active:alice"]);
   } finally {
     await rm(project.rootDir, { recursive: true, force: true });
   }
@@ -195,7 +196,7 @@ test("candidate, retired, sources-layer and non-work-style entries are not mount
   const { project, directory } = await scratchProject();
   try {
     const capsules = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-a", mode: "guest" }],
+      accountItems: [{ capsuleId: "capsule-a", mode: "guest" }],
       byCapsule: {
         "capsule-a": [
           // An imported pack's entries arrive exactly like this. Mounting one
@@ -246,6 +247,25 @@ test("an assistant's note and a received entry no model verdict covered are cont
   }
 });
 
+test("an entry labelled with another project is that project's: it mounts there and nowhere else, and an entry of the whole account mounts everywhere", async () => {
+  // One capsule per person (2026-10-24): what a project's conversations noted sits in it with the project as a label.
+  const capsules = fakeCapsules({
+    accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
+    byCapsule: {
+      "capsule-a": [
+        { ...entry("for-paper1"), projectId: "paper1" },
+        { ...entry("for-paper2"), projectId: "paper2" },
+        { ...entry("payload-label", { projectId: "paper2" }) },
+        entry("for-all"),
+      ],
+    },
+  });
+  const ids = async (projectId) => (await selectCapsuleMethods(capsules, { userId: "alice", projectId })).map((method) => method.id).sort();
+  assert.deepEqual(await ids("paper1"), ["for-all", "for-paper1"]);
+  assert.deepEqual(await ids("paper2"), ["for-all", "for-paper2", "payload-label"]);
+  assert.deepEqual(await ids(null), ["for-all"], "a conversation in no project reads the account's alone");
+});
+
 test("a received entry the scan held for a toxic herb's dose above its bound is context, never mounted", async () => {
   const { project } = await scratchProject();
   try {
@@ -279,7 +299,7 @@ test("approved methods are found past the first page of a capsule's entries", as
       ...Array.from({ length: 5 }, (_, index) => entry(`method${index}`, { content: `Method ${index}.` })),
     ];
     const capsules = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+      accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
       byCapsule: { "capsule-a": rows },
     });
     const result = await materializeCapsuleMethods({ capsules, project, directory });
@@ -339,7 +359,7 @@ test("an entry approved today is mounted from a later page, ahead of a newer one
     assert.ok(rows[200].createdAt < rows[99].createdAt, "the approved entry must really be older than page one");
 
     const capsules = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+      accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
       byCapsule: { "capsule-a": rows },
     });
     const result = await materializeCapsuleMethods({ capsules, project, directory });
@@ -374,7 +394,7 @@ test("paging is bounded by the page bound, whether or not the capsule offers mou
     // thing that does — "enough candidates" is not a place a reader may stop,
     // because the list is ordered by creation and the selection is not.
     const eligible = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+      accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
       byCapsule: {
         "capsule-a": Array.from({ length: 5_000 }, (_, index) => entry(`m${String(index).padStart(4, "0")}`, {
           curatedAt: new Date(Date.UTC(2026, 0, 1) - index * 60_000).toISOString(),
@@ -397,7 +417,7 @@ test("paging is bounded by the page bound, whether or not the capsule offers mou
     // Nothing is mountable, so the reader pages until the same bound and stops:
     // a runtime launch is bounded work, and the rest stays recallable.
     const barren = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+      accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
       byCapsule: {
         "capsule-a": Array.from({ length: 5_000 }, (_, index) => entry(`f${index}`, {
           factKind: "project_fact",
@@ -427,7 +447,7 @@ test("a hostile entry id cannot escape the methods directory", async () => {
     const shallow = "../escaped-sibling";
     const deep = "../../../../etc/evimed-owned";
     const capsules = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+      accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
       byCapsule: {
         "capsule-a": [
           entry(shallow),
@@ -476,7 +496,7 @@ test("the directory is rebuilt, so a retired method disappears from the next run
   try {
     const first = await materializeCapsuleMethods({
       capsules: fakeCapsules({
-        projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+        accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
         byCapsule: { "capsule-a": [entry("kept"), entry("dropped")] },
       }),
       project,
@@ -485,7 +505,7 @@ test("the directory is rebuilt, so a retired method disappears from the next run
     assert.equal(first.count, 2);
     const second = await materializeCapsuleMethods({
       capsules: fakeCapsules({
-        projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+        accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
         byCapsule: { "capsule-a": [entry("kept"), entry("dropped", { status: "retired" })] },
       }),
       project,
@@ -495,7 +515,7 @@ test("the directory is rebuilt, so a retired method disappears from the next run
     assert.deepEqual(await mounted(directory), ["kept"], "a stale method is a rule the user believes they removed");
     const third = await materializeCapsuleMethods({
       capsules: fakeCapsules({
-        projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+        accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
         byCapsule: { "capsule-a": [entry("kept", { status: "retired" })] },
       }),
       project,
@@ -512,14 +532,14 @@ test("a deleted capsule is skipped and a real read failure is not swallowed", as
   const { project, directory } = await scratchProject();
   try {
     const capsules = fakeCapsules({
-      projectItems: [{ capsuleId: "capsule-gone", mode: "own" }, { capsuleId: "capsule-a", mode: "blend" }],
-      accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
+      // A list that names the same capsule twice (an earlier release's two lists, folded) reads it once.
+      accountItems: [{ capsuleId: "capsule-gone", mode: "own" }, { capsuleId: "capsule-a", mode: "blend" }, { capsuleId: "capsule-a", mode: "own" }],
       byCapsule: { "capsule-a": [entry("kept")] },
       missing: ["capsule-gone"],
     });
     const result = await materializeCapsuleMethods({ capsules, project, directory });
     assert.equal(result.count, 1, "a capsule that was deleted must not stop the runtime from starting");
-    // The same capsule activated in both scopes is read once, as in `recall`.
+    // The same capsule named twice is read once, as in `recall`.
     assert.equal(capsules.calls.filter((call) => call.startsWith("entries:capsule-a")).length, 1);
 
     const broken = {
@@ -545,7 +565,7 @@ test("no more than the mount cap is written, and which methods survive is decide
       { curatedAt: new Date(Date.UTC(2026, 0, 1 + index)).toISOString() },
     ));
     const result = await materializeCapsuleMethods({
-      capsules: fakeCapsules({ projectItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": many } }),
+      capsules: fakeCapsules({ accountItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": many } }),
       project,
       directory,
     });
@@ -575,7 +595,7 @@ test("the byte budget truncates the mounted set, because every method is re-inli
       curatedAt: new Date(Date.UTC(2026, 0, 1 + index)).toISOString(),
     }));
     const result = await materializeCapsuleMethods({
-      capsules: fakeCapsules({ projectItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": rows } }),
+      capsules: fakeCapsules({ accountItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": rows } }),
       project,
       directory,
     });
@@ -605,7 +625,7 @@ test("one method larger than the whole budget is still mounted, and nothing foll
     const small = entry("also-approved", { content: "Short.", curatedAt: "2026-01-01T00:00:00.000Z" });
     const result = await materializeCapsuleMethods({
       capsules: fakeCapsules({
-        projectItems: [{ capsuleId: "capsule-a", mode: "own" }],
+        accountItems: [{ capsuleId: "capsule-a", mode: "own" }],
         byCapsule: { "capsule-a": [huge, small] },
       }),
       project,
@@ -688,7 +708,7 @@ test("a learned method costs the budget its card, not its text, so long ones sti
       { id: "method:learned:quote-anchor", payload: learnedPayload("quote-anchor", 25) },
     ];
     const learning = { async approvedMethods() { return documents; } };
-    const capsules = fakeCapsules({ projectItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": own } });
+    const capsules = fakeCapsules({ accountItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": own } });
     // What a run is handed for each learned method: the card the socket writes
     // (the same `learnedMethodCardEntry`), naming the file under the mount.
     const cardBytes = (/** @type {any} */ document) => Buffer.byteLength(`${learnedMethodCardEntry({
@@ -730,7 +750,7 @@ test("a learned method costs the budget its card, not its text, so long ones sti
     assert.equal(launched.leftOut, 1);
     await manager.syncCapsuleMethods(project);
     assert.deepEqual(manager.statsAll().methodMounts,
-      { launches: 2, promptBytes: 2 * launched.promptBytes, leftOut: 2, maxPromptBytes: ownBytes + cards - 1 });
+      { launches: 2, promptBytes: 2 * launched.promptBytes, leftOut: 2, refreshes: 0, refreshFailures: 0, maxPromptBytes: ownBytes + cards - 1 });
   } finally {
     await rm(project.rootDir, { recursive: true, force: true });
   }
@@ -745,11 +765,11 @@ test("the selection is a function of the entries, not of the order they were ser
     entry("d", { createdAt: "2026-01-01T00:00:00.000Z" }),
   ];
   const forward = await selectCapsuleMethods(
-    fakeCapsules({ projectItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": rows } }),
+    fakeCapsules({ accountItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": rows } }),
     scope,
   );
   const reversed = await selectCapsuleMethods(
-    fakeCapsules({ projectItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": [...rows].reverse() } }),
+    fakeCapsules({ accountItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": [...rows].reverse() } }),
     scope,
   );
   // Newest confirmation first; two confirmed in the same moment are ordered by
@@ -856,6 +876,84 @@ test("scratch fixtures write nothing outside the temporary project", async () =>
     await writeFile(path.join(project.rootDir, "sentinel"), "keep", "utf8");
     await materializeCapsuleMethods({ capsules: fakeCapsules(), project, directory });
     assert.equal(await readFile(path.join(project.rootDir, "sentinel"), "utf8"), "keep");
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------------- a live runtime's directory is changed in place (2026-10-23) */
+
+/** One approved learned method, as the ledger returns it. */
+function learnedDoc(name, { approvedAt = "2026-09-01T00:00:00.000Z", body = "## Purpose\nDo it.\n\n## Workflow\n1. Do it.", files = null, scope = undefined } = {}) {
+  return {
+    id: `method:learned:${name}`,
+    payload: {
+      status: "approved", statusChangedAt: approvedAt,
+      frontmatter: { name, description: `Does ${name} in words of its own.`, whenToUse: `When ${name} is what is being asked.`, metadata: { role: "functional" } },
+      body, ...(files ? { files } : {}), ...(scope ? { provenance: { origin: "inferred", scope } } : {}),
+    },
+  };
+}
+
+test("the directory is brought to the selection in place: it survives, a changed method is replaced file by file, what is stale goes last", async () => {
+  const { project, directory } = await scratchProject();
+  try {
+    const learning = { documents: [learnedDoc("alpha"), learnedDoc("beta", { files: { "scripts/x.py": "print(1)\n" } })], async approvedMethods() { return this.documents; } };
+    const first = await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.equal(first.count, 2);
+    const before = await stat(directory);
+    const alphaDir = learnedMethodDirectoryName("method:learned:alpha");
+    const betaDir = learnedMethodDirectoryName("method:learned:beta");
+    const alphaFile = path.join(directory, alphaDir, "SKILL.md");
+    const alphaBefore = await stat(alphaFile);
+
+    // beta changes (its body and its script go), alpha stays, gamma arrives.
+    learning.documents = [learnedDoc("alpha"), learnedDoc("beta", { body: "## Purpose\nDo it differently.\n\n## Workflow\n1. Otherwise." }), learnedDoc("gamma")];
+    const second = await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.equal(second.count, 3);
+    assert.equal((await stat(directory)).ino, before.ino, "the same directory: a runtime holding it as a bind mount still sees what is written");
+    assert.equal((await stat(alphaFile)).ino, alphaBefore.ino, "a method that did not change is not written again");
+    assert.match(await readFile(path.join(directory, betaDir, "SKILL.md"), "utf8"), /Do it differently/);
+    assert.equal(existsSync(path.join(directory, betaDir, "scripts", "x.py")), false, "a file the method no longer has is gone");
+    assert.deepEqual(await mounted(directory), [alphaDir, betaDir, learnedMethodDirectoryName("method:learned:gamma")].sort());
+
+    // gamma retires: the directory stays, and says so.
+    learning.documents = [learnedDoc("alpha")];
+    const third = await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.equal(third.count, 1);
+    assert.deepEqual(await mounted(directory), [alphaDir]);
+    // And the last one: an empty directory is kept when the caller keeps it, and is not when it does not.
+    learning.documents = [];
+    await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.deepEqual(await readdir(directory), ["_selection.json"], "nothing mounted, and the directory is still there for the next selection");
+    assert.equal((await stat(directory)).ino, before.ino);
+    await materializeCapsuleMethods({ capsules: null, learning, project, directory });
+    assert.equal(existsSync(directory), false);
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("the selection file says which learned method is there for which reason, and its version moves only when the mount does", async () => {
+  const { project, directory } = await scratchProject();
+  try {
+    const learning = {
+      documents: [learnedDoc("grade-first", { body: "## Purpose\nReport GRADE certainty of evidence first.\n\n## Workflow\n1. Report it." }), learnedDoc("kayak-notes")],
+      async approvedMethods() { return this.documents; },
+    };
+    const similarity = createMethodSimilarity();
+    const options = { capsules: null, learning, project, directory, keepDirectory: true, scopeId: "conversation", similarity };
+    const asked = await materializeCapsuleMethods({ ...options, query: "grade first when you report certainty" });
+    const selection = JSON.parse(await readFile(path.join(directory, SELECTION_FILE), "utf8"));
+    assert.equal(selection.version, asked.version);
+    assert.ok(asked.learned.every((method) => ["similarity", "dependency", "explore", "recent"].includes(method.reason)));
+    assert.deepEqual(selection.methods.map((entry) => entry.reason).sort(), asked.learned.map((method) => method.reason).sort());
+    assert.deepEqual(selection.methods.map((entry) => entry.directory).sort(), (await mounted(directory)));
+    assert.equal(asked.rank.mode, "lexical");
+    // The same question again is the same mount.
+    assert.equal((await materializeCapsuleMethods({ ...options, query: "grade first when you report certainty" })).version, asked.version);
+    // Another question that picks another reason is another mount.
+    assert.notEqual((await materializeCapsuleMethods({ ...options, query: "something about kayak river notes" })).version, asked.version);
   } finally {
     await rm(project.rootDir, { recursive: true, force: true });
   }

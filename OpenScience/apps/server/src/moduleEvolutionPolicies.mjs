@@ -22,9 +22,10 @@ export function validateModuleEvolutionPolicy(moduleId, policy) {
 }
 
 /** The reader hydrates a product-ledger revision, never a module or a file path.
- * @param {{readPolicy?: (moduleId: string) => Promise<any>}} [dependencies] */
-export function createModuleEvolutionPolicies({ readPolicy = async () => null } = {}) {
+ * @param {{readPolicy?: (moduleId: string) => Promise<any>, validateRevision?: (moduleId: string, revisionId: string) => Promise<boolean>}} [dependencies] */
+export function createModuleEvolutionPolicies({ readPolicy = async () => null, validateRevision = async () => true } = {}) {
   return {
+    revisionUsable: validateRevision,
     /** @param {string} moduleId @param {Record<string, any>} defaults */
     async resolve(moduleId, defaults) {
       const fallback = { revisionId: `default:${createHash("sha256").update(JSON.stringify(defaults)).digest("hex")}`, policy: structuredClone(defaults) };

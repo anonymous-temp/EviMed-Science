@@ -5,7 +5,6 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { ChartGrid, type ChartGridCell } from "@/components/ui/ChartGrid";
 import { DataTable, InlineBar, type DataColumn } from "@/components/ui/DataTable";
@@ -311,7 +310,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       // Five scenarios do not fit in half a page: the grid takes the row, and its last column is not cut.
       ...(data.grid.columns.length > 3 ? { span: 2 as const } : {}),
       node: (
-        <Card title={data.grid.measure ? `设计网格：${data.grid.measure}` : "设计网格"}>
+        <ChartCard title={data.grid.measure ? `设计网格：${data.grid.measure}` : "设计网格"}>
           {data.grid.xLabel && <p className="mb-2 text-caption text-text-3">{data.grid.xLabel}</p>}
           <HeatGrid
             label={data.grid.measure ?? "设计网格"}
@@ -319,12 +318,12 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
             rows={data.grid.rows.map((row) => ({ key: row.key, header: row.header, cells: row.cells }))}
             legend={{ low: "低", high: "高" }}
           />
-        </Card>
+        </ChartCard>
       ),
     });
   }
   if (data.milestones.length > 0) {
-    cells.push({ key: "milestones", node: <Card title="里程碑"><VcrMilestoneTimeline milestones={data.milestones} chosen={chosenCodes} /></Card> });
+    cells.push({ key: "milestones", node: <ChartCard title="里程碑"><VcrMilestoneTimeline milestones={data.milestones} chosen={chosenCodes} /></ChartCard> });
   }
 
   const setup: Fact[] = data.ademp.map((line) => ({ label: line.label, value: line.text }));
@@ -384,7 +383,7 @@ function NotComputedDesigns({ designs, studyId, study, failed }: { designs: read
           <ListRow
             key={design.id}
             title={design.name}
-            leading={<span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag bg-surface-2 text-meta font-semibold text-text-2">{design.code}</span>}
+            leading={<span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag bg-surface-2 text-meta text-text-2">{design.code}</span>}
             trailing={<Tag>{NOT_RUN}</Tag>}
             titleProps={{ "data-vcr-design": design.code }}
           />
@@ -409,7 +408,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       cell: (design) => (
         <span className="flex flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta font-semibold",
+            <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta",
               design.dominated ? "bg-surface-2 text-text-3" : design.chosen ? "bg-accent text-accent-fg" : "bg-surface-2 text-text-2")}
             >
               {design.code}
@@ -612,7 +611,7 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
               <label
                 className={cn(
                   "inline-flex h-control cursor-pointer items-center gap-1.5 rounded px-3 text-ui",
-                  option.disabled ? "cursor-not-allowed bg-surface-1 text-text-3" : chosen === option.id ? "bg-accent-soft font-medium text-accent" : "bg-surface-2 text-text-2",
+                  option.disabled ? "cursor-not-allowed bg-surface-1 text-text-3" : chosen === option.id ? "bg-accent-soft text-accent" : "bg-surface-2 text-text-2",
                 )}
               >
                 <input

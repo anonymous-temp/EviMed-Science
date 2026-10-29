@@ -1339,7 +1339,7 @@ const WRITERS = {
     const name = item.str("name", { max: 120, required: true });
     const version = item.str("version", { max: 40 }) ?? "1.0.0";
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES);
-    const risk = item.choice("risk", VCR_MODEL_RISKS, { fallback: "low" });
+    const risk = item.choice("risk", VCR_MODEL_RISKS, { fallback: null });
     const card = item.obj("card") ?? {};
     const sources = (item.arr("sources", { max: 30 }) ?? []).map((source) => String(typeof source === "object" ? object(source).label : source).slice(0, 200));
     if (!item.ok) return null;
@@ -1690,14 +1690,18 @@ const WRITERS = {
         : { studyId: study.id, subjectKey: String(subjectKey), kind, windowStart: windowStart ?? null, windowEnd: windowEnd ?? null, observations, restricted: {}, exitReason: exitReason ?? null };
     // The exit stands as first recorded: what this subject's trial-period episode already says, read back,
     // is what the new exit is held to. A different one is appended and reported, never written over.
-    const recorded = kind === "study_specific" && matchStore.listFollowupEpisodes
-      ? (await matchStore.listFollowupEpisodes({ studyId: study.id, subjectKey: String(subjectKey) })).find((/** @type {any} */ row) => row.kind === "study_specific") ?? null
+    const recorded = kind === "study_specific"
+      ? matchStore.firstTrialExit ? await matchStore.firstTrialExit({ studyId: study.id, subjectKey: String(subjectKey) })
+        : matchStore.listFollowupEpisodes ? (await matchStore.listFollowupEpisodes({ studyId: study.id, subjectKey: String(subjectKey) })).find((/** @type {any} */ row) => row.kind === "study_specific") ?? null : null
       : null;
     const saved = await matchStore.saveFollowupEpisode({ userId: study.userId, episode });
     if (recorded) {
       /** @param {unknown} value */
       const instant = (value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : "");
-      for (const finding of followupFidelityFindings({ ...recorded, exitDate: instant(recorded.windowEnd) }, { exitDate: instant(exitDate), exitReason: exitReason ?? "" })) {
+      // A date-only source is a calendar date, not local midnight interpreted
+      // in whichever timezone this Node process or PostgreSQL happens to use.
+      const recordedDate = recorded.exitDate ?? (/^\d{4}-\d{2}-\d{2}$/.test(String(exitDate)) ? recorded.legacyExitDate : null) ?? recorded.windowEnd;
+      for (const finding of followupFidelityFindings({ ...recorded, exitDate: instant(recordedDate) }, { exitDate: instant(exitDate), exitReason: exitReason ?? "" })) {
         item.issues.push(issue(item.index, finding.code === "vcr_exit_date_rewritten" ? "exitDate" : finding.code === "vcr_exit_reason_rewritten" ? "exitReason" : "kind",
           finding.code, finding.message));
       }

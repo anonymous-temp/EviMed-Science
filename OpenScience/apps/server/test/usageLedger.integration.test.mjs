@@ -8,7 +8,7 @@ import { migrateUsageLedger, USAGE_PURPOSE_CHECK } from "../src/usagePersistence
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -567,7 +567,7 @@ test("spend outlives the project it was charged to, and the caps keep counting i
   // held readiness red from the first project anyone deleted.
   // The audit reads every schema it owns, so they are migrated here the way
   // the ops command does rather than assumed from whichever file ran first.
-  for (const migrate of [migrateProductStore, migrateNotifications, migrateResearchMemory]) await migrate(database);
+  for (const migrate of [migrateProductStore, migrateNotifications, migrateMemorySettings]) await migrate(database);
   assert.equal((await relationalIntegrity(database)).counts.usage_model_requests_project, 0,
     "a surviving row with no project is not an orphan");
   await assert.rejects(

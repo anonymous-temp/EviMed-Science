@@ -77,6 +77,12 @@ const insertSnapshot = (id, geoId, roundId, questionId, engine, status, askedAt)
     geo_project_id, question_id, engine, asked_at, status, answer_text) VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, '回答')`,
 [id, ALICE, roundId, geoId, questionId, engine, askedAt, status]);
 
+/** One valid answer in a round: a finished round that heard none is never the latest measurement (2026-10-25). @param {string} roundId @param {string} geoId */
+const heard = async (roundId, geoId) => {
+  const question = (await store.questionMap(geoId, 1))[0].questions[0];
+  await insertSnapshot(`heard-${roundId}`, geoId, roundId, question.id, "deepseek", "valid", "2026-09-24T00:00:00Z");
+};
+
 test("a target is the project-wide row or nothing: a pool's own goal never stands in for it", options, async () => {
   const { project, write } = await seededProject();
   // M-01S has goals for two pools only; M-19 has a project-wide goal.
@@ -104,12 +110,16 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
   const { project } = await seededProject();
   const map = await store.questionMap(project.id, 1);
   const question = map[0].questions[0];
+  const roundId = `errors-round-${project.id}`;
+  const snapshotId = `errors-snapshot-${project.id}`;
+  await insertRound(roundId, project.id, "baseline");
+  await insertSnapshot(snapshotId, project.id, roundId, question.id, "deepseek", "valid", "2026-09-24T00:00:00Z");
   let n = 0;
   const addError = (/** @type {string} */ status, /** @type {string} */ severity, /** @type {string | null} */ last = null) => {
     n += 1;
     return database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status,
         first_snapshot_id, last_snapshot_id, updated_at) VALUES ($1, $2, $3, $4, 'deepseek', $5, $6, 'number', $7, $8, NULL, $9, now() + ($10 || ' seconds')::interval)`,
-    [`e-${run}-${project.id}-${n}`, ALICE, project.id, `fp-${n}`, question.id, `讲错第 ${n} 句`, severity, status, last, String(n)]);
+    [`e-${run}-${project.id}-${n}`, ALICE, project.id, `fp-${n}`, question.id, `讲错第 ${n} 句`, severity, status, last ?? snapshotId, String(n)]);
   };
   // 6 open (one S4, one S3), 2 acting (one S3), 1 awaiting a remeasure (S3), 3 closed (one S4): 12 rows against a list of 5.
   await addError("open", "S4"); await addError("open", "S3");
@@ -119,7 +129,7 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
   await addError("closed", "S4"); await addError("closed", "S1"); await addError("closed", "S2");
 
   const diagnosis = await service.diagnosis(USER, project.id);
-  assert.deepEqual(diagnosis.errorCounts, { total: 12, open: 6, acting: 2, awaiting_remeasure: 1, closed: 3, severe: 4 },
+  assert.deepEqual(diagnosis.errorCounts, { total: 12, open: 6, acting: 2, awaiting_remeasure: 1, closed: 3, severe: 4, withdrawn: 0 },
     "S4 + S3 open, S3 acting, S3 awaiting a remeasure — the closed S4 is not live");
   assert.equal(diagnosis.errors.length, 5, "the list is capped (geoDiagnosisErrorLimit), the counts are not");
   assert.ok(diagnosis.errors.every((error) => error.status !== "closed"), "live errors come first, severe first");
@@ -127,6 +137,26 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
 
   const row = (await service.listProjects(USER)).projects.find((entry) => entry.id === project.id);
   assert.deepEqual(row?.alert, { wrongOurs: 9, severe: 4, safety: 0, severity: "S4" }, "wrongOurs is every live error, severe the S3/S4 among them");
+
+  // The runtime's read pages the same list as every other read does (2026-10-25: it cut the list at the limit, took no offset and said
+  // nothing about the rest, and its `more` was the list of other metrics, so the run's client could never say there was a next page).
+  // The errors are paged where they are read (`errorPage`), over every error row of the selection — the live ones first, severe first,
+  // the closed ones last — so the run can page past the page's capped list of five instead of being told there are only five.
+  const first = await service.runtimeRead(project, "diagnosis", { limit: 2 });
+  assert.deepEqual([first.errors.map((/** @type {any} */ error) => error.severity), first.errorsTotal, first.more, first.nextOffset], [["S4", "S3"], 12, true, 2]);
+  assert.deepEqual(first.errorCounts.total, 12, "the counts stay over every row");
+  assert.equal(first.errorsTotal, first.errorCounts.total, "the page's total is the population the counts are over");
+  assert.ok(Array.isArray(first.otherMetrics) && typeof first.otherMetricsTotal === "number");
+  const middle = await service.runtimeRead(project, "diagnosis", { limit: 2, offset: 4 });
+  assert.deepEqual([middle.errors.length, middle.errors[0].id, middle.more, middle.nextOffset], [2, diagnosis.errors[4].id, true, 6],
+    "the page goes on where the page's own list of five stops, in the same order");
+  const pages = [first, middle];
+  for (let offset = 2; offset < 12; offset += 2) if (offset !== 4) pages.push(await service.runtimeRead(project, "diagnosis", { limit: 2, offset }));
+  const paged = pages.flatMap((entry) => entry.errors.map((/** @type {any} */ error) => error.id));
+  assert.equal(new Set(paged).size, 12, "every error row is reached once by following the pages");
+  const last = await service.runtimeRead(project, "diagnosis", { limit: 2, offset: 10 });
+  assert.deepEqual([last.errors.length, last.errors.every((/** @type {any} */ error) => error.status === "closed"), last.more, last.nextOffset], [2, true, false, undefined],
+    "the closed rows come last and the last page says there is no next one");
 });
 
 test("a measured question links its latest answer per engine, in the project's order, across set versions", options, async () => {
@@ -185,6 +215,7 @@ test("the diagnosis reads the round that finished last, not the one begun last",
   await insertRound(`late-${project.id}`, project.id, "weekly", { createdAt: "2026-10-02T00:00:00Z", finishedAt: "2026-10-02T06:00:00Z" });
   await insertRound(`early-${project.id}`, project.id, "weekly", { createdAt: "2026-10-01T00:00:00Z", finishedAt: "2026-10-03T06:00:00Z" });
   await insertRound(`run-${project.id}`, project.id, "weekly", { createdAt: "2026-10-04T00:00:00Z", status: "running" });
+  for (const round of [`late-${project.id}`, `early-${project.id}`]) await heard(round, project.id);
   const diagnosis = await service.diagnosis(USER, project.id);
   assert.equal(diagnosis.round?.id, `early-${project.id}`, "a round still running never stands in for a finished one");
 });
@@ -219,6 +250,7 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
   const { project } = await seededProject();
   const roundId = `rh-${project.id}`;
   await insertRound(roundId, project.id, "baseline", { finishedAt: "2026-09-24T10:00:00Z" });
+  await heard(roundId, project.id);
   const lines = async () => (await service.diagnosis(USER, project.id)).hardLines;
   const accuracy = async (/** @type {string} */ status, /** @type {number} */ numerator, /** @type {number} */ denominator, /** @type {number} */ value) => {
     await database.query(`DELETE FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'M-06'`, [roundId]);
@@ -245,11 +277,13 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
 
   // Errors: seven open ones traced to a cited source (the list carries five), one the model's own, one traced but closed.
   const question = (await store.questionMap(project.id, 1))[0].questions[0];
+  const snapshotId = `hardline-snapshot-${project.id}`;
+  await insertSnapshot(snapshotId, project.id, roundId, question.id, "deepseek", "valid", "2026-09-24T00:00:00Z");
   let n = 0;
   const addError = (/** @type {string} */ status, /** @type {unknown} */ citedSource) => {
     n += 1;
-    return database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status, cited_source)
-      VALUES ($1, $2, $3, $4, 'deepseek', $5, $6, 'number', 'S3', $7, $8::jsonb)`, [`eh-${run}-${project.id}-${n}`, ALICE, project.id, `fph-${n}`, question.id, `讲错第 ${n} 句`, status, citedSource ? JSON.stringify(citedSource) : null]);
+    return database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status, cited_source, last_snapshot_id)
+      VALUES ($1, $2, $3, $4, 'deepseek', $5, $6, 'number', 'S3', $7, $8::jsonb, $9)`, [`eh-${run}-${project.id}-${n}`, ALICE, project.id, `fph-${n}`, question.id, `讲错第 ${n} 句`, status, citedSource ? JSON.stringify(citedSource) : null, snapshotId]);
   };
   await addError("open", null);
   await addError("closed", { url: "https://farm.example/x", domain: "farm.example", attribute: "farm" });
@@ -269,8 +303,13 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
 
 test("the diagnosis says how many valid answers the round left out unjudged, and null for a round measured before that was kept (Q-11)", options, async () => {
   const { project } = await seededProject();
+  // A round with no answer is never the diagnosis' round (2026-10-25), so the count is read from the round's own answers: a valid
+  // answer nobody judged is counted, and once judged it is not.
   await insertRound(`ru-${project.id}`, project.id, "baseline", { finishedAt: "2026-09-24T10:00:00Z" });
-  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, null);
-  await database.query(`UPDATE evimed_geo.rounds SET ref = $2::jsonb WHERE id = $1`, [`ru-${project.id}`, JSON.stringify({ balance: { engines: ["doubao"], denominators: { unparsed: 7 } } })]);
-  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 7);
+  assert.equal((await service.diagnosis(USER, project.id)).round, null, "a round that heard nothing is no diagnosis");
+  await heard(`ru-${project.id}`, project.id);
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 1);
+  await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, judged_at, mentions_ours) VALUES ($1, $2, $3, now(), false)`,
+    [`heard-ru-${project.id}`, ALICE, project.id]);
+  assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 0);
 });

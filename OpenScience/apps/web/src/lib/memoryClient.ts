@@ -42,21 +42,36 @@ export function rememberMemory(text: string, projectId?: string | null) {
   return productRequest<{ pending: WebPendingMemory }>("/memory/remember", "POST", { text, ...(projectId ? { projectId } : {}) });
 }
 
+/** One statement the import read out of the pasted text, for the person to keep or leave. */
+export interface MemoryImportStatement {
+  id: string;
+  text: string;
+  /** `on_request`: private (health, money, a child) — kept only when the person asks in so many words, so it is offered unticked. */
+  sensitivity: "ordinary" | "on_request";
+  ticked: boolean;
+}
+
+/** What the import made of the pasted text. `leftOut` counts the lines that are never kept (a secret, an identity number, someone else's details). */
+export interface MemoryImportOffer {
+  id: string;
+  statements: MemoryImportStatement[];
+  leftOut: number;
+}
+
+/** 「从其他 AI 导入」, step one: the pasted text (8,000 characters at most) is read into statements the person can review. */
+export function offerMemoryImport(text: string) {
+  return productRequest<MemoryImportOffer>("/memory/import", "POST", { text });
+}
+
+/** Step two: save the statements the person kept (`ids`; absent, the ones the offer ticked). */
+export function saveMemoryImport(id: string, ids: readonly string[]) {
+  return productRequest<{ saved: number }>(`/memory/import/${encodeURIComponent(id)}/confirm`, "POST", { ids: [...ids] });
+}
+
 /** Undo the last change to one memory; undoing its creation removes it. */
 export function undoMemoryRecord(id: string, expectedVersion: number) {
   return productRequest<{ undone: "restored" | "removed"; record: WebStructuredMemory | null; restored: WebStructuredMemory[] }>(
     `/memory/records/${encodeURIComponent(id)}/undo`, "POST", { expectedVersion },
-  );
-}
-
-/**
- * 「以这条为准」: two memories disagree and the researcher says which one holds.
- * The other is replaced by it, never deleted, and its undo puts the
- * disagreement back.
- */
-export function settleMemoryConflict(keepId: string, otherId: string) {
-  return productRequest<{ kept: WebStructuredMemory; superseded: WebStructuredMemory }>(
-    "/memory/conflicts/resolve", "POST", { keepId, otherId },
   );
 }
 
@@ -88,17 +103,6 @@ export function archiveMemoryRecord(id: string, expectedVersion: number) {
   return productRequest<WebStructuredMemory>(`/memory/records/${encodeURIComponent(id)}`, "PATCH", { status: "archived", expectedVersion });
 }
 
-/** 「不对」 on a learned method: retired, and restorable by rolling back to the revision before. */
-export function retireLearnedMethod(methodId: string, expectedRevision: number) {
-  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/retire`, "POST",
-    { expectedRevision, reason: "在对话中被标为不对" });
-}
-
-export function restoreLearnedMethod(methodId: string, expectedRevision: number, targetRevision: number) {
-  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/rollback`, "POST",
-    { expectedRevision, targetRevision });
-}
-
 /** 「不对」 on a capsule entry: retired, as a revision the entry's undo can take back. */
 export function retireCapsuleEntry(capsuleId: string, entryId: string, expectedRevision: number) {
   return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(capsuleId)}/entries/${encodeURIComponent(entryId)}`, "PATCH",
@@ -114,6 +118,8 @@ export interface MyCapsule {
   capsules: { id: string; title: string; projectId: string | null; revision: number }[];
   /** The notes in force. */
   entries: OwnCapsuleEntry[];
+  /** The notes an outside agent proposed (the agent-memory API's `/note`) that wait for the researcher: 待确认, with 确认 and 不要. */
+  candidates?: OwnCapsuleEntry[];
   /** The notes the researcher forgot: 已忘记的内容 lists them, each with 恢复. */
   forgotten: OwnCapsuleEntry[];
 }
@@ -135,9 +141,11 @@ export function ensureMyCapsule() {
 
 /*
  * The timeline read (`/memory/timeline`) is gone from the page with the
- * 「最近变化」 block it fed (2026-09-23 plan §5.6): a method's history is its
- * row's own 「历史版本」, a memory's is its revisions, and a list of back-office
- * events above the list said the same thing twice.
+ * 「最近变化」 block it fed (2026-09-23 plan §5.6), and from the server with its
+ * last reader (2026-10-24): a method's history is its row's own 「历史版本」,
+ * a memory's is its revisions, and a list of back-office events above the list
+ * said the same thing twice. The overview's growth card and the map's time
+ * view are the map's own document.
  */
 
 /**
@@ -185,10 +193,8 @@ export interface ReceivedCapsule {
   description: string;
   issuerTrust: "verified" | "unverified" | string;
   importedAt: string | null;
-  /** In force account-wide or for this project. */
+  /** In force for the account, so in every project. */
   enabled: boolean;
-  /** Where it is in force: every project, or only the one the shell is in. */
-  enabledIn?: "account" | "project" | null;
   /** Approved entries by kind. */
   counts: Record<string, number>;
   /** The first few methods, in their own words. */
@@ -205,15 +211,17 @@ export interface ReceivedCapsule {
   sharedFrom?: { label: string; authorName: string | null; channel: string | null } | null;
   /** Taken down by its author or the operator: out of force everywhere, and never put back. */
   takenDown?: { by: "author" | "operator"; at: string; reason: string | null } | null;
+  /** One of the platform's own starter packs (「EviMed 证据中心」): on every account's shelf, switched on until the person switches it off. */
+  official?: { packId: string } | null;
 }
 
 export function fetchReceivedCapsules() {
   return productRequest<ReceivedCapsule[]>("/capsules/received");
 }
 
-/** One click in, as a reference: in every project, or with `projectId` in that one only. */
-export function enableReceivedCapsule(id: string, projectId?: string) {
-  return productRequest<ReceivedCapsule | null>(`/capsules/${encodeURIComponent(id)}/enable`, "POST", projectId ? { projectId } : {});
+/** One click in, as a reference: for the account, so in every project. */
+export function enableReceivedCapsule(id: string) {
+  return productRequest<ReceivedCapsule | null>(`/capsules/${encodeURIComponent(id)}/enable`, "POST", {});
 }
 
 /** One click out: the pack stops contributing anything. */

@@ -9,7 +9,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Textarea } from "@/components/ui/Input";
 import { LoadError } from "@/components/cards/LoadError";
 import { WebApiError } from "@/lib/apiClient";
-import { readListState, readerPath } from "@/lib/knowledgeNav";
+import { readListState, readReaderView, readerPath } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
 import {
   getKnowledgePage, getKnowledgePageAt, getKnowledgeStatus, requestKnowledgeCompile, saveKnowledgePage,
@@ -33,6 +33,11 @@ const OUTLINE_FROM = 4;
 export function KnowledgePageView({ source, onPage }: { source: SourceRecord; onPage?: (page: KnowledgePage) => void }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const readerView = useMemo(() => readReaderView(params), [params]);
+  const addressed = readerView.knowledge;
+  const addressKey = JSON.stringify(addressed ?? null);
+  const [refreshAddressKey, setRefreshAddressKey] = useState<string | null>(null);
+  const [canRefreshAddress, setCanRefreshAddress] = useState(false);
   const [page, setPage] = useState<KnowledgePage | null>(null);
   const [status, setStatus] = useState<KnowledgeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,15 +56,27 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
   useEffect(() => {
     let active = true;
     setError(null);
-    getKnowledgePage(source.id).then(
-      (value) => { if (active) { setPage(value); report.current?.(value); } },
-      (failure) => { if (active) setError(`无法打开这页：${productErrorMessage(failure)}`); },
+    setPage(null);
+    setCanRefreshAddress(false);
+    const refreshAddress = Boolean(addressed && refreshAddressKey === addressKey);
+    const requested = addressed === null ? Promise.reject(new WebApiError("The addressed page is unavailable.", { status: 409, code: "knowledge_page_changed" }))
+      : addressed ? refreshAddress ? getKnowledgePageAt(addressed.projectId, addressed.tree, addressed.path)
+        : getKnowledgePageAt(addressed.projectId, addressed.tree, addressed.path, addressed) : getKnowledgePage(source.id);
+    requested.then(
+      (value) => { if (active) {
+        setPage(value); report.current?.(value);
+        if (refreshAddress) navigate(readerPath(value.sourceId, readListState(params), { tab: null, page: null, ...(value.address ? { knowledge: value.address } : {}) }), { replace: true });
+      } },
+      (failure) => { if (active) {
+        setError(`无法打开这页：${productErrorMessage(failure)}`);
+        setCanRefreshAddress(Boolean(addressed && failure instanceof WebApiError && failure.status === 409 && failure.code === "knowledge_page_changed"));
+      } },
     );
     getKnowledgeStatus(source.projectId).then((value) => { if (active) setStatus(value); }, () => { /* the page stands without it */ });
     return () => { active = false; };
-  }, [source.id, source.projectId, attempt]);
+  }, [source.id, source.projectId, attempt, addressed, addressKey, refreshAddressKey, navigate, params]);
 
-  const follow = useCallback((id: string) => navigate(readerPath(id, readListState(params)), { replace: true }), [navigate, params]);
+  const follow = useCallback((id: string, saved?: KnowledgePage) => navigate(readerPath(id, readListState(params), { tab: null, page: null, ...(saved?.address ? { knowledge: saved.address } : {}) }), { replace: true }), [navigate, params]);
   const compile = async () => {
     setAsking(true);
     try {
@@ -69,7 +86,10 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
     finally { setAsking(false); }
   };
 
-  if (error && !page) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
+  if (error && !page) return <LoadError message={error} onRetry={() => {
+    if (canRefreshAddress && addressed) setRefreshAddressKey(addressKey);
+    setAttempt((value) => value + 1);
+  }} />;
   if (!page) return <p role="status" className="text-ui text-text-3">正在打开</p>;
   if (editing) {
     return (
@@ -78,8 +98,9 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
           page={page}
           projectId={source.projectId}
           onCancel={() => setEditing(false)}
-          onSaved={(saved) => { setEditing(false); toast.success("已保存"); if (saved.sourceId === source.id) { setPage(saved); report.current?.(saved); } else follow(saved.sourceId); }}
-          onReloaded={(fresh) => { setPage(fresh); report.current?.(fresh); if (fresh.sourceId !== source.id) follow(fresh.sourceId); }}
+          onSaved={(saved) => { setEditing(false); toast.success("已保存"); if (saved.sourceId === source.id) { setPage(saved); report.current?.(saved); }
+            if (saved.sourceId !== source.id || saved.address && JSON.stringify(saved.address) !== JSON.stringify(addressed)) follow(saved.sourceId, saved); }}
+          onReloaded={(fresh) => { setPage(fresh); report.current?.(fresh); if (fresh.sourceId !== source.id || fresh.address && JSON.stringify(fresh.address) !== JSON.stringify(addressed)) follow(fresh.sourceId, fresh); }}
         />
       </div>
     );
@@ -113,7 +134,7 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
               const named = page.stale.filter((entry) => (entry.reason in STALE_LABEL ? entry.reason : "changed") === reason);
               return (
                 <span key={reason} className="flex flex-wrap items-center gap-x-2">
-                  <span className="font-medium">{STALE_LABEL[reason]}</span>
+                  <span className="font-semibold">{STALE_LABEL[reason]}</span>
                   {named.map((entry) => (
                     <Link key={entry.sourceId} to={`/app/files/${encodeURIComponent(entry.sourceId)}`} className="text-link underline underline-offset-2">
                       {titles.get(entry.sourceId) ?? "这份资料"}
@@ -144,8 +165,8 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
 
 /**
  * The whole page's text in one field. The version it was loaded from goes back with the text; if a compile has rewritten
- * the page meanwhile the control plane refuses (`knowledge_page_changed`), the editor takes the newer version in and says
- * so in one sentence — the person's change is theirs to make again, never silently laid over the new one.
+ * the page meanwhile the control plane refuses (`knowledge_page_changed`), the editor retains the draft and shows
+ * the newer version separately. The person chooses which text to continue from before saving again.
  */
 function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
   page: KnowledgePage;
@@ -156,9 +177,11 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
 }) {
   const [base, setBase] = useState(page);
   // The engine's address in front of each link to a document is not the person's to read or to keep; it goes back on when saved.
-  const masked = useMemo(() => maskEngineAddresses(base.markdown), [base.markdown]);
+  // The draft keeps its original address map even when a conflict advances the save revision.
+  const [masked, setMasked] = useState(() => maskEngineAddresses(page.markdown));
   const [text, setText] = useState(masked.text);
   const [saving, setSaving] = useState(false);
+  const [newer, setNewer] = useState<KnowledgePage | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -167,18 +190,16 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
     setSaving(true);
     setMessage(null);
     try {
-      const saved = await saveKnowledgePage({ sourceId: base.sourceId, markdown: masked.restore(text), baseSha256: base.sha256 });
+      const saved = await saveKnowledgePage({ sourceId: base.sourceId, markdown: masked.restore(text), baseSha256: base.sha256, ...(base.address ? { address: base.address } : {}) });
       if (live.current) onSaved(saved.page);
     } catch (failure) {
       if (!live.current) return;
-      if (failure instanceof WebApiError && failure.code === "knowledge_page_changed") {
+      if (failure instanceof WebApiError && (failure.code === "knowledge_page_changed" || failure.status === 404)) {
         try {
           const fresh = await getKnowledgePageAt(projectId, base.tree, base.path);
           if (!live.current) return;
-          setBase(fresh);
-          setText(maskEngineAddresses(fresh.markdown).text);
-          onReloaded(fresh);
-          setMessage("这一页刚被重新整理过，已换成最新的版本，请在它的基础上再改一次。");
+          setNewer(fresh);
+          setMessage("这一页刚被重新整理过，你的修改已保留。请对照最新版本后继续编辑。");
         } catch (reloadFailure) { setMessage(productErrorMessage(reloadFailure)); }
       } else setMessage(productErrorMessage(failure));
     } finally {
@@ -189,9 +210,17 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
     <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (changed && text.trim() && !saving) void save(); }}>
       <Textarea label="页面全文" value={text} rows={22} onChange={(event) => setText(event.target.value)} disabled={saving} error={message}
         className="font-mono" />
+      {newer && <div className="space-y-3">
+        <Textarea label="最新版本" value={maskEngineAddresses(newer.markdown).text} rows={12} readOnly />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={() => { void navigator.clipboard.writeText(text).then(() => toast.success("已复制我的修改"), () => toast.error("无法复制，请手动选择全文复制")); }}>复制我的修改</Button>
+          <Button type="button" variant="secondary" onClick={() => { setBase(newer); const fresh = maskEngineAddresses(newer.markdown); setMasked(fresh); setText(fresh.text); onReloaded(newer); setNewer(null); setMessage(null); }}>使用最新版本</Button>
+          <Button type="button" variant="secondary" onClick={() => { setBase(newer); setNewer(null); setMessage("已保留你的修改，请核对后保存。"); }}>以我的修改继续编辑</Button>
+        </div>
+      </div>}
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="text" onClick={onCancel} disabled={saving}>取消</Button>
-        <Button type="submit" loading={saving} disabled={!changed || !text.trim()}>保存</Button>
+        <Button type="submit" loading={saving} disabled={!changed || !text.trim() || newer !== null}>保存</Button>
       </div>
     </form>
   );

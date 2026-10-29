@@ -1,9 +1,11 @@
+import type { GeoConversationScope } from "./geoNativeClient";
 import { useSyncExternalStore } from "react";
+import { geoIdFromChatPath } from "@/lib/geoLocation";
 import { isStudyChatPath } from "@/lib/studyLocation";
 import { isTaskPath } from "@/lib/taskLocation";
 
 /**
- * Where the kernel's conversation is wanted on a page that holds it in a pane: a task's page, and a study's conversation view.
+ * Where the kernel's conversation is wanted on a page that holds it in a pane: a task's page, a study's conversation view and a GEO project's conversation.
  *
  * The frame cannot be rendered by the page: the kernel's application is an iframe holding a document, a websocket and a handshake,
  * and putting an iframe in another place in the tree reloads all three (`SessionFrameHost` explains what that cost). So the page
@@ -19,15 +21,22 @@ export interface TaskPaneRequest {
   projectId: string;
   /** The conversation the pane shows: the execution's, or the study's own. */
   sessionId: string;
+  scope?: GeoConversationScope;
+  /**
+   * Whether the person owns the module project the scoped conversation is in. A member acts in the owner's runtime through the module's
+   * own routes; what reads the owner's workspace or knowledge base through the person's own projects (a run's file page, a saved
+   * source, 存入知识库) runs only for the owner.
+   */
+  owner?: boolean;
 }
 
 /**
  * Whether an address is one of the pages that hold the conversation in a pane — the places the frame may be placed over besides the
- * chat surface itself: a scheduled task (`/app/autopilot/:taskId`) and a study's conversation view
- * (`/app/virtual-research/:studyId/chat`). Read from the address alone, on every navigation, as the chat surface is.
+ * chat surface itself: a scheduled task (`/app/autopilot/:taskId`) a study's conversation view
+ * (`/app/virtual-research/:studyId/chat`) and GEO's addressed conversation (`/app/geo/:geoId/chat/:sessionId`). Read from the address alone, on every navigation, as the chat surface is.
  */
 export function isPanePath(pathname: string): boolean {
-  return isTaskPath(pathname) || isStudyChatPath(pathname);
+  return isTaskPath(pathname) || isStudyChatPath(pathname) || geoIdFromChatPath(pathname) !== null;
 }
 
 let current: TaskPaneRequest | null = null;

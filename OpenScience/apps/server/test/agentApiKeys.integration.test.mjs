@@ -13,7 +13,6 @@ import { after, before, test } from "node:test";
 
 import { AgentApiKeyStore, subjectAccountId } from "../src/agentApiKeys.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -76,16 +75,6 @@ test("each doctor of each institution is an account of its own, made once, that 
   assert.deepEqual(row, { auth_type: "subject", password_hash: null });
   const stored = (await database.query("SELECT * FROM evimed_agent.subjects WHERE user_id=$1", [first.userId])).rows[0];
   assert.ok(!JSON.stringify(stored).includes("doc-7"), "the HIS identifier itself is never stored");
-
-  // Its memory is its own: a record written for one doctor is not the other's.
-  const memory = new ResearchMemoryStore({}, { database });
-  await memory.upsertRecord(first.userId, {
-    scope: "user", scopeId: "", kind: "preference", key: "preference.herb_count", value: "药味控制在 12 味以内",
-    summary: "药味不超过 12 味", origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false,
-  }, null);
-  assert.equal((await memory.listRecords(first.userId, {})).length, 1);
-  assert.equal((await memory.listRecords(elsewhere.userId, {})).length, 0);
-  assert.equal((await memory.listRecords(hospital, {})).length, 0, "nor the institution's");
 });
 
 test("an institution lists the accounts that must go before it does", options, async () => {

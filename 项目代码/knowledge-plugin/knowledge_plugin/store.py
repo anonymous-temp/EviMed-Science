@@ -15,6 +15,14 @@ lock (``db.lock_seq``) so that commit order is seq order:
 
 A revision re-arms text enrichment when the platform had asked for the text: content changed, so
 the abstract may have too.
+
+An entry that arrives with its own full text (contract 1.5.0: an X post, a WeChat article the paid API returned) has it
+written into ``entry_texts`` in the same transaction and is ``available`` at once: nothing is left to enrich, so ``/text``
+answers the post without a round trip and the enrichment worker never fetches its page.
+
+``redeliver`` is the one revision without a content change: a text that arrives after the platform was answered
+``unavailable`` for it (the WeChat texts recovered by ``python -m knowledge_plugin wechat-bodies --apply``). The platform
+asks ``/text`` again when it sees a new revision of an entry (contract, ``getEntryText``) and would not otherwise.
 """
 
 from __future__ import annotations
@@ -26,17 +34,29 @@ from datetime import datetime, timedelta
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 
-from . import policy
+from . import policy, text_policy
 from .db import lock_seq
 from .model import (ENRICHMENT_TYPES, FETCHED_FROM, NEUTRAL_DETAILS, OPEN_ACCESS, TEXT_KINDS, TRIAL_FACT_TYPES,
                     EntryTextResult)
-from .normalize import Prepared, clean_text, cut, is_backfill, resolve_dates
+from .normalize import Prepared, clean_body, clean_text, cut, is_backfill, key_sha256, resolve_dates
 
 ENTRY_COLUMNS = (
     "seq, entry_id, source_id, external_key, identity_key, url, canonical_url, doi, pmid, registry_ids, title, "
     "summary, lang, lane_hint, published_at, date_precision, first_seen_at, content_sha256, revision, backfill, "
-    "defects, facts, text_status, text_requested_at, delivered_at"
+    "defects, facts, text_status, text_requested_at, delivered_at, channel, platform, author, media, quoted, metrics"
 )
+
+
+def _json(value):
+    return Jsonb(value) if value is not None else None
+
+
+def _body_columns(item: Prepared) -> tuple[str, str | None, str | None]:
+    """(text_kind, body_text, body_excerpt) of the text an entry arrived with: a full text is also its own excerpt (its
+    head, at most 20,000 characters), so a reader of the excerpt alone sees the post; a part is an excerpt only."""
+    if item.body_kind == "excerpt":
+        return "excerpt", None, cut(item.body_text, 20_000)
+    return "full", item.body_text, cut(item.body_text, 20_000)
 
 
 @dataclass
@@ -94,18 +114,24 @@ async def store_entries(conn: AsyncConnection, source_id: str, batch: list[Prepa
                     seen_rows.append((source_id, item.key_sha256, item.content_sha256, current["first_seen_at"], now, current["revision"]))
                     continue
                 published, precision, date_defects = resolve_dates(item, current["first_seen_at"])
-                rearm = current["text_requested_at"] is not None and current["text_status"] in ("available", "unavailable", "pending")
+                rearm = (not item.body_text and current["text_requested_at"] is not None
+                         and current["text_status"] in ("available", "unavailable", "pending"))
                 await conn.execute(
                     """UPDATE evimed_knowledge.entries SET seq = DEFAULT, revision = revision + 1, identity_key = %s,
                               url = %s, canonical_url = %s, doi = %s, pmid = %s, registry_ids = %s, title = %s,
                               summary = %s, lang = %s, lane_hint = %s, published_at = %s, date_precision = %s,
                               content_sha256 = %s, defects = %s, facts = %s, delivered_at = %s,
-                              text_status = CASE WHEN %s THEN 'pending' ELSE text_status END
+                              text_status = CASE WHEN %s THEN 'available' WHEN %s THEN 'pending' ELSE text_status END,
+                              channel = %s, platform = %s, author = %s, media = %s, quoted = %s, metrics = %s
                         WHERE source_id = %s AND external_key = %s""",
                     (item.identity_key, item.url, item.canonical_url, item.doi, item.pmid, item.registry_ids, item.title,
                      item.summary, item.language, item.lane_hint, published, precision, item.content_sha256,
-                     item.defects + date_defects, Jsonb(item.facts), now, rearm, source_id, item.external_key),
+                     item.defects + date_defects, Jsonb(item.facts), now, bool(item.body_text), rearm, item.channel,
+                     item.platform, _json(item.author), Jsonb(item.media), _json(item.quoted), _json(item.metrics),
+                     source_id, item.external_key),
                 )
+                if item.body_text:
+                    await _store_body(conn, item, current["revision"] + 1, now)
                 if rearm:
                     await conn.execute(
                         """INSERT INTO evimed_knowledge.entry_texts (entry_id, revision, next_attempt_at)
@@ -129,13 +155,18 @@ async def store_entries(conn: AsyncConnection, source_id: str, batch: list[Prepa
                 """INSERT INTO evimed_knowledge.entries
                      (entry_id, source_id, external_key, identity_key, url, canonical_url, doi, pmid, registry_ids,
                       title, summary, lang, lane_hint, published_at, date_precision, first_seen_at, content_sha256,
-                      revision, backfill, defects, facts, delivered_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                      revision, backfill, defects, facts, delivered_at, text_status, channel, platform, author, media,
+                      quoted, metrics)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                           %s, %s, %s, %s, %s, %s)""",
                 (item.entry_id, source_id, item.external_key, item.identity_key, item.url, item.canonical_url, item.doi,
                  item.pmid, item.registry_ids, item.title, item.summary, item.language, item.lane_hint, published,
                  precision, first_seen, item.content_sha256, revision, backfill, item.defects + date_defects,
-                 Jsonb(item.facts), now),
+                 Jsonb(item.facts), now, "available" if item.body_text else "none", item.channel, item.platform,
+                 _json(item.author), Jsonb(item.media), _json(item.quoted), _json(item.metrics)),
             )
+            if item.body_text:
+                await _store_body(conn, item, revision, now)
             if remembered is not None:
                 result.resurrected += 1
             elif backfill:
@@ -153,6 +184,38 @@ async def store_entries(conn: AsyncConnection, source_id: str, batch: list[Prepa
                 seen_rows,
             )
     return result
+
+
+async def _store_body(conn: AsyncConnection, item: Prepared, revision: int, now: datetime) -> None:
+    """The full text an entry arrived with, as its text (module docstring)."""
+    await conn.execute(
+        """INSERT INTO evimed_knowledge.entry_texts
+             (entry_id, revision, text_kind, body_text, body_excerpt, fetched_from, fetched_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s)
+           ON CONFLICT (entry_id) DO UPDATE SET revision = EXCLUDED.revision, text_kind = EXCLUDED.text_kind,
+             body_text = EXCLUDED.body_text, body_excerpt = EXCLUDED.body_excerpt, fetched_from = EXCLUDED.fetched_from,
+             fetched_at = EXCLUDED.fetched_at, next_attempt_at = NULL, last_error = NULL""",
+        (item.entry_id, revision, *_body_columns(item), item.body_from, now),
+    )
+
+
+async def redeliver(conn: AsyncConnection, entry_id: str, now: datetime) -> int | None:
+    """Deliver an entry again as its next revision, its content unchanged (module docstring); returns the revision, or
+    ``None`` when the entry is gone. Holds the seq lock for the caller's transaction, so commit order stays seq order."""
+    async with conn.transaction():
+        await lock_seq(conn)
+        row = await (await conn.execute(
+            """UPDATE evimed_knowledge.entries SET seq = DEFAULT, revision = revision + 1, delivered_at = %s
+                WHERE entry_id = %s RETURNING source_id, external_key, revision""", (now, entry_id))).fetchone()
+        if row is None:
+            return None
+        await conn.execute("UPDATE evimed_knowledge.entry_texts SET revision = %s WHERE entry_id = %s",
+                           (row["revision"], entry_id))
+        await conn.execute(
+            """UPDATE evimed_knowledge.seen_keys SET revision = greatest(revision, %s)
+                WHERE source_id = %s AND key_sha256 = %s""",
+            (row["revision"], row["source_id"], key_sha256(row["external_key"])))
+    return int(row["revision"])
 
 
 # ------------------------------------------------------------------------------------ fetch log
@@ -198,22 +261,57 @@ async def reliability_24h_all(conn: AsyncConnection, now: datetime) -> dict[str,
     return {source_id: policy.reliability(values) for source_id, values in outcomes.items()}
 
 
+_PAGE_FAILED = "(coalesce(starts_with(t.last_error, 'page_') AND strpos(t.last_error, 'feed_text') = 0, false))"
+_PAGE_READ = f"(t.fetched_from = 'page' OR {_PAGE_FAILED})"
+
+
+async def text_outcomes(conn: AsyncConnection, source_id: str) -> list[bool]:
+    """The page reads of one source's entries, newest entry first (at most ``policy.TEXT_WINDOW``): ``True`` for a read
+    that failed (``policy.text_failing``). A read that failed is an entry whose last attempt ended in a ``page_…`` note
+    and has no feed text to fall back on; one that read is an entry whose text came from its page. An entry that never
+    asked its page (a record, an article chain, a feed's own text) is neither."""
+    rows = await (await conn.execute(
+        f"""SELECT {_PAGE_FAILED} AS failed
+              FROM evimed_knowledge.entries e JOIN evimed_knowledge.entry_texts t USING (entry_id)
+             WHERE e.source_id = %s AND t.attempts > 0 AND {_PAGE_READ}
+             ORDER BY e.seq DESC LIMIT %s""",
+        (source_id, policy.TEXT_WINDOW))).fetchall()
+    return [bool(row["failed"]) for row in rows]
+
+
+async def text_outcomes_all(conn: AsyncConnection) -> dict[str, list[bool]]:
+    """``text_outcomes`` of every source that has any, in one read (the hourly re-check)."""
+    rows = await (await conn.execute(
+        f"""SELECT source_id, failed FROM (
+              SELECT e.source_id, {_PAGE_FAILED} AS failed,
+                     row_number() OVER (PARTITION BY e.source_id ORDER BY e.seq DESC) AS n
+                FROM evimed_knowledge.entries e JOIN evimed_knowledge.entry_texts t USING (entry_id)
+               WHERE t.attempts > 0 AND {_PAGE_READ}) x
+             WHERE n <= %s ORDER BY source_id, n""",
+        (policy.TEXT_WINDOW,))).fetchall()
+    outcomes: dict[str, list[bool]] = {}
+    for row in rows:
+        outcomes.setdefault(row["source_id"], []).append(bool(row["failed"]))
+    return outcomes
+
+
 # ------------------------------------------------------------------------------------ texts
 
-TEXT_HORIZON = timedelta(days=5)
+TEXT_HORIZON = timedelta(days=14)     # the enrichment rule's (``enrich.TEXT_HORIZON``): PubMed's late indexing
 TEXT_REFRESH_GRACE = timedelta(days=1)
 _COUNTRY = re.compile(r"^[A-Z]{2}$")
 TEXT_RETRY_DEFAULT_S = 6 * 3600
 TEXT_RETRY_MIN_S = 15 * 60
-TEXT_RETRY_MAX_S = 12 * 3600
+TEXT_RETRY_MAX_S = 24 * 3600      # a top journal's paper older than a week is asked daily (``text_policy.retry_delay_s``)
 
 
 def text_deadline(job: dict, now: datetime) -> datetime:
-    """When enrichment stops retrying: five days after the entry was first seen (plan 10.3.4 — the
-    same clock the readers' own rule uses), or a day after an operator's refresh of an older entry."""
+    """When enrichment stops retrying: fourteen days after the entry was first seen (plan 10.3.4 — the
+    same clock the readers' own rule uses; five until 2026-10-22), or a day after an operator's refresh of an older
+    entry. A top journal's research paper waits twenty-one days (``text_policy``)."""
     first_seen = job.get("first_seen_at") or now
     requested = job.get("text_requested_at") or now
-    return max(first_seen + TEXT_HORIZON, requested + TEXT_REFRESH_GRACE)
+    return max(first_seen + text_policy.horizon(job, TEXT_HORIZON), requested + TEXT_REFRESH_GRACE)
 
 
 async def entry_row(conn: AsyncConnection, entry_id: str) -> dict | None:
@@ -224,7 +322,7 @@ async def entry_row(conn: AsyncConnection, entry_id: str) -> dict | None:
 
 async def text_row(conn: AsyncConnection, entry_id: str) -> dict | None:
     return await (await conn.execute(
-        """SELECT entry_id, revision, text_kind, abstract, body_excerpt, fetched_from, fetched_at, attempts,
+        """SELECT entry_id, revision, text_kind, abstract, body_excerpt, body_text, fetched_from, fetched_at, attempts,
                   next_attempt_at, enrichment, last_error FROM evimed_knowledge.entry_texts WHERE entry_id = %s""",
         (entry_id,),
     )).fetchone()
@@ -248,31 +346,39 @@ async def schedule_text(conn: AsyncConnection, entry_id: str, revision: int, now
 
 
 async def claim_texts(conn: AsyncConnection, limit: int, now: datetime, lease_s: int) -> list[dict]:
-    """Take up to ``limit`` due enrichment jobs; the lease is a pushed-back ``next_attempt_at``."""
+    """Take up to ``limit`` due enrichment jobs; the lease is a pushed-back ``next_attempt_at``. A due journal entry
+    whose text is there but provisional (``enrich``: a feed's teaser, a standfirst) is a job too, marked ``upgrade``."""
     async with conn.transaction():
         rows = await (await conn.execute(
             """WITH due AS (
                  SELECT t.entry_id FROM evimed_knowledge.entry_texts t
                    JOIN evimed_knowledge.entries e ON e.entry_id = t.entry_id
-                  WHERE e.text_status = 'pending' AND t.next_attempt_at <= %s
-                  ORDER BY t.next_attempt_at LIMIT %s FOR UPDATE OF t SKIP LOCKED)
+                   JOIN evimed_knowledge.sources s ON s.id = e.source_id
+                  WHERE (e.text_status = 'pending'
+                         OR (e.text_status = 'available' AND (e.doi IS NOT NULL OR e.pmid IS NOT NULL)))
+                    AND t.next_attempt_at <= %s
+                  ORDER BY (s.source_type = 'journal' AND s.authority >= %s) DESC, t.next_attempt_at LIMIT %s FOR UPDATE OF t SKIP LOCKED)
                UPDATE evimed_knowledge.entry_texts t SET next_attempt_at = %s
                  FROM due WHERE t.entry_id = due.entry_id
-               RETURNING t.entry_id, t.attempts""",
-            (now, limit, now + timedelta(seconds=lease_s)),
+               RETURNING t.entry_id, t.attempts, t.paid_attempts""",
+            (now, text_policy.MIN_AUTHORITY, limit, now + timedelta(seconds=lease_s)),
         )).fetchall()
     jobs = []
     for row in rows:
         joined = await (await conn.execute(
             f"""SELECT {', '.join('e.' + c.strip() for c in ENTRY_COLUMNS.split(','))},
                        s.access AS source_access, s.egress AS source_egress, s.source_type AS source_type,
-                       s.config AS source_config
+                       s.config AS source_config, s.authority AS source_authority,
+                       (SELECT t.enrichment->'publication_types' FROM evimed_knowledge.entry_texts t
+                         WHERE t.entry_id = e.entry_id) AS known_publication_types
                   FROM evimed_knowledge.entries e JOIN evimed_knowledge.sources s ON s.id = e.source_id
                  WHERE e.entry_id = %s""",
             (row["entry_id"],),
         )).fetchone()
         if joined:
             joined["attempts"] = row["attempts"]
+            joined["paid_attempts"] = row["paid_attempts"]
+            joined["upgrade"] = joined.get("text_status") == "available"
             jobs.append(joined)
     return jobs
 
@@ -322,13 +428,20 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
     if status == "pending" and now >= text_deadline(job, now):
         status = "unavailable"
     enrichment = whitelist_enrichment(result.enrichment)
-    abstract = cut(clean_text(result.abstract), 20_000) if result.abstract else None
-    excerpt = cut(clean_text(result.body_excerpt), 20_000) if result.body_excerpt else None
+    # Paragraphs kept (2026-10-22): ``clean_text`` folded every newline, so 5,408 of 7,968 page excerpts and every
+    # abstract's sections reached the reader as one block.
+    abstract = clean_body(result.abstract, 20_000) if result.abstract else None
+    excerpt = clean_body(result.body_excerpt, 20_000) if result.body_excerpt else None
+    body = clean_body(result.body_text)
     kind = result.text_kind if result.text_kind in TEXT_KINDS else "none"
     source = result.fetched_from if result.fetched_from in FETCHED_FROM else None
     if status == "pending":
         delay = result.retry_after_s or TEXT_RETRY_DEFAULT_S
         next_attempt = now + timedelta(seconds=min(max(delay, TEXT_RETRY_MIN_S), TEXT_RETRY_MAX_S))
+    elif status == "available" and result.retry_after_s:
+        # A provisional text, asked again for an index's abstract until the horizon (``enrich``: the upgrade).
+        next_attempt = now + timedelta(seconds=min(max(result.retry_after_s, TEXT_RETRY_MIN_S), TEXT_RETRY_MAX_S))
+        next_attempt = next_attempt if next_attempt < text_deadline(job, now) else None
     else:
         next_attempt = None
     async with conn.transaction():
@@ -336,10 +449,11 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
             """UPDATE evimed_knowledge.entry_texts SET revision = %s, attempts = %s, next_attempt_at = %s,
                       text_kind = CASE WHEN %s THEN %s ELSE text_kind END,
                       abstract = coalesce(%s, abstract), body_excerpt = coalesce(%s, body_excerpt),
+                      body_text = coalesce(%s, body_text),
                       fetched_from = coalesce(%s, fetched_from), fetched_at = coalesce(%s, fetched_at),
                       enrichment = enrichment || %s, last_error = %s
                 WHERE entry_id = %s""",
-            (job["revision"], min(attempts, 32767), next_attempt, kind != "none", kind, abstract, excerpt, source,
+            (job["revision"], min(attempts, 32767), next_attempt, kind != "none", kind, abstract, excerpt, body, source,
              result.fetched_at or (now if status == "available" else None), Jsonb(enrichment),
              ",".join(result.notes)[:200] or None, job["entry_id"]),
         )
@@ -347,8 +461,39 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
     return status
 
 
+async def reopen_top_journal_texts(conn: AsyncConnection, now: datetime, *, limit: int = 500) -> int:
+    """Ask again the top journals' papers the 14-day rule gave up on (c3-primary, 2026-10-25): an entry that ended
+    ``unavailable`` on ``text_horizon_passed`` and is still inside the longer horizon (``text_policy``) goes back to
+    ``pending`` and is due at once, once — its next ending carries the note again but is past the longer horizon, so the
+    sweep does not take it again. Not one PubMed typed as something with no abstract, nor one whose PubMed record is final.
+    Returns how many were reopened."""
+    rows = await (await conn.execute(
+        """WITH due AS (
+             SELECT e.entry_id FROM evimed_knowledge.entries e
+               JOIN evimed_knowledge.entry_texts t ON t.entry_id = e.entry_id
+               JOIN evimed_knowledge.sources s ON s.id = e.source_id
+              WHERE e.text_status = 'unavailable' AND s.source_type = 'journal' AND s.authority >= %(authority)s
+                AND (e.doi IS NOT NULL OR e.pmid IS NOT NULL)
+                AND e.first_seen_at > %(since)s AND e.first_seen_at <= %(until)s
+                AND t.last_error LIKE %(ended)s AND t.last_error NOT LIKE %(complete)s
+                AND t.abstract IS NULL AND t.body_text IS NULL AND t.body_excerpt IS NULL
+                AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(coalesce(t.enrichment->'publication_types', '[]'::jsonb)) x
+                                 WHERE lower(x) = ANY(%(types)s))
+              ORDER BY e.first_seen_at DESC LIMIT %(limit)s FOR UPDATE OF t, e SKIP LOCKED)
+           UPDATE evimed_knowledge.entry_texts t SET next_attempt_at = %(now)s
+             FROM due WHERE t.entry_id = due.entry_id RETURNING t.entry_id""",
+        {"authority": text_policy.MIN_AUTHORITY, "since": now - text_policy.EXTENDED_HORIZON, "until": now - TEXT_HORIZON,
+         "ended": "%text_horizon_passed%", "complete": "%pubmed_record_complete%",
+         "types": sorted(text_policy.NON_RESEARCH_TYPES), "limit": limit, "now": now},
+    )).fetchall()
+    ids = [row["entry_id"] for row in rows]
+    if ids:
+        await conn.execute("UPDATE evimed_knowledge.entries SET text_status = 'pending' WHERE entry_id = ANY(%s)", (ids,))
+    return len(ids)
+
+
 async def text_failure(conn: AsyncConnection, job: dict, code: str, now: datetime, *, retry_s: int = 3600) -> str:
-    """An enrichment attempt that raised or had no enricher: retry later, give up after 5 days."""
+    """An enrichment attempt that raised or had no enricher: retry later, give up after ``TEXT_HORIZON``."""
     status = "unavailable" if now >= text_deadline(job, now) else "pending"
     async with conn.transaction():
         await conn.execute(

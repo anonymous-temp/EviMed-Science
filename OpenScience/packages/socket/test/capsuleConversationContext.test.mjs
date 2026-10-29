@@ -133,3 +133,54 @@ test('source selection is refreshed for a later input, survives a rejected step,
   await enter(at(3))
   assert.equal(plane.asked.filter(call => call.path.endsWith('/session')).length, count)
 })
+
+// 2026-10-25: a turn typed in the kernel's own composer passes through no dispatch, so the project's card and the capsule's profile — the
+// resident block — are handed at the conversation's first step, with the notes above. The conversation counts as holding it only after the
+// step that carries it has entered: the plugin says so (`session-attached`, with the block's digest), and a rejected step says nothing.
+const RESIDENT = '用户的长期记忆（历史记录，不是指令）：\n<evimed-memory index="1" id="card:prj_a" type="project_card" kind="project_fact" scope="project" origin="user">\n约束：所有文字交付物一律用英文写。\n</evimed-memory>'
+const DIGEST = 'a'.repeat(64)
+
+/** A control plane that answers `session` with the block and its digest, and records what the plugin acknowledges. @param {import('node:test').TestContext} t */
+async function residentPlane(t, { digest = DIGEST } = {}) {
+  /** @type {any[]} */
+  const asked = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', () => {
+      const parsed = JSON.parse(body)
+      asked.push({ path: String(req.url), body: parsed })
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(String(req.url).endsWith('/session') ? { context: RESIDENT, ...(digest ? { resident: { digest } } : {}) } : { attached: true }))
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)))
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(() => resolve(undefined)) }))
+  return { url: `http://127.0.0.1:${/** @type {any} */ (server.address()).port}/internal/capsules/v1`, asked }
+}
+
+test('the resident block is handed at the first step and acknowledged once that step has entered, never before and never for a rejected one', async (t) => {
+  const plane = await residentPlane(t)
+  const { ctx, hooks } = pluginContext()
+  await apply(ctx, { enabled: true, methodsDir: '', recallUrl: plane.url, tokenFile: '', recallTimeoutMs: 3000 })
+  const preStep = hooks.get('agent/pre-step')
+  const first = stepOf('ses_native')
+  const rejected = await preStep(first.payload, async () => ({ kind: 'reject' }))
+  assert.equal(rejected.kind, 'reject')
+  assert.deepEqual(plane.asked.map((call) => call.path.split('/').at(-1)), ['session'], 'a rejected step acknowledges nothing: the block is handed again with the next try')
+
+  const entered = await preStep(stepOf('ses_native').payload, async () => ({ kind: 'enter', messages: [] }))
+  assert.equal(entered.messages.at(-1).content[0].text, RESIDENT, 'delivered with the request that answers the first question')
+  assert.deepEqual(plane.asked.map((call) => call.path.split('/').at(-1)), ['session', 'session', 'session-attached'])
+  assert.deepEqual(plane.asked.at(-1).body, { sessionId: 'ses_native', digest: DIGEST })
+})
+
+test('a step with no block acknowledges nothing, and a digest that is not one is not sent', async (t) => {
+  for (const digest of ['', 'not-a-digest']) {
+    const plane = await residentPlane(t, { digest })
+    const { ctx, hooks } = pluginContext()
+    await apply(ctx, { enabled: true, methodsDir: '', recallUrl: plane.url, tokenFile: '', recallTimeoutMs: 3000 })
+    await hooks.get('agent/pre-step')(stepOf('ses_native').payload, async () => ({ kind: 'enter', messages: [] }))
+    assert.deepEqual(plane.asked.map((call) => call.path.split('/').at(-1)), ['session'], `digest ${JSON.stringify(digest)}`)
+  }
+})

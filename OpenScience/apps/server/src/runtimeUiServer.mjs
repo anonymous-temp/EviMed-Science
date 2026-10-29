@@ -106,6 +106,9 @@ async function assertWorkspacePath(method, payload, workspaceRoot, project) {
 
 const WORKSPACE_PATH_METHODS = new Set(RUNTIME_UI_WORKSPACE_PATH_METHODS);
 
+/** The file-panel calls that are a person opening one file (`observeFileOpen`). */
+const FILE_OPEN_METHODS = new Set(["workspaceFiles/read", "workspaceFiles/readAll", "workspaceFiles/readBytes", "officeToPdf/render"]);
+
 /** Serve native Markdown media through the same descriptor-bound file boundary as the artifact reader.
  * @param {any} req @param {any} res @param {URL} url @param {any} project
  * @param {string} workspaceRoot @param {number} maxBytes @param {() => Promise<any>} revalidate
@@ -270,14 +273,46 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
- *   managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
- *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
+ *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
+ *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
+ *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string, text?: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
+ *   noteFileRead?: ((project: any, opened: { path: string }) => Promise<unknown>) | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, authorizeMutation = null,
-  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, audit = async () => {} }) {
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
+  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
+  /** The person's signed attendance receipt, written before the prompt is forwarded and never a reason to refuse it (review F5):
+   * a missing receipt makes the turn read as unattended at worst. The writer counts its own failures
+   * (`open_science_attendance_receipt_write_failures_total`). @param {any} user @param {any} project @param {any} request */
+  const attend = async (user, project, request) => {
+    try { await recordPromptAttendance?.(user, project, request); } catch { /* isolated: open_science_attendance_receipt_write_failures_total */ }
+  };
+  const delegatedPolicies = new Map();
+  function pruneDelegatedPolicies() {
+    for (const [id, value] of delegatedPolicies) if (value.expiresAt <= Date.now()) { value.policy.dispose(); delegatedPolicies.delete(id); }
+  }
+  /**
+   * The researcher opening a file in the kernel's own file panel is a use of the run that delivered it (`LearningEvidence.noteFileUse`): the
+   * panel reads it with `workspaceFiles/read`, `readAll` or `readBytes`, or renders an Office file (`officeToPdf/render`). A read of an asset a
+   * preview embeds (`readBytes` with a `baseFile`), a listing and a stat are not an opening. Called once the call has passed the path
+   * confinement and immediately before it is forwarded, on both transports. An observation, not a check: it never refuses, nothing waits
+   * for it, and a failure is the evidence ledger's.
+   * @param {any} project @param {string | null} method @param {any} payload the native `{ args: { path } }`
+   */
+  function observeFileOpen(project, method, payload) {
+    if (!noteFileRead || !method || !FILE_OPEN_METHODS.has(method)) return;
+    const args = payload?.args;
+    if (typeof args?.path !== "string" || !args.path || (method === "workspaceFiles/readBytes" && args.options?.baseFile !== undefined)) return;
+    try {
+      const root = runtimeManager.runtimeWorkspaceRoot(project);
+      const relative = args.path.startsWith("/") ? path.posix.relative(root, args.path) : args.path;
+      void Promise.resolve(noteFileRead(project, { path: relative })).catch(() => {});
+    } catch { /* an observation never decides */ }
+  }
+
   /**
    * A message the researcher sends into a turn that is running is counted on
    * the run it steers, so the learning loop's correction trigger has an in-run
@@ -302,7 +337,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     const request = payload?.args?.request;
     if (!agentRuns || request?.mode !== "steer") return;
     try {
-      await agentRuns.recordSteeredInput(project, request.sessionId, request.requestId);
+      // Their words as typed, for the learning loop: a steer is the researcher's own correction of the run that is going.
+      const text = Array.isArray(request.content)
+        ? request.content.filter((/** @type {any} */ part) => part?.type === "text" && typeof part.text === "string").map((/** @type {any} */ part) => part.text).join("\n") : "";
+      await agentRuns.recordSteeredInput(project, request.sessionId, request.requestId, text);
     } catch (error) {
       await audit("run.correction.observe", {
         userId: project.userId, projectId: project.id,
@@ -334,21 +372,37 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       }).catch(() => {});
     }
   }
-  /** Freeze supplemental context without changing the native request or refusing research. */
+  /** Freeze the route (and the methods) of an input before forwarding the native request, never changing it. A failure refuses nothing,
+   * except a selected GEO request whose route could not be preserved (`definitivelyRejected`). */
   async function prepareNativeContext(project, payload) {
     if (!preparePrompt) return;
-    try { await preparePrompt(project, payload?.args?.request); }
+    try {
+      const prepared = await preparePrompt(project, payload?.args?.request);
+      if (prepared?.supplementFailure) await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id, code: prepared.supplementFailure }).catch(() => {});
+    }
     catch (error) {
-      await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
-        code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
+      await audit("native.route.prepare", { userId: project.userId, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "native_route_unavailable" }).catch(() => {});
+      if (error?.definitivelyRejected) throw error;
     }
   }
   // An explicit selection is part of this operation's authority, not an
   // optional supplement. Refuse stale selections without forwarding a prompt
   // that silently loses the user's target. Strip our envelope before DSH.
+  async function prepareNativePlan(user, project, payload) {
+    const request = payload?.args?.request;
+    if (request?.geoPlanContext !== undefined && prepareGeoPlan) await prepareGeoPlan(user, project, request);
+    if (request && prepareSelections) await prepareSelections(user, project, request);
+  }
   async function bindNativeResult(user, project, payload) {
     const request = payload?.args?.request;
-    if (request?.evimedResultRevision === undefined) return;
+    if (!request) return;
+    if (request.geoPlanContext !== undefined) {
+      if (!bindGeoPlan) throw new HttpError(503, "geo_plan_context_unavailable", "Planning context is unavailable.");
+      await bindGeoPlan(user, project, request);
+      delete request.geoPlanContext;
+    }
+    if (!bindResultRevision && request.evimedResultRevision === undefined) return;
     if (!bindResultRevision) throw new HttpError(503, "result_revision_unavailable", "Result revision is unavailable.");
     await bindResultRevision(user, project, request);
     delete request.evimedResultRevision;
@@ -468,10 +522,32 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
    * @param {any} req @param {any} res
    * @returns {Promise<Record<string, any>>} the project this request addresses
    */
-  async function resolveFrame(req, res) {
+  async function resolveFrame(req, res, { recheck = null } = {}) {
     const frame = parseRuntimeUiFramePath(req.url ?? "/");
     const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     const claims = validateRuntimeUiFrame({ config, req, user, session, frameId: frame.frameId });
+    if (claims.version === 2) {
+      if (!resolveDelegatedFrame || !createDelegatedPolicy) throw new HttpError(403, "runtime_ui_frame_invalid", "This deployment cannot open the delegated frame.");
+      const resolved = await resolveDelegatedFrame(user, claims.delegation, { recheck });
+      if (resolved.project.userId !== claims.delegation.ownerId || resolved.project.id !== claims.projectId
+        || resolved.principal.actorId !== user.id) throw new HttpError(403, "runtime_ui_frame_invalid", "The delegated frame identity changed.");
+      pruneDelegatedPolicies();
+      let existing = delegatedPolicies.get(frame.frameId);
+      if (!existing) {
+        if (delegatedPolicies.size >= 1024) throw new HttpError(503, 'runtime_ui_frame_limit', 'Too many active shared conversation frames.');
+        const promise = Promise.resolve().then(() => createDelegatedPolicy({ user, ...resolved, claims }));
+        // Concurrent bootstrap/assets share one registry, especially pending
+        // native questions that are delivered on MUX and answered over HTTP.
+        existing = { userId: user.id, expiresAt: claims.expiresAt, promise, policy: { dispose() {} } };
+        delegatedPolicies.set(frame.frameId, existing);
+        try { existing.policy = await promise; }
+        catch (error) { if (delegatedPolicies.get(frame.frameId) === existing) delegatedPolicies.delete(frame.frameId); throw error; }
+      }
+      const scoped = await existing.promise;
+      existing.expiresAt = Math.max(existing.expiresAt, claims.expiresAt);
+      if (delegatedPolicies.get(frame.frameId) !== existing) { scoped.dispose(); throw new HttpError(403, 'runtime_ui_frame_invalid', 'The shared frame was released.'); }
+      return { user, session, ...resolved, claims, frame, scoped };
+    }
     const project = await store.requireProject(user, claims.projectId);
     return { user, session, project, claims, frame };
   }
@@ -567,10 +643,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     if (await serveProjectAsset(req, res)) return;
 
     if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
-    const { user, project, frame, claims } = await resolveFrame(req, res);
+    const { user, project, frame, claims, scoped } = await resolveFrame(req, res);
     const runtimeUrl = new URL(frame.suffix, "http://runtime.local");
     const pathname = runtimeUrl.pathname;
     if (pathname.startsWith("/__evimed_browser")) {
+      if (scoped) { sendDenied(res, 'managed-browser'); return; }
       const requestSnapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
       const scope = { userId: user.id, projectId: project.id, authSessionHash: claims.authSessionHash, frameId: frame.frameId };
       await handleManagedBrowserRequest({ req, res, pathname, scope, service: managedBrowser,
@@ -641,13 +718,34 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       res.end(payload);
       return;
     }
+    let scopedCall = null;
+    if (scoped && method) {
+      if (req.method !== 'POST') { sendDenied(res, method); return; }
+      if (method === RUNTIME_UI_UPLOAD_METHOD) scoped.authorizeUpload(runtimeUrl);
+      else {
+        const raw = await readBody(req, config.maxJsonBytes);
+        req.__openScienceProxyBody = raw;
+        try { scopedCall = JSON.parse(raw.toString('utf8')); } catch { throw new HttpError(400, 'runtime_ui_prompt_invalid', 'A native RPC is required.'); }
+        if (!exactFields(scopedCall, ['type', 'rpcId', 'method', 'payload']) || scopedCall.type !== 'client-request'
+          || scopedCall.method !== method || typeof scopedCall.rpcId !== 'string' || !scopedCall.rpcId || scopedCall.rpcId.length > 128) {
+          throw new HttpError(400, 'runtime_ui_prompt_invalid', 'A native RPC is required.');
+        }
+        await scoped.authorize(method, scopedCall.payload);
+      }
+    }
+    if (scoped && !method && (!['GET', 'HEAD'].includes(req.method)
+      || !['/', '/__evimed_bootstrap.js'].includes(pathname) && !isImmutableRuntimeUiAsset(frame.suffix))) { sendDenied(res, pathname); return; }
+    const nativeBody = limit => {
+      if (req.__openScienceProxyBody?.length > limit) throw new HttpError(413, 'body_too_large', 'The native request exceeds its limit.');
+      return req.__openScienceProxyBody ?? readBody(req, limit);
+    };
     let workspaceBody = null;
     let promptBody = null;
     let modelBody = null;
     let loopxBody = null;
     if (method === "loopx.goalbar") {
       if (req.method !== "POST" || config.loopxEnabled === false) { sendDenied(res, method); return; }
-      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
       req.__openScienceProxyBody = raw;
       try { loopxBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
       const payload = loopxBody?.payload;
@@ -660,7 +758,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       await authorizePromptSession(project, { args: { request: { sessionId: payload.sessionId } } });
     }
     if (method === "session/prompt") {
-      const raw = await readBody(req, config.maxJsonBytes);
+      const raw = await nativeBody(config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
       try { promptBody = JSON.parse(raw.toString("utf8")); } catch { /* Rejected below as an invalid native RPC. */ }
       if (promptBody?.type !== "client-request" || promptBody.method !== "session/prompt") {
@@ -670,7 +768,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     if (method === "session/cancel" && req.method === "POST") {
       // The stop is the researcher's own: read once so it can be noted on the run before it is forwarded, and handed
       // on with the request as it was. A body this cannot read is the kernel's to refuse; nothing is noted for it.
-      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
       req.__openScienceProxyBody = raw;
       let stop = null;
       try { stop = JSON.parse(raw.toString("utf8")); } catch { /* the kernel refuses a body it cannot read */ }
@@ -678,14 +776,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     }
     if (method === "session/selectModel") {
       if (req.method !== "POST") { sendDenied(res, method); return; }
-      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
       req.__openScienceProxyBody = raw;
       try { modelBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
       if (modelBody?.type !== "client-request" || modelBody.method !== method) { sendDenied(res, method); return; }
       assertNativeModelSelection(config, modelBody.payload);
     }
     if (method === "workspace/create" && req.method === "POST") {
-      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
       req.__openScienceProxyBody = raw;
       try { workspaceBody = JSON.parse(raw.toString("utf8")); } catch { /* Remains a denied workspace mutation. */ }
     }
@@ -693,12 +791,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // The path is in the body, so the body is read here and handed on with
       // the request, as the prompt's is. A call this cannot parse carries no
       // path this can check, and is refused rather than forwarded.
-      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
       req.__openScienceProxyBody = raw;
       let fileBody = null;
       try { fileBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
       try {
         await assertWorkspacePath(method, fileBody?.payload, runtimeManager.runtimeWorkspaceRoot(project), project);
+        observeFileOpen(project, method, fileBody?.payload);
       } catch {
         // The same JSON refusal the deny list gives, not the notice page a
         // thrown error becomes: the caller is the kernel's own file panel,
@@ -725,11 +824,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // same id allowlist the operations page reads. `off` names the frame
       // bodies this deployment switched off.
       const source = runtimeUiBootstrapSource({
-        version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, assets: SHARED_UI_ASSET_PREFIX,
+        version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix,
+        ...(scoped ? { access: scoped.access() } : { assets: SHARED_UI_ASSET_PREFIX }),
         shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project),
         capabilities: await heroCapabilities(),
-        managedBrowser: config.managedBrowserEnabled ? { provider: "managed", available: managedBrowser?.enabled === true } : null,
-        operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(user?.id ?? "")),
+        managedBrowser: !scoped && config.managedBrowserEnabled ? { provider: "managed", available: managedBrowser?.enabled === true } : null,
+        operator: !scoped && Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(user?.id ?? "")),
         off: Array.isArray(config.runtimeUiFrameOff) ? config.runtimeUiFrameOff : [],
       }, installRuntimeUiTransport);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
@@ -755,37 +855,58 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       await authorizeMethod(config, project, "session/prompt", false, usageLedger, runtimeManager, balanceGate,
         { args: { request: { sessionId: loopxBody.payload.sessionId } } });
     }
+    let nativeInputRequest = null;
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
       revalidate,
+      ...(scoped?.nativeInputs && nativeInputRequest ? {
+        beforeForward: () => scoped.beforeInputForward(nativeInputRequest),
+        observeResponse: response => scoped.observeHttpInput(nativeInputRequest, promptBody?.rpcId ?? scopedCall?.rpcId, response),
+      } : {}),
       // Build assets and revisioned bundles the document names are served
       // from the path every project shares; a file whose URL names its
       // content is kept by the browser, across sessions and projects.
-      uiAssetPrefix: SHARED_UI_ASSET_PREFIX,
+      uiAssetPrefix: scoped ? null : SHARED_UI_ASSET_PREFIX,
+      ...(scoped ? { transformResponse: response => scopedCall ? scoped.httpResponse(scopedCall, response) : Promise.resolve(response.body) } : {}),
       immutable: isImmutableRuntimeUiAsset(frame.suffix),
       // A composer attachment is a file, not an RPC: held to the deployment's
       // file ceiling rather than the JSON one, and forwarded as bytes.
       ...(method === RUNTIME_UI_UPLOAD_METHOD ? { fileBody: true } : {}),
+      ...(req.method === "POST" && [RUNTIME_UI_UPLOAD_METHOD, "fileUploads/upload"].includes(method) && recordUploadAttempt ? { beforeForward: () => recordUploadAttempt(project) } : {}),
     });
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);
+      const preparing = await resolveFrame(snapshot, null);
+      await prepareNativePlan(preparing.user, preparing.project, promptBody?.payload);
+      nativeInputRequest = promptBody?.payload?.args?.request;
+      if (preparing.scoped) await preparing.scoped.prepareInput(nativeInputRequest);
       // Counted inside the admission, so a prompt the plugin fence refuses is
       // not a message that arrived.
       const admitted = async () => {
         await runtimeManager.assertPersonalSkillPromptGeneration(project, promptBody?.payload?.args?.request ?? {});
         const current = await resolveFrame(snapshot, null);
+        if (current.scoped) await current.scoped.recordInput(promptBody?.payload?.args?.request);
         await bindNativeResult(current.user, current.project, promptBody?.payload);
+        await attend(current.user, current.project, promptBody?.payload?.args?.request);
         await recordNativeActor(current.user, current.project, promptBody?.payload);
         await prepareNativeContext(project, promptBody?.payload);
-        await recordSteer(project, promptBody?.payload);
+        // A journaled input's words reach the run from its receipt; any other is recorded here, as on the owner's own frame.
+        if (!current.scoped?.journals(promptBody?.payload?.args?.request)) await recordSteer(project, promptBody?.payload);
         req.__openScienceProxyBody = Buffer.from(JSON.stringify(promptBody));
         req.headers["content-length"] = String(req.__openScienceProxyBody.length);
         return forward();
       };
-      return runtimeManager.pluginService
-        ? runtimeManager.pluginService.withAdmission(project, admitted, { prompt: true })
-        : admitted();
+      const authorized = () => scoped ? scoped.runInput(nativeInputRequest, admitted) : admitted();
+      try {
+        return await (runtimeManager.pluginService
+          ? runtimeManager.pluginService.withAdmission(project, authorized, { prompt: true,
+            ...(scoped?.nativeInputs ? { promptDisposition: () => scoped.inputDisposition(nativeInputRequest) } : {}) })
+          : authorized());
+      } catch (error) {
+        if (scoped?.nativeInputs) await scoped.afterInputAdmission(nativeInputRequest, error);
+        throw error;
+      }
     };
     if (method === "session/prompt") {
       if (authorizeMutation) await authorizeMutation(forwardPrompt);
@@ -802,7 +923,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       const admitted = () => runtimeManager.pluginService
         ? runtimeManager.pluginService.withAdmission(project, start, { prompt: true }) : start();
       if (authorizeMutation) await authorizeMutation(admitted); else await admitted();
-    } else await forward();
+    } else if (scoped?.nativeInputs && req.method === 'POST' && scoped.inputOperation(method)) {
+      nativeInputRequest = await scoped.prepareOperation(method, scopedCall.payload);
+      try { await scoped.runOperation(method, scopedCall.payload, forward); }
+      catch (error) { await scoped.afterInputAdmission(nativeInputRequest, error); throw error; }
+    } else if (scoped && req.method === 'POST') await scoped.withAuthority(forward);
+    else await forward();
   }
 
   const server = createServer((req, res) => {
@@ -843,21 +969,32 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         assertBrowserOrigin(req, config);
         const initial = await resolveFrame(req, null);
         const { project, frame, claims } = initial;
+        const scopedCarrier = initial.scoped?.openCarrier();
         let currentActor = initial;
         // Revalidation keeps the handshake login; only a validated renewal may replace its ticket.
         const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
         trackFrame(snapshot, claims, socket);
-        const revalidate = async () => { currentActor = await resolveFrame(snapshot, null); };
-        const authorize = async (endpoint, payload = null) => {
+        const revalidate = async () => { currentActor = await resolveFrame(snapshot, null); scopedCarrier?.assertCurrent(); };
+        // The carrier's standing recheck (each second and each client frame): the login, membership and claims every time, the
+        // delegated runtime context only when its generation or policy moved (`createGeoFrameResolver`). A prompt checks in full.
+        const recheckMemo = {};
+        const recheck = async () => { currentActor = await resolveFrame(snapshot, null, { recheck: recheckMemo }); scopedCarrier?.assertCurrent(); };
+        const authorize = async (endpoint, payload = null, context = null) => {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
+          if (scopedCarrier) await scopedCarrier.authorize(endpoint, payload, context);
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager, balanceGate, payload);
           await assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project), project);
+          observeFileOpen(project, endpoint, payload);
           if (endpoint === "session/selectModel") {
             assertNativeModelSelection(config, payload);
             await authorizePromptSession(project, payload);
           }
+          if (currentActor.scoped?.nativeInputs && currentActor.scoped.inputOperation(endpoint)) {
+            await currentActor.scoped.prepareOperation(endpoint, payload);
+          }
+          if (endpoint === "fileUploads/upload" && recordUploadAttempt) await recordUploadAttempt(currentActor.project);
           if (endpoint === "session/prompt") {
             await revalidate();
             // The mux's plugin admission owns the full upstream operation. This
@@ -866,23 +1003,44 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             const check = async () => authorizePromptSession(project, payload);
             if (authorizeMutation) await authorizeMutation(check);
             else await check();
+            await prepareNativePlan(currentActor.user, currentActor.project, payload);
+            if (currentActor.scoped) await currentActor.scoped.prepareInput(payload?.args?.request);
           }
         };
         // The mux calls `observe` inside the prompt's admission, right before
         // the frame goes upstream — the same point the HTTP path counts at.
         const prepare = async (endpoint, payload = null) => {
-          if (endpoint === "session/prompt") await bindNativeResult(currentActor.user, currentActor.project, payload);
+          if (endpoint === "session/prompt") {
+            if (currentActor.scoped) await currentActor.scoped.recordInput(payload?.args?.request);
+            await bindNativeResult(currentActor.user, currentActor.project, payload);
+            await attend(currentActor.user, currentActor.project, payload?.args?.request);
+            await recordNativeActor(currentActor.user, currentActor.project, payload);
+            await prepareNativeContext(project, payload);
+          }
         };
         const observe = async (endpoint, payload = null) => {
           if (endpoint === "session/prompt") {
-            await recordNativeActor(currentActor.user, currentActor.project, payload);
-            await prepareNativeContext(project, payload);
-            await recordSteer(project, payload);
+            if (!currentActor.scoped?.journals(payload?.args?.request)) await recordSteer(project, payload);
           } else if (endpoint === "session/cancel") {
             await recordStop(project, payload);
           }
         };
-        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe, prepare });
+        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate: recheck, authorize, observe, prepare,
+          ...(initial.scoped ? {
+            withAuthority: operation => initial.scoped.withAuthority(operation),
+            ...(initial.scoped.nativeInputs ? {
+              admitInput: (payload, operation) => initial.scoped.runInput(payload?.args?.request, operation),
+              beforeSend: (endpoint, payload) => initial.scoped.beforeInputForward(endpoint === 'session/prompt' ? payload?.args?.request : initial.scoped.operationRequest(payload)),
+              observeOutcome: (endpoint, payload, outcome) => initial.scoped.observeInput(endpoint === 'session/prompt' ? payload?.args?.request : initial.scoped.operationRequest(payload), outcome),
+              admitOperation: (endpoint, payload, operation) => initial.scoped.runOperation(endpoint, payload, operation),
+              promptDisposition: payload => initial.scoped.inputDisposition(payload?.args?.request),
+              afterInputAdmission: (payload, error) => initial.scoped.afterInputAdmission(payload?.args?.request, error),
+            } : {}),
+            projectItem: (endpoint, payload, value, context) => scopedCarrier.projectItem(endpoint, payload, value, context),
+            onStreamClosed: (endpoint, streamId) => scopedCarrier.onStreamClosed(endpoint, streamId),
+            onProjectionDiscarded: (endpoint, streamId) => scopedCarrier.onStreamClosed(endpoint, streamId),
+          } : {}),
+        });
       } catch (error) {
         destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");
       }
@@ -907,6 +1065,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
      * @returns {Promise<number>} how many connections were closed
      */
     async releaseFrame(frameId, userId) {
+      const delegated = delegatedPolicies.get(frameId);
+      if (delegated?.userId === userId) { delegated.policy.dispose(); delegatedPolicies.delete(frameId); }
       // Browser cleanup may remain unconfirmed. It must never keep the native
       // frame's own transports alive; join both and report the browser failure.
       const browserClosing = Promise.resolve().then(() => managedBrowser?.releaseFrame(userId, frameId))
@@ -931,6 +1091,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     },
     /** Called only after renewal proof, live login, CSRF and project access are validated. */
     refreshFrameBinding(renewed) {
+      const delegated = delegatedPolicies.get(renewed.frameId);
+      if (delegated?.userId === renewed.claims.userId) delegated.expiresAt = Math.max(delegated.expiresAt, renewed.expiresAt);
       let updated = 0;
       for (const connection of frameConnections.get(renewed.frameId) ?? []) {
         if (!["frameId", "userId", "projectId", "authSessionHash", "audience"].every((key) => connection.claims[key] === renewed.claims[key])) continue;
@@ -961,6 +1123,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       return server.listening ? server.address() : null;
     },
     async close() {
+      for (const value of delegatedPolicies.values()) value.policy.dispose();
+      delegatedPolicies.clear();
       const browserClosing = Promise.resolve().then(() => managedBrowser?.close()).then(() => null, error => error);
       for (const socket of upgradeSockets) socket.destroy();
       frameConnections.clear();

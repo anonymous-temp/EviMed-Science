@@ -88,9 +88,8 @@ export function SegmentedControl<T extends string>({
             className={cn(
               // A control nested in another wears the outer radius minus the
               // padding: 8 - 2 = 6.
-              "rounded-md px-3 outline-none transition-colors duration-fast",
-              size === "sm" ? "text-compact" : "text-ui",
-              checked ? "bg-surface font-medium text-text ring-1 ring-border" : "text-text-3 hover:text-text",
+              "rounded-md px-3 text-ui font-normal outline-none transition-colors duration-fast",
+              checked ? "bg-surface text-text ring-1 ring-border" : "text-text-3 hover:text-text",
             )}
           >
             {option.label}

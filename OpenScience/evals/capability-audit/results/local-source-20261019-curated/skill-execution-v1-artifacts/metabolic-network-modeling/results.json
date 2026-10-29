@@ -1,0 +1,12 @@
+{
+  "fluxBalance": {
+    "fluxes": [
+      10.0,
+      10.0,
+      10.0
+    ],
+    "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+    "objective": 10.0,
+    "success": true
+  }
+}

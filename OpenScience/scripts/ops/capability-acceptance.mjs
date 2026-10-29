@@ -18,28 +18,42 @@
 // It does not update the ledger. An acceptance that writes its own verdict is not
 // an acceptance; the result and package are reviewed separately before the row changes.
 //
+// Whose account it runs in (owner, 2026-10-25): nobody's. The driver registers a
+// throwaway account of its own through the product's self-registration, runs in it,
+// writes its result files here as it always did, and deletes the account through the
+// product at the end — on a result, on an error and on an interrupt
+// (`throwaway-account.mjs`). It prints `account created:` and `account deleted:`; an
+// account it cannot delete is a `FAIL` line naming it and exit 4. Deleting the account
+// stops its runtime, so a run still going when the observation budget ends is cancelled
+// with it (exit 3, `PENDING`): there is no resuming a run in an account that is gone —
+// give a long brief a long `--timeout-ms`. What the run was asked and what it wrote is
+// in the result directory; the account's own copy is gone.
+//
 // Usage:
-//   OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE=<path> \
 //   node scripts/ops/capability-acceptance.mjs \
 //     --capability clinical-evidence-synthesis --brief review-001-empa-kidney-report-family \
-//     [--base https://host] [--insecure] [--project <id>] [--timeout-ms 7200000]
+//     [--base https://host] [--insecure] [--project <id of the project to make>] [--timeout-ms 7200000]
+//
+// Exit: 0 delivered and accepted, 1 a terminal run that is not an acceptance, 2 a driver
+// error, 3 the observation budget ended with the run still going, 4 the account was not deleted.
 //
 // Candidate-bound actual native revision cohort (no --capability/--brief needed):
 //   --result-revisions --candidate-manifest <release-manifest.json> --expected-revision <40hex>
-//   Requires OPEN_SCIENCE_PLAYWRIGHT_CORE, existing password-file auth and pdftotext.
-//   It refuses a different release before creating projects or submitting prompts.
+//   Requires OPEN_SCIENCE_PLAYWRIGHT_CORE and pdftotext.
+//   It refuses a different release before creating an account, projects or prompts.
 //
 // 「循证 GEO」 capabilities work on a GEO project's data, which a plain
 // acceptance project does not have (geo_read answers `geo_no_project`):
 //   --geo-create <brand> [--geo-engines qianwen,kimi] [--geo-coverage-days 90] [--geo-paused]
 //       make a GEO project for the brand and dispatch into its first conversation
 //       (`--geo-paused` holds the platform's own program while the run works);
-//   --geo-project <geo id> --geo-export proposal|weekly | --geo-step <step>
-//       ask the GEO module itself for the run (导出 / 让 AI 做) and watch the run
-//       its orchestrator dispatches, with the orchestrator's own brief;
+//   --geo-create <brand> --geo-export proposal|weekly | --geo-step <step>
+//       make the project and ask the GEO module itself for the run (导出 / 让 AI 做)
+//       and watch the run its orchestrator dispatches, with the orchestrator's own
+//       brief;
 //   --prompt-file <path>
 //       dispatch this text instead of the rendered brief (the brief still names
-//       the results directory), e.g. a GEO step's brief into an existing GEO project.
+//       the results directory), e.g. a GEO step's brief.
 //   --inputs <dir>
 //       upload every file under <dir> into the project's workspace at the same
 //       relative path before dispatching — a brief that starts from a dataset
@@ -49,6 +63,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { fetchTransport, openThrowawayAccount } from "./throwaway-account.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -71,18 +86,14 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 const base = String(args.base ?? process.env.OPEN_SCIENCE_ACCEPTANCE_BASE_URL ?? "http://127.0.0.1:8798").replace(/\/+$/, "");
-const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "");
-if (!username) throw new Error("Name the account the driver signs in as: OPEN_SCIENCE_ACCEPTANCE_USERNAME.");
 const capabilityId = String(args.capability ?? "");
 const briefId = String(args.brief ?? "");
-const attachRunId = typeof args.run === "string" ? args.run : "";
 const promptFile = typeof args["prompt-file"] === "string" ? args["prompt-file"] : "";
 const geoCreate = typeof args["geo-create"] === "string" ? args["geo-create"].trim() : "";
-const geoProjectId = typeof args["geo-project"] === "string" ? args["geo-project"] : "";
 const geoExport = typeof args["geo-export"] === "string" ? args["geo-export"] : "";
 const geoStep = typeof args["geo-step"] === "string" ? args["geo-step"] : "";
 /** Runs the GEO module dispatches itself: the driver asks, then watches. */
-const geoTrigger = Boolean(geoProjectId && (geoExport || geoStep));
+const geoTrigger = Boolean(geoCreate && (geoExport || geoStep));
 // Production terminates TLS with a certificate issued to a bare IP, which no
 // trust store will validate by name. The flag is explicit so this can never be
 // the silent default on a host where the name does check out.
@@ -213,27 +224,61 @@ async function main() {
   // still names the results directory and is recorded beside it.
   const text = promptFile ? (await readFile(path.resolve(promptFile), "utf8")).trim() : renderBrief(brief);
   if (!text) throw new Error(promptFile ? `${promptFile} is empty` : `brief ${briefId} rendered to an empty prompt`);
-  if (geoTrigger && (promptFile || attachRunId || geoCreate)) {
-    throw new Error("--geo-export / --geo-step ask the GEO module for its own run: no --prompt-file, --run or --geo-create with them");
+  if (typeof args.run === "string" || typeof args["geo-project"] === "string") {
+    throw new Error("--run and --geo-project are gone: the driver's account is deleted when it ends, so there is no run or GEO project left to attach to");
+  }
+  if ((geoExport || geoStep) && !geoCreate) {
+    throw new Error("--geo-export / --geo-step need --geo-create <brand>: the driver's account is new, so it holds no GEO project to ask");
+  }
+  if (geoTrigger && promptFile) {
+    throw new Error("--geo-export / --geo-step ask the GEO module for its own run: no --prompt-file with them");
   }
 
-  const passwordFile = String(process.env.OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE ?? "");
-  if (!passwordFile) {
-    throw new Error("OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE is required; this never takes a password on the command line");
+  // The account is made after everything that can be refused without one, and deleted whatever happens after.
+  const account = await openThrowawayAccount({ base, send: fetchTransport(base), prefix: "acc", stop: cancelWhatWasDispatched });
+  /** @type {number} */ let code = 2;
+  /** @type {unknown} */ let failure = null;
+  try {
+    code = await observe(account, { harness, text });
+  } catch (error) {
+    failure = error;
   }
-  const password = (await readFile(passwordFile, "utf8")).trim();
+  // Deleted whatever happened above; an account that cannot be deleted is the exit code, ahead of an error the run ended on (said first).
+  const outcome = await account.close();
+  if (!outcome.deleted) {
+    if (failure) process.stderr.write(`${stamp()} acceptance failed: ${/** @type {any} */ (failure)?.message ?? failure}\n`);
+    return 4;
+  }
+  if (failure) throw failure;
+  return code;
+}
 
-  say(`base=${base} user=${username} capability=${capabilityId} brief=${briefId}`);
-  const login = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
-  if (login.status !== 200) throw new Error(`login failed: ${login.status} ${JSON.stringify(login.body).slice(0, 200)}`);
-  const cookie = (login.response.headers.getSetCookie?.() ?? []).map((entry) => entry.split(";")[0]).join("; ");
-  if (!cookie) throw new Error("login returned no session cookie");
-  auth = { cookie, "x-open-science-csrf": String(login.body.data.csrfToken) };
-  say("authenticated");
+/**
+ * What the driver dispatched and has not seen end: the account's deletion cancels it first (the deletion would stop its runtime anyway;
+ * this ends the run in the ledger the way a researcher's stop does).
+ * @type {{ runId: string, status: string } | null}
+ */
+let dispatched = null;
+const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
+async function cancelWhatWasDispatched() {
+  if (!dispatched || terminalStatuses.has(dispatched.status)) return;
+  const answer = await pollApi(`/api/agent-runs/${encodeURIComponent(dispatched.runId)}/cancel`, { method: "POST", body: "{}" });
+  say(`run ${dispatched.runId} was ${answer.status === 200 ? "cancelled" : `not cancelled (${answer.status})`} before its account was deleted`);
+}
+
+/**
+ * Run the brief in the signed-in throwaway account and write what came back. Returns the exit code the driver ends with (the account's
+ * deletion is the caller's).
+ * @param {{ headers: Record<string, string> }} account @param {{ harness: string, text: string }} brief
+ */
+async function observe(account, { harness, text }) {
+  say(`base=${base} capability=${capabilityId} brief=${briefId}`);
+  auth = { ...account.headers };
+  say("signed in as the throwaway account");
 
   // A GEO capability reads and writes a GEO project's data. `--geo-create`
   // makes one (its control project, and a first conversation already bound to
-  // geo-insight); `--geo-project` names one that exists.
+  // geo-insight): the account is new, so there is no other to name.
   /** @type {{ id: string, projectId: string, sessionId: string | null } | null} */
   let geo = null;
   if (geoCreate) {
@@ -243,11 +288,6 @@ async function main() {
     if (made.status !== 201 && made.status !== 200) throw new Error(`GEO project create failed: ${made.status} ${JSON.stringify(made.body).slice(0, 300)}`);
     geo = { id: String(made.body.data.id), projectId: String(made.body.data.projectId), sessionId: made.body.data.sessionId ?? null };
     say(`GEO project ${geo.id} (${geoCreate}) created in project ${geo.projectId}`);
-  } else if (geoProjectId) {
-    const read = await api(`/api/geo/projects/${encodeURIComponent(geoProjectId)}`);
-    if (read.status !== 200) throw new Error(`GEO project read failed: ${read.status} ${JSON.stringify(read.body).slice(0, 300)}`);
-    geo = { id: geoProjectId, projectId: String(read.body.data.projectId), sessionId: read.body.data.sessionId ?? null };
-    say(`GEO project ${geo.id} is project ${geo.projectId}`);
   }
   // `--geo-paused`: hold the platform's own program while this run works. A
   // conversation that locks a full question set starts the whole program on
@@ -262,28 +302,13 @@ async function main() {
   }
 
   const projectId = String(geo?.projectId ?? args.project ?? `acceptance-${capabilityId}`.slice(0, 60));
-  // List before creating. A 409 from the create route means two unrelated
-  // things — the id is taken, or the account is at its project ceiling — and
-  // treating both as "already there" made a full account look like a resume
-  // and then failed one call later with `project_not_found`, which points at
-  // the wrong problem entirely.
-  const existing = await api("/api/projects");
-  if (existing.status !== 200) throw new Error(`project list failed: ${existing.status}`);
-  const already = (existing.body.data ?? []).some((/** @type {any} */ entry) => entry.id === projectId);
-  if (!already && geo) throw new Error(`the GEO project's control project ${projectId} is not in this account's project list`);
-  // An acceptance project is one of the platform's own (`isInternalProject`),
-  // so the list never shows it: its existence is the create answering
-  // `project_exists`, which is the resume.
-  let resumed = false;
-  if (!already) {
+  // The account is new, so the project is too — except a GEO project's control project, which creating the GEO project made. The
+  // project is an ordinary one of an ordinary account (the platform's own `acceptance-*` names are an operator's alone), so what it
+  // costs is that account's: see the handoff of 2026-10-25 for what a new account may spend.
+  if (!geo) {
     const created = await api("/api/projects", { method: "POST", body: JSON.stringify({ id: projectId, name: `Acceptance ${capabilityId}` }) });
-    if (created.status === 409 && created.body?.code === "project_exists") resumed = true;
-    else if (created.status !== 201 && created.status !== 200) {
-      const code = created.body?.code ?? "";
-      const hint = code === "project_limit_reached"
-        ? ` — pass --project <existing id> to reuse one of the ${(existing.body.data ?? []).length} this account already holds`
-        : "";
-      throw new Error(`project create failed: ${created.status} ${code || JSON.stringify(created.body).slice(0, 200)}${hint}`);
+    if (created.status !== 201 && created.status !== 200) {
+      throw new Error(`project create failed: ${created.status} ${created.body?.code || JSON.stringify(created.body).slice(0, 200)}`);
     }
   }
   auth["x-open-science-project"] = projectId;
@@ -303,7 +328,7 @@ async function main() {
     }
     say(`inputs: ${files.length} file(s) from ${inputRoot} uploaded into the workspace`);
   }
-  say(`project=${projectId} (${already || resumed ? "existing" : "created"})`);
+  say(`project=${projectId} (${geo ? "the GEO project's" : "created"})`);
 
   const agents = await api("/api/agents");
   if (agents.status !== 200) throw new Error(`agent list failed: ${agents.status}`);
@@ -316,7 +341,7 @@ async function main() {
   // A new GEO project's first conversation is the one its page opens: dispatch there.
   let sessionId = String(args.session ?? (geoCreate && geo?.sessionId ? geo.sessionId : `acc-${capabilityId.slice(0, 20)}-${Date.now().toString(36)}`))
     .replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
-  if (!attachRunId && !geoTrigger) {
+  if (!geoTrigger) {
     const bound = await api(`/api/research-sessions/${encodeURIComponent(sessionId)}`, {
       method: "PUT",
       body: JSON.stringify({ mode: "specialist", agentId: capabilityId, agentVersion: agent.version }),
@@ -325,11 +350,6 @@ async function main() {
     say(`session=${sessionId} bound to ${capabilityId}@${agent.version}`);
   }
 
-  // `--run <id>` attaches to a run already in flight instead of starting one.
-  // A dispatched acceptance costs an hour of real model work, so losing the
-  // watcher must not mean losing the run — and re-running the script would be
-  // refused `agent_run_active` anyway, which reads as a failure rather than as
-  // "it is still going, come and watch".
   let runId;
   let run;
   let dispatchedAt = null;
@@ -360,32 +380,26 @@ async function main() {
     sessionId = String(run.sessionId ?? sessionId);
     // The ledger's question is the sentence the run was asked in; the orchestrator's brief travels in the run's own context.
     promptSource = "the GEO run's question, as the run ledger records it (the orchestrator's brief is in the run's context)";
-  } else if (attachRunId) {
-    const list = await api("/api/agent-runs");
-    if (list.status !== 200) throw new Error(`could not list runs: ${list.status}`);
-    run = list.body.data.find((/** @type {any} */ entry) => entry.id === attachRunId);
-    if (!run) throw new Error(`no run ${attachRunId} in project ${projectId}`);
-    runId = attachRunId;
-    promptSource = "the run ledger (attached to a run started elsewhere)";
-    say(`attached to run=${runId} (${run.status})`);
   } else {
     const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
     dispatchedAt = stamp();
-    const dispatched = await api("/api/agent-runs/dispatch", {
+    const answer = await api("/api/agent-runs/dispatch", {
       method: "POST",
       body: JSON.stringify({ sessionId, dispatchId, text, automated: true }),
     });
-    if (dispatched.status !== 202) {
-      throw new Error(`dispatch failed: ${dispatched.status} ${JSON.stringify(dispatched.body).slice(0, 400)}`);
+    if (answer.status !== 202) {
+      throw new Error(`dispatch failed: ${answer.status} ${JSON.stringify(answer.body).slice(0, 400)}`);
     }
-    runId = String(dispatched.body.data.id);
-    run = dispatched.body.data;
+    runId = String(answer.body.data.id);
+    run = answer.body.data;
     say(`dispatched run=${runId} prompt=${text.length} chars`);
   }
 
+  // From here the run is the account's deletion's to cancel if the observation ends before it does.
+  dispatched = { runId, status: String(run.status) };
   sessionId = String(run.sessionId ?? sessionId);
   const deadline = Date.now() + timeoutMs;
-  const terminal = new Set(["succeeded", "failed", "canceled"]);
+  const terminal = terminalStatuses;
   let lastPhase = "";
   let lastPollProblem = null;
   while (!terminal.has(run.status) && Date.now() < deadline) {
@@ -401,17 +415,17 @@ async function main() {
     if (!found) { lastPollProblem = "run_unavailable"; say("run not in the list yet"); continue; }
     lastPollProblem = null;
     run = found;
+    dispatched.status = String(run.status);
     sessionId = String(run.sessionId ?? sessionId);
     const phase = `${run.status}/${run.phase ?? "-"} msgs=${run.observedMessages ?? 0} tools=${run.observedToolCalls ?? 0} repairs=${run.attempts ?? 0}`;
     if (phase !== lastPhase) { say(phase); lastPhase = phase; }
   }
   const observedAt = stamp();
   const observation = { status: terminal.has(run.status) ? "terminal" : "pending",
-    reason: terminal.has(run.status) ? "terminal" : lastPollProblem ?? "deadline" };
+    reason: terminal.has(run.status) ? "terminal" : lastPollProblem ?? "deadline",
+    ...(terminal.has(run.status) ? {} : { note: "the run was cancelled when the driver's throwaway account was deleted" }) };
   if (observation.status === "pending") {
-    say(`PENDING after ${Math.round(timeoutMs / 60000)} min; last observed run status=${run.status}. The run continues.`);
-    const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
-    say(`Resume: node scripts/ops/capability-acceptance.mjs --capability ${quote(capabilityId)} --brief ${quote(briefId)} --base ${quote(base)} --project ${quote(projectId)} --run ${quote(runId)}${args.insecure ? " --insecure" : ""}`);
+    say(`PENDING after ${Math.round(timeoutMs / 60000)} min; last observed run status=${run.status}. The run is cancelled with the throwaway account: there is no resuming it, so give the brief a longer --timeout-ms.`);
   }
 
   // A second run of one brief on one day gets its own directory: writing into
@@ -434,8 +448,8 @@ async function main() {
     observedAt,
     observation,
     // What the run was asked: this driver's text when it dispatched, the run's
-    // own record when the GEO module did or the run was started elsewhere.
-    prompt: geoTrigger || attachRunId ? String(run.question ?? "") : text,
+    // own record when the GEO module did.
+    prompt: geoTrigger ? String(run.question ?? "") : text,
     promptSource,
     ...(geo ? { geoProject: geo.id } : {}),
     outcome: {
@@ -480,15 +494,21 @@ async function main() {
   for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${typeof notice === "string" ? notice.slice(0, 300) : `[${notice?.severity ?? "advice"}] ${notice?.title ?? ""} — ${String(notice?.text ?? "").slice(0, 300)}`}`);
   say(`results: ${path.relative(repoRoot, outDir)}`);
 
-  // Watching a run never authorizes canceling it or another session sharing
-  // its project. The existing idle manager owns runtime reclamation.
-  // 3 is an unfinished observation, 1 a terminal non-acceptance, 2 a driver error.
-  process.exit(observation.status === "pending" ? 3 : run.status === "succeeded" && !run.verification ? 0 : 1);
+  // The run belongs to the throwaway account, which is deleted when this returns: a run still going is cancelled first
+  // (`cancelWhatWasDispatched`), because nothing could watch it afterwards.
+  // 3 is an unfinished observation, 1 a terminal non-acceptance, 2 a driver error, 4 an account that was not deleted (the caller's).
+  return observation.status === "pending" ? 3 : run.status === "succeeded" && !run.verification ? 0 : 1;
 }
 
-(args["result-revisions"]
-  ? import("./result-revision-acceptance.mjs").then(module => module.runResultRevisionAcceptance(args)).then(() => say("three actual native revision journeys passed"))
-  : main()).catch((error) => {
+/** The three actual native revision journeys: they register and delete their own account (`result-revision-acceptance.mjs`). */
+async function resultRevisions() {
+  const { runResultRevisionAcceptance } = await import("./result-revision-acceptance.mjs");
+  await runResultRevisionAcceptance(args);
+  say("three actual native revision journeys passed");
+  return Number(process.exitCode ?? 0);
+}
+
+(args["result-revisions"] ? resultRevisions() : main()).then((code) => process.exit(code), (error) => {
   process.stderr.write(`${stamp()} acceptance failed: ${error?.message ?? error}\n`);
   process.exit(2);
 });

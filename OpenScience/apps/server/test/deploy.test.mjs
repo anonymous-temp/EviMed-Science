@@ -346,8 +346,8 @@ test("every capability-audit test file is named by a script the PR gate runs", a
 });
 
 test("every ops-script test file is collected by a script the PR gate runs", async () => {
-  // `scripts/ops/test/` held four suites (the Postgres backup, the recovery
-  // volume, the image archive inventory, the usememos retirement) that no
+  // `scripts/ops/test/` held suites (the Postgres backup, the recovery
+  // volume, the image archive inventory) that no
   // script and no workflow step ran, so a broken backup script would first
   // show on the host. `test:ops` discovers the directory, `test:web` chains
   // it, and the `ci:web` step test above holds the workflow to `test:web`'s
@@ -1257,6 +1257,20 @@ test("monitoring configs scrape protected metrics, probe health/readiness, alert
     "http://open-science-web:8787/api/ready",
   ]);
   assert.equal(blackbox.modules.http_2xx.http.follow_redirects, false);
+  // The GEO module's two external services (2026-10-22), from targets/external.json: the probe host is up when it answers
+  // at all — 409 while it measures, 401/403 when it verifies a signature the check does not carry — and the crawler on 2xx.
+  for (const [name, module, probe] of [["geo-probe-host", "geo_probe_answers", "geo-probe"], ["geo-social-crawler", "http_2xx", "geo-social"]]) {
+    const job = jobs.get(name);
+    assert.deepEqual(job?.params.module, [module], `${name} probes with ${module}`);
+    assert.deepEqual(job.file_sd_configs[0].files, ["/etc/prometheus/targets/external.json"]);
+    assert.ok(job.relabel_configs.some((rule) => rule.action === "keep" && rule.regex === probe), `${name} keeps only its own target`);
+    assert.ok(Number.parseInt(job.scrape_timeout, 10) > Number.parseInt(blackbox.modules[module].timeout, 10));
+  }
+  assert.deepEqual(blackbox.modules.geo_probe_answers.http.valid_status_codes, [200, 401, 403, 409]);
+  assert.equal(blackbox.modules.geo_probe_answers.http.follow_redirects, false);
+  const committedTargets = JSON.parse(await readFile(path.join(monitoringDir, "targets/external.json"), "utf8"));
+  assert.deepEqual(committedTargets.map((group) => [group.labels.probe, group.targets]), [["geo-probe", []], ["geo-social", []]],
+    "the committed list is empty: a missing file-SD file is an error Prometheus reports every refresh");
 
   const alerts = rules.groups.flatMap((group) => group.rules);
   const names = alerts.map((rule) => rule.alert);
@@ -1272,6 +1286,15 @@ test("monitoring configs scrape protected metrics, probe health/readiness, alert
     assert.equal(names.includes(required), true, `missing alert ${required}`);
   }
   assert.equal(alerts.every((rule) => rule.for && rule.labels?.severity && rule.annotations?.summary), true);
+  for (const [alert, job] of [["GeoProbeHostDown", "geo-probe-host"], ["GeoSocialCrawlerDown", "geo-social-crawler"]]) {
+    const rule = alerts.find((candidate) => candidate.alert === alert);
+    assert.ok(rule, `missing alert ${alert}`);
+    assert.equal(rule.for, "15m");
+    assert.match(rule.expr, new RegExp(`probe_success\\{job="${job}"\\}\\) == 0`));
+    assert.match(rule.annotations.summary, /[\u3400-\u9fff]/, `${alert} says in Chinese which service and what stops`);
+  }
+  assert.match(alerts.find((rule) => rule.alert === "GeoProbeHostDown").annotations.summary, /GEO 测量/);
+  assert.match(alerts.find((rule) => rule.alert === "GeoSocialCrawlerDown").annotations.description, /社媒监测.*六平台监测/);
 
   assert.equal(datasource.datasources[0].uid, "prometheus");
   assert.equal(datasource.datasources[0].editable, false);
@@ -1380,6 +1403,54 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
   assert.equal(script.includes("mock-agent-artifact.md"), false);
 });
 
+test("CI base aliases preserve every mirrored Dockerfile version and Compose build recipe", async () => {
+  const composeDir = path.join(repoRoot, "deploy/web");
+  const overlayPath = path.join(repoRoot, "../.github/ci/docker-compose.build-secrets.yml");
+  const overlay = YAML.parse(await readFile(overlayPath, "utf8"));
+  const services = {}, expected = {};
+  for (const filename of ["docker-compose.yml", "docker-compose.local-auth.yml", "docker-compose.backup.yml",
+    "docker-compose.ingestion.yml", "docker-compose.result-replay.yml"]) {
+    const document = YAML.parse(await readFile(path.join(composeDir, filename), "utf8"));
+    for (const [name, service] of Object.entries(document.services ?? {})) {
+      if (service.build) services[name] = { build: { ...service.build } };
+    }
+  }
+  for (const [name, service] of Object.entries(services)) {
+    const context = path.resolve(composeDir, service.build.context);
+    const dockerfile = await readFile(path.resolve(context, service.build.dockerfile ?? "Dockerfile"), "utf8");
+    const args = Object.fromEntries([...dockerfile.matchAll(/^ARG (\w+)=docker\.m\.daocloud\.io\/(\S+)$/gm)]
+      .map(([, argument, image]) => [argument, `docker.io/${image}`]));
+    if (Object.keys(args).length) expected[name] = args;
+    service.build.context = context;
+  }
+  assert.ok(Object.keys(expected).length > 0);
+  assert.deepEqual(Object.fromEntries(Object.entries(overlay.services).map(([name, service]) => [name, service.build.args])), expected);
+  // Exercise Compose's merge without a daemon or build. Project only builds
+  // so production credentials and service env files are never required.
+  const directory = await mkdtemp(path.join(os.tmpdir(), "evimed-ci-base-merge-"));
+  try {
+    const basePath = path.join(directory, "compose.json");
+    await writeFile(basePath, JSON.stringify({ services }));
+    const { stdout } = await execFileAsync("docker", ["compose", "-p", "evimed-ci-base-contract", "-f", basePath,
+      "-f", overlayPath, "--profile", "*", "config", "--no-interpolate", "--format", "json"]);
+    const merged = JSON.parse(stdout);
+    for (const [name, service] of Object.entries(services)) {
+      assert.equal(merged.services[name].build.context, service.build.context, name);
+      assert.equal(merged.services[name].build.dockerfile, service.build.dockerfile, name);
+      const mergedArgs = merged.services[name].build.args;
+      const normalizedArgs = Array.isArray(mergedArgs) ? Object.fromEntries(mergedArgs.map((argument) => {
+        const separator = argument.indexOf("=");
+        return [argument.slice(0, separator), argument.slice(separator + 1)];
+      })) : mergedArgs;
+      assert.deepEqual(normalizedArgs, { ...service.build.args, ...expected[name] }, name);
+    }
+    assert.deepEqual(merged.services["evimed-mr-agent"].build.secrets, [{ source: "github_token" }]);
+    assert.equal(merged.secrets.github_token.environment, "GITHUB_TOKEN");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the engine image build hands the workflow's token to the R install as a BuildKit secret, and works without one", async () => {
   // 2026-10-05: the Mendelian randomization engine installs its pinned R packages from GitHub and `remotes` resolves their
   // `Remotes:` through api.github.com, whose 60-requests-an-hour unauthenticated limit a shared runner spent on about every
@@ -1394,8 +1465,9 @@ test("the engine image build hands the workflow's token to the R install as a Bu
 
   const overlay = YAML.parse(await readFile(path.join(repoRoot, "../.github/ci/docker-compose.build-secrets.yml"), "utf8"));
   assert.deepEqual(overlay.secrets, { github_token: { environment: "GITHUB_TOKEN" } });
-  assert.deepEqual(Object.keys(overlay.services), ["evimed-mr-agent"], "only the engine that reaches the GitHub API is given it");
-  assert.deepEqual(overlay.services["evimed-mr-agent"].build, { secrets: ["github_token"] });
+  assert.deepEqual(Object.entries(overlay.services).filter(([, service]) => service.build.secrets)
+    .map(([name]) => name), ["evimed-mr-agent"], "only the engine that reaches the GitHub API is given it");
+  assert.deepEqual(overlay.services["evimed-mr-agent"].build.secrets, ["github_token"]);
   // A build that is not handed it (a host build, a fork) must not be asked for one: the deployment's compose never names it.
   const base = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   assert.doesNotMatch(base, /github_token|GITHUB_TOKEN|GITHUB_PAT/);
@@ -2557,4 +2629,25 @@ test("every workspace package the runtime's frame bundle imports is packed into 
     const missing = [...imported].filter((name) => !packed.has(name)).sort();
     assert.deepEqual(missing, [], `${dockerfile} does not pack: ${missing.join(", ")}`);
   }
+});
+
+test("receipt counter endpoint is a service overlay shared only with the runtime controller", async () => {
+  const base = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
+  const overlay = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.receipt.yml"), "utf8"));
+  const key = "OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL";
+  const receipt = overlay.services["open-science-release-receipt"];
+  const controller = overlay.services["open-science-runtime-controller"];
+  assert.ok(controller?.environment, "controller configuration must belong to services, never volumes");
+  assert.deepEqual(Object.keys(overlay.volumes), ["open-science-receipts"]);
+  assert.equal(controller.environment[key], receipt.environment[key]);
+  assert.equal(receipt.environment[key], "${OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-release-receipt:8798/internal/model/v1}");
+  const mergedController = { ...base.services["open-science-runtime-controller"],
+    ...controller, environment: { ...base.services["open-science-runtime-controller"].environment, ...controller.environment } };
+  assert.ok(mergedController.image);
+  assert.ok(mergedController.volumes.length > 0);
+  assert.equal(mergedController.environment[key], receipt.environment[key]);
+  assert.equal(mergedController.environment.OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL,
+    receipt.environment.OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL);
+  assert.equal(base.services["open-science-web"].environment[key], undefined);
+  assert.equal(overlay.services["open-science-web"], undefined);
 });

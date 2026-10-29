@@ -27,6 +27,11 @@ off, what state a source's health is in. Pure so each rule is a unit test, not a
   after NCBI's outage of 2026-09-27 02:30–06:20Z). Polls the plugin itself declined (its budget, an
   exit or key this deployment lacks) are neither. The rule is re-applied hourly, so a state never
   waits for the next poll of a source on a daily cadence to catch up with the window.
+  A source whose pages cannot be read is ``degraded`` too (review G6, 2026-10-25): a feed that polls cleanly while
+  67 of 67 press-release pages come back without text read ``healthy`` and published nothing in 14 days. When at least
+  ``TEXT_FAILING_SHARE`` (90 %) of the last ``TEXT_WINDOW`` (20) page reads of its entries failed — and at least
+  ``TEXT_MIN_SAMPLE`` (10) were made — the state is ``degraded`` (``text_failing``; ``store.text_outcomes`` reads the
+  outcomes), and it clears itself when newer pages read.
 """
 
 from __future__ import annotations
@@ -41,6 +46,9 @@ from .model import SUCCESS_OUTCOMES
 UNREADABLE_AFTER = timedelta(days=3)
 DEGRADED_BELOW = 0.8
 FLAPPING_EPISODES = 2
+TEXT_WINDOW = 20
+TEXT_MIN_SAMPLE = 10
+TEXT_FAILING_SHARE = 0.9
 TRANSIENT_RETRIES = 2
 TRANSIENT_RETRY_BASE_S = 3.0
 TRANSIENT_RETRY_CAP_S = 20.0
@@ -135,14 +143,23 @@ def reliability(outcomes: Iterable[str]) -> tuple[int, int]:
     return successes, episodes
 
 
+def text_failing(failed: Iterable[bool]) -> bool:
+    """Whether the page reads of a source's entries — newest first, ``True`` for a read that failed — are failing as a
+    whole: at least ``TEXT_MIN_SAMPLE`` of the first ``TEXT_WINDOW`` and ``TEXT_FAILING_SHARE`` of them failed."""
+    window = list(failed)[:TEXT_WINDOW]
+    return len(window) >= TEXT_MIN_SAMPLE and sum(window) / len(window) >= TEXT_FAILING_SHARE
+
+
 def health_state(*, enabled: bool, last_ok_at: datetime | None, failing_since: datetime | None, now: datetime,
-                 successes_24h: int, failure_episodes_24h: int, drifted: bool) -> str:
+                 successes_24h: int, failure_episodes_24h: int, drifted: bool, text_failing: bool = False) -> str:
     if not enabled:
         return "disabled"
     if failing_since is not None and now - failing_since >= UNREADABLE_AFTER:
         return "unreadable"
     if drifted:
         return "drifted"
+    if text_failing:
+        return "degraded"                      # it polls, but the pages of what it delivers cannot be read
     if last_ok_at is None:
         return "new" if failing_since is None else "degraded"
     if failing_since is not None:

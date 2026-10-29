@@ -19,7 +19,7 @@ async function withApp(overrides, run) {
 /** The request id differs per request; everything else of the body is what is compared. @param {string} body */
 const withoutRequestId = (body) => body.replace(/req_[0-9a-f]{32}/g, "req_x");
 const PATHS = ["/evidence/", "/evidence", "/evidence/z/ez_0123456789ab", "/evidence/c/ec_0123456789ab", "/evidence/a/alice", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/requests",
-  "/evidence/sitemap.xml", "/evidence/assets/site.css", "/evidence/api/v1/zones", "/evidence/api/v1/metrics"];
+  "/evidence/sitemap.xml", "/evidence/assets/site.css", "/evidence/api/v1/zones", "/evidence/api/v1/metrics", "/robots.txt"];
 
 test("with the pages off, every /evidence path is answered as an unknown path is, with no static build and with one", async () => {
   await withApp({ evidencePublicWebEnabled: false, evidencePublicIndexable: true }, async (base) => {

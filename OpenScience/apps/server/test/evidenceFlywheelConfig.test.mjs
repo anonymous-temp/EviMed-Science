@@ -87,36 +87,26 @@ test("the module-leads levers: off and five a day by default, read from the envi
   assert.match(apiOnly, /OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: \$\{OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:-false\}/);
 });
 
-test("the platform-handbook levers: off and three a day by default, read from the environment, a count outside 1 to 30 stops the start by its name, carried by .env.example and compose", async () => {
+test("the official-promotion levers: on and three a day by default, read from the environment, a count outside 1 to 30 stops the start by its name, carried by .env.example and compose", async () => {
   const defaults = configUnder({});
-  assert.deepEqual([defaults.learningPlatformHandbooksEnabled, defaults.learningPlatformHandbooksPerDay], [false, 3]);
-  const set = configUnder({ OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: "true", OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: "7" });
-  assert.deepEqual([set.learningPlatformHandbooksEnabled, set.learningPlatformHandbooksPerDay], [true, 7]);
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: "" }).learningPlatformHandbooksPerDay, 3);
-  for (const value of ["0", "31", "1.5", "many"]) assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: value }), /OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY/, value);
+  assert.deepEqual([defaults.officialPromotionEnabled, defaults.officialPromotionPerDay], [true, 3]);
+  const set = configUnder({ OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED: "false", OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY: "7" });
+  assert.deepEqual([set.officialPromotionEnabled, set.officialPromotionPerDay], [false, 7]);
+  assert.equal(configUnder({ OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY: "" }).officialPromotionPerDay, 3);
+  for (const value of ["0", "31", "1.5", "many"]) assert.throws(() => configUnder({ OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY: value }), /OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY/, value);
+  // The platform handbook path's levers are gone with it: a value left in an old .env is read by nothing.
+  for (const key of ["learningPlatformHandbooksEnabled", "learningPlatformHandbooksPerDay", "learningPlatformHandbooksProbationShare"]) {
+    assert.equal(key in configUnder({ OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: "true" }), false, key);
+  }
   const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const apiOnly = await readFile(path.join(repoRoot, "deploy/web/docker-compose.api-only.yml"), "utf8");
-  for (const [name, value] of [["OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", "false"], ["OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY", "3"]]) {
+  for (const [name, value] of [["OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", "true"], ["OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY", "3"]]) {
     assert.deepEqual([...example.matchAll(new RegExp(`^${name}=(.*)$`, "gm"))].map((line) => line[1]), [value], name);
     assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), name);
   }
-  assert.match(apiOnly, /OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: \$\{OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:-false\}/);
-});
-
-test("the probation share: a tenth of the dispatches by default, a fraction read from the environment, one nobody could mean stops the start by its name, carried by .env.example and compose (review L-6)", async () => {
-  const name = "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE";
-  assert.equal(configUnder({}).learningPlatformHandbooksProbationShare, 0.1);
-  assert.equal(configUnder({ [name]: "0.25" }).learningPlatformHandbooksProbationShare, 0.25);
-  assert.equal(configUnder({ [name]: "1" }).learningPlatformHandbooksProbationShare, 1);
-  assert.equal(configUnder({ [name]: "0" }).learningPlatformHandbooksProbationShare, 0, "none is a choice, not an error");
-  assert.equal(configUnder({ [name]: "" }).learningPlatformHandbooksProbationShare, 0.1, "an empty value is unset, as .env.example and compose leave it");
-  assert.equal(loadConfig({ rootDir: repoRoot, learningPlatformHandbooksProbationShare: 0.5 }).learningPlatformHandbooksProbationShare, 0.5);
-  for (const bad of ["1.5", "-0.1", "some", "NaN"]) assert.throws(() => configUnder({ [name]: bad }), new RegExp(`${name} must be a number from 0 to 1`), bad);
-  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
-  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
-  assert.match(example, new RegExp(`^# ${name}=0\\.1$`, "m"), "documented at the code's default");
-  assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), "handed to the web service value-less");
+  assert.doesNotMatch(apiOnly, /OPEN_SCIENCE_OFFICIAL_PROMOTION/, "the API-only stack pins the learning loop and the official packs off, which is what the promotion needs");
+  assert.doesNotMatch(example + compose + apiOnly, /PLATFORM_HANDBOOKS|REPAIR_DISTILL_SAMPLE_SHARE/);
 });
 
 test("off, the route answers 404 by name once the token is checked and the metrics say 0 with no family; without the token it is refused first", async () => {

@@ -24,8 +24,8 @@
     "file": "content-write-create-conflict.json",
     "method": "POST",
     "path": "/api/v1/content/write",
-    "status": 409,
-    "note": "mode create on an existing URI."
+    "status": 200,
+    "note": "mode create on an existing URI (an alias of replace from v0.5.1: no 409)."
   },
   {
     "file": "content-write-replace.json",
@@ -121,14 +121,14 @@
   {
     "file": "task-running.json",
     "method": "GET",
-    "path": "/api/v1/tasks/ad580014-9ba0-4c8b-993e-e6a232f57ab6",
+    "path": "/api/v1/tasks/bbc322c7-85ae-48c7-b7b5-a4c1dd0a3ae9",
     "status": 200,
     "note": "The task right after the commit."
   },
   {
     "file": "task-completed.json",
     "method": "GET",
-    "path": "/api/v1/tasks/ad580014-9ba0-4c8b-993e-e6a232f57ab6",
+    "path": "/api/v1/tasks/bbc322c7-85ae-48c7-b7b5-a4c1dd0a3ae9",
     "status": 200,
     "note": "The finished task: memories_extracted, token_usage (cumulative over the session), memory_diff_uri."
   },
@@ -163,7 +163,7 @@
   {
     "file": "task-completed-no-operations.json",
     "method": "GET",
-    "path": "/api/v1/tasks/fe7d1152-e505-4f04-876f-7fc30dbdd3ee",
+    "path": "/api/v1/tasks/b1e66bc4-48de-480d-896d-3b2ce00700e9",
     "status": 200,
     "note": "A commit whose extraction wrote nothing."
   },
@@ -319,14 +319,14 @@
     "method": "GET",
     "path": "/api/v1/skills",
     "status": 200,
-    "note": "The skill catalogue the plugin reads at start (empty here)."
+    "note": "The skill catalogue the plugin reads at start."
   },
   {
     "file": "stats-memories.json",
     "method": "GET",
     "path": "/api/v1/stats/memories",
     "status": 200,
-    "note": "ACCOUNT-WIDE counts, whoever asks: not a per-user number."
+    "note": "Account-wide counts, whoever asks (the engine's own statement; not a per-user number)."
   },
   {
     "file": "console-tokens.json",
@@ -347,7 +347,7 @@
     "method": "POST",
     "path": "/mcp",
     "status": 200,
-    "note": "The complete tool list a USER is offered (20 tools); the gateway keeps five."
+    "note": "The complete tool list a USER is offered; the gateway keeps five."
   },
   {
     "file": "mcp-call-search.json",
@@ -403,7 +403,7 @@
     "method": "PATCH",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-a/settings",
     "status": 200,
-    "note": "Pause learning for one user."
+    "note": "Pause learning for one user. A PATCH that does not restate memory_types leaves the user with every registered type."
   },
   {
     "file": "session-commit-while-paused.json",
@@ -415,7 +415,7 @@
   {
     "file": "task-completed-while-paused.json",
     "method": "GET",
-    "path": "/api/v1/tasks/aab22c49-2fa1-46b4-acf5-b610613ef91e",
+    "path": "/api/v1/tasks/10362945-22f5-4a18-a1fc-ac8f5e51cc36",
     "status": 200,
     "note": "Its task: what the extraction did with self memory disabled."
   },
@@ -451,7 +451,7 @@
     "file": "request-during-user-deletion.json",
     "method": "GET",
     "path": "/api/v1/fs/ls",
-    "status": 412,
+    "status": 404,
     "note": "A request as the user being deleted, at once."
   },
   {
@@ -499,7 +499,7 @@
   {
     "file": "session-delete-remember-store.json",
     "method": "DELETE",
-    "path": "/api/v1/sessions/mcp-store-4f184a402313",
+    "path": "/api/v1/sessions/mcp-store-3856c71e20d1",
     "status": 200,
     "note": "Deleting the one-off session a remember call left behind."
   },
@@ -520,7 +520,7 @@
   {
     "file": "admin-user-delete-unregistered.json",
     "method": "DELETE",
-    "path": "/api/v1/admin/accounts/evimed/users/fx-user-b",
+    "path": "/api/v1/admin/accounts/evimed/users/fx-user-f",
     "status": 404,
     "note": "Deleting a trusted user who has files but is not in the register yet (first seen less than the flush interval ago): NOT FOUND, and the files stay."
   },
@@ -529,6 +529,13 @@
     "method": "PATCH",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-a/settings",
     "status": 200,
-    "note": "A settings PATCH that carries the type allowlist."
+    "note": "A settings PATCH that carries the type allowlist. A PATCH without memory_types leaves the user with every registered type (see admin-user-settings-pause.json): the deployment default no longer applies to that user."
+  },
+  {
+    "file": "consolidation-task.json",
+    "method": "GET",
+    "path": "/api/v1/tasks/0f1e10fa-39c5-42b2-b79b-8c86f3219dd8",
+    "status": 200,
+    "note": "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>, skill: memory, instruction}) read back: three conversations' files, nothing duplicated, so adds/updates/deletes are empty and the files were byte-identical afterwards (lab, 2026-10-24)."
   }
 ]

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { entryReaches } from "./capsuleEntryProject.mjs";
 import { HttpError } from "./security.mjs";
 import { capsuleFactUri, capsuleMemoryRoot, capsuleSegment, capsuleTreeUri, parseCapsuleFactUri, userMemoryRoot } from "./openVikingClient.mjs";
 
@@ -15,13 +16,17 @@ function accountLockName(userId) {
   return `memory-index-account:${userId}`;
 }
 
-/** How many facts are written at once, and how long a write may wait for its
- *  vector before the server answers 504. The wait bound stays below the
- *  client's own request timeout so that a slow embedding is reported by the
- *  server, which knows whether the content was written, rather than by an
- *  aborted socket, which does not. */
+/**
+ * How many more hits the index is asked for than the caller wants. A person has one capsule and so one subtree, and the notes of their
+ * other projects rank beside the project's own: the index cannot tell them apart (the path names the capsule, not the project), so the
+ * label is read from the canonical row and what does not reach the project is dropped before the reranker sees it. Asking for more is what
+ * keeps a project's own notes from being crowded out of the first hits by notes it may not read.
+ */
+const LABEL_HEADROOM = 4;
+
+/** How many facts are written at once. A write waits for its vector (`wait: true`) under the client's own request
+ *  deadline; the engine's `timeout` field is gone from v0.5.1, so there is no second, shorter bound to set. */
 const WRITE_CONCURRENCY = 4;
-const WRITE_WAIT_SECONDS = 5;
 
 /** What one fact looks like as a file. The kind and the layer lead, because
  *  they are the words a reader (and an embedding) needs to place the sentence
@@ -346,7 +351,7 @@ export class MemoryIndexing {
         try {
           await this.openViking.write(userId, capsuleFactUri(userId, {
             accountCreatedAt, capsuleId, factKind: entry.factKind, factId: entry.id, revision: entry.revision,
-          }), factDocument(entry), { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+          }), factDocument(entry), { wait: true });
         } catch (error) {
           // Stop taking new work, but let the writers already in flight settle
           // before the failure is raised: a rebuild that abandoned them would
@@ -363,7 +368,7 @@ export class MemoryIndexing {
    *  read from the canonical row, so the worst a stale index can do is name a
    *  fact that is then dropped.
    * @param {string} userId @param {string} accountCreatedAt @param {{capsuleId:string,mode:string}[]} selections
-   * @param {string} query @param {number} limit @param {string|null} projectId */
+   * @param {string} query @param {number} limit @param {string|null} projectId the project the recall is for: an entry labelled with another project is not a candidate */
   async recall(userId, accountCreatedAt, selections, query, limit, projectId = null) {
     const current = await this.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]);
     if (current.rows[0]?.generation !== accountCreatedAt) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
@@ -379,7 +384,7 @@ export class MemoryIndexing {
     // nothing outside `peers/`, and the isolation that matters is the target
     // list plus the canonical re-check below.
     const hits = await this.openViking.find(userId, query, {
-      targets, limit: Math.max(1, Math.min(100, Number(limit) || 1)), scoreThreshold: this.scoreThreshold,
+      targets, limit: Math.max(1, Math.min(100, (Number(limit) || 1) * LABEL_HEADROOM)), scoreThreshold: this.scoreThreshold,
     });
     const candidates = [];
     const nominated = new Set();
@@ -396,18 +401,16 @@ export class MemoryIndexing {
     if (!candidates.length) return [];
     candidates.sort((a, b) => b.score - a.score || a.scopeRank - b.scopeRank || a.rank - b.rank);
     const ids = candidates.map((candidate) => candidate.factId);
-    const activationIds = ["active-capsules:account", ...(projectId ? [`active-capsules:project:${projectId}`] : [])];
+    // The capsules in force are the account's one list; which project may read an entry is the caller's to decide, from the row's `project_id`.
     const preferences = await this.database.query(`SELECT id,payload FROM evimed_product.documents
-      WHERE user_id=$1 AND kind='preferences' AND id=ANY($2::text[]) AND deleted_at IS NULL`, [userId, activationIds]);
-    const localId = projectId ? `active-capsules:project:${projectId}` : "active-capsules:account";
-    const orderedPreferences = [...preferences.rows].sort((a, b) => (a.id === localId ? -1 : b.id === localId ? 1 : 0));
+      WHERE user_id=$1 AND kind='preferences' AND id='active-capsules:account' AND deleted_at IS NULL`, [userId]);
     const active = new Map();
-    for (const preference of orderedPreferences) {
+    for (const preference of preferences.rows) {
       for (const item of preference.payload.items ?? []) {
         if (!active.has(item.capsuleId)) active.set(item.capsuleId, item.mode);
       }
     }
-    const canonical = await this.database.query(`SELECT id,revision,payload,created_at FROM evimed_product.documents
+    const canonical = await this.database.query(`SELECT id,revision,payload,created_at,project_id FROM evimed_product.documents
       WHERE user_id=$1 AND kind='fact' AND id=ANY($2::text[]) AND deleted_at IS NULL`, [userId, ids]);
     const byId = new Map(canonical.rows.map((row) => [row.id, row]));
     const eligible = [];
@@ -416,7 +419,7 @@ export class MemoryIndexing {
       const row = byId.get(candidate.factId);
       if (!row || seen.has(row.id) || row.revision !== candidate.revision
         || row.payload.status !== "approved" || row.payload.capsuleId !== candidate.capsuleId
-        || !active.has(candidate.capsuleId)) continue;
+        || !active.has(candidate.capsuleId) || !entryReaches(row, projectId)) continue;
       seen.add(row.id);
       eligible.push({ row, selection: { capsuleId: candidate.capsuleId, mode: active.get(candidate.capsuleId) } });
     }

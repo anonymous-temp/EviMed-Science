@@ -1,0 +1,215 @@
+{
+ "case": "enrich/paper-feeds",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-22T15:23:38+00:00",
+ "feeds": {
+  "oup-cid-advance": {
+   "url": "https://academic.oup.com/rss/site_5269/advanceAccess_3135.xml",
+   "items": 5,
+   "notes": [],
+   "dois": [
+    "10.1093/cid/ciag502",
+    "10.1093/cid/ciag502/8976507?rss=1",
+    "10.1093/cid/ciag539",
+    "10.1093/cid/ciag539/8965082?rss=1",
+    "10.1093/cid/ciag602"
+   ]
+  },
+  "oup-cid-current": {
+   "url": "https://academic.oup.com/rss/site_5269/3135.xml",
+   "items": 7,
+   "notes": [],
+   "dois": [
+    "10.1093/cid/ciag496",
+    "10.1093/cid/ciag497",
+    "10.1093/cid/ciag498",
+    "10.1093/cid/ciag499",
+    "10.1093/cid/ciag500"
+   ]
+  },
+  "bmj-recent": {
+   "url": "https://www.bmj.com/rss/recent.xml",
+   "items": 6,
+   "notes": [],
+   "dois": []
+  },
+  "jama-online-first": {
+   "url": "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+   "items": 21,
+   "notes": [],
+   "dois": [
+    "10.1001/jama.2026.14373",
+    "10.1001/jama.2026.14376",
+    "10.1001/jama.2026.16766",
+    "10.1001/jama.2026.17239",
+    "10.1001/jama.2026.17242"
+   ]
+  },
+  "jamanetworkopen-new": {
+   "url": "https://jamanetwork.com/rss/site_214/187.xml",
+   "items": 159,
+   "notes": [],
+   "dois": [
+    "10.1001/jamanetworkopen.2026.31265",
+    "10.1001/jamanetworkopen.2026.32899",
+    "10.1001/jamanetworkopen.2026.32903",
+    "10.1001/jamanetworkopen.2026.32907",
+    "10.1001/jamanetworkopen.2026.32973"
+   ]
+  },
+  "lancet-online": {
+   "url": "https://www.thelancet.com/rssfeed/lancet_online.xml",
+   "items": null,
+   "notes": [
+    "feed_robots-denied:robots_disallow"
+   ],
+   "dois": []
+  },
+  "gastro-current": {
+   "url": "https://www.gastrojournal.org/current.rss",
+   "items": 175,
+   "notes": [],
+   "dois": [
+    "10.1053/j.gastro.2012.08.012",
+    "10.1053/j.gastro.2012.09.010",
+    "10.1053/j.gastro.2012.10.020",
+    "10.1053/j.gastro.2012.11.010",
+    "10.1053/j.gastro.2014.11.011"
+   ]
+  }
+ },
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://academic.oup.com/rss/site_5269/advanceAccess_3135.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://academic.oup.com/rss/site_5269/advanceAccess_3135.xml",
+   "headers": {
+    "content-type": "text/xml",
+    "last-modified": "Thu, 22 Oct 2026 11:45:45 GMT",
+    "etag": "\"fddcd1df1a62dd1:0\""
+   },
+   "fetched_at": "2026-10-22T15:23:25+00:00",
+   "file": "01.xml",
+   "gzip": false,
+   "bytes": 7057,
+   "sha256": "8b87ebaa6ce82bfed0ea7caa25d74288608c37c5a4bedbd75be2fd384406e799"
+  },
+  {
+   "method": "GET",
+   "url": "https://academic.oup.com/rss/site_5269/3135.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://academic.oup.com/rss/site_5269/3135.xml",
+   "headers": {
+    "content-type": "text/xml",
+    "last-modified": "Mon, 19 Oct 2026 15:46:02 GMT",
+    "etag": "\"60f5abf1e05fdd1:0\""
+   },
+   "fetched_at": "2026-10-22T15:23:26+00:00",
+   "file": "02.xml",
+   "gzip": false,
+   "bytes": 17494,
+   "sha256": "edf851c6d82dbb0f17a17ff18380f12375120ddf9e7914494721f9d2bd4c3332"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.bmj.com/rss/recent.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "http://feeds.bmj.com/bmj/recent",
+   "headers": {
+    "content-type": "text/xml; charset=utf-8",
+    "last-modified": "Thu, 22 Oct 2026 14:37:35 GMT"
+   },
+   "fetched_at": "2026-10-22T15:23:29+00:00",
+   "file": "03.xml",
+   "gzip": false,
+   "bytes": 12982,
+   "sha256": "10467558e5c8f241f7b3799c79edb63054a56e418e950d74cd8e6bee32a6c20e"
+  },
+  {
+   "method": "GET",
+   "url": "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+   "headers": {
+    "content-type": "text/xml",
+    "last-modified": "Wed, 21 Oct 2026 15:43:34 GMT",
+    "etag": "\"0971cee7261dd1:0\""
+   },
+   "fetched_at": "2026-10-22T15:23:32+00:00",
+   "file": "04.xml",
+   "gzip": false,
+   "bytes": 16097,
+   "sha256": "bc2ef2dae1ce14ca349a7dddad0f7850ed21b2192edfb86b4575f22246231c9e"
+  },
+  {
+   "method": "GET",
+   "url": "https://jamanetwork.com/rss/site_214/187.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://jamanetwork.com/rss/site_214/187.xml",
+   "headers": {
+    "content-type": "text/xml",
+    "last-modified": "Wed, 21 Oct 2026 15:44:14 GMT",
+    "etag": "\"dd8d1667361dd1:0\""
+   },
+   "fetched_at": "2026-10-22T15:23:34+00:00",
+   "file": "05.xml.gz",
+   "gzip": true,
+   "bytes": 129471,
+   "sha256": "65f2d364858912edd11d61fd030554fb96901e54b16ee52e481363d06c170ebd"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.thelancet.com/rssfeed/lancet_online.xml",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "error": {
+    "outcome": "robots-denied",
+    "detail": "robots_disallow"
+   },
+   "status": null,
+   "fetched_at": "2026-10-22T15:23:35+00:00"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.gastrojournal.org/current.rss",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.gastrojournal.org/current.rss",
+   "headers": {
+    "content-type": "application/rss+xml;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:23:38+00:00",
+   "file": "07.xml.gz",
+   "gzip": true,
+   "bytes": 264998,
+   "sha256": "506a3fa2cb2bdf4d48cbd76a3c01407a23319285488a6ebdb283403d78a5e1c9"
+  }
+ ]
+}

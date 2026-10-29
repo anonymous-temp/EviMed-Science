@@ -2,6 +2,47 @@
   "model": {
     "id": "mdl_1",
     "name": "二线 NSCLC 多西他赛组 PFS · Weibull",
+    "studyId": null,
+    "executionSpec": null,
+    "specificationMissing": [],
+    "registrationState": null,
+    "revisionCard": {
+      "type": "fitted_prediction_model",
+      "title": "二线 NSCLC 多西他赛组 PFS · Weibull",
+      "inputs": [
+        "中位 PFS",
+        "形状参数"
+      ],
+      "outputs": "对照组个体 PFS 的推演",
+      "provider": "研究 EV-201",
+      "interface": "vcr-engine patients.time_to_event",
+      "retirement": "来源试验更新时复核。",
+      "knownLimits": [
+        "未做外部验证",
+        "无更新机制"
+      ],
+      "missingData": "缺项不插补。"
+    },
+    "revisionApplicability": {
+      "region": "含中国人群的研究",
+      "sources": [
+        "NCT09900001",
+        "NCT09900002",
+        "CTR20990001"
+      ],
+      "endpoints": [
+        "time_to_event"
+      ],
+      "population": "二线 NSCLC，多西他赛单药"
+    },
+    "sourceRefs": [
+      "NCT09900001",
+      "NCT09900002",
+      "CTR20990001"
+    ],
+    "endpointType": "time_to_event",
+    "sourceRegistryId": null,
+    "sourceStatus": null,
     "family": "拟合预测",
     "version": "1.2",
     "tier": "literature",
@@ -25,8 +66,8 @@
     "outputs": "对照组个体 PFS 的推演",
     "missingData": "缺项不插补。",
     "retirement": "来源试验更新时复核。",
-    "twin": "baseline_conditioned_prediction",
-    "twinLabel": "基线条件化预测",
+    "twin": "scenario_simulation",
+    "twinLabel": "情景仿真",
     "twinReason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录",
     "validation": [
       {

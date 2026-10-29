@@ -1,4 +1,4 @@
-import { HttpError, readJson, sendJson } from './security.mjs';
+import { attachmentDisposition, HttpError, readJson, sendJson } from './security.mjs';
 /** This route is platform-wide, including deployments without VCR. */
 export function createDocumentExportRoutes({ store, service }) {
   return async (req, res) => {
@@ -17,7 +17,7 @@ export function createDocumentExportRoutes({ store, service }) {
       sendJson(res, 202, { data: await service.retry(user, id, body.format) });
     } else if (parts.length === 5 && parts[3] === 'download' && req.method === 'GET') {
       const file = await service.download(user, id, parts[4]);
-      res.writeHead(200, { 'Content-Type': file.mime, 'Content-Length': file.bytes.length, 'Content-Disposition': `attachment; filename="${file.filename}"`, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+      res.writeHead(200, { 'Content-Type': file.mime, 'Content-Length': file.bytes.length, 'Content-Disposition': attachmentDisposition(file.filename), 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
       res.end(file.bytes);
     } else throw new HttpError(404, 'document_export_unavailable', 'The document is unavailable.');
     return true;

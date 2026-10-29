@@ -126,6 +126,21 @@ test("named rules carry a name of 1 to 80 characters and a rule, and an expressi
   assert.deepEqual(codes([{ name: "a", rule: { op: "present", column: "ghost" } }], { columns: ["age"] }), ["rule_column_unknown@rules[0].rule.column"]);
 });
 
+test("named rules preserve optional include/exclude unknown policies and reject every other value", () => {
+  const item = { name: "adult", rule: { op: "compare", column: "age", comparator: "gte", value: 18 } };
+  for (const rule of [item, { ...item, unknownAs: "include" }, { ...item, unknownAs: "exclude" }]) {
+    const before = JSON.stringify(rule);
+    assert.deepEqual(validateNamedRules([rule], { path: "rules" }), []);
+    assert.equal(JSON.stringify(rule), before, "validation does not rewrite the policy or add a default");
+  }
+  for (const unknownAs of ["unknown", null, 0, true, [], {}]) {
+    const issues = validateNamedRules([{ ...item, unknownAs }], { path: "rules" });
+    assert.deepEqual(issues.map(({ code, field }) => ({ code, field })), [{ code: "rule_shape_invalid", field: "rules[0].unknownAs" }]);
+  }
+  assert.equal(validateNamedRules([{ ...item, unknownAs: "include", extra: true }])[0].field, "[0].extra");
+  assert.equal(validateNamedRules([{ ...item, unknownAs: "include", expression: "age > 18" }])[0].code, "rule_expression_forbidden");
+});
+
 test("an expression field is found anywhere in a scenario, and only by name", () => {
   const scenario = { design: { kind: "x" }, rules: [{ name: "a", rule: { op: "present", column: "c" } }, { name: "b", expression: "age > 1" }], nested: { deeper: [{ expression: "1" }] } };
   assert.deepEqual(findExpressionFields(scenario, { path: "scenario" }), ["scenario.rules[1]", "scenario.nested.deeper[0]"]);

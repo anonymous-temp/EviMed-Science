@@ -123,3 +123,81 @@ async def test_no_relay_configured_is_refused_by_name(plain_settings):
 ])
 def test_edge_proxy_configuration(url, credentials, ok):
     assert (edge_proxy_from(url, credentials) is not None) is ok
+
+
+async def test_a_failed_shared_pool_is_replaced_without_closing_other_inflight_requests(plain_settings, tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+
+    secret = tmp_path / "relay-credentials"
+    secret.write_text(CREDENTIALS)
+    settings = replace(plain_settings, edge_proxy_url="https://proxy.test", edge_proxy_credentials_file=str(secret))
+    fetcher = ProtectedFetcher(settings, HostBudget(MemoryCounterStore(), {}))
+    started, release = asyncio.Event(), asyncio.Event()
+    class Client:
+        def __init__(self, broken=False):
+            self.broken, self.closed = broken, False
+            self.cookies = httpx.Cookies()
+        def build_request(self, method, url, **kwargs): return httpx.Request(method, url, **kwargs)
+        async def send(self, request, **_kwargs):
+            if request.url.path == "/inflight":
+                started.set()
+                await release.wait()
+                assert not self.closed, "a peer's failure must not close this active response"
+            elif self.broken:
+                raise httpx.PoolTimeout("synthetic stale pool")
+            return httpx.Response(200, content=b"real test response", request=request)
+        async def aclose(self): self.closed = True
+    old, fresh = Client(True), Client()
+    proxy = settings.edge_proxy()
+    fetcher._relay_client = old
+    fetcher._relay_key = (proxy.url, proxy.username, proxy.password)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_kwargs: fresh)
+    peer = asyncio.create_task(fetcher._exchange_relay("GET", "https://target.test/inflight", {}, None, "target.test", api=False))
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        with pytest.raises(FetchError) as failed:
+            await fetcher._exchange_relay("GET", "https://target.test/fail", {}, None, "target.test", api=False)
+        assert failed.value.outcome == "timeout"
+        assert not old.closed
+        reply = await fetcher._exchange_relay("GET", "https://target.test/recovered", {}, None, "target.test", api=False)
+        assert reply[0] == 200, "next scheduled read gets a fresh pool, not permanent outage"
+        release.set()
+        assert (await peer)[0] == 200
+        await asyncio.sleep(0)
+        assert old.closed
+    finally:
+        release.set()
+        await asyncio.gather(peer, return_exceptions=True)
+        await fetcher.aclose()
+    assert fresh.closed
+
+
+async def test_canceling_relay_read_releases_its_pool_for_the_next_attempt(plain_settings, tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+
+    secret = tmp_path / "relay-credentials"
+    secret.write_text(CREDENTIALS)
+    settings = replace(plain_settings, edge_proxy_url="https://proxy.test", edge_proxy_credentials_file=str(secret))
+    fetcher = ProtectedFetcher(settings, HostBudget(MemoryCounterStore(), {}))
+    started = asyncio.Event()
+    class Client:
+        cookies = httpx.Cookies()
+        closed = False
+        def build_request(self, method, url, **kwargs): return httpx.Request(method, url, **kwargs)
+        async def send(self, request, **_kwargs):
+            started.set()
+            await asyncio.Event().wait()
+        async def aclose(self): self.closed = True
+    client = Client()
+    proxy = settings.edge_proxy()
+    fetcher._relay_client = client
+    fetcher._relay_key = (proxy.url, proxy.username, proxy.password)
+    pending = asyncio.create_task(fetcher._exchange_relay("GET", "https://target.test/cancel", {}, None, "target.test", api=False))
+    await asyncio.wait_for(started.wait(), 1)
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError): await pending
+    await asyncio.sleep(0)
+    assert client.closed and fetcher._relay_client is None and not fetcher._relay_inflight
+    await fetcher.aclose()

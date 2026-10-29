@@ -19,22 +19,29 @@ import { RouteError } from "./routes/RouteError";
  * `AppShell` renders the fallback for these (`Suspense`), so a chunk still in
  * flight shows the shell with its navigation rather than a blank page.
  */
+const FrontierArticlePage = lazy(() => import("./routes/FrontierArticlePage").then((m) => ({ default: m.FrontierArticlePage })));
+const GlobalHomeRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.GlobalHomeRoute })));
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
 const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
+const VcrCalculationWorkbenchPage = lazy(() => import("./routes/VcrCalculationWorkbenchPage").then((m) => ({ default: m.VcrCalculationWorkbenchPage })));
+const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPage").then((m) => ({ default: m.VcrMethodWorkbenchPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
 const MemoryMapPage = lazy(() => import("./routes/MemoryMapPage").then((m) => ({ default: m.MemoryMapPage })));
+const MemoryOverviewPage = lazy(() => import("./routes/MemoryOverviewPage").then((m) => ({ default: m.MemoryOverviewPage })));
 const SharedCapsulePage = lazy(() => import("./routes/SharedCapsulePage").then((m) => ({ default: m.SharedCapsulePage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
 const SimulatedWalletPage = lazy(() => import("./routes/SimulatedWalletPage").then((m) => ({ default: m.SimulatedWalletPage })));
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
+const FrontierTopicPage = lazy(() => import("./routes/FrontierTopicPage").then((m) => ({ default: m.FrontierTopicPage })));
+const FrontierCongressPage = lazy(() => import("./routes/FrontierCongressPage").then((m) => ({ default: m.FrontierCongressPage })));
 const VcrHomePage = lazy(() => import("./virtual-research/VcrHomePage").then((m) => ({ default: m.VcrHomePage })));
 const VcrStudyPage = lazy(() => import("./virtual-research/VcrStudyPage").then((m) => ({ default: m.VcrStudyPage })));
 const EvidenceZonesPage = lazy(() => import("./routes/EvidenceZonesPage").then((m) => ({ default: m.EvidenceZonesPage })));
@@ -74,7 +81,8 @@ export const routes: RouteObject[] = [
       // the conversation frame stay where they were.
       errorElement: <RouteError />,
       children: [
-        { index: true, element: <Navigate to="/app/chat" replace /> },
+        { index: true, element: <Navigate to="/app/home" replace /> },
+        { path: "home", element: <GlobalHomeRoute /> },
         // One route, with or without the conversation's id. Two route objects
         // made `/app/chat` → `/app/chat/:id` a remount, and the surface resumes
         // the last conversation on arrival, so every plain visit paid for one
@@ -86,7 +94,10 @@ export const routes: RouteObject[] = [
         // 「前沿动态」: the feed, and one event of it. Both answer for themselves
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },
+        { path: "frontier/items/:itemId", element: <FrontierArticlePage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
+        { path: "frontier/topics/:topicId", element: <FrontierTopicPage /> },
+        { path: "frontier/congress/:congressId", element: <FrontierCongressPage /> },
         // 「虚拟临床研究」: the module's home, and one study's seven tabs (总览
         // when none is named). A study package is read at `?package=<id>` on
         // the study's own address rather than at a route of its own — it is a
@@ -98,11 +109,8 @@ export const routes: RouteObject[] = [
         { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
         { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
         { path: "frontier/authors/:authorId", element: <EvidenceAuthorPage /> },
-        // 「循证 GEO」: the projects, and one project as a layout — the header, the fixed band of steps and tabs, and below it the
-        // project's eight tabs (总览 when none is named) or one AI answer, which is read inside the band under 问题与回答. The tab
-        // routes have no element of their own: the layout draws the tab the address names in the body of the band, so a tab switch is
-        // never a chunk to wait for and never takes the band away. Like the frontier feed, each answers for itself when the module is
-        // off here.
+        // GEO conversations, results and preserved answers share one authorized project layout.
+        // The resident native frame is placed over its chat pane; result routes keep all existing views and anchors.
         { path: "geo", element: <GeoHomePage /> },
         {
           path: "geo/:geoId",
@@ -110,6 +118,7 @@ export const routes: RouteObject[] = [
           children: [
             { index: true, element: null },
             { path: "answers/:snapshotId", element: <GeoAnswerPage /> },
+            { path: "chat/:sessionId?", element: null },
             { path: ":tab", element: null },
           ],
         },
@@ -135,11 +144,15 @@ export const routes: RouteObject[] = [
         { path: "memory", element: <MemoryHubPage /> },
         // 「记忆地图」: the explorable picture of the memory page's contents, a data page of its own (DESIGN.md 「页面结构」).
         { path: "memory/map", element: <MemoryMapPage /> },
+        // 「总览」: the capsule as six parts of one picture, where `/app/memory` lands and each card drills into the map from (DESIGN.md 「页面结构」).
+        { path: "memory/overview", element: <MemoryOverviewPage /> },
         // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
         { path: "memory/shared/:token", element: <SharedCapsulePage /> },
         { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
+        { path: "capabilities/methods/:methodId", element: <VcrMethodWorkbenchPage /> },
+        { path: "capabilities/calculations/:studyId/:tab?", element: <VcrCalculationWorkbenchPage /> },
         { path: "account", element: <AccountPage /> },
         // The simulated wallet's two commerce pages — 模拟充值 and 模拟订单 — at the
         // addresses the domain names (`SIMULATED_WALLET_PAGES`), which is where
@@ -148,7 +161,7 @@ export const routes: RouteObject[] = [
         // sentence, not a 404. 模拟会员 and 模拟退款 had nothing behind them and
         // were removed (2026-10-07): their addresses are not found.
         { path: "account/simulated/:page", element: <SimulatedWalletPage /> },
-        { path: "extensions", element: <Navigate to="/app/extensions/skills" replace /> },
+        { path: "extensions", element: <Navigate to="/app/extensions/discover" replace /> },
         // 插件与技能: one element for both tabs and the open item (`skills/:skillId`, `plugins/:extensionId`), so switching tabs keeps what was read.
         { path: "extensions/:tab/:itemId?", element: <ExtensionsPage /> },
         // Seven destinations, six of them above (2026-09-15 walk, C8). The rows
@@ -160,7 +173,7 @@ export const routes: RouteObject[] = [
         // which is where a run's `.ipynb` deliverables still are.
         { path: "sources", element: <Navigate to="/app/files?tab=sources" replace /> },
         { path: "notebooks", element: <Navigate to="/app/files" replace /> },
-        { path: "capsules", element: <Navigate to="/app/memory?tab=capsules" replace /> },
+        { path: "capsules", element: <Navigate to="/app/memory/overview" replace /> },
         { path: "settings", element: <Navigate to="/app/account?tab=appearance" replace /> },
         // 「运维」: the operators' console, on its own page; `/app/account?tab=ops` was its address as a section of 设置 and lands here.
         { path: "ops", element: <OpsRoute /> },
@@ -178,7 +191,7 @@ export const routes: RouteObject[] = [
   ...(import.meta.env.PROD && import.meta.env.VITE_EVIMED_GALLERY !== "1"
     ? []
     : [{ path: "/__gallery", element: <GalleryPage />, errorElement: <RouteError /> }]),
-  { path: "/", element: <Navigate to="/app/chat" replace /> },
+  { path: "/", element: <Navigate to="/app/home" replace /> },
   // The paths this shell used before it had a prefix. They were linked to from
   // runs, from notification mail and from people's bookmarks, and a redirect
   // costs one route each; dropping them would turn every one of those into a

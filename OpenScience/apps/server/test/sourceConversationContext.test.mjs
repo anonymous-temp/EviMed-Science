@@ -25,3 +25,25 @@ test("an unavailable scoped library never becomes an instruction to read everyth
   assert.ok(note.endsWith("[]"));
   await assert.rejects(sourceConversationContext({ get: async () => { throw new Error("database down"); } }, { id: "p" }, { sourceScope: ["gone"] }), /database down/);
 });
+
+test("explicit selected-empty context never advertises unrestricted knowledge", async () => {
+  const context = await sourceConversationContext(null, { userId: "user-1", id: "project-1" }, { sourceScope: [] }, true);
+  assert.match(context, /No selected document is currently eligible/);
+  assert.match(context, /do not broaden/);
+  assert.doesNotMatch(context, /currently applies no document selection/);
+});
+
+test('project source context excludes library and unproven derived pages before their titles and paths are rendered', async () => {
+  const rows = {
+    local: { id: 'local', projectId: 'p', payload: { metadata: { title: 'Project source' }, outputs: { artifactPath: 'knowledge-base/local/index.md' } } },
+    derived: { id: 'derived', projectId: 'p', payload: { metadata: { title: 'Unproven private synthesis' }, outputs: { artifactPath: 'knowledge-base/derived/index.md' } } },
+    foreign: { id: 'foreign', projectId: 'other', display: { title: 'Private library title' } },
+  };
+  const service = { get: async (_user, id) => rows[id], isShared: async () => { throw new Error('Library must not be consulted'); } };
+  const note = await sourceConversationContext(service, { userId: 'owner', id: 'p' }, { sourceScope: Object.keys(rows) }, false,
+    { includeLibrary: false, acceptSource: async source => source.id === 'local' });
+  assert.match(note, /Project source/); assert.match(note, /local\/index.md/);
+  assert.doesNotMatch(note, /private|Private|library\//);
+  await assert.rejects(sourceConversationContext(service, { userId: 'owner', id: 'p' }, { sourceScope: ['local'] }, false,
+    { includeLibrary: false, acceptSource: async () => { throw new Error('Source proof unavailable'); } }), /Source proof unavailable/);
+});

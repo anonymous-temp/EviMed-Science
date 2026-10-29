@@ -41,6 +41,11 @@ export function takenEntries<T extends { id: string }>(entries: readonly T[], sc
   return entries.filter((entry) => !left.has(entry.id));
 }
 
+/** The sender of one of the platform's own packs, as its row says it: 「EviMed 证据中心提供」. */
+export function providedBy(author: string): string {
+  return `${author}提供`;
+}
+
 /** 「来自 …」 with a typed space only before Latin text: 「来自李主任」, 「来自 Alice」. */
 export function fromSender(author: string): string {
   return /^[A-Za-z0-9]/.test(author) ? `来自 ${author}` : `来自${author}`;
@@ -51,3 +56,8 @@ export function fromSender(author: string): string {
  * (`SIGNATURE_MAX_CHARS` in `capsuleShareLabel.mjs`; a server test holds the two equal).
  */
 export const CAPSULE_SIGNATURE_MAX_CHARS = 60;
+
+/** The names a person typed, one per line or separated by commas: exact account ids or exact display names, each once, at most thirty-two. */
+export function recipientsOf(text: string): string[] {
+  return [...new Set(text.split(/[\n,，、;；]+/).map((item) => item.trim()).filter(Boolean))].slice(0, 32);
+}

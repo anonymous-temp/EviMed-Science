@@ -44,11 +44,13 @@
  * @module geoStore
  */
 
+import { resolveGeoErrorIds } from "./geoLegacyErrorIdentity.mjs";
+import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { canonicalGeoUrl, geoValueCanonical, geoArticlePublishable, GEO_STEPS, STEP_WAITING_ALLOWANCE } from "@evimed/domain";
 import { GEO_SCHEMA, migrateGeo } from "./geoPersistence.mjs";
 import { geoScreenshotFile } from "./geoScreenshots.mjs";
-import { randomId } from "./security.mjs";
+import { HttpError, randomId } from "./security.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
 
 /** What a project member is called when their display name may not be shown. */
@@ -111,6 +113,8 @@ export function geoProjectFromRow(row) {
     // Who speaks for the product (enterprise or doctor, the relation, a doctor's affiliation) and the one product zone its cards are in.
     producer: row.producer && typeof row.producer === "object" && !Array.isArray(row.producer) ? row.producer : null,
     productZoneId: text(row.product_zone_id),
+    // The project's own conversation, recorded when it was made (or found once for a project made before); null until then.
+    conversationSessionId: text(row.conversation_session_id),
     // A project the platform keeps for itself: measured and judged, never advanced by the orchestrator.
     internal: row.internal === true,
     createdAt: iso(row.created_at),
@@ -180,6 +184,8 @@ export function questionFromRow(row) {
     setVersion: Number(row.set_version),
     text: String(row.text),
     kind: text(row.kind),
+    originalRowIndex: row.original_row_index == null ? null : Number(row.original_row_index), originalId: text(row.original_id), originalGroup: text(row.original_group),
+    clientTags: row.client_tags ?? [], classificationStatus: text(row.classification_status) ?? "unclassified",
     pool: text(row.pool),
     platform: text(row.platform),
     sourceUrl: text(row.source_url),
@@ -235,6 +241,8 @@ export function geoArticleFromRow(row) {
     gate: text(row.gate),
     safety: String(row.safety),
     contentSha256: text(row.content_sha256),
+    currentResultVersionId: text(row.current_result_version_id),
+    onlineUpdateNeeded: row.online_update_needed === true,
     protectedSha256: text(row.protected_sha256),
     status: String(row.status),
     // The claim references the platform read in the text (card, card claim, card revision), what it found, and the hash of the text
@@ -262,6 +270,7 @@ export function geoOwnedLinkFromRow(row) {
     title: String(row.title),
     publishedAt: iso(row.published_at),
     articleId: text(row.article_id),
+    articleResultVersionId: text(row.article_result_version_id), articleDigest: text(row.article_digest),
     groupId: text(row.group_id),
     status: String(row.status),
     retiredAt: iso(row.retired_at),
@@ -305,11 +314,11 @@ export function geoOwnedLinkKey(url) {
 }
 
 const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage_days, engines, tier, budget, status, steps,
-  entity_keys, producer, product_zone_id, internal, created_at, updated_at, deleted_at`;
+  entity_keys, producer, product_zone_id, conversation_session_id, internal, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
-const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
-  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links", "members", "value_profiles",
+const OWNED_TABLES = Object.freeze(["read_selections", "facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
+  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "article_versions", "articles", "owned_links", "members", "value_profiles",
   "action_choices"]);
 
 /** Whether this database has the GEO schema at all. @param {any} client */
@@ -415,6 +424,8 @@ export function mergedExpectations(previous, given) {
 export function strategyFromRow(row) {
   return {
     version: Number(row.version),
+    scopeKey: row.scope_key ?? null,
+    basis: row.basis ?? null,
     battlefield: row.battlefield ?? null,
     expectations: row.expectations ?? null,
     gaps: row.gaps ?? null,
@@ -543,6 +554,21 @@ export class GeoStore {
       VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, $7::text[], $8) RETURNING ${PROJECT_COLUMNS}`,
     [id, userId, projectId, JSON.stringify(product), [...engines], coverageDays, await this.#entityKeys(product), internal === true]);
     return geoProjectFromRow(result.rows[0]);
+  }
+
+  /**
+   * Record the project's own conversation. Written once: a later call does not move it, so the page keeps opening the conversation
+   * the project was made with however many others the project gains — unless it names the one it replaces (`replacing`, a
+   * conversation the person deleted), and that is still the one held. Returns the id the project holds after the call.
+   * @param {string} id @param {string} sessionId @param {string | null} [replacing]
+   * @returns {Promise<string | null>}
+   */
+  async setConversationSession(id, sessionId, replacing = null) {
+    await this.query(`UPDATE evimed_geo.projects SET conversation_session_id = $2
+      WHERE id = $1 AND deleted_at IS NULL AND (conversation_session_id IS NULL OR conversation_session_id = $3)`,
+    [id, String(sessionId), replacing == null ? null : String(replacing)]);
+    const result = await this.query(`SELECT conversation_session_id FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL`, [id]);
+    return text(result.rows[0]?.conversation_session_id);
   }
 
   /** This account's GEO project, or null (another account's, deleted, or none). @param {string} userId @param {string} id */
@@ -823,19 +849,23 @@ export class GeoStore {
 
   /** Every set version, newest first. @param {string} geoId */
   async questionSets(geoId) {
-    const result = await this.query(`SELECT version, locked_at, measured_count, note, run_id, created_at FROM evimed_geo.question_sets
+    const result = await this.query(`SELECT version, locked_at, measured_count, note, run_id, created_at, contract FROM evimed_geo.question_sets
       WHERE geo_project_id = $1 ORDER BY version DESC`, [geoId]);
     return result.rows.map((/** @type {any} */ row) => ({
-      version: Number(row.version), lockedAt: iso(row.locked_at), measuredCount: row.measured_count == null ? null : Number(row.measured_count),
+      version: Number(row.version), contract: row.contract ?? null, lockedAt: iso(row.locked_at), measuredCount: row.measured_count == null ? null : Number(row.measured_count),
       note: text(row.note), runId: text(row.run_id), createdAt: iso(row.created_at),
     }));
   }
 
-  /** The groups of one set version, each with its questions. @param {string} geoId @param {number} version */
-  async questionMap(geoId, version) {
-    const groups = (await this.query(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND set_version = $2
+  /**
+   * The groups of one set version, each with its questions.
+   * @param {string} geoId @param {number} version @param {any} [client] a transaction to read inside, for a write that builds on it
+   */
+  async questionMap(geoId, version, client = null) {
+    const read = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => (client ? client.query(sql, values) : this.query(sql, values));
+    const groups = (await read(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND set_version = $2
       ORDER BY pool NULLS LAST, position, id`, [geoId, version])).rows.map(questionGroupFromRow);
-    const questions = (await this.query(`SELECT * FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2
+    const questions = (await read(`SELECT * FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2
       ORDER BY position, id`, [geoId, version])).rows.map(questionFromRow);
     const byGroup = new Map(groups.map((group) => [group.id, /** @type {ReturnType<typeof questionFromRow>[]} */ ([])]));
     for (const question of questions) byGroup.get(question.groupId)?.push(question);
@@ -849,26 +879,57 @@ export class GeoStore {
   }
 
   /**
-   * Write a new, unlocked set version from validated groups.
+   * Write a new, unlocked set version from validated groups — or, with `merge`, from what `merge` makes of the latest set's groups
+   * (read in the same transaction, under the set's lock, so two writes that add to one map cannot lose each other's groups).
    * @param {string} userId @param {string} geoId
-   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null }} input
-   * @returns {Promise<{ version: number, groupIds: string[], questionIds: string[][] }>}
+   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null, contract?: any,
+   *   requestKey?: string | null,
+   *   merge?: ((current: Array<Record<string, any> & { questions: Array<Record<string, any>> }>) => Array<Record<string, any> & { questions: Array<Record<string, any>> }> | null) | null }} input
+   *   `merge` answers null to write nothing
+   * @returns {Promise<{ version: number, groupIds: string[], questionIds: string[][] } | null>} null when `merge` wrote nothing
    */
-  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null }) {
-    return this.transaction(async (client) => this.#insertSet(client, userId, geoId, { groups, note, runId, lockedAt: null, measuredCount: null }));
+  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null, contract = null, requestKey = null, merge = null }) {
+    return this.transaction(async (client) => {
+      let written = groups;
+      if (merge) {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
+        const latest = Number((await client.query(`SELECT coalesce(max(version), 0) AS version FROM evimed_geo.question_sets WHERE geo_project_id = $1`,
+          [geoId])).rows[0].version);
+        const merged = merge(latest ? await this.questionMap(geoId, latest, client) : []);
+        if (!merged) return null;
+        written = merged;
+      }
+      return this.#insertSet(client, userId, geoId, { groups: written, note, runId, contract, requestKey, lockedAt: null, measuredCount: null });
+    });
   }
 
   /**
    * @param {any} client @param {string} userId @param {string} geoId
    * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note: string | null, runId: string | null,
-   *   lockedAt: string | null, measuredCount: number | null }} input
+   *   lockedAt: string | null, measuredCount: number | null, contract?: any, requestKey?: string | null, expectedBaseVersion?: number | null }} input
    */
-  async #insertSet(client, userId, geoId, { groups, note, runId, lockedAt, measuredCount }) {
+  async #insertSet(client, userId, geoId, { groups, note, runId, lockedAt, measuredCount, contract = null, requestKey = null, expectedBaseVersion = null }) {
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
-    const version = Number((await client.query(`SELECT coalesce(max(version), 0) + 1 AS next FROM evimed_geo.question_sets
-      WHERE geo_project_id = $1`, [geoId])).rows[0].next);
-    await client.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, version, user_id, locked_at, measured_count, note, run_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)`, [geoId, version, userId, lockedAt, measuredCount, note, runId]);
+    const digest = createHash("sha256").update(geoValueCanonical({ groups, note, contract })).digest("hex");
+    if (requestKey) {
+      const existing = (await client.query(`SELECT version, request_digest FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND user_id=$2 AND request_key=$3`, [geoId, userId, requestKey])).rows[0];
+      if (existing) {
+        if (existing.request_digest !== digest) throw new HttpError(409, "geo_request_key_conflict", "This request key already names different question content.");
+        const savedGroups = (await client.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id=$1 AND set_version=$2 ORDER BY position`, [geoId, existing.version])).rows;
+        const savedQuestions = (await client.query(`SELECT id, group_id FROM evimed_geo.questions WHERE geo_project_id=$1 AND set_version=$2 ORDER BY position`, [geoId, existing.version])).rows;
+        return { version: Number(existing.version), groupIds: savedGroups.map((/** @type {any} */ g) => String(g.id)), questionIds: savedGroups.map((/** @type {any} */ g) => savedQuestions.filter((/** @type {any} */ q) => q.group_id === g.id).map((/** @type {any} */ q) => String(q.id))) };
+      }
+    }
+    const latest = (await client.query(`SELECT version, contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND user_id=$2 ORDER BY version DESC LIMIT 1`, [geoId, userId])).rows[0];
+    if (expectedBaseVersion != null && Number(latest?.version ?? 0) !== expectedBaseVersion) {
+      throw new HttpError(409, "geo_question_not_current", "The question set changed while this edit was being prepared. Read the current version and apply the edit there.");
+    }
+    if (latest?.contract && !contract) {
+      throw new HttpError(409, "geo_contract_missing", "Revise this imported question set with rows and its measurement agreement; a legacy write cannot discard the current agreement.");
+    }
+    const version = Number(latest?.version ?? 0) + 1;
+    await client.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, version, user_id, locked_at, measured_count, note, run_id, contract, request_key, request_digest)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`, [geoId, version, userId, lockedAt, measuredCount, note, runId, contract ? JSON.stringify(contract) : null, requestKey, digest]);
     const groupRows = [];
     const questionRows = [];
     /** @type {string[]} */
@@ -888,6 +949,7 @@ export class GeoStore {
         const questionId = randomId("gq_");
         ids.push(questionId);
         questionRows.push({ id: questionId, group_id: id, text: question.text, kind: question.kind ?? null,
+          original_row_index: question.originalRowIndex ?? null, original_id: question.originalId ?? null, original_group: question.originalGroup ?? null, client_tags: question.clientTags ?? [], classification_status: question.classificationStatus ?? "unclassified",
           pool: question.pool ?? group.pool ?? null, platform: question.platform ?? null, source_url: question.sourceUrl ?? null,
           collected_at: question.collectedAt ?? null, is_measured: question.isMeasured === true, retired_at: question.retiredAt ?? null,
           position: questionRows.length });
@@ -904,10 +966,10 @@ export class GeoStore {
     }
     if (questionRows.length) {
       await client.query(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, text, kind, pool, platform,
-          source_url, collected_at, is_measured, retired_at, position)
-        SELECT q.id, $2, $3, q.group_id, $4, q.text, q.kind, q.pool, q.platform, q.source_url, q.collected_at, q.is_measured, q.retired_at, q.position
+          source_url, collected_at, is_measured, retired_at, position, original_id, original_group, client_tags, classification_status, original_row_index)
+        SELECT q.id, $2, $3, q.group_id, $4, q.text, q.kind, q.pool, q.platform, q.source_url, q.collected_at, q.is_measured, q.retired_at, q.position, q.original_id, q.original_group, q.client_tags, q.classification_status, q.original_row_index
         FROM jsonb_to_recordset($1::jsonb) AS q(id text, group_id text, text text, kind text, pool text, platform text, source_url text,
-          collected_at timestamptz, is_measured boolean, retired_at timestamptz, position integer)`, [JSON.stringify(questionRows), userId, geoId, version]);
+          collected_at timestamptz, is_measured boolean, retired_at timestamptz, position integer, original_id text, original_group text, client_tags text[], classification_status text, original_row_index integer)`, [JSON.stringify(questionRows), userId, geoId, version]);
     }
     return { version, groupIds, questionIds };
   }
@@ -948,7 +1010,7 @@ export class GeoStore {
     }
     return this.transaction(async (client) => {
       const written = await this.#insertSet(client, userId, geoId, {
-        groups: copied, note: `unmeasure:${questionId}`, runId: null,
+        groups: copied, expectedBaseVersion: source.version, contract: source.contract, note: `unmeasure:${questionId}`, runId: null,
         lockedAt: source?.lockedAt ? new Date().toISOString() : null, measuredCount: source?.lockedAt ? measured : null,
       });
       return { version: written.version };
@@ -985,9 +1047,9 @@ export class GeoStore {
   /** @param {string} userId @param {string} geoId @param {Record<string, any>} data @param {string | null} [runId] */
   writePlacementPlan(userId, geoId, data, runId = null) { return this.#writeDocument("placement_plans", userId, geoId, data, runId); }
 
-  /** @param {string} geoId */
-  async latestStrategy(geoId) {
-    const row = (await this.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0];
+  /** @param {string} geoId @param {{scopeKey?:string|null,strategyVersion?:number}} [options] */
+  async latestStrategy(geoId, options = {}) {
+    const row = (await this.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 AND ${options.strategyVersion != null ? "version = $2" : "scope_key IS NOT DISTINCT FROM $2"} ORDER BY version DESC LIMIT 1`, [geoId, options.strategyVersion ?? options.scopeKey ?? null])).rows[0];
     return row ? strategyFromRow(row) : null;
   }
 
@@ -1004,17 +1066,19 @@ export class GeoStore {
    * strategy twice): the answer is the latest version with `unchanged: true`.
    * @param {string} userId @param {string} geoId
    * @param {{ battlefield?: any, expectations?: any, gaps?: any, layout?: any, summary?: string | null, tiers?: any, noGo?: any,
-   *   assumptions?: any, actions?: any, runId?: string | null }} fields
+   *   assumptions?: any, actions?: any, runId?: string | null, scopeKey?:string|null, basis?:any }} fields
    * @returns {Promise<{ version: number, unchanged?: boolean }>}
    */
   async writeStrategy(userId, geoId, fields) {
     return this.transaction(async (client) => {
       await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-doc:strategy:' || $1))`, [geoId]);
       const latest = (await client.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0] ?? null;
-      const before = latest ? strategyFromRow(latest) : null;
+      const scoped = (await client.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id=$1 AND scope_key IS NOT DISTINCT FROM $2 ORDER BY version DESC LIMIT 1`, [geoId, fields.scopeKey ?? null])).rows[0];
+      const before = scoped ? strategyFromRow(scoped) : null;
       const carried = (/** @type {"battlefield" | "gaps" | "layout" | "tiers" | "noGo" | "assumptions" | "actions"} */ key) =>
         (fields[key] !== undefined ? fields[key] : before?.[key] ?? null);
       const next = {
+        basis: fields.basis !== undefined ? fields.basis : before?.basis ?? null,
         battlefield: carried("battlefield"),
         expectations: mergedExpectations(before?.expectations ?? null, fields.expectations),
         gaps: carried("gaps"),
@@ -1025,17 +1089,17 @@ export class GeoStore {
         actions: carried("actions"),
         summary: fields.summary !== undefined ? fields.summary : before?.summary ?? null,
       };
-      if (before && canonicalJson(next) === canonicalJson({ battlefield: before.battlefield, expectations: before.expectations, gaps: before.gaps,
+      if (before && canonicalJson(next) === canonicalJson({ basis: before.basis, battlefield: before.battlefield, expectations: before.expectations, gaps: before.gaps,
         layout: before.layout, tiers: before.tiers, noGo: before.noGo, assumptions: before.assumptions, actions: before.actions, summary: before.summary })) {
         return { version: before.version, unchanged: true };
       }
       const version = Number(latest?.version ?? 0) + 1;
       const json = (/** @type {unknown} */ value) => (value === undefined || value === null ? null : JSON.stringify(value));
       await client.query(`INSERT INTO evimed_geo.strategy (geo_project_id, version, user_id, battlefield, expectations, gaps, layout, summary, run_id,
-          tiers, no_go, assumptions, actions)
-        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)`,
+          tiers, no_go, assumptions, actions, scope_key, basis)
+        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15::jsonb)`,
       [geoId, version, userId, json(next.battlefield), json(next.expectations), json(next.gaps), json(next.layout), next.summary, fields.runId ?? null,
-        json(next.tiers), json(next.noGo), json(next.assumptions), json(next.actions)]);
+        json(next.tiers), json(next.noGo), json(next.assumptions), json(next.actions), fields.scopeKey ?? null, json(next.basis)]);
       return { version };
     });
   }
@@ -1088,6 +1152,24 @@ export class GeoStore {
     return result.rows.map(geoSourceFromRow);
   }
 
+  /** Resolve every cited domain within an already authorized owner/project pair.
+   * This is a bounded selected-key lookup, independent of the catalogue list's display limit.
+   * Exact host matching folds only case and leading www, as the source presenter does.
+   * @param {{id:string,userId:string}} project @param {string[]} domains
+   */
+  async sourcesForDomains(project, domains) {
+    if (!project?.id || !project?.userId || !Array.isArray(domains) || domains.some(domain=>typeof domain!=='string'))
+      throw new HttpError(400, 'geo_read_filter_invalid', 'Choose an authorized source selection.');
+    const keys=[...new Set(domains.map(domain=>domain.toLowerCase().replace(/^www\./u,'')))].sort();
+    if (keys.length>20000) throw new HttpError(422, 'geo_read_filter_invalid', 'Narrow the selection to at most 20,000 cited domains.');
+    if (!keys.length) return [];
+    const result=await this.query(`SELECT s.* FROM evimed_geo.sources s
+      JOIN evimed_geo.projects p ON p.id=s.geo_project_id AND p.user_id=s.user_id
+      WHERE s.geo_project_id=$1 AND s.user_id=$2 AND regexp_replace(lower(s.domain),'^www[.]','')=ANY($3::text[])
+      ORDER BY s.domain,s.id`,[project.id,project.userId,keys]);
+    return result.rows.map(geoSourceFromRow);
+  }
+
   /**
    * Upsert the run-judged fields of sources by domain. The counts (`cited`,
    * mentions, wrong) are measured, and the market cell is the market's.
@@ -1134,6 +1216,57 @@ export class GeoStore {
   async getArticle(geoId, articleId) {
     const result = await this.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id = $1 AND id = $2`, [geoId, articleId]);
     return result.rows[0] ? geoArticleFromRow(result.rows[0]) : null;
+  }
+
+  /** @param {string} geoId @param {string} articleId */
+  async articleVersions(geoId, articleId) {
+    return (await this.query(`SELECT result_version_id AS "resultVersionId", parent_version_id AS "parentVersionId", digest,
+      path, run_id AS "runId", session_id AS "sessionId", request_id AS "requestId", association, review, created_at AS "createdAt"
+      FROM evimed_geo.article_versions WHERE geo_project_id = $1 AND article_id = $2 ORDER BY created_at, result_version_id`, [geoId, articleId])).rows;
+  }
+
+  /** One article's head is advanced atomically; a losing output remains available in shared results. */
+  async linkArticleVersion(geoId, articleId, { version, expectedHeadVersionId = null, requestId = null, checks = null }) {
+    return this.transaction(async client => {
+      const article = (await client.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id=$1 AND id=$2 FOR UPDATE`, [geoId, articleId])).rows[0];
+      if (!article) throw new HttpError(404, "geo_article_not_found", "Article not found.");
+      const exists = (await client.query(`SELECT digest FROM evimed_geo.article_versions WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
+        [geoId, articleId, version.versionId])).rows[0];
+      if (exists) {
+        if (exists.digest !== version.digest) throw new HttpError(409, "geo_article_version_changed", "Article version changed.");
+        return { linked: false, replay: true };
+      }
+      if ((article.current_result_version_id ?? null) !== expectedHeadVersionId) throw new HttpError(409, "geo_article_head_changed", "The article has a newer version.");
+      const changed = expectedHeadVersionId != null;
+      if (!changed && (article.path !== version.path || article.content_sha256 !== version.digest)) throw new HttpError(409, "geo_article_bytes_changed", "Article bytes changed.");
+      if (changed && (version.supersedesVersionId !== expectedHeadVersionId || version.digest === article.content_sha256)) throw new HttpError(409, "geo_article_ancestry_invalid", "The output is not a changed successor.");
+      if (changed) {
+        const previous = (await client.query(`SELECT digest FROM evimed_geo.article_versions WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
+          [geoId,articleId,expectedHeadVersionId])).rows[0];
+        if (!previous || previous.digest !== article.content_sha256) throw new HttpError(409, "geo_article_bytes_changed", "Article bytes changed.");
+        // Preserve later same-byte reviews before this row starts describing different bytes. The captured association stays immutable.
+        await client.query(`UPDATE evimed_geo.article_versions SET review=$4::jsonb WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
+          [geoId,articleId,expectedHeadVersionId,JSON.stringify({ digest: previous.digest, status: article.status, safety: article.safety, gate: article.gate })]);
+      }
+      const association = { ...geoArticleFromRow(article), currentResultVersionId: version.versionId, contentSha256: version.digest, path: version.path,
+        runId: version.producer?.runId ?? null, ...(changed ? { gate: "unverified", safety: "open", protectedSha256: null,
+        claimRefs: checks?.references ?? [], refStatus: checks?.status ?? "unchecked", refCheckedSha: checks ? version.digest : null } : {}) };
+      await client.query(`INSERT INTO evimed_geo.article_versions (geo_project_id,article_id,user_id,result_version_id,parent_version_id,digest,path,run_id,session_id,request_id,association)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`, [geoId,articleId,article.user_id,version.versionId,expectedHeadVersionId,version.digest,version.path,
+        version.producer?.runId ?? null,version.producer?.sessionId ?? null,requestId,JSON.stringify(association)]);
+      await client.query(`UPDATE evimed_geo.articles SET current_result_version_id=$3, content_sha256=$4, path=$5,
+        run_id=CASE WHEN $7 THEN $6 ELSE run_id END,
+        gate=CASE WHEN $7 THEN 'unverified' ELSE gate END, safety=CASE WHEN $7 THEN 'open' ELSE safety END,
+        protected_sha256=CASE WHEN $7 THEN NULL ELSE protected_sha256 END,
+        claim_refs=CASE WHEN $7 THEN $8::jsonb ELSE claim_refs END, ref_status=CASE WHEN $7 THEN $9 ELSE ref_status END,
+        ref_checked_sha=CASE WHEN $7 THEN $10 ELSE ref_checked_sha END,
+        status=CASE WHEN $7 AND status IN ('draft','publishable') THEN 'draft' ELSE status END,
+        online_update_needed=online_update_needed OR ($7 AND (status IN ('placed','published') OR
+          EXISTS (SELECT 1 FROM evimed_geo.owned_links WHERE geo_project_id=$1 AND article_id=$2 AND status='active'))), updated_at=clock_timestamp()
+        WHERE geo_project_id=$1 AND id=$2`, [geoId,articleId,version.versionId,version.digest,version.path,version.producer?.runId ?? null,changed,
+        JSON.stringify(checks?.references ?? []),checks?.status ?? "unchecked",checks ? version.digest : null]);
+      return { linked: true, replay: false };
+    });
   }
 
   /**
@@ -1270,14 +1403,17 @@ export class GeoStore {
   async attachCorrection(geoId, errorIds, material) {
     if (!errorIds.length) return [];
     const entry = { kind: "article", ...material, at: new Date().toISOString() };
-    const result = await this.query(`UPDATE evimed_geo.errors
+    return this.transaction(async client => {
+    const resolvedIds = await resolveGeoErrorIds(client, geoId, [...new Set(errorIds)], { lock: true });
+    const result = await client.query(`UPDATE evimed_geo.errors
       SET materials = coalesce(materials, '[]'::jsonb) || jsonb_build_array($3::jsonb),
           status = CASE WHEN status = 'open' THEN 'acting' ELSE status END,
           updated_at = now()
-      WHERE geo_project_id = $1 AND id = ANY($2::text[]) AND status <> 'closed'
+      WHERE geo_project_id = $1 AND id = ANY($2::text[]) AND judgment_state='active' AND status <> 'closed'
         AND NOT (coalesce(materials, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('articleId', $4::text)))
-      RETURNING id`, [geoId, [...new Set(errorIds)], JSON.stringify(entry), material.articleId]);
+      RETURNING id`, [geoId, resolvedIds, JSON.stringify(entry), material.articleId]);
     return result.rows.map((/** @type {any} */ row) => String(row.id));
+    });
   }
 
   /**
@@ -1386,15 +1522,19 @@ export class GeoStore {
       /** @type {string[]} */
       const ids = [];
       for (const link of links) {
+        const pinned = link.articleId ? (await client.query(`SELECT current_result_version_id, content_sha256 FROM evimed_geo.articles
+          WHERE geo_project_id=$1 AND id=$2 FOR SHARE`, [geoId, link.articleId])).rows[0] : null;
         const result = await client.query(`INSERT INTO evimed_geo.owned_links (id, user_id, geo_project_id, url, url_key, platform, title, published_at,
-            article_id, group_id, run_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            article_id, group_id, run_id, article_result_version_id, article_digest)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (geo_project_id, url_key) DO UPDATE SET url = EXCLUDED.url, platform = EXCLUDED.platform, title = EXCLUDED.title,
-            published_at = EXCLUDED.published_at, article_id = EXCLUDED.article_id, group_id = EXCLUDED.group_id,
+            article_id = coalesce(owned_links.article_id, EXCLUDED.article_id), group_id = coalesce(owned_links.group_id, EXCLUDED.group_id),
             run_id = coalesce(EXCLUDED.run_id, owned_links.run_id), status = 'active', retired_at = NULL, updated_at = now()
+          WHERE owned_links.article_id IS NULL OR EXCLUDED.article_id IS NULL OR owned_links.article_id=EXCLUDED.article_id
           RETURNING id`,
         [randomId("gol_"), userId, geoId, link.url, link.urlKey, link.platform, link.title, link.publishedAt, link.articleId, link.groupId,
-          link.runId ?? null]);
+          link.runId ?? null, pinned?.current_result_version_id ?? null, pinned?.current_result_version_id ? pinned.content_sha256 : null]);
+        if (!result.rows[0]) throw new HttpError(409, "geo_owned_link_invalid", "This page already belongs to another article; update its existing publication record.");
         ids.push(String(result.rows[0].id));
       }
       return ids;
@@ -1534,10 +1674,12 @@ export class GeoStore {
    * Move an article's status or safety, only from the states given (a
    * compare-and-set, so a market transition in between is not overwritten).
    * @param {string} geoId @param {string} articleId
-   * @param {{ status?: string, safety?: string, fromStatuses?: readonly string[], fromSafety?: readonly string[] }} change
+   * @param {{ status?: string, safety?: string, fromStatuses?: readonly string[], fromSafety?: readonly string[], expectedResultVersionId?:string|null, expectedDigest?:string|null }} change
    * @returns {Promise<ReturnType<typeof geoArticleFromRow> | null>} null when the article was not in an allowed state
    */
-  async changeArticle(geoId, articleId, { status, safety, fromStatuses, fromSafety }) {
+  async changeArticle(geoId, articleId, { status, safety, fromStatuses, fromSafety, expectedResultVersionId, expectedDigest }) {
+    const expected = expectedResultVersionId !== undefined && expectedDigest !== undefined;
+    if ((expectedResultVersionId !== undefined || expectedDigest !== undefined) && !expected) throw new HttpError(400, "geo_article_review_invalid", "Invalid article review reference.");
     const update = await this.query(`UPDATE evimed_geo.articles
       SET safety = coalesce($4, safety),
           status = CASE
@@ -1549,7 +1691,11 @@ export class GeoStore {
       WHERE geo_project_id = $1 AND id = $2
         AND ($5::text[] IS NULL OR status = ANY($5::text[]))
         AND ($6::text[] IS NULL OR safety = ANY($6::text[]))
-      RETURNING *`, [geoId, articleId, status ?? null, safety ?? null, fromStatuses ? [...fromStatuses] : null, fromSafety ? [...fromSafety] : null]);
+        AND ($4::text IS DISTINCT FROM 'released' OR
+          ($7::boolean AND current_result_version_id IS NOT DISTINCT FROM $8::text AND content_sha256 IS NOT DISTINCT FROM $9::text)
+          OR (NOT $7::boolean AND current_result_version_id IS NULL))
+      RETURNING *`, [geoId, articleId, status ?? null, safety ?? null, fromStatuses ? [...fromStatuses] : null, fromSafety ? [...fromSafety] : null,
+      expected, expectedResultVersionId ?? null, expectedDigest ?? null]);
     return update.rows[0] ? geoArticleFromRow(update.rows[0]) : null;
   }
 }

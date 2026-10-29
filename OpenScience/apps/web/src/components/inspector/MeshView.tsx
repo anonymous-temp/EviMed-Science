@@ -262,7 +262,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
       <div ref={mountRef} className="absolute inset-0" aria-label={`${filename} 的三维模型预览`} />
 
       <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-e2 backdrop-blur">
-        <div className="flex items-center gap-1 px-1.5 text-caption font-medium text-muted">
+        <div className="flex items-center gap-1 px-1.5 text-caption text-muted">
           <Box size={16} aria-hidden="true" /> 3D
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
@@ -278,7 +278,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
                 applyWireframe(!o.v);
               }}
               className={cn(
-                "rounded px-2 py-1 text-caption font-medium transition-colors",
+                "rounded px-2 py-1 text-caption transition-colors",
                 shaded === o.v ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
               )}
             >
@@ -290,7 +290,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
       </div>
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
-        <span className="font-medium text-text">{ext.toUpperCase()}</span>
+        <span className="font-semibold text-text">{ext.toUpperCase()}</span>
         {meta && <span className="ml-2">{formatNumber(meta.tris)} 个三角面</span>}
       </div>
 
@@ -302,7 +302,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       {notice && !rendering && !error && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 max-w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-input border border-warn bg-surface px-4 py-3 text-center text-ui text-text shadow-e2 backdrop-blur">
-          <div className="mb-1 flex items-center justify-center gap-1.5 font-medium text-warn">
+          <div className="mb-1 flex items-center justify-center gap-1.5 text-warn">
             <AlertTriangle size={16} aria-hidden="true" /> 文件有问题
           </div>
           {notice}

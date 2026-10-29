@@ -2,25 +2,33 @@
 
 Which ranker puts the right memory in front of the model.
 
-This is the cheap gate for adopting a recall index behind `memorySubstrate`. It
-is not the end-to-end question — `evals/method-quality/configs/memory-ablation-v1.json`
-asks whether memory changes a delivered package — but a provider that cannot win
-here cannot win there either.
+This is the cheap gate for adopting a recall index. It
+is not the end-to-end question (whether memory changes a delivered package, which
+the memory-ablation study of 2026-09 asked and git history keeps) — but a provider
+that cannot win here cannot win there either.
 
-Both arms answer the same 12 queries over the same 300 records. Every query is
+The runner has two modes since 2026-10-25: `--mode capsule` (capsule facts, the lexical fallback against the index) and
+`--mode engine` (OpenViking's own memory engine, which every account's memory is on). The third, the legacy engine's own records
+recall (the `term matcher` columns below), went with that engine; its sections stay as the
+measurements the adoption of the index was decided on, and are no longer reproducible with this runner.
+
+Both arms answer the same queries over the same corpus. Every query is
 worded the way a researcher would ask rather than the way the record is written,
 because a query that shares the record's words measures nothing an index could
 improve. The distractors share the gold records' vocabulary for the same reason:
 a corpus of unrelated noise flatters every ranker equally.
 
 ```bash
-node evals/memory-recall/run_recall_eval.mjs --arm builtin --label builtin \
-  --out evals/memory-recall/results/$(date +%F)-builtin.json
+node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm builtin --label lexical \
+  --out evals/memory-recall/results/$(date +%F)-capsule-builtin.json
 
 OPEN_SCIENCE_OPENVIKING_API_KEY_FILE=/path/to/key \
-node evals/memory-recall/run_recall_eval.mjs --arm openviking --label qwen \
+node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm openviking --label qwen-capsule \
   --url http://127.0.0.1:1933 --seed-index \
-  --out evals/memory-recall/results/$(date +%F)-qwen.json
+  --out evals/memory-recall/results/$(date +%F)-capsule-qwen.json
+
+node evals/memory-recall/run_recall_eval.mjs --mode engine --url http://127.0.0.1:19330 --key-file <root key file> \
+  --seed-index --label native --out evals/memory-recall/results/$(date +%F)-native.json
 ```
 
 `--label` is free-form and defaults to the arm. It exists because the arm no
@@ -28,7 +36,7 @@ longer says what was measured: two `openviking` runs against servers configured
 with different embedders are two different arms, and a comparison whose rows are
 both called `openviking` is one nobody can read a month later.
 
-## 2026-09-09, 300 records, top 5 — history
+## 2026-09-09, 300 records, top 5 — history (the records arms, no longer runnable)
 
 Measured against a live OpenViking v0.4.19 with `bge-m3` on Ollama, the embedder
 that deployment ran at the time. Production no longer runs it; the numbers stay
@@ -163,7 +171,7 @@ from the dev box, so it is not comparable with the September rows.
 
 ## 2026-10-13, OpenViking's native engine — measured
 
-The `native` arm (`--arm native`): the same 300 records and 12 questions, recalled the way the memory plugin recalls — a
+The engine mode (`--mode engine`, then called `--arm native`): the same 300 records and 12 questions, recalled the way the memory plugin recalls — a
 `mode: context` search through the memory gateway (`memoryGateway.mjs` rewrites the plugin's request: `purpose` and `quotas`
 removed, `query_expansion: off`, the derived index and shared areas excluded) — against OpenViking v0.5.0 with the production
 embedder and the policy templates mounted. A hit is a returned memory file whose text carries the gold record's statement whole.

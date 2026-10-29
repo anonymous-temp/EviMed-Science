@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GeoProject } from "@/lib/geoClient";
+import type { GeoEngine, GeoProject } from "@/lib/geoClient";
 import { cell, diagnosisFilled, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
 import { clustersFilled, clusterViewFixture, G_BRAND, G_CONTROL, G_EFFECT, G_SAFETY } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
@@ -13,6 +13,7 @@ const client = vi.hoisted(() => ({
   getGeoMonitoring: vi.fn(),
   getGeoClusters: vi.fn(),
   getGeoCluster: vi.fn(),
+  getGeoQuestions: vi.fn(),
   runGeoStep: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
@@ -43,7 +44,7 @@ function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/vi
 const withEngines = {
   ...diagnosisFilled,
   byEngine: ["doubao", "qianwen", "deepseek"].map((engine, index) => ({
-    engine: engine as "doubao",
+    engine: engine as GeoEngine,
     mention: cell(30 + index, 10 + index, 40),
     accuracy: cell(90 + index, 36 + index, 40),
     citation: cell(10 + index, 4, 40),
@@ -63,6 +64,7 @@ beforeEach(() => {
   client.getGeoDiagnosis.mockResolvedValue(withEngines);
   client.getGeoMonitoring.mockResolvedValue(monitoring);
   client.getGeoClusters.mockResolvedValue(clustersFilled);
+  client.getGeoQuestions.mockResolvedValue({ sets: [], groups: clustersFilled.groups, version: 1 });
   client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
 });
@@ -71,6 +73,38 @@ const groupRow = (id: string) => document.querySelector(`[data-cluster-row='${id
 const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
 
 describe("可见度: the order of what it shows", () => {
+  it("retains platform, pool and group choices after the measured rows have been narrowed", async () => {
+    const group = clustersFilled.groups.find(row => row.id === G_EFFECT)!;
+    client.getGeoClusters.mockResolvedValue({ ...clustersFilled, engines: ["deepseek"], groups: [group] });
+    client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, byEngine: withEngines.byEngine.filter(row => row.engine === "deepseek") });
+    renderTab(geoProject(), `/app/geo/geo_1/visibility?engine=deepseek&pool=${group.pool}&cluster=${group.id}`);
+    await screen.findByRole("heading", { name: /综合可见度指数/ });
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^引擎/ }));
+    expect(await screen.findByRole("menuitemradio", { name: "豆包" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^问句池/ }));
+    expect((await screen.findAllByRole("menuitemradio")).length).toBeGreaterThan(2);
+    await userEvent.keyboard("{Escape}");
+    expect(within(toolbar()).getByRole("button", { name: /^问题群/ })).toBeVisible();
+  });
+  it("keeps the risk rate in ordinary sentence flow with its sample, direction and answer link", async () => {
+    client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, more: [...withEngines.more, { metricId: "M-15", name: "风险问句被推荐率", cell: cell(30, 36, 120, { snapshotIds: ["risk_answer"] }) }] });
+    renderTab();
+    const line = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>("[data-geo-risk-line]");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    const link = within(line).getByRole("link", { name: /风险问句被推荐率，看回答/ });
+    expect(link).toHaveAttribute("href", "/app/geo/geo_1/answers/risk_answer");
+    expect(link).toHaveTextContent("30%120 次里 36 次");
+    expect(line).toHaveTextContent("（越低越好）");
+    expect(line).not.toHaveClass("inline-flex");
+    expect(line).not.toHaveClass("flex");
+    expect(document.querySelector("[data-geo-pool='P4']")).toBeNull();
+    await userEvent.click(link);
+    expect(screen.queryByRole("table", { name: "按问句池的品牌提及率" })).toBeNull();
+  });
   it("is the trend, then the engines against the rates, then the groups against the engines, the pools, the rivals", async () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
@@ -80,7 +114,7 @@ describe("可见度: the order of what it shows", () => {
     for (let at = 1; at < blocks.length; at += 1) {
       expect(blocks[at - 1].compareDocumentPosition(blocks[at]) & Node.DOCUMENT_POSITION_FOLLOWING, `block ${at} follows block ${at - 1}`).toBeTruthy();
     }
-    expect(document.querySelector("details")?.textContent).toContain("更多指标");
+    expect(screen.getByText("更多指标").closest("details")).toBeTruthy();
   });
 
   it("holds the engine grid that 总览 no longer has: every engine, the rates it was measured on", async () => {
@@ -118,6 +152,9 @@ describe("可见度: the groups against the engines", () => {
     const name = within(groupRow(G_BRAND)!).getByRole("link", { name: "品牌身份、规格与厂家" });
     expect(name).toHaveAttribute("data-geo-cluster-link", G_BRAND);
     expect(name.getAttribute("href")).toContain(`group=${G_BRAND}`);
+    // At its cells' 28 px, as they open the same drawer: one look for one job (a 12 px inline link was a kind of control of its own).
+    expect(name).toHaveClass("block", "h-sm", "truncate");
+    expect(within(groupRow(G_BRAND)!).getAllByRole("button")[0]).toHaveClass("h-sm");
   });
 
   it("opens the group's drawer resting on the engine of the cell, and leaves the page's own engine choice alone", async () => {

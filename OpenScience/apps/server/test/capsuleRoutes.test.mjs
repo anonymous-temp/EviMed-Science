@@ -7,11 +7,10 @@ import { createCapsuleRoutes } from "../src/capsuleRoutes.mjs";
 async function fixture(t) {
   const calls = [];
   const service = {
-    list: async (user) => ({ items: [{ id: "capsule-one", owner: user }] }),
-    create: async (user, body) => { calls.push({ user, body }); return { id: "created", payload: body }; },
-    addEntry: async (user, id, body) => { calls.push({ user, id, body }); return { id: "entry", payload: body }; },
-    activate: async (user, id, body) => { calls.push({ user, id, body }); return { id, payload: body }; },
-    recall: async (user, body) => { calls.push({ user, body }); return { items: [], contextOnly: true }; },
+    mine: async (user) => ({ capsule: { id: "mine-1", owner: user }, capsules: [], entries: [], candidates: [], forgotten: [] }),
+    received: async () => [],
+    enableReceived: async (user, id) => { calls.push({ user, id }); return { id, enabled: true }; },
+    updateEntry: async (user, id, entryId, body) => { calls.push({ user, id, entryId, body }); return { id: entryId, payload: body }; },
   };
   const store = {
     ensureSessionUser: async (req) => {
@@ -39,37 +38,40 @@ async function fixture(t) {
 
 test("capsule APIs require a live account and CSRF for mutation", async (t) => {
   const { base, headers, calls } = await fixture(t);
-  assert.equal((await fetch(`${base}/api/capsules`)).status, 401);
-  assert.equal((await fetch(`${base}/api/capsules`, { method: "POST", headers: { cookie: headers.cookie }, body: JSON.stringify({ title: "Capsule" }) })).status, 403);
-  const response = await fetch(`${base}/api/capsules`, { method: "POST", headers, body: JSON.stringify({ title: "Capsule" }) });
-  assert.equal(response.status, 201);
+  assert.equal((await fetch(`${base}/api/capsules/mine`)).status, 401);
+  assert.equal((await fetch(`${base}/api/capsules/received`)).status, 401);
+  assert.equal((await fetch(`${base}/api/capsules/pack-1/enable`, { method: "POST", headers: { cookie: headers.cookie }, body: "{}" })).status, 403);
+  assert.deepEqual(calls, [], "a request without the CSRF token reached nothing");
+  assert.equal((await fetch(`${base}/api/capsules/mine`, { headers })).status, 200);
+  const response = await fetch(`${base}/api/capsules/pack-1/enable`, { method: "POST", headers, body: "{}" });
+  assert.equal(response.status, 200);
   assert.equal(calls[0].user, "owner");
 });
 
-test("clients cannot impersonate an entry origin or change its account", async (t) => {
+// 2026-10-25: the generic routes under /api/capsules had no caller — no page, no harness, no integrator — and were deleted. A route that
+// answers 404 here is a route nobody should add back without a caller; the ones a page, the harness or an integrator reads still answer.
+test("the generic document routes are gone: create, list, read, rename, delete, restore, history, activate, recall and an entry's add and list answer as a path that never existed", async (t) => {
   const { base, headers, calls } = await fixture(t);
-  const request = (body) => fetch(`${base}/api/capsules/capsule-one/entries`, { method: "POST", headers, body: JSON.stringify(body) });
-  assert.equal((await request({ factKind: "preference", content: "Use concise text", origin: "system", userId: "other" })).status, 400);
-  const response = await request({ factKind: "preference", content: "Use concise text", layer: "profile" });
-  assert.equal(response.status, 201);
-  assert.equal(calls[0].body.origin, "explicit");
-  assert.deepEqual(calls[0].body.provenance, [{ type: "user", id: "owner" }]);
-  // Only a document's publication writes the document layer; an entry the
-  // researcher put there would be recalled nowhere and listed nowhere.
-  const document = await request({ factKind: "project_fact", content: "据资料《指南》：…", layer: "sources" });
-  assert.equal(document.status, 400);
-  assert.equal((await document.json()).code, "capsule_payload_invalid");
-  assert.equal(calls.length, 1, "the service never saw it");
-});
-
-test("activation and recall reject projects the account does not own", async (t) => {
-  const { base, headers, calls } = await fixture(t);
-  const foreign = await fetch(`${base}/api/capsules/capsule-one/activate`, { method: "POST", headers, body: JSON.stringify({ projectId: "other-project", mode: "own" }) });
-  assert.equal(foreign.status, 404);
-  assert.equal(calls.length, 0);
-  const response = await fetch(`${base}/api/capsules/recall`, { method: "POST", headers, body: JSON.stringify({ query: "method", projectId: "owned-project" }) });
-  assert.equal(response.status, 200);
-  assert.equal(calls[0].body.projectId, "owned-project");
+  const gone = [
+    ["GET", "/api/capsules"], ["POST", "/api/capsules", { title: "Capsule" }],
+    ["GET", "/api/capsules/capsule-one"], ["PATCH", "/api/capsules/capsule-one", { title: "x", expectedRevision: 1 }], ["DELETE", "/api/capsules/capsule-one", { expectedRevision: 1 }],
+    ["POST", "/api/capsules/capsule-one/activate", { mode: "own" }], ["POST", "/api/capsules/capsule-one/restore", { expectedRevision: 1 }],
+    ["GET", "/api/capsules/capsule-one/history"], ["GET", "/api/capsules/capsule-one/entries"],
+    ["POST", "/api/capsules/capsule-one/entries", { factKind: "preference", content: "Use concise text" }],
+    ["GET", "/api/capsules/capsule-one/entries/entry-1/history"], ["POST", "/api/capsules/recall", { query: "method" }], ["GET", "/api/capsules/active"],
+  ];
+  for (const [method, path, body] of gone) {
+    const answered = await fetch(`${base}${path}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+    assert.equal(answered.status, 404, `${method} ${path}`);
+    assert.equal((await answered.json()).code, "not_found", `${method} ${path}`);
+  }
+  assert.deepEqual(calls, [], "none of them reached the service");
+  // What the memory page, the shelf and the harness call is still there.
+  assert.equal((await fetch(`${base}/api/capsules/mine`, { headers })).status, 200);
+  assert.equal((await fetch(`${base}/api/capsules/received`, { headers })).status, 200);
+  assert.equal((await fetch(`${base}/api/capsules/pack-1/enable`, { method: "POST", headers, body: "{}" })).status, 200);
+  const edited = await fetch(`${base}/api/capsules/mine-1/entries/entry-1`, { method: "PATCH", headers, body: JSON.stringify({ content: "Use concise text", expectedRevision: 1 }) });
+  assert.equal(edited.status, 200, "an entry is still edited where it is shown");
 });
 
 test("transfer routes bind export/import to the live user and require explicit body fields",async(t)=>{
@@ -132,22 +134,19 @@ test("a received pack: shelf, one-click enable and disable, and a trial marked o
   assert.equal(unavailable.status, 503);
 });
 
-// Build spec §9.4 #6: 「启用范围可选账号或某个项目」. Until 2026-09-28 the
-// route took no body and every enable was account-wide.
-test("a received pack can be enabled for one project the account opens, and only for such a project", async (t) => {
+// Build spec §9.4 #6 let a pack be enabled for one project alone; since 2026-10-24 (one capsule per person) it is enabled for the account, and the
+// route takes no project: one that names it is refused by name, because answering it with the pack in force everywhere would be a widening nobody asked for.
+test("a received pack is enabled for the account, the scan metered where the researcher is, and a request naming a project is refused", async (t) => {
   const calls = [];
   const audited = [];
   const service = {
-    enableReceived: async (user, id, options) => { calls.push(options); return { id, enabled: true, enabledIn: options.onlyProject ? "project" : "account" }; },
+    enableReceived: async (_user, id, options) => { calls.push(options); return { id, enabled: true }; },
   };
   const store = {
     ensureSessionUser: async () => ({ user: { id: "owner" } }),
     assertCsrf: async () => {},
     selectedProject: async () => ({ id: "current-project" }),
-    requireProject: async (_user, id) => {
-      if (id !== "owned-project") throw new HttpError(404, "project_not_found", "Project unavailable.");
-      return { id };
-    },
+    requireProject: async (_user, id) => ({ id }),
   };
   const handle = createCapsuleRoutes({ store, service, maxJsonBytes: 262144,
     audit: async (_user, action, details) => { audited.push({ action, details }); } });
@@ -157,19 +156,16 @@ test("a received pack can be enabled for one project the account opens, and only
   const post = (body) => fetch(`http://127.0.0.1:${server.address().port}/api/capsules/pack-1/enable`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-  const scoped = await post({ projectId: "owned-project" });
-  assert.equal(scoped.status, 200);
-  assert.equal((await scoped.json()).data.enabledIn, "project");
-  assert.deepEqual(calls[0], { projectId: "owned-project", onlyProject: true });
-  assert.deepEqual(audited[0], { action: "capsule.pack.enable", details: { capsuleId: "pack-1", projectId: "owned-project" } });
+  const refused = await post({ projectId: "owned-project" });
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).code, "capsule_payload_invalid");
+  assert.equal(calls.length, 0, "nothing refused reached the service");
 
-  assert.equal((await post({ projectId: "someone-elses" })).status, 404, "a project the account cannot open is refused, not enabled");
-  assert.equal((await post({ projectId: "" })).status, 400);
-  assert.equal((await post({ projectId: 7 })).status, 400);
-  assert.equal(calls.length, 1, "nothing refused reached the service");
-
-  assert.equal((await post({})).status, 200);
-  assert.deepEqual(calls[1], { projectId: "current-project" }, "no project named: every project, the scan metered where the researcher is");
+  const enabled = await post({});
+  assert.equal(enabled.status, 200);
+  assert.equal("enabledIn" in (await enabled.json()).data, false);
+  assert.deepEqual(calls[0], { projectId: "current-project" }, "the scan is metered where the researcher is; the pack is in force in every project");
+  assert.deepEqual(audited[0], { action: "capsule.pack.enable", details: { capsuleId: "pack-1" } });
 });
 
 // 2026-09-26 audit (M-6): no pack action wrote an audit row (build spec §12).
@@ -213,33 +209,4 @@ test("every action on a pack writes an audit row with ids and counts, and a prev
   assert.deepEqual(audited[0].details, { capsuleId: "mine-1", snapshotId: "snap-1", entries: 3, scopes: ["workstyle"], recipients: 1, supersedes: null });
   assert.equal(audited[2].details.dropped, 1);
   assert.ok(!JSON.stringify(audited).includes("test-only-transfer"), "no password, no content");
-});
-
-// 2026-10-10 review C-5: deleting a capsule was a soft delete and its share links and hosted snapshots kept serving.
-test("deleting a capsule ends its links and revokes its hosted snapshots, and only once the removal succeeded", async (t) => {
-  const calls = [];
-  const store = { ensureSessionUser: async () => ({ user: { id: "owner" } }), assertCsrf: async () => {} };
-  const service = {
-    remove: async (user, id, revision) => {
-      calls.push(["remove", user, id, revision]);
-      if (revision !== 3) throw new HttpError(409, "product_revision_conflict", "Revision conflict.");
-      return { id, deleted: true };
-    },
-  };
-  const links = { revokeForCapsule: async (user, id) => { calls.push(["links", user, id]); return 2; } };
-  const transferService = { revokeAllForCapsule: async (user, id) => { calls.push(["snapshots", user, id]); return ["snap-1"]; } };
-  const audits = [];
-  const handle = createCapsuleRoutes({ store, service, links, transferService, maxJsonBytes: 100000, audit: async (_user, event, detail) => { audits.push([event, detail]); } });
-  const server = createServer((req, res) => { handle(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error)); });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const remove = (revision) => fetch(`${base}/api/capsules/capsule-one`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedRevision: revision }) });
-
-  assert.equal((await remove(2)).status, 409);
-  assert.deepEqual(calls, [["remove", "owner", "capsule-one", 2]], "a removal that failed withdraws nothing");
-  calls.length = 0;
-  assert.equal((await remove(3)).status, 200);
-  assert.deepEqual(calls, [["remove", "owner", "capsule-one", 3], ["links", "owner", "capsule-one"], ["snapshots", "owner", "capsule-one"]]);
-  assert.deepEqual(audits, [["capsule.share.withdrawn-on-delete", { capsuleId: "capsule-one", links: 2, snapshots: 1 }]]);
 });

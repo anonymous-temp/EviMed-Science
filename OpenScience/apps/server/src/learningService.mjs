@@ -51,14 +51,19 @@
 import { createHash } from "node:crypto";
 
 import {
+  METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_STATUSES,
   appendMethodLink,
   cleanMethodDisplay,
   cleanMethodScope,
   cleanMethodSteps,
   emptyLearning,
+  foldApplied,
   foldCarried,
+  foldDecided,
   foldEligible,
+  foldExplored,
+  foldLevel,
   foldMethodFeedback,
   foldObservation,
   foldRead,
@@ -75,6 +80,7 @@ import {
   retirementProposal,
   unresolvedConflicts,
   validateMethodSkill,
+  withoutRetiredLearningKeys,
 } from "@evimed/domain";
 import { productId } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
@@ -83,30 +89,12 @@ import { HttpError } from "./security.mjs";
  *  `source-method` rows the source pipeline already writes under this kind. */
 export const LEARNED_METHOD_RECORD_TYPE = "learned-method";
 
-/**
- * A lesson whose only evidence was the platform's own reviewer — the gate's
- * findings a run repaired against, with nothing the researcher said or changed.
- *
- * It is about how to pass EviMed's checks, which is the capability's handbook
- * (the L2 loop, spec §19.17), not how this person works. Both methods the loop
- * learnt in production were of this kind and sat in the researcher's own list
- * as 「我的做法」 (audit 2026-09-26, L-G3). Such a lesson stays under its own
- * record type: never listed as the researcher's or exported in a pack. The
- * handbook loop applies it as a separate owner-scoped capability supplement.
- */
-export const HANDBOOK_CANDIDATE_RECORD_TYPE = "handbook-candidate";
-
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 
 /** @param {string} name @returns {string} */
 export function learnedMethodId(name) {
   return `method:learned:${name}`;
-}
-
-/** @param {string} name @returns {string} */
-export function handbookCandidateId(name, capabilityId = "") {
-  return `method:handbook:${capabilityId ? `${capabilityId}:` : ""}${name}`;
 }
 
 /** @param {any} document @returns {boolean} */
@@ -137,6 +125,10 @@ export function effectiveStatusReason(payload) {
   const returned = Array.isArray(payload?.links) ? payload.links.at(-1) : null;
   if (returned?.type === "rolled_back_for_regression" && returned.toDigest === payload?.contentDigest) {
     return `用上较新一版后，${returned.results} 个结果里有 ${returned.against} 个没能被重算复现，或被你改正过，已回到这一版；这只说明两者相伴出现，不证明是这条做法造成的。`;
+  }
+  // Returned to an earlier body because the newer text contradicted runs the person had accepted (`MethodReplay`): the same, said in what was found.
+  if (returned?.type === "rolled_back_for_replay" && returned.toDigest === payload?.contentDigest) {
+    return `较新的一版和你之前认可过的工作对不上（核对了 ${returned.results} 次，其中 ${returned.against} 次冲突），已回到这一版；要用较新的一版，可以在版本历史里恢复。`;
   }
   return payload?.provenance?.origin === "explicit"
     ? "你亲口定下的做法，已直接生效；回到上一版即可撤销。"
@@ -199,9 +191,6 @@ function sourceProjectOf(provenance, projectId) {
   return null;
 }
 
-/** How many projects a method's provenance names at most; a method learned from more is no one project's. */
-const SOURCE_PROJECTS_LIMIT = 20;
-
 /** The reason written on a method stopped because the only project it was learnt in was deleted: the reader's sentence. */
 const PROJECT_DELETED_REASON = "它只是从已删除的项目里学到的，已停用。";
 
@@ -215,7 +204,7 @@ export function methodSourceProjects(provenance) {
   for (const value of [provenance?.sourceProjectId, ...(Array.isArray(provenance?.sourceProjectIds) ? provenance.sourceProjectIds : [])]) {
     if (typeof value === "string" && value.trim() && !found.includes(value)) found.push(value);
   }
-  return found.slice(0, SOURCE_PROJECTS_LIMIT);
+  return found;
 }
 
 /**
@@ -235,6 +224,8 @@ export function methodRecordFrom(document, { revisions = undefined } = {}) {
     dependencies: payload.dependencies ?? [],
     learning: payload.learning ?? emptyLearning(payload.contentDigest ?? ""),
     provenance: payload.provenance ?? { origin: "inferred" },
+    // When the body it holds now was written, for the rules that read an age (a merge nobody has used expires).
+    since: payload.bodyUpdatedAt ?? payload.createdAt ?? document?.createdAt ?? null,
     // What later became of the results produced under each revision (N14), and — only where a caller needed the lifecycle
     // to answer which earlier body to return to — every body the method has held, newest first.
     ...(payload.scientific ? { scientific: payload.scientific } : {}),
@@ -249,13 +240,40 @@ export class LearningService {
    * history, and used to arrive as quiet inbox records nobody read, under the
    * 「自动运行」 fold (plan 2026-09-23 §5.8).
    *
-   * @param {{documents: any, jobs?: any, now?: () => Date}} dependencies
+   * @param {{documents: any, jobs?: any, now?: () => Date, contextProvenance?: any}} dependencies
    */
-  constructor({ documents, jobs = null, now = () => new Date() }) {
+  constructor({ documents, jobs = null, now = () => new Date(), contextProvenance = null }) {
     if (!documents) throw new TypeError("The learning service needs the product document store.");
+    this.contextProvenance = contextProvenance;
     this.documents = documents;
     this.jobs = jobs;
     this.now = now;
+    /**
+     * Told, after a write that changes what a run is given of the library (a method took effect, was amended, stopped or went
+     * back), whose library it was: the composition root has the live runtimes of the account rewrite their methods
+     * (`RuntimeManager.refreshCapsuleMethods`). Told and never asked, so a failure of it costs the runtime a refresh and the write
+     * nothing. A counter write is not one of these.
+     * @type {((userId: string) => unknown) | null}
+     */
+    this.onMountChange = null;
+    /**
+     * Told, after a write that may have put a method in force, which one it was (`createCandidate`, `amendMethod`, an approval): the composition
+     * root hands it to the promotion of general methods to everyone's pack (`officialPromotion.mjs`), which reads the method itself and decides.
+     * Told and never asked, like `onMountChange`.
+     * @type {((userId: string, methodId: string) => unknown) | null}
+     */
+    this.onTookEffect = null;
+  }
+
+  /**
+   * @param {string} userId
+   * @param {string | null} [methodId] the method whose write this is, when it may have come into force: `onTookEffect` is told it too
+   */
+  #mountChanged(userId, methodId = null) {
+    // A shared GEO project's learning write is told once its scope is settled (`GeoContextProvenance.deferMountChange`).
+    if (this.contextProvenance?.deferMountChange(() => this.#mountChanged(userId, methodId))) return;
+    try { Promise.resolve(this.onMountChange?.(userId)).catch(() => {}); } catch { /* told, never asked */ }
+    if (methodId) try { Promise.resolve(this.onTookEffect?.(userId, methodId)).catch(() => {}); } catch { /* told, never asked */ }
   }
 
   /**
@@ -266,7 +284,10 @@ export class LearningService {
    * mounted read-only into a container, and the check that it names no absent
    * tool and carries no credential is worth more at the boundary than in the
    * caller that happens to be trusted today.
-   * @param {{frontmatter: any, body: string, files?: any, requireProvenance?: boolean, resolveDigest?: (d: any) => boolean, mountedTools?: readonly string[]}} input
+   * `allowStale` lets a text that names a feature the platform no longer has pass (`method_stale_feature`): a record that was put
+   * away for it (`scripts/ops/learning-sweep.mjs`) is given back by saving its earlier state forward, and what is written now is
+   * held to the list while what was written before it is not.
+   * @param {{frontmatter: any, body: string, files?: any, requireProvenance?: boolean, resolveDigest?: (d: any) => boolean, mountedTools?: readonly string[], allowStale?: boolean}} input
    */
   #validated(input) {
     const verdict = validateMethodSkill({
@@ -278,8 +299,9 @@ export class LearningService {
       resolveDigest: input.resolveDigest,
       ...(input.mountedTools ? { mountedTools: input.mountedTools } : {}),
     });
-    if (!verdict.ok) {
-      throw new HttpError(422, "method_invalid", verdict.issues.slice(0, 4).map((issue) => `${issue.code}: ${issue.message}`).join(" "));
+    const issues = input.allowStale ? verdict.issues.filter((issue) => issue.code !== "method_stale_feature") : verdict.issues;
+    if (issues.length) {
+      throw new HttpError(422, "method_invalid", issues.slice(0, 4).map((issue) => `${issue.code}: ${issue.message}`).join(" "));
     }
     return methodContentDigest({ frontmatter: input.frontmatter, body: input.body, files: input.files }, sha256);
   }
@@ -301,8 +323,10 @@ export class LearningService {
    * @param {string} userId
    * @returns {Promise<(dependency: {name: string, digest: string}) => boolean>}
    */
-  async #digestResolver(userId) {
-    const page = await this.documents.list(userId, "method", { limit: 100, filter: { recordType: LEARNED_METHOD_RECORD_TYPE } });
+  async #digestResolver(userId, projectId = null) {
+    const policy = this.contextProvenance && projectId ? await this.contextProvenance.policyFor({userId,id:projectId}) : null;
+    const page = this.contextProvenance ? {items:await this.contextProvenance.scopedMethods(userId,policy)}
+      : await this.documents.list(userId, "method", { limit: 100, filter: { recordType: LEARNED_METHOD_RECORD_TYPE } });
     /** @type {Map<string, Set<string>>} */
     const digests = new Map();
     for (const document of page.items ?? []) {
@@ -333,12 +357,17 @@ export class LearningService {
    * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async createCandidate(userId, input) {
-    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
+    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId, sourceProjectOf(input.provenance, null)) });
     const name = String(input.frontmatter?.name ?? "");
     const id = learnedMethodId(name);
-    const sourceProjectId = sourceProjectOf(input.provenance, input.projectId);
+    // A method learnt from one lesson names the project the lesson was in. One derived from other methods (a merge, a factored-out shared part)
+    // names every project its sources were learnt in, which the caller states in the provenance and which is kept as it is stated: it was forced
+    // to the project the consolidation ran in, so deleting a source's project never reached a merge built from it.
+    const named = methodSourceProjects(input.provenance);
+    const sourceProjectId = named[0] ?? sourceProjectOf(null, input.projectId);
+    const sourceProjectIds = named.length ? named : sourceProjectId ? [sourceProjectId] : [];
     const provenance = withResultLinks({ origin: "inferred", ...input.provenance,
-      ...(sourceProjectId ? { sourceProjectId, sourceProjectIds: [sourceProjectId] } : {}) });
+      ...(sourceProjectId ? { sourceProjectId, sourceProjectIds } : {}) });
     const createdAt = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
     const scope = cleanMethodScope(input.scope);
@@ -385,69 +414,12 @@ export class LearningService {
       // has one answer however it became effective.
       payload.statusChangedAt = payload.createdAt;
     }
-    await this.documents.put(userId, "method", productId(id, "method"), payload, {
+    await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", productId(id, "method"), payload, {
       expectedRevision: 0,
       projectId: null,
     });
+    if (payload.status === "approved") this.#mountChanged(userId, id);
     return this.getMethod(userId, id);
-  }
-
-  /**
-   * Recheck a handbook with the same body, dependency and provenance rules as a method.
-   * @param {string} userId
-   * @param {{frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], display?: unknown, steps?: unknown, capabilityId?: string | null}} input
-   */
-  async validateHandbook(userId, input) {
-    return this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
-  }
-
-  /** Queue exactly one application per owner, capability and reviewed content.
-   * @param {string} userId @param {any} candidate @param {{retryOf?:string,transactionClient?:any}} [options] */
-  async enqueueHandbook(userId, candidate, { retryOf, transactionClient = null } = {}) {
-    if (!this.jobs || candidate?.payload?.recordType !== HANDBOOK_CANDIDATE_RECORD_TYPE) return null;
-    const { capabilityId, contentDigest, provenance } = candidate.payload;
-    return this.jobs.enqueue(userId, "consolidate", {
-      ...(retryOf ? { retryOf } : {}),
-      action: "optimize", candidateId: candidate.id, candidateDigest: contentDigest,
-      candidateRevision: candidate.payload.candidateRevision ?? candidate.revision, capabilityId,
-      sourceRunId: provenance?.runId ?? null, sourceProjectId: provenance?.sourceProjectId ?? null,
-    }, { idempotencyKey: `handbook:${sha256(JSON.stringify([userId, candidate.id, capabilityId, contentDigest, retryOf ?? null]))}`, projectId: null, transactionClient });
-  }
-
-  /** One record per capability and name, separate from personal methods. Prior digest outcomes are preserved.
-   * @param {string} userId @param {any} input */
-  async recordHandbookCandidate(userId, input) {
-    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
-    const name = String(input.frontmatter?.name ?? "");
-    const id = handbookCandidateId(name, input.capabilityId ?? "");
-    const current = await this.documents.get(userId, "method", productId(id, "method"));
-    if (current?.payload?.contentDigest === digest) {
-      await this.enqueueHandbook(userId, current);
-      return current;
-    }
-    const steps = cleanMethodSteps(input.steps);
-    const payload = {
-      recordType: HANDBOOK_CANDIDATE_RECORD_TYPE,
-      candidateRevision: (current?.revision ?? 0) + 1,
-      dispositions: { ...(current?.payload?.dispositions ?? {}), [digest]: { state: "queued", at: this.now().toISOString() } },
-      // Applied supplements have a separate record type and revision history.
-      status: "candidate",
-      frontmatter: input.frontmatter,
-      body: input.body,
-      ...(input.files ? { files: input.files } : {}),
-      dependencies: input.dependencies ?? [],
-      contentDigest: digest,
-      capabilityId: typeof input.capabilityId === "string" && input.capabilityId ? input.capabilityId : null,
-      provenance: { origin: "inferred", ...input.provenance, derivedFrom: "reviewer" },
-      ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
-      ...(steps ? { displaySteps: { text: steps, contentDigest: digest } } : {}),
-      createdAt: current?.payload?.createdAt ?? this.now().toISOString(),
-      updatedAt: this.now().toISOString(),
-    };
-    await this.documents.put(userId, "method", id, payload, { expectedRevision: current?.revision ?? 0, projectId: null });
-    const candidate = await this.documents.get(userId, "method", id);
-    await this.enqueueHandbook(userId, candidate);
-    return candidate;
   }
 
   /**
@@ -463,9 +435,15 @@ export class LearningService {
    * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async amendMethod(userId, methodId, input) {
-    const current = await this.getMethod(userId, methodId);
-    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
-    const learning = resetLearningForDigest(current.payload.learning, digest);
+    let current;
+    if (this.contextProvenance) {
+      const projectId = sourceProjectOf(input.provenance,null);
+      const policy = projectId ? await this.contextProvenance.policyFor({userId,id:projectId}) : {kind:'owned',ownerId:userId};
+      current = await this.contextProvenance.methodFor(userId,methodId,policy);
+      if (!current) throw new HttpError(409,'geo_learning_target_unverified','The method belongs to another learning scope.');
+    } else current = await this.getMethod(userId, methodId);
+    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId, sourceProjectOf(input.provenance, null)) });
+    const learning = withoutRetiredLearningKeys(resetLearningForDigest(current.payload.learning, digest));
     const bodyChanged = digest !== current.payload.contentDigest;
     const at = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
@@ -475,8 +453,9 @@ export class LearningService {
     const sourceProjectId = sourceProjectOf(current.payload.provenance, null) ?? sourceProjectOf(input.provenance, null);
     // But every project a lesson came from is kept beside it: deleting a project retires only the methods that were
     // learnt in no other (`retireProjectMethods`).
+    // (A merge folds methods learnt elsewhere into this one, and its provenance names their projects as well as the lesson's.)
     const sourceProjectIds = methodSourceProjects({ ...current.payload.provenance,
-      sourceProjectIds: [...methodSourceProjects(current.payload.provenance), sourceProjectOf(input.provenance, null)].filter(Boolean) });
+      sourceProjectIds: [...methodSourceProjects(current.payload.provenance), ...methodSourceProjects(input.provenance)] });
     const payload = {
       ...current.payload,
       status: bodyChanged ? "candidate" : current.payload.status,
@@ -488,7 +467,8 @@ export class LearningService {
       learning,
       // The result versions each lesson was learnt from accumulate: the method names every pair it was shaped by.
       provenance: withResultLinks({ ...current.payload.provenance, ...input.provenance,
-        ...(sourceProjectId ? { sourceProjectId } : {}), ...(sourceProjectIds.length ? { sourceProjectIds } : {}) }, current.payload.provenance?.results),
+        ...(sourceProjectId ? { sourceProjectId } : {}), ...(sourceProjectIds.length ? { sourceProjectIds } : {}),
+        sourceRunIds:[...new Set([current.payload.provenance?.runId,...(current.payload.provenance?.sourceRunIds??[]),input.provenance?.runId,...(input.provenance?.sourceRunIds??[])].filter(Boolean))] }, current.payload.provenance?.results),
       // A new line when the revision brought one; otherwise the old one stands.
       ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
       // New steps when the revision brought them; otherwise the old rendering
@@ -503,7 +483,8 @@ export class LearningService {
       updatedAt: at,
     };
     if (payload.files === undefined) delete payload.files;
-    await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
 
@@ -535,9 +516,9 @@ export class LearningService {
     return this.getMethod(userId, methodId);
   }
 
-  /** @param {string} userId @param {string} methodId */
-  async getMethod(userId, methodId) {
-    const document = await this.documents.get(userId, "method", productId(methodId, "method"));
+  /** @param {string} userId @param {string} methodId @param {{expectedRevision?:number}} [options] */
+  async getMethod(userId, methodId, { expectedRevision = undefined } = {}) {
+    const document = await this.documents.get(userId, "method", productId(methodId, "method"), { expectedRevision });
     if (!isLearnedMethod(document)) throw new HttpError(404, "method_not_found", "The method is unavailable.");
     return document;
   }
@@ -550,7 +531,7 @@ export class LearningService {
    * the account's (`createCandidate`), and a filter on where it is filed would
    * find nothing.
    * @param {string} userId
-   * @param {{projectId?: string|null, status?: string, limit?: number, cursor?: string|null}} [options]
+   * @param {{projectId?: string|null, status?: string, limit?: number, cursor?: string|null, fields?: Record<string,true|number>|null}} [options]
    */
   async listMethods(userId, options = {}) {
     const filter = {
@@ -561,6 +542,7 @@ export class LearningService {
     return this.documents.list(userId, "method", {
       limit: options.limit ?? 50,
       cursor: options.cursor ?? null,
+      fields: options.fields ?? null,
       filter,
     });
   }
@@ -617,7 +599,13 @@ export class LearningService {
       /** @type {string} */ let key;
       // An id that cannot name a method names none; a read that fails is not taken for "not in force", it fails the decision.
       try { key = productId(id, "method"); } catch { continue; }
-      const other = await this.documents.get(userId, "method", key);
+      let other;
+      if (this.contextProvenance) {
+        const projectId=sourceProjectOf(payload.provenance,null);
+        const policy=projectId?await this.contextProvenance.policyFor({userId,id:projectId}):{kind:'owned',ownerId:userId};
+        const metadata=(await this.contextProvenance.rows(userId,'method',{recordType:LEARNED_METHOD_RECORD_TYPE})).find(row=>row.id===key);
+        if (metadata && await this.contextProvenance.authorize(policy,'method',metadata)) other=metadata;
+      } else other = await this.documents.get(userId, "method", key);
       if (isLearnedMethod(other) && other.payload.status === "approved") approved.add(id);
     }
     return (id) => approved.has(id);
@@ -646,8 +634,11 @@ export class LearningService {
    *
    * A method is the researcher's, not the project's (`createCandidate`), and it used to outlive every project it came from.
    * Deleting a project is asking for what it held to go, and a way of working drawn only from its conversations is part of
-   * that. A method that a lesson from another project also shaped keeps standing: it is not only this project's. Retired,
-   * not deleted: the reason is written on it, and it can be returned to like any stopped method.
+   * that. A method that a lesson from another project also shaped keeps standing: it is not only this project's, and the deleted
+   * project leaves its list of sources — so that deleting the last of the others later finds it again (it was found by the first
+   * project it was learnt in alone, and a method learnt in two projects outlived both). A merge, or a method factored out of
+   * others, names every project its sources were learnt in (`createCandidate`) and goes the same way. Retired, not deleted: the
+   * reason is written on it, and it can be returned to like any stopped method.
    * Run inside the project's deletion (`transactionClient`), so the project goes only if its methods are stopped.
    *
    * @param {string} userId @param {string} projectId @param {{ transactionClient?: any }} [options]
@@ -657,33 +648,47 @@ export class LearningService {
     /** @type {string[]} */
     const retired = [];
     let kept = 0;
-    /** @type {string | null} */
-    let cursor = null;
-    do {
-      const page = await this.documents.list(userId, "method", {
-        limit: 100, cursor,
-        filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance: { sourceProjectId: projectId } },
-      });
-      for (const listed of page.items ?? []) {
-        if (listed.payload?.status === "retired") continue;
-        if (methodSourceProjects(listed.payload?.provenance).some((id) => id !== projectId)) { kept += 1; continue; }
-        // The revision read is the revision written against: one that moved in between is read again, a few times.
-        let document = listed;
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          if (document.payload?.status === "retired" || methodSourceProjects(document.payload?.provenance).some((id) => id !== projectId)) break;
-          const payload = { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
-          try {
-            await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient });
-            retired.push(document.id);
-            break;
-          } catch (error) {
-            if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
-            document = await this.documents.get(userId, "method", document.id) ?? document;
+    /** @type {Set<string>} */
+    const handled = new Set();
+    // By the project it was first learnt in, and by every project it names: a record from before the list names the first only.
+    for (const provenance of [{ sourceProjectId: projectId }, { sourceProjectIds: [projectId] }]) {
+      /** @type {string | null} */
+      let cursor = null;
+      do {
+        const page = await this.documents.list(userId, "method", {
+          limit: 100, cursor,
+          filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance },
+        });
+        for (const listed of page.items ?? []) {
+          if (handled.has(listed.id)) continue;
+          handled.add(listed.id);
+          // A stopped method keeps the reason it was stopped for, and its sources as they were.
+          if (listed.payload?.status === "retired") continue;
+          // The revision read is the revision written against: one that moved in between is read again, a few times.
+          let document = listed;
+          for (let attempt = 0; attempt < 4; attempt += 1) {
+            if (document.payload?.status === "retired") break;
+            const remaining = methodSourceProjects(document.payload?.provenance).filter((id) => id !== projectId);
+            const others = remaining.length > 0;
+            const payload = others
+              ? { ...document.payload, provenance: { ...document.payload.provenance,
+                ...(document.payload.provenance?.sourceProjectId === projectId ? { sourceProjectId: remaining[0] } : {}), sourceProjectIds: remaining } }
+              : { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
+            try {
+              // Dropping a deleted project from a method's sources is bookkeeping, not a change of the method: no history row.
+              await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient, ...(others ? { telemetry: true } : {}) });
+              if (others) kept += 1;
+              else retired.push(document.id);
+              break;
+            } catch (error) {
+              if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
+              document = await this.documents.get(userId, "method", document.id) ?? document;
+            }
           }
         }
-      }
-      cursor = page.nextCursor ?? null;
-    } while (cursor);
+        cursor = page.nextCursor ?? null;
+      } while (cursor);
+    }
     return { retired, kept };
   }
 
@@ -701,6 +706,7 @@ export class LearningService {
       statusChangedAt: this.now().toISOString(),
     };
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision });
+    this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
 
@@ -797,9 +803,9 @@ export class LearningService {
       contentDigest: digestOf(target),
       // Given back, the same body starts its count of loads again: it was stopped on that count (`never_opened`), and the
       // next hourly pass would otherwise stop it again before a single run had carried it.
-      learning: sameBody
+      learning: withoutRetiredLearningKeys(sameBody
         ? (current.payload.status === "retired" ? restartCarried(current.payload.learning) : current.payload.learning)
-        : resetLearningForDigest(current.payload.learning, digestOf(target)),
+        : resetLearningForDigest(current.payload.learning, digestOf(target))),
       provenance: { ...target.payload.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) },
       ...(sameBody ? {} : {
         ...(cleanMethodDisplay(target.payload.display) ? { display: cleanMethodDisplay(target.payload.display) } : {}),
@@ -820,6 +826,7 @@ export class LearningService {
     payload.statusReason = effectiveStatusReason(payload);
     payload.statusChangedAt = at;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
 
@@ -864,7 +871,7 @@ export class LearningService {
   /**
    * The lessons that taught a method, newest first: the one its current body was learnt from, then the ones each earlier body was
    * (an amendment overwrites `provenance.runId`, so the saved revisions are where the older lessons are). Each is the run that
-   * taught it and the trigger that queued the distillation (`delivered`, `repair_accepted`, `correction`, `routine`; null on a
+   * taught it and the trigger that queued the distillation (`edit_diff`, `correction`, `routine`, `script`, `adopted`; null on a
    * revision older than the field). Only names — a method's text is never read through this.
    * @param {string} userId @param {string} methodId
    * @returns {Promise<{ projectId: string, runId: string, trigger: string | null }[]>}
@@ -920,22 +927,46 @@ export class LearningService {
   }
 
   /**
-   * Count a finished run that carried the method's card to a model that answered (`foldCarried`): the denominator of "was it
-   * ever opened" that the unused-method retirement reads. A stopped method is not counted, and a write that lost a race to
+   * Count a finished run that carried the method's card to a model that answered: the denominator of "was it ever opened" that
+   * the unused-method retirement reads (`foldCarried`), when the card was there because the method was meant for the work (the
+   * mount reasons `similarity` and `dependency`), and exposure only otherwise (`foldExplored`: the exploration slot, a mount that
+   * had no question to rank by), which nothing is stopped for. A stopped method is not counted, and a write that lost a race to
    * another counter write is made again on the fresh record, because this is the one counter a verdict is later drawn from.
-   * @param {string} userId @param {string} methodId
+   * @param {string} userId @param {string} methodId @param {string} [reason] why the card was in front of the run; absent reads as meant for the work
    */
-  async recordCarried(userId, methodId) {
+  async recordCarried(userId, methodId, reason = "similarity") {
+    const fold = /** @type {readonly string[]} */ (METHOD_RELEVANT_MOUNT_REASONS).includes(reason) ? foldCarried : foldExplored;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const document = await this.getMethod(userId, methodId);
       if (document.payload.status === "retired") return document;
       try {
-        return await this.#saveLearning(userId, methodId, document, foldCarried(document.payload.learning));
+        return await this.#saveLearning(userId, methodId, document, fold(document.payload.learning));
       } catch (error) {
         if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 7) throw error;
       }
     }
     throw new HttpError(409, "product_revision_conflict", "Concurrent method counters did not settle.");
+  }
+
+  /**
+   * Record what the researcher did after a run that opened this method (`foldApplied`): once per run, a correction never taken
+   * back. `expectedDigest` is the body the run read: a method amended since is left alone, because the reaction is to text it no
+   * longer holds. A stopped method is not counted.
+   * @param {string} userId @param {string} methodId @param {{ runId: string, outcome: "corrected" | "clean", at: string }} applied
+   * @param {string} [expectedDigest] the content digest the run's file was written from
+   * @returns {Promise<{ document: any, changed: boolean }>}
+   */
+  async recordApplied(userId, methodId, applied, expectedDigest) {
+    let changed = false;
+    const document = await this.#foldLearning(userId, methodId, (current) => {
+      changed = false;
+      if (current.payload.status === "retired") return current.payload.learning;
+      if (expectedDigest && current.payload.contentDigest !== expectedDigest) return current.payload.learning;
+      const learning = foldApplied(current.payload.learning, applied);
+      changed = learning !== current.payload.learning;
+      return learning;
+    });
+    return { document, changed };
   }
 
   /** @param {string} userId @param {string} methodId */
@@ -956,6 +987,48 @@ export class LearningService {
   async recordRead(userId, methodId, at = new Date().toISOString()) {
     const document = await this.getMethod(userId, methodId);
     return this.#saveLearning(userId, methodId, document, foldRead(document.payload.learning, at));
+  }
+
+  /**
+   * Stamp a method with the group it was last decided in (`foldDecided`), so the consolidation pass reads an unchanged group
+   * once. Telemetry like the counters, and made again on the fresh record when it loses a race to another counter write.
+   * `expectedDigest` is the body the pass decided about: a method amended since is left unstamped, because the stamp would
+   * claim a reading of text it no longer holds.
+   * @param {string} userId @param {string} methodId @param {{key: string, at: string, version?: number}} decided @param {string} [expectedDigest]
+   */
+  async recordDecided(userId, methodId, decided, expectedDigest) {
+    return this.#foldLearning(userId, methodId, (document) => {
+      if (expectedDigest && document.payload.contentDigest !== expectedDigest) return document.payload.learning;
+      return foldDecided(document.payload.learning, decided);
+    });
+  }
+
+  /**
+   * Store a method's level in the library (`foldLevel`): derived from `depends_on`, so it is written back when it differs and
+   * never decided here. Telemetry, like the counters.
+   * @param {string} userId @param {string} methodId @param {number} level
+   */
+  async recordLevel(userId, methodId, level) {
+    return this.#foldLearning(userId, methodId, (document) => foldLevel(document.payload.learning, level));
+  }
+
+  /**
+   * Fold something into a method's learning payload, on the record as it is now; a write that lost a race to another counter
+   * write is made again, and nothing is written when the fold changes nothing.
+   * @param {string} userId @param {string} methodId @param {(document: any) => any} fold
+   */
+  async #foldLearning(userId, methodId, fold) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const document = await this.getMethod(userId, methodId);
+      const learning = fold(document);
+      if (learning === document.payload.learning) return document;
+      try {
+        return await this.#saveLearning(userId, methodId, document, learning);
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 7) throw error;
+      }
+    }
+    throw new HttpError(409, "product_revision_conflict", "Concurrent method counters did not settle.");
   }
 
   /**
@@ -1091,13 +1164,36 @@ export class LearningService {
   }
 
   /**
+   * Act on a replay that found the newer text contradicting runs the person had accepted (`MethodReplay`): return the method to the exact
+   * earlier body it names, or stop it when there is none (a merge the pass just built, whose originals are still in force), and keep the link
+   * that says why. Both are what the person undoes by restoring a revision. `results` is the runs the text was read against and `rejected` the
+   * contradictions found in them; the sentence for a stop is the reader's, passed in because it lives with the other retirement sentences.
+   * @param {string} userId @param {any} document the method as read just now
+   * @param {{ rollbackToDigest?: string | null, runs?: number, rejected?: number }} proposal
+   * @param {{ retire: string }} sentences
+   * @returns {Promise<{ action: "rollback" | "retire", document: any }>}
+   */
+  async applyReplayRegression(userId, document, proposal, sentences) {
+    const rollback = Boolean(proposal.rollbackToDigest) && proposal.rollbackToDigest !== document.payload.contentDigest;
+    const link = {
+      type: rollback ? "rolled_back_for_replay" : "retired_for_replay",
+      at: this.now().toISOString(), fromDigest: document.payload.contentDigest, toDigest: rollback ? proposal.rollbackToDigest : null,
+      results: proposal.runs ?? 0, against: proposal.rejected ?? 0, evidence: [],
+    };
+    if (rollback) {
+      return { action: "rollback", document: await this.rollback(userId, document.id, { expectedRevision: document.revision, targetDigest: proposal.rollbackToDigest ?? undefined, link }) };
+    }
+    return { action: "retire", document: await this.retire(userId, document.id, { expectedRevision: document.revision, reason: sentences.retire, link }) };
+  }
+
+  /**
    * Write the counters, which are telemetry about the method and not a change
    * of it: no history row, no new `updated_at` (`ProductDocuments.put`). The
    * revision still moves, so a writer holding the older record conflicts
    * rather than overwriting a count.
    * @param {string} userId @param {string} methodId @param {any} document @param {any} learning */
   async #saveLearning(userId, methodId, document, learning) {
-    await this.documents.put(userId, "method", methodId, { ...document.payload, learning }, {
+    await this.documents.put(userId, "method", methodId, { ...document.payload, learning: withoutRetiredLearningKeys(learning) }, {
       expectedRevision: document.revision,
       telemetry: true,
     });
@@ -1105,12 +1201,13 @@ export class LearningService {
   }
 
   /**
-   * Which effective methods should be proposed for retirement tonight.
-   * A proposal, not an action: the caller sends a notice with a rollback target.
-   * @param {string} userId @param {{projectId?: string|null, nowMs?: number, cap?: number, unusedAfterLoads?: number}} [options]
+   * Which effective methods a branch of the lifecycle wants stopped, with the branch (`code`) that decided and whether it acts
+   * at once (`immediate`: a method the system inferred) or only proposes (one the researcher stated). The caller acts on the
+   * first kind and reports the second; a stop is a status the researcher restores with one click.
+   * @param {string} userId @param {{projectId?: string|null, nowMs?: number, cap?: number, unusedAfterLoads?: number, items?: any[]}} [options]
    */
   async retirementProposals(userId, options = {}) {
-    const page = await this.listMethods(userId, { ...options, limit: 100 });
+    const page = Array.isArray(options.items) ? {items:options.items} : await this.listMethods(userId, { ...options, limit: 100 });
     const items = page.items ?? [];
     const approved = new Set(items.filter((item) => item.payload.status === "approved").map((item) => item.id));
     /** @type {{document: any, proposal: any}[]} */
@@ -1139,12 +1236,13 @@ export class LearningService {
     // — which is the failure mode the published work names, and its symptom is
     // silence: the wrong method gets injected and the run says nothing. So the
     // cap is applied to what is left after the per-method proposals, and it
-    // proposes the lowest contributions until the library is back under it.
+    // stops the least-used until the library is back under it: the same status
+    // and the same one click as every other stop, never a deletion.
     const proposed = new Set(proposals.map((entry) => entry.document.id));
     const remaining = items.filter((document) => document.payload.status === "approved" && !proposed.has(document.id));
     for (const eviction of libraryEvictions(remaining.map((document) => records.get(document.id)), { cap: options.cap })) {
       const document = remaining.find((entry) => entry.id === eviction.id);
-      if (document) proposals.push({ document, proposal: { propose: true, immediate: false, reason: eviction.reason, strength: 0, contribution: eviction.contribution } });
+      if (document) proposals.push({ document, proposal: { propose: true, immediate: eviction.immediate, code: "library_cap", reason: eviction.reason, strength: 0 } });
     }
     return proposals;
   }

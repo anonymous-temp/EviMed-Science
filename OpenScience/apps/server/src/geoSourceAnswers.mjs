@@ -25,9 +25,22 @@ import { citedFor } from "./geoErrors.mjs";
 
 const list = (/** @type {unknown} */ value) => (Array.isArray(value) ? value : []);
 
-/** The site a cited link belongs to: lower case, `www.` folded. @param {any} citation */
+/** A usable preserved URL is the source authority; optional domain metadata cannot replace it.
+ * Exact lower-case host, with leading www folded, and the existing query-preserving page key.
+ * @param {any} citation
+ */
+export function sourceCitation(citation) {
+  try {
+    const url=new URL(citation?.url);
+    if (!['https:','http:'].includes(url.protocol)||url.username||url.password) return null;
+    const domain=url.hostname.toLowerCase().replace(/^www\./u,''),key=pageKey(citation.url);
+    return domain&&key?{domain,key}:null;
+  } catch { return null; }
+}
+
+/** An unlinked citation remains unobservable, even when it carries a domain annotation. @param {any} citation */
 export function citedDomain(citation) {
-  return String(citation?.domain ?? "").toLowerCase().replace(/^www\./u, "");
+  return sourceCitation(citation)?.domain??"";
 }
 
 /** The distinct sites one answer cites. @param {unknown} citations @returns {Set<string>} */
@@ -135,7 +148,7 @@ export function countsOf(citing, domain) {
   };
 }
 
-/** The most pages of one site a detail lists; the count of all of them is told beside. */
+/** Default page size available to callers that explicitly request bounded display pages. */
 export const SOURCE_PAGES_LIMIT = 200;
 
 /**
@@ -156,10 +169,10 @@ export function pageKey(url) {
  * citation of it had one (the most often written), how many answers cited it — once each however many of its links an answer
  * carries — and how many of those answers misstated us (a co-occurrence, like the row's).
  * @param {ReadonlyArray<RoundAnswer>} citing answers that already cite `domain` @param {string} domain
- * @param {{ limit?: number }} [options]
+ * @param {{ limit?: number, offset?: number }} [options]
  * @returns {{ pages: Array<{ url: string, title: string | null, cited: number, wrongOurs: number }>, total: number }}
  */
-export function pagesCited(citing, domain, { limit = SOURCE_PAGES_LIMIT } = {}) {
+export function pagesCited(citing, domain, { limit = Infinity, offset = 0 } = {}) {
   const wanted = String(domain).toLowerCase().replace(/^www\./u, "");
   /** @type {Map<string, { url: string, titles: Map<string, number>, cited: number, wrongOurs: number }>} */
   const byPage = new Map();
@@ -167,10 +180,9 @@ export function pagesCited(citing, domain, { limit = SOURCE_PAGES_LIMIT } = {}) 
     /** @type {Set<string>} */
     const seen = new Set();
     for (const citation of answer.citations) {
-      const url = String(citation?.url ?? "").trim().split("#", 1)[0];
-      if (!url || citedDomain(citation) !== wanted) continue;
-      const key = pageKey(url);
-      if (!key) continue;
+      const reference=sourceCitation(citation);
+      if (!reference||reference.domain!==wanted) continue;
+      const url=String(citation.url).trim().split("#",1)[0],key=reference.key;
       const page = byPage.get(key) ?? { url, titles: new Map(), cited: 0, wrongOurs: 0 };
       const title = String(citation?.title ?? "").replace(/\s+/gu, " ").trim();
       if (title) page.titles.set(title, (page.titles.get(title) ?? 0) + 1);
@@ -190,5 +202,5 @@ export function pagesCited(citing, domain, { limit = SOURCE_PAGES_LIMIT } = {}) 
       wrongOurs: page.wrongOurs,
     }))
     .sort((left, right) => right.cited - left.cited || right.wrongOurs - left.wrongOurs || left.url.localeCompare(right.url));
-  return { pages: pages.slice(0, limit), total: pages.length };
+  return { pages: pages.slice(offset, offset + limit), total: pages.length };
 }

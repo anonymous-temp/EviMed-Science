@@ -25,7 +25,7 @@ function appWith(dataDir, extra = {}) {
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl, sourceIngestionEnabled: false, ...extra });
 }
 
-test("through the server: a retraction the frontier recorded reaches a result and a memory by the app's own lookup and impact path, with Crossref never asked", {
+test("through the server: a retraction the frontier recorded reaches a result by the app's own lookup and impact path, with Crossref never asked", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-source-change-app-"));
@@ -47,10 +47,6 @@ test("through the server: a retraction the frontier recorded reaches a result an
       producer: { kind: "tool", runId: "run-1" }, inputs: [{ kind: "source", id: DOI, digest: hex("1"), versionId: null, availability: "captured" }],
       machineValues: [], findings: [], coverage: { gaps: [] }, storagePath: `result-snapshots/${hex("5")}`, bindingSources: [] },
     { expectedRevision: 0, projectId: project.id });
-    const fact = await app.researchMemory.upsertRecord(user.id, { scope: "project", scopeId: project.id, kind: "project_fact", key: "project.pooled",
-      value: "the pooled finding", summary: "pooled", origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false }, null,
-    { sourceLinks: [{ type: "doi", id: DOI }] });
-
     // The integration has named no account yet: the record knows nothing and refuses writes, and the app goes on.
     assert.equal((await app.sourceChanges.get(DOI)).state, "unknown");
     await recordFrontierNotices(app.sourceChanges, [{ kind: "retraction", noticeDoi: "10.9999/n1", doi: DOI, date: "2026-10-01" }]);
@@ -65,7 +61,6 @@ test("through the server: a retraction the frontier recorded reaches a result an
     assert.deepEqual(asked, [], "the lookup was answered from the record");
     const reply = await app.resultImpacts.reconcileSourceUpdate(user.id, { projectId: project.id, source: { id: DOI, doi: DOI }, status: statuses.get(DOI) });
     assert.deepEqual(reply.items.map(item => item.payload.versionId), [versionId]);
-    assert.equal((await app.researchMemory.sourceLinks(user.id, fact.id))[0].state, "retracted");
     const notices = (await app.notificationService.list(user.id, { projectId: project.id })).items;
     assert.equal(notices.length, 1);
     assert.match(notices[0].body, /来源发布了更正或撤回通知/);

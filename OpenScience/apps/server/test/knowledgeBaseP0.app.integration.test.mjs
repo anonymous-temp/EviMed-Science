@@ -77,10 +77,7 @@ test("through the server: dependents, the vault, the delivered files and the com
     await writeFile(path.join(owner.project.baseDir, "knowledge-base/wiki/doac.md"), "---\ntitle: \"直接口服抗凝药\"\n---\n# 直接口服抗凝药\n");
     await add("wiki/doac.md", { docType: "document" });
 
-    // What rests on the first: a memory that names it, a result that read its bytes (and one of a stranger's that did not).
-    const memory = await app.researchMemory.upsertRecord(owner.user.id, { scope: "project", scopeId: projectId, kind: "project_fact", key: "project.population",
-      value: "纳入 18 岁以上非瓣膜性房颤患者", summary: "纳入 18 岁以上非瓣膜性房颤患者", origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false },
-    null, { sourceLinks: [{ type: "knowledge_source", id: trial.source.id }] });
+    // What rests on the first: a result that read its bytes (and one of a stranger's that did not). The memory files that name a document are the engine's and are listed from the overlay's record (`sourceDependents.integration.test.mjs`); this composition has no engine.
     const versionId = `rv_${hex("3")}`;
     await documents.put(owner.user.id, "result-version", versionId, { recordType: "result-version", versionId, artifactId: `ra_${hex("2")}`, projectId, digest: hex("5"), size: 10,
       path: "deliverables/clinical-evidence-synthesis/clinical-evidence-report.md", mimeType: "text/markdown", capturedAt: "2026-10-10T08:00:00Z", producer: { kind: "tool", runId: "run_report" },
@@ -96,7 +93,7 @@ test("through the server: dependents, the vault, the delivered files and the com
 
     // 1. Dependents.
     const found = await (await fetch(`${base}/api/sources/${trial.source.id}/dependents`, { headers: ownerHeaders })).json();
-    assert.deepEqual(found.data.memories.map((item) => [item.recordId, item.text, item.scope]), [[memory.id, "纳入 18 岁以上非瓣膜性房颤患者", "project"]]);
+    assert.deepEqual(found.data.memories, [], "no engine is composed here, so there are no memory files to name the document");
     assert.deepEqual(found.data.results.map((item) => [item.versionId, item.runId, item.title]), [[versionId, "run_report", "房颤抗凝综述"]]);
     assert.deepEqual(found.data.methods, []);
     const none = await (await fetch(`${base}/api/sources/${(await app.sourceService.list(owner.user.id, { projectId, limit: 100 })).items.find((item) => item.payload.paths[0] === "knowledge-base/guideline.pdf").id}/dependents`, { headers: ownerHeaders })).json();

@@ -12,12 +12,30 @@
 // - **User-written lists stay out of the index.** The topic requests page is made of titles any signed-in account typed; it is
 //   `noindex` always, for the reason (a) exists.
 // - **A sitemap lists what the same rules call indexable, and nothing else.** With the deployment's switch off the sitemap is a 404.
+//   Every entry carries the `lastmod` of the page (an author's page, and the index, the latest of what they list).
+// - **"Indexable" is the absence of `noindex`**, in the markup and in the header, on the same verdict. No page says `index` aloud: there
+//   is no second tag that could contradict the first, and a crawler's default is the answer the deployment wants.
+// - **`/robots.txt` is the one thing the pages answer outside their base** (`evidenceRobotsTxt`): the application serves the whole host's
+//   root, and without it the single-page fallback answered the crawler's first request with an HTML shell. It names the sitemap only while
+//   indexing is on and the deployment has a public address (the sitemap's own conditions), keeps crawlers off the private surfaces
+//   (`/app/`, `/api/`, `/internal/`, `/evolution/`) and off the pages' JSON API, and never disallows a page: a page that says `noindex` has
+//   to be crawlable for the crawler to read it.
 
 import { HttpError } from "./security.mjs";
 import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
-/** The static pages a sitemap lists besides zones, cards and authors, under the base the deployment serves the pages at. */
+/** The static pages a sitemap lists besides zones, cards and authors, under the base the deployment serves the pages at. The index is the first of them. */
 const sitePaths = () => ["/", "/about", "/metrics", "/simulations"].map((suffix) => evidencePublicPath(suffix));
+
+/** The sitemaps.org limit on one document; a library that grows past it needs a sitemap index, and until then the newest pages are kept. */
+export const EVIDENCE_SITEMAP_MAX_URLS = 50_000;
+
+/** The later of two instants as ISO strings, either of which may be missing or unreadable. @param {string | null} left @param {string | null} right */
+function later(left, right) {
+  const time = (/** @type {string | null} */ value) => (value ? Date.parse(value) : Number.NaN);
+  if (Number.isNaN(time(right))) return left;
+  return Number.isNaN(time(left)) || time(right) > time(left) ? right : left;
+}
 
 /**
  * @param {{ config: Record<string, any>, reads: { authorQualifies: (authorHandle: string | null) => Promise<boolean> } }} options
@@ -57,18 +75,29 @@ export function createEvidencePublicIndexing({ config, reads }) {
       return /** @type {boolean} */ (verdicts.get(authorHandle));
     };
     /** @type {{ path: string, lastmod: string | null }[]} */
-    const paths = sitePaths().map((path) => ({ path, lastmod: null }));
+    const pages = [];
+    /** @type {Map<string, string | null>} an author's page changes when any zone or card of theirs does */
     const authors = new Map();
+    /** @type {string | null} */
+    let latest = null;
+    const note = (/** @type {string | null} */ authorHandle, /** @type {string | null} */ updatedAt) => {
+      latest = later(latest, updatedAt);
+      if (authorHandle) authors.set(authorHandle, later(authors.get(authorHandle) ?? null, updatedAt));
+    };
     for (const zone of zones) {
       if (!(await allowed(zone.kind, zone.authorHandle))) continue;
-      paths.push({ path: evidencePublicPath(`/z/${encodeURIComponent(zone.id)}`), lastmod: zone.updatedAt });
-      if (zone.authorHandle) authors.set(zone.authorHandle, zone.updatedAt);
+      pages.push({ path: evidencePublicPath(`/z/${encodeURIComponent(zone.id)}`), lastmod: zone.updatedAt });
+      note(zone.authorHandle, zone.updatedAt);
     }
     for (const card of cards) {
       if (!(await allowed(card.kind, card.authorHandle))) continue;
-      paths.push({ path: evidencePublicPath(`/c/${encodeURIComponent(card.id)}`), lastmod: card.updatedAt });
+      pages.push({ path: evidencePublicPath(`/c/${encodeURIComponent(card.id)}`), lastmod: card.updatedAt });
+      note(card.authorHandle, card.updatedAt);
     }
-    for (const [authorHandle, lastmod] of authors) paths.push({ path: evidencePublicPath(`/a/${encodeURIComponent(authorHandle)}`), lastmod });
+    for (const [authorHandle, lastmod] of authors) pages.push({ path: evidencePublicPath(`/a/${encodeURIComponent(authorHandle)}`), lastmod });
+    // The index changes whenever anything listed below it does; the other static pages have no date of their own to state.
+    const site = sitePaths().map((path, position) => ({ path, lastmod: position === 0 ? latest : null }));
+    const paths = [...site, ...pages].slice(0, EVIDENCE_SITEMAP_MAX_URLS);
     counters.sitemapUrls += paths.length;
     return paths;
   }
@@ -93,6 +122,32 @@ export function evidenceAbsoluteUrl(publicUrl, path) {
   }
 }
 
+/** The application's own surfaces no crawler has a reason to read: the signed-in app and its API, the gateways and the plugin manifests. */
+const PRIVATE_SURFACES = Object.freeze(["/app/", "/api/", "/internal/", "/evolution/"]);
+
+/**
+ * The host's `/robots.txt`. The pages are crawlable whatever the deployment's indexing switch says, so a page that says `noindex` is read
+ * as such; the sitemap is announced only when it exists (indexing on, a public address configured).
+ * @param {{ indexable: boolean, publicUrl: unknown }} options
+ */
+export function evidenceRobotsTxt({ indexable, publicUrl }) {
+  const sitemap = indexable ? evidenceAbsoluteUrl(publicUrl, evidencePublicPath("/sitemap.xml")) : null;
+  return [
+    "User-agent: *",
+    ...(indexable ? [`Allow: ${evidencePublicPath("/")}`] : []),
+    `Disallow: ${evidencePublicPath("/api/")}`,
+    ...PRIVATE_SURFACES.map((path) => `Disallow: ${path}`),
+    ...(sitemap ? ["", `Sitemap: ${sitemap}`] : []),
+    "",
+  ].join("\n");
+}
+
+/** A `lastmod` the document can state: a W3C datetime, or nothing for a value that is not a date. @param {string | null} value */
+function lastmodText(value) {
+  const time = value ? new Date(value) : null;
+  return time && !Number.isNaN(time.getTime()) ? `<lastmod>${xml(time.toISOString())}</lastmod>` : "";
+}
+
 /**
  * The sitemap document (sitemaps.org 0.9).
  * @param {{ path: string, lastmod: string | null }[]} paths @param {unknown} publicUrl
@@ -102,7 +157,7 @@ export function evidenceSitemapXml(paths, publicUrl) {
   for (const entry of paths) {
     const loc = evidenceAbsoluteUrl(publicUrl, entry.path);
     if (!loc) throw new HttpError(404, "evidence_public_not_found", "The sitemap needs the deployment's public address (OPEN_SCIENCE_PUBLIC_URL).");
-    urls.push(`<url><loc>${xml(loc)}</loc>${entry.lastmod ? `<lastmod>${xml(new Date(entry.lastmod).toISOString())}</lastmod>` : ""}</url>`);
+    urls.push(`<url><loc>${xml(loc)}</loc>${lastmodText(entry.lastmod)}</url>`);
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
 }

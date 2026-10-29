@@ -9,8 +9,8 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { editTopic, type MapTopic, type TopicEdit } from "@/lib/memoryMapClient";
 import { toast } from "@/lib/toast";
 
-/** Fewer topics than this and a cloud is a handful of words: the ranking says it better. */
-export const MIN_TOPICS = 6;
+/** A single real topic is still a useful visual entry; no synthetic topics are added to fill space. */
+export const MIN_TOPICS = 1;
 
 /** 「近 30 天 +3」 / 「持平」 / 「近 30 天 −2」: the trend as words and a sign, never colour alone. */
 export function trendWords(trend: number): string {
@@ -101,7 +101,8 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
                     <span>{`${topic.weight} 条记忆 · ${trendWords(topic.trend)}`}</span>
                   </span>
                 }
-                menu={<Menu label={`“${topic.label}”的操作`} items={menuFor(topic)} />}
+                // A topic the page made from the kinds and projects (fewer memories than the model groups) is not the researcher's to rename or merge.
+                menu={topic.derived ? undefined : <Menu label={`“${topic.label}”的操作`} items={menuFor(topic)} />}
               />
             )
           ))}

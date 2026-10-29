@@ -45,11 +45,11 @@ export function wordCloudOption(topics: readonly CloudTopic[], { selected, palet
     series: [{
       type: "wordCloud", shape: "square", left: "center", top: "center", width: "96%", height: "94%",
       sizeRange: [15, 44], rotationRange: [0, 0], rotationStep: 0, gridSize: 16, drawOutOfBound: false, layoutAnimation: false,
-      textStyle: { fontFamily, fontWeight: 500 },
-      emphasis: { textStyle: { fontWeight: 700 } },
+      textStyle: { fontFamily, fontWeight: 400 },
+      emphasis: { textStyle: { fontWeight: 600 } },
       data: words.map((topic) => ({
         name: topic.label, value: topic.weight, id: topic.id,
-        textStyle: { color: wordColour(topic, topic.id === selected, palette), fontWeight: topic.id === selected ? 800 : 500 },
+        textStyle: { color: wordColour(topic, topic.id === selected, palette), fontWeight: topic.id === selected ? 600 : 400 },
       })),
     }],
   };

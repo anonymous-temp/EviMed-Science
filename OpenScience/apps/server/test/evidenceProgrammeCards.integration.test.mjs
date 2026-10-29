@@ -5,6 +5,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { claimVerification } from "@evimed/domain/clinical-evidence";
 import { EVIDENCE_PROJECT_ID, PLATFORM_PUBLISHER_USER_ID, modelAnswer, programmeFixture, sha256 } from "./helpers/evidenceProgrammeFixture.mjs";
+import { resettleRefusedCards } from "../../../scripts/ops/evidence-programme-resettle.mjs";
+import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
+import { AutopilotService } from "../src/autopilotService.mjs";
+import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
+import { createEvidenceProgramme } from "../src/evidenceProgramme.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { skip: !url && "local PostgreSQL required" };
@@ -50,7 +56,7 @@ async function foldEpisode(fx, { action, matrixClaims, sources, agendaClaims, ma
     const versionId = `rv_${sha256(`matrix-${counter}`)}`;
     const inputs = sources.map((source, index) => {
       const sourceVersion = `rv_${sha256(`${source.path}-${counter}`)}`;
-      fx.rawByVersion.set(sourceVersion, { bytes: Buffer.from(source.text), digest: sha256(source.text), capturedAt: "2026-10-05T00:30:00.000Z" });
+      fx.rawByVersion.set(sourceVersion, { bytes: Buffer.from(source.text), digest: sha256(source.text), capturedAt: source.capturedAt ?? "2026-10-05T00:30:00.000Z" });
       return { kind: "source", id: source.path, path: source.path, digest: sha256(source.text), versionId: sourceVersion, availability: "captured", index };
     });
     // As the delivery capture records it: the matrix version carries the source links, and the gate's verdict sits on the report
@@ -81,6 +87,38 @@ async function verify(fx, { runId, episodeId }, verdicts) {
 const cardsOf = async (fx, zoneTitle) => (await fx.database.query(`SELECT c.* FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id WHERE z.title=$1 ORDER BY c.created_at, c.id`, [zoneTitle])).rows;
 const outcomeOf = async (fx, day, episodeId) => (await fx.documents.get(PUBLISHER, "programme-decision", `programme-decision-${day}`)).payload.outcomes[episodeId];
 
+test("one verified capture-repair generation reopens an exhausted missing-matrix outcome without a model call", options, async () => {
+  const fx = await setup("capturerepair");
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")] });
+    await verify(fx, run, { "CLM-001": "stands" });
+    const versions = fx.resultsByRun.get(run.runId);
+    fx.resultsByRun.set(run.runId, []);
+    for (let index = 0; index < 3; index += 1) await fx.programme.settleEpisode(run.episodeId);
+    const before = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.equal(before.attempts, 3);
+    fx.resultsByRun.set(run.runId, versions);
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "no_evidence_matrix");
+    const repair = { schemaVersion: 1, generation: sha256("repair"), projectId: EVIDENCE_PROJECT_ID, runId: run.runId,
+      matrixVersionId: versions[0].versionId, matrixDigest: versions[0].digest };
+    fx.results.captureRepairReceipt = async (_user, _project, matrixId, generation) => {
+      assert.equal(matrixId, repair.matrixVersionId); assert.equal(generation, repair.generation); return repair;
+    };
+    const calls = fx.decisions.calls.length;
+    const settled = await fx.programme.settleCaptureRepair(repair);
+    assert.equal(settled.state, "published");
+    const after = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.equal(after.attempts, 4);
+    assert.equal(after.history.at(-1).attempts, 3);
+    assert.equal(after.captureRepair.generation, repair.generation);
+    assert.equal((await fx.programme.settleCaptureRepair(repair)).state, "published");
+    assert.equal((await outcomeOf(fx, "2026-10-05", run.episodeId)).attempts, 4);
+    assert.equal(fx.decisions.calls.length, calls);
+    assert.equal((await cardsOf(fx, "非小细胞肺癌")).length, 1);
+  } finally { await fx.close(); }
+});
+
 async function setup(label, config = {}) {
   const state = { model: async () => modelAnswer({ actions: [], reason: "x" }) };
   const fx = await programmeFixture({ url, label, config, callModel: (deps, call) => state.model(deps, call) });
@@ -88,6 +126,93 @@ async function setup(label, config = {}) {
   await fx.programme.ensureOfficialZones();
   return fx;
 }
+
+async function peerOf(fx) {
+  const database = new ControlPlaneDatabase({ databaseUrl: fx.databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
+  const documents = new ProductDocuments(database);
+  const autopilot = new AutopilotService({ documents, jobs: new ProductJobs(database), now: fx.now });
+  const zones = new EvidenceZoneService({ database, entityKeysFor: ({ texts }) => fx.vocabulary.keysForText({ texts }), platformPublisherUserId: PUBLISHER });
+  await zones.ready();
+  return { database, programme: createEvidenceProgramme({ config: fx.config, database, documents, autopilot, zones,
+    budget: fx.budget, entityVocabulary: fx.vocabulary, results: fx.results, now: fx.now }) };
+}
+
+test("two independent database instances consume one repair generation and fence its outcome", options, async () => {
+  const fx = await setup("repairconcurrent");
+  let peer;
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")] });
+    await verify(fx, run, { "CLM-001": "refuted" });
+    const versions = fx.resultsByRun.get(run.runId);
+    fx.resultsByRun.set(run.runId, []);
+    for (let index = 0; index < 3; index += 1) await fx.programme.settleEpisode(run.episodeId);
+    fx.resultsByRun.set(run.runId, versions);
+    const repair = { generation: sha256("concurrent-repair"), projectId: EVIDENCE_PROJECT_ID, runId: run.runId,
+      matrixVersionId: versions[0].versionId, matrixDigest: versions[0].digest };
+    fx.results.captureRepairReceipt = async () => repair;
+    peer = await peerOf(fx);
+    const list = fx.results.list;
+    let evaluations = 0;
+    fx.results.list = async (...args) => {
+      evaluations += 1;
+      if (evaluations === 1) await new Promise(resolve => setTimeout(resolve, 150));
+      return list(...args);
+    };
+    const replies = await Promise.all([fx.programme.settleCaptureRepair(repair), peer.programme.settleCaptureRepair(repair)]);
+    assert.deepEqual(replies.map(reply => reply.state), ["no_qualifying_claims", "no_qualifying_claims"]);
+    const outcome = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.equal(outcome.attempts, 4);
+    assert.equal(evaluations, 1);
+    assert.equal(outcome.history.at(-1).attempts, 3);
+    assert.equal((await cardsOf(fx, "非小细胞肺癌")).length, 0);
+  } finally { await peer?.database.close(); await fx.close(); }
+});
+
+test("a failure after saving a repaired card rolls back publication and a restarted peer publishes once", options, async () => {
+  const fx = await setup("repairrestart");
+  let peer;
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")] });
+    await verify(fx, run, { "CLM-001": "stands" });
+    const versions = fx.resultsByRun.get(run.runId);
+    fx.resultsByRun.set(run.runId, []);
+    for (let index = 0; index < 3; index += 1) await fx.programme.settleEpisode(run.episodeId);
+    fx.resultsByRun.set(run.runId, versions);
+    const repair = { generation: sha256("restart-repair"), projectId: EVIDENCE_PROJECT_ID, runId: run.runId,
+      matrixVersionId: versions[0].versionId, matrixDigest: versions[0].digest };
+    fx.results.captureRepairReceipt = async () => repair;
+    const put = fx.documents.put.bind(fx.documents);
+    let failedAfterSave = false;
+    fx.documents.put = async (...args) => {
+      if (!failedAfterSave && args[1] === "programme-decision" && args[3].outcomes?.[run.episodeId]?.outcome === "published") {
+        failedAfterSave = true;
+        assert.equal((await cardsOf(fx, "非小细胞肺癌")).length, 1, "the injected failure is after the card write");
+        throw Object.assign(new Error("Lost owner before the outcome write"), { code: "test_settlement_owner_lost" });
+      }
+      return put(...args);
+    };
+    const modelCalls = fx.decisions.calls.length;
+    await assert.rejects(fx.programme.settleCaptureRepair(repair), { code: "test_settlement_owner_lost" });
+    assert.equal((await cardsOf(fx, "非小细胞肺癌")).length, 0, "the unpublished outcome cannot leave a committed card behind");
+    assert.equal((await fx.database.query("SELECT count(*)::int AS n FROM evimed_frontier.evidence_card_revisions")).rows[0].n, 0);
+    const pending = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.equal(pending.attempts, 3);
+    assert.equal(pending.captureRepair.state, "pending");
+    peer = await peerOf(fx);
+    const replies = await Promise.all([peer.programme.settleCaptureRepair(repair), fx.programme.settleCaptureRepair(repair)]);
+    assert.deepEqual(replies.map(reply => reply.state), ["published", "published"]);
+    assert.equal(replies[0].cardId, replies[1].cardId);
+    const cards = await cardsOf(fx, "非小细胞肺癌");
+    assert.equal(cards.length, 1);
+    assert.equal(cards[0].revision, 1);
+    const outcome = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.equal(outcome.attempts, 4);
+    assert.equal(outcome.history.at(-1).attempts, 3);
+    assert.equal(fx.decisions.calls.length, modelCalls);
+  } finally { await peer?.database.close(); await fx.close(); }
+});
 
 test("a finished episode with verified, standing claims writes one card in the official zone with its lineage and claims, and a second run of the topic revises it in place", options, async () => {
   const fx = await setup("cardone");
@@ -190,6 +315,108 @@ test("a card with no qualifying claim is not written, and the reason is recorded
     assert.equal(recorded.outcome, "no_qualifying_claims");
     assert.deepEqual(recorded.excluded, { refuted: 1, run_not_verified: 1 });
     assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "no_qualifying_claims", "final: not looked at again");
+  } finally { await fx.close(); }
+});
+
+test("a card the zone refuses as invalid is recorded once with the zone's reason and not built again at every sweep; another failure is looked at again", options, async () => {
+  const fx = await setup("cardrefused");
+  const save = fx.zones.saveEditorial.bind(fx.zones);
+  let calls = 0;
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")] });
+    await verify(fx, run, { "CLM-001": "stands" });
+    // A failure that is not about the card (the database, a conflict) leaves the episode open.
+    fx.zones.saveEditorial = async () => { calls += 1; throw Object.assign(new Error("connection reset"), { status: 503, code: "evidence_unavailable" }); };
+    await assert.rejects(fx.programme.settleEpisode(run.episodeId), /connection reset/);
+    assert.equal(await outcomeOf(fx, "2026-10-05", run.episodeId), undefined);
+    // The zone's validation refusing the card is final, with its own sentence.
+    fx.zones.saveEditorial = async () => { calls += 1; throw Object.assign(new Error("A claim needs a quotation of its source."), { status: 400, code: "evidence_invalid" }); };
+    const result = await fx.programme.settleEpisode(run.episodeId);
+    assert.deepEqual([result.state, result.reason], ["card_refused", "A claim needs a quotation of its source."]);
+    const recorded = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.deepEqual([recorded.outcome, recorded.code, recorded.reason], ["card_refused", "evidence_invalid", "A claim needs a quotation of its source."]);
+    assert.deepEqual(await fx.programme.sweep(), { settled: 0, applied: 0 }, "a final outcome is not swept again");
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "card_refused");
+    assert.equal(calls, 2, "the refused card was not built and saved again");
+    assert.equal(fx.programme.status().counters.cards.card_refused, 1);
+  } finally { fx.zones.saveEditorial = save; await fx.close(); }
+});
+
+test("an episode of more verified claims than a card carries publishes sixty through the real zone, the day's new ones first (production 2026-10-09 to 10-17)", options, async () => {
+  const fx = await setup("cardlimit");
+  try {
+    // The 10-13 shape: the claims of the day before carried forward, then the ones read that morning; no agenda claims, as on production.
+    const sourceOf = (/** @type {number} */ n, /** @type {string} */ day) => ({ path: `.evimed-sources/pubmed/PMID${3100000 + n}/abstract.md`, title: `Trial ${n}`,
+      url: `https://pubmed.ncbi.nlm.nih.gov/${3100000 + n}/`, access: "abstract", capturedAt: `${day}T00:41:40.623Z`,
+      text: `Abstract ${n}. In trial ${n} the primary composite kidney outcome occurred less often with the study drug than with placebo.` });
+    const quoteOf = (/** @type {number} */ n) => `In trial ${n} the primary composite kidney outcome occurred less often`;
+    const earlier = Array.from({ length: 20 }, (_, n) => sourceOf(n, "2026-10-12"));
+    const fresh = Array.from({ length: 4 }, (_, n) => sourceOf(20 + n, "2026-10-13"));
+    const carried = Array.from({ length: 65 }, (_, n) => claim(`CLM-${527 + n}`, earlier[n % 20], quoteOf(n % 20)));
+    const added = Array.from({ length: 13 }, (_, n) => claim(`CLM-${592 + n}`, fresh[n % 4], quoteOf(20 + (n % 4))));
+    const run = await episodeOf(fx, { day: "2026-10-13", zone: "nsclc", taskType: "literature-sentinel", sources: [...earlier, ...fresh], matrixClaims: [...carried, ...added], agendaClaims: [] });
+    const settled = await fx.programme.onRunFinished(project, { id: run.runId });
+    assert.equal(settled.state, "published", JSON.stringify(settled));
+    const [card] = await cardsOf(fx, "非小细胞肺癌");
+    assert.equal(card.claims.length, 60);
+    const ids = card.claims.map((/** @type {any} */ entry) => entry.claimId);
+    for (const entry of added) assert.ok(ids.includes(entry.claimId), `${entry.claimId}, read on the run's day, is on the card`);
+    const recorded = await outcomeOf(fx, "2026-10-13", run.episodeId);
+    assert.deepEqual([recorded.outcome, recorded.claims, recorded.excluded], ["published", 60, { card_limit: 18 }]);
+    assert.equal(fx.programme.status().counters.claimsExcluded.card_limit, 18);
+    const read = await fx.zones.detail(fx.publisherUser, card.zone_id, card.id);
+    assert.equal(read.evidence.claimVerification.verified, 60, "a reader sees every carried claim ✓");
+    // The zone's own refusal of a longer list now says which bound it crossed.
+    const many = [...card.claims, ...card.claims.slice(0, 1).map((/** @type {any} */ entry) => ({ ...entry, claimId: "CLM-999" }))];
+    await assert.rejects(fx.zones.saveEditorial(fx.publisherUser, { claims: many, expectedRevision: card.revision }, card.zone_id, card.id, false, "programme"),
+      (error) => /** @type {any} */ (error).code === "evidence_invalid" && /claims has 61 entries, more than the 60 a card carries/.test(/** @type {any} */ (error).message));
+  } finally { await fx.close(); }
+});
+
+test("an episode whose card was refused before the fix is reopened by the ops script and settled by the next sweep; a second run changes nothing", options, async () => {
+  const fx = await setup("cardresettle");
+  const save = fx.zones.saveEditorial.bind(fx.zones);
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-09", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A, SOURCE_B],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A), claim("CLM-002", SOURCE_B, QUOTE_B)], agendaClaims: [] });
+    // What production recorded for four episodes: the zone's refusal, final.
+    fx.zones.saveEditorial = async () => { throw Object.assign(new Error("Invalid evidence content: claims."), { status: 400, code: "evidence_invalid" }); };
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "card_refused");
+    fx.zones.saveEditorial = save;
+    const report = await resettleRefusedCards({ documents: fx.documents });
+    assert.deepEqual(report.episodes.map((entry) => [entry.episodeId, entry.day, entry.action, entry.reason]),
+      [[run.episodeId, "2026-10-09", "would_reopen", "Invalid evidence content: claims."]], "a report changes nothing");
+    assert.equal((await outcomeOf(fx, "2026-10-09", run.episodeId)).outcome, "card_refused");
+    const applied = await resettleRefusedCards({ documents: fx.documents, episodeIds: [run.episodeId, "episode-unknown"], apply: true });
+    assert.deepEqual(applied.episodes.map((entry) => entry.action), ["reopened", "not_found"]);
+    assert.equal(await outcomeOf(fx, "2026-10-09", run.episodeId), undefined, "only that outcome is gone");
+    assert.equal((await fx.programme.sweep()).settled, 1, "the next sweep settles it like any open episode");
+    const [card] = await cardsOf(fx, "非小细胞肺癌");
+    assert.deepEqual(card.claims.map((/** @type {any} */ entry) => entry.claimId), ["CLM-001", "CLM-002"]);
+    assert.equal((await outcomeOf(fx, "2026-10-09", run.episodeId)).outcome, "published");
+    const again = await resettleRefusedCards({ documents: fx.documents, episodeIds: [run.episodeId], apply: true });
+    assert.deepEqual(again.episodes.map((entry) => [entry.action, entry.outcome]), [["not_refused", "published"]], "idempotent");
+  } finally { fx.zones.saveEditorial = save; await fx.close(); }
+});
+
+test("an older episode settled after a later one of its topic does not put its evidence back over the later card", options, async () => {
+  const fx = await setup("cardsuperseded");
+  try {
+    const older = await episodeOf(fx, { day: "2026-10-12", zone: "nsclc", taskType: "literature-sentinel", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [] });
+    const newer = await episodeOf(fx, { day: "2026-10-13", zone: "nsclc", taskType: "literature-sentinel", sources: [SOURCE_A, SOURCE_B],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A), claim("CLM-002", SOURCE_B, QUOTE_B)], agendaClaims: [] });
+    // The later run settles first (the sweep reads the newest decision first; a reopened older episode comes after it).
+    assert.equal((await fx.programme.settleEpisode(newer.episodeId)).state, "published");
+    const settled = await fx.programme.settleEpisode(older.episodeId);
+    assert.equal(settled.state, "superseded");
+    const [card] = await cardsOf(fx, "非小细胞肺癌");
+    assert.deepEqual([card.revision, card.lineage.episodeId, card.claims.length], [1, newer.episodeId, 2], "the later card is untouched");
+    const recorded = await outcomeOf(fx, "2026-10-12", older.episodeId);
+    assert.deepEqual([recorded.outcome, recorded.cardId, recorded.supersededBy], ["superseded", card.id, newer.episodeId]);
+    assert.equal((await fx.programme.settleEpisode(older.episodeId)).state, "superseded", "final");
+    assert.equal(fx.programme.status().counters.cards.superseded, 1);
   } finally { await fx.close(); }
 });
 
@@ -343,5 +570,121 @@ test("the hook of a verification and the sweep meeting on one episode settle it 
     const cards = await cardsOf(fx, "非小细胞肺癌");
     assert.equal(cards.length, 1);
     assert.equal(cards[0].revision, 1, "written once");
+  } finally { await fx.close(); }
+});
+
+// ── A hot topic's episode (前沿动态 round 2, 2026-10-25): its card answers the topic's question, and the topic records it ────────────
+
+const TOPIC_TITLE = "年轻人心源性猝死的风险有多大？";
+const TOPIC_QUESTION = "年轻人发生心源性猝死的风险有多大，哪些人风险更高，出现什么征兆应及时就医？";
+
+/** The day's decision takes the topic (the model chooses no zone), and its episode runs to its fold. */
+async function topicEpisode(fx, { day = "2026-10-05", topic, sources = [SOURCE_A], matrixClaims = [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims = [agendaClaim("CLM-001")] }) {
+  fx.state.model = async () => modelAnswer({ actions: [], reason: "没有变化" });
+  const decided = await fx.programme.runDay(day);
+  const action = decided.decision.actions.find((entry) => entry.topicId === topic);
+  assert.equal(action?.status, "scheduled", JSON.stringify(decided.decision.actions));
+  return foldEpisode(fx, { action, matrixClaims, sources, agendaClaims });
+}
+const topicActionOf = async (fx, day, episodeId) => (await fx.documents.get(PUBLISHER, "programme-decision", `programme-decision-${day}`)).payload.actions.find((entry) => entry.episodeId === episodeId);
+
+test("a hot topic's episode that meets the standard is a card in 「热点求证」 titled with the topic's question; the topic records the card; a replay changes nothing; the answered agenda is stopped the next day", options, async () => {
+  const fx = await setup("topiccard");
+  try {
+    const topic = await fx.topic({ title: TOPIC_TITLE, question: TOPIC_QUESTION, subjectNames: ["张某某"] });
+    const run = await topicEpisode(fx, { topic });
+    assert.equal((await fx.programme.onRunFinished(project, { id: run.runId })).state, "pending_verification");
+    assert.equal((await fx.topicRow(topic)).programme_state, "taken", "a waiting episode leaves the topic taken");
+    await verify(fx, run, { "CLM-001": "stands" });
+    const settled = await fx.programme.onRunFinished(project, { id: run.runId });
+    assert.equal(settled.state, "published");
+    const [card, ...more] = await cardsOf(fx, "热点求证");
+    assert.equal(more.length, 0);
+    assert.equal(card.id, settled.cardId);
+    assert.equal(card.title, TOPIC_TITLE, "the card's title is the topic's question");
+    assert.equal(card.content.question, TOPIC_QUESTION);
+    assert.deepEqual([card.user_id, card.producer.name, card.originality], [PUBLISHER, "EviMed 证据中心", "synthesis"]);
+    assert.equal(card.lineage.agendaId, run.agendaId);
+    const row = await fx.topicRow(topic);
+    assert.deepEqual([row.programme_state, row.programme_card_id], ["card", card.id]);
+    assert.deepEqual([(await topicActionOf(fx, "2026-10-05", run.episodeId)).topicState, (await topicActionOf(fx, "2026-10-05", run.episodeId)).topicReason], ["card", undefined]);
+    for (const text of [JSON.stringify(card), JSON.stringify((await fx.documents.get(PUBLISHER, "programme-decision", "programme-decision-2026-10-05")).payload)]) {
+      assert.ok(!text.includes("张某某"), "the topic's subject names reach no card and no decision");
+    }
+    // Replayed — the hook again, and the sweep: the same card, the topic untouched.
+    const at = row.programme_at.toISOString();
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "published");
+    await fx.programme.sweep();
+    assert.equal((await fx.topicRow(topic)).programme_at.toISOString(), at, "a replay moves nothing");
+    assert.equal((await cardsOf(fx, "热点求证")).length, 1);
+    assert.equal(fx.programme.status().counters.topics.states.card, 1, "and counts once");
+    // The next day the answered topic is not picked again, and its agenda is stopped.
+    fx.clock.at = new Date("2026-10-06T01:00:00.000Z");
+    const next = (await fx.programme.runDay("2026-10-06")).decision;
+    assert.ok(!next.actions.some((entry) => entry.zone === "hot-questions"), "a topic with a card is not taken twice");
+    assert.equal((await fx.autopilot.get(PUBLISHER, run.agendaId)).payload.status, "stopped", "one question, one episode: its agenda leaves the timer's rounds");
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "published", "and the card stands");
+    assert.equal((await fx.topicRow(topic)).programme_state, "card");
+  } finally { await fx.close(); }
+});
+
+test("two topics answered on two days are two cards: a topic's card is never revised by another topic's episode", options, async () => {
+  const fx = await setup("topictwocards");
+  try {
+    const first = await fx.topic({ title: TOPIC_TITLE });
+    const run1 = await topicEpisode(fx, { topic: first });
+    await verify(fx, run1, { "CLM-001": "stands" });
+    await fx.programme.onRunFinished(project, { id: run1.runId });
+    fx.clock.at = new Date("2026-10-06T01:00:00.000Z");
+    const second = await fx.topic({ title: "地震后挤压伤怎么救？", question: "地震后被压埋的人发生挤压综合征的风险有多大，救出前后应注意什么？" });
+    const run2 = await topicEpisode(fx, { day: "2026-10-06", topic: second, sources: [SOURCE_B], matrixClaims: [claim("CLM-001", SOURCE_B, QUOTE_B)] });
+    await verify(fx, run2, { "CLM-001": "stands" });
+    assert.equal((await fx.programme.onRunFinished(project, { id: run2.runId })).state, "published", "published, not revised");
+    assert.notEqual(run1.agendaId, run2.agendaId, "each topic is its own agenda");
+    const cards = await cardsOf(fx, "热点求证");
+    assert.deepEqual(cards.map((card) => card.title), [TOPIC_TITLE, "地震后挤压伤怎么救？"]);
+    assert.deepEqual([(await fx.topicRow(first)).programme_card_id, (await fx.topicRow(second)).programme_card_id], cards.map((card) => card.id));
+  } finally { await fx.close(); }
+});
+
+test("a hot topic's card whose title names a person or body of the event is not published: the topic is skipped with the reason, and a replay refuses it again without a write", options, async () => {
+  const fx = await setup("topicname");
+  try {
+    const topic = await fx.topic({ title: "张某某猝死：年轻人风险有多大？", subjectNames: ["张某某"] });
+    const run = await topicEpisode(fx, { topic });
+    await verify(fx, run, { "CLM-001": "stands" });
+    const settled = await fx.programme.onRunFinished(project, { id: run.runId });
+    assert.equal(settled.state, "topic_name_in_title");
+    assert.equal((await cardsOf(fx, "热点求证")).length, 0, "no card");
+    const recorded = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.equal(recorded.outcome, "topic_name_in_title");
+    const row = await fx.topicRow(topic);
+    assert.deepEqual([row.programme_state, row.programme_card_id], ["skipped", null]);
+    const action = await topicActionOf(fx, "2026-10-05", run.episodeId);
+    assert.deepEqual([action.topicState, action.topicReason], ["skipped", "topic_name_in_title"], "the reason is on the day's decision");
+    const revision = (await fx.documents.get(PUBLISHER, "programme-decision", "programme-decision-2026-10-05")).revision;
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "topic_name_in_title", "final: the same answer again");
+    assert.equal((await fx.documents.get(PUBLISHER, "programme-decision", "programme-decision-2026-10-05")).revision, revision, "and no write");
+    assert.equal(fx.programme.status().counters.cards.topic_name_in_title, 1);
+  } finally { await fx.close(); }
+});
+
+test("a hot topic's episode that earns no card leaves the topic skipped with the outcome as its reason", options, async () => {
+  const fx = await setup("topicnocard");
+  try {
+    const topic = await fx.topic({ title: TOPIC_TITLE });
+    const run = await topicEpisode(fx, { topic });
+    await verify(fx, run, { "CLM-001": "refuted" });
+    assert.equal((await fx.programme.onRunFinished(project, { id: run.runId })).state, "no_qualifying_claims");
+    assert.equal((await fx.topicRow(topic)).programme_state, "skipped");
+    assert.equal((await topicActionOf(fx, "2026-10-05", run.episodeId)).topicReason, "no_qualifying_claims");
+    // A failed episode is skipped the same way.
+    fx.clock.at = new Date("2026-10-06T01:00:00.000Z");
+    const failedTopic = await fx.topic({ title: "高温天气如何预防中暑？" });
+    const decided = await fx.programme.runDay("2026-10-06");
+    const action = decided.decision.actions.find((entry) => entry.topicId === failedTopic);
+    await fx.autopilot.markEpisodeCanceled(PUBLISHER, action.episodeId);
+    assert.equal((await fx.programme.settleEpisode(action.episodeId)).state, "episode_failed");
+    assert.deepEqual([(await fx.topicRow(failedTopic)).programme_state, (await topicActionOf(fx, "2026-10-06", action.episodeId)).topicReason], ["skipped", "episode_failed"]);
   } finally { await fx.close(); }
 });

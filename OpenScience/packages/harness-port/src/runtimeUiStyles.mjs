@@ -56,7 +56,7 @@ export function frameStyles() {
       boxSizing: 'border-box',
     },
     line: { ...text, display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, color: 'var(--dsw-alias-label-secondary)' },
-    title: { ...ellipsis, color: 'var(--dsw-alias-label-primary)', fontWeight: 500 },
+    title: { ...ellipsis, color: 'var(--dsw-alias-label-primary)', fontWeight: 600 },
     quiet: { ...ellipsis, color: 'var(--dsw-alias-label-tertiary)' },
     // A tag that nothing clicks: grey, 20 px high, radius 4. Colour is for
     // clinical safety alone (整改方案 §4), so a state is words on grey.

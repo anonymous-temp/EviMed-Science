@@ -26,11 +26,17 @@ import { HttpError } from "./security.mjs";
  *    no researcher's caps or bill ever see it, and held by one budget of its own per rolling day
  *    (`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`, counted from the ledger, never from a counter here: a
  *    restart loses nothing).
- *  - **A spent budget answers 402, and that is a choice.** The engine does not retry a 4xx: the commit or the
- *    compile round it refused ends there. A 429 or 5xx would be retried sixteen times in thirty seconds by every
- *    waiting commit and still fail (lab/memory/RESULTS.md §E-3), so the honest answer to "no money today" is the
- *    one that ends the attempt at once. What that costs is real — a refused extraction commit is archived as
- *    failed and extracted only if the control plane replays it — which is why the default budget is generous.
+ *  - **A spent budget answers 402 with the body code `insufficient_quota`, and both are a choice.** What ends the
+ *    attempt is the engine's own error classifier (`openviking/models/model_error.py`), and it changed between the
+ *    two pins. v0.5.0 retried only what `classify_api_error` called transient, so any 4xx ended the commit or the
+ *    compile round at once. From v0.5.1 an error whose status has no mapping (402 has none) and whose body names
+ *    no known code is `UNKNOWN`, and `UNKNOWN` gets the full retry limit with back-off; only a body code the
+ *    classifier knows (`insufficient_quota`, read from `error.code`, the shape `modelGateway.mjs` already writes)
+ *    is `QUOTA_EXHAUSTED` and is not retried. A 429 or 5xx would be retried sixteen times in thirty seconds by
+ *    every waiting commit and still fail (lab/memory/RESULTS.md §E-3), so the honest answer to "no money today"
+ *    is the one that ends the attempt at once, on either version. What that costs is real — a refused extraction
+ *    commit is archived as failed and extracted only if the control plane replays it — which is why the default
+ *    budget is generous. Readiness and the metrics keep naming the condition `openviking_model_budget_exhausted`.
  *  - **Thinking off unless asked.** The gateway gives a request that names no reasoning the deployment's default,
  *    `high`. For this caller that is four times the cost and five times the latency of an extraction for nothing
  *    measurable, and nine times the cost of a write-back's summaries. So a request that does not say is held to
@@ -49,6 +55,9 @@ export const OPENVIKING_MODEL_PURPOSES = Object.freeze(["memory-extraction", "kn
 
 /** The largest request body this caller may send. */
 export const OPENVIKING_MODEL_MAX_BODY_BYTES = 4 * 1024 * 1024;
+
+/** The body code of the spent-budget refusal: the one the engine's classifier maps to quota exhaustion and never retries. */
+export const OPENVIKING_QUOTA_CODE = "insufficient_quota";
 
 /** What the ledger's `module` column reads for these rows. */
 export const OPENVIKING_USAGE_MODULE = "openviking";
@@ -138,7 +147,7 @@ export function createOpenVikingModelCaller({ config, usageLedger = null, ensure
         if (committed != null && committed + Math.max(0, Number(estimatedCost) || 0) > budgetCny) {
           counters.refused[caller.purpose] += 1;
           lastRefusalAt = now().toISOString();
-          throw new HttpError(402, "openviking_model_budget_exhausted",
+          throw new HttpError(402, OPENVIKING_QUOTA_CODE,
             "The engine's model budget for this day is spent; nothing was sent to the provider.");
         }
       }

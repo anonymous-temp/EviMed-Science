@@ -28,16 +28,13 @@ export function memoryIndexFailurePolicy(code, attempts) {
 
 /** Durable ProductJobs drive indexing; timers only wake the next lease claim.
  *
- * Two producers, one worker. `memory-index` republishes a capsule's approved
- * facts; `memory-record-index` carries one research-memory record. They share a
- * worker because they share an index, a lease policy and a retry policy, and
- * because a second worker would be a second thing to compose, configure and
- * forget to compose — which is how the record half came to have no writer at
- * all while the capsule half had one.
+ * `memory-index` republishes a capsule's approved facts. The worker also drains what a deletion owes the index
+ * (`MemoryIndexWithdrawals`). It once also claimed `memory-record-index`, one job per record of the legacy engine's structured
+ * memory; that engine is deleted (2026-10-25) and `legacyMemoryRetirement.mjs` removes the jobs it left in the queue.
  */
 export class MemoryIndexWorker {
-  /** @param {{jobs:any,indexing:any,substrate?:any,withdrawals?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, indexing, substrate = null, withdrawals = null, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
+  /** @param {{jobs:any,indexing:any,withdrawals?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, indexing, withdrawals = null, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
     /** @type {[string,number,number][]} */
     const intervals = [["poll", pollMs, 100], ["lease", leaseMs, 1000], ["reconcile", reconcileMs, 1000]];
     for (const [name, value, minimum] of intervals) {
@@ -47,7 +44,6 @@ export class MemoryIndexWorker {
     }
     this.jobs = jobs;
     this.indexing = indexing;
-    this.substrate = substrate;
     // What deletions owe the index as whole subtrees (`MemoryIndexWithdrawals`):
     // drained here, because this worker is what the index's other writes already
     // wait on, and a deletion that could not tell the index must not depend on
@@ -58,15 +54,12 @@ export class MemoryIndexWorker {
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
-    // Claim only what this worker can run. Without a substrate the record half
-    // is not composed, and claiming its jobs would lease work nothing here can
-    // do — worse than leaving them queued, which at least stays visible.
-    // No indexing at all is a third state, and it is the deployment's normal
-    // one: `MEMORY_INDEX_PROVIDER=builtin` composes no index, so nothing was
-    // constructed to claim these jobs — while the database trigger that
-    // enqueues them fires on every capsule and fact write regardless, because a
-    // Postgres trigger cannot read a Node config. Two had been sitting queued
-    // since 2026-09-15 with no claimer and no signal (2026-09-16 review, M5).
+    // No indexing at all is the deployment's normal state when
+    // `MEMORY_INDEX_PROVIDER=builtin`: nothing was constructed to claim the
+    // jobs — while the database trigger that enqueues them fires on every
+    // capsule and fact write regardless, because a Postgres trigger cannot
+    // read a Node config. Two had been sitting queued since 2026-09-15 with no
+    // claimer and no signal (2026-09-16 review, M5).
     //
     // Draining beats both leaving them and never enqueuing them: the job rows
     // record why they were closed, and the index a `builtin` deployment does
@@ -74,7 +67,7 @@ export class MemoryIndexWorker {
     // (`pnpm rebuild:memory-index --all`), so nothing is lost if a provider is
     // configured later.
     this.draining = !indexing;
-    this.kinds = (substrate || this.draining) ? ["memory-index", "memory-record-index"] : ["memory-index"];
+    this.kinds = ["memory-index"];
     this.workerId = `memory-index-${randomUUID()}`;
     this.timer = null;
     this.reconcileTimer = null;
@@ -157,9 +150,7 @@ export class MemoryIndexWorker {
     try {
       const result = this.draining
         ? await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: "no_index_provider" })
-        : job.kind === "memory-record-index"
-          ? await this.substrate.indexRecord(job)
-          : await this.indexing.rebuild(job);
+        : await this.indexing.rebuild(job);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
       return result;
@@ -182,14 +173,10 @@ export class MemoryIndexWorker {
 
   async reconcile() {
     if (this.reconciling) return this.reconciling;
-    // Both halves, because both can be left behind by the same outage: the
-    // capsule ledger re-arms from what it published, the record half from the
-    // jobs its writers enqueued.
-    // With no index there is nothing to reconcile against, and draining the
+    // The capsule ledger re-arms from what it published. With no index there is nothing to reconcile against, and draining the
     // queue is the whole of the sweep.
     this.reconciling = Promise.all([
       this.draining ? this.drainQueue() : this.indexing.reconcile(),
-      this.substrate ? this.substrate.reconcileRecords() : null,
       this.drainWithdrawals(),
     ]).catch((error) => {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_reconcile_failed";

@@ -77,7 +77,7 @@ import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { VCR_SUBJECT_KINDS, vcrResultKindFor } from "./vcrJobs.mjs";
 import { vcrObjectLine } from "./vcrSubjects.mjs";
-import { vcrRouteOptions } from "./vcrService.mjs";
+import { vcrRequestedSteps, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
 import { vcrExportHoldsDocument, vcrReportReviewRevision } from "./vcrRender.mjs";
@@ -373,14 +373,14 @@ export function vcrStepClosure(step) {
  * created from the home page's action cards does not sit still.
  * @param {Record<string, { status: string, requested: boolean, held?: boolean }>} steps
  */
-export function vcrProgramSteps(steps) {
+export function vcrProgramSteps(steps, purpose = "programme") {
   /** @type {Record<string, { status: string, requested: boolean, held?: boolean }>} */
   const out = Object.fromEntries(VCR_STEPS.map((step) => {
     const entry = steps?.[step] ?? { status: "none", requested: false };
     return [step, { ...entry, requested: entry.requested === true || entry.status === "queued" }];
   }));
   if (VCR_STEPS.some((step) => out[step].requested)) return out;
-  if (FINISHED.has(out.definition.status)) for (const step of VCR_STEPS) out[step].requested = true;
+  if (purpose !== "calculation" && FINISHED.has(out.definition.status)) for (const step of VCR_STEPS) out[step].requested = true;
   return out;
 }
 
@@ -1721,6 +1721,145 @@ export class VcrOrchestrator {
     return (await this.store.setStep(study.id, step, next)) ?? study;
   }
 
+  /** Reserve the existing definition slot before the first visible prompt is sent.
+   * @param {any} study @param {any} input */
+  async claimIntake(study, input) {
+    await this.store.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-run:' || $1))", [study.id]);
+      const current = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.studies WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [study.id])).rows[0];
+      if (!current || !["draft", "active"].includes(current.status)) throw new HttpError(409, "vcr_study_paused", "This study is paused.");
+      const previous = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks
+        WHERE study_id = $1 AND key = 'run:definition' FOR UPDATE`, [study.id])).rows[0];
+      if (previous?.dispatch_id === input.dispatchId) {
+        if (object(previous.detail).dispatchFingerprint !== input.dispatchFingerprint || previous.session_id !== input.sessionId) {
+          throw new HttpError(409, "agent_run_dispatch_conflict", "This request id already belongs to another research request.");
+        }
+        // A delayed identical caller owns no new transition, including after completion or cancellation.
+        return;
+      }
+      const active = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'run'
+        AND (state = 'running' OR (state = 'claimed' AND updated_at > now() - make_interval(mins => $2))) FOR UPDATE`, [study.id, VCR_RUN_RULES.staleClaimMinutes])).rows;
+      if (active.length) throw new HttpError(409, "vcr_conversation_busy", "The study is already running research. Retry when it finishes.");
+      const requested = [...new Set(["definition", ...vcrRequestedSteps(input.action)])];
+      await client.query(`INSERT INTO ${VCR_SCHEMA}.schedule_marks (study_id, key, user_id, kind, state, dispatch_id, session_id, detail)
+        VALUES ($1, 'run:definition', $2, 'run', 'claimed', $3, $4, $5::jsonb)
+        ON CONFLICT (study_id, key) DO UPDATE SET state = 'claimed', dispatch_id = EXCLUDED.dispatch_id,
+          session_id = EXCLUDED.session_id, run_id = NULL, done_at = NULL, detail = EXCLUDED.detail, updated_at = now()`,
+      [study.id, study.userId, input.dispatchId, input.sessionId, JSON.stringify({ purpose: "intake", requested,
+        scope: [{ step: "definition", fidelity: "full" }], dispatchFingerprint: input.dispatchFingerprint })]);
+    });
+    return {
+      bind: run => this.recoverIntake(study, run),
+      release: async code => {
+        await this.store.query(`UPDATE ${VCR_SCHEMA}.schedule_marks SET state = 'failed', detail = detail || $3::jsonb, updated_at = now()
+          WHERE study_id = $1 AND key = 'run:definition' AND dispatch_id = $2 AND state = 'claimed'`,
+        [study.id, input.dispatchId, JSON.stringify({ lastError: code })]);
+      },
+    };
+  }
+
+  /** A bounded reread of the existing mark and run, for an idempotent Start retry.
+   * @param {string} studyId @param {any} run */
+  async intakeStatus(studyId, run) {
+    const mark = await this.store.one(`SELECT detail FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1
+      AND key = 'run:definition' AND dispatch_id = $2`, [studyId, run.dispatchId]);
+    if (run.dispatchStatus === "rejected") return "rejected";
+    if (object(mark?.detail).awaitingInput === true) return "awaiting_input";
+    if (["dispatching", "unknown"].includes(run.dispatchStatus)) return "confirming";
+    return "accepted";
+  }
+
+  /** Recover the PostgreSQL binding from the authoritative run ledger without resending.
+   * @param {any} study @param {any} run */
+  async recoverIntake(study, run) {
+    const mark = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks
+      WHERE study_id = $1 AND key = 'run:definition' AND dispatch_id = $2`, [study.id, run.dispatchId]);
+    if (!mark) return false;
+    const changed = await this.#settleIntake(study, mark, run);
+    if (changed && TERMINAL_RUN.has(String(run.status)) && run.dispatchStatus !== "rejected") await this.advance(study.id);
+    return changed;
+  }
+
+  /** The run ledger is authoritative; bind, goal admission and terminal intake bookkeeping commit together.
+   * Explicit pre-send rejections never replace existing programme goals. Unknown acceptance is never replayed or rolled back.
+   * @param {any} study @param {any} mark @param {any} run */
+  async #settleIntake(study, mark, run) {
+    return this.store.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-run:' || $1))", [study.id]);
+      const current = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks
+        WHERE study_id = $1 AND key = $2 AND dispatch_id = $3 FOR UPDATE`, [study.id, mark.key, run.dispatchId])).rows[0];
+      if (!current || object(current.detail).purpose !== "intake") return false;
+      const row = (await client.query(`SELECT steps FROM ${VCR_SCHEMA}.studies WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [study.id])).rows[0];
+      if (!row) return false;
+      const detail = { ...object(current.detail) };
+      const before = JSON.stringify(detail);
+      const steps = object(row.steps);
+      const priorSteps = JSON.stringify(steps);
+      const terminal = TERMINAL_RUN.has(String(run.status));
+      const rejected = run.dispatchStatus === "rejected";
+      const canceled = detail.canceled === true || ["canceled", "cancelled"].includes(run.status);
+      const submitted = ["accepted", "unknown"].includes(run.dispatchStatus) || (terminal && !rejected && !canceled);
+      if (submitted && !canceled && detail.goalsApplied !== true) {
+        for (const step of VCR_STEPS) steps[step] = { ...object(steps[step]), requested: list(detail.requested).includes(step),
+          held: !FINISHED.has(String(object(steps[step]).status ?? "none")) };
+        detail.goalsApplied = true;
+      }
+      let state = current.state;
+      if (terminal) {
+        detail.runStatus = run.status;
+        state = run.status === "succeeded" ? "done" : "failed";
+        if (canceled) { detail.canceled = true; detail.awaitingInput = false; }
+        else if (rejected) detail.awaitingInput = false;
+        else if (detail.intakeReleased !== true) {
+          const defined = (await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.study_definitions WHERE study_id = $1 LIMIT 1`, [study.id])).rows.length > 0;
+          if (defined) {
+            for (const step of list(detail.requested)) if (VCR_STEPS.includes(String(step))) {
+              steps[String(step)] = { ...object(steps[String(step)]), requested: true, held: false };
+            }
+            detail.intakeReleased = true;
+            detail.awaitingInput = false;
+          } else {
+            state = "done";
+            detail.awaitingInput = true;
+            steps.definition = { ...object(steps.definition), status: "none", requested: true, held: true,
+              note: "请在研究对话中补充尚缺的研究信息。" };
+          }
+        }
+      } else if (state === "claimed") state = "running";
+      const changed = before !== JSON.stringify(detail) || priorSteps !== JSON.stringify(steps)
+        || state !== current.state || current.run_id !== run.id || current.session_id !== run.sessionId;
+      if (!changed) return false;
+      if (priorSteps !== JSON.stringify(steps)) await client.query(`UPDATE ${VCR_SCHEMA}.studies
+        SET steps = $2::jsonb, updated_at = now() WHERE id = $1`, [study.id, JSON.stringify(steps)]);
+      await client.query(`UPDATE ${VCR_SCHEMA}.schedule_marks SET run_id = $3, session_id = $4, state = $5,
+        detail = $6::jsonb, done_at = CASE WHEN $7 THEN COALESCE(done_at, now()) ELSE done_at END, updated_at = now()
+        WHERE study_id = $1 AND key = $2`, [study.id, mark.key, run.id, run.sessionId, state, JSON.stringify(detail), terminal]);
+      return true;
+    });
+  }
+
+  /** Only the intake hold is released by an actual definition; cancellation holds stay intact.
+   * @param {any} study @param {any} mark */
+  async #releaseIntake(study, mark) {
+    if (!await this.store.latestDefinition(study.id)) return false;
+    return this.store.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-run:' || $1))", [study.id]);
+      const current = (await client.query(`SELECT detail FROM ${VCR_SCHEMA}.schedule_marks
+        WHERE study_id = $1 AND key = $2 AND dispatch_id = $3 FOR UPDATE`, [study.id, mark.key, mark.dispatch_id])).rows[0];
+      const detail = object(current?.detail);
+      if (!current || detail.canceled === true || detail.intakeReleased === true) return false;
+      for (const step of list(detail.requested)) {
+        const name = String(step);
+        if (!VCR_STEPS.includes(name)) continue;
+        await client.query(`UPDATE ${VCR_SCHEMA}.studies SET steps = jsonb_set(steps, ARRAY[$2::text],
+          COALESCE(steps->$2, '{}'::jsonb) || '{"requested":true,"held":false}'::jsonb, true), updated_at = now() WHERE id = $1`, [study.id, name]);
+      }
+      await client.query(`UPDATE ${VCR_SCHEMA}.schedule_marks SET detail = detail || '{"awaitingInput":false,"intakeReleased":true}'::jsonb,
+        updated_at = now() WHERE study_id = $1 AND key = $2`, [study.id, mark.key]);
+      return true;
+    });
+  }
+
   // --- the route hooks ---------------------------------------------------------------
 
   /** Review-only conversion, with no research dispatch or scientific model replacement.
@@ -1869,6 +2008,8 @@ export class VcrOrchestrator {
     return this.#exclusive(studyId, async () => {
       const study = await this.store.studyById(studyId);
       if (!study) return { held: [] };
+      await this.store.query(`UPDATE ${VCR_SCHEMA}.schedule_marks SET detail = detail || '{"canceled":true,"awaitingInput":false}'::jsonb,
+        updated_at = now() WHERE study_id = $1 AND key = 'run:definition' AND detail->>'purpose' = 'intake'`, [study.id]);
       /** @type {string[]} */
       const held = [];
       for (const step of VCR_STEPS) {
@@ -2123,6 +2264,7 @@ export class VcrOrchestrator {
     return this.#exclusive(studyId, async () => {
       let study = await this.store.studyById(studyId);
       if (!study || study.status !== "active") return { skipped: study ? "paused" : "gone" };
+      if (study.purpose === "calculation") return { skipped: "calculation" };
       await this.#detectChanges(study);
       await this.#refreshReviewExports(study);
       // Two passes, because what the programme wants depends on what is
@@ -2130,8 +2272,8 @@ export class VcrOrchestrator {
       // study that wants the whole programme, and reading the plan before
       // observing would leave it waiting a whole tick for something already
       // on disk.
-      study = await this.#observe(study, wantedVcrSteps(vcrProgramSteps(study.steps)));
-      const plan = wantedVcrSteps(vcrProgramSteps(study.steps));
+      study = await this.#observe(study, wantedVcrSteps(vcrProgramSteps(study.steps, study.purpose)));
+      const plan = wantedVcrSteps(vcrProgramSteps(study.steps, study.purpose));
       /** @type {{ dispatched: any, deferred: string | null, enqueued: string[] }} */
       const result = { dispatched: null, deferred: null, enqueued: [] };
       study = await this.#observe(study, plan);
@@ -2837,6 +2979,7 @@ export class VcrOrchestrator {
    * @param {any} study @param {any} job @param {any} result @param {string} node
    */
   async #landResult(study, job, result, node) {
+    if (job.kind === "population_quality") return;
     const parsed = parseLineageNode(node);
     if (!parsed) return;
     const table = { population: "populations", patient_set: "patient_sets", comparator_design: "comparator_designs", trial_scenario: "trial_scenarios" }[parsed.kind];
@@ -3259,15 +3402,32 @@ export class VcrOrchestrator {
   /**
    * The run ledger's completion, for every run of the platform: a run this
    * module dispatched (`vcr-…`) is folded into its steps.
-   * @param {{ userId: string, id: string }} controlProject @param {{ id: string, dispatchId?: string | null, status: string }} run
+   * @param {{ userId: string, id: string }} controlProject @param {{ id: string, sessionId?: string, dispatchId?: string | null, status: string }} run
    */
   async onRunFinished(controlProject, run) {
+    if (TERMINAL_RUN.has(String(run.status)) && !String(run?.dispatchId ?? "").startsWith("vcr-")) {
+      const waiting = await this.store.one(`SELECT m.* FROM ${VCR_SCHEMA}.schedule_marks m
+        JOIN ${VCR_SCHEMA}.studies s ON s.id = m.study_id WHERE s.user_id = $1 AND s.project_id = $2
+        AND s.deleted_at IS NULL AND m.session_id = $3 AND m.key = 'run:definition' AND m.state = 'done'
+        AND m.detail->>'purpose' = 'intake' AND m.detail->>'awaitingInput' = 'true'`,
+      [String(controlProject.userId), String(controlProject.id), String(run.sessionId ?? "")]);
+      if (!waiting) return false;
+      const study = await this.store.studyById(String(waiting.study_id));
+      if (!study || !(await this.#releaseIntake(study, waiting))) return false;
+      await this.advance(study.id);
+      return true;
+    }
     if (!String(run?.dispatchId ?? "").startsWith("vcr-") || !TERMINAL_RUN.has(String(run.status))) return false;
     const row = await this.store.one(`SELECT m.* FROM ${VCR_SCHEMA}.schedule_marks m
       JOIN ${VCR_SCHEMA}.studies s ON s.id = m.study_id
       WHERE s.user_id = $1 AND s.project_id = $2 AND s.deleted_at IS NULL AND m.kind = 'run' AND m.dispatch_id = $3`,
     [String(controlProject.userId), String(controlProject.id), String(run.dispatchId)]);
-    if (!row || ["done", "failed"].includes(String(row.state))) return false;
+    if (!row) return false;
+    if (object(row.detail).purpose === "intake") {
+      const study = await this.store.studyById(String(row.study_id));
+      return study ? this.recoverIntake(study, run) : false;
+    }
+    if (["done", "failed"].includes(String(row.state))) return false;
     await this.#exclusive(String(row.study_id), async () => {
       const study = await this.store.studyById(String(row.study_id));
       if (study) await this.#finishRun(study, { ...row, run_id: row.run_id ?? run.id }, String(run.status));
@@ -3278,6 +3438,10 @@ export class VcrOrchestrator {
 
   /** @param {any} study @param {any} mark @param {string} status */
   async #finishRun(study, mark, status) {
+    if (object(mark.detail).purpose === "intake") {
+      return this.#settleIntake(study, mark, { id: mark.run_id, sessionId: mark.session_id,
+        dispatchId: mark.dispatch_id, status });
+    }
     // A run a person stopped is their decision, not a failure the programme tries again: its key is not asked again until they ask for
     // the step (`runStep` raises the allowance), and the steps it covered read as not started, not as failed.
     const canceled = status === "canceled" || status === "cancelled";
@@ -3318,7 +3482,7 @@ export class VcrOrchestrator {
     // nothing leaves its step where it was for a person to ask again. The run
     // is over by now, so a step it left nothing for no longer reads running
     // (`vcrIdleStepStatus`) — which is what lets a run that failed be said here.
-    const plan = wantedVcrSteps(vcrProgramSteps(study.steps));
+    const plan = wantedVcrSteps(vcrProgramSteps(study.steps, study.purpose));
     const observed = await this.#observe(study, plan);
     for (const entry of list(detail.scope)) {
       const step = String(object(entry).step ?? entry);

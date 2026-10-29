@@ -3,11 +3,11 @@
  * and the one sentence at its end. The tabs below it are drawn by the layout; this is only the words and the states.
  */
 import { agendaLocalDate, DISPLAY_TIME_ZONE } from "@evimed/domain";
-import { GEO_STEP_KEYS, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
+import { GEO_STEP_KEYS, type GeoMeasurement, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import type { RailState } from "@/components/ui/ProgressRail";
 import type { StepRailStep } from "@/components/ui/StepRail";
-import { GEO_STEP_NAMES, GEO_STEP_WORK, monthDay, parseGeoDate } from "./geoText";
+import { engineName, GEO_STEP_NAMES, GEO_STEP_WORK, monthDay, parseGeoDate, zh } from "./geoText";
 import { GEO_MARKET_OFF_NOTE, marketConnected } from "./geoOverviewModel";
 
 /** The steps as the project's overview copy has them; an empty copy says nothing rather than that nothing has been done. */
@@ -52,7 +52,7 @@ export function bandSteps(project: GeoProject, hrefOf: (step: GeoStepKey) => str
             : held ? "todo"
               : working ? "active" : "todo";
     const summary = budget ? "待你确认预算" : held ? GEO_MARKET_OFF_NOTE : step?.summary?.text ?? shortNote(step?.note);
-    return { id: key, label: GEO_STEP_NAMES[key], state, summary, href: hrefOf(key) };
+    return { id: key, label: GEO_STEP_NAMES[key], state, stateLabel: status === "none" ? step?.requested === true ? "待开始" : step?.requested === false ? "未请求" : "未开始" : status === "queued" ? "排队中" : undefined, summary, href: hrefOf(key) };
   });
 }
 
@@ -60,41 +60,83 @@ export function bandSteps(project: GeoProject, hrefOf: (step: GeoStepKey) => str
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
 /**
- * The one sentence at the rail's right end — 「现在」: what the programme is doing and when it measures next. No percentage, no bar:
- * a number on work an agent is doing is one nobody can honour.
- *
- *  - the steps being worked on, in the work's own word (「正在写稿、投放」) — 监测 is the schedule's and is said by the next line;
- *  - a measurement under way (the next date has come and the round is queued or running): 「第 3 轮复测中」;
- *  - otherwise the next one: 「下次复测 周一 10月21日」.
- *
- * `next` is the monitoring read's `next` (a date and the round kind); null where it is not known yet, and then only the work is said.
- * Null when there is nothing to say.
+ * What the measurement's own state says, in the reader's words, or null while every engine of the project is measured as usual
+ * (and from an older server, which says nothing). `paused`: no engine can be asked. `short` is the band's few words, `detail` what
+ * happens next, `sentence` the two as one line. Nothing here names a code or the measuring host.
+ */
+export interface MeasurementPause {
+  paused: boolean;
+  short: string;
+  detail: string;
+  sentence: string;
+}
+
+export function measurementPause(measurement: GeoMeasurement | null | undefined): MeasurementPause | null {
+  if (!measurement || typeof measurement !== "object") return null;
+  if (measurement.state === "paused") {
+    const day = monthDay(measurement.since ?? null);
+    const short = `AI 回答测量暂停中${day ? `（${day}起）` : ""}`;
+    const detail = "测量服务暂时连不上，恢复后自动继续";
+    return { paused: true, short, detail, sentence: `${short}：${detail}。` };
+  }
+  const engines = Array.isArray(measurement.engines)
+    ? measurement.engines.filter((engine, at, all): engine is string => typeof engine === "string" && !!engine && all.indexOf(engine) === at)
+    : [];
+  if (engines.length === 0) return null;
+  const short = zh`${engines.map((engine) => engineName(engine)).join("、")}暂停测量`;
+  const detail = "其余 AI 照常测量，恢复后自动继续";
+  return { paused: false, short, detail, sentence: `${short}，${detail}。` };
+}
+
+/**
+ * The next full measurement as the page may say it: none for a project its owner paused, none while the measurement itself is
+ * paused — the server says the same, and the page does not promise a round on an older server's word.
+ */
+export function nextMeasurement(
+  project: Pick<GeoProject, "status">,
+  watch: { next?: { date: string; kind: string } | null; measurement?: GeoMeasurement | null } | null | undefined,
+): { date: string; kind: string } | null {
+  if (!watch?.next?.date || project.status === "paused" || watch.measurement?.state === "paused") return null;
+  return watch.next;
+}
+
+/**
+ * The current persisted work state and next scheduled date; a due schedule proves no execution or current round identity. No next
+ * measurement is said for a project its owner paused, nor while the measurement itself is paused: neither one is coming.
  */
 export function bandNow(
   project: GeoProject,
   next: { date: string; kind: string } | null | undefined,
   now: Date = new Date(),
+  measurement: GeoMeasurement | null = null,
 ): string | null {
   const steps = stepsOf(project);
   const working = GEO_STEP_KEYS
-    .filter((key) => key !== "monitoring")
-    .filter((key) => {
-      const step = steps[key];
-      return step && (step.status === "running" || step.status === "queued") && !stepAllowanceWait(step);
-    })
-    .map((key) => GEO_STEP_WORK[key]);
+    .filter(key => key !== "monitoring")
+    .filter(key => steps[key]?.status === "running" && !stepAllowanceWait(steps[key]))
+    .map(key => GEO_STEP_WORK[key]);
+  const queued = GEO_STEP_KEYS
+    .filter(key => key !== "monitoring")
+    .filter(key => steps[key]?.status === "queued" && !stepAllowanceWait(steps[key]))
+    .map(key => GEO_STEP_WORK[key]);
   const parts: string[] = [];
   if (working.length > 0) parts.push(`正在${working.join("、")}`);
-  if (next?.date) {
+  if (queued.length > 0) parts.push(`排队中：${queued.join("、")}`);
+  const monitor = steps.monitoring;
+  if (stepAllowanceWait(monitor)) parts.push("复测等待额度");
+  else if (monitor?.status === "running") parts.push("复测进行中");
+  else if (monitor?.status === "queued") parts.push("复测排队中");
+  const pause = measurementPause(measurement);
+  if (pause) parts.push(pause.short);
+  if (next?.date && project.status !== "paused" && !pause?.paused) {
     const today = agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString());
-    const rounds = steps.monitoring?.summary?.count ?? project.overview?.metrics?.[0]?.trend?.length ?? 0;
+    const day = parseGeoDate(next.date);
+    const date = `${day ? `${WEEKDAYS[day.getDay()]} ` : ""}${monthDay(next.date) ?? next.date}`.trim();
     if (next.date <= today) {
-      // The round the date names has begun: the baseline when nothing was measured yet, else the n-th re-test.
-      parts.push(rounds > 0 ? `第 ${rounds} 轮复测中` : "基线测量中");
-    } else {
-      const day = parseGeoDate(next.date);
-      parts.push(`下次复测 ${day ? `${WEEKDAYS[day.getDay()]} ` : ""}${monthDay(next.date) ?? ""}`.trim());
-    }
+      // A due schedule is not evidence that a round began, nor an identity for the next round.
+      if (monitor?.status !== "running") parts.push(`待复测 ${monthDay(next.date) ?? next.date}`);
+      else parts.push(`计划日期 ${date}`);
+    } else parts.push(`下次复测 ${date}`);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 }

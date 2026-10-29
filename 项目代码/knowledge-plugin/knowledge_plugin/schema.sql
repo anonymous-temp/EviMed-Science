@@ -229,3 +229,216 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.meta (
   value       jsonb NOT NULL,
   updated_at  timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+
+-- fr-sources 2026-10-22 ---------------------------------------------------------------------------------------------
+-- Automatic source discovery and the source lifecycle (discovery.py, lifecycle.py). Candidates found by the candidate
+-- lines are validated (reachable, robots, an adapter reads them, fresh items, medical), put on a seven-day trial as
+-- ordinary registry rows at a low rate, then admitted or not; any source — file, discovered or dynamic — is retired by
+-- rule (robots refusal, 401/403 for seven days, silence past its own rhythm, off-topic by the platform's screen) and
+-- keeps its row and history, so it can come back.
+
+-- One row per thing a line found: a site, a feed, a journal (ISSN), a social account, a requested row, a retired
+-- source due for a re-check. `key` is the canonical identity (a feed or homepage URL, `issn:<ISSN-L>`,
+-- `x:<handle>`, `source:<id>`), unique across lines: the first line that found it owns it, the rest add evidence.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.source_candidates (
+  id               text PRIMARY KEY CHECK (char_length(id) BETWEEN 1 AND 120),
+  line             text NOT NULL,
+  key              text NOT NULL UNIQUE CHECK (char_length(key) BETWEEN 1 AND 2048),
+  name             text,
+  first_seen_at    timestamptz(3) NOT NULL,
+  last_seen_at     timestamptz(3) NOT NULL,
+  sightings        integer NOT NULL DEFAULT 1 CHECK (sightings >= 1),
+  evidence         jsonb NOT NULL DEFAULT '{}'::jsonb,       -- where it was seen: referring sources, lines, volumes
+  state            text NOT NULL DEFAULT 'candidate'
+                   CHECK (state IN ('candidate', 'trial', 'admitted', 'retired', 'failed', 'rejected')),
+  state_reason     text,
+  state_at         timestamptz(3) NOT NULL,
+  attempts         smallint NOT NULL DEFAULT 0,
+  next_check_at    timestamptz(3),                           -- a candidate whose validation was deferred
+  medical_basis    text,                                     -- data that makes it medical: nlm-catalog, pubmed-stream, directory, request
+  source_id        text,                                     -- the registry row's id once validated
+  row              jsonb,                                    -- the registry row validation built (trial, admitted)
+  validation       jsonb,                                    -- what the probe found: exit, feed, fresh items, sample titles
+  trial_started_at timestamptz(3),
+  trial_until      timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS knowledge_source_candidates_state_idx
+  ON evimed_knowledge.source_candidates (state, line, next_check_at);
+CREATE INDEX IF NOT EXISTS knowledge_source_candidates_source_idx
+  ON evimed_knowledge.source_candidates (source_id) WHERE source_id IS NOT NULL;
+
+-- Daily counts by line (Asia/Shanghai day): what /v1/health `discovery` reports. A transition adds one to its column
+-- on the day it happens; net growth is admitted minus retired.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.discovery_daily (
+  day        date NOT NULL,
+  line       text NOT NULL,
+  candidates integer NOT NULL DEFAULT 0 CHECK (candidates >= 0),
+  validated  integer NOT NULL DEFAULT 0 CHECK (validated >= 0),
+  trial      integer NOT NULL DEFAULT 0 CHECK (trial >= 0),
+  admitted   integer NOT NULL DEFAULT 0 CHECK (admitted >= 0),
+  retired    integer NOT NULL DEFAULT 0 CHECK (retired >= 0),
+  failed     integer NOT NULL DEFAULT 0 CHECK (failed >= 0),
+  PRIMARY KEY (day, line)
+);
+
+-- Sources the lifecycle retired, whatever their origin. The registry composition leaves them out, so the sync marks
+-- them retired (`retired_at`) and nothing polls them; the row, its entries and its fetch history stay. A re-check that
+-- finds the source readable, permitted and fresh again deletes the row here and the source comes back.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.source_lifecycle (
+  source_id     text PRIMARY KEY,
+  reason        text NOT NULL CHECK (reason IN ('robots', 'forbidden', 'silent', 'off-topic')),
+  line          text NOT NULL,                              -- `registry` for a file row, else the candidate's line
+  decided_at    timestamptz(3) NOT NULL,
+  recheck_after timestamptz(3),                             -- null: never re-checked automatically (off-topic)
+  evidence      jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+-- The platform's own screening verdicts on each source's entries (POST /v1/sources/screening): how many it screened
+-- and how many it judged not medical over its window. The plugin makes no content judgement; trials and the
+-- off-topic rule read these.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.source_screening (
+  source_id   text PRIMARY KEY,
+  screened    integer NOT NULL CHECK (screened >= 0),
+  off_topic   integer NOT NULL CHECK (off_topic >= 0 AND off_topic <= screened),
+  window_days smallint NOT NULL CHECK (window_days BETWEEN 1 AND 30),
+  reported_at timestamptz(3) NOT NULL
+);
+-- How many of the source's items the platform selected (its own window, 30 days): a source that put one item in the
+-- selected feed is never retired as off-topic, however much else it sends (2026-10-22: 中国政府网 最新政策, 1 selected).
+ALTER TABLE evimed_knowledge.source_screening ADD COLUMN IF NOT EXISTS selected integer CHECK (selected >= 0);
+
+-- fr-social 2026-10-22
+-- Contract 1.5.0: social posts. What a post carries beside the common fields, on the entry as delivered: the channel (every
+-- entry delivered from 1.5.0 on; older rows keep NULL and are delivered without it), the platform, the author, the stored
+-- media (ids of evimed_knowledge.media), the post it quotes and the platform's own counts when it was read.
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS metrics jsonb;
+-- The full text (`/text` body_text): a post or article as it arrived, or the readable text of a page; 40,000 characters.
+ALTER TABLE evimed_knowledge.entry_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 40000);
+-- entry_texts.fetched_from gains 'x' and 'social' (a CHECK made with the table, replaced once, the way fetches.outcome was).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'evimed_knowledge.entry_texts'::regclass AND conname = 'entry_texts_fetched_from_check'
+                    AND pg_get_constraintdef(oid) LIKE '%''social''%') THEN
+    ALTER TABLE evimed_knowledge.entry_texts DROP CONSTRAINT IF EXISTS entry_texts_fetched_from_check;
+    ALTER TABLE evimed_knowledge.entry_texts ADD CONSTRAINT entry_texts_fetched_from_check CHECK (fetched_from IN
+      ('pubmed', 'europepmc', 'crossref', 'page', 'browser', 'relay', 'evimed-api', 'wechat', 'x', 'social'));
+  END IF;
+END $$;
+-- Contract 1.5.1 (rt-papers, 2026-10-22): entry_texts.fetched_from gains the paper text chain's sources — 'openalex',
+-- 'landing', 'publisher-feed', 'europepmc-fulltext', 'elsevier' — the same one-time replacement.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'evimed_knowledge.entry_texts'::regclass AND conname = 'entry_texts_fetched_from_check'
+                    AND pg_get_constraintdef(oid) LIKE '%''europepmc-fulltext''%') THEN
+    ALTER TABLE evimed_knowledge.entry_texts DROP CONSTRAINT IF EXISTS entry_texts_fetched_from_check;
+    ALTER TABLE evimed_knowledge.entry_texts ADD CONSTRAINT entry_texts_fetched_from_check CHECK (fetched_from IN
+      ('pubmed', 'europepmc', 'crossref', 'page', 'browser', 'relay', 'evimed-api', 'wechat', 'x', 'social',
+       'openalex', 'landing', 'publisher-feed', 'europepmc-fulltext', 'elsevier'));
+  END IF;
+END $$;
+
+-- The media store's index (the bytes are files under KNOWLEDGE_PLUGIN_MEDIA_DIR, named by their sha256): one row per stored
+-- image, never deleted. Eviction (least recently served first, past the store's cap) removes the file and sets evicted_at;
+-- the row keeps the id and the original address, so an entry that names the image keeps naming it.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.media (
+  id              text PRIMARY KEY CHECK (id ~ '^[a-f0-9]{64}$'),
+  content_type    text NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp', 'image/gif')),
+  bytes           integer NOT NULL CHECK (bytes > 0 AND bytes <= 1572864),
+  width           integer,
+  height          integer,
+  original_url    text NOT NULL CHECK (char_length(original_url) <= 2048),
+  stored_at       timestamptz(3) NOT NULL,
+  last_served_at  timestamptz(3),
+  evicted_at      timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS knowledge_media_original_idx ON evimed_knowledge.media (original_url);
+CREATE INDEX IF NOT EXISTS knowledge_media_lru_idx
+  ON evimed_knowledge.media ((coalesce(last_served_at, stored_at))) WHERE evicted_at IS NULL;
+-- An original that could not be stored (not an image, too big to re-encode, refused), so it is not fetched again on every
+-- sighting; retried after a day.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.media_failures (
+  original_url  text PRIMARY KEY CHECK (char_length(original_url) <= 2048),
+  failed_at     timestamptz(3) NOT NULL,
+  reason        text NOT NULL CHECK (char_length(reason) <= 200)
+);
+
+-- Every call to a paid provider (SocialData, Dajiala) and to the GEO social crawler, with what it cost: the daily caps are
+-- sums over this table (Asia/Shanghai calendar day), /v1/health's `providers` reads its last 24 h. Kept 30 days.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.provider_calls (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  provider    text NOT NULL CHECK (char_length(provider) <= 40),
+  called_at   timestamptz(3) NOT NULL,
+  purpose     text NOT NULL CHECK (char_length(purpose) <= 60),
+  outcome     text NOT NULL CHECK (outcome IN ('ok', 'missing', 'refused', 'rate-limited', 'balance', 'failed')),
+  objects     integer NOT NULL DEFAULT 0 CHECK (objects >= 0),
+  amount      numeric(12, 6) NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  currency    text NOT NULL CHECK (char_length(currency) <= 12),
+  remaining   numeric(14, 4),
+  error       text CHECK (char_length(error) <= 200)
+);
+CREATE INDEX IF NOT EXISTS knowledge_provider_calls_idx ON evimed_knowledge.provider_calls (provider, called_at DESC);
+
+-- fr-ext 2026-10-22
+-- entry_texts: the paid calls made for an entry's text (Dajiala `article_detail` for a WeChat article, ¥0.03 each). A WeChat
+-- article's text is bought, never read as a page (robots.txt refuses mp.weixin.qq.com), and a call that failed for a reason
+-- that passes (code 20002 while the balance ran low, 2026-10-22) is tried again later — at most six calls per entry.
+ALTER TABLE evimed_knowledge.entry_texts ADD COLUMN IF NOT EXISTS paid_attempts smallint NOT NULL DEFAULT 0;
+
+-- ct-mix 2026-10-24
+-- leads: the addresses the platform's lead triggers handed over (POST /v1/leads, contract 1.6.0), one row per canonical
+-- address (idempotent), counted against the day's cap by `day` (Asia/Shanghai), read by the leads loop (`leads.py`) and
+-- answered by what came of it. Kept 30 days.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.leads (
+  url_sha256      text PRIMARY KEY CHECK (url_sha256 ~ '^[a-f0-9]{64}$'),
+  url             text NOT NULL CHECK (char_length(url) <= 2048),
+  trigger         text NOT NULL CHECK (char_length(trigger) <= 40),
+  query           text CHECK (char_length(query) <= 300),
+  title           text CHECK (char_length(title) <= 300),
+  snippet         text CHECK (char_length(snippet) <= 700),
+  published_hint  timestamptz(3),
+  received_at     timestamptz(3) NOT NULL,
+  day             date NOT NULL,
+  state           text NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'fetched', 'stale', 'failed', 'refused')),
+  state_reason    text CHECK (char_length(state_reason) <= 200),
+  attempts        smallint NOT NULL DEFAULT 0,
+  next_attempt_at timestamptz(3) NOT NULL,
+  source_id       text,
+  entry_id        text,
+  done_at         timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS knowledge_leads_queue_idx ON evimed_knowledge.leads (next_attempt_at) WHERE state = 'queued';
+CREATE INDEX IF NOT EXISTS knowledge_leads_day_idx ON evimed_knowledge.leads (day);
+-- lead_sources: one registry row per site, WeChat account or journal a lead was read from and no registered source covers
+-- (access `lead`, never polled); composed into the registry with every other channel (`dynamic_registry`).
+CREATE TABLE IF NOT EXISTS evimed_knowledge.lead_sources (
+  id            text PRIMARY KEY CHECK (char_length(id) BETWEEN 1 AND 120),
+  key           text NOT NULL UNIQUE CHECK (char_length(key) BETWEEN 1 AND 300),
+  row           jsonb NOT NULL,
+  created_at    timestamptz(3) NOT NULL,
+  last_entry_at timestamptz(3)
+);
+
+-- c2-leads 2026-10-25
+-- hot_lists: the public hot lists read every round (GET /v1/hot-lists, contract 1.7.0, `hotlists.py`): one row per board
+-- and round, the ranked entries (rank, title, heat, the board's description and link; never a post or an account), kept
+-- 72 hours. hot_list_boards: each board's last attempt, its last snapshot and why its last attempt failed (Health.hot_lists).
+CREATE TABLE IF NOT EXISTS evimed_knowledge.hot_lists (
+  board      text NOT NULL CHECK (char_length(board) BETWEEN 1 AND 40),
+  fetched_at timestamptz(3) NOT NULL,
+  entries    jsonb NOT NULL,
+  PRIMARY KEY (board, fetched_at)
+);
+CREATE INDEX IF NOT EXISTS knowledge_hot_lists_fetched_idx ON evimed_knowledge.hot_lists (fetched_at);
+CREATE TABLE IF NOT EXISTS evimed_knowledge.hot_list_boards (
+  board           text PRIMARY KEY CHECK (char_length(board) BETWEEN 1 AND 40),
+  last_attempt_at timestamptz(3),
+  last_ok_at      timestamptz(3),
+  last_error      text CHECK (char_length(last_error) <= 200)
+);

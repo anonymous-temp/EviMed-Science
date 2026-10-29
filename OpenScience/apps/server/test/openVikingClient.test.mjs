@@ -32,6 +32,24 @@ const config = {
   openVikingRequestTimeoutMs: 1_000,
 };
 
+test("bounded sensitive responses cancel the stream before retaining excess bytes", async () => {
+  let cancelled = false;
+  const client = new OpenVikingClient(config, { fetchImpl: async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("private configuration must remain bounded")); },
+    cancel() { cancelled = true; },
+  })) });
+  await assert.rejects(client.request({ path: "/api/v1/admin/configuration", maxResponseBytes: 8 }),
+    error => error.code === "memory_index_unavailable" && !error.message.includes("private configuration"));
+  assert.equal(cancelled, true);
+});
+
+test("bounded reads preserve JSON and byte responses within the limit", async () => {
+  const client = new OpenVikingClient(config, { fetchImpl: async () => new Response('{"result":{"ok":true}}') });
+  assert.deepEqual(await client.request({ path: "/api/v1/admin/configuration", maxResponseBytes: 64 }), { result: { ok: true } });
+  const bytes = await client.request({ path: "/api/v1/content/download", maxResponseBytes: 64, responseType: "bytes" });
+  assert.equal(bytes.bytes.toString(), '{"result":{"ok":true}}');
+});
+
 /** Records every call and answers with the queued responses. */
 function recordingFetch(responses) {
   const calls = [];
@@ -292,9 +310,26 @@ test("a waiting write that timed out upstream is reported as a timeout, not as a
   const fetchImpl = recordingFetch([{ status: 504, body: upstreamError("DEADLINE_EXCEEDED", "queue processing exceeded 5.0s") }]);
   const client = new OpenVikingClient(config, { fetchImpl });
   await assert.rejects(
-    () => client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 5 }),
+    () => client.write("usr_alice", "viking://x/y.md", "text", { wait: true }),
     (error) => error.code === "memory_index_timeout" && /DEADLINE_EXCEEDED/.test(error.message),
   );
+});
+
+test("a write's body never carries a timeout: v0.5.1 forbids the field, v0.5.0 does not need it", async () => {
+  // Pinned because the break is silent until the engine is upgraded: `WriteContentRequest` forbids unknown fields
+  // there, so a body that still named `timeout` would turn every index write into a refusal. A caller that still
+  // passes the old option gets the same body.
+  const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", result: {} } }, { status: 200, body: { status: "ok", result: {} } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await client.write("usr_alice", "viking://user/x/memories/y.md", "text", { wait: true, tags: ["a"] });
+  await client.write("usr_alice", "viking://user/x/memories/y.md", "text", { wait: true, timeoutSeconds: 5 });
+  for (const call of fetchImpl.calls) {
+    assert.equal(new URL(call.url).pathname, "/api/v1/content/write");
+    const body = JSON.parse(call.options.body);
+    assert.equal(Object.hasOwn(body, "timeout"), false, JSON.stringify(Object.keys(body)));
+    assert.equal(body.wait, true);
+    assert.equal(body.mode, "replace");
+  }
 });
 
 test("a request that never answers becomes a timeout, not a hung recall", async () => {
@@ -563,4 +598,31 @@ test("a delete of something already gone is told from one that deleted, by the c
   assert.equal(await client.remove("usr_alice", "viking://x/a.md"), true);
   assert.equal(await client.remove("usr_alice", "viking://x/a.md"), false);
   assert.equal(await client.remove("usr_alice", "viking://x/a.md"), true, "an answer with no count is a delete that happened, as it always was");
+});
+
+test("write wait deadline belongs to HTTP transport, never a removed request-body timeout", async () => {
+  const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", result: {} } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 5 });
+  const body = JSON.parse(fetchImpl.calls[0].options.body);
+  assert.equal(body.wait, true);
+  assert.equal(Object.hasOwn(body, "timeout"), false);
+});
+
+test("write HTTP deadline aborts the request without cancelling background work", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    await new Promise((resolve, reject) => options.signal.addEventListener("abort", () => {
+      reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    }, { once: true }));
+  };
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await assert.rejects(
+    () => client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 0.01 }),
+    (error) => error.code === "memory_index_timeout",
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.signal.aborted, true);
+  assert.equal(new URL(calls[0].url).pathname, "/api/v1/content/write");
 });

@@ -135,6 +135,8 @@ const HOSTED_ENV = Object.freeze({ NODE_ENV: "production", OPEN_SCIENCE_AUTH_MOD
 const UNDER_THE_TOOL_CALL_CEILING = "the kernel abandons an MCP call at 180 s; a longer deadline means the gateway's own error never arrives";
 const ON_THE_DISPATCH_PATH = "recall runs before a run starts; longer holds every dispatch while the index is down";
 const FALLBACK_RULES = {
+  // Explicit operator endpoint enables only the receipt/controller release-gate profile.
+  OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL: ["deployment", "url"],
   OPEN_SCIENCE_RUNTIME_PIDS_LIMIT: ["gte", "runtimePidsLimit", "256 killed three runs with fork(): EAGAIN"],
   OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT: ["gte", "runtimeMemoryLimit", "4g OOM-killed the kernel on 2026-08-26"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ["gte", "memoryExtractionTimeoutMs", "30 s aborted a deep run's extraction on 2026-09-19"],
@@ -194,8 +196,6 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT: ["eq", "userDailySpendLimit", "budget"],
   OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT: ["eq", "userWeeklySpendLimit", "budget"],
   OPEN_SCIENCE_USER_RUN_SPEND_LIMIT: ["eq", "userRunSpendLimit", "budget"],
-  OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ["eq", "memoryContextLimit", "prompt budget"],
-  OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ["eq", "memoryContextMaxChars", "prompt budget"],
   OPEN_SCIENCE_GATE_REPAIR_ROUNDS: ["eq", "gateRepairRounds", "0 since the 2026-09-17 ruling"],
   OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD: ["eq", "llmRoutingConfidenceThreshold", "classifier policy"],
   // Cadences: how often and how long a worker holds work.
@@ -222,6 +222,10 @@ const FALLBACK_RULES = {
   // It turns on the one API it exists for and off the workers and warm-ups
   // that would start runs in a runtime this shape does not have.
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["deployment", "switch"],
+  // The API-only (CDSS) stack has no web app and no person to share with: sharing stays off there while the hosted default is on.
+  OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ["deployment", "switch"],
+  // The official starter packs are published for the web app's people; the API-only stack serves an institution's subjects and publishes none.
+  OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_LEARNING_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_AUTOPILOT_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["deployment", "switch"],
@@ -620,25 +624,9 @@ test("the learning loop has no cap by default, a day, a week or a run (owner rul
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learning-caps", learningDailyLimitCny: 25 }).learningDailyLimitCny, 25);
 });
 
-test("a third of the finished deliveries queue a distillation by default, the share is a fraction, and a share nobody could mean stops the process by name (review L-15)", () => {
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share" }).learningDistillSampleShare, 0.33);
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 1 }).learningDistillSampleShare, 1, "every delivery, as before");
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-share", learningDistillSampleShare: 0 }).learningDistillSampleShare, 0, "none from a clean delivery is a choice, not an error");
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "0.5" }).learningDistillSampleShare, 0.5);
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: "" }).learningDistillSampleShare, 0.33, "an empty value is unset, as .env.example and compose leave it");
-  for (const bad of ["1.5", "-0.1", "most", "NaN"]) {
-    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE: bad }), /OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE must be a number from 0 to 1/, bad);
-  }
-});
-
-test("the loop learns nothing from a repaired delivery by default, and stops a method its model never opens after twenty loads (owner, 2026-10-12)", () => {
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn" }).learningRepairDistillShare, 0);
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn", learningRepairDistillShare: 1 }).learningRepairDistillShare, 1, "every repaired delivery, as before");
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "0.25" }).learningRepairDistillShare, 0.25);
-  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "" }).learningRepairDistillShare, 0, "an empty value is unset, as .env.example and compose leave it");
-  for (const bad of ["2", "-1", "some"]) {
-    assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: bad }), /OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE must be a number from 0 to 1/, bad);
-  }
+test("the loop stops a method its model never opens after twenty loads (owner, 2026-10-12), and has no lever for a repaired delivery any more (deleted 2026-10-25)", () => {
+  assert.equal("learningRepairDistillShare" in loadConfig({ dataDir: "/tmp/os-config-learn" }), false);
+  assert.equal("learningRepairDistillShare" in configUnder({ OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: "1" }), false, "a value left in an old .env is read by nothing");
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn" }).learningUnusedRetireLoads, 20);
   assert.equal(loadConfig({ dataDir: "/tmp/os-config-learn", learningUnusedRetireLoads: 0 }).learningUnusedRetireLoads, 0, "zero is the switch, not an error");
   assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: "35" }).learningUnusedRetireLoads, 35);
@@ -709,10 +697,8 @@ test("the kernel is not selectable, and the variable that used to select it is r
 });
 
 // The same property, for the memory service that was retired into a schema of
-// the control-plane database. A renamed budget is the dangerous half: an
-// operator who had raised OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT would otherwise go
-// back to eight memories per prompt and be told nothing at all.
-test("the retired memory variables are refused by name, and the budget keeps its meaning under the new one", () => {
+// the control-plane database (and that schema's records have since gone too).
+test("the retired memory variables are refused by name", () => {
   const retired = {
     OPEN_SCIENCE_MEMOS_URL: "http://memos.internal",
     OPEN_SCIENCE_MEMOS_ACCESS_TOKEN: "pat",
@@ -737,12 +723,10 @@ test("the retired memory variables are refused by name, and the budget keeps its
   }
 
   const config = loadConfig({ dataDir: "/tmp/os-config-memory" });
-  assert.equal(config.memoryContextLimit, 8);
-  assert.equal(config.memoryContextMaxChars, 20_000);
   assert.equal(config.requireMemos, undefined, "the requirement flag is gone: the store exists with the database");
-  const raised = loadConfig({ dataDir: "/tmp/os-config-memory", memoryContextLimit: 12, memoryContextMaxChars: 40_000 });
-  assert.equal(raised.memoryContextLimit, 12);
-  assert.equal(raised.memoryContextMaxChars, 40_000);
+  // The legacy memory engine's recall budget went with it (2026-10-25).
+  assert.equal(config.memoryContextLimit, undefined);
+  assert.equal(config.memoryContextMaxChars, undefined);
 });
 
 test("the reranker defaults to the pins the index's own compatibility is recorded under", async () => {
@@ -945,41 +929,45 @@ test("owner-approved registration and one-credit-per-CNY defaults preserve an ex
   assert.equal(disabled.evimedCreditsPerCny, 0);
 });
 
-test("OpenViking as an engine: the two switches follow whether the engine is the deployment's index, and the levers are checked", () => {
-  // Each switch gates behaviour another module implements, so its default has to be a fact about the deployment and not
-  // an opinion: on exactly when there is an engine to build on. A literal `true` would switch native memory on for a
-  // deployment that pinned the term matcher.
+test("OpenViking as an engine: the knowledge switch follows whether the engine is the deployment's index, memory is a fact (the engine is configured), and the levers are checked", () => {
+  // The knowledge switch gates behaviour another module implements, so its default has to be a fact about the deployment and not
+  // an opinion: on exactly when there is an engine to build on. A literal `true` would switch it on for a deployment that pinned the
+  // term matcher. Memory has no lever: every account's memory is the engine's, so `memoryEngineEnabled` is whether it is configured,
+  // whichever component ranks the capsule's facts.
   const engine = { openVikingUrl: "http://evimed-openviking:1933", openVikingApiKey: "root-key-of-a-fixture" };
   const base = configUnder({ ...HOSTED_ENV });
   assert.equal(base.ovKnowledgeEnabled, false);
-  assert.equal(base.ovNativeMemoryEnabled, false);
+  assert.equal(base.memoryEngineEnabled, false);
   assert.equal(base.openVikingModelDailyBudgetCny, 50);
   assert.equal(base.openVikingEngineCheckMs, 1_800_000);
   assert.equal(base.openVikingModelKey, "");
-  assert.match(base.openVikingPin.version, /^\d+\.\d+\.\d+$/);
+  assert.match(base.openVikingPin.version, /^\d+\.\d+\.\d+(?:\.\d+)?$/, "upstream tags a patch of a patch as a fourth number (v0.5.1.1)");
   assert.deepEqual(Object.keys(base.openVikingPin.skills).sort(), ["knowledge-graph", "llm-wiki"]);
 
   const withEngine = loadConfig({ rootDir: repoRoot, ...engine });
   assert.equal(withEngine.ovKnowledgeEnabled, true);
-  assert.equal(withEngine.ovNativeMemoryEnabled, true);
-  // Named `openviking`, the same; pinned to the term matcher, both off though the engine is configured.
-  assert.equal(loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "openviking" }).ovNativeMemoryEnabled, true);
+  assert.equal(withEngine.memoryEngineEnabled, true);
+  // Named `openviking`, the same; pinned to the term matcher, the knowledge switch is off though the engine is configured and memory stays on.
+  assert.equal(loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "openviking" }).memoryEngineEnabled, true);
   const pinned = loadConfig({ rootDir: repoRoot, ...engine, memoryIndexProvider: "builtin" });
   assert.equal(pinned.ovKnowledgeEnabled, false);
-  assert.equal(pinned.ovNativeMemoryEnabled, false);
+  assert.equal(pinned.memoryEngineEnabled, true);
   // An unreadable root key is no engine.
-  assert.equal(loadConfig({ rootDir: repoRoot, openVikingUrl: engine.openVikingUrl, openVikingApiKey: "" }).ovKnowledgeEnabled, false);
+  const unreadable = loadConfig({ rootDir: repoRoot, openVikingUrl: engine.openVikingUrl, openVikingApiKey: "" });
+  assert.equal(unreadable.ovKnowledgeEnabled, false);
+  assert.equal(unreadable.memoryEngineEnabled, false);
 
-  // The operator's word wins in both directions, one switch at a time.
+  // The operator's word wins on the knowledge switch, and the memory engine is not one of the operator's words.
   const saved = process.env;
   try {
     process.env = { ...HOSTED_ENV, OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED: "false" };
     const oneOff = loadConfig({ rootDir: repoRoot, ...engine });
     assert.equal(oneOff.ovKnowledgeEnabled, false);
-    assert.equal(oneOff.ovNativeMemoryEnabled, true);
+    assert.equal(oneOff.memoryEngineEnabled, true);
+    // A leftover of the retired lever is not read: memory is not on because it says so.
     process.env = { ...HOSTED_ENV, OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED: "true", OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: "0", OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS: "600000" };
     const forced = loadConfig({ rootDir: repoRoot });
-    assert.equal(forced.ovNativeMemoryEnabled, true);
+    assert.equal(forced.memoryEngineEnabled, false);
     assert.equal(forced.openVikingModelDailyBudgetCny, 0, "0 is no cap, like every spend limit here");
     assert.equal(forced.openVikingEngineCheckMs, 600_000);
     // Empty reads as unset: `Number("")` is 0, and an unset budget must not become "no cap" by accident.

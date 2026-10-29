@@ -9,7 +9,7 @@
 // recall); `learning` paused = nothing is written (notes). A 「试用一次」 conversation is paused for both, for itself.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -49,10 +49,9 @@ async function projectFixture() {
 /** The researcher's own capsule in force for p1: one profile line and one approved work-style method. */
 async function ownCapsule() {
   const capsules = new CapsuleService(/** @type {any} */ (productDocumentsDouble()));
-  const own = await capsules.create(USER, { title: "我的记忆胶囊" });
+  const own = await capsules.ownCapsule(USER, { create: true });
   await capsules.addEntry(USER, own.id, { factKind: "profile", layer: "profile", content: "心内科临床药师" });
   await capsules.addEntry(USER, own.id, { factKind: "method_preference", layer: "methods", content: "先做敏感性分析再下结论" });
-  await capsules.activate(USER, own.id, { mode: "own", projectId: "p1" });
   return capsules;
 }
 
@@ -132,7 +131,9 @@ test("a launch under a recall pause mounts no learned and no capsule method, and
       assert.equal(paused.count, 0, JSON.stringify(state));
       assert.deepEqual(paused.learned, []);
       assert.deepEqual(paused.capsule, []);
-      assert.equal(existsSync(f.methodsDir), false, "the earlier launch's files are gone: a stale SKILL.md is a rule the researcher turned off");
+      // The directory itself stays (a bind mount of it must reach a later refresh); what is in it is the selection of nothing.
+      assert.deepEqual(await readdir(f.methodsDir), ["_selection.json"], "the earlier launch's files are gone: a stale SKILL.md is a rule the researcher turned off");
+      assert.deepEqual(JSON.parse(await readFile(path.join(f.methodsDir, "_selection.json"), "utf8")).methods, [], "and the plugin is told there is nothing to carry");
       assert.deepEqual(learning.asked, [], "a paused account's library is not even read");
       // Reopened for the next arm of the loop.
       manager.memoryPause = pauseOf({}).read;
@@ -162,7 +163,7 @@ test("the composition root gives the runtime manager the researcher's switches f
     async sessionState(_userId, _projectId, sessionId) { return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null }; },
     async relevant() { return []; },
   };
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, researchMemory: store });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memorySettings: store });
   try {
     await app.listen(0, "127.0.0.1");
     assert.equal(typeof app.runtimeManager.memoryPause, "function");

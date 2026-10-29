@@ -114,6 +114,8 @@ export const CONTRAST_RULES = Object.freeze([
   // is what found the 4.27:1 that followed.
   { fg: 'text-3', bg: 'surface-3', min: 4.5, what: 'metadata on an inset track' },
   { fg: 'text-2', bg: 'surface-3', min: 4.5, what: 'secondary text on an inset track' },
+  { fg: 'title-ink', bg: 'bg', min: 4.5, what: 'a list title on the canvas' },
+  { fg: 'title-ink', bg: 'surface-2', min: 4.5, what: 'a list title on a hovered row' },
   { fg: 'accent', bg: 'bg', min: 4.5, what: 'a link on the canvas' },
   { fg: 'accent', bg: 'surface', min: 4.5, what: 'a link on a card' },
   { fg: 'accent-fg', bg: 'accent', min: 4.5, what: 'the primary button label' },

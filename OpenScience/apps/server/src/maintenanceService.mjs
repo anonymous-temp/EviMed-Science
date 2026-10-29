@@ -262,7 +262,16 @@ export class MaintenanceService {
     await this.migrate(this.database);
     let admitted = false;
     try {
-      await this.database.transaction(async (client) => {
+      // An ambient plugin transaction can own the pool's only connection.
+      // Release this read/lock fence's savepoint, not that parent transaction.
+      const readFence = this.database.readFence ?? this.database.transaction;
+      await readFence.call(this.database, async (client) => {
+        // A repeatable-read/serializable parent can retain a snapshot from
+        // before a lease existed, even after acquiring its advisory lock.
+        const isolation = await client.query("SELECT current_setting('transaction_isolation') AS isolation");
+        if (isolation.rows[0]?.isolation !== "read committed") {
+          throw maintenanceError(503, "maintenance_state_invalid", "Maintenance admission requires read committed isolation.");
+        }
         await sharedLock(client);
         const lease = await activeLease(client);
         if (lease) throw maintenanceError(503, "maintenance_active", "The service is temporarily draining for maintenance.");

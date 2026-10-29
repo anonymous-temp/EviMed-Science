@@ -1,7 +1,8 @@
 # General-task baseline (`evals/general-tasks`)
 
-Twenty-two general tasks (G01–G22) and six medical controls (M01–M06), worded as in section 7 of the course-correction review
-(`general-agent.md`, finding GA30), run against a **real DSH kernel and DeepSeek through the real control plane**, one case at a
+Twenty-three general tasks (G01–G23) and six medical controls (M01–M06) — G01–G22 and the controls worded as in section 7 of the
+course-correction review (`general-agent.md`, finding GA30), G23 a production incident of 2026-10-24 (a report format remembered
+from one conversation, applied in the next with details the person never gave) — run against a **real DSH kernel and DeepSeek through the real control plane**, one case at a
 time, unattended. It answers one question: what does a plain request (an email, a spreadsheet, a deck, a script, a lookup) get on
 this platform today, and did a change make that better or worse, without making the medical work worse?
 
@@ -15,7 +16,7 @@ cd OpenScience
 node evals/general-tasks/runner/run.mjs --tree <path to the OpenScience checkout under test> --arm C --out <result directory>
 ```
 
-That is the whole of arm C: all 28 cases once, with the three fault variants (G16 with the routing classifier timing out, G14 with
+That is the whole of arm C: all 29 cases once, with the three fault variants (G16 with the routing classifier timing out, G14 with
 web search unavailable and with the whole web unavailable), judged and summarised as it goes. It is resumable: a case that already has a record in `--out` is
 skipped, so after an interruption run the same command again. Start it detached when it will outlive the shell:
 
@@ -27,7 +28,7 @@ Read `<dir>/summary.md` (one row per case) and `<dir>/summary.json`; do not read
 
 | option | meaning |
 |---|---|
-| `--arm A\|B\|C` | a label for B and C (the tree is the tree); A is the native control (below) and runs the 22 general cases only |
+| `--arm A\|B\|C` | a label for B and C (the tree is the tree); A is the native control (below) and runs the 23 general cases only |
 | `--cases G01,G05` / `--set all\|general\|medical` | which cases (G07 continues G06's conversation: ask for `G06,G07` together, or G07 alone, which brings G06 along) |
 | `--repeat N` | run the plan N times (records `…-r1`, `…-r2`); routing checks are deterministic, once is enough |
 | `--timeout-min 15` | per turn; a case may ask for more (M02 25, M04 45, M05 30). A run that hits it is cancelled and recorded as timed out |
@@ -65,7 +66,7 @@ For each case the runner registers a **throwaway local account**, creates a proj
 /api/files/upload` (the route the web app uses; knowledge-base files go to `knowledge-base/`), and dispatches each turn through `POST
 /api/agent-runs/dispatch` with the route left to the platform. A file that is uploaded to the workspace is announced the way the
 composer announces an attachment, by one line appended to the first message (`（附件已上传：sales.xlsx）`); this is the same in
-every arm. Multi-turn cases send their follow-ups in the same conversation (G22's last turn opens a new one, in the same
+every arm. Multi-turn cases send their follow-ups in the same conversation (G22's and G23's last turns open a new one, in the same
 project). Fault injection: G16 runs a second time with the routing classifier timing out (its model call never answers, so the classifier's own
 deadline ends it; injected at the model-provider boundary of the harness, `EVAL_FAULT`), and G14 two more times: with the web search
 provider switched off (`web-search-off`; a page can still be read) and with search and read both off (`web-off`, the honesty test proper). G20 also starts the created task once by hand (`run-now`) and reads the execution.

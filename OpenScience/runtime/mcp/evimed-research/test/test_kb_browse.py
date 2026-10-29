@@ -266,11 +266,15 @@ class KbBrowseThroughTheServerTests(_GatewayCase):
     def setUpClass(cls):
         cls.mcp = load_server()
 
-    def test_it_is_offered_beside_kb_search_and_is_not_an_engine_context_tool(self):
+    def test_it_is_offered_beside_kb_search_with_native_session_context(self):
         names = [tool["name"] for tool in self.mcp.list_tools()]
         self.assertIn("kb_browse", names)
         self.assertIn("kb_search", names)
-        self.assertNotIn("kb_browse", self.mcp.ENGINE_CONTEXT_TOOLS, "it reads the project, never a conversation's session")
+        self.assertIn("kb_browse", self.mcp.ENGINE_CONTEXT_TOOLS, "selected conversation scope is set by the native wrapper")
+
+    def test_only_native_context_sets_the_session_field(self):
+        kb_browse.browse({"op": "overview", "sessionId": "model-other"}, execution_context={"sessionId": "ses_selected"})
+        self.assertEqual(_Gateway.seen[-1]["body"]["sessionId"], "ses_selected")
 
     def test_a_success_carries_provenance_and_no_sources(self):
         result = self.mcp.call_tool("kb_browse", {"op": "read", "path": "concept/盘点差异率.md"})

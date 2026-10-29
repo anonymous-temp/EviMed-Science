@@ -1,4 +1,4 @@
-import { KNOWLEDGE_TREES } from "@evimed/domain";
+import { KNOWLEDGE_TREES, isKnowledgeMirrorPath } from "@evimed/domain";
 import { preferredLanguage } from "./knowledgePageService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -56,29 +56,45 @@ export function createKnowledgePageRoutes({ store, service, sources, maxJsonByte
     }
     if (url.pathname === "/api/knowledge-pages/page" && method === "GET") {
       let sourceId = url.searchParams.get("sourceId") ?? "";
-      if (!sourceId) {
+      const explicit = ["projectId", "tree", "path", "generationId", "pageId", "pageRevision"].some(key => url.searchParams.has(key));
+      let address = null;
+      if (explicit || !sourceId) {
         // A link inside a page names a path, not a document id.
         const project = await ownedProject(url.searchParams.get("projectId"));
         const tree = url.searchParams.get("tree") ?? "wiki";
         const path = url.searchParams.get("path") ?? "";
-        if (!KNOWLEDGE_TREES.includes(tree)) throw new HttpError(400, "knowledge_payload_invalid", "tree must be wiki or kg.");
+        if (!KNOWLEDGE_TREES.includes(tree) || !isKnowledgeMirrorPath(path)) throw new HttpError(400, "knowledge_payload_invalid", "tree must be wiki or kg.");
         const found = (await service.list(user.id, project.id)).pages.find((/** @type {any} */ page) => page.tree === tree && page.path === path);
         if (!found?.sourceId) throw new HttpError(404, "knowledge_page_not_found", "There is no such page.");
+        if (sourceId && sourceId !== found.sourceId) throw new HttpError(409, "knowledge_page_changed", "The addressed knowledge page changed.");
         sourceId = found.sourceId;
+        const revision = url.searchParams.get("pageRevision");
+        if (revision !== null && (!/^[1-9][0-9]*$/.test(revision) || !Number.isSafeInteger(Number(revision)))) throw new HttpError(400, "knowledge_payload_invalid", "The page revision is invalid.");
+        address = { projectId: project.id, tree, path,
+          ...(url.searchParams.has("generationId") ? { generationId: url.searchParams.get("generationId") || null } : {}),
+          ...(url.searchParams.has("pageId") ? { pageId: url.searchParams.get("pageId") } : {}),
+          ...(revision !== null ? { pageRevision: Number(revision) } : {}) };
       }
       const source = await sources.get(user.id, sourceId);
       const project = await store.requireProject(user, source.projectId);
-      return reply(await service.pageView(user.id, project, source));
+      return reply(await service.pageView(user.id, project, source, address));
     }
     if (url.pathname === "/api/knowledge-pages/page" && method === "PUT") {
-      const input = body(await readJson(req, maxJsonBytes), ["sourceId", "markdown", "baseSha256"]);
+      const input = body(await readJson(req, maxJsonBytes), ["sourceId", "markdown", "baseSha256", "address"]);
       if (typeof input.sourceId !== "string" || typeof input.markdown !== "string" || (input.baseSha256 != null && !/^[a-f0-9]{64}$/.test(String(input.baseSha256)))) {
         throw new HttpError(400, "knowledge_payload_invalid", "A page is saved with its document id and its Markdown.");
       }
+      if (input.address != null) {
+        const address = body(input.address, ["projectId", "tree", "path", "generationId", "pageId", "pageRevision"]);
+        if (typeof address.projectId !== "string" || !KNOWLEDGE_TREES.includes(address.tree) || !isKnowledgeMirrorPath(address.path)
+          || !(address.generationId === null || typeof address.generationId === "string" && /^kg_[a-f0-9]{32}$/.test(address.generationId))
+          || typeof address.pageId !== "string" || !address.pageId || !Number.isSafeInteger(address.pageRevision) || address.pageRevision < 1
+          || !input.baseSha256) throw new HttpError(400, "knowledge_payload_invalid", "The addressed page needs its complete current revision and base hash.");
+      }
       const source = await sources.get(user.id, input.sourceId);
       const project = await store.requireProject(user, source.projectId);
-      const saved = await service.saveEdit({ user, project, source, markdown: input.markdown, baseSha256: input.baseSha256 ?? null });
-      return reply({ changed: saved.changed, writeBack: saved.writeBack, userBlocks: saved.userBlocks, page: await service.pageView(user.id, project, saved.source) });
+      const saved = await service.saveEdit({ user, project, source, markdown: input.markdown, baseSha256: input.baseSha256 ?? null, address: input.address ?? null });
+      return reply({ changed: saved.changed, writeBack: saved.writeBack, userBlocks: saved.userBlocks, page: await service.pageView(user.id, project, saved.source, input.address ? { projectId: project.id, tree: input.address.tree, path: input.address.path } : null) });
     }
     if (url.pathname === "/api/knowledge-pages/graph" && method === "GET") {
       const project = await ownedProject(url.searchParams.get("projectId"));

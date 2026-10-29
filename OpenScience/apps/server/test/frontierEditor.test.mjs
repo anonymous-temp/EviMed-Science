@@ -1,16 +1,27 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { FRONTIER_EVIDENCE_TYPES } from "@evimed/domain";
+import { FRONTIER_EVIDENCE_TYPES, FRONTIER_GENRES } from "@evimed/domain";
+import { FRONTIER_TITLE_RULE } from "../src/frontierStyle.mjs";
 import {
   FRONTIER_AI_MINUTE_INSTRUCTIONS,
   FRONTIER_DIGEST_INSTRUCTIONS,
+  FRONTIER_RETAG_INSTRUCTIONS,
+  buildRetagInput,
+  verifyRetag,
   FRONTIER_EDITOR_VERSION,
   FRONTIER_EDIT_INSTRUCTIONS,
   FRONTIER_MODEL_INPUT_CHARS,
   FRONTIER_PROSE_ISSUE_KINDS,
+  FRONTIER_SCORE_ANCHORS_ZH,
   FRONTIER_SCREEN_INSTRUCTIONS,
+  FRONTIER_TITLE_GUIDES_ZH,
+  FRONTIER_TITLE_INSTRUCTIONS,
+  FRONTIER_TITLE_VERSION,
   FRONTIER_TEXT_LIMITS,
+  FRONTIER_TRANSLATE_BODY_INSTRUCTIONS,
+  FRONTIER_TRANSLATE_POST_INSTRUCTIONS,
+  FRONTIER_TRANSLATION_LIMITS,
   FrontierEditor,
   abstractNumberSource,
   aiMinuteNumberSource,
@@ -18,8 +29,16 @@ import {
   buildAiMinuteInput,
   buildDigestInput,
   buildModelInput,
+  buildTitleInput,
+  frontierEditorDiagnostics,
+  frontierTitleMarks,
+  frontierTitleVersionOf,
+  verifyTitle,
   digestNumberSource,
   editNumberSource,
+  frontierEditPolicyCurrent,
+  frontierParagraphs,
+  FRONTIER_REFERENCE_ENTRY,
   isChineseProse,
   isChineseTitle,
   parseModelJson,
@@ -28,6 +47,7 @@ import {
   validateScreen,
   verifyAbstract,
   verifyEdit,
+  verifyParagraph,
 } from "../src/frontierEditor.mjs";
 
 const config = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierModel: "deepseek-flash" };
@@ -98,7 +118,7 @@ test("a screening answer that is not one valid verdict per entry is asked again 
   assert.equal(calls.length, 5);
   assert.deepEqual([...result.verdicts.keys()], ["e1", "e3"]);
   assert.equal(result.errors.get("e2"), "frontier_screen_invalid", "an unknown specialty is not a verdict");
-  assert.deepEqual(result.verdicts.get("e3")?.specialties, ["oncology", "hematology", "pharmacy"], "ordered by relevance, the first three kept");
+  assert.deepEqual(result.verdicts.get("e3")?.specialties, ["oncology", "hematology"], "ordered by relevance, the first two kept");
   assert.equal(editor.counters.screenRetries, 1);
   assert.equal(editor.counters.screenSingles, 3);
 });
@@ -208,12 +228,69 @@ function answer(overrides = {}) {
   };
 }
 
-test("the edit asks for no 「为什么值得看」: the summary's last sentence carries what the item means, within three lines", () => {
-  assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /reason_zh|为什么值得看/, "the field and its output key are gone");
-  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /summary_zh：两三句导读，不超过 120 个字/);
-  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /最后一句说明它对临床实践或科研意味着什么，只依据原文，不夸大/);
-  assert.equal(FRONTIER_TEXT_LIMITS.summary, 140);
-  assert.equal(Object.hasOwn(FRONTIER_TEXT_LIMITS, "reason"), false);
+test("the edit asks for an answer-first 导读 and a 推荐理由 that says what a reader can do with the item, never why it was picked", () => {
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /summary_zh：导读，两三句，不超过 200 个字，答案前置：第一句直接说清这条消息的核心/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /reason_zh：推荐理由，一句话，45 到 70 个字，写给临床医生、药师或研究者：读了这条可以拿它做什么/);
+  // The cause of the 2026-09-24 retirement — a line about the feed's own choice («为什么值得看», 「为什么入选」) — is what the prompt rules out.
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /不写为什么入选、为什么推荐或值不值得读，不评价本平台/);
+  assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /为什么值得看/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /支持不了具体的阅读价值时给空字符串/, "an empty reason is an answer");
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /"reason_zh":"","tags":\[\]/, "both keys are in the output shape");
+  // The tag tree (2026-10-23): the tree's spellings ride with each item as 「候选标签」, and the prompt says to copy them.
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /条目给了「候选标签」时，意思相同的必须原样照抄候选里的写法/);
+  assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /主题词表/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /pharmacy 药学（药学实践本身/, "every specialty says what it takes");
+  assert.equal(FRONTIER_TEXT_LIMITS.summary, 220);
+  assert.deepEqual([FRONTIER_TEXT_LIMITS.reasonMin, FRONTIER_TEXT_LIMITS.reason, FRONTIER_TEXT_LIMITS.tags], [20, 90, 4]);
+});
+
+test("the 推荐理由 is checked on its own: a failed reason is dropped, the answer is not sent back for it, and it rides along when the answer is", async () => {
+  const modelInput = buildModelInput(item());
+  const good = "肥胖但无糖尿病的心血管高危患者，可据此评估加用司美格鲁肽做二级预防的获益与胃肠道耐受。";
+  const kept = verifyEdit(answer({ reason_zh: good }), item(), modelInput);
+  assert.deepEqual([kept.issues, kept.reasonIssues, kept.output.reasonZh], [[], [], good]);
+  for (const [what, reason, kind] of /** @type {Array<[string, string, string]>} */ ([
+    ["too long", "司".repeat(95), "length"], ["too short", "可参考。", "length"], ["a link", `${good}见 www.nejm.org`, "link"],
+    ["not Chinese", "Clinicians can use this to weigh semaglutide for secondary prevention in obesity.", "language"],
+    ["a number the source lacks", "肥胖患者心血管事件可降低 35%，可据此评估加用司美格鲁肽做二级预防。", "number"],
+  ])) {
+    const verified = verifyEdit(answer({ reason_zh: reason }), item(), modelInput);
+    assert.deepEqual(verified.issues, [], `${what}: the answer itself passes`);
+    assert.equal(verified.output.reasonZh, null, `${what}: the reason is dropped`);
+    assert.ok(verified.reasonKinds.includes(/** @type {any} */ (kind)), what);
+  }
+  assert.equal(verifyEdit(answer({ reason_zh: "" }), item(), modelInput).output.reasonZh, null, "empty is an answer, not a failure");
+
+  // A reason alone never pays for a rewrite.
+  const once = stubModel([() => answer({ reason_zh: "司".repeat(95) })]);
+  const editor = new FrontierEditor(config, { owner, callModel: once.callModel });
+  const passed = await editor.edit(item());
+  assert.equal(once.calls.length, 1);
+  assert.equal(passed.verification, "passed");
+  assert.equal(passed.output?.reasonZh, null);
+  assert.deepEqual(editor.counters.reasonDropped, { length: 1 });
+  // When the answer is sent back for something else, the reason's issue goes with it, and the rewrite's reason is the one kept.
+  const twice = stubModel([() => answer({ title_zh: "司美格鲁肽降低心血管事件 25%", reason_zh: "可参考。" }), () => answer({ reason_zh: good })]);
+  const repaired = await new FrontierEditor(config, { owner, callModel: twice.callModel }).edit(item());
+  assert.equal(repaired.verification, "repaired");
+  assert.match(twice.calls[1].body.messages[3].content, /- reason_zh 太短/);
+  assert.equal(repaired.output?.reasonZh, good);
+});
+
+test("tags are short names kept or dropped one by one: no sentence, no link, no number the source lacks, no other dimension, four at most", () => {
+  const modelInput = buildModelInput(item());
+  const tags = (/** @type {unknown} */ value, /** @type {string[]} */ candidates = []) => verifyEdit(answer({ tags: value }), item({ tagCandidates: candidates }), modelInput);
+  assert.deepEqual(tags(["GLP-1 受体激动剂", "肥胖", "#心血管预防"]).output.tags, ["GLP-1 受体激动剂", "肥胖", "心血管预防"]);
+  assert.deepEqual(tags(["肥胖", "肥胖", "见 www.nejm.org", "降低了心血管事件，效果明显", "降低 35%", "甲", "司".repeat(17)]).output.tags, ["肥胖"]);
+  assert.deepEqual(tags(["随访 39.8 个月"]).output.tags, ["随访 39.8 个月"], "a number the source states may stand");
+  assert.deepEqual(tags(["一", "二二", "三三", "四四", "五五", "六六", "七七", "八八", "九九"].slice(1)).output.tags.length, 4);
+  // A specialty, a lane, an evidence type or a study design is another dimension of the item, never a tag.
+  assert.deepEqual(tags(["肿瘤", "药物安全", "随机对照试验", "Meta分析", "肿瘤微环境"]).output.tags, ["肿瘤微环境"]);
+  // A tag of the tree the item was offered is the vocabulary's word: its number need not be the source's.
+  assert.deepEqual(tags(["4型糖尿病"]).output.tags, [], "a number the source lacks, in the model's own word");
+  assert.deepEqual(tags(["4型糖尿病"], ["4型糖尿病"]).output.tags, ["4型糖尿病"], "the same word, offered by the tree");
+  assert.deepEqual(tags("肥胖").output.tags, [], "not an array: no tags, and no failure");
+  assert.deepEqual(tags("肥胖").issues, []);
 });
 
 test("D-04: the edit prompt says a design the vocabulary has no key for is `other`, never the nearest design — and the cases that hold it load", async () => {
@@ -344,7 +421,7 @@ test("a rewrite that fails again leaves the title only — and only a title that
   assert.equal(kept.verification, "title-only");
   assert.equal(kept.output?.titleZh, "司美格鲁肽降低非糖尿病肥胖患者心血管事件 20%");
   assert.equal(kept.output?.summaryZh, null);
-  assert.equal(Object.hasOwn(kept.output ?? {}, "reasonZh"), false, "「为什么值得看」 is no longer written at all");
+  assert.equal(kept.output?.reasonZh, null, "no verified 导读, no 推荐理由");
   assert.equal(kept.output?.scores, null, "an unverified answer's scores are not used");
   assert.deepEqual(kept.output?.entities.drugs, ["司美格鲁肽"], "structure that passed its own checks is kept");
   assert.ok(kept.issues.some((issue) => issue.includes("链接")));
@@ -358,18 +435,18 @@ test("a rewrite that fails again leaves the title only — and only a title that
   assert.equal(dropped.output?.titleZh, null, "neither title passed: the original title stands alone");
 });
 
-// Three sentences of a summary: the first two are 89 code points, all three 152 (over the 140 limit).
+// Three sentences of a summary: the first two are 158 code points, all three 221 (over the 220 limit).
 const SENTENCE_1 = "一项纳入 17,604 例患者的研究显示，司美格鲁肽使主要不良心血管事件降低 20%，风险比 0.80，随访 39.8 个月。";
-const SENTENCE_2 = "这一结果为无糖尿病的肥胖人群提供了心血管保护的证据。";
+const SENTENCE_2 = "这一结果为无糖尿病的肥胖人群提供了心血管保护的证据，覆盖了既往心肌梗死、卒中和外周动脉疾病的患者，主要终点的获益在各个预设亚组中方向一致，安全性方面胃肠道不良反应导致停药的比例高于安慰剂组。";
 const SENTENCE_3 = "对于临床医生而言，这提示在评估此类患者的心血管风险时，可以把药物治疗纳入综合管理的考虑范围之内，并结合个体情况权衡获益与风险。";
 const length = (/** @type {string} */ text) => [...text].length;
 
 test("a length issue names the measured length, the limit and how much to cut — for the title and the summary", async () => {
   const modelInput = buildModelInput(item());
   const long = SENTENCE_1 + SENTENCE_2 + SENTENCE_3;
-  assert.equal(length(long), 152);
+  assert.equal(length(long), 221);
   const summary = verifyEdit(answer({ summary_zh: long }), item(), modelInput);
-  assert.deepEqual(summary.issues, ["summary_zh 太长：现在 152 个字，不能超过 140 个字，请删掉至少 12 个字（可以删去次要的限定语或英文全称，保留数字与结论）。"]);
+  assert.deepEqual(summary.issues, ["summary_zh 太长：现在 221 个字，不能超过 220 个字，请删掉至少 1 个字（可以删去次要的限定语或英文全称，保留数字与结论）。"]);
   assert.deepEqual(summary.kinds, [{ field: "summary_zh", kind: "length" }]);
   const title = verifyEdit(answer({ title_zh: "司".repeat(75) }), item(), modelInput);
   assert.deepEqual(title.issues, ["title_zh 太长：现在 75 个字，不能超过 60 个字，请删掉至少 15 个字（可以删去次要的限定语或英文全称，保留数字与结论）。"]);
@@ -379,7 +456,7 @@ test("a length issue names the measured length, the limit and how much to cut �
   const { calls, callModel } = stubModel([() => answer({ summary_zh: long }), () => answer()]);
   const result = await new FrontierEditor(config, { owner, callModel }).edit(item());
   assert.equal(result.verification, "repaired");
-  assert.match(calls[1].body.messages[3].content, /- summary_zh 太长：现在 152 个字，不能超过 140 个字，请删掉至少 12 个字/);
+  assert.match(calls[1].body.messages[3].content, /- summary_zh 太长：现在 221 个字，不能超过 220 个字，请删掉至少 1 个字/);
 });
 
 test("every kind of failed Chinese text is named: empty, length, link, language, number", () => {
@@ -392,12 +469,12 @@ test("every kind of failed Chinese text is named: empty, length, link, language,
   assert.deepEqual(kinds({ summary_zh: "Semaglutide lowered events by 20%." }), [{ field: "summary_zh", kind: "language" }]);
   assert.deepEqual(kinds({ summary_zh: "心血管事件降低 25%。" }), [{ field: "summary_zh", kind: "number" }]);
   assert.deepEqual(kinds({ title_zh: "司美格鲁肽降低心血管事件 25%" }), [{ field: "title_zh", kind: "number" }]);
-  assert.deepEqual(kinds({ summary_zh: "司".repeat(150) + " www.nejm.org" }).map(({ kind }) => kind), ["length", "link"]);
+  assert.deepEqual(kinds({ summary_zh: "司".repeat(230) + " www.nejm.org" }).map(({ kind }) => kind), ["length", "link"]);
   assert.deepEqual(kinds({ lane: "ai" }), [], "a lane, specialties and the rest are not Chinese texts");
   assert.deepEqual(kinds({}), []);
   assert.deepEqual([...FRONTIER_PROSE_ISSUE_KINDS], ["empty", "length", "link", "language", "number"], "the closed set the counters are labelled with");
   const seen = new Set([
-    ...kinds({ summary_zh: "" }), ...kinds({ summary_zh: "司".repeat(150) + " www.nejm.org" }),
+    ...kinds({ summary_zh: "" }), ...kinds({ summary_zh: "司".repeat(230) + " www.nejm.org" }),
     ...kinds({ summary_zh: "Semaglutide lowered events." }), ...kinds({ summary_zh: "降低 25%。" }),
   ].map(({ kind }) => kind));
   assert.deepEqual([...seen].sort(), [...FRONTIER_PROSE_ISSUE_KINDS].sort(), "every kind is produced, and none outside the set");
@@ -465,7 +542,7 @@ test("a rewrite whose summary is only too long is published with its whole sente
   assert.equal(calls.length, 2, "one rewrite, then nothing more is paid for");
   assert.equal(result.verification, "repaired");
   assert.equal(result.attempts, 2);
-  assert.equal(result.output?.summaryZh, SENTENCE_1 + SENTENCE_2, "the longest prefix of whole sentences within 140");
+  assert.equal(result.output?.summaryZh, SENTENCE_1 + SENTENCE_2, "the longest prefix of whole sentences within 220");
   assert.ok(length(result.output?.summaryZh ?? "") <= FRONTIER_TEXT_LIMITS.summary);
   // The rest of the answer stands as a verified answer's: it is not a title-only stand-in.
   assert.equal(result.output?.titleZh, "司美格鲁肽降低非糖尿病肥胖患者心血管事件 20%");
@@ -503,9 +580,9 @@ test("a rewrite that could not be had leaves the first answer's too-long summary
 });
 
 test("a too-long summary with no whole sentence under the limit stays title-only", async () => {
-  // One sentence of 189 code points: nothing of it is a whole sentence within 140.
-  const oneSentence = `${Array(3).fill(SENTENCE_3.slice(0, -1)).join("，")}。`;
-  assert.equal(length(oneSentence), 189);
+  // One sentence of 252 code points: nothing of it is a whole sentence within 220.
+  const oneSentence = `${Array(4).fill(SENTENCE_3.slice(0, -1)).join("，")}。`;
+  assert.equal(length(oneSentence), 252);
   const { callModel } = stubModel([() => answer({ summary_zh: oneSentence }), () => answer({ summary_zh: oneSentence })]);
   const editor = new FrontierEditor(config, { owner, callModel });
   const result = await editor.edit(item());
@@ -513,7 +590,7 @@ test("a too-long summary with no whole sentence under the limit stays title-only
   assert.equal(result.output?.summaryZh, null);
   assert.equal(result.output?.titleZh, "司美格鲁肽降低非糖尿病肥胖患者心血管事件 20%", "a title that passed on its own is kept, as ever");
   assert.equal(result.output?.scores, null);
-  assert.ok(result.issues.some((issue) => issue.includes("现在 189 个字")));
+  assert.ok(result.issues.some((issue) => issue.includes("现在 252 个字")));
   assert.equal(editor.counters.summaryTrimmed, 0);
   assert.deepEqual(editor.counters.finalIssues, { summary_zh: { length: 1 } });
 });
@@ -539,7 +616,7 @@ test("a too-long summary that is also wrong another way is not trimmed: a link, 
 
 test("the kind counters count each failed kind once per first answer, and the final ones the answer an item was left on", async () => {
   const long = SENTENCE_1 + SENTENCE_2 + SENTENCE_3;
-  const english = "Semaglutide reduced major adverse cardiovascular events by 20% in 17,604 patients over 39.8 months. ".repeat(2);
+  const english = "Semaglutide reduced major adverse cardiovascular events by 20% in 17,604 patients over 39.8 months. ".repeat(3);
   const editor = new FrontierEditor(config, { owner, callModel: stubModel([
     // 1: a link in the summary and a number in the title, twice → title-only.
     () => answer({ summary_zh: "司美格鲁肽使主要不良心血管事件降低 20%，详见 www.nejm.org。", title_zh: "司美格鲁肽降低心血管事件 25%" }),
@@ -590,15 +667,198 @@ test("trimToWholeSentences keeps the longest prefix of whole sentences that fits
   assert.equal(trimToWholeSentences("结果为阳性（见表 1。）后续无关。", length("结果为阳性（见表 1。）")), "结果为阳性（见表 1。）");
 });
 
-test("a Chinese source keeps its own title; the model's title is not used or checked", async () => {
-  const { callModel } = stubModel([() => answer({ title_zh: "完全不同的标题 99%" })]);
-  const result = await new FrontierEditor(config, { owner, callModel }).edit(item({
-    titleRaw: "国家药监局批准司美格鲁肽新适应症", isChinese: true,
-    abstract: "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%，风险比 0.80，随访 39.8 个月。",
-  }));
-  assert.equal(result.verification, "passed");
-  assert.equal(result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症");
-  assert.match(result.modelInput, /中文信源：是/);
+test("a Chinese source's title follows the title rule: kept when it already does, rewritten when it is a hook, and its own when a rewrite fails a check (c2-style S10)", async () => {
+  // The review of 2026-10-25: 820 of 838 WeChat titles were shown as written, 275 with ！, ？, 刚刚 or 重磅, because code copied them.
+  const source = { isChinese: true, abstract: "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%，风险比 0.80，随访 39.8 个月。" };
+  const write = async (/** @type {string} */ titleRaw, /** @type {string} */ titleZh) => {
+    const { callModel } = stubModel([() => answer({ title_zh: titleZh })]);
+    const editor = new FrontierEditor(config, { owner, callModel });
+    return { result: await editor.edit(item({ ...source, titleRaw })), counters: editor.counters.chineseTitles };
+  };
+  const hook = await write("重磅！刚刚，司美格鲁肽又获批了？", "国家药监局批准司美格鲁肽用于降低心血管事件风险");
+  assert.equal(hook.result.verification, "passed");
+  assert.equal(hook.result.output?.titleZh, "国家药监局批准司美格鲁肽用于降低心血管事件风险", "a hook is rewritten");
+  assert.deepEqual(hook.counters, { kept: 0, rewritten: 1, refused: 0 });
+  assert.match(hook.result.modelInput, /中文信源：是$/m, "the input states the fact; the rule is the instructions'");
+  const kept = await write("国家药监局批准司美格鲁肽新适应症", " 国家药监局批准司美格鲁肽新适应症 ");
+  assert.equal(kept.result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症");
+  assert.deepEqual(kept.counters, { kept: 1, rewritten: 0, refused: 0 });
+  // A rewrite with a number the source does not state is not the title; the source's own is, and the edit is not failed for it.
+  const refused = await write("国家药监局批准司美格鲁肽新适应症", "司美格鲁肽心血管事件降低 99%");
+  assert.equal(refused.result.verification, "passed");
+  assert.equal(refused.result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症");
+  assert.deepEqual(refused.counters, { kept: 0, rewritten: 0, refused: 1 });
+  assert.equal((await write("国家药监局批准司美格鲁肽新适应症", "")).result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症", "an empty answer keeps the source's");
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /没有悬念、钩子、问句和感叹号，没有前缀标签和网站、栏目名后缀，也不超过 40 个字，就一字不改地照抄，不要为了写得更好而改写；有其中任一处毛病时才改写/);
+  assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /原样照抄标题/);
+});
+
+test("a Chinese source's rewritten title carries none of 【】|｜丨!！?？; a refusal shows the source's title and is recorded by kind (c4-title)", async () => {
+  const source = { isChinese: true, abstract: "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%，风险比 0.80，随访 39.8 个月。" };
+  const write = async (/** @type {string} */ titleRaw, /** @type {string} */ titleZh) => {
+    const { callModel } = stubModel([() => answer({ title_zh: titleZh })]);
+    const editor = new FrontierEditor(config, { owner, callModel });
+    return { result: await editor.edit(item({ ...source, titleRaw })), counters: editor.counters.chineseTitles };
+  };
+  const raw = "重磅！刚刚，司美格鲁肽又获批了？";
+  // Every mark of the closed set, in both widths, refuses a rewrite: the source's title stays, the answer is not failed.
+  for (const mark of ["【", "】", "|", "｜", "丨", "!", "！", "?", "？"]) {
+    const refused = await write(raw, `国家药监局批准司美格鲁肽${mark}用于降低心血管事件风险`);
+    assert.equal(refused.result.verification, "passed", mark);
+    assert.equal(refused.result.output?.titleZh, raw, mark);
+    assert.deepEqual(refused.counters, { kept: 0, rewritten: 0, refused: 1 }, mark);
+    assert.deepEqual(refused.result.fieldDiagnostics.title_zh, ["marks"], `${mark}: the kind is the record`);
+  }
+  // The same title without a mark is the rewrite.
+  const clean = await write(raw, "国家药监局批准司美格鲁肽用于降低心血管事件风险");
+  assert.equal(clean.result.output?.titleZh, "国家药监局批准司美格鲁肽用于降低心血管事件风险");
+  assert.deepEqual(clean.result.fieldDiagnostics.title_zh, ["passed"]);
+  // A source's own title handed back with a mark still in it is no clean title: refused, and it is the source's either way.
+  const handedBack = await write(raw, raw);
+  assert.equal(handedBack.result.output?.titleZh, raw);
+  assert.deepEqual(handedBack.counters, { kept: 0, rewritten: 0, refused: 1 });
+  // The other refusals keep their kind (the closed vocabulary the diagnostics already carry).
+  assert.deepEqual((await write("国家药监局批准司美格鲁肽新适应症", "司美格鲁肽心血管事件降低 99%")).result.fieldDiagnostics.title_zh, ["number"]);
+  assert.deepEqual((await write("国家药监局批准司美格鲁肽新适应症", "")).result.fieldDiagnostics.title_zh, ["empty"]);
+  assert.deepEqual((await write("国家药监局批准司美格鲁肽新适应症", "x".repeat(70))).result.fieldDiagnostics.title_zh, ["length"], "the first kind that refused it");
+  assert.deepEqual((await write("国家药监局批准司美格鲁肽新适应症", "国家药监局批准司美格鲁肽，详见 www.nmpa.gov.cn")).result.fieldDiagnostics.title_zh, ["link"]);
+  // A translated title keeps the checks it had: a mark there is not a refusal and fails nothing (a failure there has other consequences).
+  const translated = stubModel([() => answer({ title_zh: "司美格鲁肽降低心血管事件 20%！" })]);
+  const english = await new FrontierEditor(config, { owner, callModel: translated.callModel }).edit(item());
+  assert.equal(english.verification, "passed");
+  assert.equal(english.output?.titleZh, "司美格鲁肽降低心血管事件 20%！");
+  assert.deepEqual(frontierTitleMarks("Cell | 全球首个！【临床研究】？ ｜丨!?|"), ["|", "！", "【", "】", "？", "｜", "丨", "!", "?"]);
+  assert.deepEqual(frontierTitleMarks("司美格鲁肽降低心血管事件 20%"), []);
+});
+
+test("the title version is a hash of the title rule and the words about a title: it moves when they move (c4-title)", () => {
+  assert.match(FRONTIER_TITLE_VERSION, /^frontier-title-1\.[0-9a-f]{12}$/);
+  assert.equal(frontierTitleVersionOf(FRONTIER_TITLE_RULE), FRONTIER_TITLE_VERSION);
+  assert.notEqual(frontierTitleVersionOf(`${FRONTIER_TITLE_RULE}不用副标题。`), FRONTIER_TITLE_VERSION);
+  // What the version is a hash of is what the model is shown, in the edit and in the standalone call.
+  for (const instructions of [FRONTIER_EDIT_INSTRUCTIONS, FRONTIER_TITLE_INSTRUCTIONS]) {
+    assert.ok(instructions.includes(FRONTIER_TITLE_RULE));
+    for (const genre of FRONTIER_GENRES) assert.ok(instructions.includes(FRONTIER_TITLE_GUIDES_ZH[genre]), genre);
+    assert.match(instructions, /没有前缀标签和网站、栏目名后缀，也不超过 40 个字，就一字不改地照抄/);
+  }
+  // The rule says it once and in plain words: the prefix label, the site or media name, and the 40 characters.
+  assert.match(FRONTIER_TITLE_RULE, /开头不加期刊、会议或栏目名加竖线、方括号的前缀/);
+  assert.match(FRONTIER_TITLE_RULE, /不带网站或媒体名/);
+  assert.match(FRONTIER_TITLE_RULE, /最多 40 个字/);
+  assert.match(FRONTIER_TITLE_RULE, /期刊名写进句子里/);
+});
+
+test("a standalone title: kept, rewritten, translated or refused, with one rewrite that names what was wrong (c4-title)", async () => {
+  const text = "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%。";
+  const base = { sourceName: "医学界", genre: "approval", summaryZh: "国家药监局批准司美格鲁肽用于降低心血管事件风险。", text };
+  const ask = async (/** @type {any} */ input, /** @type {Array<(call: any) => any>} */ answers) => {
+    const model = stubModel(answers);
+    const editor = new FrontierEditor(config, { owner, callModel: model.callModel });
+    return { result: await editor.writeTitle({ ...base, ...input }), calls: model.calls };
+  };
+  const title = (/** @type {string} */ value) => () => ({ title_zh: value });
+  // A Chinese source: its own title when it is right, a rewrite when it is a hook.
+  const kept = await ask({ titleRaw: "国家药监局批准司美格鲁肽新适应症", isChinese: true, titleZh: "国家药监局批准司美格鲁肽新适应症" }, [title(" 国家药监局批准司美格鲁肽新适应症 ")]);
+  assert.deepEqual(kept.result, { titleZh: "国家药监局批准司美格鲁肽新适应症", basis: "kept" });
+  assert.equal(kept.calls.length, 1);
+  const hook = "重磅！刚刚，司美格鲁肽又获批了？-医学界-医学界官方网站";
+  const rewritten = await ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [title("国家药监局批准司美格鲁肽用于降低心血管事件风险")]);
+  assert.deepEqual(rewritten.result, { titleZh: "国家药监局批准司美格鲁肽用于降低心血管事件风险", basis: "rewritten" });
+  // The call: purpose frontier, thinking off, JSON, the shared instructions, the labelled lines and never the platform's name.
+  const call = rewritten.calls[0];
+  assert.equal(call.purpose, "frontier");
+  assert.equal(call.body.messages[0].content, FRONTIER_TITLE_INSTRUCTIONS);
+  assert.match(call.body.messages[1].content, /^类型：审批上市\n中文信源：是\n来源：医学界\n标题：重磅！/);
+  assert.doesNotMatch(call.body.messages[1].content, /EviMed/);
+  // A first answer with a mark is sent back once with the mark named; the second is the title.
+  const repaired = await ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [title("【审批】国家药监局批准司美格鲁肽"), (call) => {
+    assert.match(call.body.messages.at(-1).content, /title_zh 里不能出现「【】」/);
+    return { title_zh: "国家药监局批准司美格鲁肽新适应症" };
+  }]);
+  assert.deepEqual(repaired.result, { titleZh: "国家药监局批准司美格鲁肽新适应症", basis: "rewritten" });
+  assert.equal(repaired.calls.length, 2);
+  // A source's own title handed back with a mark is told the same, and a second one is a refusal: null, the title there was stays.
+  const stuck = await ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [title(hook), title(hook)]);
+  assert.equal(stuck.result, null);
+  assert.equal(stuck.calls.length, 2);
+  // A number the source does not state is a refusal too; so is an empty answer.
+  assert.equal((await ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [title("司美格鲁肽降低事件 99%"), title("司美格鲁肽降低事件 98%")])).result, null);
+  assert.equal((await ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [title(""), title("")])).result, null);
+  // A translated title: the item's own when handed back, otherwise written and checked like the edit's.
+  const english = { titleRaw: "Semaglutide and Cardiovascular Outcomes in Obesity", isChinese: false, titleZh: "司美格鲁肽与肥胖患者的心血管结局" };
+  assert.deepEqual((await ask(english, [title("司美格鲁肽与肥胖患者的心血管结局")])).result, { titleZh: "司美格鲁肽与肥胖患者的心血管结局", basis: "kept" });
+  assert.deepEqual((await ask(english, [title("司美格鲁肽降低肥胖患者心血管事件")])).result, { titleZh: "司美格鲁肽降低肥胖患者心血管事件", basis: "translated" });
+  assert.equal((await ask(english, [title("Semaglutide lowers events"), title("Semaglutide lowers events")])).result, null, "not Chinese");
+  const withMark = await ask({ ...english, titleZh: "NEJM｜司美格鲁肽与肥胖患者的心血管结局" }, [title("NEJM｜司美格鲁肽与肥胖患者的心血管结局"), title("司美格鲁肽与肥胖患者的心血管结局")]);
+  assert.deepEqual(withMark.result, { titleZh: "司美格鲁肽与肥胖患者的心血管结局", basis: "translated" });
+  assert.match(withMark.calls[0].body.messages[1].content, /\n现有中文标题：NEJM｜/);
+  // A call that fails is not an answer: it throws with the code (the step writes nothing for it) - the budget's included.
+  await assert.rejects(ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [refuse("usage_budget_exceeded")]), { code: "usage_budget_exceeded" });
+  await assert.rejects(ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [title("【审批】司美格鲁肽获批"), refuse("frontier_provider_unavailable")]), { code: "frontier_provider_unavailable" });
+});
+
+test("a standalone title's first answer is held to 40 characters and told by how much to cut; the rewrite is held to the edit's 60 (c4-title)", async () => {
+  const text = "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%。";
+  const long = "国家药监局批准司美格鲁肽用于降低成人心血管事件风险的新适应症上市申请";
+  const input = { sourceName: "医学界", titleRaw: "重磅！司美格鲁肽获批？", isChinese: true, titleZh: "重磅！司美格鲁肽获批？", text };
+  assert.equal([...long].length, 34);
+  const over = `${long}，纳入17,604例患者`;
+  assert.ok([...over].length > 40 && [...over].length <= 60);
+  const model = stubModel([() => ({ title_zh: over }), (call) => {
+    assert.match(call.body.messages.at(-1).content, new RegExp(`title_zh 太长：现在 ${[...over].length} 个字，不能超过 40 个字，请删掉至少 ${[...over].length - 40} 个字`));
+    return { title_zh: `${long}，纳入17,604例患者`.replace("成人", "") };
+  }]);
+  const result = await new FrontierEditor(config, { owner, callModel: model.callModel }).writeTitle(input);
+  assert.equal(model.calls.length, 2);
+  assert.equal(result?.basis, "rewritten");
+  // The rewrite may keep a title the edit's check accepts (over 40, within 60): it is not refused for a few characters.
+  const stubborn = stubModel([() => ({ title_zh: over }), () => ({ title_zh: over })]);
+  assert.deepEqual(await new FrontierEditor(config, { owner, callModel: stubborn.callModel }).writeTitle(input), { titleZh: over, basis: "rewritten" });
+  // Past 60 it is refused both times, and the item keeps the title it had.
+  const tooLong = `${over}${over}`;
+  const refused = stubModel([() => ({ title_zh: tooLong }), () => ({ title_zh: tooLong })]);
+  assert.equal(await new FrontierEditor(config, { owner, callModel: refused.callModel }).writeTitle(input), null);
+  // A title within 40 is one call.
+  const brief = stubModel([() => ({ title_zh: "国家药监局批准司美格鲁肽新适应症" })]);
+  assert.equal((await new FrontierEditor(config, { owner, callModel: brief.callModel }).writeTitle(input))?.basis, "rewritten");
+  assert.equal(brief.calls.length, 1);
+});
+
+test("the title call's input states the source: the head of the text at most 600 characters, numbers checked against title, summary and text only (c4-title)", () => {
+  const input = buildTitleInput({ sourceName: "医学界", titleRaw: "司美格鲁肽获批", isChinese: true, genre: "approval", summaryZh: "导读", text: `${"甲".repeat(700)}`, titleZh: "司美格鲁肽获批" });
+  assert.equal(input, ["类型：审批上市", "中文信源：是", "来源：医学界", "标题：司美格鲁肽获批", "导读：导读", `正文开头：${"甲".repeat(600)}…`].join("\n"));
+  const bare = buildTitleInput({ sourceName: "NEJM", titleRaw: "Semaglutide", isChinese: false });
+  assert.equal(bare, "中文信源：否\n来源：NEJM\n标题：Semaglutide");
+  // 「现有中文标题」 is shown when it differs and is no source of numbers; the source's name never is.
+  const shown = buildTitleInput({ sourceName: "第 7 号刊", titleRaw: "Semaglutide 20%", isChinese: false, titleZh: "司美格鲁肽 99%" });
+  assert.match(shown, /\n现有中文标题：司美格鲁肽 99%/);
+  const verified = verifyTitle({ title_zh: "司美格鲁肽降低 99%" }, shown, { isChinese: false, titleRaw: "Semaglutide 20%", titleZh: "司美格鲁肽 99%" });
+  assert.equal(verified.output.title_zh, null);
+  assert.equal(verified.numbers.missing.length, 1);
+});
+
+test("the edit asks each genre for its title formula and its place on the scales, and the raw scores reach the diagnostics (c2-style S6, S9)", async () => {
+  for (const genre of FRONTIER_GENRES) {
+    assert.ok(FRONTIER_EDIT_INSTRUCTIONS.includes(FRONTIER_TITLE_GUIDES_ZH[genre]), genre);
+    assert.ok(FRONTIER_EDIT_INSTRUCTIONS.includes(FRONTIER_SCORE_ANCHORS_ZH[genre]), genre);
+  }
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /精选只占全部条目的 3% 到 5%，所以多数条目应落在量表的中下段，满分一周也难得出现几次/);
+  // An out-of-scale first answer is sent back once; the rewrite's scores are used, and the model's own numbers are diagnostics only.
+  const { callModel, calls } = stubModel([() => answer({ scores: { impact: 55, novelty: 40, relevance: 45 } }), () => answer({ scores: { impact: 18, novelty: 9, relevance: 12 } })]);
+  const result = await new FrontierEditor(config, { owner, callModel }).edit(item());
+  assert.equal(calls.length, 2);
+  assert.equal(result.verification, "repaired");
+  assert.deepEqual(result.output?.scores, { impact: 18, novelty: 9, relevance: 12 });
+  assert.deepEqual(result.output?.scoresRaw, { impact: 18, novelty: 9, relevance: 12 });
+  const checkedAt = "2026-10-25T08:00:00.000Z";
+  assert.deepEqual(frontierEditorDiagnostics({ schemaVersion: 1, outcome: "passed", checkedAt, scoresRaw: { impact: 55, novelty: 40, relevance: 45 } })?.scoresRaw,
+    { impact: 55, novelty: 40, relevance: 45 });
+  assert.equal(frontierEditorDiagnostics({ schemaVersion: 1, outcome: "passed", checkedAt, scoresRaw: { impact: "55" } })?.scoresRaw, undefined, "only three integers are kept");
+  // One call and no rewrite (the backfill's): the scale's end at once, not a failed edit.
+  const single = stubModel([() => answer({ scores: { impact: 55, novelty: 40, relevance: 45 } })]);
+  const once = await new FrontierEditor(config, { owner, callModel: single.callModel }).edit(item(), { singleAttempt: true });
+  assert.equal(once.verification, "passed");
+  assert.deepEqual(once.output?.scores, { impact: 30, novelty: 20, relevance: 20 });
 });
 
 test("an evidence type code has decided is the one used, whatever the model says", async () => {
@@ -638,18 +898,22 @@ test("the verification's other checks: vocabularies, lengths, links, Chinese pro
   assert.deepEqual(issues({ specialties: ["cardiology", "astrology"] }), []);
   assert.deepEqual(verifyEdit(answer({ specialties: ["cardiology", "astrology"] }), item(), modelInput).output.specialties, ["cardiology"]);
   assert.ok(issues({ evidence_type: "anecdote" }).some((issue) => issue.includes("evidence_type")));
-  assert.ok(issues({ summary_zh: "司".repeat(141) }).some((issue) => issue.includes("太长")), "three lines of forty, with room for a near miss: 140");
-  assert.deepEqual(issues({ summary_zh: "司".repeat(140) }), []);
+  assert.ok(issues({ summary_zh: "司".repeat(221) }).some((issue) => issue.includes("太长")), "200 asked, with room for a near miss: 220");
+  assert.deepEqual(issues({ summary_zh: "司".repeat(220) }), []);
   assert.ok(issues({ summary_zh: "心血管事件降低 20%，见 www.nejm.org 原文。" }).some((issue) => issue.includes("链接")));
-  // A retired 「为什么值得看」 an answer still carries is neither checked nor kept.
+  // A 推荐理由 that fails its own checks fails nothing else, and is not kept.
   assert.deepEqual(issues({ reason_zh: "见 www.nejm.org 原文 99%" }), []);
-  assert.equal(Object.hasOwn(verifyEdit(answer({ reason_zh: "理由" }), item(), modelInput).output, "reasonZh"), false);
+  assert.equal(verifyEdit(answer({ reason_zh: "理由" }), item(), modelInput).output.reasonZh, null);
   const six = { drugs: ["a", "b", "c", "d", "e", "f"], trials: [], orgs: [], diseases: [] };
   assert.deepEqual(issues({ entities: six }), []);
   assert.deepEqual(verifyEdit(answer({ entities: six }), item(), modelInput).output.entities.drugs, ["a", "b", "c", "d", "e"]);
-  assert.deepEqual(issues({ scores: { impact: 31, novelty: 2, relevance: 2 } }), []);
-  assert.deepEqual(verifyEdit(answer({ scores: { impact: 31, novelty: -1, relevance: 25 } }), item(), modelInput).output.scores,
-    { impact: 30, novelty: 0, relevance: 20 });
+  // A score out of its scale is the wrong unit (c2-style S9, review G9: 55/40/45 had been clamped to every maximum): the first answer
+  // is sent back with the scale named, a rewrite still out of it takes the scale's end, and the model's own numbers are kept raw.
+  assert.ok(issues({ scores: { impact: 31, novelty: 2, relevance: 2 } }).some((issue) => issue.includes("超出了 0 到 30 的刻度")));
+  const rewrite = verifyEdit(answer({ scores: { impact: 31, novelty: -1, relevance: 25 } }), item(), modelInput, { attempt: 2 });
+  assert.deepEqual(rewrite.issues, []);
+  assert.deepEqual(rewrite.output.scores, { impact: 30, novelty: 0, relevance: 20 });
+  assert.deepEqual(rewrite.output.scoresRaw, { impact: 31, novelty: -1, relevance: 25 });
   assert.ok(issues({ scores: { impact: 3.5, novelty: 2, relevance: 2 } }).some((issue) => issue.includes("整数")));
   assert.ok(issues({ flags: ["sponsored"] }).some((issue) => issue.includes("flags")));
   assert.deepEqual(verifyEdit(answer({ flags: ["preprint", "press-release"] }), item(), modelInput).output.flags, ["press-release"],
@@ -930,4 +1194,264 @@ test("confirmed timeout or network outage never fans a screening batch out into 
     assert.equal(result.errors.size,20);
     assert.equal(editor.counters.screenSingles,0);
   }
+});
+
+
+test("edit diagnostics preserve actual field outcomes without model prose", async () => {
+  const editor = new FrontierEditor(config, { owner, callModel: stubModel([
+    () => answer({ summary_zh: "English summary", title_zh: "司美格鲁肽降低心血管事件 20%" }),
+    () => answer({ summary_zh: "English summary", title_zh: "English title" }),
+  ]).callModel });
+  const result = await editor.edit(item());
+  assert.equal(result.output?.titleZh, "司美格鲁肽降低心血管事件 20%");
+  assert.deepEqual(result.fieldDiagnostics, { title_zh: ["passed"], summary_zh: ["language"] });
+  assert.equal(result.attempts, 2);
+  assert.equal(result.modelInputSha256, sha256(result.modelInput));
+  assert.ok(!JSON.stringify(result.fieldDiagnostics).includes("English"));
+});
+
+test("source-only items distinguish missing source text from rejected summaries", async () => {
+  const result = await new FrontierEditor(config, { owner, callModel: stubModel([() => answer({ title_zh: "司美格鲁肽研究", summary_zh: null })]).callModel })
+    .edit({ ...item(), abstract: null, summary: null, bodyExcerpt: null });
+  assert.deepEqual(result.fieldDiagnostics, { title_zh: ["passed"], summary_zh: ["source_missing"] });
+});
+
+
+test("public diagnostics reject unknown content and retain only closed bounded metadata", () => {
+  assert.equal(frontierEditorDiagnostics({}), null);
+  const kept = frontierEditorDiagnostics({ schemaVersion: 1, outcome: "title-only", attempts: 9999,
+    inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00Z",
+    reason: "private upstream message", answer: "private model answer", fields: {
+      title_zh: ["language", "language", "private body"], summary_zh: ["number"], private: ["answer"] } });
+  assert.deepEqual(kept, { schemaVersion: 1, outcome: "title-only", attempts: null,
+    inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00.000Z", reason: null,
+    fields: { title_zh: ["language"], summary_zh: ["number"] } });
+});
+
+test("pending and repaired diagnostics reflect the last actual field check", async () => {
+  const pending = await new FrontierEditor(config, { owner, callModel: stubModel([refuse("usage_budget_exceeded")]).callModel }).edit(item());
+  assert.equal(pending.attempts, 1);
+  assert.deepEqual(pending.fieldDiagnostics, { title_zh: ["not_checked"], summary_zh: ["not_checked"] });
+  const repaired = await new FrontierEditor(config, { owner, callModel: stubModel([
+    () => answer({ title_zh: "English title", summary_zh: "English summary" }), () => answer(),
+  ]).callModel }).edit(item());
+  assert.equal(repaired.verification, "repaired");
+  assert.deepEqual(repaired.fieldDiagnostics, { title_zh: ["passed"], summary_zh: ["passed"] });
+});
+
+
+test("diagnostic provenance uses the resolved policy and actual bounded calls", async () => {
+  const editor = new FrontierEditor(config, { owner, callModel: stubModel([() => answer()]).callModel,
+    policies: { resolve: async (_module, policy) => ({ revisionId: "policy:v2", policy }) } });
+  const result = await editor.edit(item());
+  assert.equal(result.editorVersion,"policy:v2");
+  assert.equal(result.attempts,1);
+  assert.equal(result.modelInputSha256,sha256(result.modelInput));
+});
+
+test("the full text is split into the paragraphs a reader sees, losslessly: blank lines, then line breaks, then sentence ends, then the limit", () => {
+  assert.deepEqual(frontierParagraphs("A para.\n\nB line1\nB line2\n\n\n  C  x "), ["A para.", "B line1\nB line2", "C x"]);
+  const long = "HR 0.80 (95% CI 0.70-0.92). Results were consistent. 结果一致。".repeat(60);
+  const pieces = frontierParagraphs(long);
+  assert.ok(pieces.length > 1 && pieces.every((piece) => piece.length <= FRONTIER_TRANSLATION_LIMITS.paragraphChars));
+  assert.equal(pieces.join("").replace(/\s/g, ""), long.replace(/\s/g, ""), "nothing is lost at a cut");
+  assert.deepEqual(frontierParagraphs(""), []);
+  assert.deepEqual(frontierParagraphs(null), []);
+});
+
+test("a translated paragraph is held to its own original: Chinese, bounded, no number added and none dropped", () => {
+  const original = "In 17,604 patients, semaglutide reduced events by 20% (hazard ratio 0.80).";
+  assert.equal(verifyParagraph("在 17,604 例患者中，司美格鲁肽使事件减少 20%（风险比 0.80）。", original), "在 17,604 例患者中，司美格鲁肽使事件减少 20%（风险比 0.80）。");
+  assert.equal(verifyParagraph("在 17,604 例患者中，司美格鲁肽使事件减少 25%（风险比 0.80）。", original), null, "a number the original lacks");
+  assert.equal(verifyParagraph("在患者中，司美格鲁肽使事件减少 20%（风险比 0.80）。", original), null, "a number the original states is gone");
+  assert.equal(verifyParagraph("In 17,604 patients, semaglutide reduced events by 20% (hazard ratio 0.80).", original), null, "not translated");
+  assert.equal(verifyParagraph("", original), null);
+  assert.equal(verifyParagraph("译".repeat(400), "Short text here."), null, "far longer than its original");
+  assert.equal(verifyParagraph("NCT01234567", "NCT01234567"), "NCT01234567", "nothing to translate comes back as it was");
+});
+
+test("the live check of 2026-10-22: names kept as written, digit groups split by a thin space, 两个 for both, and 100万 for 1 million pass", () => {
+  // Each of these is a paragraph of a real item the first version refused (fr-edit live run, 20 items).
+  const pass = /** @type {Array<[string, string]>} */ ([
+    ["资助：Eli Lilly and Company。", "FUNDING: Eli Lilly and Company."],
+    ["试验注册：ClinicalTrials.gov标识符：NCT02473536。", "TRIAL REGISTRATION: ClinicalTrials.gov Identifier: NCT02473536."],
+    ["试验注册：Open Science Framework 10.17605/OSF.IO/C4YQZ。", "TRIAL REGISTRATION: Open Science Framework 10.17605/OSF.IO/C4YQZ."],
+    ["方法：我们针对KCNQ1生成了包含13 403个蛋白编码变异的文库。采用4项混合检测。",
+      "METHODS: We generated a nearly comprehensive variant library of 13\u2009403 protein-coding variants in KCNQ1. Using 4 pooled assays."],
+    ["这两个术语均描述癌细胞在复制DNA时纠正错误的方式存在缺陷。", "Both terms describe a defect in the way cancer cells correct errors when copying their DNA."],
+    ["从2006年逾223 000例的峰值降至零。", "reducing cases from a peak of more than 223\u2009000 clinically diagnosed cases in 2006 to zero"],
+    ["背景：约有100万感染HIV的人未实现病毒抑制。", "BACKGROUND: approximately 1 million people living with HIV do not have viral suppression."],
+  ]);
+  for (const [zh, en] of pass) assert.equal(verifyParagraph(zh, en), zh, zh);
+  // …and what the checks are for still fails: an English paragraph handed back, a name added, a figure dropped or changed.
+  assert.equal(verifyParagraph("FUNDING: Eli Lilly and Company.", "FUNDING: Eli Lilly and Company."), null, "not translated at all");
+  assert.equal(verifyParagraph("资助：Novo Nordisk 公司。", "FUNDING: Eli Lilly and Company."), null, "a name the original does not have is untranslated Latin");
+  assert.equal(verifyParagraph("方法：我们生成了变异文库。", "METHODS: a library of 13\u2009403 variants."), null, "a figure dropped");
+  assert.equal(verifyParagraph("约有200万人。", "approximately 1 million people"), null, "a figure changed");
+});
+
+test("a sentence a page broke across paragraphs is one paragraph again; a list of single terms and a heading stay apart (WHO, 2026-10-22)", () => {
+  const text = ["WHO advice", "Based on the current", "situation and available information, WHO re-emphasizes the importance of",
+    "maintaining strong surveillance for acute respiratory infections.", "aspirin", "clopidogrel", "Human-to-human", "transmission is limited."].join("\n\n");
+  assert.deepEqual(frontierParagraphs(text), ["WHO advice",
+    "Based on the current situation and available information, WHO re-emphasizes the importance of maintaining strong surveillance for acute respiratory infections.",
+    "aspirin", "clopidogrel", "Human-to-human transmission is limited."]);
+  assert.deepEqual(frontierParagraphs("第一段。\n\n第二段。"), ["第一段。", "第二段。"], "Chinese has no case: never joined");
+});
+
+test("a bibliography entry is kept as written and no gap; a list of names handed back unchanged is its own translation", async () => {
+  assert.ok(FRONTIER_REFERENCE_ENTRY.test("- Colella V, Young ND, Manzanell R, et al. Dirofilaria asiatica sp. nov."));
+  assert.ok(FRONTIER_REFERENCE_ENTRY.test("12. Fleseriu M, Rusch E, Geer EB (2017) Safety and tolerability of pasireotide."));
+  for (const text of ["- The recall covers 22 lots of compounded tirzepatide.", "1. Introduction", "- Rasonque"]) assert.equal(FRONTIER_REFERENCE_ENTRY.test(text), false, text);
+  const paragraphs = ["Dirofilaria infections are rising in Asia.", "- Colella V, Young ND, Manzanell R, et al. Dirofilaria asiatica sp. nov."];
+  const { calls, callModel } = stubModel([() => ({ t: ["亚洲的恶丝虫感染正在增加。"] })]);
+  const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
+  assert.deepEqual(JSON.parse(calls[0].body.messages[1].content).p, [paragraphs[0]], "the entry is not asked for");
+  assert.deepEqual([result.complete, result.paragraphs], [true, ["亚洲的恶丝虫感染正在增加。", paragraphs[1]]]);
+  assert.equal(verifyParagraph("- Maquet Critical Care AB: Flow-i C20, Flow-i C30", "- Maquet Critical Care AB: Flow-i C20, Flow-i C30"), "- Maquet Critical Care AB: Flow-i C20, Flow-i C30");
+  assert.equal(verifyParagraph("The safety profile was consistent with prior studies.", "The safety profile was consistent with prior studies."), null, "prose handed back is not translated");
+});
+
+test("rt2's live check: a figure in the translation's own notation passes; a figure dropped, changed or made up still fails", () => {
+  // Paragraphs production left in English on 2026-10-22, each with the translation the model gave and the old check refused.
+  const pass = /** @type {Array<[string, string]>} */ ([
+    ["In 2024, 170 million children and adolescents aged 5–19 years were living with obesity.", "2024年，有1.7亿5–19岁儿童和青少年患有肥胖。"],
+    ["Kostaive received a marketing authorisation valid throughout the EU on 04 February 2025.", "Kostaive 于 2025 年 2 月 4 日获得在欧盟全境有效的上市许可。"],
+    ["The effect was significant in children (SMD=-1.00,95%CI [-1.56,-0.43]).", "该效应在儿童中显著（SMD=-1.00，95%CI [-1.56,-0.43]）。"],
+    ["Since August, 21 new cases have been recorded.", "自8月以来，新增21例病例。"],
+    ["Call between 8.30am and 5pm, Monday to Friday.", "请于周一至周五上午8时30分至下午5时致电。"],
+    ["Long-lasting pain can be managed with serotonin norepinephrine reuptake inhibitors.", "持续性疼痛可使用5-羟色胺去甲肾上腺素再摄取抑制剂治疗。"],
+    ["Search strategies for the remaining registries are provided in Appendices 5,6.", "其余登记库的检索策略见附录5、6。"],
+    ["The findings were consistent with prior studies43.", "这些结果与既往研究一致。"],
+    ["The articles seized were valued at about $364 million.", "检获物品约值3.64亿美元。"],
+  ]);
+  for (const [en, zh] of pass) assert.equal(verifyParagraph(zh, en), zh, zh);
+  assert.equal(verifyParagraph("2024年，有1.7亿儿童和青少年患有肥胖。", "In 2024, 170 million children and adolescents aged 5–19 years were living with obesity."), null, "an age range dropped");
+  assert.equal(verifyParagraph("2024年，有1.6亿5–19岁儿童和青少年患有肥胖。", "In 2024, 170 million children and adolescents aged 5–19 years were living with obesity."), null, "a figure changed");
+  assert.equal(verifyParagraph("5月起，副作用可能影响多达十分之一的人。", "Side effects may affect up to 1 in 10 people."), null, "a month made up from the modal verb, and 1 in 10 lost");
+});
+
+test("translateBody: one translation per paragraph or none trusted; refused paragraphs asked once more; complete only when all came back", async () => {
+  const paragraphs = ["Semaglutide reduced events by 20%.", "Adverse events occurred in 12% of patients.", "The trial enrolled adults with obesity."];
+  const good = ["司美格鲁肽使事件减少 20%。", "12% 的患者发生不良事件。", "该试验纳入了肥胖成人。"];
+  // First answer: the second paragraph adds a number; the retry asks for it alone and gets it right.
+  const { calls, callModel } = stubModel([() => ({ t: [good[0], "15% 的患者发生不良事件。", good[2]] }), () => ({ t: [good[1]] })]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.translateBody({ paragraphs, glossary: [{ kind: "drug", termEn: "semaglutide", termZh: "司美格鲁肽", keepOriginal: false, origin: "hand" }] });
+  assert.deepEqual(result, { paragraphs: good, complete: true, calls: 2, error: null });
+  assert.equal(calls[0].purpose, "frontier");
+  assert.equal(calls[0].body.messages[0].content, FRONTIER_TRANSLATE_BODY_INSTRUCTIONS);
+  const asked = JSON.parse(calls[0].body.messages[1].content);
+  assert.deepEqual(asked.p, paragraphs);
+  assert.ok(asked.glossary.some((line) => line.includes("semaglutide → 司美格鲁肽")));
+  assert.deepEqual(JSON.parse(calls[1].body.messages[1].content).p, [paragraphs[1]], "only the refused paragraph is asked again");
+  assert.deepEqual(editor.counters.translatedParagraphs, 3);
+
+  // A count that does not match trusts nothing; a paragraph refused twice stays untranslated, and the result is not complete.
+  const shifted = stubModel([() => ({ t: [good[0], good[1]] }), () => ({ t: [...good, "死亡率为 99%。"] })]);
+  const partial = await new FrontierEditor(config, { owner, callModel: shifted.callModel }).translateBody({ paragraphs: [...paragraphs, "Mortality was 3%."] });
+  assert.equal(shifted.calls.length, 2, "the whole answer was refused, so every paragraph was asked once more");
+  assert.equal(partial.complete, false);
+  assert.deepEqual(partial.paragraphs, [...good, null]);
+
+  // A call that cannot be made stops the item with its code, keeping what was verified.
+  const refused = await new FrontierEditor(config, { owner, callModel: stubModel([refuse("usage_budget_exceeded")]).callModel }).translateBody({ paragraphs });
+  assert.deepEqual([refused.complete, refused.error, refused.paragraphs], [false, "usage_budget_exceeded", [null, null, null]]);
+});
+
+test("translateBody stops asking past the item's limit, in calls of bounded size, and an X post takes the post shape", async () => {
+  const paragraph = `${"Results were consistent across all prespecified subgroups. ".repeat(30)}`.trim();
+  // Past the item's limit (100,000 characters since 2026-10-22 rt2: a whole open-access paper, its references cut).
+  const paragraphs = Array.from({ length: Math.ceil(FRONTIER_TRANSLATION_LIMITS.itemChars / paragraph.length) + 5 }, () => paragraph);
+  const { calls, callModel } = stubModel(Array.from({ length: 80 }, () => (/** @type {any} */ call) => ({ t: JSON.parse(call.body.messages[1].content).p.map(() => "各预设亚组的结果一致。") })));
+  const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
+  const asked = calls.flatMap((call) => JSON.parse(call.body.messages[1].content).p);
+  assert.ok(asked.length * paragraph.length <= FRONTIER_TRANSLATION_LIMITS.itemChars, "never past the item's limit");
+  assert.ok(calls.every((call) => JSON.parse(call.body.messages[1].content).p.join("").length <= FRONTIER_TRANSLATION_LIMITS.callChars + paragraph.length));
+  assert.equal(result.complete, false, "the paragraphs past the limit are not translated");
+  assert.equal(result.paragraphs.filter(Boolean).length, asked.length);
+
+  const post = stubModel([() => ({ t: ["@nejm 新试验：司美格鲁肽使事件减少 20%。#obesity"] })]);
+  const translated = await new FrontierEditor(config, { owner, callModel: post.callModel }).translateBody({ paragraphs: ["@nejm New trial: semaglutide cut events by 20%. #obesity"], post: true });
+  assert.equal(post.calls[0].body.messages[0].content, FRONTIER_TRANSLATE_POST_INSTRUCTIONS);
+  assert.equal(translated.complete, true);
+});
+
+test("translateBody asks a whole paper's calls a few at a time, and a call that cannot be made stops the ones not yet started", async () => {
+  const paragraph = `${"Results were consistent across all prespecified subgroups. ".repeat(40)}`.trim();
+  const paragraphs = Array.from({ length: 12 }, () => paragraph);
+  let inFlight = 0;
+  let most = 0;
+  const answer = async (/** @type {any} */ call) => {
+    inFlight += 1;
+    most = Math.max(most, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    inFlight -= 1;
+    return { t: JSON.parse(call.body.messages[1].content).p.map(() => "各预设亚组的结果一致。") };
+  };
+  const { calls, callModel } = stubModel(Array.from({ length: 12 }, () => answer));
+  const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
+  assert.equal(result.complete, true);
+  assert.ok(most > 1 && most <= 4, `at most four at once (saw ${most})`);
+  assert.equal(calls.length, 12);
+
+  const failing = stubModel([answer, refuse("usage_budget_exceeded"), ...Array.from({ length: 12 }, () => answer)]);
+  const stopped = await new FrontierEditor(config, { owner, callModel: failing.callModel }).translateBody({ paragraphs });
+  assert.equal(stopped.error, "usage_budget_exceeded");
+  assert.equal(stopped.complete, false);
+  assert.ok(failing.calls.length < 12, `the calls not yet started were not made (made ${failing.calls.length})`);
+});
+
+test("a served edit policy older than the answer's keys is not used: the shipped instructions write the 推荐理由 and the tags", async () => {
+  assert.ok(frontierEditPolicyCurrent(FRONTIER_EDIT_INSTRUCTIONS), "the shipped instructions ask for every key");
+  const older = FRONTIER_EDIT_INSTRUCTIONS.replace('"reason_zh":"","tags":[],', "");
+  assert.equal(frontierEditPolicyCurrent(older), false);
+  const promoted = { async resolve(/** @type {string} */ _module, /** @type {any} */ defaults) { return { revisionId: "evolved:frontier:7", policy: { ...defaults, editInstructions: older } }; } };
+  const { calls, callModel } = stubModel([() => answer({ tags: ["肥胖"] })]);
+  const editor = new FrontierEditor(config, { owner, callModel, policies: promoted });
+  const result = await editor.edit(item());
+  assert.equal(calls[0].body.messages[0].content, FRONTIER_EDIT_INSTRUCTIONS);
+  assert.equal(result.editorVersion, FRONTIER_EDITOR_VERSION, "written by the shipped prompt, keyed as such");
+  assert.equal(editor.counters.outdatedPolicies, 1);
+  // A current promoted policy is used as before.
+  const currentPolicy = { async resolve(/** @type {string} */ _module, /** @type {any} */ defaults) {
+    return { revisionId: "evolved:frontier:8", policy: { ...defaults, editInstructions: `${FRONTIER_EDIT_INSTRUCTIONS}\n补充：只写原文有的。` } }; } };
+  const second = stubModel([() => answer()]);
+  const used = await new FrontierEditor(config, { owner, callModel: second.callModel, policies: currentPolicy }).edit(item());
+  assert.match(second.calls[0].body.messages[0].content, /补充：只写原文有的。$/);
+  assert.equal(used.editorVersion, "evolved:frontier:8");
+});
+
+test("the tree's candidates ride with the edit call after its input, and the input — the source's identity — stays without them", async () => {
+  const { calls, callModel } = stubModel([() => answer({ tags: ["GLP-1 受体激动剂", "肥胖"] })]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.edit(item({ tagCandidates: ["GLP-1 受体激动剂", "肥胖", "心血管疾病"] }));
+  const sent = calls[0].body.messages[1].content;
+  assert.ok(sent.startsWith(result.modelInput), "the input first, as it is stored");
+  assert.ok(sent.endsWith("\n候选标签：GLP-1 受体激动剂、肥胖、心血管疾病"));
+  assert.doesNotMatch(result.modelInput, /候选标签/);
+  assert.equal(result.modelInputSha256, (await new FrontierEditor(config, { owner, callModel: stubModel([() => answer()]).callModel }).edit(item())).modelInputSha256,
+    "a tag promoted overnight is not a change of the source");
+  assert.deepEqual(result.output?.tags, ["GLP-1 受体激动剂", "肥胖"]);
+});
+
+test("tagging again: several items a call, each answered by its number; specialties known and two at most, tags checked as an edit's", () => {
+  assert.match(FRONTIER_RETAG_INSTRUCTIONS, /"items":\[\{"n":1,"specialties":\[\],"tags":\[\]\}\]/);
+  assert.match(FRONTIER_RETAG_INSTRUCTIONS, /意思相同的必须原样照抄候选里的写法/);
+  const items = [
+    { titleZh: "司美格鲁肽减重 3 期试验", titleRaw: "Semaglutide phase 3", summaryZh: null, diseases: ["肥胖"], drugs: ["司美格鲁肽"], tagCandidates: ["肥胖", "4型糖尿病"] },
+    { titleZh: null, titleRaw: "A paper", summaryZh: "导读。", diseases: [], drugs: [], tagCandidates: [] },
+    { titleZh: null, titleRaw: "Another", summaryZh: null, diseases: [], drugs: [], tagCandidates: [] },
+  ];
+  const input = buildRetagInput(items);
+  assert.match(input, /^\[1\]\n标题：司美格鲁肽减重 3 期试验\n原标题：Semaglutide phase 3\n疾病：肥胖\n药物：司美格鲁肽\n候选标签：肥胖、4型糖尿病/);
+  assert.match(input, /\n\n\[2\]\n标题：A paper\n导读：导读。/);
+  const verified = verifyRetag(items, { items: [
+    { n: 1, specialties: ["endocrinology", "pharmacy", "astrology"], tags: ["肥胖", "4型糖尿病", "5期试验", "内分泌代谢"] },
+    { n: 2, specialties: "endocrinology", tags: [] },
+  ] });
+  assert.deepEqual(verified[0], { specialties: ["endocrinology", "pharmacy"], tags: ["肥胖", "4型糖尿病"] },
+    "an offered tag's number is the tree's; a number of the model's own the item lacks is dropped; a specialty name is not a tag");
+  assert.equal(verified[1], null, "malformed: asked again later");
+  assert.equal(verified[2], null, "left out: asked again later");
 });

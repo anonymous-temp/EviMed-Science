@@ -11,6 +11,7 @@ import { HttpError } from "./security.mjs";
  */
 export function frontierFollowPredicate(follow, param) {
   if (follow.kind === "source") return `i.primary_source_id = ${param(follow.key)}`;
+  if (follow.kind === "tag") return frontierTagPredicate(param(follow.key));
   if (follow.kind === "specialty") return `${param(follow.key)} = ANY(i.specialties)`;
   if (follow.kind === "drug") return `${param(follow.key)} = ANY(i.entity_keys)`;
   if (follow.kind === "event") {
@@ -18,11 +19,26 @@ export function frontierFollowPredicate(follow, param) {
     return `coalesce(i.event_id IN (SELECT id FROM evimed_frontier.events WHERE public_id = ${key}
       UNION SELECT event_id FROM evimed_frontier.event_aliases WHERE public_id = ${key}), false)`;
   }
+  // A typed follow lists what was matched to it (frontierFollowMatches.mjs), once each.
+  if (follow.kind === "query") return `EXISTS (SELECT 1 FROM evimed_frontier.follow_matches fm WHERE fm.item_id = i.id AND fm.follow_id = ${param(follow.id)}::bigint)`;
   if (follow.kind === "topic") {
     const query = tsqueryLiteral(follow.key);
     return query ? `i.lexemes @@ ${param(query)}::tsquery` : "FALSE";
   }
   return "FALSE";
+}
+
+/**
+ * Items carrying a tag of the tree (frontierTags.mjs), by its address: the tag, any tag folded into it, and its active narrower tags
+ * (肺癌 lists 非小细胞肺癌). The address may be one that was folded into another since: it reads as the tag that stands for it.
+ * @param {string} slugParam the SQL parameter holding the address
+ */
+export function frontierTagPredicate(slugParam) {
+  return `EXISTS (SELECT 1 FROM evimed_frontier.item_tags it JOIN evimed_frontier.tags tg ON tg.id = it.tag_id
+    WHERE it.item_id = i.id AND coalesce(tg.merged_into, tg.id) IN (
+      SELECT coalesce(f.merged_into, f.id) FROM evimed_frontier.tags f WHERE f.slug = ${slugParam}
+      UNION SELECT n.id FROM evimed_frontier.tags n JOIN evimed_frontier.tags f ON n.broader_id = coalesce(f.merged_into, f.id)
+        WHERE f.slug = ${slugParam} AND n.state = 'active'))`;
 }
 
 export class FrontierSubscriptions {

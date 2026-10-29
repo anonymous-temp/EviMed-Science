@@ -350,12 +350,12 @@ export class HabitWriter {
 /** Observations, counted habits and the method ledger, per account. */
 export class AgentObservations {
   /**
-   * @param {{ database: any, learning: any, researchMemory?: any, writer?: HabitWriter | null, now?: () => Date }} dependencies
+   * @param {{ database: any, learning: any, memorySettings?: any, writer?: HabitWriter | null, now?: () => Date }} dependencies
    */
-  constructor({ database, learning, researchMemory = null, writer = null, now = () => new Date() }) {
+  constructor({ database, learning, memorySettings = null, writer = null, now = () => new Date() }) {
     this.database = database;
     this.learning = learning;
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.writer = writer;
     this.now = now;
   }
@@ -365,8 +365,8 @@ export class AgentObservations {
    * @param {{ id: string }} user @param {ReturnType<typeof readObservation>} observation
    */
   async observe(user, observation) {
-    if (this.researchMemory?.configured) {
-      const settings = await this.researchMemory.settings(user.id);
+    if (this.memorySettings?.configured) {
+      const settings = await this.memorySettings.settings(user.id);
       if (settings.learningPaused) return { recorded: false, reason: "paused", habits: [] };
     }
     await migrateAgentObservations(this.database);

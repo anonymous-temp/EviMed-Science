@@ -3,6 +3,7 @@ import { productRequest } from './productClient';
 export interface ForecastPoint { day: number; subjects: number | null; mean: number | null; lower: number | null; upper: number | null }
 export interface ForecastMetric { value: number | null; lower: number | null; upper: number | null }
 export interface ForecastGroup {
+  intervalMeaning?: string; modelUncertainty?: string;
   horizonDays: number; subjects?: number | null; events?: number | null; observedMean?: number | null; forecastMean?: number | null;
   requested?: number | null; evaluated?: number | null; missingOutcomes?: number | null; missingForecasts?: number | null; invalidForecasts?: number | null;
   candidates?: number | null; prevalentExcluded?: number | null; riskSet?: string;
@@ -26,7 +27,7 @@ export interface LongitudinalRecord {
     failures?: Array<{ code: string; rows?: number }>; code?: string; predictionId?: string;
     comparisons?: number; matched?: number; excluded?: number; issues?: Array<{ code?: string; codes?: string[] }>;
     notes?: string[];
-    available?: boolean; mode?: string; predictionIds?: string[]; origins?: string[]; changedFactors?: string[];
+    available?: boolean; mode?: string; causalEffectIdentified?: boolean; attribution?: string; predictionIds?: string[]; origins?: string[]; changedFactors?: string[];
     models?: Array<{ name?: string; version?: string } | null>;
     subjectsWithoutObservations?: number; modalities?: Array<{ modality: string; subjects: number | null; events: number | null }>;
     components?: Array<{ id: string; endpoint: { code: string; unit: string; type: string }; accepted: number; invalidRows: number }>;

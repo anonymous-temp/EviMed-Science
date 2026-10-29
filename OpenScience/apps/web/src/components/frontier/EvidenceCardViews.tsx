@@ -99,7 +99,7 @@ function FactBoxGroup({ title, rows }: { title: string; rows: EvidenceFactBoxRow
   if (!rows.length) return null;
   return (
     <div className="space-y-1">
-      <h4 className="text-ui font-medium text-text">{title}</h4>
+      <h4 className="text-ui font-semibold text-text">{title}</h4>
       <ul className="space-y-1">
         {rows.map((row) => (
           <li key={row.index} className="text-ui text-text-2">
@@ -119,7 +119,7 @@ export function EvidenceFactBoxView({ factBox }: { factBox: EvidenceFactBox }) {
   }
   return (
     <div className="space-y-3">
-      <p className="text-ui font-medium text-text">每 1000 人里</p>
+      <p className="text-ui font-semibold text-text">每 1000 人里</p>
       <FactBoxGroup title="获益" rows={factBox.benefits} />
       <FactBoxGroup title="不良反应" rows={factBox.harms} />
       {factBox.excluded.length > 0 && <p className="text-caption text-text-3">另有 {factBox.excluded.length} 个结局没有放进事实框。</p>}
@@ -132,7 +132,7 @@ function PanelBlock({ panel }: { panel: Panel }) {
   if (panel.key === "sourcesAndCheckDate") {
     return (
       <section className="space-y-1">
-        <h4 className="text-ui font-medium text-text">{panel.label}</h4>
+        <h4 className="text-ui font-semibold text-text">{panel.label}</h4>
         <ul className="text-ui text-text-2">
           {(panel.sources ?? []).map((source, index) => <li key={index}>{source.title}</li>)}
         </ul>
@@ -143,7 +143,7 @@ function PanelBlock({ panel }: { panel: Panel }) {
   if (panel.key === "commonMisunderstandings") {
     return (
       <section className="space-y-2">
-        <h4 className="text-ui font-medium text-text">{panel.label}</h4>
+        <h4 className="text-ui font-semibold text-text">{panel.label}</h4>
         <ul className="space-y-2">
           {(panel.items ?? []).map((item, index) => (
             <li key={index} className="text-ui text-text-2">
@@ -158,7 +158,7 @@ function PanelBlock({ panel }: { panel: Panel }) {
   }
   return (
     <section className="space-y-1">
-      <h4 className="text-ui font-medium text-text">{panel.label}</h4>
+      <h4 className="text-ui font-semibold text-text">{panel.label}</h4>
       <p className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">{panel.text}</p>
       <TraceMark traced={panel.traced === true} />
     </section>
@@ -181,7 +181,7 @@ export function EvidencePublicLayout({ view }: { view: EvidencePublicView }) {
       {view.panels.map((panel) => <PanelBlock key={panel.key} panel={panel} />)}
       {(view.calculations?.length ?? 0) > 0 && (
         <section className="space-y-1">
-          <h4 className="text-ui font-medium text-text">平台计算</h4>
+          <h4 className="text-ui font-semibold text-text">平台计算</h4>
           <ul className="space-y-1">
             {view.calculations?.map((entry) => (
               <li key={entry.claimId} className="text-ui text-text-2">{entry.text}</li>
@@ -190,7 +190,7 @@ export function EvidencePublicLayout({ view }: { view: EvidencePublicView }) {
         </section>
       )}
       <section className="space-y-2">
-        <h4 className="text-ui font-medium text-text">事实框</h4>
+        <h4 className="text-ui font-semibold text-text">事实框</h4>
         <EvidenceFactBoxView factBox={view.factBox} />
       </section>
     </div>

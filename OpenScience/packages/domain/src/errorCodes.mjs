@@ -229,6 +229,8 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "kb_browse_gateway_token_missing",
   "kb_browse_gateway_token_invalid",
   "kb_browse_not_found",
+  // A denied project context is an unavailable source, never permission to widen scope.
+  "kb_browse_scope_denied",
   // The stored meaning of a dataset (dataset_semantics → dataSemanticsGateway.mjs) not answering — the module off,
   // an outage, a slow ledger. The analysis goes on from the files, as it did before the tool existed, and says it
   // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
@@ -258,6 +260,12 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "frontier_search_response_too_large",
   "frontier_search_gateway_token_missing",
   "frontier_search_gateway_token_invalid",
+  // An item the conversation was opened from that the feed no longer holds (withdrawn, or an id nobody published): the run goes on
+  // with the link it was given.
+  "frontier_search_item_not_found",
+  // The service's own name for it, which the gateway reads and answers as the line above: classified the same, so it is never fatal
+  // should it reach a run unchanged.
+  "frontier_item_not_found",
   // 「循证 GEO」's runtime tools (geo_platform.py → geoGateway.mjs) not
   // answering: the module off or not open to this account, a conversation
   // outside a GEO project, the social channel not configured, an outage. The
@@ -408,6 +416,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // a run that did nothing wrong; failing over those would repeat the
   // official_page_url_forbidden incident exactly.
   "geo_probe_unconfigured",
+  // The inclusion channel's two refusals before a task is taken (not enabled
+  // here; an engine not measured through it): the same operator decision as
+  // an unconfigured probe, 2026-10-25.
+  "geo_inclusion_disabled",
+  "geo_inclusion_engine_not_allowed",
   "geo_probe_endpoint_invalid",
   "geo_probe_plaintext_forbidden",
   "geo_probe_busy",
@@ -636,6 +649,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "frontier_search_window_invalid",
   "frontier_search_mode_invalid",
   "frontier_search_limit_invalid",
+  "frontier_search_id_invalid",
   "frontier_search_request_invalid",
   "frontier_search_request_too_large",
   // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a
@@ -651,7 +665,18 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "geo_read_filter_invalid",
   "geo_write_what_invalid",
   "geo_write_payload_invalid",
+  "geo_plan_file_required",
   "geo_write_rejected",
+  // The three refusals of a diagnosis start or recovery the gateway passes to
+  // the run by name, because each has its own next step: a request key already
+  // spent on another request (use a new one), a cell whose recovery is used up
+  // (report it as not measured), and a recovery that may call the provider a
+  // second time (only the person can accept that). The other refusals of an
+  // import, start or recovery reach the run as `geo_write_payload_invalid`, so
+  // they are page codes (`GEO_ROUTE_ERROR_CODES`), not these.
+  "geo_request_key_conflict",
+  "geo_recovery_exhausted",
+  "geo_recovery_acknowledgment_required",
   "social_posts_query_invalid",
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",
@@ -927,6 +952,7 @@ export const SOCKET_TOOL_ERROR_CODES = Object.freeze([
   'contract_kind_ambiguous',
   'attempt_limit_reached',
   'budget_exhausted',
+  'unattended_question_unavailable',
   'path_guard_denied',
   'subagent_failed',
   'capsule_unavailable',
@@ -1140,12 +1166,18 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'memory_engine_unavailable',
   'memory_engine_unsupported',
   'memory_content_refused',
+  // 2026-10-25: 「从其他 AI 导入」 (`nativeMemoryImport.mjs`): the account paused memory, asked too often, the offer is gone or the text could not be read.
+  'memory_import_paused',
+  'memory_import_rate_limited',
+  'memory_import_expired',
+  'memory_import_unavailable',
   'memory_engine_invalid',
   'memory_gateway_disabled',
   'memory_gateway_unauthenticated',
   'memory_gateway_role_refused',
   'memory_gateway_route_refused',
   'memory_gateway_uri_refused',
+  'memory_scope_denied',
   'memory_gateway_body_invalid',
   'memory_gateway_payload_too_large',
   'memory_gateway_rate_limited',
@@ -1250,7 +1282,6 @@ const sourceIntakeErrorCodes = Object.freeze([
   'knowledge_page_empty',
   'knowledge_page_not_found',
   'knowledge_pages_disabled',
-  'knowledge_page_limit',
   'knowledge_task_expired',
   'knowledge_compile_failed',
   'knowledge_compile_cancelled',
@@ -1276,6 +1307,10 @@ const autopilotMaterialErrorCodes = Object.freeze([
   // not there for this account; the page says so and goes back to its list.
   'autopilot_agenda_not_found',
   'autopilot_episode_not_found',
+  'autopilot_cancellation_failed',
+  // 2026-10-25: the deployment's scheduler is off. The page's own code, so it is not the conversation tool's sentence that sends the
+  // researcher to the very page they are on; saved tasks and their results stay readable.
+  'autopilot_scheduling_disabled',
 ])
 
 /**
@@ -1334,9 +1369,6 @@ const capsuleTransferErrorCodes = Object.freeze([
   // method, not 「内容已发生变化」 — what a bare 409 used to be read as.
   'method_no_earlier_version',
   'method_revision_unavailable',
-  // The same two for a capability handbook (`HandbookLibrary`): one that is gone, and a version that is.
-  'handbook_unavailable',
-  'handbook_revision_unavailable',
 ])
 
 /**
@@ -1360,6 +1392,10 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_not_enabled',
   'vcr_path_invalid',
   'vcr_payload_invalid',
+  'vcr_conversation_busy',
+  'vcr_conversation_unavailable',
+  'vcr_calculation_research_required',
+  'agent_run_dispatch_conflict',
   'vcr_study_not_found',
   'vcr_study_paused',
   'vcr_name_invalid',
@@ -1650,6 +1686,41 @@ export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
+  'geo_signal_not_found',
+  'geo_signal_conflict',
+  'geo_plan_context_invalid',
+  'geo_plan_context_not_found',
+  'geo_plan_context_unavailable',
+  'geo_native_context_unavailable',
+  'geo_plan_context_conflict',
+  'geo_plan_context_mismatch',
+  'geo_plan_context_consumed',
+  'geo_plan_context_ambiguous',
+  'geo_plan_focus_invalid',
+  'geo_plan_basis_unavailable',
+  'geo_plan_basis_too_large',
+  'geo_plan_action_invalid',
+  'geo_plan_output_unavailable',
+  'geo_plan_output_invalid',
+  'geo_plan_output_ambiguous',
+  'geo_strategy_import_failed',
+  'geo_strategy_not_found',
+  'geo_strategy_version_invalid',
+
+  "geo_review_unavailable",
+  "geo_assessment_changed",
+  "geo_review_basis_unavailable",
+  "geo_feedback_invalid",
+  "geo_feedback_request_conflict",
+  "geo_feedback_not_found",
+  "geo_review_failed",
+
+  // An import, diagnosis start or recovery the page sent wrongly, or a round
+  // that could not be planned. The gateway hands the run each of these as
+  // `geo_write_payload_invalid`; the recovery refusals the run hears by name
+  // are tool codes (above).
+  'geo_question_import_invalid', 'geo_diagnosis_invalid', 'geo_contract_missing', 'geo_recovery_invalid',
+  'geo_round_empty', 'geo_round_question_invalid', 'geo_round_engine_invalid', 'geo_round_too_large',
   'geo_not_enabled',
   'geo_path_invalid',
   'geo_payload_invalid',
@@ -1673,6 +1744,13 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_screenshot_not_found',
   'geo_article_not_found',
   'geo_article_state_invalid',
+  'geo_article_review_invalid',
+  'geo_article_review_stale',
+  'geo_article_version_changed',
+  'geo_article_head_changed',
+  'geo_article_bytes_changed',
+  'geo_article_ancestry_invalid',
+  'geo_article_text_unsupported',
   'geo_order_not_found',
   'geo_order_not_cancellable',
   // The market's refusals of an operator or owner action (geoMarket.mjs, `marketFailure`): an order whose send is still on its way,
@@ -1988,6 +2066,8 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  // c3-ask: the feed holds no such item (withdrawn, or an id nobody published) — a reader's page, or the run asked by id.
+  frontier_item_not_found: '这条动态已不再提供。',
   vcr_split_invalid: '请为验证指定患者、时间或中心划分，并检查日期顺序。',
   vcr_history_perturbation_invalid: '请指定要省略的事件代码或有效的历史起始日期。',
   vcr_benchmark_invalid: '请按试验效果模板提供比较记录和已有证据的引用。',
@@ -2087,12 +2167,47 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   media_market_response_too_large: '媒介集市的答复超过了大小上限，这次结果没有采用。',
   media_market_request_invalid: '发给媒介集市的请求不符合要求（媒体类型、订单号、标题或正文），已拒绝。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
+  geo_signal_not_found: '找不到这条线索，请刷新后查看当前记录。',
+  geo_signal_conflict: '这条线索或处理请求已更新，请刷新后继续。',
+  geo_plan_context_invalid: '方案选择不完整，请刷新方案页后重新选择。',
+  geo_plan_context_not_found: '找不到所选方案依据，请返回信源页重新选择。',
+  geo_plan_context_unavailable: '暂时无法读取方案依据，请保留当前稿件并稍后重试。',
+  geo_native_context_unavailable: '暂时无法读取这次对话的项目上下文，请保留当前工作并稍后重试。',
+  geo_plan_context_conflict: '这次请求已关联另一份方案，请重新打开要使用的方案。',
+  geo_plan_context_mismatch: '所选方案不属于当前对话，请从方案页重新打开。',
+  geo_plan_context_consumed: '这份方案选择已用于另一条消息，请重新选择后继续。',
+  geo_plan_context_ambiguous: '本次对话包含多份方案输入，请分别选择需要处理的方案。',
+  geo_plan_focus_invalid: '所选问题群或页面不在该方案范围内，请刷新后重新选择。',
+  geo_plan_basis_unavailable: '这份方案缺少可用依据，请在当前范围重新生成方案。',
+  geo_plan_basis_too_large: '所选范围过大，请缩小问题群、信源或日期范围后生成方案。',
+  geo_plan_action_invalid: '请从所选方案版本中选择要处理的行动。',
+  geo_plan_file_required: '请在当前对话中完成并保存所选方案，再刷新方案页。',
+  geo_plan_output_unavailable: '暂时无法读取本次方案成果，文件已保留，请稍后刷新。',
+  geo_plan_output_invalid: '方案数据暂时无法读取，请检查原任务中的文件后重试导入。',
+  geo_plan_output_ambiguous: '发现多份不同的方案文件，请选择需要导入的那一份。',
+  geo_strategy_import_failed: '方案暂未写入项目，文件仍保留；请查看导入记录并重试。',
+  geo_strategy_not_found: '找不到这个方案版本，请返回方案页重新选择。',
+  geo_strategy_version_invalid: '方案版本不正确，请从方案页选择已有版本。',
   geo_source_not_found: '找不到这个信源，它可能已被移除。',
   geo_producer_invalid: '出品方设置不对：类型选“企业”或“医生”，医生要写姓名，与产品的关系只能选列出的几种。',
   geo_card_producer_required: '先在项目里写明由谁出品（企业或医生），才能生成产品专区的证据卡；结论库里的结论都还在。',
   geo_card_reviewer_required: '产品专区的证据卡要写明作者和审核医生。先在项目成员里加一位医学审核，再生成；结论库里的结论都还在。',
+  geo_review_unavailable: '暂时无法复核判定，请稍后重试。',
+  geo_assessment_changed: '判定已经更新，请刷新后提交反馈。',
+  geo_review_basis_unavailable: '原始判定依据暂不可用，已保留原判定和反馈。',
+  geo_feedback_invalid: '请选定具体原句并填写反馈理由。',
+  geo_feedback_request_conflict: '这次请求已有不同反馈，请刷新后重试。',
+  geo_feedback_not_found: '未找到这条反馈。',
+  geo_review_failed: '复核暂未完成，请稍后查看。',
   geo_cards_unavailable: '这个部署没有开通证据专区，结论暂时不能生成证据卡；结论库里的结论都还在。',
   geo_article_text_unavailable: '这篇稿件的正文现在读不到，暂时不能核对它引用的结论；稿件本身没有变化。',
+  geo_article_review_invalid: '请重新打开稿件后再放行。',
+  geo_article_review_stale: '稿件已有新版本，请重新查看后再放行。',
+  geo_article_version_changed: '稿件版本已变化，请重新打开后再处理。',
+  geo_article_head_changed: '稿件已有新版本，请重新打开后再处理。',
+  geo_article_bytes_changed: '稿件内容已变化，请重新打开后再处理。',
+  geo_article_ancestry_invalid: '这份文件不能确认为原稿的修订稿，请重新打开原稿后再处理。',
+  geo_article_text_unsupported: '这份文件暂时不能提取可编辑正文，请提供 Markdown 或 Word 原稿。',
   geo_member_forbidden: '你在这个项目里的角色不能做这件事；请联系项目负责人调整角色。',
   geo_member_role_invalid: '成员角色只能选：编辑、医学审核、只读。',
   geo_member_user_required: '请填写成员的账号。',
@@ -2103,6 +2218,19 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_action_not_found: '找不到这条行动，它可能已经完成或被新一版策略取代。',
   geo_action_choice_invalid: '这一步只能“跳过”或“换信源”，换信源要写明一个信源的网站域名。',
   geo_owned_link_invalid: '这个发布链接没有登记成功：需要一个具体页面的网址和发布平台，并且不能和已登记的重复。',
+  geo_request_key_conflict: '这个请求编号已经用在另一次请求上；新的开始或补测要换一个新的编号，只有重试同一次请求时才沿用原编号。',
+  geo_recovery_exhausted: '这些单元格已经补测过，不能再补测；仍未测到的会按未测记入结果。',
+  geo_recovery_acknowledgment_required: '这次补测涉及可能已经发出、甚至已经计费的请求，再补测可能重复计费；需要你确认接受后才能补测。',
+  geo_question_import_invalid: '这份问句没有导入：请按提示修改问句或测量约定后再导入。',
+  geo_diagnosis_invalid: '请选择一个已保存的问句版本，再开始诊断。',
+  geo_contract_missing: '这个问句版本没有保存测量约定；请连同测量约定重新保存后再开始。',
+  geo_recovery_invalid: '只能补测这次诊断里失败或缺失的单元格，请重新选择。',
+  geo_round_empty: '这次没有可以测量的问句或平台，所以没有开始测量。',
+  geo_inclusion_disabled: '这个部署没有开通收录检查，这一项这次没有测。',
+  geo_inclusion_engine_not_allowed: '这个 AI 引擎不通过收录检查来测，这一项这次没有测。',
+  geo_round_question_invalid: '这次测量的问句不属于同一个可测量的问句版本，所以没有开始；请检查问句版本后再试。',
+  geo_round_engine_invalid: '这次测量选择的平台不在可测范围或测量约定里，所以没有开始。',
+  geo_round_too_large: '这次测量的提问次数超过单轮上限，所以没有开始；请减少问句、平台或重复次数。',
   // 「虚拟临床研究」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown
@@ -2124,6 +2252,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_pack_not_curated: '只有研究负责人已经标为「已整理」的知识包，才能申请成为平台知识包；先在研究页上确认整理。',
   vcr_path_invalid: '这个地址不是虚拟临床研究的页面；从研究列表重新进入。',
   vcr_payload_invalid: '提交的内容格式不对，没有保存；刷新页面后重新填写。',
+  vcr_conversation_busy: '研究对话正在处理其他请求，请完成后重试。',
+  vcr_conversation_unavailable: '研究对话暂时不可用，请重试。',
+  vcr_calculation_research_required: '请先选择或新建研究，再将本次计算用于研究。',
+  agent_run_dispatch_conflict: '这次启动请求已用于另一份研究内容，请重新发起。',
   vcr_study_not_found: '找不到这个研究，或它不属于你的账号；从研究列表重新进入。',
   vcr_name_invalid: '研究名要写 1 到 40 个字。',
   vcr_tier_invalid: '数据档位只能选 T0 到 T3 之一。',
@@ -2424,6 +2556,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   contract_kind_ambiguous: '这个能力有多种产出，需要在计划里指明契约种类。',
   attempt_limit_reached: '提交次数已用尽，请以部分交付结束。',
   budget_exhausted: '本次运行的预算已用尽。',
+  unattended_question_unavailable: '这次任务无人值守，已按现有资料继续；缺少的信息会在结果中说明。',
   path_guard_denied: '这个路径不允许写入。',
   subagent_failed: '一个分工失败了，已自动重派一次。',
   capsule_unavailable: '记忆胶囊暂不可用，本次未启用。',
@@ -2665,7 +2798,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   knowledge_page_empty: '页面内容不能为空。',
   knowledge_page_not_found: '没有找到这个知识页。',
   knowledge_pages_disabled: '这个部署没有开启知识页整理。',
-  knowledge_page_limit: '这个项目的知识页已经到了上限，这一轮没有再整理；已有的页面照常可用。',
   knowledge_task_expired: '这一轮整理超时了，已有的页面没有变；可以再点一次“重新整理”。',
   knowledge_compile_failed: '这一轮整理没有完成，已有的页面没有变；可以稍后再点“重新整理”。',
   knowledge_compile_cancelled: '这一轮整理被取消了，已有的页面没有变。',
@@ -2679,6 +2811,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
   autopilot_agenda_not_found: '找不到这个定时任务。它可能已被删除，回到任务列表刷新后再看。',
   autopilot_episode_not_found: '找不到这次执行。它可能已被清理，刷新任务页后再看。',
+  autopilot_cancellation_failed: '任务计划已暂停或删除，但部分运行尚未停止。请重试停止。',
+  autopilot_scheduling_disabled: '定时执行暂不可用，已保存的任务和历史结果仍可查看。',
   autopilot_daily_budget_spent:
     '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
     + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',
@@ -2722,19 +2856,22 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_community_not_found: '这个官方专区不存在，或还没有发布。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
-  handbook_unavailable: '这条经验已不存在，刷新后再试。',
-  handbook_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
   // ——— 记忆：原生引擎 (nativeMemoryStore.mjs, memoryGateway.mjs) ———
   memory_engine_unavailable: '记忆服务暂时不可用，稍后再来看；对话照常进行，不受影响。',
   memory_engine_unsupported: '这项操作在当前的记忆方式下不可用。',
   memory_content_refused: '这条含有密钥、证件号、手机号、卡号或邮箱这类信息，没有记下。可以只记住不含这些信息的部分。',
+  memory_import_paused: '记忆已暂停，恢复记忆后才能导入。',
+  memory_import_rate_limited: '一小时内导入的次数太多了，稍后再试。',
+  memory_import_expired: '这份导入清单已经失效，请重新粘贴一次。',
+  memory_import_unavailable: '暂时没能读这段文字，稍后再试。',
   memory_engine_invalid: '记忆引擎只能是 legacy 或 native。',
   memory_gateway_disabled: '这个部署没有开放原生记忆。',
   memory_gateway_unauthenticated: '记忆网关不认识这个调用方。',
   memory_gateway_role_refused: '调用方不能自己声明角色。',
   memory_gateway_route_refused: '记忆网关不提供这个接口。',
   memory_gateway_uri_refused: '这个地址不在本人的记忆范围内。',
+  memory_scope_denied: '当前身份不能访问这份项目记忆，请从所属项目重新打开。',
   memory_gateway_body_invalid: '记忆请求的内容不完整。',
   memory_gateway_payload_too_large: '记忆请求过大。',
   memory_gateway_rate_limited: '记忆请求过于频繁，请稍后再试。',
@@ -2805,7 +2942,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // 「循证 GEO」's runtime tools, then its routes. The tool family comes first:
   // a run reading the platform's data has a different next step (go on with
   // what it has) from a person whose page action was refused (try again).
-  [/^(?:geo_(?:disabled$|no_project$|unconfigured$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
+  [/^(?:geo_(?:disabled$|no_project$|unconfigured$|plan_file_required$|recovery_exhausted$|recovery_acknowledgment_required$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
     '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
   [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
   // 「虚拟临床研究」, read the same way and for the same reason: a run whose study
@@ -2840,7 +2977,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
   [/^kb_browse_/, '知识库目录这次没能打开；运行会改用资料库检索或直接读取知识库里的文件继续。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
-  [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
+  [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|materials_invalid$|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
   // The engine protocol's per-field issues (`VCR_PROTOCOL_ISSUE_CODES`), last so
   // no earlier family can take one of them. Three families, because each is
@@ -2968,12 +3105,17 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   memory_engine_unavailable: 'upstream',
   memory_engine_unsupported: 'capped',
   memory_content_refused: 'capped',
+  memory_import_paused: 'capped',
+  memory_import_rate_limited: 'capped',
+  memory_import_expired: 'capped',
+  memory_import_unavailable: 'upstream',
   memory_engine_invalid: 'capped',
   memory_gateway_disabled: 'capped',
   memory_gateway_unauthenticated: 'capped',
   memory_gateway_role_refused: 'capped',
   memory_gateway_route_refused: 'capped',
   memory_gateway_uri_refused: 'capped',
+  memory_scope_denied: 'capped',
   memory_gateway_body_invalid: 'capped',
   memory_gateway_payload_too_large: 'capped',
   memory_gateway_rate_limited: 'capped',

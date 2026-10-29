@@ -105,7 +105,7 @@ export function ClusterEngineGrid({
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} data-cluster-row={row.key}>
-                <th scope="row" className={cn("sticky left-0 z-page w-44 max-w-44 text-left text-compact font-normal text-text", groundClass)}>
+                <th scope="row" className={cn("sticky left-0 z-page w-44 max-w-44 text-left text-caption font-normal text-text", groundClass)}>
                   <span className="flex min-w-0 items-baseline gap-1.5">
                     <span className="min-w-0 truncate">{row.header}</span>
                     {row.note}
@@ -116,7 +116,7 @@ export function ClusterEngineGrid({
                   const stance = engineStance(tally);
                   if (!tally || stance === "unmeasured") {
                     return (
-                      <td key={engine} data-cluster-cell={engine} data-stance="unmeasured" className="h-sm rounded text-center text-compact text-text-3" style={{ background: HATCH }}>
+                      <td key={engine} data-cluster-cell={engine} data-stance="unmeasured" className="h-sm rounded text-center text-caption text-text-3" style={{ background: HATCH }}>
                         <span aria-hidden="true">—</span>
                         <span className="sr-only">{`${row.name}，${engineName(engine)}：${STANCE_WORDS.unmeasured}`}</span>
                       </td>
@@ -127,7 +127,7 @@ export function ClusterEngineGrid({
                   const spoken = `${row.name}，${engineName(engine)}：${tally.answered} 个回答里 ${tally.mentioned} 个提到了${wrong ? `，${tally.wrong} 个讲错` : ""}`;
                   return (
                     <td key={engine} data-cluster-cell={engine} data-stance={stance} data-wrong={wrong ? "" : undefined} data-forced-colors="preserve"
-                      className={cn("h-sm rounded p-0 text-center text-compact tabular-nums", STANCE_CLASSES[stance])}>
+                      className={cn("h-sm rounded p-0 text-center text-caption tabular-nums", STANCE_CLASSES[stance])}>
                       {onOpen ? (
                         <button type="button" onClick={() => onOpen(row.key, engine)} aria-label={spoken}
                           className="flex h-sm w-full items-center justify-center gap-1 rounded px-2 hover:underline hover:underline-offset-4">

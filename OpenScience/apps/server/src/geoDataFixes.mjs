@@ -16,14 +16,28 @@
  *  3. **Strategy** from the run's own `strategy.json` (G4): the fields the
  *     platform used to drop, written once through `geo_write` (merge-forward,
  *     sources in pages of the write's limit).
- *  4. **Materials**: the correction articles each content batch wrote, attached
- *     to the errors that batch was given, which move to 处置中 (G7).
+ *  4. **Materials**: a content batch's correction articles attached to the
+ *     error it was given, which moves to 处置中 (G7) — only where the pairing
+ *     is certain, a batch given one error. A batch given several errors never
+ *     pairs its corrections by itself: each names the errors it corrects
+ *     (`errorIds`) when it is registered. Until 2026-10-25 this step paired
+ *     every correction of a batch with every error of it, so an error of a
+ *     five-error batch held all five corrections (production: the two batches
+ *     of 2026-09-25, attached by the 09-26 run). Such cross-attached errors
+ *     are reported; with `correctionPairs` (which correction answers which
+ *     error, read off the articles and the errors by a person or a model) the
+ *     corrections of that batch not paired with an error are detached, and an
+ *     error left with no correction goes back from 处置中 to 待处理.
  *  5. **Collected**: a real phrasing without its day is dated to when its
  *     question set was first written (G9).
  *  6. **Recount and re-measure** (G2): every stored answer counted again under
  *     the registry as it now stands — no model asked — and every measured
  *     round of the project re-measured, in the order they finished, with the
- *     headline numbers before and after.
+ *     headline numbers before and after. A round that heard no answer is not
+ *     measured, and the empty cells the metrics loop wrote for such rounds
+ *     before 2026-10-25 (209 a day for a sentinel whose engines were all
+ *     paused) are removed: they are derived, all without a value, and the
+ *     loop no longer writes them.
  *
  * Runs against the tables the running server migrated; it migrates first
  * outside its transaction (a DDL lock held for the length of the fix would
@@ -144,6 +158,8 @@ async function headline(db, geoProjectId) {
  * @property {Record<string, boolean>} [competitorSingleSource]  by brand or generic name
  * @property {Record<string, any> | null} [strategy]  the run's parsed strategy.json
  * @property {boolean} [materials]
+ * @property {Array<{ errorId: string, articleId: string }> | null} [correctionPairs]  which correction answers which error, for the
+ *   cross-attached errors of a several-error batch
  * @property {boolean} [collected]
  * @property {() => Date} [now]
  */
@@ -154,7 +170,7 @@ async function headline(db, geoProjectId) {
  * @param {GeoDataFixOptions} options
  */
 export async function runGeoDataFixes({ database, geoProjectId, apply = false, disown = [...GEO_NOT_OWNED_DOMAINS], ourSingleSource = null, ourGenericAliases = [],
-  competitorSingleSource = {}, strategy = null, materials = true, collected = true, now = () => new Date() }) {
+  competitorSingleSource = {}, strategy = null, materials = true, correctionPairs = null, collected = true, now = () => new Date() }) {
   // Migrated once, committed, outside the fix (the server does the same at boot).
   await new GeoMeasureStore(database).ready();
   const migrated = await migrateGeo(database);
@@ -230,25 +246,67 @@ export async function runGeoDataFixes({ database, geoProjectId, apply = false, d
       };
     }
 
-    // 4. Each content batch's corrections, attached to the errors it was given.
+    // 4. A content batch's corrections, attached to the error it was given — where that is certain — and the corrections an
+    //    error of a several-error batch holds from that batch beyond its own, detached by the pairs given.
     if (materials) {
-      const pairs = (await db.query(`SELECT a.id AS article_id, a.path, a.layer, a.title, a.run_id, e.error_id
+      const batches = (await db.query(`SELECT m.key, m.run_id, m.detail -> 'errorIds' AS error_ids,
+          coalesce((SELECT jsonb_agg(jsonb_build_object('id', a.id, 'path', a.path, 'layer', a.layer, 'title', a.title, 'withdrawn', a.status = 'withdrawn')
+            ORDER BY a.created_at, a.id) FROM evimed_geo.articles a
+            WHERE a.geo_project_id = m.geo_project_id AND a.run_id = m.run_id AND a.layer = 'correction'), '[]'::jsonb) AS articles
         FROM evimed_geo.schedule_marks m
-          CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(m.detail -> 'errorIds') = 'array' THEN m.detail -> 'errorIds' ELSE '[]'::jsonb END) AS e(error_id)
-          JOIN evimed_geo.articles a ON a.geo_project_id = m.geo_project_id AND a.run_id = m.run_id AND a.layer = 'correction' AND a.status <> 'withdrawn'
         WHERE m.geo_project_id = $1 AND m.kind = 'run' AND starts_with(m.key, 'run:content:') AND m.run_id IS NOT NULL
-        ORDER BY a.created_at, e.error_id`, [geoProjectId])).rows;
+          AND jsonb_typeof(m.detail -> 'errorIds') = 'array'
+        ORDER BY m.key`, [geoProjectId])).rows;
+      /** @type {Map<string, Set<string>>} */
+      const paired = new Map();
+      for (const pair of Array.isArray(correctionPairs) ? correctionPairs : []) {
+        if (typeof pair?.errorId !== "string" || typeof pair?.articleId !== "string") continue;
+        paired.set(pair.errorId, new Set([...(paired.get(pair.errorId) ?? []), pair.articleId]));
+      }
       /** @type {Set<string>} */
       const acting = new Set();
+      let pairs = 0;
       let attached = 0;
-      for (const pair of pairs) {
-        const moved = await store.attachCorrection(geoProjectId, [String(pair.error_id)], {
-          articleId: String(pair.article_id), path: String(pair.path ?? ""), layer: String(pair.layer), title: pair.title ?? null, runId: pair.run_id ?? null,
-        });
-        attached += moved.length;
-        for (const id of moved) acting.add(id);
+      /** @type {string[]} */
+      const crossAttached = [];
+      /** @type {string[]} */
+      const unlisted = [];
+      let detached = 0;
+      let reopened = 0;
+      for (const batch of batches) {
+        const errorIds = [...new Set((/** @type {unknown[]} */ (batch.error_ids)).filter((id) => typeof id === "string").map(String))];
+        const articles = /** @type {Array<{ id: string, path: string | null, layer: string, title: string | null, withdrawn: boolean }>} */ (batch.articles);
+        if (errorIds.length === 1) {
+          for (const article of articles.filter((entry) => !entry.withdrawn)) {
+            pairs += 1;
+            const moved = await store.attachCorrection(geoProjectId, errorIds, {
+              articleId: article.id, path: String(article.path ?? ""), layer: article.layer, title: article.title ?? null, runId: batch.run_id ?? null,
+            });
+            attached += moved.length;
+            for (const id of moved) acting.add(id);
+          }
+          continue;
+        }
+        const ofBatch = new Set(articles.map((article) => article.id));
+        for (const errorId of errorIds) {
+          const errorRow = (await db.query(`SELECT status, materials FROM evimed_geo.errors WHERE geo_project_id = $1 AND id = $2`, [geoProjectId, errorId])).rows[0];
+          if (!errorRow) continue;
+          const held = (Array.isArray(errorRow.materials) ? errorRow.materials : []).filter((entry) => ofBatch.has(String(entry?.articleId ?? "")));
+          if (held.length <= 1) continue;
+          crossAttached.push(errorId);
+          const keep = paired.get(errorId);
+          if (!keep) { unlisted.push(errorId); continue; }
+          const materialsLeft = (Array.isArray(errorRow.materials) ? errorRow.materials : [])
+            .filter((entry) => !ofBatch.has(String(entry?.articleId ?? "")) || keep.has(String(entry.articleId)));
+          const hasCorrection = materialsLeft.some((entry) => entry?.kind === "article");
+          const status = errorRow.status === "acting" && !hasCorrection ? "open" : errorRow.status;
+          await db.query(`UPDATE evimed_geo.errors SET materials = $3::jsonb, status = $4, updated_at = now() WHERE geo_project_id = $1 AND id = $2`,
+            [geoProjectId, errorId, JSON.stringify(materialsLeft), status]);
+          detached += (Array.isArray(errorRow.materials) ? errorRow.materials.length : 0) - materialsLeft.length;
+          if (status !== errorRow.status) reopened += 1;
+        }
       }
-      report.materials = { pairs: pairs.length, attached, errors: acting.size };
+      report.materials = { pairs, attached, errors: acting.size, crossAttached: crossAttached.length, detached, reopened, unlisted };
     }
 
     // 5. A real phrasing's day, where the run wrote none.
@@ -264,9 +322,13 @@ export async function runGeoDataFixes({ database, geoProjectId, apply = false, d
     // 6. Every stored answer counted again under the registry as it now stands, every round measured again.
     const recount = await recountRegistryFacts({ store: measure, config: {}, now, force: true, geoProjectIds: [geoProjectId],
       state: /** @type {any} */ ({ recountAt: 0 }) });
-    const rounds = (await db.query(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[]) AND status IN ('done', 'partial')
-      ORDER BY finished_at NULLS LAST, created_at`, [geoProjectId, [...GEO_METRIC_ROUND_KINDS]])).rows.map((/** @type {any} */ entry) => String(entry.id));
+    const answered = `EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))`;
+    const rounds = (await db.query(`SELECT r.id FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = ANY($2::text[]) AND r.status IN ('done', 'partial')
+      AND ${answered} ORDER BY r.finished_at NULLS LAST, r.created_at`, [geoProjectId, [...GEO_METRIC_ROUND_KINDS]])).rows.map((/** @type {any} */ entry) => String(entry.id));
     for (const roundId of rounds) await measureRound({ store: measure, now }, roundId);
+    const cleared = (await db.query(`DELETE FROM evimed_geo.metrics m USING evimed_geo.rounds r WHERE m.round_id = r.id AND r.geo_project_id = $1
+      AND m.geo_project_id = $1 AND r.status IN ('done', 'partial') AND NOT ${answered} RETURNING m.round_id`, [geoProjectId])).rows;
+    report.emptyRounds = { rounds: new Set(cleared.map((/** @type {any} */ entry) => String(entry.round_id))).size, cells: cleared.length };
     const contextAfter = await measure.projectContext(geoProjectId);
     report.registryAfter = contextAfter ? registryKey(brandRegistry(contextAfter.project.product, contextAfter.project.competitors), contextAfter.owned) : null;
     report.recounted = recount.facts;

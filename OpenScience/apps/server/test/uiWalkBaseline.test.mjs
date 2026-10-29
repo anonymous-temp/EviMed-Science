@@ -89,7 +89,9 @@ test("the walk's own lists are read from the page table and nowhere else", () =>
   // A page's budget is its row's, widened by its own override.
   assert.deepEqual(BUDGET_BY_PAGE["frontier-zones"], { controls: 9, colors: 8, borders: 4 });
   assert.deepEqual(BUDGET_BY_PAGE["frontier-daily"], { controls: 10, colors: 8 });
-  assert.deepEqual(BUDGET_BY_PAGE["geo-overview"], { controls: 10, colors: 7, borders: 6 });
+  // A data page's type budget is five (owner, 2026-10-19), every other page's four (TYPE_PAIR_NOTICE).
+  assert.deepEqual(BUDGET_BY_PAGE["geo-overview"], { controls: 10, colors: 7, borders: 6, typePairs: 5 });
+  assert.equal(BUDGET_BY_PAGE["frontier-zones"].typePairs, undefined);
   assert.equal(walk.PROVISIONAL_PAGES, undefined, "the provisional list is gone");
 });
 

@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useMemo } from "react";
 import { Radar } from "lucide-react";
 import type { GeoMonitoring, GeoProject } from "@/lib/geoClient";
@@ -9,7 +10,9 @@ import { TrendChart } from "@/components/charts/TrendChart";
 import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue } from "../GeoCellText";
 import { NeedsYou } from "../NeedsYou";
-import { useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
+import { LoadError } from "@/components/cards/LoadError";
+import { nextMeasurement } from "../geoBand";
+import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag } from "@/components/ui/Tag";
 import {
@@ -33,6 +36,8 @@ import { GEO_METRIC_NAMES, monthDay } from "../geoText";
 import { geoTabPath } from "../geoTabs";
 import { roundKindWord } from "./geoTabText";
 import { Ranking } from "./VisibilityTab";
+import { GeoComparison } from "../GeoComparison";
+import { useGeoPath } from "../useGeoPath";
 
 /**
  * 总览 — the first screen, and the only one most readers will look at (fusion plan §4.8, mockup m10; R19 audit C §2.3).
@@ -47,6 +52,7 @@ import { Ranking } from "./VisibilityTab";
  * band, not in each cell — and 未测 is still a word with a reason rather than a zero.
  */
 export function OverviewTab({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const path = useGeoPath();
   const diagnosis = useGeoDiagnosis(geoId);
   const monitoring = useGeoMonitoring(geoId);
   // The plan gives each target the day it falls due; without it the band still reads, just without that date.
@@ -54,6 +60,8 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const plan = strategy.state.kind === "ready" ? strategy.state.data : null;
+  // The open errors and the rivals are the diagnosis's: when it did not come, the band says so instead of reading as none.
+  const diagnosisFailed = readFailure(diagnosis);
 
   const tiles = useMemo(() => overviewTiles(project, diag, plan), [project, diag, plan]);
   const denominator = denominatorLine(project, diag);
@@ -68,6 +76,8 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-6">
+      <GeoComparison geoId={geoId} view={project} />
+      <GeoAnalysisWorkbench geoId={geoId} project={project} />
       {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
           「还有 11 条严重讲错」 a moment later is worse than a held line. */}
       {diagnosis.state.kind === "loading" ? (
@@ -98,7 +108,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
             rank={tile.rank ?? undefined}
             tone={tile.tone}
             placeholder={tile.placeholder}
-            to={tile.tab ? geoTabPath(geoId, tile.tab) : undefined}
+            to={tile.tab ? path(geoTabPath(geoId, tile.tab)) : undefined}
             loading={diagnosis.state.kind === "loading" && tile.key === "safety"}
             delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} polarity={tile.polarity} />}
             note={tile.triple ? undefined : tile.note}
@@ -127,6 +137,8 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
           />
         ))}
       </StatBand>
+
+      {diagnosisFailed && <LoadError message={`用药安全和同类药排名没有读到：${diagnosisFailed.message}`} onRetry={diagnosisFailed.retry} />}
 
       <NeedsYou geoId={geoId} project={project} />
 
@@ -176,6 +188,7 @@ function TripleLine({ triple, unit }: { triple: MetricTriple; unit: "index" | "p
 
 /** What changed since the last look, each line landing on the thing it is about. */
 function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const path = useGeoPath();
   const items = project.overview.week ?? [];
   if (items.length === 0) return null;
   return (
@@ -186,7 +199,7 @@ function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
           return (
             <ListRow
               key={`${index}:${item.text}`}
-              to={to ?? undefined}
+              to={to ? path(to) : undefined}
               leading={<span className="w-16 text-caption text-text-3">{dayWord(item.at) ?? ""}</span>}
               title={item.text}
               trailing={GEO_ALERT_KINDS.has(item.kind) ? <Tag tone="safety">需处理</Tag> : undefined}
@@ -223,6 +236,7 @@ function TrendCard({
   const points = Array.isArray(series?.points) ? series.points : [];
   const dates = points.map((point) => point.date);
   const metric = project.overview.metrics.find((item) => item.key === "gvi") ?? null;
+  const next = nextMeasurement(project, watch);
   const input = useMemo(() => ({
     labels: points.map((point) => monthDay(point.date) ?? ""),
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
@@ -230,14 +244,14 @@ function TrendCard({
     targetLabel: metric?.target == null ? null : `目标 ${formatGeoValue(metric.target, "index")}`,
     band: null,
     markers: withCoverageMarker(actionMarkers(dates, watch), points),
-    nextLabel: watch?.next?.date ? `${monthDay(watch.next.date)} ${roundKindWord(watch.next.kind) ?? "复测"}` : null,
+    nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [watch, metric?.target, project.name]);
+  }), [watch, next, metric?.target, project.name]);
 
   return (
     <ChartCard
       title={title}
-      meta={chartDates(change, watch?.next?.date)}
+      meta={chartDates(change, next?.date)}
       state={monitoring.state.kind === "loading" ? "loading"
         : monitoring.state.kind === "error" ? "error"
           : points.length === 0 ? "empty" : "content"}

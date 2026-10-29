@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import {
+  EVIDENCE_BODY_MAX_CHARS,
   EVIDENCE_PLATFORM_LINEAGE_KEYS,
+  EVIDENCE_SOURCE_LIMIT,
   EVIDENCE_WRITE_ORIGINS,
   EVIDENCE_ZONE_KINDS,
   EVIDENCE_ZONE_VISIBILITY,
@@ -40,14 +42,20 @@ const error = (
 ) => new HttpError(status, `evidence_${code}`, message);
 const missing = () =>
   error(404, "not_found", "No such visible evidence content.");
-/** @param {unknown} value @param {number} max @param {boolean} [required] */
-function text(value, max, required = false) {
+/**
+ * A text field within its bound. `name` is said in the refusal, with the length against the bound, so a writer reads which
+ * field it sent too much of instead of "a field".
+ * @param {unknown} value @param {number} max @param {boolean} [required] @param {string} [name]
+ */
+function text(value, max, required = false, name = "") {
   if (
     typeof value !== "string" ||
     value.length > max ||
     (required && !value.trim())
-  )
-    throw error(400, "invalid", "Invalid evidence field.");
+  ) {
+    const what = typeof value !== "string" ? "is not text" : value.length > max ? `has ${value.length} characters, more than ${max}` : "is empty";
+    throw error(400, "invalid", name ? `Invalid evidence field: ${name} ${what}.` : "Invalid evidence field.");
+  }
   return value.trim();
 }
 /** @param {unknown} value */
@@ -166,8 +174,8 @@ function keepQuotedPassages(list, claims) {
 }
 /** @param {any} value */
 function sources(value) {
-  if (!Array.isArray(value) || value.length > 50)
-    throw error(400, "invalid", "Invalid source list.");
+  if (!Array.isArray(value) || value.length > EVIDENCE_SOURCE_LIMIT)
+    throw error(400, "invalid", Array.isArray(value) ? `Invalid source list: ${value.length} sources, more than the ${EVIDENCE_SOURCE_LIMIT} a card cites.` : "Invalid source list.");
   return value.map((source) => {
     fields(source, ["title", "url", "excerpt", "sha256", "checkedAt", "coverage", "documentText", "fetchedSha256", "publicationStatus"]);
     const publicationStatus = evidencePublicationStatus(source.publicationStatus);
@@ -210,6 +218,24 @@ const jsonOrNull = (value) => (value == null ? null : JSON.stringify(value));
 function cardLineage(row) {
   const lineage = { ...(row.lineage ?? {}), ...(row.source_item_id ? { frontierItemId: row.source_item_id } : {}) };
   return Object.keys(lineage).length ? lineage : null;
+}
+
+/** Exact historical cards for an already authorized GEO project. No current-card fallback or source fetch.
+ * @param {any} client @param {{userId:string,productZoneId?:string|null}} project @param {Array<{cardId:string,revision:number}>} references */
+export async function readEvidenceCardRevisions(client, project, references) {
+  if (references.length > 20000) throw error(422, "query_invalid", "Narrow the linked card scope.");
+  const refs = [...new Map(references.map(ref => [`${ref.cardId}@${ref.revision}`, ref])).values()];
+  if (!refs.length) return [];
+  const ready = (await client.query("SELECT to_regclass('evimed_frontier.evidence_card_revisions') AS revisions, to_regclass('evimed_frontier.evidence_cards') AS cards")).rows[0];
+  if (!ready?.revisions || !ready?.cards) return [];
+  return (await client.query(`SELECT c.id AS "cardId",r.revision,r.snapshot AS at,
+    jsonb_build_object('revision',c.revision,'withdrawn',c.withdrawn,'retiredAt',c.retired_at,'currency',c.currency) AS current
+    FROM jsonb_to_recordset($1::jsonb) AS requested("cardId" text,revision integer)
+    JOIN evimed_frontier.evidence_cards c ON c.id=requested."cardId"
+    JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+    JOIN evimed_frontier.evidence_card_revisions r ON r.card_id=c.id AND r.revision=requested.revision
+    WHERE ((c.zone_id=$2 AND c.user_id=$3 AND z.user_id=$3) OR (z.kind='official' AND z.state='published' AND c.state='published'))
+    ORDER BY c.id,r.revision`, [JSON.stringify(refs), project.productZoneId ?? "", project.userId])).rows;
 }
 
 export class EvidenceZoneService {
@@ -818,9 +844,10 @@ export class EvidenceZoneService {
                 key === "title"
                   ? 300
                   : key === "body" || key === "background"
-                    ? 50000
+                    ? EVIDENCE_BODY_MAX_CHARS
                     : 12000,
                 key === "title",
+                key,
               );
       if (!value.title) throw error(400, "invalid", "A title is required.");
       value.state = body.state ?? existing?.state ?? "draft";

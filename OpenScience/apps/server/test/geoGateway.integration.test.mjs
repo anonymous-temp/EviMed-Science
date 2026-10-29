@@ -103,7 +103,7 @@ test("what a run writes through the gateway is what it reads back, in the pages'
   const pool = await call("read", { what: "questions", filter: { pool: "P3" } });
   assert.deepEqual(pool.body.data.groups.map((/** @type {any} */ group) => group.name), ["P3 群"]);
   const page = await call("read", { what: "project" });
-  assert.deepEqual(Object.keys(page.body.data).sort(), ["overview", "project", "what"]);
+  assert.deepEqual(Object.keys(page.body.data).sort(), ["comparison", "overview", "project", "scope", "selection", "what"]);
   assert.equal(page.body.data.project.id, project.id);
 });
 

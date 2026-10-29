@@ -9,17 +9,19 @@
  * 2026-10-07 — a heat is shown as a number, and the domain keeps its method
  * (`FRONTIER_HEAT_METHOD_ZH`) for the operator's documents.
  */
-import type {
-  FrontierDaily,
-  FrontierEvent,
-  FrontierHotEvent,
-  FrontierHotWindow,
-  FrontierItem,
-  FrontierPrimaryKind,
-  FrontierScoreBand,
-  FrontierTrendPoint,
+import {
+  FRONTIER_SCORE_PARTS,
+  scoreTier,
+  type FrontierDaily,
+  type FrontierEvent,
+  type FrontierHotEvent,
+  type FrontierHotWindow,
+  type FrontierItem,
+  type FrontierPlatform,
+  type FrontierPrimaryKind,
+  type FrontierScoreBand,
+  type FrontierTrendPoint,
 } from "@/lib/frontierClient";
-import { dayKey, dayLabel } from "@/lib/inboxGroups";
 import { relativeTime } from "@/lib/runPresentation";
 
 /* ------------------------------------------------------------------ actions */
@@ -61,31 +63,38 @@ export function evidenceTag(item: Pick<FrontierItem, "evidenceType" | "evidenceT
   return item.evidenceTypeLabel;
 }
 
-/** At most this many #tags under a card: its specialties first, then its diseases. */
+/** At most this many #tags under a card: the item's own, in its order (the reader lists all of them). */
 export const CARD_MAX_TAGS = 3;
 
-/** A #tag under a card: a specialty filters the feed by it, a disease searches for it. */
-export type CardTag = { kind: "specialty" | "term"; key: string; label: string };
-
-/** 「#消化 #结直肠癌」: the specialties (at most two), then the diseases, three in all. */
-export function cardTags(item: Pick<FrontierItem, "specialties" | "entities">): CardTag[] {
-  const tags: CardTag[] = item.specialties.slice(0, 2).map((specialty) => ({ kind: "specialty", key: specialty.key, label: specialty.label }));
-  for (const disease of item.entities.diseases) {
-    if (tags.length >= CARD_MAX_TAGS) break;
-    const label = disease.trim();
-    if (label && !tags.some((tag) => tag.label === label)) tags.push({ kind: "term", key: label, label });
-  }
-  return tags;
+/**
+ * The eyebrow tag of a card: what the item is — its genre (「行业动态」「政策法规」「会议报道」, ct-write 2026-10-24) — and for a paper its
+ * design (「RCT」), which says more than 「研究论文」. None for a safety alert, which says 「安全警示」 first already.
+ */
+export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel" | "genre" | "genreLabel">): string | null {
+  if (item.safetyAlert) return null;
+  if (item.genre === "paper") return evidenceTag(item) ?? item.genreLabel;
+  return item.genreLabel || evidenceTag(item) || item.laneLabel || null;
 }
 
-/**
- * The band an editorial score reads in: the server's, measured against its
- * selection line. A score that came without one is at most 「中」 — only the
- * server knows where the line is.
- */
+/** 「AI 评分」: one name everywhere — the card's pill, the reader's 推荐理由, a screen reader. */
+export const SCORE_LABEL = "AI 评分";
+
+/** 「可能改变实践」 (c3-select): the rare label of an item that could change what many clinicians do now; one name on the card and in the reader. */
+export const PRACTICE_LABEL = "可能改变实践";
+
+/** What 「AI 评分」 measures, under its breakdown. */
+export const SCORE_NOTE = "衡量对临床和科研读者的重要程度，不代表证据等级";
+
+/** The tier a score reads in: the server's (85 / 70), or from the score itself where a server sent none. */
 export function scoreBand(item: Pick<FrontierItem, "score" | "scoreBand">): FrontierScoreBand | null {
   if (item.score === null) return null;
-  return item.scoreBand ?? (item.score >= 60 ? "medium" : "low");
+  return item.scoreBand ?? scoreTier(item.score);
+}
+
+/** The four parts of a score as its bars draw them — 实践影响 x/30, 权威性 x/30, 新颖性 x/20, 国内相关性 x/20 — or none. */
+export function scoreBreakdown(item: Pick<FrontierItem, "scoreParts">): Array<{ key: string; label: string; value: number; max: number }> {
+  const parts = item.scoreParts;
+  return parts ? FRONTIER_SCORE_PARTS.map(({ key, label, max }) => ({ key, label, value: parts[key], max })) : [];
 }
 
 /** One item as Markdown (「⋯ › 复制为 Markdown」): its title linked to the original, what it says, who said it. */
@@ -95,64 +104,263 @@ export function itemMarkdown(item: Pick<FrontierItem, "title" | "url" | "summary
   return [`**[${title}](${item.url})**`, ...(item.summary ? ["", item.summary] : []), "", who].join("\n");
 }
 
+/* ---------------------------------------------------------------- platforms */
+
+/** Where a post was published, as a reader names it; an ordinary web page names no platform. */
+export const PLATFORM_LABELS: Readonly<Record<FrontierPlatform, string | null>> = Object.freeze({
+  x: "X", wechat: "微信公众号", xiaohongshu: "小红书", douyin: "抖音", zhihu: "知乎", weibo: "微博", bilibili: "哔哩哔哩", channels: "视频号", web: null,
+});
+
+/** A post on a social platform: its account is who said it, and the publication it came through is that platform. */
+export function isSocialItem(item: Pick<FrontierItem, "platform">): boolean {
+  return item.platform !== null && item.platform !== "web";
+}
+
+/** The way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「打开原文」. */
+export function originalLinkLabel(item: Pick<FrontierItem, "platform">): string {
+  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "打开原文";
+  const platform = PLATFORM_LABELS[item.platform];
+  return /^[A-Za-z]/.test(platform ?? "") ? `在 ${platform} 查看原帖` : `在${platform}查看原帖`;
+}
+
 /* -------------------------------------------------------------------- times */
+
+/**
+ * The zone every time of the feed is read in: Beijing time, whatever the browser's zone is (owner, 2026-10-26: an article its
+ * source posted at 19:00 stood under 「今天」 at 05:59 in a browser that was not on Beijing time). The server cuts its days
+ * in the same zone (`FRONTIER_FEED_TIME_ZONE`).
+ */
+export const FEED_TIME_ZONE = "Asia/Shanghai";
 
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-/** `YYYY-MM-DD` → a Date at local midnight, or null. */
-function localDay(key: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
-  if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
+/** A moment's calendar fields in the feed's zone. */
+interface FeedMoment {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
 }
 
-/** 「9月22日 周二」. */
+let feedFormat: Intl.DateTimeFormat | null = null;
+
+/** A moment as its wall clock in the feed's zone, or null for one that cannot be read. */
+function feedMoment(value: string | number | Date | null | undefined): FeedMoment | null {
+  if (value === null || value === undefined || value === "") return null;
+  const at = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(at.getTime())) return null;
+  feedFormat ??= new Intl.DateTimeFormat("en-CA", {
+    timeZone: FEED_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  });
+  const parts: Record<string, number> = {};
+  for (const part of feedFormat.formatToParts(at)) if (part.type !== "literal") parts[part.type] = Number(part.value);
+  const { year, month, day, hour, minute } = parts;
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+  return { year, month, day, hour, minute };
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** `YYYY-MM-DD` of a moment in the feed's zone, or null: the key a day group and 「今天」 are decided by. */
+export function feedDayKey(value: string | number | Date | null | undefined): string | null {
+  const at = feedMoment(value);
+  return at ? `${at.year}-${pad(at.month)}-${pad(at.day)}` : null;
+}
+
+/**
+ * The calendar day a source stated, from the moment it is stored at: the UTC date (a source that gives a day and no hour is stored at
+ * 00:00Z of it), as `YYYY-MM-DD`; null for a value that is not a time.
+ */
+export function statedDayKey(value: string | number | Date | null | undefined): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const at = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString().slice(0, 10);
+}
+
+/** 「9月22日 周二」, from a `YYYY-MM-DD` key; the weekday is the key's own, whatever the browser's zone is. */
 export function shortDate(key: string): string {
-  const date = localDay(key);
-  return date ? `${date.getMonth() + 1}月${date.getDate()}日 ${WEEKDAYS[date.getDay()]}` : key;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!match) return key;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return key;
+  return `${month}月${day}日 ${WEEKDAYS[date.getUTCDay()]}`;
 }
 
-/** 「14:05」, the local clock; empty for a time that cannot be read. */
+/**
+ * Whether a moment stands for a day and no hour: the server places an item whose source stated only its day, and which reached us
+ * after that day, at the day's last millisecond in Beijing time (`frontierTimelineAt`: 23:59:59.999), and an event's first or last
+ * report inherits it. No source states a time to the millisecond, so the marker is exact. Such a moment has no clock to show.
+ */
+export function isStatedDayEnd(value: string | number | Date | null | undefined): boolean {
+  if (value === null || value === undefined || value === "") return false;
+  const at = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(at.getTime()) || at.getUTCMilliseconds() !== 999 || at.getUTCSeconds() !== 59) return false;
+  const moment = feedMoment(at);
+  return moment?.hour === 23 && moment.minute === 59;
+}
+
+/** 「14:05」, the clock in Beijing time; empty for a time that cannot be read or that stands for a day and no hour. */
 export function clock(value: string | number | null): string {
-  if (value === null) return "";
-  const at = new Date(value);
-  if (Number.isNaN(at.getTime())) return "";
-  return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const at = feedMoment(value);
+  return at && !isStatedDayEnd(value) ? `${pad(at.hour)}:${pad(at.minute)}` : "";
 }
 
-/** 「9月22日 18:01」: a moment named in full, when it is the fact itself (an event's first report). */
+/** 「9月22日 18:01」: a moment named in full, when it is the fact itself (an event's first report). Beijing time. */
 export function dateClock(value: string | null): string {
-  if (!value) return "";
-  const at = new Date(value);
-  if (Number.isNaN(at.getTime())) return "";
-  return `${at.getMonth() + 1}月${at.getDate()}日 ${clock(value)}`;
+  const at = feedMoment(value);
+  if (!at) return "";
+  return isStatedDayEnd(value) ? `${at.month}月${at.day}日` : `${at.month}月${at.day}日 ${pad(at.hour)}:${pad(at.minute)}`;
 }
 
 /** 「14:05」 today, 「9月22日 14:05」 before: when something was last read. */
 export function stamp(value: string | null, now = Date.now()): string {
   if (!value) return "";
-  return dayKey(value) === dayKey(now) ? clock(value) : dateClock(value);
-}
-
-/** 「2 小时前」 / 「9/20」: how long ago something happened; empty for no time. */
-export function ago(value: string | null, now = Date.now()): string {
-  if (!value) return "";
-  const ms = Date.parse(value);
-  return Number.isNaN(ms) ? "" : relativeTime(ms, now);
+  return feedDayKey(value) === feedDayKey(now) ? clock(value) : dateClock(value);
 }
 
 /**
- * The feed's time column. Inside a day group the day is its heading, so the
- * column is the clock; where the list is not cut into days (a search, 与我相关)
- * it is the clock today and the day (「9月20日」) before.
+ * A day as a list dates it, in Beijing time: 「9月22日」 within this year, 「2025-09-22」 before it (`formatDay`'s forms, read in
+ * the feed's zone). Empty for a value that is not a time.
  */
-export function timeColumn(item: Pick<FrontierItem, "timelineAt">, grouped: boolean, now = Date.now()): string {
-  if (grouped) return clock(item.timelineAt);
-  const key = dayKey(item.timelineAt);
+export function feedDay(value: string | number | Date | null | undefined, now = Date.now()): string {
+  const at = feedMoment(value);
+  if (!at) return "";
+  return at.year === feedMoment(now)?.year ? `${at.month}月${at.day}日` : `${at.year}-${pad(at.month)}-${pad(at.day)}`;
+}
+
+/**
+ * 「今天」「昨天」「3 天前」, by Beijing calendar days, for a moment that stands for a day; past thirty days the date, or nothing where the
+ * line names the date already (`beyond: "none"`, as `sinceText`).
+ */
+function daysAgo(value: string | number | Date, now: number, beyond: "date" | "none" = "date"): string {
+  const day = feedDayKey(value);
+  const today = feedDayKey(now);
+  if (!day || !today) return "";
+  const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / 86_400_000);
+  if (days <= 0) return "今天";
+  if (days === 1) return "昨天";
+  if (days <= 30) return `${days} 天前`;
+  return beyond === "date" ? feedDay(value, now) : "";
+}
+
+/** 「2 小时前」 / 「9月20日」: how long ago something happened, and past a day the Beijing date; empty for no time. */
+export function ago(value: string | null, now = Date.now()): string {
+  if (!value) return "";
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return "";
+  if (isStatedDayEnd(value)) return daysAgo(value, now);
+  return now - ms >= 86_400_000 ? feedDay(ms, now) : relativeTime(ms, now);
+}
+
+/**
+ * 「刚刚」「5 分钟前」「3 小时前」「2 天前」: how long ago, beside a line that already names the moment (the reader's byline, a follow-up's
+ * row). Empty past thirty days, where the date says it better, and for a time that cannot be read or is ahead of the clock.
+ */
+export function sinceText(value: string | null, now = Date.now()): string {
+  if (!value) return "";
+  const at = Date.parse(value);
+  if (Number.isNaN(at) || at > now + 60_000) return "";
+  // A day and no hour: how many Beijing days ago, not hours from a made-up clock.
+  if (isStatedDayEnd(value)) return daysAgo(value, now, "none");
+  const minutes = Math.floor(Math.max(0, now - at) / 60_000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} 小时前`;
+  const days = Math.floor(minutes / (24 * 60));
+  return days <= 30 ? `${days} 天前` : "";
+}
+
+/**
+ * The clock an item stands under in the list (Beijing time), empty for an item whose source gave a day and no hour: its place in the
+ * day is where we saw it, which says nothing about when it was said (`date_precision: day`).
+ */
+export function itemClock(item: Pick<FrontierItem, "timelineAt" | "datePrecision">): string {
+  return item.datePrecision === "day" ? "" : clock(item.timelineAt);
+}
+
+/**
+ * When an item came, in a list that is not cut into days (与我相关, a search by relevance, an event's list), said in the card's meta row
+ * after its source: the clock today (「09:06」; 「今天」 for an item that has no hour), the day before (「10月20日」), the year too before
+ * this one. A day-grouped list has the clock in its own column instead (`itemClock`). Beijing time.
+ */
+export function metaTime(item: Pick<FrontierItem, "timelineAt"> & Partial<Pick<FrontierItem, "datePrecision">>, now = Date.now()): string {
+  const key = feedDayKey(item.timelineAt);
   if (!key) return "";
-  const label = dayLabel(key, now);
-  return label === "今天" ? clock(item.timelineAt) : label;
+  if (key === feedDayKey(now)) return item.datePrecision === "day" ? "今天" : clock(item.timelineAt);
+  const [year, month, day] = key.split("-").map(Number);
+  return year === feedMoment(now)?.year ? `${month}月${day}日` : `${year}年${month}月${day}日`;
+}
+
+/** A day group's heading: 「今天 · 10月23日 周四 · 11 条」, 「10月22日 周三 · 40 条」 — the count once the whole day is on screen. */
+export function dayHeading(day: Pick<ItemDay, "key" | "label" | "items">, whole: boolean, now = Date.now()): string {
+  return [day.key === feedDayKey(now) ? "今天" : null, day.label, whole ? `${day.items.length} 条` : null].filter(Boolean).join(" · ");
+}
+
+/* ---------------------------------------------------------------------- links */
+
+/**
+ * A bare address in a text: http(s), up to the first space or a character no address carries in running Chinese text. What trails it
+ * — a full stop, a comma, a closing bracket the address did not open — is the sentence's, not the address's (`trimUrl`).
+ */
+const URL_IN_TEXT = /https?:\/\/[^\s<>"'`（）【】「」『』《》，。；：！？、“”‘’]+/g;
+
+/** An address without what the sentence put after it: trailing punctuation, and closing brackets it did not open. */
+export function trimUrl(raw: string): string {
+  let url = raw;
+  for (;;) {
+    const last = url.slice(-1);
+    if (/[.,;:!?'"]/.test(last)) { url = url.slice(0, -1); continue; }
+    const pairs: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+    if (pairs[last] && url.split(last).length > url.split(pairs[last]).length) { url = url.slice(0, -1); continue; }
+    return url;
+  }
+}
+
+/** The longest an address is shown: its site and the start of its path (the whole address is its tooltip). */
+const SHOWN_URL_MAX = 40;
+
+/**
+ * An address as a reader takes it in: the site without `www.`, then the path — whole if the two fit in 40 characters, else its first
+ * segment and 「…」 (「fda.gov/vaccines-blood-biologics/…」), else cut at 40. The query and the fragment are not shown.
+ */
+export function shortUrl(url: string): string {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return url.length > SHOWN_URL_MAX ? `${url.slice(0, SHOWN_URL_MAX - 1)}…` : url; }
+  const host = parsed.hostname.replace(/^www\./, "");
+  let path = parsed.pathname.replace(/\/+$/, "");
+  try { path = decodeURI(path); } catch { /* an address that is not valid percent-encoding is shown as it came */ }
+  const whole = `${host}${path}`;
+  if (whole.length <= SHOWN_URL_MAX) return whole;
+  const first = path.split("/").filter(Boolean)[0];
+  const head = first ? `${host}/${first}/…` : "";
+  if (head && head.length <= SHOWN_URL_MAX) return head;
+  return `${whole.slice(0, SHOWN_URL_MAX - 1)}…`;
+}
+
+/** A piece of a text: its own words, or an address in it. */
+export type TextPiece = string | { url: string };
+
+/** A text cut into its words and its bare addresses, in order; what trails an address stays with the words after it. */
+export function splitUrls(text: string): TextPiece[] {
+  const pieces: TextPiece[] = [];
+  let rest = 0;
+  for (const match of text.matchAll(URL_IN_TEXT)) {
+    const url = trimUrl(match[0]);
+    if (!/^https?:\/\/[^/]+\.[^/]/.test(url)) continue;
+    if (match.index > rest) pieces.push(text.slice(rest, match.index));
+    pieces.push({ url });
+    rest = match.index + url.length;
+  }
+  if (rest < text.length) pieces.push(text.slice(rest));
+  return pieces;
+}
+
+/** An address as compared with an item's own: no trailing slash, no fragment, `http` and `https` alike, the site's `www.` aside. */
+export function sameAddress(a: string, b: string): boolean {
+  const key = (value: string) => value.trim().replace(/#.*$/, "").replace(/\/+$/, "").replace(/^https?:\/\/(www\.)?/i, "").toLowerCase();
+  return key(a) === key(b);
 }
 
 /* ---------------------------------------------------------------------- days */
@@ -165,15 +373,15 @@ export interface ItemDay {
 }
 
 /**
- * The list, cut into the reader's days by the list's own axis (`timelineAt`).
+ * The list, cut into days by the list's own axis (`timelineAt`), in Beijing time.
  * Items arrive newest first, so a day is a run of neighbours; a day is never
- * split in two even when the server's order and the local calendar disagree.
+ * split in two even when the server's order and the calendar disagree.
  */
 export function groupByDay(items: readonly FrontierItem[]): ItemDay[] {
   const days: ItemDay[] = [];
   const byKey = new Map<string, ItemDay>();
   for (const item of items) {
-    const key = dayKey(item.timelineAt) ?? "unknown";
+    const key = feedDayKey(item.timelineAt) ?? "unknown";
     let day = byKey.get(key);
     if (!day) {
       day = { key, label: key === "unknown" ? "日期不明" : shortDate(key), items: [] };
@@ -368,33 +576,54 @@ const FIRST_QUESTION: Readonly<Record<Grounds, string>> = Object.freeze({
   claim: "这条消息的依据是什么？请读原文，找出它所依据的研究、数据或文件，说明哪些说法有证据支持、哪些还没有。",
 });
 
-/** The item as the conversation should receive it: what it is, who said it, where the original is. */
-export function itemBrief(item: FrontierItem): string {
-  const kind = [item.sourceTypeLabel, item.evidenceTypeLabel].filter(Boolean).join(" · ");
-  const lines = [
-    `“${item.title}”`,
-    ...(item.titleZh && item.titleRaw !== item.titleZh ? [`原标题：${item.titleRaw}`] : []),
-    `来源：${item.source.name}${kind ? `（${kind}）` : ""}`,
-    ...item.flags.filter((flag) => ["preprint", "press-release", "retracted", "corrected"].includes(flag.key)).map((flag) => `注意：${flag.label}`),
-    ...(item.publishedAt ? [`发布时间：${item.publishedAt.slice(0, 10)}`] : []),
-    `原文：${item.url}`,
-    ...(item.doi ? [`DOI：${item.doi}`] : []),
-    ...(item.pmid ? [`PMID：${item.pmid}`] : []),
-    ...(item.registryIds.length > 0 ? [`注册号：${item.registryIds.join("、")}`] : []),
-    ...(item.summary ? [`导读：${item.summary}`] : []),
-  ];
-  return lines.join("\n");
+/** What names an item in a draft: the item, its source and when, and the id the assistant reads it by. */
+export interface AskItem {
+  id: string;
+  title: string;
+  source?: { name: string } | null;
+  publishedAt?: string | null;
+  url?: string | null;
 }
 
 /**
- * The card's 「深入研究」: one question that fits the item — a study's
- * reliability, a guideline's grounds, a decision's basis, a claim's evidence —
- * and what it means in practice, then the item itself. It lands in the
- * composer as a draft the researcher sends or rewrites (owner, 2026-09-24:
- * no menu of prepared questions to choose from first).
+ * The compact line a conversation opened from an item starts with (c3-ask): the title, the source and the day, and `frontier:<id>`,
+ * the name the assistant's feed tool reads the item by — its text, 导读 and 要点 — then the original's address, which the answer
+ * cites and which stands in if the feed no longer holds the item.
  */
+export function itemLine(item: AskItem): string {
+  const where = [item.source?.name, item.publishedAt?.slice(0, 10)].filter(Boolean).join(" · ");
+  return [`“${item.title}”${where ? `（${where}）` : ""} frontier:${item.id}`, ...(item.url ? [`原文：${item.url}`] : [])].join("\n");
+}
+
+/**
+ * 「就此提问」: the draft a question opens the conversation with — the question, then the item's line — or, for the reader's own
+ * question, the item's line alone for them to write beside. It lands in the composer unsent.
+ */
+export function askDraft(item: AskItem, question: string | null): string {
+  return question ? `${question}\n\n${itemLine(item)}` : itemLine(item);
+}
+
+/**
+ * The card's and the reader's 「深入研究」: one question that fits the item — a study's reliability, a guideline's grounds, a decision's
+ * basis, a claim's evidence — and what it means in practice, then the item's line. It lands in the composer as a draft the researcher
+ * sends or rewrites (owner, 2026-09-24: no menu of prepared questions to choose from first). The item itself is read by the
+ * assistant through its id (`itemLine`).
+ */
+export function researchQuestion(item: Pick<FrontierItem, "evidenceType" | "sourceType">): string {
+  return `${FIRST_QUESTION[groundsOf(item)]}它对临床实践和我的研究意味着什么，也请一并说明。`;
+}
+
+/** The whole draft of 「深入研究」: that question, then the item's line. */
 export function researchDraft(item: FrontierItem): string {
-  return `${FIRST_QUESTION[groundsOf(item)]}它对临床实践和我的研究意味着什么，也请一并说明。\n\n${itemBrief(item)}`;
+  return askDraft(item, researchQuestion(item));
+}
+
+/**
+ * The topic page's 「就此提问」: the general medical question the event raised, with the topic's title under it. A topic is the feed's
+ * own index of an event, not an item the assistant can read, so the draft names the topic and no origin is recorded.
+ */
+export function topicAskDraft(topic: { title: string; question: string }): string {
+  return topic.question && topic.question !== topic.title ? `${topic.question}\n\n前沿动态热点话题：“${topic.title}”` : `${topic.title}\n\n前沿动态热点话题`;
 }
 
 /** The event page's 「深入研究」: the event with its first-hand sources, for the composer. */

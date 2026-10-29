@@ -66,7 +66,9 @@ const TOKEN = "replay-token-for-the-contract-test";
 const REPLAYED = ["health.json", "manifest.json", "sources-page-1.json", "sources-page-2.json", "entries-page-1.json",
   "entries-page-2.json", "entries-tail.json", "identity-doi-pmid-registry.json", "identity-doi.json", "identity-pmid.json",
   "identity-reg.json", "identity-fda.json", "identity-url.json", "text-available.json", "text-pending.json", "lookups.json",
-  "lookup-unavailable.json", "error-unauthorized.json", "error-not-found.json", "error-invalid-cursor.json"];
+  "lookup-unavailable.json", "error-unauthorized.json", "error-not-found.json", "error-invalid-cursor.json",
+  "entry-x.json", "text-x.json", "entry-wechat.json", "text-wechat.json", "media-x.jpg", "health-1.5.1.json", "manifest-1.5.1.json",
+  "leads-accepted.json", "leads-duplicate.json", "health-1.6.0.json", "manifest-1.6.0.json", "hot-lists.json", "error-hot-lists-since.json"];
 
 /** A recorded answer as the plugin gave it: its status, its content type and the body bytes. @param {string} name */
 async function recorded(name) {
@@ -161,10 +163,29 @@ test("a contract minor is recorded again only where it changed, and provenance s
   // live plugin of that contract, and the stream's recordings are the 1.2.0 plugin's, still valid because a minor only adds.
   // 1.4.0 added `Health.host_budget`: the manifest and the health answer (the two that name the contract, one of them the field's
   // home) were recorded again off a live plugin of 1.4.0; the source row and the stream stand as they were.
+  // 1.5.0 added social posts and `Health.providers`: the manifest, the health answer, one X post, one WeChat article, their
+  // texts and one stored image were recorded off a plugin that read them live; the stream stands as it was.
   const partials = provenance.partialRecordings ?? [];
-  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0"], "every minor since the stream was recorded names its partial recording, in order");
-  const [platformProduced, hostBudget] = partials;
-  assert.equal(hostBudget.contractVersion, pin.version, "the last partial recording is the pin's");
+  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0", "1.5.1", "1.6.0", "1.7.0"], "every minor since the stream was recorded names its partial recording, in order");
+  // 1.5.1 widened EntryText.fetched_from and named the `## ` heading rule: the manifest and the health answer only.
+  // 1.6.0 (ct-mix) added POST /v1/leads, the read method `lead`, Health.leads and Manifest.capabilities.leads: the manifest, the
+  // health answer and two posts to /v1/leads, off a plugin over an empty database; the 1.5.1 health answer, which named the paid
+  // providers with the calls a live run made, is kept under its version's name (`health-1.5.1.json`).
+  // 1.7.0 (c2-leads) added GET /v1/hot-lists, Health.hot_lists and Manifest.capabilities.hot_lists: the manifest, the health
+  // answer, the hot lists a live round read and a refused `since`; the 1.6.0 health answer, which counted the recorded lead
+  // posts, and its manifest are kept under their version's name.
+  const [platformProduced, hostBudget, social, patch, leads, hotLists] = partials;
+  assert.deepEqual(leads.fixtures.slice().sort(), ["health.json", "leads-accepted.json", "leads-duplicate.json", "manifest.json"]);
+  assert.deepEqual(hotLists.fixtures.slice().sort(), ["error-hot-lists-since.json", "health.json", "hot-lists.json", "manifest.json"]);
+  assert.ok(provenance.fixtures["health-1.6.0.json"] && provenance.fixtures["manifest-1.6.0.json"], "the 1.6.0 health answer and manifest are kept, with their provenance");
+  assert.ok(Date.parse(provenance.fixtures["health-1.6.0.json"].recordedAt) >= Date.parse(leads.recordedAt) - 60_000, "…as 1.6.0 recorded it");
+  assert.ok(provenance.fixtures["health-1.5.1.json"] && provenance.fixtures["manifest-1.5.1.json"], "the 1.5.1 health answer and manifest are kept, with their provenance");
+  assert.ok(Date.parse(provenance.fixtures["health-1.5.1.json"].recordedAt) >= Date.parse(patch.recordedAt) - 60_000, "…as 1.5.1 recorded it");
+  assert.equal(partials.at(-1).contractVersion, pin.version, "the last partial recording is the pin's");
+  assert.equal(social.contractVersion, "1.5.0");
+  assert.deepEqual(patch.fixtures, ["health.json", "manifest.json"], "a patch records again only what names the contract");
+  assert.deepEqual(social.fixtures.slice().sort(), ["entry-wechat.json", "entry-x.json", "health.json", "manifest.json", "media-x.jpg", "text-wechat.json", "text-x.json"]);
+  assert.ok(Date.parse(social.recordedAt) >= Date.parse(hostBudget.recordedAt));
   assert.equal(provenance.contractVersion, pin.version);
   assert.deepEqual(platformProduced.fixtures.slice().sort(), ["health.json", "manifest.json", "source-platform-produced.json"]);
   assert.deepEqual(hostBudget.fixtures.slice().sort(), ["health.json", "manifest.json"]);
@@ -174,8 +195,9 @@ test("a contract minor is recorded again only where it changed, and provenance s
     for (const name of partial.fixtures) assert.ok(provenance.fixtures[name], `${name} is a listed recording`);
   }
   assert.ok(Date.parse(hostBudget.recordedAt) >= Date.parse(platformProduced.recordedAt));
-  // The files the later recording replaced were recorded at its time, not the earlier one's.
-  for (const name of hostBudget.fixtures) assert.ok(Date.parse(provenance.fixtures[name].recordedAt) >= Date.parse(hostBudget.recordedAt) - 60_000, `${name} is the 1.4.0 recording`);
+  // The files the later recordings replaced were recorded at their time, not the earlier one's.
+  for (const name of hostBudget.fixtures) assert.ok(Date.parse(provenance.fixtures[name].recordedAt) >= Date.parse(hostBudget.recordedAt) - 60_000, `${name} is the 1.4.0 recording or later`);
+  for (const name of social.fixtures) assert.ok(Date.parse(provenance.fixtures[name].recordedAt) >= Date.parse(social.recordedAt) - 60_000, `${name} is the 1.5.0 recording`);
   // The recorded source row, read the way the platform reads one: the attribute is on the wire and survives validation.
   const recorded = await fixture("source-platform-produced.json");
   assert.equal(recorded.id, "evimed-evidence");
@@ -192,8 +214,9 @@ test("a contract minor is recorded again only where it changed, and provenance s
 
 test("health carries today's use against each host's daily cap, the contract names the field, and the platform reads it as recorded", async () => {
   // A spent cap is the plugin's own refusal until 00:00 UTC and counts against no source's health, so this table is the only
-  // place the spend shows (review 2026-10-10, D-10). The recording is a 1.4.0 plugin's own answer.
-  const body = await fixture("health.json");
+  // place the spend shows (review 2026-10-10, D-10). The recording is the plugin's own answer (1.4.0's, recorded again by 1.5.0
+  // and 1.5.1; the 1.6.0 answer is off an empty database, whose hosts have no use yet).
+  const body = await fixture("health-1.5.1.json");
   assert.ok(body.host_budget && typeof body.host_budget === "object", "the recorded health answer has the table");
   const hosts = Object.keys(body.host_budget);
   assert.ok(hosts.length >= 4, "every capped host is listed, whether or not it was used that day");
@@ -202,7 +225,7 @@ test("health carries today's use against each host's daily cap, the contract nam
   const schema = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8")).components.schemas.Health.properties.host_budget;
   assert.deepEqual(schema.additionalProperties.required, ["used", "cap"]);
   assert.match(schema.description, /Added in 1\.4\.0/);
-  await withPlugin({ "GET /v1/health": await recorded("health.json") }, async ({ client }) => {
+  await withPlugin({ "GET /v1/health": await recorded("health-1.5.1.json") }, async ({ client }) => {
     const health = await client.health();
     assert.deepEqual(health.host_budget, body.host_budget, "every recorded host survives the client's shape check");
     for (const [host, row] of Object.entries(health.host_budget)) {
@@ -453,4 +476,132 @@ test("the identity ladder: every recorded sample stands on its highest rung, and
   assert.ok(["doi", "pmid", "reg", "fda", "url"].every((rung) => rungs.has(rung)), "the batch-1 rungs are all recorded");
   assert.ok(identitySamples.samples.some(({ inputs }) => inputs.doi && inputs.pmid && inputs.registry_ids.length),
     "one sample holds several rungs at once, where the ladder's order is visible");
+});
+
+test("contract 1.5.0: a recorded X post, a WeChat article, their texts, one image and the providers, read the way the platform reads them", async () => {
+  const xEntry = await fixture("entry-x.json");
+  const wechatEntry = await fixture("entry-wechat.json");
+  const xText = await fixture("text-x.json");
+  const wechatText = await fixture("text-wechat.json");
+  const image = await fixtureBytes("media-x.jpg");
+  const mediaId = recordedPath("media-x.jpg").split("/").pop();
+  const routes = {
+    [`GET ${recordedPath("entry-x.json")}`]: await recorded("entry-x.json"),
+    [`GET ${recordedPath("text-x.json")}`]: await recorded("text-x.json"),
+    [`GET ${recordedPath("entry-wechat.json")}`]: await recorded("entry-wechat.json"),
+    [`GET ${recordedPath("text-wechat.json")}`]: await recorded("text-wechat.json"),
+    [`GET ${recordedPath("media-x.jpg")}`]: { status: 200, headers: { "content-type": provenance.fixtures["media-x.jpg"].headers["content-type"] }, body: image },
+    // The providers with the calls a live run made: the 1.5.1 answer (the 1.6.0 one is off an empty database).
+    "GET /v1/health": await recorded("health-1.5.1.json"),
+  };
+  await withPlugin(routes, async ({ client }) => {
+    const post = await client.entry(xEntry.entry_id);
+    assert.equal(post.channel, "x");
+    assert.equal(post.platform, "x");
+    assert.equal(post.author.handle, xEntry.author.handle);
+    assert.ok(["organisation", "person"].includes(post.author.role), "the registry says whose account it is");
+    assert.ok(post.quoted && post.quoted.text && post.quoted.url.startsWith("https://x.com/"), "the recorded post quotes another");
+    assert.ok(Number.isFinite(Date.parse(post.metrics.observed_at)), "the counts say when they were read");
+    assert.match(post.url, /^https:\/\/x\.com\/[A-Za-z0-9_]{1,15}\/status\/\d+$/);
+    const text = await client.text(xEntry.entry_id);
+    assert.equal(text.status, "available");
+    assert.equal(text.text_kind, "full");
+    assert.equal(text.fetched_from, "x");
+    assert.equal(text.body_text, xText.body_text);
+    assert.ok(text.body_text.length > 0 && text.body_text.length <= 40_000);
+    const article = await client.entry(wechatEntry.entry_id);
+    assert.equal(article.channel, "wechat");
+    assert.match(article.identity_key, /^wx:[^:]+:\d+:\d+$/, "a WeChat article stands on the wx rung of the ladder");
+    assert.ok(article.media.length >= 1 && article.media[0].original_url.startsWith("https://"));
+    const articleText = await client.text(wechatEntry.entry_id);
+    assert.equal(articleText.fetched_from, "wechat");
+    assert.equal(articleText.body_text, wechatText.body_text);
+    const media = await client.media(mediaId);
+    assert.equal(media.contentType, "image/jpeg");
+    assert.ok(media.body.equals(image) && image.subarray(0, 2).equals(Buffer.from([0xff, 0xd8])), "the image is the recorded JPEG");
+    assert.equal(createHash("sha256").update(image).digest("hex"), mediaId, "the id is the sha256 of the stored bytes");
+    const health = await client.health();
+    assert.ok(Array.isArray(health.providers) && health.providers.length >= 2, "the recorded health answer names its providers");
+    assert.ok(health.providers.some((row) => row.name === "socialdata" && row.calls_24h > 0), "the live calls are on the recording's ledger");
+    assert.ok(health.providers.some((row) => row.name === "dajiala" && row.remaining?.currency === "CNY"), "Dajiala's own balance");
+  });
+  const yaml = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8"));
+  const entryProperties = Object.keys(yaml.components.schemas.Entry.properties);
+  for (const field of ["channel", "platform", "author", "media", "quoted", "metrics"]) assert.ok(entryProperties.includes(field), `Entry.${field}`);
+  assert.ok(yaml.components.schemas.EntryText.properties.body_text, "EntryText.body_text");
+  assert.ok(yaml.paths["/v1/media/{mediaId}"]?.get, "GET /v1/media/{mediaId}");
+  assert.deepEqual(yaml.components.schemas.Health.properties.discovery.required, ["today", "history", "by_line", "in_trial"]);
+  assert.ok(yaml.paths["/v1/sources/screening"]?.post, "POST /v1/sources/screening (fr-sources)");
+  // The fields a live run populated: the 1.5.1 manifest (the 1.6.0 one is off an empty database, which populates none).
+  const manifest = await fixture("manifest-1.5.1.json");
+  for (const field of ["channel", "platform", "author", "media", "metrics"]) assert.ok(manifest.fields.entry.includes(field), `the recorded manifest says it populates ${field}`);
+});
+
+test("contract 1.6.0: leads posted to the recorded plugin are read as it answered them; the manifest offers them and health counts them", async () => {
+  const { LEAD_POSTS } = await import("./fixtures/record.mjs");
+  const accepted = await fixture("leads-accepted.json");
+  const again = await fixture("leads-duplicate.json");
+  await withPlugin({ "POST /v1/leads": await recorded("leads-accepted.json") }, async ({ client, seen }) => {
+    const answer = await client.submitLeads(LEAD_POSTS.map((lead) => ({ ...lead })));
+    assert.deepEqual(answer, { accepted: accepted.accepted, duplicate: 0, refused: 0, capped: 0,
+      results: accepted.results.map((row) => ({ url: row.url, status: row.status, reason: row.reason ?? null })) });
+    assert.deepEqual(JSON.parse(seen[0].body), provenance.fixtures["leads-accepted.json"].request.body, "the client sends what was recorded");
+    assert.equal(seen[0].headers.authorization, `Bearer ${TOKEN}`);
+  });
+  await withPlugin({ "POST /v1/leads": await recorded("leads-duplicate.json") }, async ({ client }) => {
+    const answer = await client.submitLeads(provenance.fixtures["leads-duplicate.json"].request.body.leads);
+    assert.deepEqual(answer.results.map((row) => [row.status, row.reason]), [["duplicate", "received"], ["refused", "not_a_public_address"]]);
+    assert.deepEqual([answer.duplicate, answer.refused], [again.duplicate, again.refused]);
+  });
+  // The 1.6.0 recording's own health answer and manifest (1.7.0 recorded them again off a plugin no lead was posted to).
+  const manifest = await fixture("manifest-1.6.0.json");
+  assert.equal(manifest.capabilities.leads, true);
+  const health = await fixture("health-1.6.0.json");
+  assert.deepEqual(Object.keys(health.leads.today).sort(), ["failed", "fetched", "queued", "refused", "stale"]);
+  assert.equal(health.leads.queued, LEAD_POSTS.length, "the recording's own two addresses wait to be read (its crawler is off)");
+  const yaml = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8"));
+  assert.ok(yaml.paths["/v1/leads"]?.post, "POST /v1/leads");
+  assert.ok(yaml.components.schemas.Access.enum.includes("lead"), "the read method lead");
+  assert.ok(FRONTIER_ACCESSES.includes("lead"), "the platform knows the read method");
+  assert.deepEqual(yaml.components.schemas.Lead.required, ["url", "trigger"]);
+  assert.equal(yaml.components.schemas.LeadBatch.properties.leads.maxItems, 50);
+});
+
+test("contract 1.7.0: the hot lists the recorded plugin read are read as it served them; a bad since is refused by name; health says how each board read", async () => {
+  const { FRONTIER_HOT_BOARDS } = await import("@evimed/domain");
+  const lists = await fixture("hot-lists.json");
+  assert.ok(lists.boards.length >= 3, "a live round read at least the three direct boards");
+  await withPlugin({ [`GET ${recordedPath("hot-lists.json")}`]: await recorded("hot-lists.json") }, async ({ client, seen }) => {
+    const answer = await client.hotLists();
+    assert.equal(seen[0].url, "/v1/hot-lists", "no since: the plugin's own 72 hours");
+    assert.equal(seen[0].headers.authorization, `Bearer ${TOKEN}`);
+    assert.deepEqual(answer.boards.map((board) => board.board), lists.boards.map((board) => board.board), "every recorded board survives the shape check");
+    for (const [index, board] of answer.boards.entries()) {
+      assert.ok(FRONTIER_HOT_BOARDS.includes(board.board));
+      assert.equal(board.fetchedAt, new Date(lists.boards[index].fetched_at).toISOString());
+      assert.equal(board.entries.length, lists.boards[index].entries.length, `${board.board}: every entry survives`);
+      assert.deepEqual(board.entries.map((entry) => entry.rank), board.entries.map((_, rank) => rank + 1));
+      for (const entry of board.entries) assert.ok(entry.title && (entry.heat === null || entry.heat >= 0) && (entry.url === null || /^https:\/\//.test(entry.url)));
+    }
+    assert.ok(answer.boards.some((board) => board.entries.some((entry) => entry.desc)), "Baidu's description survives");
+  });
+  await withPlugin({ [`GET ${recordedPath("error-hot-lists-since.json")}`]: await recorded("error-hot-lists-since.json") }, async ({ client }) => {
+    // The recorded refusal of a since that is no date-time, served to the one request the client can send (a date-time).
+    await assert.rejects(client.hotLists({ since: "not a time" }), { code: "knowledge_plugin_request_invalid" }, "the client refuses it before asking");
+    const body = await fixture("error-hot-lists-since.json");
+    assert.deepEqual([body.code, body.details], ["invalid_params", { field: "since" }]);
+  });
+  const health = await fixture("health.json");
+  assert.equal(health.contract, "1.7.0");
+  assert.deepEqual(Object.keys(health.hot_lists).sort(), [...FRONTIER_HOT_BOARDS].sort(), "every configured board says how it read");
+  assert.ok(Object.values(health.hot_lists).some((row) => row.last_error === "blocked:egress_unavailable"), "a relay board without a relay fails by name");
+  await withPlugin({ "GET /v1/health": await recorded("health.json") }, async ({ client }) => {
+    const read = await client.health();
+    assert.deepEqual(Object.keys(read.hot_lists).sort(), [...FRONTIER_HOT_BOARDS].sort());
+  });
+  assert.equal((await fixture("manifest.json")).capabilities.hot_lists, true);
+  const yaml = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8"));
+  assert.ok(yaml.paths["/v1/hot-lists"]?.get, "GET /v1/hot-lists");
+  assert.deepEqual(yaml.components.schemas.HotBoard.enum, [...FRONTIER_HOT_BOARDS], "the platform's boards are the contract's");
+  assert.deepEqual(yaml.components.schemas.HotListEntry.required, ["rank", "title", "heat", "desc", "url"]);
 });

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { frontierAudienceAllows } from "../src/frontierService.mjs";
-import { createFrontierRoutes, frontierRoutePattern } from "../src/frontierRoutes.mjs";
+import { createFrontierRoutes, frontierEventsBeacon, frontierRoutePattern } from "../src/frontierRoutes.mjs";
 
 /** A request as the route reads one. @param {string} method @param {string} url @param {{ body?: any, headers?: Record<string, string> }} [options] */
 function request(method, url, { body, headers = {} } = {}) {
@@ -24,6 +24,7 @@ function response() {
 /** @param {Record<string, any>} config @param {string} userId */
 function fixture(config, userId = "reader") {
   const calls = [];
+  const states = [];
   const audits = [];
   const store = {
     async ensureSessionUser() { return { user: { id: userId } }; },
@@ -38,20 +39,24 @@ function fixture(config, userId = "reader") {
       return ifNoneMatch === 'W/"1.0.abc"' ? { status: 304, etag: 'W/"1.0.abc"' } : { status: 200, etag: 'W/"1.0.abc"', body: { items: [], nextCursor: null, version: "1", mode: "list" } };
     },
     async getItem() { return { status: 200, etag: 'W/"1.0.item"', body: { item: { id: "abc" } } }; },
-    async setItemState(_user, id, action) { calls.push([action, id]); return { state: { starred: action === "star", hidden: false, read: false } }; },
+    async setItemState(_user, id, action, options) { calls.push([action, id]); states.push([action, id, options]); return { state: { starred: action === "star", hidden: action === "hide", read: false } }; },
     async sources() { return { sources: [] }; },
     async listFollows() { return { follows: [] }; },
     async createFollow(_user, body) { return { follow: { id: "1", ...body } }; },
     async deleteFollow() { return { deleted: true }; },
+    async markFollowSeen(user, id) { calls.push(["seen", user.id, id]); return { follow: { id, newItems: 0 } }; },
     async operateItem(id, action, input) { calls.push([`ops-${action}`, id, input.reason]); return { item: { id, state: action === "withdraw" ? "withdrawn" : "published" } }; },
     async setSourceEnabled(id, enabled) { return { source: { id, enabled } }; },
     async weeklies(params) { return { weeklies: [{ weekStart: "2026-09-21", limit: params.get("limit") }] }; },
     async weeklyIssue(user, week) { calls.push(["weekly", user.id, week]); return { weekly: { weekStart: week } }; },
     async hot(params) { calls.push(["hot", params.get("window")]); return { window: params.get("window") ?? "current", events: [] }; },
+    interactions: { async record(user, body) { calls.push(["events", user.id, body.events.length]); return { accepted: body.events.length, duplicates: 0, dropped: {} }; } },
+    async prefs(user) { calls.push(["prefs", user.id]); return { role: null, specialties: [], interests: [], onboardedAt: null, skippedAt: null, interestTags: [] }; },
+    async savePrefs(user, body) { calls.push(["save-prefs", user.id, body]); return { role: body.role ?? null }; },
   };
   const routes = createFrontierRoutes({ store, service, config, maxJsonBytes: 65_536,
     audit: async (event, status, details) => { audits.push({ event, status, ...details }); } });
-  return { routes, calls, audits };
+  return { routes, calls, audits, states };
 }
 
 const on = { frontierEnabled: true, frontierAudience: "all", operatorUsers: ["ops"], frontierPreviewUsers: ["preview"] };
@@ -109,6 +114,39 @@ test("a reader's writes take no fields they do not name, and the CSRF check runs
   const removed = response();
   await routes(request("DELETE", "/api/frontier/follows/7"), removed);
   assert.deepEqual(removed.json(), { data: { deleted: true } });
+  // Something typed (c3-watch): the kind and the words ride in the same fields; opening a follow's feed is one more POST, with no body.
+  const typedFollow = response();
+  await routes(request("POST", "/api/frontier/follows", { body: { kind: "query", label: "GLP-1 和胰腺炎" } }), typedFollow);
+  assert.equal(typedFollow.json().data.follow.label, "GLP-1 和胰腺炎");
+  const seen = response();
+  await routes(request("POST", "/api/frontier/follows/7/seen", { body: {} }), seen);
+  assert.deepEqual(seen.json(), { data: { follow: { id: "7", newItems: 0 } } });
+  assert.ok(calls.some((call) => call[0] === "seen" && call[2] === "7"));
+  await assert.rejects(routes(request("POST", "/api/frontier/follows/7/seen", { body: { extra: 1 } }), response()), { code: "frontier_payload_invalid" });
+  await assert.rejects(routes(request("GET", "/api/frontier/follows/7/seen"), response()), { code: "not_found" });
+});
+
+test("a hide may say why, by one of the feed's words; nothing else takes a reason and nothing else rides in a hide (c2-hide)", async () => {
+  const { routes, states } = fixture(on);
+  for (const [body, expected] of [[undefined, null], [{}, null], [{ reason: null }, null], [{ reason: "already-seen" }, "already-seen"], [{ reason: "source" }, "source"]]) {
+    const res = response();
+    await routes(request("POST", "/api/frontier/items/abc123def456/hide", body === undefined ? {} : { body }), res);
+    assert.equal(res.status, 200);
+    assert.deepEqual(states.at(-1), ["hide", "abc123def456", { reason: expected }], JSON.stringify(body));
+  }
+  // The closed list is the domain's: a word it does not hold is refused by name, and nothing reached the service.
+  const before = states.length;
+  for (const reason of ["boring", "", 7, "Source", ["source"]]) {
+    await assert.rejects(routes(request("POST", "/api/frontier/items/abc123def456/hide", { body: { reason } }), response()), { status: 400, code: "frontier_payload_invalid" }, String(reason));
+  }
+  await assert.rejects(routes(request("POST", "/api/frontier/items/abc123def456/hide", { body: { reason: "source", note: "free text" } }), response()), { code: "frontier_payload_invalid" });
+  for (const action of ["unhide", "star", "unstar", "read"]) {
+    await assert.rejects(routes(request("POST", `/api/frontier/items/abc123def456/${action}`, { body: { reason: "source" } }), response()), { code: "frontier_payload_invalid" }, action);
+  }
+  assert.equal(states.length, before, "a refused request never reached the service");
+  const unhide = response();
+  await routes(request("POST", "/api/frontier/items/abc123def456/unhide", { body: {} }), unhide);
+  assert.deepEqual(states.at(-1), ["unhide", "abc123def456", undefined]);
 });
 
 test("operator routes answer 403 to anyone else, and an operator's change is audited", async () => {
@@ -144,6 +182,7 @@ test("route labels fold ids so a dashboard row is a route", () => {
   assert.equal(frontierRoutePattern("/api/frontier/items/abc123"), "/api/frontier/items/:id");
   assert.equal(frontierRoutePattern("/api/frontier/items/abc123/star"), "/api/frontier/items/:id/:action");
   assert.equal(frontierRoutePattern("/api/frontier/follows/12"), "/api/frontier/follows/:id");
+  assert.equal(frontierRoutePattern("/api/frontier/follows/12/seen"), "/api/frontier/follows/:id/seen");
   assert.equal(frontierRoutePattern("/api/frontier/ops/sources/nejm/enabled"), "/api/frontier/ops/sources/:id/enabled");
   assert.equal(frontierRoutePattern("/api/frontier/events/e1"), "/api/frontier/events/:id");
   assert.equal(frontierRoutePattern("/api/frontier/whatever/x/y"), "/api/frontier/:route");
@@ -157,4 +196,53 @@ test("weekly routes use the authenticated reader and preserve the archive envelo
   assert.equal(issue.json().data.weekly.weekStart, "2026-09-21");
   assert.deepEqual(calls.filter(call => Array.isArray(call)), [["weekly", "ordinary-reader", "2026-09-21"]]);
   assert.equal(frontierRoutePattern("/api/frontier/weeklies/2026-09-21"), "/api/frontier/weeklies/:id");
+});
+
+test("events: a batch goes to the interactions with the reader, no field but the events and the token; without the module the route is unknown", async () => {
+  const { routes, calls } = fixture(on);
+  const accepted = response();
+  await routes(request("POST", "/api/frontier/events", { body: { events: [{}, {}], csrf: "t" } }), accepted);
+  assert.deepEqual(accepted.json(), { data: { accepted: 2, duplicates: 0, dropped: {} } });
+  assert.deepEqual(calls.filter((call) => call[0] === "events"), [["events", "reader", 2]]);
+  assert.ok(calls.includes("csrf"), "the CSRF check runs here too");
+  const extra = response();
+  await assert.rejects(routes(request("POST", "/api/frontier/events", { body: { events: [], url: "https://example.org" } }), extra), { code: "frontier_payload_invalid" });
+  const noModule = createFrontierRoutes({ store: { async ensureSessionUser() { return { user: { id: "reader" } }; }, async assertCsrf() {} },
+    service: { allows: () => true, isOperator: () => false }, config: on, maxJsonBytes: 65_536 });
+  await assert.rejects(noModule(request("POST", "/api/frontier/events", { body: { events: [{}] } }), response()), { code: "not_found" });
+  assert.equal(frontierRoutePattern("/api/frontier/events"), "/api/frontier/events");
+  assert.equal(frontierRoutePattern("/api/frontier/prefs"), "/api/frontier/prefs");
+});
+
+test("the beacon: its body's token is moved into the header the one CSRF check reads, for the events route alone, and the batch is kept for the route", async () => {
+  const beacon = request("POST", "/api/frontier/events", { body: { events: [{ id: "x" }], csrf: "token-from-body" }, headers: { "content-type": "text/plain;charset=UTF-8" } });
+  await frontierEventsBeacon(beacon);
+  assert.equal(beacon.headers["x-open-science-csrf"], "token-from-body");
+  assert.deepEqual(beacon.frontierEventsBody, { events: [{ id: "x" }], csrf: "token-from-body" });
+  const withHeader = request("POST", "/api/frontier/events", { body: { events: [], csrf: "other" }, headers: { "x-open-science-csrf": "from-header" } });
+  await frontierEventsBeacon(withHeader);
+  assert.equal(withHeader.headers["x-open-science-csrf"], "from-header", "a request that set the header keeps it, and its body is not read here");
+  assert.equal(withHeader.frontierEventsBody, undefined);
+  const elsewhere = request("POST", "/api/frontier/items/abc/star", { body: { csrf: "smuggled" } });
+  await frontierEventsBeacon(elsewhere);
+  assert.equal(elsewhere.headers["x-open-science-csrf"], undefined, "no other route takes a token from its body");
+  const noToken = request("POST", "/api/frontier/events", { body: { events: [] } });
+  await frontierEventsBeacon(noToken);
+  assert.equal(noToken.headers["x-open-science-csrf"], undefined, "without a token the CSRF check refuses it as it refuses any other");
+  // The route reads the batch the beacon kept: the stream was read once.
+  const { routes, calls } = fixture(on);
+  await routes(beacon, response());
+  assert.deepEqual(calls.filter((call) => call[0] === "events"), [["events", "reader", 1]]);
+});
+
+test("prefs: read and saved for the signed-in reader, with no field it does not name", async () => {
+  const { routes, calls } = fixture(on);
+  const read = response();
+  await routes(request("GET", "/api/frontier/prefs"), read);
+  assert.equal(read.json().data.role, null);
+  const saved = response();
+  await routes(request("PUT", "/api/frontier/prefs", { body: { role: "pharmacist", specialties: ["cardiology"], interests: [], done: true } }), saved);
+  assert.equal(saved.json().data.role, "pharmacist");
+  assert.deepEqual(calls.filter((call) => call[0] === "save-prefs")[0], ["save-prefs", "reader", { role: "pharmacist", specialties: ["cardiology"], interests: [], done: true }]);
+  await assert.rejects(routes(request("PUT", "/api/frontier/prefs", { body: { email: "x" } }), response()), { code: "frontier_payload_invalid" });
 });

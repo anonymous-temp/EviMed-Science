@@ -21,34 +21,51 @@
  *   reader's own rows are read, and a paused or internal project's documents stay out as its memories do. A phrase
  *   from a zone says 「因为你关注的专区涉及」 and one from the library 「因为你的知识库里有」; neither is ever a
  *   fact written anywhere, only the heading of a group of news items.
- * - **What the reader shows interest in, three ways.** Their memory of every
- *   provenance — stated, confirmed, edited, inferred, from a tool or from the
- *   assistant — that is active and not sensitive (at most 40, by importance);
- *   the questions of their own conversations of the last 30 days (at most 30,
- *   newest first, `frontierProfileQuestions`); and the feed items they starred
- *   or opened in the last 60 days (at most 30, stars first). Left out: run
- *   summaries; memories and questions of a project the reader paused and of
- *   the platform's internal projects; deleted conversations and work a
- *   machine started. Everything is left out when the reader paused recall —
- *   for them the block is off. An inferred memory feeds a ranking and nothing
- *   else: it is at most the heading of a group of news items, never written
- *   anywhere as a fact (principle 18).
- * - **Every phrase keeps where it came from** — `memory` with the memory's
- *   id, `question`, or `frontier-item`. A memory the reader deleted or archived
- *   since the ranking was cached takes its items with it at once, without a
- *   new ranking; the other two are read again at the next profile.
+ * - **What the reader shows interest in, three ways.** Their memory — the lines of the memory files that say who they are, how they
+ *   like to work, the entities they work with and what their projects are (profile, preferences, entities and project context: the
+ *   engine's own files, read through the store the memory page uses, `NativeMemoryStore.files`), each line one candidate, newest file
+ *   first, at most 40 (`frontierProfileMemories`: the lines are cut deterministically, front matter, headings and the platform's own
+ *   label lines left out, nothing is ranked by an importance the files do not have); the questions of their own conversations of the
+ *   last 30 days (at most 30, newest first, `frontierProfileQuestions`); and the feed items they starred or opened in the last 60 days
+ *   (at most 30, stars first). Left out: corrections and follow-ups, what the overlay marks sensitive; memories and questions of a
+ *   project the reader paused and of the platform's internal projects; deleted conversations and work a machine started. Everything
+ *   is left out when the reader paused recall — for them the block is off. A line feeds a ranking and nothing else: it is at most
+ *   the heading of a group of news items, never written anywhere as a fact (principle 18). A deployment without the memory engine has
+ *   no memory to read, and the other signals go on. (Until 2026-10-25 this read the legacy engine's PostgreSQL records, which no
+ *   native account had.)
+ * - **Every phrase keeps where it came from** — `memory` with the line's id (`native:<file uri>#<12 hex of the line's hash>`, which
+ *   names the file and the line), `question`, or `frontier-item`. A line the reader deleted — the file removed, the line taken out of it,
+ *   a project paused since — takes its items with it at once, without a new ranking; the other two are read again at the next profile.
  * - **What the reader hid pushes back.** An item marked 「不感兴趣」 keeps out
  *   every candidate of its event and, where there are vectors, every candidate
  *   whose cosine to it is at least `FRONTIER_FOR_YOU_HIDDEN_COSINE`. Items the
  *   reader already starred or opened are not recommended to them again.
- * - **Ranking.** Every published item of the window that passes the reader's
- *   hidden and muted filters is a candidate (the newest 300), not only the
- *   editor's best. An item scores its best phrase's cosine plus a tenth of its
- *   editorial score out of 100 — enough to order near-equals, never to carry
- *   an item past the 0.4 floor — and a phrase picks at most two items, so one
- *   interest never fills the block. Vectors, not the rerank service
- *   (§10.5.3): that service returns an order without scores and cannot say
- *   which phrase matched.
+ * - **What the reason says (c2-hide, 2026-10-25).** A hide may carry why (`user_state.hidden_reason`, the reader's own word).
+ *   「不是我的专科」 in the last `notMySpecialty.windowDays` days lowers the specialties of those items for this reader — each
+ *   hide `perHide`, at most `max`, on the rank, the editor's order and the exploration pool of every candidate of that specialty
+ *   (an item takes the strongest of its specialties) — except the specialties the reader named in onboarding: what they stated
+ *   stands over what one hide of one item can say (principle 18), so the other specialties of such an item carry it. 「看过了」
+ *   says the item was good and old: it is a hide that keeps the item out and counts against no genre. 「内容质量不高」 and 「像广告或软文」
+ *   are the operator's — counted per source in `/api/ops/frontier-reading`, never shown to a reader and never moving a ranking.
+ * - **Ranking (ct-track, 2026-10-24).** Every published item of the window that passes the reader's hidden and muted
+ *   filters is a candidate (the newest 300). Its reasons are the profile's phrases (a phrase vector's cosine, at or above
+ *   the 0.4 floor; or a keyword hit), what the reader told onboarding (a tag or entity key of interest), what they follow
+ *   (a positive follow's predicate), and their specialties (onboarding's, else the ones the model extracted — finally
+ *   used — matching items of 精选 quality). An (item, reason) pair ranks by its match, plus an editorial share of the
+ *   item's score out of 100 that shrinks with the reader's visit days (0.3 for a newcomer, 0.2 at five, toward 0.1: the
+ *   editor beats the algorithm for a reader the platform barely knows, Claussen, Peukert & Sen), plus the reader's genre
+ *   affinity (Beta-smoothed opens and satisfied reads over seen impressions, a hide an extra failure, priors by role —
+ *   a pharmacist leans to safety, approval, policy and guideline). A reason picks at most two items (a specialty four),
+ *   so one interest never fills the block. Vectors, not the rerank service (§10.5.3): that service returns an order
+ *   without scores and cannot say which phrase matched. Every constant is in `FRONTIER_RANKING`.
+ * - **Slots.** Up to two `must-see` entries first — a safety alert of the last 72 hours that names one of the reader's
+ *   specialties or none, then a selected guideline or approval in their specialties; then the `personal` entries; then,
+ *   while fewer than seven, the editor's (`editorial`, 精选 by score); and one `explore` entry, drawn uniformly at random from
+ *   the best items the profile matched nothing of, at the first group boundary from the fourth place, with its
+ *   propensity (1 / the pool's size) recorded so the ranking can be evaluated off-policy. A reader with nothing at all is
+ *   served 精选 (and the exploration entry), never an empty block.
+ * - **Served in display order.** The block groups entries under their reason's topic; the server orders entries so each
+ *   topic's run is contiguous, so an entry's index in the answer is the position it is displayed at (contract C).
  * - **Without vectors it says so.** No embedder, no pgvector, or no phrase
  *   vector: the phrases are matched as keywords against the items' own search
  *   lexemes, and the answer's `basis` is `tags` — never a ranking that
@@ -57,31 +74,45 @@
  *   or a day old, and as soon as what it was read from changes: a star or an
  *   unstar, a researcher's new or deleted question (`noteConversation`), a
  *   change to their memory (its count, versions and latest change, kept as
- *   `memory_mark`), and — for a reader who has nothing yet — an item opened or
+ *   `memory_mark`: the count and newest change of their memory files and the newest revision the overlay holds, which every extraction, page
+ *   edit, forget and restore moves), and — for a reader who has nothing yet — an item opened or
  *   the block opened. A hide changes nothing the model reads and only drops
  *   the cached ranking. Readers who opened the block since their profile was
  *   computed go first. Each round computes at most five profiles, one model
  *   call each, and none while the day's budget is past its threshold.
- * - **States, honestly.** `off`: this deployment has no memory store or no
- *   model to read it with — the block is absent — or this reader paused recall
+ * - **States, honestly.** `off`: this deployment has no account store or no
+ *   model to read with — the block is absent — or this reader paused recall
  *   (`paused: true`). `unavailable`: the memory store failed when it was last
  *   read — the page says 「暂时不可用」 and the rest goes on (§10.5.3). Nothing
  *   to show yet is `available` with no items. Never a guessed hit.
  * - **The read path makes no model call and no embedding call.** A reader
- *   whose profile is not computed yet sees nothing until the composer's next
- *   round computes it; a cached ranking older than six hours, or dropped by a
- *   hide, is recomputed in SQL alone.
+ *   whose profile is not computed yet is ranked from what SQL knows (onboarding,
+ *   follows, specialties, 精选) until the composer's next round computes it; a
+ *   cached ranking older than six hours, or dropped by a hide, a follow or a
+ *   saved onboarding answer, is recomputed in SQL alone.
+ * - **Onboarding (ct-track).** `prefs` / `savePrefs`: a role, one to three specialties, up to ten interests (tag slugs or
+ *   entity keys), and when it was finished or skipped. The answer of `forYou` says `onboarding: true` while the reader has
+ *   neither answered nor skipped and the platform knows too little of them (no phrase and fewer than five opened items);
+ *   the page shows its skippable card then, and never again once it is answered or skipped.
  *
  * @module frontierProfiles
  */
 
-import { FRONTIER_SPECIALTIES } from "@evimed/domain";
-import { splitKeys } from "@evimed/domain/entity-keys";
+import { FRONTIER_DWELL, FRONTIER_GENRE_LABELS_ZH, FRONTIER_GENRES, FRONTIER_ONBOARDING_LIMITS, FRONTIER_READER_ROLES, FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH,
+  frontierSpecialtyKey, isFrontierGenre } from "@evimed/domain";
+import { isEntityKey, splitKeys } from "@evimed/domain/entity-keys";
 import { FrontierSubscriptions, frontierFollowPredicate } from "./frontierSubscriptions.mjs";
 import { FRONTIER_PHRASE_LIMITS } from "./frontierEditor.mjs";
+import { FRONTIER_GENRE_COLUMNS, frontierItemGenre } from "./frontierInteractions.mjs";
 import { migrateFrontier } from "./frontierPersistence.mjs";
+import { frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { HttpError } from "./security.mjs";
+import { createHash } from "node:crypto";
 import { isInternalProject } from "./internalProjects.mjs";
 import { tsqueryLiteral } from "./kbChunker.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
+import { SOURCE_LABEL_PREFIX } from "./nativeMemoryStore.mjs";
+import { migrateNativeMemory } from "./nativeMemoryPersistence.mjs";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -142,30 +173,78 @@ const VISIT_INTERVAL_MS = 10 * MINUTE;
 /** Conversation changes remembered as already noted, so a run's every state change is not a write. */
 const NOTED_LIMIT = 5_000;
 /**
- * What a reader's memory was when a profile read it: how many records, the sum
- * of their versions (every write moves one) and the latest change. Any
- * insert, update, archive or delete moves it; comparing it needs no clock.
+ * What a reader's memory was when a profile read it: how many memory files the overlay knows, the latest change of one, and the newest
+ * revision the overlay holds. Every extraction, page edit, forget and restore of a file adds a revision (and a hard delete moves the
+ * count), so any change of what the reader's memory says moves it; comparing it needs no clock and no read of the engine. The notes of the
+ * `observations` type are not what the memory says (no reader of it sees one) and do not move it. `$1` is the account (a column or a parameter).
  */
-const MEMORY_MARK = "count(*)::text || ':' || coalesce(sum(r.version), 0)::text || ':' || coalesce(extract(epoch FROM max(r.updated_at))::text, '')";
+const memoryMarkOf = (/** @type {string} */ user) => `(SELECT count(*)::text || ':' || coalesce(extract(epoch FROM max(f.updated_at))::text, '')
+    FROM evimed_memory.native_files f WHERE f.user_id = ${user} AND f.memory_type <> 'observations')
+  || ':' || (SELECT coalesce(max(v.id), 0)::text FROM evimed_memory.native_revisions v WHERE v.user_id = ${user} AND v.memory_type <> 'observations')`;
+
+/**
+ * The mark of one reader's memory now (`memoryMarkOf`): what a profile stores beside itself when it reads the memory, and what the round
+ * compares to know the memory has changed since.
+ * @param {{ query: (sql: string, values: unknown[]) => Promise<{ rows?: any[] }> }} database @param {string} userId @returns {Promise<string>}
+ */
+export async function frontierMemoryMark(database, userId) {
+  const row = (await database.query(`SELECT ${memoryMarkOf("$1")} AS mark`, [userId])).rows?.[0];
+  return String(row?.mark ?? "");
+}
+
+/** The memory files a profile is read from: who the reader is, how they work, what they work with and what their projects are. */
+export const FRONTIER_MEMORY_FILE_TYPES = Object.freeze(["profile", "preferences", "entities", "project_context"]);
+/** What the model is told a line is, by the file it is in (the same word the memory page files it under). */
+const FRONTIER_MEMORY_KIND_OF_TYPE = Object.freeze({ profile: "profile", preferences: "preference", entities: "project_fact", project_context: "project_fact" });
+/** At most this many lines of one profile's memory are read. */
+export const FRONTIER_MEMORY_LINES = 40;
 
 // ───────────────────────── pure decisions (unit-tested) ─────────────────────────
 
 /**
- * The memories a profile may be built from, as the model is shown them, in
- * the order given (the store's: by importance). Every provenance counts; run
- * summaries, sensitive and inactive records, and records of a paused or
- * internal project do not.
- * @param {any[]} records `researchMemory.listAllRecords` rows
+ * The lines of the memory files a profile is built from, as the model is shown them: each a candidate phrase with the id
+ * `native:<file uri>#<12 hex of the sha256 of the line>`, newest file first and the file's own order within it, at most
+ * `FRONTIER_MEMORY_LINES`. Pure and deterministic: the lines are what a reader of the file sees (the front matter, the engine's
+ * `MEMORY_FIELDS` comment, headings and the platform's label lines are not statements; a bullet mark and a trailing
+ * `(as of YYYY-MM-DD)` are the file's dress, not the line), and nothing is ranked by an importance a file does not have.
+ * Left out: files of another type than `FRONTIER_MEMORY_FILE_TYPES`, files the overlay marks sensitive, files of a paused or an
+ * internal project.
+ * @param {readonly { uri: string, type: string, body: string, sensitive?: boolean, projectId?: string | null, modTime?: string | null }[]} files
+ *   `NativeMemoryStore.files` rows
  * @param {{ pausedProjects?: string[] }} [settings]
  * @returns {Array<{ id: string, kind: string, text: string }>}
  */
-export function frontierProfileMemories(records, { pausedProjects = [] } = {}) {
+export function frontierProfileMemories(files, { pausedProjects = [] } = {}) {
   const paused = new Set(pausedProjects.map(String));
-  return (Array.isArray(records) ? records : [])
-    .filter((record) => record?.status === "active" && record?.kind !== "run_summary" && record?.sensitive !== true
-      && (record?.scope === "user" || (record?.scope === "project" && !paused.has(String(record.scopeId)) && !isInternalProject(record.scopeId))))
-    .map((record) => ({ id: String(record.id), kind: String(record.kind), text: String(record.summary || record.value || "").replace(/\s+/g, " ").trim() }))
-    .filter((memory) => memory.text);
+  const readable = (Array.isArray(files) ? files : [])
+    .filter((file) => file && FRONTIER_MEMORY_FILE_TYPES.includes(file.type) && file.sensitive !== true
+      && (!file.projectId || (!paused.has(String(file.projectId)) && !isInternalProject(file.projectId))))
+    .map((file) => ({ file, at: Date.parse(String(file.modTime ?? "")) }))
+    .sort((left, right) => (Number.isFinite(right.at) ? right.at : 0) - (Number.isFinite(left.at) ? left.at : 0) || String(left.file.uri).localeCompare(String(right.file.uri)));
+  /** @type {Array<{ id: string, kind: string, text: string }>} */
+  const lines = [];
+  for (const { file } of readable) {
+    for (const text of frontierMemoryLines(file.body)) {
+      lines.push({ id: `native:${file.uri}#${createHash("sha256").update(text).digest("hex").slice(0, 12)}`,
+        kind: /** @type {Record<string, string>} */ (FRONTIER_MEMORY_KIND_OF_TYPE)[file.type] ?? "profile", text });
+      if (lines.length >= FRONTIER_MEMORY_LINES) return lines;
+    }
+  }
+  return lines;
+}
+
+/**
+ * The statements of one memory file's body, one string each. Deterministic and language-free: the front matter and the engine's
+ * `MEMORY_FIELDS` comment are cut, blank lines, headings and the platform's own source labels are not statements, a bullet or number
+ * mark and a trailing `(as of …)` are removed, and a line of fewer than four characters says nothing.
+ * @param {unknown} body @returns {string[]}
+ */
+export function frontierMemoryLines(body) {
+  const text = String(body ?? "").replace(/\r\n/g, "\n").replace(/^---\n[\s\S]*?\n---\n?/, "").replace(/<!--[\s\S]*?-->/g, "");
+  return text.split("\n").map((line) => line.trim())
+    .filter((line) => line && !/^#{1,6}\s/.test(line) && !line.startsWith(SOURCE_LABEL_PREFIX.trim()))
+    .map((line) => line.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim())
+    .filter((line) => line.length >= 4);
 }
 
 /**
@@ -207,6 +286,8 @@ export function frontierProfileQuestions(entries, { since = new Date(0), pausedP
  */
 export function frontierReasonText(phrase) {
   const kind = String(phrase.kind ?? "");
+  // An entry with no reason of the reader's — the editor's pick, a must-see, the exploration entry — is named by its topic alone.
+  if (kind === "editorial" || kind === "must-see" || kind === "explore") return String(phrase.text);
   const lead = WORK_KINDS.has(kind) ? "因为你在做" : kind === "question" ? "因为你问过" : kind === "zone" ? "因为你关注的专区涉及"
     : kind === "library" ? "因为你的知识库里有" : "因为你关注";
   return `${lead}：${phrase.text}`;
@@ -220,6 +301,19 @@ export function frontierReasonText(phrase) {
 export function frontierPhraseSource(entry) {
   const source = entry?.source;
   return source === "question" || source === "frontier-item" || source === "zone" || source === "library" ? source : "memory";
+}
+
+/** Where a cached entry's reason came from: a profile phrase's source, or what the reader stated, or no reason of theirs. */
+const STATED_SOURCES = new Set(["interest", "follow", "specialty", "editorial", "must-see", "explore"]);
+
+/**
+ * Where a cached entry of the block came from: a phrase's sources (`frontierPhraseSource`), what the reader stated (`interest`,
+ * `follow`, `specialty`) or no reason of theirs (`editorial`, `must-see`, `explore`).
+ * @param {{ source?: unknown, memoryId?: unknown }} entry
+ * @returns {"memory" | "question" | "frontier-item" | "zone" | "library" | "interest" | "follow" | "specialty" | "editorial" | "must-see" | "explore"}
+ */
+export function frontierReasonSource(entry) {
+  return typeof entry?.source === "string" && STATED_SOURCES.has(entry.source) ? /** @type {any} */ (entry.source) : frontierPhraseSource(entry);
 }
 
 /**
@@ -256,40 +350,208 @@ export function decodeVector(value, dimension) {
   return vector.every(Number.isFinite) ? vector : null;
 }
 
+// ───────────────────────── the ranking's constants and its pure parts (ct-track) ─────────────────────────
+
 /**
- * The block from per-phrase scores. Every (item, phrase) pair at or above the
- * floor is ordered by its score plus `editorial` × the item's editorial score
- * out of 100, and taken greedily: an item once, a phrase at most `perPhrase`
- * times, at most `size` items. An item whose best phrase is full may still
- * come in under its next phrase above the floor — which is how one phrase
- * stops filling the block while each item keeps a reason that holds.
- * @param {Array<{ itemId: string, phrase: number, score: number, weight?: number }>} matches
- * @param {{ minScore?: number, editorial?: number, size?: number, perPhrase?: number }} [options]
- * @returns {Array<{ itemId: string, phrase: number, score: number }>}
+ * Every constant of 与我相关's ranking, in one place. Each is a starting point to be read against the measured distribution
+ * (`/api/ops/frontier-reading`), as the selection threshold is; none was fitted, because 1–4 readers a day fit nothing yet.
+ *
+ * - `match`: what a non-phrase reason scores, on the cosine scale a phrase vector's cosine is on (floor 0.4). A stated interest
+ *   or a follow is stronger than a weak cosine (0.6); a keyword hit (no vectors) is moderate (0.5, plus its rank); a specialty is
+ *   broad and only just above the floor (0.42), and matches items of 精选 quality only.
+ * - `editorial`: the share of the editorial score (out of 100) added to a match — `ceiling` for a reader with no visit day,
+ *   halfway to `floor` at `visitsHalf` visit days (in 60 days). The editor beats the algorithm for a reader the platform barely
+ *   knows (Claussen, Peukert & Sen, NBER field experiment: the algorithm led from about five visits).
+ * - `genre`: Beta smoothing of a reader's per-genre success rate: `strength` virtual impressions at the prior mean — `lean` for
+ *   the genres the reader's role leans to, `base` for the rest (Liu, Dolan & Pedersen's 10 virtual clicks) — an open counts
+ *   `openWeight`, a satisfied read (`FRONTIER_DWELL.satisfiedMs`, the end reached, a star, a save, a share, a research) 1, a hide
+ *   one extra failure; the term added is `share` × log2(mean / base), clipped to ±1.
+ * - `mustSee`: at most `max` entries; a safety alert counts within `safetyHours`.
+ * - `explore`: `slots` entries drawn from at most `poolMax` of the best unmatched items, placed at the first group boundary at
+ *   or after index `position`.
+ * - `perReason`: how many items one reason may pick. `follows`: the positive follows read, most recent first.
+ * - `onboardingOpens`: a reader with this many opened items is known enough not to be asked.
+ * - `notMySpecialty` (c2-hide): items the reader hid as 「不是我的专科」 within `windowDays` days lower their specialties by `perHide`
+ *   each, at most `max`: on the cosine scale of a match (so five hides take a specialty's items 0.2 down, the distance between a
+ *   follow and a weak phrase), and as `max × 100` points where the editor's order or the exploration pool sorts by score.
  */
-export function frontierForYouRanking(matches, { minScore = -Infinity, editorial = 0, size = FRONTIER_FOR_YOU_SIZE,
-  perPhrase = FRONTIER_FOR_YOU_PER_PHRASE } = {}) {
-  const pairs = matches
-    .filter((match) => Number.isFinite(match.score) && match.score >= minScore)
-    .map((match) => {
-      const weight = Number(match.weight ?? 0) || 0;
-      return { itemId: match.itemId, phrase: match.phrase, score: match.score, weight, rank: match.score + editorial * weight / 100 };
-    })
-    .sort((left, right) => right.rank - left.rank || right.weight - left.weight || left.phrase - right.phrase
-      || left.itemId.localeCompare(right.itemId));
-  const taken = new Set();
-  /** @type {Map<number, number>} */
-  const perPhraseTaken = new Map();
-  /** @type {Array<{ itemId: string, phrase: number, score: number }>} */
-  const ranked = [];
-  for (const pair of pairs) {
-    if (ranked.length >= size) break;
-    if (taken.has(pair.itemId) || (perPhraseTaken.get(pair.phrase) ?? 0) >= perPhrase) continue;
-    taken.add(pair.itemId);
-    perPhraseTaken.set(pair.phrase, (perPhraseTaken.get(pair.phrase) ?? 0) + 1);
-    ranked.push({ itemId: pair.itemId, phrase: pair.phrase, score: pair.score });
+export const FRONTIER_RANKING = Object.freeze({
+  policy: "for-you-2026-10-25.1",
+  match: Object.freeze({ interest: 0.6, follow: 0.6, keyword: 0.5, specialty: 0.42 }),
+  editorial: Object.freeze({ ceiling: 0.3, floor: 0.1, visitsHalf: 5 }),
+  genre: Object.freeze({ share: 0.05, base: 0.08, lean: 0.12, strength: 10, windowDays: 60, openWeight: 0.5 }),
+  roleLeans: Object.freeze({
+    clinician: Object.freeze(["guideline", "paper", "safety", "conference"]),
+    pharmacist: Object.freeze(["safety", "approval", "policy", "guideline"]),
+    researcher: Object.freeze(["paper", "preprint", "trial", "conference"]),
+    industry: Object.freeze(["industry", "approval", "policy", "trial"]),
+    student: Object.freeze(["paper", "guideline", "commentary", "news"]),
+    other: Object.freeze([]),
+  }),
+  mustSee: Object.freeze({ max: 2, safetyHours: 72 }),
+  explore: Object.freeze({ slots: 1, position: 3, poolMax: 30 }),
+  perReason: Object.freeze({ phrase: FRONTIER_FOR_YOU_PER_PHRASE, interest: 2, follow: 2, specialty: 4 }),
+  follows: 30,
+  onboardingOpens: 5,
+  notMySpecialty: Object.freeze({ windowDays: 90, perHide: 0.04, max: 0.2 }),
+});
+
+/** The topics of the entries that have no reason of the reader's: the editor's pick, and the exploration entry. */
+export const FRONTIER_FOR_YOU_TOPICS = Object.freeze({ editorial: "精选", explore: "其他领域精选" });
+
+/**
+ * The editorial share for a reader with this many visit days: `ceiling` at none, halfway to `floor` at `visitsHalf`.
+ * @param {number} visits @param {typeof FRONTIER_RANKING.editorial} [rule]
+ */
+export function frontierEditorialShare(visits, rule = FRONTIER_RANKING.editorial) {
+  const days = Number.isFinite(visits) && visits > 0 ? visits : 0;
+  return rule.floor + (rule.ceiling - rule.floor) * (rule.visitsHalf / (rule.visitsHalf + days));
+}
+
+/**
+ * A reader's affinity for each genre, from what they were shown and did (per item: seen, opened, satisfied, hidden), smoothed
+ * toward their role's priors. Pure.
+ * @param {Array<{ genre: string, seen?: boolean, opened?: boolean, satisfied?: boolean, hidden?: boolean }>} outcomes one per item
+ * @param {string | null} role @param {typeof FRONTIER_RANKING.genre} [rule]
+ * @returns {Record<string, { trials: number, successes: number, mean: number, term: number }>}
+ */
+export function frontierGenreAffinity(outcomes, role, rule = FRONTIER_RANKING.genre) {
+  const leans = new Set(role && Object.hasOwn(FRONTIER_RANKING.roleLeans, role) ? /** @type {Record<string, readonly string[]>} */ (FRONTIER_RANKING.roleLeans)[role] : []);
+  /** @type {Record<string, { trials: number, successes: number }>} */
+  const counts = Object.fromEntries(FRONTIER_GENRES.map((genre) => [genre, { trials: 0, successes: 0 }]));
+  for (const outcome of Array.isArray(outcomes) ? outcomes : []) {
+    const count = counts[outcome?.genre];
+    if (!count) continue;
+    const opened = outcome.opened === true;
+    if (outcome.seen === true || opened || outcome.hidden === true) count.trials += 1;
+    if (opened) count.successes += outcome.satisfied === true ? 1 : rule.openWeight;
+    // A hide is a stronger "no" than a card scrolled past: one more failure.
+    if (outcome.hidden === true) count.trials += 1;
   }
-  return ranked;
+  return Object.fromEntries(FRONTIER_GENRES.map((genre) => {
+    const { trials, successes } = counts[genre];
+    const prior = leans.has(genre) ? rule.lean : rule.base;
+    const mean = (successes + rule.strength * prior) / (trials + rule.strength);
+    const term = rule.share * Math.max(-1, Math.min(1, Math.log2(mean / rule.base)));
+    return [genre, { trials, successes: Math.round(successes * 100) / 100, mean: Math.round(mean * 10_000) / 10_000, term: Math.round(term * 10_000) / 10_000 }];
+  }));
+}
+
+/**
+ * How far a reader's 「不是我的专科」 hides lower each specialty: `perHide` for every hidden item that carries it, at most `max`.
+ * An item's specialties the reader named in onboarding (`stated`) are not counted — what they stated stands over what one hide of
+ * one item can say — so such an item lowers only its other specialties. Pure.
+ * @param {Array<readonly string[]>} hides the specialties of each item the reader hid as 「不是我的专科」 within the window
+ * @param {readonly string[]} stated the specialties the reader named in onboarding
+ * @param {typeof FRONTIER_RANKING.notMySpecialty} [rule]
+ * @returns {Record<string, number>} specialty key → how much to take off, in the cosine scale
+ */
+export function frontierSpecialtyDemotion(hides, stated = [], rule = FRONTIER_RANKING.notMySpecialty) {
+  const own = new Set(stated);
+  /** @type {Record<string, number>} */
+  const counts = {};
+  for (const specialties of Array.isArray(hides) ? hides : []) {
+    for (const key of new Set(Array.isArray(specialties) ? specialties : [])) {
+      if (typeof key === "string" && key && !own.has(key)) counts[key] = (counts[key] ?? 0) + 1;
+    }
+  }
+  return Object.fromEntries(Object.entries(counts).map(([key, count]) => [key, Math.round(Math.min(rule.max, count * rule.perHide) * 10_000) / 10_000]));
+}
+
+/**
+ * @typedef {{ id: string, publicId: string, weight: number, selected: boolean, safetyAlert: boolean, genre: string, specialties: string[],
+ *   visibleAt: number }} RankCandidate
+ * @typedef {{ topic: string, kind: string, cap: number }} RankReason
+ * @typedef {{ itemId: string, reason: number, score: number }} RankPair
+ * @typedef {{ itemId: string, slot: "must-see" | "personal" | "editorial" | "explore", reason: number | null, topic: string, kind: string, score: number,
+ *   propensity: number }} RankEntry
+ */
+
+/**
+ * The block from its parts, in display order (pure; the integration test drives it through SQL). `pairs` are the (item, reason)
+ * matches already above their floor; `terms` the genre terms; `random` returns [0, 1).
+ * `demotion` is `frontierSpecialtyDemotion`'s answer: what a reader's 「不是我的专科」 hides take off an item of that specialty.
+ * @param {{ candidates: RankCandidate[], reasons: RankReason[], pairs: RankPair[], readerSpecialties: string[], editorialShare: number,
+ *   terms: Record<string, { term: number }>, now: number, selectThreshold: number, random?: () => number, size?: number,
+ *   ranking?: typeof FRONTIER_RANKING, demotion?: Record<string, number> }} input
+ * @returns {RankEntry[]}
+ */
+export function frontierForYouBlock({ candidates, reasons, pairs, readerSpecialties, editorialShare, terms, now, selectThreshold,
+  random = Math.random, size = FRONTIER_FOR_YOU_SIZE, ranking = FRONTIER_RANKING, demotion = {} }) {
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const own = new Set(readerSpecialties);
+  const overlaps = (/** @type {RankCandidate} */ candidate) => candidate.specialties.some((key) => own.has(key));
+  // An item takes the strongest demotion of its specialties; in points where the editor's order sorts by score.
+  const lowered = (/** @type {RankCandidate} */ candidate) => candidate.specialties.reduce((most, key) => Math.max(most, demotion[key] ?? 0), 0);
+  const standing = (/** @type {RankCandidate} */ candidate) => candidate.weight - lowered(candidate) * 100;
+  const boost = (/** @type {RankCandidate} */ candidate) => editorialShare * candidate.weight / 100 + (terms[candidate.genre]?.term ?? 0) - lowered(candidate);
+  const label = (/** @type {string} */ genre) => /** @type {Record<string, string>} */ (FRONTIER_GENRE_LABELS_ZH)[genre] ?? genre;
+  /** @type {RankEntry[]} */
+  const mustSee = [];
+  const safety = candidates.filter((candidate) => candidate.safetyAlert && now - candidate.visibleAt <= ranking.mustSee.safetyHours * 3_600_000
+    && (!own.size || !candidate.specialties.length || overlaps(candidate)))
+    .sort((left, right) => right.visibleAt - left.visibleAt || left.id.localeCompare(right.id));
+  const major = own.size ? candidates.filter((candidate) => !candidate.safetyAlert && candidate.selected && (candidate.genre === "guideline" || candidate.genre === "approval")
+    && overlaps(candidate)).sort((left, right) => standing(right) - standing(left) || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)) : [];
+  for (const candidate of [...safety, ...major].slice(0, ranking.mustSee.max)) {
+    mustSee.push({ itemId: candidate.id, slot: "must-see", reason: null, topic: label(candidate.genre), kind: "must-see", score: candidate.weight / 100, propensity: 1 });
+  }
+  const taken = new Set(mustSee.map((entry) => entry.itemId));
+  const exploreSlots = ranking.explore.slots;
+  const room = Math.max(0, size - mustSee.length - exploreSlots);
+  /** @type {RankEntry[]} */
+  const chosen = [];
+  const matched = new Set(pairs.map((pair) => pair.itemId));
+  const ranked = pairs.filter((pair) => byId.has(pair.itemId)).map((pair) => {
+    const candidate = /** @type {RankCandidate} */ (byId.get(pair.itemId));
+    return { ...pair, rank: pair.score + boost(candidate), weight: candidate.weight };
+  }).sort((left, right) => right.rank - left.rank || right.weight - left.weight || left.reason - right.reason || left.itemId.localeCompare(right.itemId));
+  /** @type {Map<number, number>} */
+  const perReason = new Map();
+  for (const pair of ranked) {
+    if (chosen.length >= room) break;
+    const reason = reasons[pair.reason];
+    if (!reason || taken.has(pair.itemId) || (perReason.get(pair.reason) ?? 0) >= reason.cap) continue;
+    taken.add(pair.itemId);
+    perReason.set(pair.reason, (perReason.get(pair.reason) ?? 0) + 1);
+    chosen.push({ itemId: pair.itemId, slot: "personal", reason: pair.reason, topic: reason.topic, kind: reason.kind, score: Math.round(pair.rank * 10_000) / 10_000, propensity: 1 });
+  }
+  // While the reader's own reasons leave room, the editor's: 精选 by score.
+  const editorial = candidates.filter((candidate) => candidate.selected && !taken.has(candidate.id))
+    .sort((left, right) => standing(right) - standing(left) || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id));
+  for (const candidate of editorial) {
+    if (chosen.length >= room) break;
+    taken.add(candidate.id);
+    chosen.push({ itemId: candidate.id, slot: "editorial", reason: null, topic: FRONTIER_FOR_YOU_TOPICS.editorial, kind: "editorial",
+      score: Math.round(boost(candidate) * 10_000) / 10_000, propensity: 1 });
+  }
+  // Groups in the order of their best entry; each topic's entries together.
+  /** @type {string[]} */
+  const order = [];
+  for (const entry of chosen) if (!order.includes(entry.topic)) order.push(entry.topic);
+  const grouped = order.flatMap((topic) => chosen.filter((entry) => entry.topic === topic));
+  const block = [...mustSee, ...grouped];
+  // The exploration entry: one of the best items the reader's reasons matched nothing of, drawn uniformly, its probability kept.
+  const pool = candidates.filter((candidate) => !taken.has(candidate.id) && !matched.has(candidate.id) && (candidate.selected || candidate.weight >= selectThreshold))
+    .sort((left, right) => standing(right) - standing(left) || right.visibleAt - left.visibleAt || left.id.localeCompare(right.id)).slice(0, ranking.explore.poolMax);
+  for (let slot = 0; slot < exploreSlots && pool.length; slot += 1) {
+    const draw = Math.min(pool.length - 1, Math.floor(Math.max(0, random()) * pool.length));
+    const propensity = 1 / pool.length;
+    const [candidate] = pool.splice(draw, 1);
+    // With no reason of the reader's at all, every entry is the editor's, and the drawn one joins their group.
+    const topic = chosen.some((entry) => entry.slot === "personal") ? FRONTIER_FOR_YOU_TOPICS.explore : FRONTIER_FOR_YOU_TOPICS.editorial;
+    const entry = /** @type {RankEntry} */ ({ itemId: candidate.id, slot: "explore", reason: null, topic, kind: "explore",
+      score: Math.round(boost(candidate) * 10_000) / 10_000, propensity: Math.round(propensity * 1_000_000) / 1_000_000 });
+    let at = block.length;
+    for (let index = Math.min(ranking.explore.position, block.length); index <= block.length; index += 1) {
+      // A boundary: the start, the end, or between two topics — or inside the run of its own topic.
+      const before = block[index - 1];
+      const after = block[index];
+      if (!before || !after || before.topic !== after.topic || before.topic === topic) { at = index; break; }
+    }
+    block.splice(at, 0, entry);
+  }
+  return block.slice(0, size);
 }
 
 /** @param {unknown} error */
@@ -302,25 +564,31 @@ function codeOf(error) {
 
 export class FrontierProfiles {
   /**
-   * @param {{ database: any, researchMemory?: any, editor?: any, embedder?: any, config?: Record<string, any>,
+   * @param {{ database: any, memorySettings?: any, nativeMemory?: { configured?: boolean, files: (userId: string) => Promise<any[]> } | null,
+   *           editor?: any, embedder?: any, config?: Record<string, any>,
    *           budget?: (() => Promise<{ state: string }>) | null, now?: () => Date, dimension?: number,
    *           conversations?: ((userId: string) => Promise<Array<{ projectId: string, run: Record<string, any> }>>) | null,
    *           entityVocabulary?: { enabled?: boolean, keysForText: (input: { texts: string[] }) => Promise<string[]>,
    *             tag?: (input: { texts: string[] }) => Promise<string[] | null>,
-   *             describe: (keys: string[]) => Promise<Array<{ key: string, label: string }>> } | null }} options
-   *   `researchMemory` the account memory store (`listAllRecords`, `settings`),
+   *             describe: (keys: string[]) => Promise<Array<{ key: string, label: string }>> } | null,
+   *           tags?: { filter: (slug: string) => Promise<{ ids: Iterable<number | string>, tag: { slug: string, name: string } } | null> } | null,
+   *           random?: () => number, ranking?: typeof FRONTIER_RANKING }} options
+   *   `memorySettings` the account's switches (`settings`), `nativeMemory` the memory engine's store (`files`; absent or not configured,
+   *   there is no memory to read and the other signals go on),
    *   `editor` a `FrontierEditor` (`extractProfile`), `embedder` the feed's,
    *   `conversations` a reader's own runs across their projects (the run ledger's
    *   `researcherRuns`, composed in `server.mjs`); without it no question is read,
    *   `entityVocabulary` the platform's one vocabulary (`entityVocabulary.mjs`); without it the followed zones and
-   *   the library are not read.
+   *   the library are not read, `tags` the tag tree (`FrontierTagStore`; without it an interest tag is not matched),
+   *   `random` the exploration draw's source of [0, 1), `ranking` the constants (`FRONTIER_RANKING`; a test narrows them).
    */
-  constructor({ database, researchMemory = null, editor = null, embedder = null, config = {}, budget = null,
-    now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null }) {
+  constructor({ database, memorySettings = null, nativeMemory = null, editor = null, embedder = null, config = {}, budget = null,
+    now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null, tags = null, random = Math.random, ranking = FRONTIER_RANKING }) {
     if (!database) throw new TypeError("The frontier profiles need the product database.");
     this.database = database;
     this.subscriptions = new FrontierSubscriptions({ database });
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
+    this.nativeMemory = nativeMemory;
     this.editor = editor;
     this.embedder = embedder;
     this.config = config ?? {};
@@ -328,6 +596,11 @@ export class FrontierProfiles {
     this.now = now;
     this.conversations = typeof conversations === "function" ? conversations : null;
     this.entityVocabulary = entityVocabulary?.enabled === false ? null : entityVocabulary;
+    this.tags = tags;
+    this.random = random;
+    this.ranking = ranking;
+    /** The feed's own day, for a reader's visit days. */
+    this.timeZone = String(this.config.frontierTimeZone || "Asia/Shanghai");
     this.dimension = Number(this.config.kbEmbeddingDimension) || Number(embedder?.dimension) || dimension;
     /** @type {Map<string, number>} reader → when their last refresh failed */
     this.failures = new Map();
@@ -339,16 +612,32 @@ export class FrontierProfiles {
     this.memoryFailedAt = null;
     /** Observable counters (principle 15). */
     this.counters = { refreshed: 0, empty: 0, paused: 0, failures: 0, ranked: 0, embedded: 0, embedFailures: 0, reasonsDropped: 0, reads: 0,
-      staleMarks: 0, staleMarkFailures: 0, visitFailures: 0, questionFailures: 0, hiddenDropped: 0, entityPhrases: 0, entityFailures: 0 };
+      staleMarks: 0, staleMarkFailures: 0, visitFailures: 0, questionFailures: 0, hiddenDropped: 0, entityPhrases: 0, entityFailures: 0,
+      signalFailures: 0, statedFailures: 0, prefsSaved: 0, demotionFailures: 0, demotedRanks: 0 };
     /** @type {string | null} */
     this.lastError = null;
   }
 
-  async ready() { return migrateFrontier(this.database, { dimension: this.dimension }); }
+  async ready() {
+    // The mark of a reader's memory is read from the overlay's tables (`memoryMarkOf`); they exist before the first read of it.
+    await migrateMemorySettings(this.database);
+    await migrateNativeMemory(this.database);
+    return migrateFrontier(this.database, { dimension: this.dimension });
+  }
 
-  /** Whether this deployment can personalize at all: a memory store to read and a model to read it with. */
+  /**
+   * The memory files a profile is read from (`frontierProfileMemories`): the engine's, through the store the memory page uses, whose
+   * read is shared and cached by what the engine says changed. None when this deployment has no memory engine.
+   * @param {string} userId @returns {Promise<any[]>}
+   */
+  async #memoryFiles(userId) {
+    if (!this.nativeMemory?.configured) return [];
+    return this.nativeMemory.files(userId);
+  }
+
+  /** Whether this deployment can personalize at all: the account's switches to honour and a model to read with. */
   get composed() {
-    return Boolean(this.researchMemory?.configured) && this.config.deepseekProviderEnabled === true && Boolean(this.config.deepseekApiKey);
+    return Boolean(this.memorySettings?.configured) && this.config.deepseekProviderEnabled === true && Boolean(this.config.deepseekApiKey);
   }
 
   /** `available`, `unavailable` (the memory store failed lately) or `off` — what `/status` says. */
@@ -366,7 +655,7 @@ export class FrontierProfiles {
 
   /** @param {string} userId @returns {Promise<{ recallPaused: boolean, pausedProjects: string[] }>} */
   async #settings(userId) {
-    const settings = typeof this.researchMemory?.settings === "function" ? await this.researchMemory.settings(userId) : null;
+    const settings = typeof this.memorySettings?.settings === "function" ? await this.memorySettings.settings(userId) : null;
     return { recallPaused: settings?.recallPaused === true, pausedProjects: (settings?.pausedProjects ?? []).map(String) };
   }
 
@@ -391,7 +680,7 @@ export class FrontierProfiles {
       LEFT JOIN evimed_frontier.user_profiles pr ON pr.user_id = up.user_id
       WHERE up.last_seen_at >= $1::timestamptz AND ($3::text[] IS NULL OR up.user_id = ANY($3::text[]))
         AND (pr.user_id IS NULL OR pr.computed_at < $2::timestamptz OR pr.inputs_version > pr.computed_inputs_version
-          OR (pr.for_you->>'state' = 'off' AND up.for_you_seen_at > pr.computed_at))
+          OR (jsonb_array_length(pr.phrases) = 0 AND up.for_you_seen_at > pr.computed_at))
       ORDER BY (up.for_you_seen_at IS NOT NULL AND (pr.user_id IS NULL OR up.for_you_seen_at > pr.computed_at)) DESC,
         (pr.inputs_version > pr.computed_inputs_version) DESC NULLS LAST,
         pr.computed_at NULLS FIRST, up.last_seen_at DESC LIMIT 100`,
@@ -438,8 +727,8 @@ export class FrontierProfiles {
 
   /**
    * Mark the profiles of active readers whose memory changed since it was
-   * read: any writer — the extractor after a conversation, the memory page, an
-   * import, a delete — moves the mark, so none of them has to call here. A
+   * read: any writer — the engine's extraction after a conversation, the memory page, an
+   * undo, a delete — moves the mark (`memoryMarkOf`), so none of them has to call here. A
    * memory store that cannot be read marks nothing and the round goes on.
    * @param {Date} active
    */
@@ -448,7 +737,7 @@ export class FrontierProfiles {
       const result = await this.database.query(`UPDATE evimed_frontier.user_profiles pr SET inputs_version = pr.inputs_version + 1
         FROM evimed_frontier.user_prefs up
         WHERE up.user_id = pr.user_id AND up.last_seen_at >= $1::timestamptz AND pr.inputs_version <= pr.computed_inputs_version
-          AND pr.memory_mark IS DISTINCT FROM (SELECT ${MEMORY_MARK} FROM evimed_memory.records r WHERE r.user_id = pr.user_id)`, [active]);
+          AND pr.memory_mark IS DISTINCT FROM (${memoryMarkOf("pr.user_id")})`, [active]);
       this.counters.staleMarks += Number(result?.rowCount ?? 0);
     } catch (error) {
       this.counters.staleMarkFailures += 1;
@@ -660,10 +949,7 @@ export class FrontierProfiles {
   }
 
   /** @param {string} userId @returns {Promise<string>} */
-  async #memoryMark(userId) {
-    const row = (await this.database.query(`SELECT ${MEMORY_MARK} AS mark FROM evimed_memory.records r WHERE r.user_id = $1`, [userId])).rows?.[0];
-    return String(row?.mark ?? "");
-  }
+  async #memoryMark(userId) { return frontierMemoryMark(this.database, userId); }
 
   /**
    * Read, extract, embed and store one reader's profile, then rank for them.
@@ -680,12 +966,12 @@ export class FrontierProfiles {
     const version = Number((await this.database.query(`SELECT inputs_version FROM evimed_frontier.user_profiles WHERE user_id = $1`,
       [userId])).rows?.[0]?.inputs_version ?? 0);
     let settings;
-    let records;
+    let files;
     let mark;
     try {
       settings = await this.#settings(userId);
       mark = await this.#memoryMark(userId);
-      records = settings.recallPaused ? [] : await this.researchMemory.listAllRecords(userId);
+      files = settings.recallPaused ? [] : await this.#memoryFiles(userId);
       this.memoryFailedAt = null;
     } catch (error) {
       this.memoryFailedAt = now.getTime();
@@ -697,7 +983,7 @@ export class FrontierProfiles {
       this.counters.paused += 1;
       return { state: "off", reason: "recall-paused" };
     }
-    const memories = frontierProfileMemories(records, { pausedProjects: settings.pausedProjects });
+    const memories = frontierProfileMemories(files, { pausedProjects: settings.pausedProjects });
     const questions = await this.#questions(userId, settings.pausedProjects, now);
     const items = await this.#itemSignals(userId, now);
     const entities = await this.#entityPhrases(userId, settings.pausedProjects);
@@ -758,16 +1044,18 @@ export class FrontierProfiles {
    * The candidates for one reader since `since`: published items of enabled
    * sources, newest first, at most 300 — none the reader hid, starred or
    * opened, none of an event they hid an item of, none from a source or
-   * specialty they muted.
+   * specialty they muted — with what the block reads of each: the editorial
+   * score, 精选, the safety flag, the specialties and the genre's columns.
    * @param {string} userId @param {Date} since
-   * @returns {Promise<Array<{ id: string, public_id: string, weight: number }>>}
+   * @returns {Promise<any[]>}
    */
   async #candidates(userId, since) {
     const { muted } = await this.subscriptions.read(userId);
     const values = /** @type {any[]} */ ([since, userId]);
     const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
     const muteFilter = muted.map((follow) => `NOT coalesce((${frontierFollowPredicate(follow, param)}),false)`).join(" AND ") || "TRUE";
-    return (await this.database.query(`SELECT i.id, i.public_id, coalesce(i.score_total, 0) AS weight
+    return (await this.database.query(`SELECT i.id, i.public_id, coalesce(i.score_total, 0) AS weight, i.selected, i.specialties, i.visible_at,
+        ${FRONTIER_GENRE_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $1::timestamptz
         AND NOT EXISTS (SELECT 1 FROM evimed_frontier.user_state us WHERE us.user_id = $2 AND us.item_id = i.id
@@ -799,29 +1087,196 @@ export class FrontierProfiles {
   }
 
   /**
-   * Rank the window for one reader from their stored profile and cache it
-   * (`user_profiles.for_you`). Never a model call and never an embedding
-   * call: the phrase vectors are stored with the profile.
+   * What the reader was shown and did in the genre window, one outcome per item — impressions, opens, dwell, the end reached,
+   * the keeping actions and hides from `interactions`; reads, stars and hides from `user_state`, which came before it — and
+   * their visit days. A signal that cannot be read is empty (counted): the ranking falls back to the role's priors.
+   * @param {string} userId @param {Date} now
+   * @returns {Promise<{ outcomes: Array<{ genre: string, seen: boolean, opened: boolean, satisfied: boolean, hidden: boolean }>, opens: number, visits: number }>}
+   */
+  async #readingSignal(userId, now) {
+    const since = new Date(now.getTime() - this.ranking.genre.windowDays * DAY);
+    try {
+      const rows = (await this.database.query(`WITH acts AS (
+          SELECT x.item_id, min(x.genre) AS logged_genre, bool_or(x.type = 'impression') AS seen, bool_or(x.type = 'open') AS opened,
+            coalesce(sum(x.value) FILTER (WHERE x.type = 'dwell'), 0) AS dwell, bool_or(x.type = 'reach-end') AS reached,
+            bool_or(x.type IN ('star', 'save', 'share', 'research')) AS kept, bool_or(x.type = 'hide' AND x.detail IS DISTINCT FROM 'already-seen') AS hid
+          FROM evimed_frontier.interactions x WHERE x.user_id = $1 AND x.item_id IS NOT NULL AND x.client_at >= $2 GROUP BY x.item_id
+        ), marks AS (
+          -- 「看过了」: the item is kept out of the feed but is no failure of its genre, whichever of the two records says it.
+          SELECT us.item_id, coalesce(us.read_at >= $2, false) AS read, coalesce(us.starred_at >= $2, false) AS starred,
+            coalesce(us.hidden_at >= $2, false) AS hidden, coalesce(us.hidden_at IS NOT NULL AND us.hidden_reason = 'already-seen', false) AS seen_before
+          FROM evimed_frontier.user_state us WHERE us.user_id = $1 AND (us.read_at >= $2 OR us.starred_at >= $2 OR us.hidden_at >= $2)
+        )
+        SELECT a.logged_genre, ${FRONTIER_GENRE_COLUMNS}, coalesce(a.seen, false) AS seen, coalesce(a.opened, false) AS opened,
+          coalesce(a.dwell, 0) AS dwell, coalesce(a.reached, false) AS reached, coalesce(a.kept, false) AS kept, coalesce(a.hid, false) AS hid,
+          coalesce(m.read, false) AS read, coalesce(m.starred, false) AS starred, coalesce(m.hidden, false) AS hidden,
+          coalesce(m.seen_before, false) AS seen_before
+        FROM acts a FULL JOIN marks m ON m.item_id = a.item_id
+        JOIN evimed_frontier.items i ON i.id = coalesce(a.item_id, m.item_id) LIMIT 5000`, [userId, since])).rows ?? [];
+      const outcomes = rows.map((/** @type {any} */ row) => ({
+        genre: isFrontierGenre(row.logged_genre) ? row.logged_genre : frontierItemGenre(row),
+        seen: row.seen === true, opened: row.opened === true || row.read === true,
+        satisfied: Number(row.dwell) >= FRONTIER_DWELL.satisfiedMs || row.reached === true || row.kept === true || row.starred === true,
+        hidden: (row.hid === true || row.hidden === true) && row.seen_before !== true,
+      }));
+      const visits = Number((await this.database.query(`SELECT count(*)::integer AS days FROM (
+          SELECT (client_at AT TIME ZONE $3)::date AS day FROM evimed_frontier.interactions WHERE user_id = $1 AND client_at >= $2
+          UNION SELECT (read_at AT TIME ZONE $3)::date FROM evimed_frontier.user_state WHERE user_id = $1 AND read_at >= $2) AS days`,
+      [userId, since, this.timeZone])).rows?.[0]?.days ?? 0);
+      return { outcomes, opens: outcomes.filter((outcome) => outcome.opened).length, visits };
+    } catch (error) {
+      this.counters.signalFailures += 1;
+      this.lastError = codeOf(error);
+      return { outcomes: [], opens: 0, visits: 0 };
+    }
+  }
+
+  /**
+   * The specialties of the items the reader hid as 「不是我的专科」 within `notMySpecialty.windowDays` days, one list per item, newest
+   * first, at most 500 (what `frontierSpecialtyDemotion` counts). A signal that cannot be read is empty (counted).
+   * @param {string} userId @param {Date} now
+   * @returns {Promise<string[][]>}
+   */
+  async #specialtyHides(userId, now) {
+    const since = new Date(now.getTime() - this.ranking.notMySpecialty.windowDays * DAY);
+    try {
+      return ((await this.database.query(`SELECT i.specialties FROM evimed_frontier.user_state us JOIN evimed_frontier.items i ON i.id = us.item_id
+        WHERE us.user_id = $1 AND us.hidden_reason = 'not-my-specialty' AND us.hidden_at >= $2 ORDER BY us.hidden_at DESC LIMIT 500`,
+      [userId, since])).rows ?? []).map((/** @type {any} */ row) => (row.specialties ?? []).map(String));
+    } catch (error) {
+      this.counters.demotionFailures += 1;
+      this.lastError = codeOf(error);
+      return [];
+    }
+  }
+
+  /**
+   * The reader's onboarding answer as stored, with closed words re-checked (a specialty retired since reads as its successor).
+   * @param {string} userId
+   * @returns {Promise<{ role: string | null, specialties: string[], interests: string[], onboardedAt: string | null, skippedAt: string | null }>}
+   */
+  async #prefsRow(userId) {
+    const row = (await this.database.query(`SELECT role, specialties, interests, onboarded_at, onboarding_skipped_at FROM evimed_frontier.user_prefs
+      WHERE user_id = $1`, [userId])).rows?.[0];
+    const iso = (/** @type {unknown} */ value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : null);
+    return {
+      role: typeof row?.role === "string" && FRONTIER_READER_ROLES.includes(row.role) ? row.role : null,
+      specialties: [...new Set((row?.specialties ?? []).map((/** @type {string} */ key) => frontierSpecialtyKey(key)).filter(Boolean))].map(String),
+      interests: (row?.interests ?? []).map(String),
+      onboardedAt: iso(row?.onboarded_at), skippedAt: iso(row?.onboarding_skipped_at),
+    };
+  }
+
+  /**
+   * The reasons a reader stated, beside the profile's phrases, and their matches among the candidates: onboarding's interests
+   * (a tag through the tree — itself, what was folded into it, its narrower tags — or an entity key), the positive follows (the
+   * most recent, a tag follow an interest already names left out) and the specialties, which match items of 精选 quality only.
+   * A piece that cannot be read is left out (counted), never faked.
+   * @param {string} userId @param {{ interests: string[] }} prefs @param {string[]} specialties @param {any[]} candidates @param {number} threshold
+   * @returns {Promise<{ reasons: Array<{ text: string, source: string, memoryId: string, kind: string, cap: number }>, pairs: Array<{ itemId: string, reason: number, score: number }> }>}
+   */
+  async #statedReasons(userId, prefs, specialties, candidates, threshold) {
+    /** @type {Array<{ text: string, source: string, memoryId: string, kind: string, cap: number }>} */
+    const reasons = [];
+    /** @type {Array<{ itemId: string, reason: number, score: number }>} */
+    const pairs = [];
+    const ids = candidates.map((row) => String(row.id));
+    if (!ids.length) return { reasons, pairs };
+    const { match, perReason } = this.ranking;
+    try {
+      /** @type {Array<{ tagId: string, reason: number }>} */
+      const tagIds = [];
+      /** @type {Array<{ key: string, reason: number }>} */
+      const entityKeys = [];
+      const interestSlugs = new Set();
+      const entityNames = new Map();
+      const keyed = prefs.interests.filter((key) => isEntityKey(key));
+      if (keyed.length && this.entityVocabulary) {
+        for (const entry of await this.entityVocabulary.describe(keyed).catch(() => [])) entityNames.set(entry.key, String(entry.label ?? "").trim());
+      }
+      for (const key of prefs.interests) {
+        if (isEntityKey(key)) {
+          const text = entityNames.get(key) || key.slice(key.indexOf(":") + 1);
+          entityKeys.push({ key, reason: reasons.push({ text, source: "interest", memoryId: "", kind: "interest", cap: perReason.interest }) - 1 });
+          continue;
+        }
+        const found = this.tags ? await this.tags.filter(key) : null;
+        if (!found) continue;
+        interestSlugs.add(found.tag.slug);
+        const reason = reasons.push({ text: String(found.tag.name), source: "interest", memoryId: "", kind: "interest", cap: perReason.interest }) - 1;
+        for (const id of found.ids) tagIds.push({ tagId: String(id), reason });
+      }
+      if (tagIds.length) {
+        const rows = (await this.database.query(`SELECT it.item_id, x.idx FROM evimed_frontier.item_tags it
+          JOIN unnest($1::bigint[], $2::integer[]) AS x(tag_id, idx) ON x.tag_id = it.tag_id WHERE it.item_id = ANY($3::bigint[])`,
+        [tagIds.map((entry) => entry.tagId), tagIds.map((entry) => entry.reason), ids])).rows ?? [];
+        for (const row of rows) pairs.push({ itemId: String(row.item_id), reason: Number(row.idx), score: match.interest });
+      }
+      if (entityKeys.length) {
+        const rows = (await this.database.query(`SELECT i.id, x.idx FROM evimed_frontier.items i
+          JOIN unnest($1::text[], $2::integer[]) AS x(key, idx) ON x.key = ANY(i.entity_keys) WHERE i.id = ANY($3::bigint[])`,
+        [entityKeys.map((entry) => entry.key), entityKeys.map((entry) => entry.reason), ids])).rows ?? [];
+        for (const row of rows) pairs.push({ itemId: String(row.id), reason: Number(row.idx), score: match.interest });
+      }
+      const { follows } = await this.subscriptions.read(userId);
+      const positive = follows.filter((follow) => !follow.muted && !(follow.kind === "tag" && interestSlugs.has(follow.key)))
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))).slice(0, this.ranking.follows);
+      if (positive.length) {
+        const values = /** @type {any[]} */ ([ids]);
+        const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
+        const first = reasons.length;
+        for (const follow of positive) reasons.push({ text: String(follow.label), source: "follow", memoryId: "", kind: "follow", cap: perReason.follow });
+        const hits = positive.map((follow, index) => `CASE WHEN coalesce((${frontierFollowPredicate(follow, param)}), false) THEN ${first + index} END`);
+        const rows = (await this.database.query(`SELECT i.id, array_remove(ARRAY[${hits.join(", ")}]::integer[], NULL) AS hits
+          FROM evimed_frontier.items i WHERE i.id = ANY($1::bigint[])`, values)).rows ?? [];
+        for (const row of rows) for (const hit of row.hits ?? []) pairs.push({ itemId: String(row.id), reason: Number(hit), score: match.follow });
+      }
+    } catch (error) {
+      this.counters.statedFailures += 1;
+      this.lastError = codeOf(error);
+    }
+    for (const key of specialties) {
+      const reason = reasons.push({ text: FRONTIER_SPECIALTY_LABELS_ZH[key] ?? key, source: "specialty", memoryId: "", kind: "specialty", cap: perReason.specialty }) - 1;
+      for (const row of candidates) {
+        if ((row.specialties ?? []).includes(key) && (row.selected === true || Number(row.weight) >= threshold)) {
+          pairs.push({ itemId: String(row.id), reason, score: match.specialty });
+        }
+      }
+    }
+    return { reasons, pairs };
+  }
+
+  /**
+   * Rank the window for one reader and cache it (`user_profiles.for_you`): their phrases, what they stated (onboarding, follows,
+   * specialties), their genre affinity and visit days, the must-see and the exploration entry (`frontierForYouBlock`). Never a
+   * model call and never an embedding call: the phrase vectors are stored with the profile. A reader with nothing is ranked too
+   * — 精选 and the exploration entry.
    * @param {string} userId
    */
   async rank(userId) {
     const capabilities = await this.ready();
     const now = this.now();
-    const profile = (await this.database.query(`SELECT phrases FROM evimed_frontier.user_profiles WHERE user_id = $1`, [userId])).rows?.[0];
+    const profile = (await this.database.query(`SELECT phrases, specialties FROM evimed_frontier.user_profiles WHERE user_id = $1`, [userId])).rows?.[0];
     const phrases = Array.isArray(profile?.phrases) ? profile.phrases : [];
-    if (!profile || !phrases.length) return null;
+    const prefs = await this.#prefsRow(userId);
     const vectors = phrases.map((phrase) => decodeVector(phrase.vector, this.dimension));
-    const useVectors = Boolean(capabilities.vector && this.embedder?.configured) && vectors.some(Boolean);
+    const vectorsHere = Boolean(capabilities.vector && this.embedder?.configured);
+    const useVectors = vectorsHere && vectors.some(Boolean);
     let candidates = await this.#candidates(userId, new Date(now.getTime() - FRONTIER_FOR_YOU_WINDOW_MS));
     if (candidates.length < FRONTIER_FOR_YOU_MIN_CANDIDATES) {
       candidates = await this.#candidates(userId, new Date(now.getTime() - FRONTIER_FOR_YOU_WIDE_WINDOW_MS));
     }
+    // The same story as something the reader hid, by meaning, is no candidate at all — for a phrase, a follow or the editor.
+    if (vectorsHere && candidates.length) {
+      const near = await this.#nearHidden(userId, candidates.map((row) => String(row.id)));
+      this.counters.hiddenDropped += near.size;
+      if (near.size) candidates = candidates.filter((row) => !near.has(String(row.id)));
+    }
     const ids = candidates.map((row) => String(row.id));
-    const weights = new Map(candidates.map((row) => [String(row.id), Number(row.weight)]));
     const publicIds = new Map(candidates.map((row) => [String(row.id), row.public_id]));
-    /** @type {Array<{ itemId: string, phrase: number, score: number, weight: number }>} */
-    let matches = [];
-    let basis = /** @type {"vector" | "tags"} */ ("tags");
+    /** @type {Array<{ itemId: string, reason: number, score: number }>} */
+    let phrasePairs = [];
+    let basis = /** @type {"vector" | "tags" | null} */ (phrases.length ? "tags" : null);
     if (useVectors && ids.length) {
       const type = capabilities.halfvec ? "halfvec" : "vector";
       const literals = vectors.map((vector) => (vector ? `[${vector.join(",")}]` : null));
@@ -833,10 +1288,8 @@ export class FrontierProfiles {
       [indexes.map((index) => literals[index]), indexes, ids, String(this.embedder.modelKey)])).rows ?? [];
       if (rows.length) {
         basis = "vector";
-        const near = await this.#nearHidden(userId, ids);
-        this.counters.hiddenDropped += near.size;
-        matches = rows.filter((row) => !near.has(String(row.item_id)))
-          .map((row) => ({ itemId: String(row.item_id), phrase: Number(row.idx), score: Number(row.cosine), weight: weights.get(String(row.item_id)) ?? 0 }));
+        phrasePairs = rows.map((row) => ({ itemId: String(row.item_id), reason: Number(row.idx), score: Number(row.cosine) }))
+          .filter((pair) => Number.isFinite(pair.score) && pair.score >= FRONTIER_FOR_YOU_MIN_COSINE);
       }
     }
     if (basis === "tags" && ids.length) {
@@ -846,41 +1299,71 @@ export class FrontierProfiles {
           FROM evimed_frontier.items i CROSS JOIN unnest($1::text[], $2::integer[]) AS p(q, idx)
           WHERE i.id = ANY($3::bigint[]) AND i.lexemes @@ p.q::tsquery`,
         [queries.map((entry) => entry.query), queries.map((entry) => entry.index), ids])).rows ?? [];
-        matches = rows.map((row) => ({ itemId: String(row.id), phrase: Number(row.idx), score: Number(row.rank), weight: weights.get(String(row.id)) ?? 0 }));
+        // A keyword hit is no cosine: a moderate match, ordered among hits by its rank.
+        phrasePairs = rows.map((row) => ({ itemId: String(row.id), reason: Number(row.idx), score: this.ranking.match.keyword + Math.min(0.1, Number(row.rank) || 0) }));
       }
     }
-    // Keyword ranks are not cosines: no floor and no editorial share for
-    // them, the editorial score only breaks their ties.
-    const ranked = basis === "vector"
-      ? frontierForYouRanking(matches, { minScore: FRONTIER_FOR_YOU_MIN_COSINE, editorial: FRONTIER_FOR_YOU_EDITORIAL_SHARE })
-      : frontierForYouRanking(matches);
-    const items = ranked.map((match) => {
-      const phrase = phrases[match.phrase] ?? {};
-      const source = frontierPhraseSource(phrase);
-      return { itemId: publicIds.get(match.itemId), text: String(phrase.text ?? ""), source,
-        memoryId: source === "memory" ? String(phrase.memoryId ?? "") : "", kind: String(phrase.kind ?? "profile") };
+    // The reader's own specialties win over the ones the model read off their memory (principle 18: a statement over an inference).
+    const readerSpecialties = prefs.specialties.length ? prefs.specialties
+      : (Array.isArray(profile?.specialties) ? profile.specialties : []).filter((key) => FRONTIER_SPECIALTIES.includes(/** @type {any} */ (key)));
+    const threshold = frontierSelectThreshold(this.config);
+    const stated = await this.#statedReasons(userId, prefs, readerSpecialties, candidates, threshold);
+    const reasons = [
+      ...phrases.map((phrase) => {
+        const source = frontierPhraseSource(phrase);
+        return { text: String(phrase.text ?? ""), source, memoryId: source === "memory" ? String(phrase.memoryId ?? "") : "", kind: String(phrase.kind ?? "profile"),
+          cap: this.ranking.perReason.phrase };
+      }),
+      ...stated.reasons,
+    ];
+    const pairs = [...phrasePairs, ...stated.pairs.map((pair) => ({ ...pair, reason: pair.reason + phrases.length }))]
+      .filter((pair) => reasons[pair.reason]?.text && (reasons[pair.reason].source !== "memory" || reasons[pair.reason].memoryId));
+    const signal = await this.#readingSignal(userId, now);
+    // What they said was not their specialty lowers it, except what they stated in onboarding (frontierSpecialtyDemotion).
+    const demotion = frontierSpecialtyDemotion(await this.#specialtyHides(userId, now), prefs.specialties, this.ranking.notMySpecialty);
+    if (Object.keys(demotion).length) this.counters.demotedRanks += 1;
+    const block = frontierForYouBlock({
+      candidates: candidates.map((row) => ({ id: String(row.id), publicId: String(row.public_id), weight: Number(row.weight) || 0, selected: row.selected === true,
+        safetyAlert: row.safety_alert === true, genre: frontierItemGenre(row), specialties: (row.specialties ?? []).map(String),
+        visibleAt: row.visible_at ? new Date(row.visible_at).getTime() : 0 })),
+      reasons: reasons.map((reason) => ({ topic: reason.text, kind: reason.kind, cap: reason.cap })),
+      pairs, readerSpecialties, editorialShare: frontierEditorialShare(signal.visits, this.ranking.editorial),
+      terms: frontierGenreAffinity(signal.outcomes, prefs.role, this.ranking.genre), now: now.getTime(), selectThreshold: threshold,
+      random: this.random, ranking: this.ranking, demotion,
+    });
+    const items = block.map((entry) => {
+      const reason = entry.reason === null ? null : reasons[entry.reason];
+      const source = reason ? reason.source : entry.kind;
+      return { itemId: publicIds.get(entry.itemId), text: reason ? reason.text : entry.topic, source, memoryId: source === "memory" ? reason?.memoryId ?? "" : "",
+        kind: reason ? reason.kind : entry.kind, slot: entry.slot, score: entry.score, propensity: entry.propensity };
     }).filter((entry) => entry.itemId && entry.text && (entry.source !== "memory" || entry.memoryId));
     this.counters.ranked += 1;
-    return this.#cache(userId, { state: "available", basis, items }, now);
+    return this.#cache(userId, { state: "available", basis, policy: this.ranking.policy, signal: { opens: signal.opens, visits: signal.visits }, items }, now);
   }
 
-  /** @param {string} userId @param {{ state: string, basis: string, items: any[] }} forYou @param {Date} now */
+  /**
+   * Cache a ranking. A reader with no profile row yet gets one whose profile is due at once (`computed_at` at the epoch):
+   * caching a ranking is not computing a profile.
+   * @param {string} userId @param {Record<string, any>} forYou @param {Date} now
+   */
   async #cache(userId, forYou, now) {
     const value = { ...forYou, computedAt: now.toISOString() };
-    await this.database.query(`UPDATE evimed_frontier.user_profiles SET for_you = $2::jsonb, for_you_at = $3 WHERE user_id = $1`,
-      [userId, JSON.stringify(value), now]);
+    await this.database.query(`INSERT INTO evimed_frontier.user_profiles (user_id, for_you, for_you_at, computed_at) VALUES ($1, $2::jsonb, $3, 'epoch')
+      ON CONFLICT (user_id) DO UPDATE SET for_you = EXCLUDED.for_you, for_you_at = EXCLUDED.for_you_at`, [userId, JSON.stringify(value), now]);
     return value;
   }
 
   /**
    * The block for one reader (the read path): the cached ranking, recomputed
-   * in SQL when older than six hours or dropped, each memory reason checked
-   * against the memory it names; items hydrated by `hydrate` (the service's,
-   * with the reader's own state), hidden ones left out.
+   * in SQL when older than six hours, dropped, or made under another policy;
+   * each memory reason checked against the memory it names; items hydrated by
+   * `hydrate` (the service's, with the reader's own state), hidden ones left
+   * out. Each entry says its `slot`, `score` and `propensity`; the answer says
+   * the ranking's `policy` and whether to show onboarding (`onboarding`).
    * @param {{ id: string }} user
    * @param {(user: { id: string }, publicIds: string[]) => Promise<Map<string, any>>} hydrate
-   * @returns {Promise<{ state: "available" | "unavailable" | "off", basis: "vector" | "tags" | null, paused?: true,
-   *   items: Array<{ item: any, reason: { text: string, topic: string, memoryId: string | null, source: string } }> }>}
+   * @returns {Promise<{ state: "available" | "unavailable" | "off", basis: "vector" | "tags" | null, paused?: true, policy?: string, onboarding?: boolean,
+   *   items: Array<{ item: any, reason: { text: string, topic: string, memoryId: string | null, source: string }, slot: string, score: number | null, propensity: number | null }> }>}
    */
   async forYou(user, hydrate) {
     this.counters.reads += 1;
@@ -902,46 +1385,128 @@ export class FrontierProfiles {
     const phrases = Array.isArray(profile?.phrases) ? profile.phrases : [];
     let forYou = profile?.for_you ?? null;
     const stale = !profile?.for_you_at || this.now().getTime() - new Date(profile.for_you_at).getTime() > FRONTIER_FOR_YOU_TTL_MS;
-    if (phrases.length && (stale || forYou?.state !== "available")) forYou = await this.rank(user.id);
+    if (stale || forYou?.state !== "available" || forYou?.policy !== this.ranking.policy) forYou = await this.rank(user.id);
+    const prefs = await this.#prefsRow(user.id);
+    // Asked while the reader has neither answered nor skipped and the platform knows too little of them.
+    const onboarding = !prefs.onboardedAt && !prefs.skippedAt && !phrases.length && !prefs.specialties.length && !prefs.interests.length
+      && Number(forYou?.signal?.opens ?? 0) < this.ranking.onboardingOpens;
+    const policy = String(forYou?.policy ?? this.ranking.policy);
     const entries = forYou?.state === "available" && Array.isArray(forYou.items) ? forYou.items : [];
-    // Nothing yet — no profile, nothing to read one from, nothing in the
-    // window — is not a state of its own: the next round may have something.
-    if (!entries.length) return { state: deployment, basis: forYou?.basis ?? null, items: [] };
-    const remembered = [...new Set(entries.filter((/** @type {any} */ entry) => frontierPhraseSource(entry) === "memory")
+    if (!entries.length) return { state: deployment, basis: forYou?.basis ?? null, policy, onboarding, items: [] };
+    const remembered = [...new Set(entries.filter((/** @type {any} */ entry) => frontierReasonSource(entry) === "memory")
       .map((/** @type {any} */ entry) => String(entry.memoryId)))];
     /** @type {Set<string>} */
     let alive = new Set();
     if (remembered.length) {
       try {
-        // A memory of a project paused since is no reason any more.
-        const rows = (await this.database.query(`SELECT id FROM evimed_memory.records WHERE user_id = $1 AND id = ANY($2::text[]) AND status = 'active'
-            AND (scope <> 'project' OR NOT (scope_id = ANY($3::text[])))`, [user.id, remembered, settings.pausedProjects])).rows ?? [];
-        alive = new Set(rows.map((row) => String(row.id)));
+        // A line the reader deleted, took out of its file, or whose project they paused since is no reason any more: the lines the
+        // files hold now are the ones that count (`frontierProfileMemories`, the same cut a profile is made from).
+        alive = new Set(frontierProfileMemories(await this.#memoryFiles(user.id), { pausedProjects: settings.pausedProjects }).map((memory) => memory.id));
       } catch {
-        // The memory store cannot say whether a reason still stands: no reason
+        // The memory engine cannot say whether a reason still stands: no reason
         // is shown rather than one that may no longer be true.
         this.memoryFailedAt = this.now().getTime();
         return { state: "unavailable", basis: null, items: [] };
       }
     }
-    const kept = entries.filter((/** @type {any} */ entry) => frontierPhraseSource(entry) !== "memory" || alive.has(String(entry.memoryId)));
+    const kept = entries.filter((/** @type {any} */ entry) => frontierReasonSource(entry) !== "memory" || alive.has(String(entry.memoryId)));
     this.counters.reasonsDropped += entries.length - kept.length;
     const ids = kept.map((/** @type {any} */ entry) => String(entry.itemId));
     const muted = await this.subscriptions.mutedPublicIds(user.id, ids);
     const items = await hydrate(user, ids);
     return {
       state: "available",
-      basis: forYou?.basis === "vector" ? "vector" : "tags",
+      basis: forYou?.basis === "vector" ? "vector" : forYou?.basis === "tags" ? "tags" : null,
+      policy,
+      onboarding,
       items: kept.flatMap((/** @type {any} */ entry) => {
         const item = items.get(String(entry.itemId));
         if (!item || item.state?.hidden || muted.has(String(entry.itemId))) return [];
-        const source = frontierPhraseSource(entry);
+        const source = frontierReasonSource(entry);
         // `topic` is the phrase alone — what 「与我相关」 groups by and heads a
         // group with (plan 2026-09-23 §6.2), without the 「因为你在做」 before it.
         return [{ item, reason: { text: frontierReasonText({ text: String(entry.text), kind: entry.kind }), topic: String(entry.text),
-          memoryId: source === "memory" ? String(entry.memoryId) : null, source } }];
+          memoryId: source === "memory" ? String(entry.memoryId) : null, source },
+        slot: typeof entry.slot === "string" ? entry.slot : "personal", score: Number.isFinite(entry.score) ? entry.score : null,
+        propensity: Number.isFinite(entry.propensity) ? entry.propensity : null }];
       }).slice(0, FRONTIER_FOR_YOU_SIZE),
     };
+  }
+
+  /**
+   * 与我相关's onboarding answer (`GET /api/frontier/prefs`): the role, the specialties, the interests — with the tags among them
+   * named as the tree names them now — and when it was finished or skipped.
+   * @param {string} userId
+   */
+  async prefs(userId) {
+    await this.ready();
+    const prefs = await this.#prefsRow(userId);
+    /** @type {Array<{ slug: string, name: string }>} */
+    const interestTags = [];
+    for (const key of prefs.interests) {
+      if (isEntityKey(key) || !this.tags) continue;
+      const found = await this.tags.filter(key).catch(() => null);
+      if (found) interestTags.push({ slug: String(found.tag.slug), name: String(found.tag.name) });
+    }
+    return { ...prefs, interestTags };
+  }
+
+  /**
+   * Save the onboarding answer (`PUT /api/frontier/prefs`): `role` (a `FRONTIER_READER_ROLES` word or null), `specialties`
+   * (at most three; finishing needs one), `interests` (at most ten tag slugs of the tree or entity keys; a tag is kept by the
+   * address that stands for it now), `done` (finished) or `skipped` (skipped) — each time kept as the first, so an answer
+   * changed later is not a second onboarding. A field not sent is left as it is. The cached ranking is dropped, so the next
+   * read ranks with the answer.
+   * @param {string} userId @param {Record<string, unknown>} body
+   */
+  async savePrefs(userId, body) {
+    const invalid = (/** @type {string} */ message) => new HttpError(400, "frontier_prefs_invalid", message);
+    await this.ready();
+    const current = await this.#prefsRow(userId);
+    /** @type {Record<string, unknown>} */
+    const set = {};
+    if (body.role !== undefined) {
+      if (body.role !== null && (typeof body.role !== "string" || !FRONTIER_READER_ROLES.includes(body.role))) throw invalid("The role is not one of the roles.");
+      set.role = body.role;
+    }
+    if (body.specialties !== undefined) {
+      if (!Array.isArray(body.specialties) || body.specialties.some((key) => typeof key !== "string")) throw invalid("The specialties must be a list of keys.");
+      const keys = [...new Set(body.specialties.map((key) => frontierSpecialtyKey(String(key))))];
+      if (keys.some((key) => !key) || keys.length > FRONTIER_ONBOARDING_LIMITS.specialtiesMax) throw invalid(`At most ${FRONTIER_ONBOARDING_LIMITS.specialtiesMax} known specialties.`);
+      set.specialties = keys;
+    }
+    if (body.interests !== undefined) {
+      if (!Array.isArray(body.interests) || body.interests.length > FRONTIER_ONBOARDING_LIMITS.interestsMax || body.interests.some((key) => typeof key !== "string" || key.length > 200)) {
+        throw invalid(`At most ${FRONTIER_ONBOARDING_LIMITS.interestsMax} interests.`);
+      }
+      /** @type {string[]} */
+      const keys = [];
+      for (const key of body.interests) {
+        if (isEntityKey(key)) { keys.push(key); continue; }
+        const found = this.tags && /^[a-z0-9][a-z0-9-]{1,79}$/.test(key) ? await this.tags.filter(key) : null;
+        if (!found) throw invalid("An interest is neither a tag nor an entity key.");
+        keys.push(String(found.tag.slug));
+      }
+      set.interests = [...new Set(keys)];
+    }
+    for (const flag of ["done", "skipped"]) if (body[flag] !== undefined && typeof body[flag] !== "boolean") throw invalid(`${flag} must be a boolean.`);
+    if (body.done === true && body.skipped === true) throw invalid("An answer is finished or skipped, not both.");
+    const specialties = /** @type {string[]} */ (set.specialties ?? current.specialties);
+    if (body.done === true && specialties.length < FRONTIER_ONBOARDING_LIMITS.specialtiesMin) throw invalid("Finishing needs at least one specialty.");
+    const at = this.now();
+    await this.database.query(`INSERT INTO evimed_frontier.user_prefs (user_id, role, specialties, interests, onboarded_at, onboarding_skipped_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id) DO UPDATE SET
+        role = CASE WHEN $7 THEN EXCLUDED.role ELSE evimed_frontier.user_prefs.role END,
+        specialties = CASE WHEN $8 THEN EXCLUDED.specialties ELSE evimed_frontier.user_prefs.specialties END,
+        interests = CASE WHEN $9 THEN EXCLUDED.interests ELSE evimed_frontier.user_prefs.interests END,
+        onboarded_at = coalesce(evimed_frontier.user_prefs.onboarded_at, EXCLUDED.onboarded_at),
+        onboarding_skipped_at = coalesce(evimed_frontier.user_prefs.onboarding_skipped_at, EXCLUDED.onboarding_skipped_at)`,
+    [userId, set.role ?? current.role, specialties, set.interests ?? current.interests, body.done === true ? at : null, body.skipped === true ? at : null,
+      "role" in set, "specialties" in set, "interests" in set]);
+    await this.database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [userId]);
+    this.counters.prefsSaved += 1;
+    return this.prefs(userId);
   }
 
   status() {

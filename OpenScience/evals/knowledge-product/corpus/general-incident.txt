@@ -1,0 +1,3 @@
+Benchmark fixture only; not real organizational policy or clinical evidence.
+Topic: incident.
+When must a severity-one incident be escalated? Answer: within 10 minutes.

@@ -19,6 +19,7 @@ import { evolutionRecordedFailures } from './evolutionGrowth.mjs';
  * the audit pool reads tasks and resource assets, and the monthly metrics read the missions' own observation lists (`evolutionMonthlyObservations`).
  * Both aggregates are written under record types of their own, so `service.list('module-observation')` never sees them as observations.
  */
+// `handbook-gap-scan` is no longer produced (the scan went with the handbook arm, 2026-10-25); the events it left are folded as they age like the others.
 export const EVOLUTION_FOLDED_EVENT_TYPES = Object.freeze(['handbook-gap-scan', 'source-facts-scan', 'prospective-target-scan', 'lead-source-scan', 'search-resumed',
   'frontier-publication', 'tool-ready']);
 /** The counts an observation carries, as the SQL below reads them: the failure sum is `evolutionRecordedFailures`'s, written once more for the database. */

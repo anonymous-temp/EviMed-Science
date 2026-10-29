@@ -56,7 +56,10 @@ export const inject = ['slots'];
  * statistics for a researcher). Re-read at 0.2.1-rc.2 (2026-10-17): the same ten
  * suffixes carry the same hashed names in ui-layout, ui-conversation, ui-chat and
  * ui-sidebar-right as at 0.2.0-rc.2, and the frame was walked at both sizes on a live
- * 0.2.1-rc.2 kernel.
+ * 0.2.1-rc.2 kernel. Read for the three rules about the bundles beside the kernel
+ * (2026-10-19, the Mermaid toolbars, the goal bar and the `/` menu's skill rows): the
+ * markup they name is in the pinned bundles, ui-skill (`skill` source, option ids
+ * `dsh-slash-option-skill-<n>`) and ui-input-trigger (`_itemDescription`) of this pin.
  */
 export const GEOMETRY_KERNEL_PIN = '0.2.1-rc.2';
 
@@ -235,6 +238,33 @@ export function shellStylesheet(pin, operator = false) {
     // descendant was already shadowing. The embedded conversation body carries
     // the same attribute with its own narrower formula, and keeps it.
     '[data-conversation-content]:not([class*="_embeddedBody"]){--dsh-chat-content-width:clamp(680px,calc(var(--dsh-conversation-column-width,0px) * .64),920px) !important}',
+
+    // Three surfaces that belong to bundles installed beside the kernel, drawn in this page and not shaped by any slot or
+    // locale key (R19.2, found by the integrated acceptance of 2026-10-17 on a real frame at 390 px). The bundles are pinned
+    // and digest-checked, so what they draw is what these rules were read against; a changed class costs the rule, and the
+    // surface comes back as the bundle drew it.
+    //
+    // The Mermaid cards' toolbars (their own plain class names): a flex row of labels that may break anywhere, so at 390 px
+    // 「代码」, 「图形」, 「全屏」 and 「flowchart」 each read on two lines. A label is one line; the row wraps as a whole when the
+    // frame is too narrow, and below 480 px the buttons give up four pixels of padding a side, which is what lets the four
+    // buttons and the diagram's name stay on one row at 390. The full-screen viewer's bar is the same row.
+    '.dsh-mmd-badge,.dsh-mmd-btn,.dsh-mmd-viewer-title{white-space:nowrap}',
+    '.dsh-mmd-bar,.dsh-mmd-viewer-bar{flex-wrap:wrap;row-gap:4px}',
+    '@media (max-width:480px){.dsh-mmd-bar,.dsh-mmd-viewer-bar,.dsh-mmd-action-slot{gap:4px}.dsh-mmd-bar .dsh-mmd-btn,.dsh-mmd-viewer-bar .dsh-mmd-btn{padding-left:6px;padding-right:6px}.dsh-mmd-viewer-bar .dsh-mmd-btn:last-child{margin-left:auto}}',
+    // LoopX's goal bar sits in the input dock above the composer and is drawn as a tab: no bottom border, square lower corners,
+    // and a negative margin that tucks it three pixels under the card so the card's top edge would serve as its own. The card
+    // paints over it and has rounded corners, so the bar had no lower edge at all (and its buttons touched the card). It is the
+    // dock's one entry that holds a `section[aria-busy]`, found by that structure and by the CSS-module suffix of the dock
+    // (the hash is the bundle's). The strip is given its own border and radius and the dock's own gap separates it from the card.
+    '[data-slot="conversation.input.dock"] > [class$="_dock"]:has(> section[aria-busy]){margin-bottom:0}',
+    '[data-slot="conversation.input.dock"] > [class$="_dock"] > section[aria-busy]{border-bottom:1px solid var(--color-border,var(--dsw-alias-border-l1));border-radius:12px}',
+    // The `/` menu lists every skill with the description of its SKILL.md, which is written for the model, in English, while
+    // the commands above it carry the platform's own Chinese lines. The text is data the host answers (`skills/list`, the
+    // kernel's own `ui-skill` source) and no locale key or slot reaches it, so the skill rows show their name alone; the
+    // Chinese line of each skill is on the 插件与技能 page. Commands and the other sources keep theirs.
+    // The row's name is held to 40% of the row to leave room for the description, so with the description gone it gets the row.
+    '[id^="dsh-slash-option-skill-"] [class$="_itemDescription"]{display:none}',
+    '[id^="dsh-slash-option-skill-"] [class$="_itemName"]{max-width:100%}',
   ].join('\n');
 }
 

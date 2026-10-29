@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { Crosshair, MessageSquare } from "lucide-react";
+import type { EChartsType } from "echarts/core";
 import { MapChart } from "@/components/charts/MapChart";
 import { mapPalette } from "@/components/charts/map/palette";
 import { LoadError } from "@/components/cards/LoadError";
@@ -14,7 +15,7 @@ import { Tag } from "@/components/ui/Tag";
 import { useColorScheme } from "@/lib/colorScheme";
 import { readerPath, type KnowledgeListState } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
-import { getKnowledgeGraph, type KnowledgeGraph } from "@/lib/sourceClient";
+import { getKnowledgeGraph, type KnowledgeGraph, type KnowledgeGraphSource } from "@/lib/sourceClient";
 import {
   evidenceOf, foldId, hueOfTypes, isFold, isThin, linesBetween, listedMarks, modelOf, neighbourhood, overview, searchHits, withoutIndexLines, type GraphMark,
 } from "./knowledgeGraph";
@@ -26,6 +27,24 @@ const CANVAS_HEIGHT = 560;
 const CANVAS_HEIGHT_COMPACT = 440;
 /** How many marks the list under the picture shows before it asks to show more. */
 const LIST_STEP = 60;
+
+/** Render only supplied evidence metadata; an absent passage is not a verified quotation. */
+function evidenceContext(source: KnowledgeGraphSource): string {
+  const locator = source.locator;
+  const position = [
+    locator?.page ? `第 ${locator.page} 页` : "",
+    [locator?.sheet, locator?.cell].filter(Boolean).join(" · "),
+    locator?.start != null && locator.end != null ? `字符 ${locator.start}–${locator.end}` : "",
+  ].filter(Boolean).join(" · ");
+  return [
+    source.title ?? "资料",
+    source.sourceVersion != null ? `第 ${source.sourceVersion} 版` : "版本未知",
+    source.available === false ? "当前不可读取" : "",
+    position || "未提供原文位置",
+    source.quote ? `引文（来源内容）：${source.quote.slice(0, 2000)}` : "未提供引文",
+  ].filter(Boolean).join(" · ");
+}
+
 
 type Loaded = { phase: "loading" } | { phase: "error"; message: string } | { phase: "ready"; graph: KnowledgeGraph };
 
@@ -71,19 +90,24 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
   const compact = useCompactScreen();
   const openConversation = useKnowledgeConversation(projectId);
   const [loaded, setLoaded] = useState<Loaded>({ phase: "loading" });
+  const chart = useRef<EChartsType | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [fullView, setFullView] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [line, setLine] = useState<{ from: string; to: string } | null>(null);
+  const [line, setLine] = useState<{ from: string; to: string; row?: number } | null>(null);
+  useEffect(() => { setLoaded({ phase: "loading" }); }, [projectId, kind]);
   useEffect(() => {
     let active = true;
-    setLoaded((previous) => (previous.phase === "ready" ? previous : { phase: "loading" }));
     getKnowledgeGraph(projectId, kind).then(
       (graph) => { if (active) setLoaded({ phase: "ready", graph }); },
       (failure) => { if (active) setLoaded({ phase: "error", message: `无法画出图谱：${productErrorMessage(failure)}` }); },
     );
     return () => { active = false; };
   }, [projectId, kind, version, attempt]);
-  useEffect(() => { setExpanded(new Set()); setLine(null); }, [kind, projectId]);
+  useEffect(() => { setExpanded(new Set()); setLine(null); setZoom(1); setFullView(false); }, [kind, projectId]);
+  // A row of the relation list is addressed by its index, which a new search or focus gives to another relation.
+  useEffect(() => { setLine((held) => (held?.row === undefined ? held : null)); }, [listState.q, listState.focus]);
 
   const graph = loaded.phase === "ready" ? loaded.graph : null;
   const model = useMemo(() => (graph ? modelOf(graph) : null), [graph]);
@@ -94,14 +118,30 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
   const hits = useMemo(() => (scope ? searchHits(scope.marks, listState.q) : new Set<string>()), [scope, listState.q]);
   const kinds = useMemo(() => new Map((model?.marks ?? []).map((mark) => [mark.type, mark.typeLabel])), [model]);
   const thin = scope ? isThin(scope) : false;
-  const rows = useMemo(() => (scope ? listedMarks(scope.marks, hits) : []), [scope, hits]);
+  const rows = useMemo(() => (scope ? listedMarks(scope.marks, hits, Boolean(listState.q.trim())) : []), [scope, hits, listState.q]);
   const { visible, remaining, more } = useShowMore(rows, { first: LIST_STEP, step: LIST_STEP, resetKey: `${kind}|${projectId}|${listState.q}|${listState.focus ?? ""}` });
+  const accessibleLines = useMemo(() => (scope?.lines ?? []).filter((entry) => !listState.q.trim() || hits.has(entry.from) || hits.has(entry.to)), [scope, listState.q, hits]);
+  const relationships = useShowMore(accessibleLines, { first: 30, step: 30, resetKey: `${kind}|${projectId}|${listState.q}|${listState.focus ?? ""}` });
+
 
   const plan = useMemo(() => (view && !thin ? knowledgeGraphOption({
     kind, marks: view.marks, lines: withoutIndexLines(view.lines, view.marks, focusMark?.id ?? null), folded: view.folded, hits, focus: focusMark?.id ?? null, hues: hueOfTypes(model?.marks ?? view.marks),
     // The palette is read from the live document, so a theme flip is a reason to build the option again.
     palette: mapPalette(), scheme, compact,
   }) : null), [view, thin, kind, hits, focusMark, scheme, compact, model]);
+
+  const chartOption = useMemo(() => {
+    if (!plan) return null;
+    const option = plan.option as { series?: Array<Record<string, unknown>> };
+    return { ...option, series: option.series?.map((series) => ({ ...series, zoom })) };
+  }, [plan, zoom]);
+  const exportView = () => {
+    if (!chart.current) return;
+    const link = document.createElement("a");
+    link.href = chart.current.getDataURL({ type: "png", pixelRatio: 2 });
+    link.download = `${kind === "kg" ? "entities" : "knowledge-pages"}-${projectId.replace(/[^A-Za-z0-9_-]/g, "_")}.png`;
+    link.click();
+  };
 
   const open = useCallback((mark: GraphMark) => { if (mark.sourceId) navigate(readerPath(mark.sourceId, listState)); }, [navigate, listState]);
   const marksById = useMemo(() => new Map((model?.marks ?? []).map((mark) => [mark.id, mark])), [model]);
@@ -142,7 +182,7 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
     : `${scope.marks.length} 个${noun}，${scope.lines.length} 条${connection}`;
   const focusBar = focusMark && (
     <span role="group" aria-label="聚焦" className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-ui text-text-2">
-      <span className="min-w-0 max-w-48 truncate">聚焦：<strong className="font-medium text-text">{focusMark.title}</strong></span>
+      <span className="min-w-0 max-w-48 truncate">聚焦：<strong className="font-semibold text-text">{focusMark.title}</strong></span>
       <label className="flex items-center gap-2 text-caption text-text-3">
         范围
         <input type="range" min={1} max={3} step={1} value={depth} aria-label="聚焦范围，几步以内" className="w-24 accent-accent"
@@ -152,29 +192,11 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
       <Button size="sm" variant="text" onClick={() => { onChange({ focus: null, depth: null }); setLine(null); }}>取消聚焦</Button>
     </span>
   );
-  return (
-    <div className="space-y-4" data-knowledge-graph={kind}>
-      {!thin && (
-        <ChartCard
-          level={2} title={title} meta={focusBar || undefined}
-          legend={<Legend kind={kind} hues={hues} kinds={kinds} anyStale={view.marks.some((mark) => mark.stale.length > 0)} />}
-          footnote={quiet > 0 ? `有 ${quiet} 处连线没能画出来，不影响其余的内容。` : undefined}
-        >
-          <div className="space-y-3">
-            <MapChart kind={`knowledge-${kind}`} option={plan?.option ?? null} height={compact ? CANVAS_HEIGHT_COMPACT : CANVAS_HEIGHT} on={on}
-              label={`${kind === "kg" ? "实体和关系" : "页面和链接"}的关系图，共 ${view.marks.length} 个标记，列表在下方。`}
-              unpainted={`${view.marks.length} 个标记、${view.lines.length} 条连线。`} />
-            {view.folded.length > 0 && (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
-                <span>另有 {view.folded.reduce((sum, fold) => sum + fold.count, 0)} 个标记折叠在各自的类里：</span>
-                {view.folded.map((fold) => (
-                  <button key={fold.type} type="button" className="text-link underline underline-offset-2" data-fold={foldId(fold.type)}
-                    onClick={() => setExpanded((held) => new Set([...held, fold.type]))}>展开 {fold.count} 个{fold.label}</button>
-                ))}
-              </div>
-            )}
-            {line && pair.length > 0 && (
-              <section aria-label="连线的依据" data-knowledge-line="" className="space-y-2 rounded-card border border-border px-3 py-2 text-ui">
+  // What a selected line rests on: under the relation row that opened it (an opened row, where the reader is looking —
+  // the release walk found a click on a row of 「可选择的关系」 showing nothing on screen when this rendered after the whole
+  // list, 2026-10-24), or below the list for a line picked on the chart.
+  const lineEvidence = line && pair.length > 0 ? (
+<section aria-label="连线的依据" data-knowledge-line="" className="space-y-2 rounded-card border border-border px-3 py-2 text-ui">
                 <div className="flex items-start justify-between gap-3">
                   <p className="min-w-0 text-text">
                     {lineMarks[0]?.title} <span className="text-text-3">与</span> {lineMarks[1]?.title}
@@ -190,21 +212,73 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
                     </li>
                   ))}
                 </ul>
+                <Button size="sm" variant="secondary" onClick={() => openConversation(
+                  `请结合以下关系及其来源继续分析：${pair.map((entry) => `${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`).join("；")}\n\n依据的资料：\n${pair.flatMap((entry) => entry.evidence).map(evidenceContext).join("\n") || "未提供来源资料、原文位置或引文"}`,
+                  documents.filter((entry) => entry.available !== false && /^src_[a-f0-9]{32}$/.test(entry.sourceId)).map((entry) => ({ id: entry.sourceId, title: entry.title ?? "资料" })),
+                )}>在对话中使用这条关系</Button>
                 {documents.length > 0 && (
                   <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
                     依据的资料：
                     {documents.map((entry) => (
-                      <Link key={entry.sourceId} to={readerPath(entry.sourceId, listState)} className="text-link underline underline-offset-2">{entry.title ?? "资料"}</Link>
+                      <span key={entry.sourceId}>{entry.available === false ? <span>{entry.title ?? "资料"}（当前不可读取）</span> : <Link to={readerPath(entry.sourceId, listState)} className="text-link underline underline-offset-2">{entry.title ?? "资料"}</Link>}{entry.sourceVersion != null && ` · 第 ${entry.sourceVersion} 版`}</span>
                     ))}
                   </p>
                 )}
               </section>
+  ) : null;
+  return (
+    <div className="space-y-4" data-knowledge-graph={kind}>
+      {!thin && (
+        <ChartCard
+          level={2} title={title} meta={<div className="flex flex-wrap items-center gap-2">
+            {focusBar}
+            <span role="group" aria-label="图谱视图" className="flex flex-wrap items-center gap-1">
+              <Button size="sm" variant="text" aria-label="缩小图谱" disabled={zoom <= 0.4} onClick={() => setZoom((value) => Math.max(0.4, value / 1.25))}>−</Button>
+              <Button size="sm" variant="text" aria-label="放大图谱" disabled={zoom >= 8} onClick={() => setZoom((value) => Math.min(8, value * 1.25))}>＋</Button>
+              <Button size="sm" variant="text" onClick={() => { setZoom(1); setExpanded(new Set()); setLine(null); onChange({ focus: null, depth: null }); }}>回到全图</Button>
+              <Button size="sm" variant="text" onClick={() => setFullView((value) => !value)}>{fullView ? "收起视图" : "完整视图"}</Button>
+              <Button size="sm" variant="text" onClick={exportView}>导出图片</Button>
+            </span>
+          </div>}
+          legend={<Legend kind={kind} hues={hues} kinds={kinds} anyStale={view.marks.some((mark) => mark.stale.length > 0)} />}
+          footnote={quiet > 0 ? `有 ${quiet} 处连线没能画出来，不影响其余的内容。` : undefined}
+        >
+          <div className="space-y-3">
+            <MapChart kind={`knowledge-${kind}`} option={chartOption} chart={chart} height={fullView ? 800 : compact ? CANVAS_HEIGHT_COMPACT : CANVAS_HEIGHT} on={on}
+              label={`${kind === "kg" ? "实体和关系" : "页面和链接"}的关系图，共 ${view.marks.length} 个标记，列表在下方。`}
+              unpainted={`${view.marks.length} 个标记、${view.lines.length} 条连线。`} />
+            {view.folded.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
+                <span>另有 {view.folded.reduce((sum, fold) => sum + fold.count, 0)} 个标记折叠在各自的类里：</span>
+                {view.folded.map((fold) => (
+                  <button key={fold.type} type="button" className="text-link underline underline-offset-2" data-fold={foldId(fold.type)}
+                    onClick={() => setExpanded((held) => new Set([...held, fold.type]))}>展开 {fold.count} 个{fold.label}</button>
+                ))}
+              </div>
             )}
+
           </div>
         </ChartCard>
       )}
+      {relationships.visible.length > 0 && <div className="space-y-2">
+        <List label="可选择的关系">
+          {relationships.visible.map((entry, index) => {
+            const open = line?.row === index;
+            return (
+              <Fragment key={`${entry.from}:${entry.to}:${index}`}>
+                <ListRow expanded={open} onOpen={() => setLine(open ? null : { from: entry.from, to: entry.to, row: index })}
+                  title={`${marksById.get(entry.from)?.title ?? entry.from} ${entry.label || "相关"} ${marksById.get(entry.to)?.title ?? entry.to}`} />
+                {open && lineEvidence && <li className="px-2 pb-3">{lineEvidence}</li>}
+              </Fragment>
+            );
+          })}
+        </List>
+        <ShowMore remaining={relationships.remaining} unit="条关系" onMore={relationships.more} />
+      </div>}
+      {line && line.row === undefined && lineEvidence}
       <div>
-        <List label={hits.size > 0 ? "搜索命中的标记" : kind === "kg" ? "实体" : "页面"}>
+        {listState.q.trim() && rows.length === 0 && <p role="status" className="text-ui text-text-3">没有找到相关标记</p>}
+        <List label={listState.q.trim() ? "搜索命中的标记" : kind === "kg" ? "实体" : "页面"}>
           {visible.map((mark) => (
             <ListRow
               key={mark.id}

@@ -21,6 +21,12 @@ against the live upstreams (plan 10.1, 10.2.4; ``research/dryrun-report-2026-09-
   be fuzzy-matched); notices are Crossref ``update-to`` relations plus a closed list of notice
   title forms that must be followed by ``:``/``to``/end, so "Correction of Hyponatremia …" (an
   article) is not a notice.
+- **Entities escaped twice inside real markup.** Crossref's JAMA abstracts carry ``&amp;amp;lt;`` inside JATS
+  (``P for trend &amp;amp;lt;.001``): parsing decodes one level and the old single ``html.unescape`` the next, so the
+  reader showed ``P &lt;.001`` (58 abstracts, 2026-10-22). What is left after the tags are stripped is unescaped while an
+  entity is left (at most three rounds); text is never markup by then, so an entity left in it is always a mistake.
+- **Soft hyphens** (U+00AD, Endpoints News writes ``Rez\u00adera``) are removed: a reader shows them as nothing, but
+  search, translation and the number checks see a different word.
 - **Named failures.** A response an adapter cannot use raises ``model.FetchError`` with the fetch
   outcome vocabulary (``http-error``, ``parse-error``) and a snake_case detail, so the scheduler
   records it exactly like a transport failure — never an empty success.
@@ -79,6 +85,8 @@ _ESCAPED_TAG = re.compile(r"&(?:amp;)*lt;/?[A-Za-z!][^<>&]{0,200}&(?:amp;)*gt;")
 _BROKEN_TAG = re.compile(r"</?[A-Za-z][\w:-]{0,30}(?:\s+[\w:-]+=\"[^\"<>]*\")*\s*<"
                          r"|^\s*(?:</?[A-Za-z][\w:-]{0,30}\s*)+(?=\S)")
 _TAGGY = re.compile(r"<[A-Za-z!/][^>]*>")
+_ENTITY = re.compile(r"&(?:[A-Za-z][A-Za-z0-9]{1,30}|#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6});")
+_INVISIBLE = re.compile("\u00ad")       # the zero-width characters are normalize.clean_text's
 _DROP_TAGS = ("script", "style", "noscript", "template", "svg", "iframe")
 _BLOCK_TAGS = ("p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "section", "article",
                "blockquote", "table", "ul", "ol", "dd", "dt", "header", "footer")
@@ -114,8 +122,11 @@ def clean_markup(value: Any, *, keep_paragraphs: bool = False) -> str:
                 node.insert_before("\n")
         root = tree.body or tree.root
         text = root.text(separator=" " if not keep_paragraphs else "", strip=False) if root else ""
-        text = html.unescape(text)  # entities selectolax leaves (e.g. inside CDATA-ish text)
-    text = unicodedata.normalize("NFC", text)
+        for _ in range(3):  # entities selectolax leaves, and those escaped once more inside the markup
+            if not _ENTITY.search(text):
+                break
+            text = html.unescape(text)
+    text = _INVISIBLE.sub("", unicodedata.normalize("NFC", text))
     if "<" in text:
         text = _BROKEN_TAG.sub(" ", text)
     if keep_paragraphs:
@@ -123,6 +134,48 @@ def clean_markup(value: Any, *, keep_paragraphs: bool = False) -> str:
         text = "\n".join(line for line in lines if line)
         return _MANY_NEWLINES.sub("\n", text).strip()
     return _WS.sub(" ", text.replace("\n", " ")).strip()
+
+
+_HEADING_END = re.compile(r"</(?:jats:title|title|h[1-6])\s*>", re.I)
+_HEADING_MARK = "\u2063"   # invisible separator: where a heading ended, until its line is joined to the next
+_ABSTRACT_HEADINGS = frozenset({"abstract", "摘要", "summary"})
+# A run-in heading: a short bold run that opens a paragraph ("<p><strong>Background</strong>This trial…" — Frontiers'
+# citation_abstract; "<jats:p><jats:bold>Objective:</jats:bold> To assess…"), read as the paragraph's heading.
+_RUN_IN = re.compile(r"(<(?:jats:)?p\b[^>]*>)\s*<((?:jats:)?(?:bold|strong|b))\b[^>]*>([^<]{1,40}?)</\2\s*>", re.I)
+
+
+def structured_abstract(value: Any) -> str:
+    """An abstract's text with each section a paragraph of its own, ``Heading: text`` (JATS ``<sec><title>``, Europe
+    PMC's ``<h4>``), one paragraph a line; a lone "Abstract" heading is dropped. Markup without headings reads as
+    ``clean_markup(value, keep_paragraphs=True)``."""
+    if value is None:
+        return ""
+    # The mark, and a break after the heading: Europe PMC writes ``<h4>Background</h4>Text…``, read as "BackgroundText".
+    value = _RUN_IN.sub(lambda match: f"{match.group(1)}<h4>{match.group(3).strip()}</h4>", str(value))
+    marked = _HEADING_END.sub(lambda match: _HEADING_MARK + match.group(0) + "<br>", value)
+    lines = clean_markup(marked, keep_paragraphs=True).split("\n")
+    out: list[str] = []
+    heading = ""
+    for line in lines:
+        if line.endswith(_HEADING_MARK):
+            name = line.rstrip(_HEADING_MARK).strip()
+            if name.lower() in _ABSTRACT_HEADINGS:
+                continue
+            if heading:
+                out.append(heading)
+            heading = name
+            continue
+        line = line.replace(_HEADING_MARK, "").strip()
+        if not line:
+            continue
+        if heading:
+            out.append(f"{heading}{'' if heading.endswith((':', '：')) else ':'} {line}")
+            heading = ""
+        else:
+            out.append(line)
+    if heading:
+        out.append(heading)
+    return "\n".join(out)
 
 
 def clip_title(title: str) -> str:
@@ -141,10 +194,13 @@ TRUNCATION_MARKS = ("…", "...", "[...]", "[…]", "(...)", "read more", "conti
 
 
 def looks_truncated(summary: str) -> bool:
+    """Whether a text ends the way a cut one does. A mark is matched as written, and without the punctuation that may
+    follow it ("Read more »"); "..." itself has nothing left once stripped, and until 2026-10-22 that dropped it from the
+    test altogether, so NEJM's ``dc.Description`` cut at 200 characters ("…two patients in the mava...") read as uncut."""
     low = summary.strip().lower()
     stripped = low.rstrip(" .»›>)]").strip()
-    return any(low.endswith(mark) or stripped.endswith(mark.rstrip(" .»›>)]")) for mark in TRUNCATION_MARKS
-               if mark.rstrip(" .»›>)]"))
+    return any(low.endswith(mark) or (bare and stripped.endswith(bare))
+               for mark, bare in ((mark, mark.rstrip(" .»›>)]")) for mark in TRUNCATION_MARKS))
 
 
 def summary_and_defects(summary: str | None, *, feed: bool = False) -> tuple[str | None, list[str]]:

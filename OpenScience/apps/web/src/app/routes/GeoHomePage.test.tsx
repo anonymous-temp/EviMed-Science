@@ -24,7 +24,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   patchGeoProject: client.patchGeoProject,
 }));
 
-// Opening a GEO conversation switches the shell's project; that has its own
+// Opening a GEO conversation resolves the exact module scope; that has its own
 // test (useOpenGeoConversation.test.tsx). Here it is the call it makes.
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => client.open }));
 
@@ -72,6 +72,17 @@ describe("循证 GEO home", () => {
     const xinli = rows[2];
     expect(xinli).toHaveTextContent("只做了信源分析");
     expect(within(xinli).getAllByText("—")).toHaveLength(2);
+  });
+
+  it("says a single step that ended without finishing as not finished, never as under way", async () => {
+    client.listGeoProjects.mockResolvedValue([
+      { ...GEO_SUMMARIES[2], steps: { evidence: { status: "done", requested: true }, diagnosis: { status: "failed", requested: true } } },
+    ]);
+    renderHome();
+    const list = await screen.findByRole("list", { name: "循证 GEO 项目" });
+    const subline = within(list).getAllByRole("listitem")[0].querySelector("[data-geo-subline]");
+    expect(subline).toHaveTextContent("诊断没有做完");
+    expect(subline).not.toHaveTextContent("正在做");
   });
 
   it("says the severe errors in its own words beside their badge — never an engine's sentence", async () => {
@@ -171,7 +182,7 @@ describe("循证 GEO home", () => {
     renderHome();
     await screen.findByRole("list", { name: "循证 GEO 项目" });
     await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-new", sessionId: "ses_new" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_new", projectId: "p-new", sessionId: "ses_new" }));
     expect(client.createGeoProject).toHaveBeenCalledWith({});
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
@@ -195,7 +206,7 @@ describe("循证 GEO home", () => {
     renderHome();
     await screen.findByText("还没有循证 GEO 项目");
     await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-new", sessionId: "ses_new" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_new", projectId: "p-new", sessionId: "ses_new" }));
     expect(client.createGeoProject).toHaveBeenCalledWith({});
   });
 

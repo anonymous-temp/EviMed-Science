@@ -1,20 +1,68 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { ChevronRight, Flame } from "lucide-react";
+import { Flame } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { FRONTIER_HOT_WINDOWS, type FrontierHotBoard, type FrontierHotEvent, type FrontierHotWindow } from "@/lib/frontierClient";
+import { FRONTIER_HOT_WINDOWS, fetchFrontierTopics, type FrontierHotBoard, type FrontierHotEvent, type FrontierHotWindow, type FrontierTopicSummary } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Section } from "@/components/ui/Section";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { Sparkline } from "./Sparkline";
-import { INLINE_ACTION, hotBoardStamp, hotRowMeta, rankChangeLabel, rankLabel, rankTone } from "./frontierText";
+import { INLINE_ACTION, ago, hotBoardStamp, hotRowMeta, rankChangeLabel, rankLabel, rankTone } from "./frontierText";
 
 const eventPath = (id: string) => `/app/frontier/events/${encodeURIComponent(id)}`;
+/** A hot-event topic's own page (c2-leads 2026-10-25). */
+export const topicPath = (id: string) => `/app/frontier/topics/${encodeURIComponent(id)}`;
+
+/**
+ * The active hot-event topics (contract §T), read once where they are shown: `null` while reading, a server without the route,
+ * or a read that failed — each of which shows nothing, since a section of topics is never a promise the page has to keep.
+ */
+export function useFrontierTopics(): FrontierTopicSummary[] | null {
+  const [topics, setTopics] = useState<FrontierTopicSummary[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetchFrontierTopics("active", 6).then((read) => { if (active) setTopics(read ?? []); }, () => { if (active) setTopics([]); });
+    return () => { active = false; };
+  }, []);
+  return topics;
+}
+
+/**
+ * 热点话题, above 热榜's ranking (c2-leads 2026-10-25): the medical questions today's public events raised, each one row — the
+ * question (the whole line opens the topic), and under it the field, the event in one line, how many reports and studies the
+ * topic holds and when it was found. Nothing active, nothing shown.
+ */
+export function HotTopics({ topics }: { topics: readonly FrontierTopicSummary[] }) {
+  const origin = useFrontierOrigin();
+  if (topics.length === 0) return null;
+  return (
+    <Section title="热点话题" count={topics.length} className="mb-6">
+      <ul aria-label="热点话题">
+        {topics.map((topic) => (
+          <li key={topic.id} className="border-b border-border py-3 first:pt-0">
+            <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(topic.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
+              <span data-prose="" className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{topic.title}</span>
+            </Link>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-3">
+              <Tag>{topic.domainLabel}</Tag>
+              {topic.itemCount > 0 && <span className="tabular-nums">{topic.itemCount} 篇</span>}
+              {topic.itemCount > 0 && topic.acceptedAt && <span aria-hidden="true">·</span>}
+              {topic.acceptedAt && <span>{ago(topic.acceptedAt)}</span>}
+            </div>
+            {topic.peg && <p data-prose="" className="mt-1 truncate text-caption text-text-3">{topic.peg.text}</p>}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
 
 const WINDOW_OPTIONS = FRONTIER_HOT_WINDOWS.map((value) => ({ value, label: value === "current" ? "当前" : value === "week" ? "本周" : "本月" }));
 
@@ -29,27 +77,38 @@ const WINDOW_OPTIONS = FRONTIER_HOT_WINDOWS.map((value) => ({ value, label: valu
  */
 export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEvent[]; onOpenAll: () => void }) {
   const origin = useFrontierOrigin();
-  const top = events.slice(0, 3);
-  if (top.length === 0) return null;
+  // c2-leads 2026-10-25: one active surge topic — a public event high on several boards at once — leads the card.
+  const surge = (useFrontierTopics() ?? []).find((topic) => topic.surge) ?? null;
+  const top = events.slice(0, surge ? 2 : 3);
+  if (top.length === 0 && !surge) return null;
   return (
     <Card
-      className="frontier-hot-card"
       padding="p-3"
       header={(
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-body font-semibold leading-6 text-text">当前热点</h2>
-          <button type="button" aria-label="完整热榜 ›" onClick={onOpenAll} className={cn(INLINE_ACTION, "frontier-hot-action -mr-1 px-1 text-accent")}>完整热榜<ChevronRight size={16} aria-hidden="true" /></button>
+          <button type="button" onClick={onOpenAll} className={cn(INLINE_ACTION, "-mr-1.5 px-1.5 text-accent")}>完整热榜 ›</button>
         </div>
       )}
     >
       <ol aria-label="当前热点" className="px-1">
+        {/* The surge topic's row has no rank: its title starts on the events' edge and its label stands after the link. */}
+        {surge && (
+          <li className="flex min-w-0 items-center gap-3">
+            <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(surge.id)} className="group flex h-control min-w-0 flex-1 items-center gap-3 rounded text-ui">
+              <span aria-hidden="true" className="w-5 shrink-0" />
+              <span data-row-title data-prose="" className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{surge.title}</span>
+            </Link>
+            <Tag tone="accent">话题</Tag>
+          </li>
+        )}
         {top.map((event, index) => {
           const change = rankChangeLabel(event.rankChange);
           return (
-            <li key={event.id} className={index > 0 ? "max-sm:hidden" : undefined}>
-              <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-8 items-center gap-3 rounded text-ui">
-                <span className={cn("w-5 shrink-0 text-right font-semibold tabular-nums", rankTone(event.rank))}>{event.rank}</span>
-                <span data-row-title className="min-w-0 flex-1 truncate font-medium text-text group-hover:text-accent">{event.title}</span>
+            <li key={event.id} className={index > 0 || surge ? "max-sm:hidden" : undefined}>
+              <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
+                <span className={cn("w-5 shrink-0 text-right tabular-nums", rankTone(event.rank))}>{event.rank}</span>
+                <span data-row-title data-prose="" className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{event.title}</span>
                 {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
                 {change && <span className="shrink-0 text-caption text-text-2">{change}</span>}
               </Link>
@@ -99,6 +158,9 @@ export function HotBoard({ state, onRetry }: {
   onRetry: () => void;
 }) {
   const board = state?.board ?? null;
+  // 热点话题 sit above the ranking on the current list only: a week's or a month's ranking is a look back.
+  const topics = useFrontierTopics();
+  const current = !board || board.window === "current";
   const body = !state ? <FrontierSkeleton />
     : state.error && !board ? <LoadError message={state.error} onRetry={onRetry} />
       : !board ? <EmptyState icon={Flame} title="热榜还在准备" reason="准备好后会出现在这里。" />
@@ -108,7 +170,7 @@ export function HotBoard({ state, onRetry }: {
               {board.events.map((event) => <HotRow key={event.id} event={event} />)}
             </ol>
           );
-  return <div>{body}</div>;
+  return <div>{current && topics && <HotTopics topics={topics} />}{body}</div>;
 }
 
 /**
@@ -124,16 +186,15 @@ export function HotBoard({ state, onRetry }: {
 function HotRow({ event }: { event: FrontierHotEvent }) {
   const origin = useFrontierOrigin();
   return (
-    <li className="frontier-hot-row flex gap-3 rounded-card border-b border-border px-3 py-4 transition-all duration-normal">
+    <li className="flex gap-3 border-b border-border py-4">
       <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
         {/* The badge stands beside the link, not in it: a tag is a label and is never part of a control (DESIGN.md rule 7). After it, not
             before: a badge in front moved the title of the rows that have one off the left edge of the titles of those that do not. */}
         <div className="flex min-h-control min-w-0 items-center gap-1.5">
           <Tooltip content={event.title} kind="label" whenTruncated>
-            <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-control min-w-0 items-center gap-1 rounded text-ui">
+            <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
               <span className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
-              <ChevronRight size={16} className="frontier-hot-chevron shrink-0 text-text-3" aria-hidden="true" />
             </Link>
           </Tooltip>
           {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
@@ -142,8 +203,10 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
       </div>
       {event.heat !== null && (
         <div className="w-16 shrink-0 sm:w-28">
-          <p className="flex h-control items-center justify-end gap-0.5">
+          {/* 「405 热度」: the number with its unit, a typed space between them. */}
+          <p className="flex h-control items-baseline justify-end gap-1">
             <span className="text-title font-semibold tabular-nums text-text">{event.heat}</span>
+            <span className="sr-only"> </span>
             <span className="text-caption text-text-3">热度</span>
           </p>
           <div className="flex h-7 justify-end max-sm:hidden"><Sparkline points={event.trend} /></div>

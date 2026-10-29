@@ -29,7 +29,12 @@ LISTS = {  # case -> entries on the recorded page
     "zhongguokexuebao": 30,
     "chinacdc-notifiable-disease": 12,
     "china-cdc-news": 12,
+    # ct-src 2026-10-24: two policy lists read with their siblings' configuration (same site templates)
+    "natcm-policy-interpretation": 22,
+    "ndcpa-regulations": 30,
 }
+DROPPED = {"csco-news": ["html_list_dropped_host=4"],
+           "natcm-policy-interpretation": ["html_list_dropped_host=3"]}   # three NHC interpretations, read by NHC rows
 _TRAILING_DATE = re.compile(r"20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?\s*$")
 
 
@@ -43,7 +48,7 @@ def test_batch2_lists_parse(name):
     case, output = parsed(name)
     assert validate_config(case.source) == []
     assert len(output.entries) == LISTS[name]
-    assert output.notes == (["html_list_dropped_host=4"] if name == "csco-news" else [])
+    assert output.notes == DROPPED.get(name, [])
     hosts = set(case.source.config.get("link_hosts") or case.source.config["allowed_hosts"])
     for entry in output.entries:
         assert urlsplit(entry.url).hostname in hosts

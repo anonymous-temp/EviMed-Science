@@ -1,3 +1,4 @@
+import { VcrReferenceWorkspace } from "../VcrReferenceSearch";
 import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -129,7 +130,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   const headline: NotePart[] = [
     ...(cards ? [{ n: numberText(data.assumptions.length, 0), onOpen: scrollTo(CARDS), label: "看假设卡" }, " 张假设卡"] : []),
     ...(cards && data.precedents.length > 0 ? [" · "] : []),
-    ...(data.precedents.length > 0 ? [{ n: numberText(data.precedents.length, 0), onOpen: scrollTo(PRECEDENTS), label: "看试验先例" }, " 项试验先例"] : []),
+    ...(data.precedents.length > 0 ? [{ n: numberText(data.precedents.length, 0), onOpen: scrollTo(PRECEDENTS), label: "看参考试验" }, " 项参考试验"] : []),
   ];
 
   // The intake is not here: it is one entry of the header's 「⋯」 on every tier (`VcrIntakeDrawer`), where the study's data came from.
@@ -138,6 +139,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       <div className="flex flex-col gap-6">
         {defined ? <DefinitionCard study={study} /> : null}
         {defined ? pack : null}
+        <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
         <VcrRegistryCoverage sources={data.registryCoverage} />
         {defined ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
       </div>
@@ -169,6 +171,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       {headline.length > 0 && <Headline parts={headline} />}
       <DefinitionCard study={study} />
       {pack}
+      <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
 
       {cards && (
         <MasterDetail
@@ -195,7 +198,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
                       selected={selected?.id === assumption.id}
                       titleProps={{ "data-vcr-assumption": assumption.id }}
                       trailing={(
-                        <span className="text-ui font-medium tabular-nums text-text">
+                        <span className="text-ui tabular-nums text-text">
                           {valueText(assumption.value)}
                           {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
                         </span>
@@ -226,7 +229,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
 
       {data.precedents.length > 0 && (
         <div data-vcr-precedents="">
-          <Section title="试验先例" count={data.precedents.length}>
+          <Section title="参考试验" count={data.precedents.length}>
             <VcrPrecedentTable rows={data.precedents} withUse />
             <VcrRegistryCoverage sources={data.registryCoverage} />
           </Section>
@@ -270,15 +273,15 @@ const CANDIDATE_EVENT_LABELS: Readonly<Record<VcrPrecedentCandidate["event"], st
 });
 
 /**
- * 待核对的先例: trial events the frontier feed reported for what the study is about. Each is marked 待核对 — a candidate is a pointer,
+ * 待核对的参考试验: trial events the frontier feed reported for what the study is about. Each is marked 待核对 — a candidate is a pointer,
  * and a precedent is a registry record the evidence step fetched and checked against its own text — so the mark is in the row and
  * no sentence has to say it.
  */
 function PrecedentCandidates({ rows }: { rows: readonly VcrPrecedentCandidate[] }) {
   return (
-    <Section title="待核对的先例" count={`${rows.length} 项`}>
+    <Section title="待核对的参考试验" count={`${rows.length} 项`}>
       <DataTable
-        label="待核对的先例"
+        label="待核对的参考试验"
         minWidth="min-w-0"
         columns={[
           { key: "state", header: "状态", width: "w-24", cell: () => <Tag>待核对</Tag> },
@@ -350,7 +353,9 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
 
       <div>
         <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} /></span>
+          {/* An assumption's value is a parameter of the study, not a dashboard figure: set at the section rung beside the card's name,
+              so the data tab keeps to a data page's five pairs (owner, 2026-10-19). */}
+          <span className="text-section font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} large /></span>
           {assumption.value.interval && (
             <span className="text-ui tabular-nums text-text-2">{intervalText(assumption.value.interval, assumption.value.precision)}</span>
           )}
@@ -435,7 +440,7 @@ const NEWS_CAUSE_LABELS: Readonly<Record<NonNullable<VcrAssumption["newEvidence"
 function NewEvidence({ news }: { news: NonNullable<VcrAssumption["newEvidence"]> }) {
   return (
     <div data-vcr-new-evidence="" role="status" className="mt-4 rounded-card border border-border bg-surface-1 p-3">
-      <p className="text-ui font-medium text-text">{news.label}</p>
+      <p className="text-ui font-semibold text-text">{news.label}</p>
       {news.open.length > 0 && (
         <ul className="mt-1.5 flex flex-col gap-1">
           {news.open.map((entry) => (

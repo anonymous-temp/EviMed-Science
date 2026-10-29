@@ -146,3 +146,7 @@ describe("withoutIndexLines", () => {
     expect(withoutIndexLines(kg.lines, kg.marks, null)).toHaveLength(kg.lines.length);
   });
 });
+
+it("distinguishes an active search with zero hits from no search", () => {
+  expect(listedMarks([{ id: "unmatched" } as never], new Set(), true)).toEqual([]);
+});

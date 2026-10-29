@@ -3,8 +3,11 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { LIBRARY_ITEM_STATUSES } from "@evimed/domain";
+import { createRebuildIndex } from "../../../scripts/ops/rebuild-kb-index.mjs";
+import { KB_INDEX_METHOD, tsvectorLiteral } from "../src/kbChunker.mjs";
 import { userLibraryDir } from "../src/libraryService.mjs";
 import { databaseUrl, ingestCorpus, signedIn, titleOf } from "./helpers/knowledgeBaseApp.mjs";
+import { makePack } from "./helpers/capsuleFixtures.mjs";
 
 const GUIDELINE = "房颤抗凝指南.pdf";
 const skip = !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured";
@@ -137,6 +140,16 @@ test("one document added from two projects is one entry, read from a third, and 
     assert.equal(await indexDocuments(app, user.id, sha256), 1, "the library holds its index document");
     await app.kbIndex.rebuild({ userIds: [user.id] });
     assert.equal(await indexDocuments(app, user.id, sha256), 1, "a rebuild cannot re-derive it, so it keeps it");
+    // Both application and operator rebuild retain and sanitize a detached legacy index
+    // locally; the copy's metadata header is not a new captured-content input.
+    await app.store.database.query("UPDATE evimed_kb.documents SET index_method=NULL,embedding_input_sha256=NULL,title='privatecanary' WHERE user_id=$1 AND sha256=$2", [user.id,sha256]);
+    await app.store.database.query("UPDATE evimed_kb.chunks SET context_prefix='privatecanary',heading_path='privatecanary',lexemes=(lexemes || $3::tsvector) WHERE user_id=$1 AND sha256=$2", [user.id,sha256,tsvectorLiteral("privatecanary")]);
+    const cli = await createRebuildIndex({ database:app.store.database,config:{ dataDir,libraryMaxItems:1000,kbEmbeddingDimension:1024 },embedder:{ configured:false,counters:{} } });
+    cli.sources.loadCapture = async () => { throw new Error("detached repair must not parse a new capture"); };
+    const cliResult = await cli.rebuild({ userIds:[user.id] });
+    assert.equal(cliResult.repaired,1); assert.equal(cliResult.unproven,0); assert.equal(cliResult.failed,0);
+    assert.equal((await app.store.database.query("SELECT index_method FROM evimed_kb.documents WHERE user_id=$1 AND sha256=$2",[user.id,sha256])).rows[0].index_method,KB_INDEX_METHOD);
+    assert.equal(await indexDocuments(app,user.id,sha256),1);
     const detached = await app.kbIndex.search({ userId: user.id, projectId: reader.id, query: "达比加群", limit: 3 });
     assert.equal(detached.hits[0]?.sourceId, inA.id);
     await access(path.join(libraryDir, inA.id, "index.md"));
@@ -169,8 +182,8 @@ test("understanding a document writes its summary and key claims into the resear
     await assert.rejects(publish(), (error) => error?.code === "library_understanding_missing");
 
     // A reference capsule already active for the account stays active beside the one made.
-    const reference = await app.capsuleService.create(user.id, { title: "同事的胶囊" });
-    await app.capsuleService.activate(user.id, reference.id, { mode: "guest" });
+    const reference = await makePack(app.capsuleService, user.id, { title: "同事的胶囊" });
+    await app.capsuleService.activate(user.id, reference.id);
     await giveUnderstanding(app, user, source, { statement: "利伐沙班推荐 20 mg 每日一次，随餐服用", quote: "推荐剂量为20 mg，每日一次，随餐服用" });
     // This is what the source worker calls when an understanding is published:
     // no route, no button, and the researcher is not asked.
@@ -180,7 +193,7 @@ test("understanding a document writes its summary and key claims into the resear
     assert.deepEqual({ facts: result.facts, methods: result.methods, added: result.added, kept: result.kept, retired: result.retired },
       { facts: 2, methods: 0, added: 2, kept: 0, retired: 0 });
     assert.equal(result.capsuleTitle, "我的记忆胶囊");
-    const active = await app.capsuleService.active(user.id, null);
+    const active = await app.capsuleService.active(user.id);
     assert.deepEqual(active.items.map((item) => [item.capsuleId, item.mode]).sort(),
       [[result.capsuleId, "own"], [reference.id, "guest"]].sort());
 

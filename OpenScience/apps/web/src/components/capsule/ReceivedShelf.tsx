@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { declineDelivery, importDelivery, listPendingDeliveries, openDelivery, type PendingDelivery } from "@/lib/capsuleShareClient";
-import { CAPSULE_ENTRY_TYPES, fromSender } from "@/lib/capsuleText";
+import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
+import { CAPSULE_ENTRY_TYPES, fromSender, providedBy } from "@/lib/capsuleText";
 import {
   announceMemoryChanged, disableCapsule, enableReceivedCapsule, fetchReceivedCapsules, startCapsuleTrial, type ReceivedCapsule,
 } from "@/lib/memoryClient";
 import { formatDay } from "@/lib/format";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
-import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
@@ -102,11 +102,16 @@ function PendingDeliveries() {
   );
 }
 
-/** The shelf: what is waiting to be taken in, then what was taken in. Each says nothing while it has nothing to say. */
+/**
+ * The shelf: what is waiting to be taken in, then what was taken in. Each says nothing while it has nothing to say. What is waiting is a
+ * delivery between accounts, which only a deployment with sharing on has: asked of one that has not, the server answers 404 by name and
+ * the shelf showed a red error for a thing that does not exist, for good (2026-10-23), so there it is not asked.
+ */
 export function ReceivedShelf() {
+  const sharing = useCapsuleShareFeature() === "on";
   return (
     <>
-      <PendingDeliveries />
+      {sharing && <PendingDeliveries />}
       <ReceivedPacks />
     </>
   );
@@ -115,11 +120,11 @@ export function ReceivedShelf() {
 /**
  * 「收到的胶囊」, inside 分享与导入: what other people shared, trusted as a
  * whole pack — no entry to approve one by one. A row is the pack, what it
- * brings, and a switch that puts it in force account-wide as a reference
- * (methods and standards, never an identity); 「试用一次」 — a conversation of
- * its own that writes nothing into memory — and 「只在…启用」, in force in the
- * project the shell is in and nowhere else (build spec §9.4 #6), are in its
- * 「⋯」. The switch reads "in force here": account-wide, or in this project.
+ * brings, and a switch that puts it in force for the account as a reference
+ * (methods and standards, never an identity), in every project; 「试用一次」 — a
+ * conversation of its own that writes nothing into memory — is in its 「⋯」. A
+ * pack is never enabled for one project alone: a person has one capsule
+ * (2026-10-24).
  *
  * Said only what the pack is and who sent it (owner ruling 2026-10-10). When it
  * was received, whether a signature checked out, how far the scan got and what
@@ -130,7 +135,6 @@ function ReceivedPacks() {
   const navigate = useNavigate();
   const { data, failed, reload } = useCapsuleData(fetchReceivedCapsules);
   const [busy, setBusy] = useState<string | null>(null);
-  const project = useProjectStore((state) => state.projects.find((item) => item.id === state.currentId) ?? null);
 
   const act = async (key: string, operation: () => Promise<void>) => {
     setBusy(key);
@@ -150,12 +154,6 @@ function ReceivedPacks() {
       action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
     });
   });
-  const enableHere = (pack: ReceivedCapsule, target: { id: string; name: string }) => act(`enable:${pack.id}`, async () => {
-    await enableReceivedCapsule(pack.id, target.id);
-    toast.success(`已在“${target.name}”启用“${pack.title}”`, {
-      action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
-    });
-  });
   const disable = (pack: ReceivedCapsule) => act(`disable:${pack.id}`, async () => {
     await disableCapsule(pack.id);
     toast.success(`已停用“${pack.title}”`);
@@ -171,49 +169,56 @@ function ReceivedPacks() {
   if (failed && data === null) return <LoadError message="暂时读不到收到的胶囊。" onRetry={reload} />;
   // Nothing received, or not read yet: silent. 导入 is right above.
   if (data === null || data.length === 0) return null;
+  const defaults = data.filter((pack) => pack.official);
+  const received = data.filter((pack) => !pack.official);
+  /** One pack's row: the platform's own say who provides them, someone's share says who sent it. */
+  const row = (pack: ReceivedCapsule) => (
+    <ListRow
+      key={pack.id}
+      title={pack.title}
+      meta={(
+        <>
+          {/* Who sent it and what it says it holds, from the card its
+              sender signed; the counts when a pack carries no card. */}
+          {pack.takenDown && <p className="text-danger-strong">
+            {pack.takenDown.by === "operator" ? "已被平台下架并停用" : "作者已撤回，这份已停用"}{pack.takenDown.reason ? `：${pack.takenDown.reason}` : ""}
+          </p>}
+          <p>{[
+            pack.card?.author ? (pack.official ? providedBy(pack.card.author) : fromSender(pack.card.author)) : null,
+            pack.card?.summary || contents(pack),
+          ].filter(Boolean).join(" · ")}</p>
+          {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
+          {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
+        </>
+      )}
+      trailing={(
+        <Switch
+          label={`启用“${pack.title}”`}
+          checked={pack.enabled}
+          disabled={busy !== null || Boolean(pack.takenDown)}
+          onChange={(next) => void (next ? enable(pack) : disable(pack))}
+        />
+      )}
+      menu={pack.takenDown ? undefined : <Menu label="更多" items={[
+        { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
+      ]} />}
+    />
+  );
   return (
-    <section aria-labelledby="received-capsules">
-      <h3 id="received-capsules" className="text-ui font-semibold text-text">收到的胶囊</h3>
-      <List label="收到的胶囊" className="mt-2">
-        {data.map((pack) => {
-          return (
-            <ListRow
-              key={pack.id}
-              title={pack.title}
-              meta={(
-                <>
-                  {/* Who sent it and what it says it holds, from the card its
-                      sender signed; the counts when a pack carries no card. */}
-                  {pack.takenDown && <p className="text-danger-strong">
-                    {pack.takenDown.by === "operator" ? "已被平台下架并停用" : "已被作者下架并停用"}{pack.takenDown.reason ? `：${pack.takenDown.reason}` : ""}
-                  </p>}
-                  <p>{[
-                    pack.card?.author ? fromSender(pack.card.author) : null,
-                    pack.card?.summary || contents(pack),
-                    pack.enabledIn === "project" && project ? `只在“${project.name}”启用` : null,
-                  ].filter(Boolean).join(" · ")}</p>
-                  {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
-                  {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
-                </>
-              )}
-              trailing={(
-                <Switch
-                  label={`启用“${pack.title}”`}
-                  checked={pack.enabled}
-                  disabled={busy !== null || Boolean(pack.takenDown)}
-                  onChange={(next) => void (next ? enable(pack) : disable(pack))}
-                />
-              )}
-              menu={pack.takenDown ? undefined : <Menu label="更多" items={[
-                { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
-                ...(project && !pack.enabled
-                  ? [{ label: `只在“${project.name}”启用`, disabled: busy !== null, onSelect: () => void enableHere(pack, project) }]
-                  : []),
-              ]} />}
-            />
-          );
-        })}
-      </List>
-    </section>
+    <>
+      {/* What the platform gives every account, already on and switched off with one click; the person's own comes before them in a run. */}
+      {defaults.length > 0 && (
+        <section aria-labelledby="official-capsules">
+          <h3 id="official-capsules" className="text-ui font-semibold text-text">EviMed 的默认做法</h3>
+          <List label="EviMed 的默认做法" className="mt-2">{defaults.map(row)}</List>
+        </section>
+      )}
+      {received.length > 0 && (
+        <section aria-labelledby="received-capsules">
+          <h3 id="received-capsules" className="text-ui font-semibold text-text">收到的胶囊</h3>
+          <List label="收到的胶囊" className="mt-2">{received.map(row)}</List>
+        </section>
+      )}
+    </>
   );
 }

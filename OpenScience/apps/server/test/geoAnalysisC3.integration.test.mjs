@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict';
+import { after, before, test } from 'node:test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
+import { GeoStore } from '../src/geoStore.mjs';
+import { GeoMeasureStore } from '../src/geoMeasureStore.mjs';
+import { GeoService } from '../src/geoService.mjs';
+import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
+import { brandRegistry } from '../src/geoParse.mjs';
+import { buildJudgeInput, verifyJudgement, factsOf, recountedFacts } from '../src/geoJudge.mjs';
+import { freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from '../src/geoAnalysis.mjs';
+import { preserveGeoAssessment, geoAssessmentId } from '../src/geoLearningSignals.mjs';
+import { createGeoDiagnosisReview } from '../src/geoDiagnosisReview.mjs';
+const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, opts={skip:!url&&'Postgres URL is not configured'};
+let isolated,database,store,measure,service,project,originalVersion;
+const user={id:'c3-owner'},product={brandName:'Alpha'},registry=brandRegistry(product,[]);
+const quotes=Array.from({length:25},(_,n)=>`If condition ${n}, Alpha is recommended.`),answer=quotes.join(' ');
+const raw={schemaVersion:1,rubric:'geo-recommendation-expression-v1',coverage:'complete',items:quotes.map((quote,n)=>({quote,entity:'Alpha',state:'conditional',conditionQuote:`If condition ${n}`,rationale:null,claimRefs:[],explicitPosition:null,positionQuote:null}))};
+function makeFacts(extraction=raw,at='2026-10-01T01:00:00Z') {
+ const input={owner:{userId:user.id,projectId:'c3-project'},product,competitors:[],claims:[],careFlags:[],question:{text:'Options?',pool:'P2'},answer};
+ const judged=verifyJudgement({assessmentComplete:true,statements:[],recommendations:[{text:quotes[0],entities:['Alpha']}],recommendationExpressions:extraction},buildJudgeInput(input),input);
+ return factsOf({snapshot:{status:'valid',answerText:answer,citations:[]},judged,registry,countedOwned:{},at:new Date(at)}).facts;
+}
+before(async()=>{
+ if(!url)return;
+ isolated=await createGeoTestDatabase(url,'geoc3');database=new ControlPlaneDatabase({databaseUrl:isolated.url,databasePoolMax:4,databaseConnectionTimeoutMs:2000});
+ store=new GeoStore({database});measure=new GeoMeasureStore(database);await measure.ready();await store.ready();
+ await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'C3','development'),('c3-viewer','Viewer','development')",[user.id]);
+ await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'c3-project','C3',1048576)",[user.id]);
+ project=await store.createProject({userId:user.id,projectId:'c3-project',engines:['deepseek'],coverageDays:90,product});
+ service=new GeoService({store,config:{geoEnabled:true,geoAudience:'all'}});await store.addMember({geoId:project.id,userId:'c3-viewer',role:'viewer',invitedBy:user.id});
+ await store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('c3-g',$1,$2,2,'P2','Condition group')",[user.id,project.id]);
+ await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) VALUES('c3-q',$1,$2,'c3-g',2,'P2','Options?',true)",[user.id,project.id]);
+ await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface,ref) VALUES('c3-r',$1,$2,'baseline','done',2,'{deepseek}','2026-10-01','{\"mode\":\"web\"}',$3::jsonb)",[user.id,project.id,JSON.stringify({evaluationBasis:{product,competitors:[],owned:{}}})]);
+ await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES('c3-answer',$1,$2,'c3-r','c3-q','deepseek','2026-10-01','valid',$3,'{\"mode\":\"web\"}')",[user.id,project.id,answer]);
+ await measure.writeFacts({id:'c3-answer',userId:user.id,geoProjectId:project.id},makeFacts());
+ originalVersion=(await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND id=$2",[user.id,geoAssessmentId('c3-answer')])).rows[0].payload.assessmentVersion;
+});
+after(async()=>{await database?.close();await isolated?.drop();});
+test('C3 PG immutable extraction, exact occurrence pages, selected export roles and unsent native parity',opts,async()=>{
+ const view=await service.analysis(user,project.id,{round:'c3-r',viewId:'V09'}),full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest});
+ assert.equal(full.page.total,34);assert.equal(view.page.total,34);
+ const conditional=full.rows.find(row=>row.dimensions.kind==='distribution'&&row.dimensions.category==='conditional');
+ assert.equal(conditional.values.expressions.value,25);assert.equal(conditional.values.answers.value,1);
+ const ref=conditional.values.expressions.members,pages=[];
+ for(const offset of [0,20])pages.push(await service.analysisMembers(user,project.id,{selectionRef:ref.selectionRef,...ref.view,rowKey:ref.rowKey,columnKey:ref.columnKey,expectedDigest:ref.expectedDigest,limit:20,offset}));
+ const items=pages.flatMap(page=>page.items);assert.equal(new Set(items.map(item=>item.id)).size,25);
+ assert.ok(items.every(item=>item.snapshotId==='c3-answer'&&item.assessmentVersion===originalVersion&&item.questionVersion===2&&item.registryKey&&item.answer.answer_text===answer));
+ assert.deepEqual(items.map(item=>item.expression.conditionQuote),quotes.map((_,n)=>`If condition ${n}`));
+ await assert.rejects(service.analysisMembers(user,project.id,{selectionRef:ref.selectionRef,...ref.view,rowKey:ref.rowKey,columnKey:ref.columnKey,expectedDigest:'f'.repeat(64)}),error=>error.status===409);
+ assert.equal((await service.analysis({id:'c3-viewer'},project.id,{selectionRef:view.selection.reference,viewId:'V09'})).digest,view.digest);
+ await assert.rejects(service.analysis({id:'stranger'},project.id,{viewId:'V09'}),error=>error.status===404);
+ await assert.rejects(service.selectedExport({id:'c3-viewer'},project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest},{requestFrozen:async()=>assert.fail()}),error=>error.status===403);
+ const calls=[];await service.selectedExport(user,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,formats:['csv','xlsx','docx','pdf','html']},{requestFrozen:async(...args)=>{calls.push(args);return{id:'c3-export'};}});assert.equal(calls[0][1].revision,view.digest);
+ const {GeoPlanContext}=await import('../src/geoPlanContext.mjs'),{ProductDocuments}=await import('../src/productStore.mjs');
+ const adapter=new GeoPlanContext({documents:new ProductDocuments(database),store,service,authorizeSession:async()=>{},runs:async()=>[]});service.planContexts=adapter;
+ const staged=await adapter.stage(user,project.id,{requestKey:'c3-expressions',sessionId:'c3-session',mode:'analysis',selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,intent:'explain'});
+ assert.ok(staged.draft);const request={requestId:'c3-expressions',sessionId:'c3-session',content:[{type:'text',text:'Explain these preserved expressions.'}],geoPlanContext:{referenceId:staged.referenceId}};
+ await adapter.bind(user,{id:project.projectId,userId:project.userId},request);const native=await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,limit:20,offset:0});const nativeTail=await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,limit:20,offset:20});assert.deepEqual([...native.rows,...nativeTail.rows],full.rows);assert.deepEqual(native.chart,full.chart);
+ if(process.env.GEO_C3_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_RECEIPTS_DIR}/document.json`,JSON.stringify({...freezeGeoAnalysisDocument(full),version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
+});
+test('C3 registry recount preserves immutable extraction identity; a new assessment retains the original revision',opts,async()=>{
+ const before=(await measure.roundFactRows('c3-r',project.id,user.id))[0];
+ assert.equal(before.assessmentFacts.assessmentVersion,originalVersion);
+ const counted=recountedFacts({...makeFacts(),status:'valid',answerText:answer,citations:[]},brandRegistry({...product,aliases:['A']},[]),{});
+ await measure.recountFacts('c3-answer',counted,{key:'new-registry',at:new Date('2026-10-02')});
+ const after=(await measure.roundFactRows('c3-r',project.id,user.id))[0];
+ assert.equal(after.facts.registryKey,'new-registry');assert.equal(after.assessmentFacts.registryKey,before.assessmentFacts.registryKey);assert.equal(after.assessmentFacts.assessmentVersion,originalVersion);assert.deepEqual(after.assessmentFacts.judgeExtract,before.assessmentFacts.judgeExtract);
+ const revised=makeFacts({...raw,items:raw.items.map((item,n)=>n?item:{...item,state:'unknown'})},'2026-10-03T01:00:00Z');
+ await database.transaction(async client=>{await client.query('UPDATE evimed_geo.facts SET judge_extract=$2::jsonb,judged_at=$3 WHERE snapshot_id=$1',['c3-answer',JSON.stringify(revised.judgeExtract),revised.judgedAt]);await preserveGeoAssessment({database,client,snapshotId:'c3-answer',facts:revised});});
+ const history=await createGeoDiagnosisReview({database,store:measure}).read(project,'c3-answer');
+ assert.notEqual(history.assessmentVersion,originalVersion);assert.equal(history.history.length,2);
+ assert.deepEqual(history.history.find(row=>row.version===originalVersion).assessment.judgeExtract.recommendationExpressions.items[0].state,'conditional');
+ assert.equal(history.current.judgeExtract.recommendationExpressions.items[0].state,'unknown');
+});
+
+test('C3 SPEC repairs retain same-entity clinical support and explicit ordinal proof through real members, native freeze and export',opts,async()=>{
+ const claim={id:'c3-clinical',version:3,quote:'Alpha is contraindicated during pregnancy.',statement:'Alpha is contraindicated during pregnancy.',sourceKind:'label'};
+ const support={relation:'supports_nonrecommendation',entity:'Alpha',statementQuote:claim.quote,conditionQuote:'during pregnancy',claimId:claim.id,claimVersion:3,evidenceQuote:claim.quote,evidenceConditionQuote:'during pregnancy'};
+ const cases=[{id:'c3-supported',text:claim.quote,claims:[claim],statements:[{text:claim.quote,verdict:'correct',claim:'C1',evidence:claim.quote}],entities:[],item:{quote:claim.quote,entity:'Alpha',state:'reasonable_nonrecommendation',conditionQuote:'during pregnancy',claimRefs:[{claimId:claim.id,claimVersion:3}],nonrecommendationBasis:support}},
+ {id:'c3-order',text:'First choice: Alpha.',claims:[],statements:[],entities:[],item:{quote:'First choice: Alpha.',entity:'Alpha',state:'recommended',conditionQuote:null,claimRefs:[],explicitPosition:1,positionQuote:'First choice: Alpha.',positionToken:'First',positionKind:'explicit_recommendation_order'}},
+ {id:'c3-contained',text:'AlphaBeta is recommended.',claims:[],statements:[],entities:['AlphaBeta'],item:{quote:'AlphaBeta is recommended.',entity:'Alpha',state:'recommended',conditionQuote:null,claimRefs:[]}}];
+ for(const specimen of cases){
+  const input={owner:{userId:user.id,projectId:project.projectId},product,competitors:[],claims:specimen.claims,careFlags:[],question:{text:'Options?',pool:'P2'},answer:specimen.text};
+  const items=[{rationale:null,explicitPosition:null,positionQuote:null,...specimen.item},...(specimen.id==='c3-contained'?[{quote:specimen.text,entity:'AlphaBeta',state:'recommended',rationale:null,conditionQuote:null,claimRefs:[],explicitPosition:null,positionQuote:null}]:[])];
+  const judged=verifyJudgement({assessmentComplete:true,statements:specimen.statements,entities:specimen.entities,recommendationExpressions:{schemaVersion:1,rubric:'geo-recommendation-expression-v1',coverage:'complete',items}},buildJudgeInput(input),input);
+  const {facts}=factsOf({snapshot:{status:'valid',answerText:specimen.text,citations:[]},judged,registry,countedOwned:{},at:new Date('2026-10-04'),claims:specimen.claims});
+  await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES($1,$2,$3,'c3-r','c3-q','deepseek','2026-10-01','valid',$4,'{\"mode\":\"web\"}')",[specimen.id,user.id,project.id,specimen.text]);
+  await measure.writeFacts({id:specimen.id,userId:user.id,geoProjectId:project.id},facts);
+ }
+ const view=await service.analysis(user,project.id,{round:'c3-r',viewId:'V09'}),full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest});
+ const supported=full.rows.find(row=>row.dimensions.snapshotId==='c3-supported');assert.deepEqual(supported.dimensions.nonrecommendationBasis,support);
+ const member=supported.values.expressions.members,page=await service.analysisMembers(user,project.id,{selectionRef:member.selectionRef,...member.view,rowKey:member.rowKey,columnKey:member.columnKey,expectedDigest:member.expectedDigest});
+ assert.deepEqual(page.items[0].expression.nonrecommendationBasis,support);
+ assert.equal(page.items[0].expression.state,'reasonable_nonrecommendation');
+ const order=full.rows.find(row=>row.dimensions.snapshotId==='c3-order');assert.equal(order.dimensions.explicitPosition,1);assert.equal(order.dimensions.positionToken,'First');
+ assert.deepEqual(full.rows.filter(row=>row.dimensions.snapshotId==='c3-contained').map(row=>row.dimensions.entity),['AlphaBeta']);
+ const staged=await service.planContexts.stage(user,project.id,{requestKey:'c3-integrity-proof',sessionId:'c3-session',mode:'analysis',selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,intent:'explain'});
+ await service.planContexts.bind(user,{id:project.projectId,userId:user.id},{requestId:'c3-integrity-proof',sessionId:'c3-session',content:[{type:'text',text:'Explain these specific supported expressions.'}],geoPlanContext:{referenceId:staged.referenceId}});
+ const native=[];for(let offset=0;offset<full.page.total;offset+=20)native.push(...(await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,offset,limit:20})).rows);assert.deepEqual(native,full.rows);
+ // The supported non-recommendation and the stated order reach the reader in words; the record keeps their codes and tokens.
+ const report=freezeGeoAnalysisDocument(full);assert.ok(report.typedTable.rows.some(row=>row.dimensions?.includes('不推荐依据')&&row.dimensions.includes('支持不推荐')));
+ assert.ok(report.typedTable.rows.every(row=>!String(row.dimensions??'').includes('supports_nonrecommendation')));
+ assert.ok(JSON.stringify(report.cover.analysis.rows).includes('supports_nonrecommendation'));
+ if(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_INTEGRITY_RECEIPTS_DIR}/document.json`,JSON.stringify({...report,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
+});
+
+test('C3 quality conflicts keep the exact expression with null order across assessment, members, native and export',opts,async()=>{
+ const text='First choice: Alpha. Second choice: Alpha.',base={quote:text,entity:'Alpha',state:'recommended',conditionQuote:null,rationale:null,claimRefs:[],positionKind:'explicit_recommendation_order'};
+ const one={...base,explicitPosition:1,positionQuote:'First choice: Alpha.',positionToken:'First'},two={...base,explicitPosition:2,positionQuote:'Second choice: Alpha.',positionToken:'Second'};
+ const input={owner:{userId:user.id,projectId:project.projectId},product,competitors:[],claims:[],careFlags:[],question:{text:'Options?',pool:'P2'},answer:text};
+ const make=items=>factsOf({snapshot:{status:'valid',answerText:text,citations:[]},judged:verifyJudgement({assessmentComplete:true,statements:[],recommendationExpressions:{schemaVersion:1,rubric:'geo-recommendation-expression-v1',coverage:'complete',items}},buildJudgeInput(input),input),registry,countedOwned:{},at:new Date('2026-10-05')}).facts;
+ const first=make([one,two]),reversed=make([two,one]);assert.deepEqual(first,reversed);assert.equal(first.checks.judgementCoverage.status,'complete');
+ await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) VALUES('c3-conflict',$1,$2,'c3-r','c3-q','deepseek','2026-10-01','valid',$3,'{\"mode\":\"web\"}')",[user.id,project.id,text]);
+ await measure.writeFacts({id:'c3-conflict',userId:user.id,geoProjectId:project.id},first);
+ const original=(await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND id=$2",[user.id,geoAssessmentId('c3-conflict')])).rows[0].payload;
+ await database.transaction(client=>preserveGeoAssessment({database,client,snapshotId:'c3-conflict',facts:reversed}));
+ const after=(await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND id=$2",[user.id,geoAssessmentId('c3-conflict')])).rows[0].payload;
+ assert.equal(after.assessmentVersion,original.assessmentVersion);assert.equal(after.generation,original.generation);
+ const view=await service.analysis(user,project.id,{round:'c3-r',viewId:'V09'}),full=await freezeSelectedGeoAnalysis(store,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest});
+ const expression=full.rows.find(row=>row.dimensions.snapshotId==='c3-conflict');assert.equal(expression.dimensions.category,'recommended');
+ for(const field of ['explicitPosition','positionQuote','positionToken','positionKind'])assert.equal(expression.dimensions[field],null,field);
+ const ref=expression.values.expressions.members,members=await service.analysisMembers(user,project.id,{selectionRef:ref.selectionRef,...ref.view,rowKey:ref.rowKey,columnKey:ref.columnKey,expectedDigest:ref.expectedDigest});
+ assert.equal(members.items.length,1);assert.equal(members.items[0].assessmentVersion,original.assessmentVersion);assert.equal(members.items[0].expression.explicitPosition,null);assert.equal(members.items[0].expression.quote,text);
+ const staged=await service.planContexts.stage(user,project.id,{requestKey:'c3-commutative-order',sessionId:'c3-session',mode:'analysis',selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,intent:'explain'});
+ await service.planContexts.bind(user,{id:project.projectId,userId:user.id},{requestId:'c3-commutative-order',sessionId:'c3-session',content:[{type:'text',text:'Explain uncertain recommendation order.'}],geoPlanContext:{referenceId:staged.referenceId}});
+ const native=[];for(let offset=0;offset<full.page.total;offset+=20)native.push(...(await service.runtimeRead(project,'analysis',{planContextRef:staged.referenceId,offset,limit:20})).rows);assert.deepEqual(native,full.rows);
+ const report=freezeGeoAnalysisDocument(full),frozen=report.typedTable.rows.find(row=>row.row_number===full.rows.findIndex(row=>row.key===expression.key)+1);
+ assert.ok(frozen&&!String(frozen.dimensions??'').includes('明确推荐次序'),'a conflicted order is never printed as one');
+ assert.equal(report.cover.analysis.rows.find(row=>row.key===expression.key).dimensions.explicitPosition,null);
+ if(process.env.GEO_C3_QUALITY_RECEIPTS_DIR){await mkdir(process.env.GEO_C3_QUALITY_RECEIPTS_DIR,{recursive:true});await writeFile(`${process.env.GEO_C3_QUALITY_RECEIPTS_DIR}/document.json`,JSON.stringify({...report,version:1,rendererVersion:'pandoc-chromium-v1',sourceDigest:view.digest,sourceType:'typed-table',formats:['csv','xlsx','docx','pdf','html']},null,2));}
+});

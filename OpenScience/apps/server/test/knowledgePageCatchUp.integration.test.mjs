@@ -54,7 +54,20 @@ test("a project whose document predates the sync gets its round queued by the pe
     };
     const query = async (/** @type {string} */ text, /** @type {any[]} */ values = []) => (await app.store.database.query(text, values)).rows;
 
-    // One document, read. (The hooks of a document turning readable are asynchronous; they are let finish, then undone below.)
+    // The worker deliberately does not await these hooks. Track their actual promises:
+    // observing the first compile job does not mean the other readable/published hooks finished.
+    /** @type {Promise<unknown>[]} */
+    const sourceHooks = [];
+    for (const [service, method] of [[app.sourceSync, "note"], [app.knowledgePages, "noteSourceReady"]]) {
+      const original = service[method].bind(service);
+      service[method] = (...args) => {
+        const pending = original(...args);
+        sourceHooks.push(pending);
+        return pending;
+      };
+    }
+
+    // One document, read; settle every hook before removing the newer sync state.
     const sent = await api("/api/files/upload", { method: "POST", body: JSON.stringify({ root: "base", path: "knowledge-base/one.md", data: "# 一\n\n唯一的一份资料。\n", encoding: "utf8" }) });
     assert.equal(sent.status, 200, JSON.stringify(sent.body));
     const sourceId = sent.body.data.source.id;
@@ -66,9 +79,9 @@ test("a project whose document predates the sync gets its round queued by the pe
       if (!(await query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' AND status IN ('queued','running')", [user.id])).length) break;
       await app.sourceWorker.tick();
     }
-    for (let round = 0; round < 100 && !(await query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind='wiki-compile'", [user.id])).length; round += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    assert.equal((await query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' AND status IN ('queued','running')", [user.id])).length, 0, "the historical source finished ingestion");
+    assert.ok(sourceHooks.length > 0, "the upload exercised the real source hooks");
+    await Promise.all(sourceHooks);
 
     // Undo everything the document's own hooks did: this is the project as it was before any of them existed.
     await query("DELETE FROM evimed_product.jobs WHERE user_id=$1 AND kind IN ('wiki-compile','ov-resource-sync')", [user.id]);

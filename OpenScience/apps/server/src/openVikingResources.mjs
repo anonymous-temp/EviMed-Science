@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  OPENVIKING_SKILL_NAMES, libraryResourcesUri, openVikingUserId, projectGraphUri, projectResourcesRoot, projectSourcesUri, projectWikiUri,
+  OPENVIKING_SKILL_NAMES, libraryResourcesUri, nativeMemoryRoot, openVikingUserId, projectGraphUri, projectResourcesRoot, projectSourcesUri, projectWikiUri,
   resourcesRoot, skillUri,
 } from "./openVikingLayout.mjs";
 import { HttpError } from "./security.mjs";
@@ -33,12 +33,21 @@ import { HttpError } from "./security.mjs";
  * - **Every find, grep and compile names its roots.** Isolation between projects is the path prefix; a `find` with no
  *   target searches everything the user can see. Between users it is the engine's own (another user's subtree answers
  *   403), and the acting user is set by `OpenVikingClient.request` and nowhere else.
- * - **A compile is always submitted with an `Idempotency-Key` and never with `args`.** The same key and body answer
- *   the same task; a non-empty `args` fails the task at submission on v0.5.0.
+ * - **A compile is always submitted with an `Idempotency-Key` and never with `args`** — but for the one argument a v0.5.2 engine
+ *   reads, `mode` (2026-10-25). The same key and body answer the same task; a non-empty `args` fails the task at submission on v0.5.0.
+ *   From v0.5.2 a compile is incremental by default, so a retry with the same instruction over the same sources is a no-op that
+ *   writes nothing: the one retry the knowledge pages make, of a wiki that came out as its index alone, asks `mode: "full"`
+ *   (`compileRetryMode`) on an engine that is v0.5.2 or later and sends no `args` on any other. Every root it names is inside the acting
+ *   user's own resources: the engine refuses another user's root (403 at submission) but takes a target under the
+ *   account-shared `viking://resources/…` or `viking://agent/…` roots, which the identity shim of the v0.5.0 pin used to
+ *   refuse, so `submitCompile` refuses them itself.
  * - **`result.updated` of a finished compile lists every file of the target, changed or not.** A mirror compares
  *   content hashes; nothing here interprets that list.
  * - **A task's record expires** (24 h after it ended, 7 d after it failed) and then answers 404, the same answer as a
  *   task that never existed. `task()` returns null for both; a caller must not need the record.
+ * - **A compile that `completed` can be partial.** v0.5.1 runs a map/reduce pipeline; a job of it that fails leaves the
+ *   task `completed` with `meta.pipeline.errors` and a "Partial output" warning in `result.warnings`. `compileTask`
+ *   reports them as `warnings`, so a caller can say so.
  *
  * Built on `OpenVikingClient.request` — the one place the credential and the identity headers are written — except
  * the multipart upload of `temp_upload`, which that primitive (JSON bodies only) cannot carry: `#upload` below writes
@@ -84,10 +93,10 @@ export function sourceFileName(sourceId) {
  * The idempotency key of one compile submission: the same project, target, round and attempt always name the same
  * task, so a control plane that restarts between submitting and recording finds its task again instead of paying for
  * a second one.
- * @param {{ projectId: string, tree: string, round: number, attempt?: number }} submission
+ * @param {{ projectId: string, tree: string, round: number, attempt?: number, requestDigest?: string }} submission
  */
-export function compileIdempotencyKey({ projectId, tree, round, attempt = 0 }) {
-  return `evimed-${tree}-${sha256(`${projectId}\u0000${tree}\u0000${round}\u0000${attempt}`).slice(0, 40)}`;
+export function compileIdempotencyKey({ projectId, tree, round, attempt = 0, requestDigest = "" }) {
+  return `evimed-${tree}-${sha256(`${projectId}\u0000${tree}\u0000${round}\u0000${attempt}${requestDigest ? `\u0000${requestDigest}` : ""}`).slice(0, 40)}`;
 }
 
 export class OpenVikingResources {
@@ -142,16 +151,12 @@ export class OpenVikingResources {
    * @param {string} text @param {{ sourceId: string, sha: string, docType?: string | null, state?: string | null }} facts
    */
   async pushSource(userId, uri, text, { sourceId, sha, docType = null, state = null }) {
-    const tags = [`src=${sourceId}`, `sha=${sha}`, `doctype=${docType || "other"}`, ...(state ? [`state=${state}`] : [])];
-    const body = { uri, content: String(text ?? ""), wait: true, processing_mode: "vectors_only", tags, tag_mode: "replace" };
+    const tags = [`src=${sourceId}`, `sha=${sha}`, `doctype=${docType || "other"}`, `rendition=${sha256(String(text ?? ""))}`, ...(state ? [`state=${state}`] : [])];
+    const body = { uri, content: String(text ?? ""), mode: "replace", wait: true, processing_mode: "vectors_only", tags, tag_mode: "replace" };
     try {
-      let written;
-      try {
-        written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "create" }, timeoutMs: WRITE_TIMEOUT_MS });
-      } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "memory_index_conflict") throw error;
-        written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "replace" }, timeoutMs: WRITE_TIMEOUT_MS });
-      }
+      // One `replace`: from v0.5.1 it creates a file that is not there, parents included (measured on v0.5.1.1), and `create`
+      // is only its alias (no 409 on an existing file), so the create-then-replace pair this used to be is one call.
+      const written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body, timeoutMs: WRITE_TIMEOUT_MS });
       this.counters.pushes += 1;
       return { uri, bytes: Number(written?.result?.written_bytes) || Buffer.byteLength(body.content) };
     } catch (error) { this.counters.failures += 1; throw error; }
@@ -168,7 +173,7 @@ export class OpenVikingResources {
    * The documents pushed under one directory (`sources/` of a project, or the library), each with what its tags say.
    * A directory that does not exist yet holds none.
    * @param {string} userId @param {string} directory
-   * @returns {Promise<Array<{ uri: string, sourceId: string, size: number, sha: string | null, docType: string | null, state: string | null, modTime: string | null }>>}
+   * @returns {Promise<Array<{ uri: string, sourceId: string, size: number, sha: string | null, renditionSha: string | null, docType: string | null, state: string | null, modTime: string | null }>>}
    */
   async listSources(userId, directory) {
     const found = [];
@@ -177,7 +182,8 @@ export class OpenVikingResources {
       const match = SOURCE_FILE.exec(name);
       if (entry.isDir || !match) continue;
       const tags = resourceTags(entry.tags);
-      found.push({ uri: entry.uri, sourceId: match[1], size: Number(entry.size) || 0, sha: tags.sha ?? null, docType: tags.doctype ?? null, state: tags.state ?? null, modTime: entry.modTime ?? null });
+      found.push({ uri: entry.uri, sourceId: match[1], size: Number(entry.size) || 0, sha: tags.sha ?? null, renditionSha: tags.rendition ?? null,
+        docType: tags.doctype ?? null, state: tags.state ?? null, modTime: entry.modTime ?? null });
     }
     return found;
   }
@@ -306,15 +312,32 @@ export class OpenVikingResources {
   // Writing a page back
 
   /**
-   * Write one page of a compiled tree: a person's edit, or their blocks put back after a compile. Unlike a source this
-   * is written in the engine's default mode, so the page's summary and vector follow its new text. v0.5.0 has no
-   * version precondition on this route — the caller makes sure no compile is writing the same target.
+   * Write one page of a compiled tree back — a person's edit, or their blocks put back after a compile — as a checked write:
+   * one `batch-write` operation that names the hash of the bytes the caller last read (`expectedSha256`), so a page the
+   * engine's own Compile changed since is not overwritten. Unlike a source it is written in the engine's default mode, so
+   * the page's summary and vector follow its new text; `wait` (the default) answers once that is done, which is also what
+   * keeps the next write to the same directory from finding it busy. A page whose bytes are no longer the ones named
+   * answers `knowledge_page_engine_changed` (409) and is not written; a directory still being processed answers the
+   * client's `memory_index_conflict` (retryable). Before v0.5.1 the route had no precondition and the caller had to make
+   * sure no compile was writing the same target.
    * @param {string} userId @param {string} uri @param {string} content
+   * @param {{ expectedSha256: string, wait?: boolean }} options `expectedSha256`: the hex digest of the file as last read
    */
-  async writePage(userId, uri, content) {
-    const written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: WRITE_TIMEOUT_MS,
-      body: { uri, content: String(content ?? ""), mode: "replace", wait: false } });
-    return { uri, bytes: Number(written?.result?.written_bytes) || 0 };
+  async writePage(userId, uri, content, { expectedSha256, wait = true }) {
+    if (!/^[a-f0-9]{64}$/.test(String(expectedSha256 ?? ""))) throw new HttpError(500, "knowledge_write_back_invalid", "A write-back always names the hash of the page it replaces.");
+    const parent = String(uri).slice(0, String(uri).lastIndexOf("/"));
+    try {
+      await this.client.request({ method: "POST", path: "/api/v1/content/batch-write", userId, timeoutMs: WRITE_TIMEOUT_MS,
+        body: { root_uri: parent, wait: Boolean(wait), operations: [{ uri, content: String(content ?? ""), mode: "replace", expected_sha256: expectedSha256 }] } });
+    } catch (error) {
+      // 409 is two refusals: the directory is still being processed (`path_busy`, retryable), and the page is not the
+      // one that was read ("Content revision changed", or no longer there).
+      if (/** @type {any} */ (error)?.code === "memory_index_conflict" && /** @type {any} */ (error)?.upstreamDetails?.conflict_type !== "path_busy") {
+        throw new HttpError(409, "knowledge_page_engine_changed", "The page in the engine is not the one this write was made against.");
+      }
+      throw error;
+    }
+    return { uri, bytes: Buffer.byteLength(String(content ?? "")) };
   }
 
   /** Remove a whole subtree (a project's resources, a staging directory). @param {string} userId @param {string} uri */
@@ -326,19 +349,55 @@ export class OpenVikingResources {
   /**
    * Submit one compile. Answers the task as the engine reports it: `{ taskId, status, stage }`.
    * @param {string} userId
-   * @param {{ from: string[], to: string, skill: string, instruction?: string | null, idempotencyKey: string }} submission
-   *   `skill`: one of `OPENVIKING_SKILL_NAMES`
+   * @param {{ from: string[], to: string, skill: string, instruction?: string | null, idempotencyKey: string, mode?: "full" | null }} submission
+   *   `skill`: one of `OPENVIKING_SKILL_NAMES`; `mode`: `"full"` only, for an engine that reads it (`compileRetryMode`), else absent
    */
-  async submitCompile(userId, { from, to, skill, instruction = null, idempotencyKey }) {
+  async submitCompile(userId, { from, to, skill, instruction = null, idempotencyKey, mode = null }) {
     if (!OPENVIKING_SKILL_NAMES.includes(skill)) throw new HttpError(500, "knowledge_skill_unknown", "That compile skill is not one this deployment installs.");
     if (!Array.isArray(from) || !from.length || from.length > 16) throw new HttpError(500, "knowledge_compile_invalid", "A compile reads between one and sixteen roots.");
     if (!idempotencyKey) throw new HttpError(500, "knowledge_compile_invalid", "A compile is always submitted with an idempotency key.");
+    // The rule the identity shim used to enforce in front of the engine: every root is inside the acting user's own resources.
+    const own = resourcesRoot(userId);
+    for (const root of [...from, to]) {
+      const value = String(root ?? "");
+      if (!(value === own || value.startsWith(`${own}/`)) || value.split("/").some((part) => part === "." || part === "..")) {
+        throw new HttpError(500, "knowledge_compile_invalid", "A compile reads and writes inside the acting user's own resources.");
+      }
+    }
     try {
       const body = await this.client.request({ method: "POST", path: "/api/v1/compile", userId, idempotencyKey, timeoutMs: READ_TIMEOUT_MS,
-        body: { from, to, skill: skillUri(skill), ...(instruction ? { instruction: String(instruction) } : {}) } });
+        body: { from, to, skill: skillUri(skill), ...(instruction ? { instruction: String(instruction) } : {}), ...(mode === "full" ? { args: { mode: "full" } } : {}) } });
       this.counters.compiles += 1;
       return compileTask(body?.result);
     } catch (error) { this.counters.failures += 1; throw error; }
+  }
+
+  /**
+   * Ask the engine to consolidate one account's memories in place (`ov compile --skill memory`, v0.5.0 `docs/en/context-compilation/06-memory-consolidation.md`):
+   * deduplicate, merge, split and compact under each type's own schema, facts preserved, no external source — which is why there is no
+   * `from`, and why the target is the account's own memories root. It runs inside the engine (no VikingBot) and its model calls go
+   * through the model gateway as `memory-extraction`. Answers at once with the task.
+   * @param {string} userId
+   * @param {{ to: string, instruction?: string | null, idempotencyKey: string }} submission `to`: the account's `memories` root or one memory type's directory
+   */
+  async submitMemoryConsolidation(userId, { to, instruction = null, idempotencyKey }) {
+    if (!(String(to ?? "") === nativeMemoryRoot(userId) || String(to ?? "").startsWith(`${nativeMemoryRoot(userId)}/`))) throw new HttpError(500, "knowledge_compile_invalid", "A memory consolidation targets the account's own memories.");
+    if (!idempotencyKey) throw new HttpError(500, "knowledge_compile_invalid", "A compile is always submitted with an idempotency key.");
+    try {
+      const body = await this.client.request({ method: "POST", path: "/api/v1/compile", userId, idempotencyKey, timeoutMs: READ_TIMEOUT_MS,
+        body: { to, skill: "memory", ...(instruction ? { instruction: String(instruction) } : {}) } });
+      this.counters.compiles += 1;
+      return memoryConsolidationTask(body?.result);
+    } catch (error) { this.counters.failures += 1; throw error; }
+  }
+
+  /** A consolidation task as the engine reports it now, or null for one it no longer holds. @param {string} userId @param {string} taskId */
+  async memoryConsolidationTask(userId, taskId) {
+    try { return memoryConsolidationTask((await this.client.request({ path: `/api/v1/tasks/${taskSegment(taskId)}`, userId }))?.result); }
+    catch (error) {
+      if (/** @type {any} */ (error)?.code === "memory_index_not_found") return null;
+      throw error;
+    }
   }
 
   /** A task as the engine reports it now, or null for one it no longer holds (expired, or never there). @param {string} userId @param {string} taskId */
@@ -455,10 +514,27 @@ function taskSegment(taskId) {
  * rounds (input and output tokens, cache hits not told apart); the summaries written after it are not in it.
  * @param {any} task
  */
-function compileTask(task) {
+export function compileTask(task) {
   if (!task || typeof task !== "object" || typeof task.task_id !== "string") throw new HttpError(502, "memory_index_response_invalid", "The engine answered without a task.");
-  const usage = task.meta?.token_usage;
+  // v0.5.1 moved the token counts to `meta.pipeline.tokens` (`{ input, output, cached }`; v0.5.0 had `meta.token_usage`).
+  const tokens = task.meta?.pipeline?.tokens;
+  const inputTokens = Number(tokens?.input) || 0;
+  const outputTokens = Number(tokens?.output) || 0;
   const result = task.result && typeof task.result === "object" ? task.result : null;
+  const lines = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(value => String(value).slice(0, 2000)).slice(0, 20) : []);
+  const paths = (list) => {
+    const all = Array.isArray(list) ? list : [], kept = [];
+    let bytes = 0, truncated = false;
+    for (const value of all) {
+      const raw = String(typeof value === "string" ? value : value?.uri ?? value?.path ?? "");
+      const text = raw.slice(0, 1000);
+      if (kept.length >= 2000 || bytes + Buffer.byteLength(text) > 16384) { truncated = true; break; }
+      kept.push(text); bytes += Buffer.byteLength(text);
+      if (text !== raw || typeof value !== "string") truncated = true;
+    }
+    return { paths: kept, count: all.length, truncated };
+  };
+  const updated = paths(result?.updated), created = paths(result?.created), unchanged = paths(result?.unchanged);
   return {
     taskId: task.task_id,
     status: String(task.status ?? ""),
@@ -466,9 +542,35 @@ function compileTask(task) {
     terminal: COMPILE_TERMINAL_STATES.includes(String(task.status ?? "")),
     error: typeof task.error === "string" && task.error ? task.error.slice(0, 500) : null,
     processingSeconds: Number.isFinite(Number(task.processing_seconds)) ? Number(task.processing_seconds) : null,
-    usage: usage && typeof usage === "object" ? { inputTokens: Number(usage.input_tokens) || 0, outputTokens: Number(usage.output_tokens) || 0, totalTokens: Number(usage.total_tokens) || 0 } : null,
-    result: result ? { pageCount: Number(result.page_count) || 0, linkCount: Number(result.link_count) || 0,
-      warnings: Array.isArray(result.warnings) ? result.warnings.map(String).slice(0, 20) : [] } : null,
+    usage: tokens && typeof tokens === "object" ? { inputTokens, outputTokens, cachedTokens: Number(tokens.cached) || 0, totalTokens: inputTokens + outputTokens } : null,
+    result: result ? { pageCount: Number(result.page_count) || 0, linkCount: Number(result.link_count) || 0, conflicts: Array.isArray(result.conflicts) ? result.conflicts.length : 0,
+      updated: updated.paths, updatedCount: updated.count, updatedTruncated: updated.truncated,
+      created: created.paths, createdCount: created.count, createdTruncated: created.truncated,
+      unchanged: unchanged.paths, unchangedCount: unchanged.count, unchangedTruncated: unchanged.truncated,
+      // What a task that says `completed` still reports: the warnings of its result and the errors of the jobs that failed.
+      warnings: [...lines(result.warnings), ...lines(task.meta?.pipeline?.errors).filter((line) => !lines(result.warnings).includes(line))].slice(0, 20) } : null,
+  };
+}
+
+/**
+ * A memory-consolidation task: its state, and the files it changed as the engine lists them (URIs only, never content), with what went
+ * wrong in part. A task that changed nothing and says nothing is a completed no-op; `errors` are read whatever the status.
+ * @param {any} task
+ */
+export function memoryConsolidationTask(task) {
+  if (!task || typeof task !== "object" || typeof task.task_id !== "string") throw new HttpError(502, "memory_index_response_invalid", "The engine answered without a task.");
+  const result = task.result && typeof task.result === "object" ? task.result : null;
+  const uris = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(String).filter((uri) => uri.startsWith("viking://")).slice(0, 2_000) : []);
+  return {
+    taskId: task.task_id,
+    status: String(task.status ?? ""),
+    terminal: COMPILE_TERMINAL_STATES.includes(String(task.status ?? "")),
+    error: typeof task.error === "string" && task.error ? task.error.slice(0, 500) : null,
+    result: result ? {
+      adds: uris(result.adds), updates: uris(result.updates), deletes: uris(result.deletes),
+      errors: Array.isArray(result.errors) ? result.errors.map((/** @type {any} */ item) => String(typeof item === "string" ? item : item?.message ?? item?.error ?? "error").slice(0, 300)).slice(0, 20) : [],
+      traceId: typeof result.trace_id === "string" ? result.trace_id.slice(0, 120) : null,
+    } : null,
   };
 }
 

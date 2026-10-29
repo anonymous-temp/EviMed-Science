@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
+import { frontierArrival } from "@/lib/frontierTracking";
 import { fetchFrontierItem, frontierErrorMessage, frontierItemGone, hideFrontierItem, starFrontierItem, unstarFrontierItem, type FrontierItem } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -13,6 +15,8 @@ import { FrontierSkeleton } from "./FrontierSkeleton";
  * reader is told so in one grey line and closes it, where a read that failed offers 「重试」.
  */
 export function FrontierLinkedItem({ id, onClose }: { id: string; onClose: () => void }) {
+  // A link a notification carried (`from=push`): the card is where the reader arrives, so opening it is an open from `push`.
+  const arrival = frontierArrival(useLocation().search);
   const generation = useRef(0);
   const [item, setItem] = useState<FrontierItem | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +51,11 @@ export function FrontierLinkedItem({ id, onClose }: { id: string; onClose: () =>
   };
   return (
     <section aria-label="相关动态" className="mt-5">
-      <h2 className="text-ui font-medium text-text">相关动态</h2>
+      <h2 className="text-ui font-semibold text-text">相关动态</h2>
       {loading ? <FrontierSkeleton />
         : error ? <LoadError message={error} onRetry={() => setAttempt((n) => n + 1)} />
           : !item || item.state.hidden ? <EmptyState title="这条动态已隐藏" />
-            : <ul><FrontierCard item={item} onStar={() => void update(item, "star")} onHide={() => void update(item, "hide")} /></ul>}
+            : <ul data-frontier-list={arrival ?? undefined}><FrontierCard item={item} onStar={() => void update(item, "star")} onHide={() => void update(item, "hide")} /></ul>}
     </section>
   );
 }

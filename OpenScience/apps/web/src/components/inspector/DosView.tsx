@@ -88,7 +88,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
         <button
           onClick={() => setAlignFermi((v) => !v)}
           className={cn(
-            "rounded-md px-2 py-1 text-caption font-medium ring-1 transition-colors",
+            "rounded-md px-2 py-1 text-caption ring-1 transition-colors",
             alignFermi
               ? "bg-accent-soft text-accent ring-focus"
               : "bg-surface-2 text-muted ring-border hover:text-text",

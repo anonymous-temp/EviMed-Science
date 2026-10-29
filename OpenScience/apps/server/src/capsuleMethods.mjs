@@ -1,3 +1,4 @@
+import { CONTEXT_ITEM_FIELDS, contextPolicyIdentity } from "./geoContextItems.mjs";
 /**
  * The work-style methods a project's active capsules contribute to a run.
  *
@@ -22,9 +23,10 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { NEVER_SHARED_LAYERS } from "@evimed/domain";
+import { METHOD_RELEVANT_MOUNT_REASONS, NEVER_SHARED_LAYERS } from "@evimed/domain";
+import { entryReaches } from "./capsuleEntryProject.mjs";
 import { sharedFrom } from "./capsuleShareLabel.mjs";
-import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
+import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods, selectOfficialMethods } from "./learnedMethodMount.mjs";
 import { assertNoSymlinkPath, safeId, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** The directory name under the project's runtime root. */
@@ -56,13 +58,15 @@ export const CAPSULE_WORK_STYLE_FACT_KINDS = Object.freeze([
 /**
  * Only approved entries are mounted.
  *
- * An imported pack arrives as candidates on purpose: `capsuleTransferService`
- * writes every received entry with `status: "candidate"`, so that adopting
- * someone else's work style is an act the recipient performs rather than a
- * consequence of opening a file. Mounting a candidate would run a stranger's
- * methods on the strength of the transfer alone. Retired entries are excluded
- * for the mirror-image reason: "was true once" is kept as history, not as
- * instruction.
+ * An imported pack arrives approved, and is in force nowhere: `capsuleTransferService`
+ * writes every entry the automatic scan kept with `status: "approved"` into a capsule that
+ * no activation list names, so adopting someone else's work style is an act the recipient
+ * performs — enabling the pack, in the account or in one project — rather than a
+ * consequence of opening a file (whole-pack trust, 2026-09-19; it was entry-by-entry
+ * candidates before). What the scan could not judge (`unscanned`), what it held back
+ * (`safetyHold`) and an assistant's own note (`origin: "inferred"`) stay context and are
+ * never mounted. Retired entries are excluded because "was true once" is kept as
+ * history, not as instruction.
  */
 const MOUNTABLE_STATUS = "approved";
 
@@ -270,7 +274,8 @@ function confirmedAtMs(entry) {
 }
 
 /**
- * The mountable entries of one capsule, paged to the page bound.
+ * The mountable entries of one capsule, paged to the page bound, that a conversation in `projectId` may read: an entry labelled with
+ * another project is that project's (`entryProject`).
  *
  * Every page inside the bound is read, even once the capsule has offered more
  * candidates than a runtime can mount. It used to stop there, on the ground
@@ -286,18 +291,26 @@ function confirmedAtMs(entry) {
  * capsule of unmountable facts already pays on every launch, so the worst case
  * per capsule is unchanged.
  *
- * @param {any} capsules @param {string} userId @param {string} capsuleId
+ * @param {any} capsules @param {string} userId @param {string} capsuleId @param {string | null} projectId
  * @returns {Promise<any[]>}
  */
-async function mountableCapsuleEntries(capsules, userId, capsuleId) {
+async function mountableCapsuleEntries(capsules, userId, capsuleId, projectId, contextPolicy, contextItems, activation) {
   /** @type {any[]} */
   const candidates = [];
   let cursor = null;
   for (let page = 0; page < MAX_CAPSULE_ENTRY_PAGES; page += 1) {
     /** @type {any} */
-    const result = await capsules.entries(userId, capsuleId, { limit: CAPSULE_ENTRY_PAGE, cursor });
-    for (const entry of result?.items ?? []) {
-      if (isMountableEntry(entry)) candidates.push(entry);
+    const shared=contextPolicy?.kind === "geo-project";
+    const result = await capsules.entries(userId, capsuleId, { limit: CAPSULE_ENTRY_PAGE, cursor,
+      ...(shared ? {projectId,fields:CONTEXT_ITEM_FIELDS} : {}) });
+    for (let entry of result?.items ?? []) {
+      if(shared) {
+        if (!contextItems || !capsules.documents || !await contextItems.capsule(contextPolicy,activation,entry)) continue;
+        const full=await capsules.documents.get(userId,"fact",entry.id,{expectedRevision:entry.revision});
+        if(!full || full.revision!==entry.revision || !await contextItems.capsule(contextPolicy,activation,full)) continue;
+        entry=full;
+      }
+      if (isMountableEntry(entry) && entryReaches(entry, projectId)) candidates.push(entry);
     }
     cursor = result?.nextCursor ?? null;
     if (!cursor) break;
@@ -328,10 +341,10 @@ async function receivedCapsule(capsules, userId, selection) {
 /**
  * The methods this project's active capsules contribute, in a stable order.
  *
- * The active set is read the way `CapsuleService.recall` reads it — this
- * project's activations first, then the account-wide ones, deduplicated, capped
- * at eight — so the memory a run reads and the memory a run recalls cannot come
- * from different capsules.
+ * The active set is read the way `CapsuleService.recall` reads it — the account's
+ * one list, capped at eight, and of its entries those of the whole account and
+ * those labelled with this project — so the memory a run reads and the memory a
+ * run recalls cannot come from different capsules.
  *
  * The candidates are ranked the account's own first, then what received packs
  * brought, and within each most-recently-confirmed first, and truncated against
@@ -355,22 +368,22 @@ async function receivedCapsule(capsules, userId, selection) {
  * counter.
  *
  * @param {any} capsules `CapsuleService`
- * @param {{ userId: string, projectId: string, maxBytes?: number, onLeftOut?: ((entryId: string) => void) | null }} scope
+ * @param {{ userId: string, projectId: string | null, maxBytes?: number, contextPolicy?:any, contextItems?:any, onLeftOut?: ((entryId: string) => void) | null }} scope
  * @returns {Promise<{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean }[]>}
  */
-export async function selectCapsuleMethods(capsules, { userId, projectId, maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES, onLeftOut = null }) {
-  const local = await capsules.active(userId, projectId);
-  const account = await capsules.active(userId, null);
-  const active = [...local.items, ...account.items]
+export async function selectCapsuleMethods(capsules, { userId, projectId, maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES, onLeftOut = null, contextPolicy = null, contextItems = null }) {
+  if(contextPolicy?.kind === "geo-project" && (contextPolicy.ownerId!==userId || contextPolicy.controlProjectId!==projectId)) return [];
+  const active = (await capsules.active(userId)).items
     .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
     .slice(0, ACTIVE_CAPSULE_LIMIT);
   /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean, confirmedAt: number }[]} */
   const candidates = [];
+  const snapshots=new Map();
   for (const selection of active) {
     /** @type {any[]} */
     let entries;
     try {
-      entries = await mountableCapsuleEntries(capsules, userId, String(selection.capsuleId));
+      entries = await mountableCapsuleEntries(capsules, userId, String(selection.capsuleId), projectId, contextPolicy, contextItems, selection);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "capsule_not_found") continue;
       throw error;
@@ -380,9 +393,12 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
     // A pack the author or the operator took down mounts nothing, whatever list still names it.
     if (record?.payload?.takenDown) continue;
     for (const entry of entries) {
+      if(contextPolicy?.kind === "geo-project" && (!await capsules.inForce(userId,selection.capsuleId) || !await contextItems.capsule(contextPolicy,selection,entry))) continue;
+      snapshots.set(String(entry.id),{entry,selection});
       const origin = record ? sharedFrom(record, entry.payload) : null;
       const method = {
         id: String(entry.id),
+        ...(contextPolicy?.kind === "geo-project" ? {revision:entry.revision,contentDigest:entry.payload.contentDigest,contextPolicy:contextPolicyIdentity(contextPolicy)} : {}),
         directoryName: capsuleMethodDirectoryName(entry.id),
         capsuleId: String(selection.capsuleId),
         factKind: String(entry.payload.factKind),
@@ -418,6 +434,10 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
       for (const left of candidates.slice(index, index + MAX_MOUNTED_CAPSULE_METHODS - selected.length)) onLeftOut?.(left.id);
       break;
     }
+    if(contextPolicy?.kind === "geo-project") {
+      const snapshot=snapshots.get(candidate.id);
+      if(!await capsules.inForce(userId,candidate.capsuleId) || !await contextItems.capsule(contextPolicy,snapshot.selection,snapshot.entry)) continue;
+    }
     bytes += candidate.bytes;
     selected.push(candidate);
   }
@@ -445,11 +465,14 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * run. `learning` closes that circle; without it this function behaves exactly
  * as it did before, which is what a deployment with no product database gets.
  *
- * The directory is rebuilt from scratch on every launch rather than merged
- * into: a method the user retired between two runs has to disappear from the
- * runtime, and a leftover file is a rule the user believes they removed. It is
- * created only when there is something to write, so a project with no methods
- * leaves no directory for anything to find, mount or write into.
+ * The directory is brought to exactly this selection on every write rather than merged into: a method the user retired between
+ * two runs has to disappear from the runtime, and a leftover file is a rule the user believes they removed. It is brought there
+ * in place, never by removing the directory and making it again: a runtime that is already running holds this directory as a
+ * bind mount, and a directory replaced under a bind mount leaves the runtime looking at the one that was deleted. What is new
+ * is written before what is stale is removed, so a listing taken in between holds both and never neither. Without
+ * `keepDirectory` it is created only when there is something to write, so a project with no methods leaves no directory for
+ * anything to find, mount or write into; a launch asks to keep it (the runtime mounts it empty and the next selection reaches
+ * the runtime that is already up).
  *
  * Files are written with the no-follow atomic helpers under the methods
  * directory as their own scoped root, so a directory name that somehow escaped
@@ -457,15 +480,27 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * (0444) inside 0700 directories: the container reads them, and nothing —
  * including the run — writes its own method.
  *
+ * `_selection.json` is written last, beside the method directories: what the plugin lists, in order, and for each learned method
+ * the reason it is there (`similarity`, `dependency`, `explore`, `recent`), and a version that changes when the selection does. The
+ * capsule plugin reads it when a conversation's first prompt arrives, so the mount receipt a finished run is counted by carries the
+ * reason; a plugin that predates it lists every directory and ignores a file.
+ *
  * `maxPromptBytes` is the byte budget (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`),
  * spent on what each method puts in front of the model: a capsule entry's
  * whole document, a learned method's card (`MAX_MOUNTED_CAPSULE_METHOD_BYTES`).
  * `promptBytes` in the result is what was spent, and `leftOut` how many
  * methods the byte budget could not carry.
  *
+ * `scopeId`, `query` and `similarity` say what the learned half is selected for (`selectLearnedMethods`): the run's scope, the
+ * first message of its conversation, and the module that reads closeness. Without a query there is nothing to rank by.
+ *
+ * `keep` names learned methods a running runtime was already given (`selectLearnedMethods`): the ones still approved stay on disk
+ * (current, written like the rest) and are not in `_selection.json`, so a conversation that began earlier can still read the file its
+ * card names and one that begins now is shown only the selection.
+ *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
- *   learnedFamily?: "geo" | "research" | null, maxPromptBytes?: number,
- *   writeFile?: typeof writeFileAtomicNoFollow }} options
+ *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
+ *   keep?: Iterable<string> | null, keepDirectory?: boolean, contextPolicy?:any, contextItems?:any, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
@@ -473,10 +508,15 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * `learnedFamily` is which learned methods this runtime may carry
  * (`learnedMethodFamilyForRuntime`); absent, the whole library.
  *
+ * `official` is what the platform's tier put in the mount and `officialLeftOut` what it left out because a method of the person's own says
+ * the same thing, each with the one it yielded to and how near they were: the mount's receipt of the tier (`selectOfficialMethods`).
+ *
  * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
- *   learned: {id: string, name: string, digest: string}[],
- *   learnedBytes: number,
- *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
+ *   learned: {id: string, name: string, digest: string, reason: string}[],
+ *   learnedBytes: number, version: string, rank: { mode: string | null, topScore: number | null },
+ *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[],
+ *   official: {id: string, name: string, digest: string, directoryName: string}[],
+ *   officialLeftOut: {id: string, name: string, reason: string, twin: {id: string, name: string}, score: number}[] }>}
  */
 export async function materializeCapsuleMethods({
   capsules,
@@ -484,6 +524,13 @@ export async function materializeCapsuleMethods({
   directory,
   learning = null,
   learnedFamily = undefined,
+  scopeId = undefined,
+  query = null,
+  similarity = null,
+  keep = null,
+  keepDirectory = false,
+  contextPolicy = null,
+  contextItems = null,
   maxPromptBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES,
   writeFile = writeFileAtomicNoFollow,
 }) {
@@ -493,7 +540,7 @@ export async function materializeCapsuleMethods({
   let leftOut = 0;
   const countLeftOut = () => { leftOut += 1; };
   const capsuleSelection = capsules
-    ? await selectCapsuleMethods(capsules, { userId, projectId, maxBytes: maxPromptBytes, onLeftOut: countLeftOut })
+    ? await selectCapsuleMethods(capsules, { userId, projectId, maxBytes: maxPromptBytes, onLeftOut: countLeftOut, contextPolicy, contextItems })
     : [];
   // The account's own entries are spent first; what received packs brought
   // waits until the learned methods have had theirs.
@@ -508,6 +555,7 @@ export async function materializeCapsuleMethods({
     ? await selectLearnedMethods(learning, {
       userId,
       projectId,
+      contextPolicy, contextItems,
       maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - ownMethods.length),
       maxBytes: maxPromptBytes - ownBytes,
       // A learned method is handed to a run as a card naming its file here,
@@ -515,6 +563,10 @@ export async function materializeCapsuleMethods({
       cardDirectory: runtimeCapsuleMethodsDir,
       onLeftOut: countLeftOut,
       ...(learnedFamily === undefined ? {} : { family: learnedFamily }),
+      ...(scopeId === undefined ? {} : { scopeId }),
+      query,
+      similarity,
+      keep,
     })
     : [];
   const learnedBytes = learnedMethods.reduce((total, method) => total + method.bytes, 0);
@@ -537,43 +589,160 @@ export async function materializeCapsuleMethods({
     spentBytes += method.bytes;
     receivedMethods.push(method);
   }
+  // The platform's tier, last: what a run is given of the official packs is what is left of the room after everything of the person's own and
+  // everything they were sent, chosen against their own methods (`selectOfficialMethods`: a method of theirs about the same thing wins).
+  // A shared GEO project's context carries only the items its context authorization verified (`geoContextItems.mjs`), and the official
+  // tier is none of them: it is not mounted there (a GEO runtime's family already reads none of it, `selectOfficialMethods`).
+  const officialAll = contextPolicy?.kind !== "geo-project" && capsules && typeof capsules.officialMethods === "function" ? await capsules.officialMethods(userId).catch(() => []) : [];
+  const officialMethods = await selectOfficialMethods(officialAll, {
+    scopeId: scopeId ?? null,
+    family: learnedFamily,
+    query,
+    similarity,
+    personal: [...ownMethods.map(ownMethodDocument), ...((/** @type {any} */ (learnedMethods)).candidates ?? [])],
+    maxCount: MAX_MOUNTED_CAPSULE_METHODS - ownMethods.length - learnedMethods.length - receivedMethods.length,
+    maxBytes: maxPromptBytes - spentBytes,
+    cardDirectory: runtimeCapsuleMethodsDir,
+    keep,
+    onLeftOut: countLeftOut,
+  });
+  const official = capsules?.official;
+  if (official) {
+    official.noteMount("offered", officialMethods.length);
+    official.noteMount("leftOutPersonal", officialMethods.leftOut.length);
+    if (officialMethods.deltaMode === "lexical") official.noteMount("deltaUnread", 1);
+  }
+  spentBytes += officialMethods.reduce((total, method) => total + method.promptBytes, 0);
   const capsuleMethods = [...ownMethods, ...receivedMethods];
-  const methods = [...ownMethods, ...learnedMethods, ...receivedMethods];
-  await fs.rm(directory, { recursive: true, force: true });
+  const methods = [...ownMethods, ...learnedMethods, ...receivedMethods, ...officialMethods];
+  const recheck=async()=>{
+    if(contextPolicy?.kind!=="geo-project") return;
+    for(const method of methods) {
+      const row={id:method.id,revision:method.revision,payload:{contentDigest:method.contentDigest,...(method.capsuleId?{capsuleId:method.capsuleId}:{})}};
+      const allowed=method.capsuleId ? await capsules.inForce(userId,method.capsuleId) && await contextItems.capsule(contextPolicy,{capsuleId:method.capsuleId},row)
+        : await contextItems.method(contextPolicy,row);
+      if(!allowed) throw new Error("Method context authority changed");
+    }
+  };
+  await recheck();
   const learned = learnedMethods.map((method) => ({
     id: method.id,
     name: method.name,
     digest: method.digest,
+    reason: method.reason,
   }));
   // The panel shows at most 160 characters of a method; a prefix is all it keeps.
   const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,
     factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
-  if (methods.length === 0) return { directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, capsule };
+  const rank = { mode: /** @type {any} */ (learnedMethods).mode ?? null, topScore: /** @type {any} */ (learnedMethods).topScore ?? null };
+  const reasons = new Map([...learnedMethods, ...officialMethods].map((method) => [method.directoryName, method.reason]));
+  const policyIdentity=contextPolicy?.kind === "geo-project" ? contextPolicyIdentity(contextPolicy) : null;
+  const identities=policyIdentity ? methods.map(method=>({kind:method.capsuleId?"fact":"method",id:method.id,revision:method.revision,contentDigest:method.contentDigest,directoryName:method.directoryName,...(method.capsuleId?{capsuleId:method.capsuleId}:{})})) : [];
+  const selectionScope=policyIdentity ? {contextPolicy:policyIdentity,identities} : {};
+  const version = selectionVersion([...methods.map((method) => ({ directory: method.directoryName, digest: String(method.digest ?? method.document ?? ""), reason: reasons.get(method.directoryName) ?? null })), ...(policyIdentity ? [{directory:"context-policy",digest:JSON.stringify(policyIdentity),reason:null}] : [])]);
+  const officialReceipt = officialMethods.map((method) => ({ id: method.id, name: method.name, digest: method.digest, directoryName: method.directoryName }));
+  if (methods.length === 0 && !keepDirectory) {
+    await fs.rm(directory, { recursive: true, force: true });
+    return { ...selectionScope, directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
+  }
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
+  // New and changed first, stale last (see above). What a running runtime was given and is still approved is written too, and stays.
+  /** @type {any[]} */
+  const kept = contextPolicy?.kind === "geo-project" ? [] : [...(/** @type {any} */ (learnedMethods).kept ?? []), ...officialMethods.kept];
   let bytes = 0;
-  for (const method of methods) {
-    await writeFile(
-      directory,
-      path.join(directory, method.directoryName, "SKILL.md"),
-      method.document,
-      { encoding: "utf8", mode: 0o444 },
-    );
+  for (const method of [...methods, ...kept]) {
     // A code skill is a body plus the scripts it tells the run to execute.
     // Writing only the body mounted an instruction to run a file that was not
     // there, which reads to the model as its own mistake. Same scope root and
     // same read-only mode as the body: the container executes them, and
     // nothing — including the run — writes its own.
-    const files = "files" in method ? method.files : {};
-    for (const [relative, content] of Object.entries(files ?? {})) {
-      await writeFile(
-        directory,
-        path.join(directory, method.directoryName, relative),
-        content,
-        { encoding: "utf8", mode: 0o444 },
-      );
+    /** @type {Record<string, string>} */
+    const wanted = { "SKILL.md": method.document };
+    for (const [relative, content] of Object.entries("files" in method ? method.files ?? {} : {})) wanted[relative] = String(content);
+    const target = path.join(directory, method.directoryName);
+    const held = await readTree(target);
+    if (!sameTree(held, wanted)) {
+      // Replaced file by file (a rename), so a reader never finds the method's own file missing; what the method no longer has goes after.
+      for (const [relative, content] of Object.entries(wanted)) {
+        if (held?.get(relative) !== content) await writeFile(directory, path.join(target, relative), content, { encoding: "utf8", mode: 0o444 });
+      }
+      for (const relative of held?.keys() ?? []) {
+        if (!(relative in wanted)) await fs.rm(path.join(target, relative), { recursive: true, force: true });
+      }
     }
-    bytes += method.bytes;
+    if (methods.includes(method)) bytes += method.bytes;
   }
-  return { directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, capsule };
+  const present = new Set([...methods, ...kept].map((method) => method.directoryName));
+  present.add(SELECTION_FILE);
+  for (const entry of await fs.readdir(directory)) {
+    if (!present.has(entry)) await fs.rm(path.join(directory, entry), { recursive: true, force: true });
+  }
+  // What the plugin lists, in the order of the selection: the researcher's own entries, the learned methods best first, what a
+  // received pack brought. A learned method carries the reason it is there; a capsule entry none.
+  await recheck();
+  // `leftOut` is the receipt of what the personal delta kept out of this selection (a plugin that predates it ignores the field).
+  await writeFile(directory, path.join(directory, SELECTION_FILE), `${JSON.stringify({
+    version, ...(contextPolicy ? {contextPolicy:contextPolicyIdentity(contextPolicy)} : {}), methods: methods.map((method) => ({ directory: method.directoryName, reason: reasons.get(method.directoryName) ?? null })),
+    ...(officialMethods.leftOut.length ? { leftOut: officialMethods.leftOut } : {}),
+  })}\n`, { encoding: "utf8", mode: 0o444 });
+  return { ...selectionScope, directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
+}
+
+/**
+ * One of the person's own capsule methods as a document the similarity module reads: its heading is its name and the opening of its text is
+ * what it says, which is all `methodText` embeds.
+ * @param {{ id: string, content: string }} method
+ */
+function ownMethodDocument(method) {
+  const text = String(method.content ?? "").trim();
+  const first = text.split("\n", 1)[0].trim();
+  const name = (first.startsWith("# ") ? first.slice(2) : first).slice(0, 80);
+  return { id: method.id, payload: { frontmatter: { name, description: text.replace(/\s+/g, " ").slice(0, 400) }, contentDigest: `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}` } };
+}
+
+/** The file beside the method directories that says which learned method is there for which reason. */
+export const SELECTION_FILE = "_selection.json";
+
+/**
+ * What the selection is, as a short digest: the methods and the bodies they were mounted as and why. It changes when a card
+ * would change in front of a run, and not otherwise, so a reader can tell "the same mount" without comparing text.
+ * @param {{ directory: string, digest: string, reason: string | null }[]} entries
+ * @returns {string}
+ */
+function selectionVersion(entries) {
+  const lines = entries.map((entry) => `${entry.directory}\u0000${entry.digest}\u0000${entry.reason ?? ""}`).sort();
+  return createHash("sha256").update(lines.join("\n"), "utf8").digest("hex").slice(0, 16);
+}
+
+/**
+ * Every regular file under a directory, by relative path; null when there is no such directory. A thing that is not a regular
+ * file (a link, a socket) is read as a file whose content cannot match, so the directory is written again.
+ * @param {string} directory @returns {Promise<Map<string, string> | null>}
+ */
+async function readTree(directory) {
+  /** @type {import("node:fs").Dirent[]} */
+  let entries;
+  try { entries = await fs.readdir(directory, { withFileTypes: true, recursive: true }); } catch { return null; }
+  /** @type {Map<string, string>} */
+  const tree = new Map();
+  for (const entry of entries) {
+    const full = path.join(entry.parentPath, entry.name);
+    const relative = path.relative(directory, full).split(path.sep).join("/");
+    if (entry.isDirectory()) continue;
+    tree.set(relative, entry.isFile() ? await fs.readFile(full, "utf8").catch(() => "\u0000unreadable") : "\u0000not a file");
+  }
+  return tree;
+}
+
+/** @param {Map<string, string> | null} tree @param {Record<string, string>} wanted @returns {boolean} */
+function sameTree(tree, wanted) {
+  if (!tree) return false;
+  const names = Object.keys(wanted);
+  return tree.size === names.length && names.every((name) => tree.get(name) === wanted[name]);
+}
+
+/** What a reason of a mount is worth to a count of carried runs: the methods that were meant for the work. @param {unknown} reason @returns {boolean} */
+export function isRelevantMountReason(reason) {
+  return /** @type {readonly unknown[]} */ (METHOD_RELEVANT_MOUNT_REASONS).includes(reason);
 }

@@ -55,7 +55,7 @@ function ForecastList({ forecasts }: { forecasts: readonly VcrForecast[] }) {
         const compared = forecast.lines.some((line) => line.actual != null);
         return (
           <li key={forecast.id} data-vcr-forecast={forecast.id}>
-            <p className="text-ui font-medium text-text">{forecast.label}</p>
+            <p className="text-ui font-semibold text-text">{forecast.label}</p>
             {(forecast.frozenAt || forecast.comparedAt) && (
               <p className="mt-0.5 text-caption text-text-3">
                 {[forecast.frozenAt ? `冻结于 ${forecast.frozenAt}` : null, forecast.comparedAt ? `与实际对照于 ${forecast.comparedAt}` : null]

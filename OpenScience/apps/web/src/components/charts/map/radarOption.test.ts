@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MapDimension } from "@/lib/memoryMapClient";
 import { TEST_PALETTE } from "./palette";
-import { RADAR_MIN_AXES, radarMax, radarOption, radarState, radarValue } from "./radarOption";
+import { RADAR_MIN_AXES, dimensionBarOption, radarMax, radarOption, radarState, radarValue } from "./radarOption";
 
 const axis = (id: string, value: number, previousValue: number, count = value) => ({ id, label: id, value, previousValue, count });
 const memory = (axes: ReturnType<typeof axis>[]): MapDimension => ({ id: "memory", title: "各方面记了多少", previous: "30 天前", scale: "count", total: axes.reduce((sum, entry) => sum + entry.count, 0), previousTotal: 5, axes });
@@ -56,5 +56,18 @@ describe("the polygon", () => {
   it("uses only the three hues", () => {
     const used = JSON.stringify(radarOption(dimension, TEST_PALETTE)).match(/#[a-z0-9]+/gu) ?? [];
     expect(new Set(used)).toEqual(new Set(["#grid", "#text", "#grey", "#blue"]));
+  });
+});
+
+
+describe("sparse dimension bars", () => {
+  it("keeps both periods' original values and formats share tooltips in the displayed unit", () => {
+    const option: any = dimensionBarOption(work([axis("写作", 0.5, 0.25, 1), axis("检索", 0.5, 0.75, 1)], 2), TEST_PALETTE);
+    expect(option.series.map((series: any) => series.data)).toEqual([[0.25, 0.75], [0.5, 0.5]]);
+    expect(option.tooltip.valueFormatter(0.5)).toBe("50%");
+    expect(option.tooltip.valueFormatter(0.25)).toBe("25%");
+    expect(option.series[1].label.formatter({ value: 0.5 })).toBe("50%");
+    const counted: any = dimensionBarOption(memory([axis("偏好", 2, 1)]), TEST_PALETTE);
+    expect(counted.tooltip.valueFormatter(2)).toBe("2");
   });
 });

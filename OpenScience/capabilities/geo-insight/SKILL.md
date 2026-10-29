@@ -78,7 +78,11 @@ probe host, a social crawler or a marketplace.
   step that is done and not stale); `mcp__evimed__geo_write` to register what you produce —
   `product`, `claims`, `journey`, `questions`, then `lock_questions`, then
   `step`. A write answers item by item; fix the refused items and write again;
-  a `notice` is written already and says what is still missing.
+  a `notice` is written already and says what is still missing. A `questions`
+  write adds its groups to the latest map — a group of the same name and pool
+  replaces that group, the others stay as they are — and `replace: true` writes
+  the whole map; a question is measured by `isMeasured: true`, and one written
+  without a `kind` is `typical`.
   `product` is the identity every answer is counted by, so preserve what is known:
   `brandName`, `genericName`, `aliases` (the other names an answer uses for the
   product), `misspellings` (how people misspell it), `approvalNo` (批准文号),
@@ -150,6 +154,12 @@ Inside this deliverable's `deliverables/<id>/` directory:
   literature|regulator|other`), `artifactPath` (the `.evimed-sources/` file the
   quote is in), `evidenceLevel`, `population`, `inLabel`, `elements` (the
   T/CAPT 026 evidence elements), `verifiedAt`, `validUntil`. Keep the supported claims; do not pad the library to a quota.
+  `inLabel` is explicitly `true`, `false`, or `null`: `true` means a checked approved label supports this use;
+  `false` means an evidenced comparison establishes that the use is outside that label; `null` means the label
+  scope was not checked or remains unknown. Never use `false` to mean "not verified". A public medicine-information
+  page alone does not establish approved-label scope. Preserve the authoritative label or regulatory source,
+  jurisdiction and version for an asserted in-label or off-label decision; otherwise keep `inLabel: null` and
+  state the limitation. Unknown label scope does not discard a source-supported clinical claim.
   Each claim also says where it belongs on the patient journey: `journeyStage`
   (the stage's name, as your journey names it) and `clinicalQuestion` (the key
   clinical question it answers, one plain sentence); where the claim is a

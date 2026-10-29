@@ -20,7 +20,7 @@ export function registryCoverageSummary(sources: readonly VcrRegistrySource[]): 
 export function VcrRegistryCoverage({ sources = [], heading = true }: { sources?: VcrRegistrySource[]; heading?: boolean }) {
   if (!sources.length) return null;
   return <section aria-label="注册源覆盖" className="space-y-2">
-    {heading && <h3 className="text-ui font-medium text-text">注册源覆盖</h3>}
+    {heading && <h3 className="text-ui font-semibold text-text">注册源覆盖</h3>}
     <ul className="space-y-1 text-caption text-text-2">
       {sources.map(source => <li key={source.key} className="flex flex-wrap gap-x-3 gap-y-1">
         <span>{source.label}</span>

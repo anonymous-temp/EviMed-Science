@@ -108,7 +108,7 @@ describe("the study page's header", () => {
     await heading();
     expect(screen.getByRole("link", { name: /虚拟临床研究/ })).toHaveAttribute("href", "/app/virtual-research");
     expect(screen.queryByRole("list", { name: "七步进度" })).toBeNull();
-    expect(document.querySelector("[data-step-rail]")).toBeNull();
+    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
   });
 
   // UI-17: a study whose results cannot carry the use it asked for says both,
@@ -124,6 +124,9 @@ describe("the study page's header", () => {
     draw();
     const mark = await screen.findByRole("button", { name: "指定研究分析 → 研究设计支持" });
     expect(mark).not.toHaveAttribute("data-tag");
+    expect(mark).toHaveClass("h-sm", "text-ui", "text-warn-strong");
+    expect(mark).not.toHaveClass("text-caption");
+    expect(mark).toHaveAttribute("aria-haspopup", "dialog");
     await userEvent.click(mark);
     const drawer = await screen.findByRole("dialog", { name: "预期用途" });
     expect(within(drawer).getByText("所用模型的可信度层级最多支持“研究设计支持”")).toBeInTheDocument();
@@ -144,11 +147,11 @@ describe("the study page's header", () => {
     expect(screen.getByTestId("location")).not.toHaveTextContent("/app/chat");
     expect(store.select).not.toHaveBeenCalled();
     // The band is still there, with the same tabs; none of them is the open view.
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(7);
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();
     // The shell is asked to place the kernel's frame over the pane, for the study's own conversation, in the study's project.
     await waitFor(() => expect(pane.requests).toEqual([{ projectId: "prj_ev201", sessionId: "ses_own" }]));
-    expect(screen.getByRole("button", { name: /对话/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
   });
 
   it("says nothing of the engine: its state is not a sentence on a person's page", async () => {
@@ -168,15 +171,13 @@ describe("the study page's header", () => {
 describe("the seven tabs", () => {
   // One row of tabs replaces the step rail and the tabs: five of the seven steps were named like five of the seven tabs.
   it("is one row of seven, the stage tabs each wearing the state of its stage as a dot that is also said in words, and what the stage found", async () => {
-    draw();
-    await heading();
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      "总览", "定义与证据4 张假设卡已完成", "人群3,412 名已完成", "虚拟患者2,000 名需要留意", "对照1 条可估计已完成", "试验成功把握 58–74%已完成", "匹配与招募6 条入排标准已完成",
-    ]);
-    const dots = tabs.map((tab) => tab.querySelector("[data-tab-dot]")?.getAttribute("data-tab-dot") ?? null);
-    // 总览 is the study as a whole and has no dot; the failed 患者 step needs the reader.
-    expect(dots).toEqual([null, "done", "done", "attention", "done", "done", "done"]);
+    draw(); await heading();
+    const steps = [...document.querySelectorAll("[data-rail-step]")];
+    expect(steps.map(step => step.getAttribute("data-rail-step"))).toEqual(["definition", "evidence", "population", "patients", "comparator", "trial", "matching"]);
+    expect(steps.map(step => step.getAttribute("data-rail-state"))).toEqual(["done", "done", "done", "attention", "done", "done", "done"]);
+    expect(steps[3]).toHaveTextContent("未完成");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("button", { name: "查看：总览" })).toBeInTheDocument();
   });
 
   it("shows a stage that has not begun as todo, and one under way as active", async () => {
@@ -186,8 +187,8 @@ describe("the seven tabs", () => {
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
     draw();
     await heading();
-    expect(screen.getByRole("tab", { name: /^试验/ }).querySelector("[data-tab-dot]")).toHaveAttribute("data-tab-dot", "active");
-    expect(screen.getByRole("tab", { name: /^匹配与招募/ }).querySelector("[data-tab-dot]")).toHaveAttribute("data-tab-dot", "todo");
+    expect(document.querySelector('[data-rail-step="trial"]')).toHaveAttribute("data-rail-state", "active");
+    expect(document.querySelector('[data-rail-step="matching"]')).toHaveAttribute("data-rail-state", "todo");
   });
 
   it("tells when a step moved in the overview's list, and says nothing of time for a step nobody has started", async () => {
@@ -215,7 +216,7 @@ describe("the seven tabs", () => {
     await waitFor(() => expect(panel.querySelector("[data-vcr-loading]")).toBeNull());
     expect(panel.querySelector("[data-vcr-tab-error]")).toBeNull();
     expect(panel.textContent?.trim().length).toBeGreaterThan(0);
-    expect(screen.getByRole("tab", { selected: true })).toHaveAttribute("id", `vcr-tab-panel-tab-${tab}`);
+    expect(screen.getByRole("button", { name: /^查看：/ })).toBeInTheDocument();
     expect(errors).not.toHaveBeenCalledWith("VcrTabBoundary", expect.anything(), expect.anything());
   });
 
@@ -235,8 +236,8 @@ describe("the seven tabs", () => {
     });
     expect(panel).toHaveTextContent("这一页的内容暂时读不出来");
     expect(screen.getByRole("heading", { level: 1, name: STUDY_NAME })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
-    await userEvent.click(screen.getByRole("tab", { name: /^人群/ }));
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(7);
+    await userEvent.click(within(document.querySelector('[data-rail-step="population"]') as HTMLElement).getByRole("link"));
     await waitFor(() => expect(document.querySelector("#vcr-tab-panel [data-vcr-tab-error]")).toBeNull());
   });
 });
@@ -287,11 +288,11 @@ describe("the study page's addresses", () => {
   it("opens a package in the reader on the study's own address, under the same band: the step bar is on every view", async () => {
     draw(`/app/virtual-research/${STUDY_ID}?package=exp_2`);
     expect(await screen.findByRole("heading", { name: "研究包 v1" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(7);
     expect(screen.queryByRole("textbox")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /返回研究/ }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "研究包 v1" })).toBeNull());
-    expect(screen.getByRole("tab", { name: /^总览/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "查看：总览" })).toBeInTheDocument();
   });
 });
 
@@ -321,7 +322,7 @@ describe("what the study is doing, in the strip under the header", () => {
     expect(line).toHaveTextContent("另有 1 项排队");
     expect(within(line).getByRole("button", { name: "取消" })).toBeInTheDocument();
     // The strip is in the band, above the row of tabs — and says no percentage and no instruction the model was briefed with.
-    const tabs = screen.getByRole("tablist");
+    const tabs = document.querySelector("[data-toolbar]")!;
     expect(line.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(document.querySelector("[data-page-chrome]")!.contains(line)).toBe(true);
     expect(line.textContent).not.toMatch(/%|vcr_|exploratory|数据档位/);
@@ -904,4 +905,49 @@ describe("成员与角色", () => {
     expect(within(dialog).getByLabelText("成员账号 ID")).toHaveValue("u_x");
     expect(within(dialog).getByText("陈统计")).toBeInTheDocument();
   });
+});
+
+it("opens step methods in the main area and carries study and result context into the shared workbench", async () => {
+  draw(`/app/virtual-research/${STUDY_ID}/population`);
+  await heading();
+  await userEvent.click(screen.getByRole("button", { name: "选择方法" }));
+  expect(await screen.findByRole("searchbox", { name: "搜索本步方法" })).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole("button", { name: "构建队列" }));
+  expect(screen.getByTestId("location")).toHaveTextContent("/app/capabilities/methods/mth_2?study=std_1&view=population");
+});
+
+it("restores a submitted intake awaiting information as its canonical conversation after handoff and reload", async () => {
+  const study = fixture("empty/study.json");
+  study.id = STUDY_ID; study.projectId = "prj_ev201"; study.status = "draft"; study.activity = null;
+  study.conversation = { sessionId: "submitted_canonical", exists: true, submitted: true, awaitingInput: true };
+  study.steps.definition = { status: "none", requested: true, held: true, note: "请在研究对话中补充尚缺的研究信息。" };
+  server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+  const page = draw(`/app/virtual-research/${STUDY_ID}/chat`);
+  await screen.findByRole("region", { name: "研究对话" });
+  expect(screen.queryByRole("button", { name: "开始研究" })).toBeNull();
+  expect(pane.requests.at(-1)).toEqual({ projectId: "prj_ev201", sessionId: "submitted_canonical" });
+  page.unmount(); forgetStudies(); draw(`/app/virtual-research/${STUDY_ID}/chat`);
+  await screen.findByRole("region", { name: "研究对话" });
+  expect(screen.queryByRole("button", { name: "开始研究" })).toBeNull();
+  expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(7);
+});
+
+it("opens the existing protected data intake on its addressed study view", async () => {
+  draw(`/app/virtual-research/${STUDY_ID}/data?intake=1`);
+  expect(await screen.findByRole("dialog", { name: "数据接入" })).toBeInTheDocument();
+  expect(server.calls.some(call => call.path === `/vcr/studies/${STUDY_ID}/data`)).toBe(true);
+});
+
+it("keeps a truly unsubmitted saved draft in the brief even when its canonical session already exists", async () => {
+  me.fetchWebMe.mockResolvedValue({ user: { id: "draft-owner", tenantId: "tenant" }, features: { vcr: true } });
+  const study = fixture("empty/study.json");
+  study.id = STUDY_ID; study.projectId = "prj_ev201"; study.status = "draft"; study.question = "尚未提交的问题"; study.activity = null;
+  study.conversation = { sessionId: "unsubmitted_canonical", exists: true };
+  study.steps.definition = { status: "none", requested: true, held: true, note: null };
+  installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+  draw(`/app/virtual-research/${STUDY_ID}/chat`);
+  expect(await screen.findByRole("textbox", { name: "研究问题" })).toHaveValue("尚未提交的问题");
+  expect(screen.getByRole("button", { name: "开始研究" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "研究对话" })).toBeNull();
+  expect(pane.requests).toHaveLength(0);
 });

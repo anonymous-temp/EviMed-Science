@@ -135,7 +135,7 @@ function SourceBlock({ source, index, sourceCount, check, runId }: {
         {source.accessLevel && ACCESS_LABEL[source.accessLevel] && <span>{ACCESS_LABEL[source.accessLevel]}</span>}
         <SourceUpdateBadges updates={check?.updates} updateStatus={check?.updateStatus} />
       </p>
-      <p className="text-ui font-medium text-text">{source.sourceTitle ?? source.identifier ?? "来源未记录"}</p>
+      <p className="text-ui font-semibold text-text">{source.sourceTitle ?? source.identifier ?? "来源未记录"}</p>
       {source.identifier && source.sourceTitle && <p className="break-all text-caption text-text-3">{source.identifier}</p>}
       {source.supportQuote ? (
         <blockquote className="border-l-2 border-strong pl-2 text-ui text-text">

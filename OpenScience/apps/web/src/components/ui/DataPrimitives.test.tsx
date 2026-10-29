@@ -77,7 +77,9 @@ describe("StatTile", () => {
     // The sample is a tooltip, never a printed line in the tile.
     expect(tile).toHaveAccessibleDescription("61，264 次回答");
     expect(tile).not.toHaveTextContent("264 次回答");
-    expect(within(tile).getByText("61")).toHaveClass("text-metric-lg");
+    // The leading tile is first, at the band's own metric rung: a 40 px figure was a sixth pair on a data page (owner, 2026-10-19).
+    expect(within(tile).getByText("61")).toHaveClass("text-metric");
+    expect(within(tile).getByText("61")).not.toHaveClass("text-metric-lg");
   });
 
   it("has a skeleton of its own, and says a missing number in words", () => {
@@ -146,6 +148,22 @@ describe("StatTile", () => {
     expect(within(screen.getByRole("region", { name: "本轮指标" })).getAllByText(/次有效回答计算/)).toHaveLength(1);
   });
 
+  it("associates visible scientific disclosures with their own figures", () => {
+    render(<>
+      <StatBand label="本轮指标" footnote="按 4 个引擎、178 次有效回答计算 · DeepSeek 本轮未测：探测暂停"><StatTile label="提及率" value="31%" /></StatBand>
+      <StatBand label="未知指标" footnote="事实准确率、引用命中率、检索触发率这一轮没有读数"><StatTile label="事实准确率" value="—" /></StatBand>
+      <StatBand label="无注释"><StatTile label="数量" value="2" /></StatBand>
+    </>);
+    const measured = screen.getByRole("region", { name: "本轮指标" });
+    const unknown = screen.getByRole("region", { name: "未知指标" });
+    expect(measured).toHaveAccessibleDescription("按 4 个引擎、178 次有效回答计算 · DeepSeek 本轮未测：探测暂停");
+    expect(unknown).toHaveAccessibleDescription("事实准确率、引用命中率、检索触发率这一轮没有读数");
+    expect(measured.getAttribute("aria-describedby")).not.toBe(unknown.getAttribute("aria-describedby"));
+    expect(within(measured).getByText(/178 次有效回答/)).toBeVisible();
+    expect(within(unknown).getByText(/这一轮没有读数/)).toHaveAttribute("data-note");
+    expect(screen.getByRole("region", { name: "无注释" })).not.toHaveAttribute("aria-describedby");
+  });
+
   it("puts the target and the leading rival on the same measure as the value", () => {
     const { container } = render(<BulletBar label="综合可见度" value={61} target={65} targetLabel="目标 65" rival={72} rivalLabel="诺和盈 72" />);
     expect(screen.getByRole("img", { name: "综合可见度 61，目标 65，诺和盈 72" })).toBeInTheDocument();
@@ -196,6 +214,22 @@ describe("ChartCard", () => {
     rerender(<ChartCard title="可见度升到 61" footnote="按 4 个引擎计算">x</ChartCard>);
     expect(screen.getByRole("heading", { name: "可见度升到 61" })).toBeInTheDocument();
     expect(screen.getByText("按 4 个引擎计算")).toBeInTheDocument();
+  });
+
+  it("associates chart denominators only while their chart is drawn", () => {
+    const note = "每格是提到我们的回答数 / 回答数";
+    const { rerender } = render(<ChartCard title="引擎对比" footnote={note}>plot</ChartCard>);
+    const card = () => screen.getByRole("heading", { name: "引擎对比" }).closest("section")!;
+    expect(card()).toHaveAccessibleDescription(note);
+    expect(screen.getByText(note)).toBeVisible();
+    expect(screen.getByText(note)).toHaveAttribute("data-note");
+    for (const state of ["loading", "empty", "error"] as const) {
+      rerender(<ChartCard title="引擎对比" state={state} footnote={note}>plot</ChartCard>);
+      expect(card()).not.toHaveAttribute("aria-describedby");
+      expect(screen.queryByText(note)).not.toBeInTheDocument();
+    }
+    rerender(<ChartCard title="引擎对比" footnote={note}>plot</ChartCard>);
+    expect(card()).toHaveAccessibleDescription(note);
   });
 
   it("retries from the card", async () => {
@@ -362,14 +396,16 @@ describe("ProgressRail", () => {
 
   it("sets a word that stands in for a number smaller than a number", () => {
     // 「未测」 and 「样本不足」 are words, and a word at the 40 px metric rung
-    // shouts a non-measurement louder than every measurement beside it.
+    // shouts a non-measurement louder than every measurement beside it. It is set at the section rung (18 / 600) — the page's own
+    // heading pair — and not at a 20 / 600 of its own (R19.2).
     const { container, rerender } = render(<StatTile label="豆包" value="未测" placeholder />);
     const word = container.querySelector("[data-stat-value]");
-    expect(word).toHaveClass("text-heading");
+    expect(word).toHaveClass("text-section");
+    expect(word).not.toHaveClass("text-heading");
     expect(word).not.toHaveClass("text-metric");
     expect(word).not.toHaveClass("text-metric-lg");
     rerender(<StatTile label="品牌提及率" value="21" unit="%" lead />);
-    expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric-lg");
+    expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric");
   });
 
 });
@@ -394,11 +430,15 @@ describe("HeatGrid sideways", () => {
     expect(within(table).getAllByRole("columnheader")[1]).not.toHaveClass("sticky");
   });
 
-  it("sets a row name in the regular weight unless it is the one in view: a th is bold by default, a seventh type pair (13/700)", () => {
+  it("sets every row name in the regular weight — a th is bold by default, a pair of its own — and tells the one in view by a ring round its cells", () => {
     render(<HeatGrid {...props} emphasis={{ row: "kimi" }} />);
     const [kimi, off] = within(screen.getByRole("table")).getAllByRole("rowheader");
-    expect(kimi).toHaveClass("font-semibold");
+    expect(kimi).toHaveClass("font-normal");
     expect(off).toHaveClass("font-normal");
+    expect(kimi).toHaveAttribute("data-heat-emphasis");
+    expect(off).not.toHaveAttribute("data-heat-emphasis");
+    const cells = [...document.querySelectorAll("[data-heat-row] td")];
+    expect(cells.filter((cell) => cell.classList.contains("ring-1")).map((cell) => cell.textContent)).toEqual(["10", "30"]);
   });
 
   it("takes the page's ground when it is drawn on the page", () => {

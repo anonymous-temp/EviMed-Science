@@ -19,7 +19,8 @@ import { Switch } from "@/components/ui/Switch";
  * The memory page's header controls: one switch and one 「⋯」 (2026-10-07 plan
  * §3.2). The owner put the switch, the reset and sharing on the header's one
  * line (2026-09-22); the menu holds the four things that are not a list:
- * 分享与导入 · 已忘记的内容 · 本项目不使用记忆 · 重置记忆.
+ * 分享与导入 · 已忘记的内容 · 本项目不使用记忆 · 重置记忆, and, where the memory takes words typed on
+ * the page, 从其他 AI 导入 beside the first (2026-10-25).
  *
  * 「记忆」 is one decision over two stored halves (learning and recall, owner
  * ruling 2026-09-20); it reads on only when both are on, because a switch that
@@ -30,7 +31,9 @@ import { Switch } from "@/components/ui/Switch";
  * the researcher's own capsule), and none of what it does not (对话, 报告, 知识库
  * and the capsules others shared).
  */
-export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember }: {
+export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember, onImport, projectId: shown }: {
+  /** The project 「本项目不使用记忆」 acts on: the one the page shows. `undefined` is the shell's own project; `null` is a page showing none that can be paused (the 「其他」 of the 项目 tab), where the item is off. */
+  projectId?: string | null;
   onReset: () => void;
   /** A switch was changed: 项目 says 「本项目已暂停记忆」 from the same setting. */
   onSettingsChanged?: () => void;
@@ -38,12 +41,14 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
   onForgotten: () => void;
   /** 「记住这一条」: present only for an account whose memory can take words typed on the page. */
   onRemember?: () => void;
+  /** 「从其他 AI 导入」: bring in what another assistant remembered about the person; present only where memory can take words typed on the page. */
+  onImport?: () => void;
 }) {
   const [settings, setSettings] = useState<WebMemorySettings | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
-  const projectId = getWebProjectId();
+  const projectId = shown === undefined ? getWebProjectId() : shown;
 
   useEffect(() => {
     let cancelled = false;
@@ -80,11 +85,13 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
   };
 
   const memoryOn = settings ? !settings.learningPaused && !settings.recallPaused : false;
-  const projectPaused = settings?.pausedProjects.includes(projectId) ?? false;
+  const projectPaused = projectId !== null && (settings?.pausedProjects.includes(projectId) ?? false);
 
   return (
     <>
-      {onRemember && <Button size="sm" variant="secondary" onClick={onRemember}>记住这一条</Button>}
+      {/* `text`, not `secondary`: a filled 28 px button is a look of its own, and on the map and the overview — held to the data page's ten kinds of
+          control — one more look is the page over budget (measured: the map was at ten, and ten with this button as it was it was eleven). */}
+      {onRemember && <Button size="sm" variant="text" onClick={onRemember}>记住这一条</Button>}
       {failed
         ? <span className="text-caption text-text-3">记忆开关暂时读取不到</span>
         : settings && (
@@ -100,15 +107,16 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
         label="记忆设置"
         items={[
           { label: "分享与导入", onSelect: onShare },
+          ...(onImport ? [{ label: "从其他 AI 导入", onSelect: onImport }] : []),
           { label: "已忘记的内容", onSelect: onForgotten },
           "separator",
           {
             label: "本项目不使用记忆",
             toggle: true,
             checked: projectPaused,
-            disabled: !settings || busy,
+            disabled: !settings || busy || projectId === null,
             onSelect: () => {
-              if (!settings) return;
+              if (!settings || projectId === null) return;
               void change({
                 pausedProjects: projectPaused
                   ? settings.pausedProjects.filter((id) => id !== projectId)
@@ -124,7 +132,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
       {confirmingReset && (
         <ConfirmDialog
           title="重置记忆？"
-          body="将永久清空你的全部记忆、已学到的做法和经验，以及你自己胶囊里的记录，不可撤销。对话、报告、知识库和别人分享给你的胶囊不受影响。"
+          body="将永久清空你的全部记忆、已学到的做法，以及你自己胶囊里的记录，不可撤销。对话、报告、知识库和别人分享给你的胶囊不受影响。"
           confirmLabel="清空"
           onConfirm={() => void reset()}
           onCancel={() => setConfirmingReset(false)}

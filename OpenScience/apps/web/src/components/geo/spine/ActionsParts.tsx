@@ -9,6 +9,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { OWN_COLOR, rivalColor } from "@/components/charts/trendModel";
+import type { ReadFailure } from "../geoProjectData";
 import { geoSectionId } from "../geoTabs";
 import { GEO_POOL_KINDS, layerName, monthDay } from "../geoText";
 import { yuan } from "../tabs/geoTabText";
@@ -22,16 +23,16 @@ import type { ArticleRef } from "./useArticleActions";
 const finite = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
 
 /**
- * The day the first page went out, from what the platform knows has been published: an order that is published (its last change
- * is the day it went live) or a page the brand registered with its own date. Null while nothing has.
+ * Publication uses the recorded publication event, including orders that later became lost or refunded.
  */
 export function firstPublishedDay(distribution: GeoDistribution | null | undefined): string | null {
+  if (distribution && 'firstPublishedAt' in distribution) return distribution.firstPublishedAt && Number.isFinite(Date.parse(distribution.firstPublishedAt)) ? agendaLocalDate(DISPLAY_TIME_ZONE, distribution.firstPublishedAt) : null;
   const days: string[] = [];
   for (const order of distribution?.orders ?? []) {
-    if (["published", "verified", "settled"].includes(order.state) && order.updatedAt) days.push(agendaLocalDate(DISPLAY_TIME_ZONE, order.updatedAt));
+    if (order.publishedAt && Number.isFinite(Date.parse(order.publishedAt))) days.push(agendaLocalDate(DISPLAY_TIME_ZONE, order.publishedAt));
   }
   for (const link of distribution?.ownedLinks ?? []) {
-    if (link.publishedAt && link.status !== "retired") days.push(agendaLocalDate(DISPLAY_TIME_ZONE, link.publishedAt));
+    if (link.publishedAt && Number.isFinite(Date.parse(link.publishedAt))) days.push(agendaLocalDate(DISPLAY_TIME_ZONE, link.publishedAt));
   }
   return days.sort()[0] ?? null;
 }
@@ -86,11 +87,14 @@ export function EffectCard({
   input,
   loading,
   onOpen,
+  error = null,
 }: {
   parts: readonly HeadlinePart[];
   input: NetEffectInput | null;
   loading: boolean;
   onOpen: (target: "acted" | "waiting" | "effect") => void;
+  /** The monitoring did not come: the arms cannot be drawn, and the card says why instead of 「首批稿件上线后…」. */
+  error?: ReadFailure | null;
 }) {
   // The figures of a heading take the heading's own weight (a `Note`'s medium figure would be a type pair of its own at this size).
   const title = parts.length > 0
@@ -118,7 +122,9 @@ export function EffectCard({
             {input.band !== null && <LegendMark series="band" shape="band" color="var(--chart-band)">对照组的波动范围</LegendMark>}
           </>
         ) : undefined}
-        state={loading ? "loading" : input ? "content" : "empty"}
+        state={loading ? "loading" : input ? "content" : error ? "error" : "empty"}
+        errorMessage={error ? `投放效果的测量没有读到：${error.message}` : undefined}
+        onRetry={error?.retry}
         emptyText="首批稿件上线后，这里会把投放的问题群和对照组放在一起比。"
         height={200}
       >
@@ -142,6 +148,7 @@ export function ReviewBlock({
   reachable,
   onOpen,
   onRelease,
+  addressed = null,
 }: {
   articles: readonly GeoArticle[];
   groupOf: (article: GeoArticle) => GeoClusterRow | null;
@@ -150,6 +157,8 @@ export function ReviewBlock({
   reachable: (article: ArticleRef) => { label: string } | null;
   onOpen: (article: GeoArticle) => void;
   onRelease: (article: GeoArticle) => void;
+  /** The article the address names (`?article=`, a 「本周」 line about it): its row is the marked one. */
+  addressed?: string | null;
 }) {
   if (articles.length === 0) return null;
   return (
@@ -165,6 +174,7 @@ export function ReviewBlock({
               title={article.title || article.question || "未命名稿件"}
               titleProps={{ "data-geo-article": article.id }}
               onOpen={reach ? () => onOpen(article) : undefined}
+              selected={addressed === article.id}
               meta={(
                 <span className="inline-flex flex-wrap items-baseline gap-x-2">
                   {group && <ClusterLink groupId={group.id} className="relative z-sticky text-ui">{clusterName(group)}</ClusterLink>}
@@ -200,8 +210,8 @@ export function BudgetLine({
   const connected = distribution.market?.configured !== false;
   const budget = distribution.budget && typeof distribution.budget.totalCny === "number" ? distribution.budget : null;
   if (!connected && !budget) return null;
-  const spent = typeof distribution.spentCny === "number" ? distribution.spentCny : 0;
-  const reserved = typeof distribution.reservedCny === "number" ? distribution.reservedCny : 0;
+  const spent = typeof distribution.spentCny === "number" ? distribution.spentCny : null;
+  const reserved = typeof distribution.reservedCny === "number" ? distribution.reservedCny : null;
   return (
     <section id={geoSectionId("budget")} aria-label="投放预算" data-geo-budget={budget ? "set" : "unset"}>
       {budget ? (
@@ -264,6 +274,7 @@ export function OtherArticles({
   reachable,
   onOpen,
   onWithdraw,
+  onContinue,
   canEdit,
 }: {
   articles: readonly GeoArticle[];
@@ -271,6 +282,7 @@ export function OtherArticles({
   reachable: (article: ArticleRef) => { label: string } | null;
   onOpen: (article: GeoArticle) => void;
   onWithdraw: (article: GeoArticle) => void;
+  onContinue?: (article: GeoArticle) => void;
   canEdit: boolean;
 }) {
   if (articles.length === 0) return null;
@@ -294,7 +306,10 @@ export function OtherArticles({
                   </span>
                 )}
                 trailing={article.groupIsControl ? <Tag tone="warn">对照群</Tag> : undefined}
-                actions={canEdit && article.status !== "withdrawn" ? <Button variant="text" size="sm" onClick={() => onWithdraw(article)}>撤回</Button> : undefined}
+                actions={canEdit ? <>
+                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" onClick={() => onContinue(article)}>继续在对话中处理</Button>}
+                  {article.status !== "withdrawn" && <Button variant="text" size="sm" onClick={() => onWithdraw(article)}>撤回</Button>}
+                </> : undefined}
               />
             );
           })}

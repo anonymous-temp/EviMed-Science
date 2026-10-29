@@ -12,15 +12,15 @@ import { NativeMemoryStore, nativeFileId, versionOfHash } from "../src/nativeMem
 import { NativeMemoryWorker, cleanBody, lineRefusal } from "../src/nativeMemoryWorker.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { resetNativeMemoryMetrics, nativeMemoryCounters } from "../src/nativeMemoryMetrics.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-const config = { ovNativeMemoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, nativeMemoryReplayAttempts: 3 };
+const config = { memoryEngineEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, nativeMemoryReplayAttempts: 3 };
 
 /** @type {ControlPlaneDatabase} */
 let database;
@@ -29,7 +29,7 @@ const users = [];
 before(async () => {
   if (!url) return;
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
 });
 after(async () => {
   if (!url) return;
@@ -47,33 +47,23 @@ async function fixture(t, { extract = () => ({}) } = {}) {
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
   const overlay = new NativeMemoryOverlay({ database });
-  const researchMemory = new ResearchMemoryStore(config, { database });
+  const memorySettings = new MemorySettingsStore(config, { database });
   let clock = new Date("2026-10-13T08:00:00.000Z");
   const store = new NativeMemoryStore({ sessions, overlay, now: () => clock });
-  const worker = new NativeMemoryWorker({ config: { ...config, ovNativeMemoryEnabled: true }, researchMemory, sessions, overlay, now: () => clock });
+  const worker = new NativeMemoryWorker({ config: { ...config, memoryEngineEnabled: true }, memorySettings, sessions, overlay, now: () => clock });
   const root = sessions.memoryRoot(userId);
   const engineUser = sessions.engineUser(userId);
   const seed = (relPath, text, { type, tags = [] } = {}) => stub.seedMemory(engineUser, relPath, text, { type, tags });
   await sessions.register(userId);
   await overlay.noteRegistered(userId);
-  return { userId, stub, sessions, overlay, researchMemory, store, worker, root, engineUser, seed, advance: (ms) => { clock = new Date(clock.getTime() + ms); }, now: () => clock };
+  return { userId, stub, sessions, overlay, memorySettings, store, worker, root, engineUser, seed, advance: (ms) => { clock = new Date(clock.getTime() + ms); }, now: () => clock };
 }
 
-test("the engine of an account is native by default where the deployment has it, and one account is never on both", options, async (t) => {
-  const { userId, researchMemory, overlay } = await fixture(t);
-  assert.equal(await researchMemory.memoryEngine(userId), "native");
-  assert.ok((await researchMemory.accountsOnEngine("native")).some((entry) => entry.userId === userId));
-  assert.ok(!(await researchMemory.accountsOnEngine("legacy")).some((entry) => entry.userId === userId));
-  const walk = await researchMemory.engineWalk();
-  assert.ok(walk.examined.native >= 1, "the walk looked at accounts");
-  assert.equal(walk.both.filter((entry) => entry.userId === userId).length, 0);
-  // A legacy record written after the move is what the walk is there to find (the move is dated a minute back: a write in the
-  // very second of the switch counts as before it).
-  await database.query("UPDATE evimed_memory.settings SET engine_changed_at = engine_changed_at - interval '1 minute' WHERE user_id=$1", [userId]);
-  await researchMemory.upsertRecord(userId, { scope: "user", scopeId: null, kind: "preference", key: "preference.x", value: "x", summary: "x", origin: "inferred", status: "active", confidence: 0.7, importance: 0.5, sensitive: false }, null);
-  const after = await researchMemory.engineWalk();
-  assert.ok(after.both.some((entry) => entry.userId === userId && entry.engine === "native" && entry.writes >= 1), "a legacy write on a native account is reported");
+test("an account of a deployment with the engine is registered with it, and settings keep no word of which engine it is on", options, async (t) => {
+  const { userId, memorySettings, overlay } = await fixture(t);
   assert.equal((await overlay.account(userId)).registeredAt !== null, true);
+  assert.ok((await overlay.accounts()).some((entry) => (entry.userId ?? entry) === userId), "the worker's pass reaches it");
+  assert.equal("engine" in await memorySettings.settings(userId), false, "there is one engine, and nothing to say about it per account");
 });
 
 test("a memory file is a record, the profile is a document of lines, and counts are counted here", options, async (t) => {
@@ -83,7 +73,6 @@ test("a memory file is a record, the profile is a document of lines, and counts 
   seed("projects/oncology-review.md", "# Oncology review\n领域：肿瘤药学\n## 目标\n- 评价某药的疗效\n## 阶段\n- 检索中", { type: "project_context", tags: ["project=p_onc"] });
   seed("evimed/derived.md", "derived index, not a memory");
   const profilePage = await store.profile(userId, { holder: { id: userId, name: "T" } });
-  assert.equal(profilePage.engine, "native");
   assert.equal(profilePage.activeCount, 4, "one file, two profile lines, one project card");
   const lines = profilePage.records.filter((record) => record.document);
   assert.equal(lines.length, 2);
@@ -305,12 +294,12 @@ test("a replay is capped: after the attempts it is abandoned and the reason is o
 });
 
 test("learning paused: a failed commit is abandoned and not replayed into a paused account", options, async (t) => {
-  const { userId, worker, overlay, stub, engineUser, researchMemory } = await fixture(t, { extract: () => "fail" });
+  const { userId, worker, overlay, stub, engineUser, memorySettings } = await fixture(t, { extract: () => "fail" });
   const session = "dsh-session_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
   stub.sessions.set(`${engineUser}/${session}`, { id: session, user: engineUser, messages: [{ role: "user", parts: [{ type: "text", text: "something" }] }], archives: 0, commitCount: 0 });
   const committed = stub.commitSession(engineUser, session);
   await overlay.recordCommit({ userId, archiveUri: committed.archive_uri, engineSession: session, origin: "gateway", taskId: committed.task_id });
-  await researchMemory.updateSettings(userId, { learningPaused: true });
+  await memorySettings.updateSettings(userId, { learningPaused: true });
   await worker.processCommits({ userId });
   await worker.processCommits({ userId });
   assert.equal((await overlay.commit(userId, committed.archive_uri)).state, "abandoned");
@@ -332,9 +321,34 @@ test("a source that changed is a label line on the memory that names it, removed
   assert.equal(record.relations.sources[0].state, "retracted");
   assert.match(record.value, /已撤稿/, "the label travels with the text; the record's relations carry the state");
   assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "retracted"), 0, "the same state twice writes nothing");
-  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "current"), 1);
-  assert.equal(await sessions.read(userId, uri), `The trial reported a benefit (doi ${doi}).`);
+  // A later clean check of the same source does not undo the retraction (`linkStatesLeftFor`): the label stays, the state stays.
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "current"), 0);
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "unknown"), 0);
+  assert.match(await sessions.read(userId, uri), /已撤稿/, "the label survives a clean answer and an outage");
+  assert.equal((await overlay.sources(userId, [uri]))[0].state, "retracted");
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "changed"), 0, "a correction never lowers a retraction");
   assert.ok(root.length > 0);
+});
+
+test("a clean answer sets right a link no check had answered, and a document that is back in the library lifts its removal label", options, async (t) => {
+  const { userId, worker, sessions, seed, overlay } = await fixture(t, {});
+  const doi = "10.1056/nejmoa0000002";
+  const sourceId = `src_${"a".repeat(64)}`;
+  const uri = seed("project_facts/trial.md", `The trial reported a benefit (doi ${doi}, ${sourceId}).`, { type: "project_facts" });
+  await overlay.upsertFile({ userId, uri, memoryType: "project_facts", body: `The trial reported a benefit (doi ${doi}, ${sourceId}).` });
+  await overlay.setSources(userId, uri, [{ type: "doi", id: doi }, { type: "knowledge_source", id: sourceId }]);
+  const stateOf = async (/** @type {string} */ id) => (await overlay.sources(userId, [uri])).find((link) => link.id === id)?.state;
+  // A check that could not answer is `unknown`, and the clean answer after it sets that right: no label was ever written for it.
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "unknown"), 0);
+  assert.equal(await stateOf(doi), "unknown");
+  assert.equal(await worker.labelSource(userId, { type: "doi", id: doi }, "current"), 0);
+  assert.equal(await stateOf(doi), "current");
+  // The library's own fact: a deleted document is labelled, and the same bytes added again take the label off.
+  assert.equal(await worker.labelSource(userId, { type: "knowledge_source", id: sourceId }, "removed"), 1);
+  assert.match(await sessions.read(userId, uri), /已从资料库删除/);
+  assert.equal(await worker.labelSource(userId, { type: "knowledge_source", id: sourceId }, "current"), 1);
+  assert.doesNotMatch(await sessions.read(userId, uri), /已从资料库删除/);
+  assert.equal(await stateOf(sourceId), "current");
 });
 
 test("reset, a deleted project and an erased account take what the engine holds with them", options, async (t) => {
@@ -397,4 +411,13 @@ test("the project tab's card reads the labels of an English conversation as well
   assert.deepEqual(card.map((entry) => entry.slot), ["field", "goal", "subject", "data_source", "stage", "constraints", "design"]);
   assert.equal(card.find((entry) => entry.slot === "field").text, "data engineering");
   assert.equal(card.find((entry) => entry.slot === "stage").text, "Waiting for the retry proposal");
+});
+
+test("the actual overlay returns the 201st sensitive URI and refuses any incomplete bounded enumeration", options, async t => {
+  const { userId, overlay, root } = await fixture(t);
+  const uris = Array.from({ length: 201 }, (_, i) => `${root}/preferences/sensitive-${String(i).padStart(3, "0")}.md`);
+  for (const uri of uris) await overlay.upsertFile({ userId, uri, memoryType: "preferences", body: "Private preference", sensitive: true });
+  const complete = await overlay.sensitiveUris(userId);
+  assert.deepEqual(complete, uris);
+  await assert.rejects(overlay.sensitiveUris(userId, 200), { code: "memory_index_listing_too_large" });
 });

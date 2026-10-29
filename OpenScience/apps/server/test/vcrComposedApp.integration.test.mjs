@@ -14,7 +14,7 @@
 // two things that leave the process are replaced — the run dispatch (a run
 // needs a kernel) and `fetch` (the engine is not started).
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,6 +30,8 @@ import { VcrStore } from "../src/vcrStore.mjs";
 import { VCR_ROUTE_ABILITIES } from "../src/vcrRoutes.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { ProductJobs } from "../src/productJobs.mjs";
+import { sourceIdFor } from "../src/sourceService.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 // The browser's own body builders: what the page posts is proven against the real routes, not against a copy of their allow-lists.
 import { confirmFieldMapBody, fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery } from "../../web/src/lib/vcrIntakeBodies.ts";
@@ -100,6 +102,7 @@ before(async () => {
         await writeFile(path.join(root, "output/manifest.json"), JSON.stringify({ sourceDigest: input.sourceDigest, rendererVersion: input.rendererVersion, formats }));
       },
     },
+    vcrStartStudy: async () => ({ accepted: true }),
     vcrDispatchRun: async (/** @type {any} */ input) => {
       dispatches.push(input);
       return { runId: `run_${dispatches.length}`, sessionId: `session_${dispatches.length}`, status: "running" };
@@ -190,6 +193,7 @@ function requests(target, ids) {
     "PATCH /studies/:id name,question,action": async () => ["PATCH", S, { name: "改个名字", question: "同一个问题" }],
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],
+    "POST /studies/:id/start": async () => ["POST", `${S}/start`, { brief: "Partial research brief", requestId: "request_123" }],
     "POST /studies/:id/run": async () => ["POST", `${S}/run`, { step: "definition" }],
     // Stop what the study is doing: the run its slot holds and its open jobs (nothing is out here, so nothing is stopped).
     "POST /studies/:id/cancel": async () => ["POST", `${S}/cancel`, {}],
@@ -201,6 +205,8 @@ function requests(target, ids) {
     "POST /studies/:id/trial-search": async () => ["POST", `${S}/trial-search`, { subjectKey: "P-0192" }],
     "GET /studies/:id/jobs": async () => ["GET", `${S}/jobs`, undefined],
     "GET /studies/:id/jobs/:job": async () => ["GET", `${S}/jobs/job_none`, undefined],
+    "GET /studies/:id/jobs/:job/result": async () => ["GET", `${S}/jobs/job_none/result`, undefined],
+    "POST /studies/:id/method-configurations": async () => ["POST", `${S}/method-configurations`, { method: "profile.snapshot", name: "Profile", scenario: {} }],
     "POST /studies/:id/jobs": async () => ["POST", `${S}/jobs`, { kind: "design_simulation", scenario: {} }],
     "POST /studies/:id/jobs/:job/cancel": async () => ["POST", `${S}/jobs/job_none/cancel`, {}],
     "POST /studies/:id/budget": async () => ["POST", `${S}/budget`, { cpuSeconds: 600 }],
@@ -299,7 +305,7 @@ test("CS-45 every route, driven through the real server as the owner and as each
       const answer = await call(who, method, route, body);
       // Reference-only case export still requires current patient-level read
       // authority; study export alone cannot read its underlying documents.
-      const allowed = holdsAny(held, abilities) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
+      const allowed = (key === "POST /studies/:id/start" ? abilities.every(ability => holdsAny(held, [ability])) : holdsAny(held, abilities)) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
       const label = `${who} (${held.join("+")}) ${key} -> ${answer.status} ${String(answer.body?.code ?? "")}`;
       if (answer.status >= 500) problems.push(`${label}: a server error — ${answer.text.slice(0, 160)}`);
       else if (allowed && answer.status === 403) problems.push(`${label}: refused, but the role holds ${abilities.join(" or ")}`);
@@ -322,10 +328,10 @@ test("the study a project belongs to is found by the project — a draft nobody 
   const made = await call("owner", "POST", "/api/vcr/studies", {});
   assert.equal(made.status, 201, made.text);
   assert.equal(made.body.data.status, "draft");
-  // The home list leaves the untouched draft out: that is why the frame cannot find its study there.
+  // A bound legacy conversation cannot prove absence of unsent native attachments. Keep it reachable.
   const listed = await call("owner", "GET", "/api/vcr/studies");
-  assert.ok(!listed.body.data.studies.some((entry) => entry.id === made.body.data.id));
-  assert.ok(listed.body.data.draftProjectIds.includes(made.body.data.projectId));
+  assert.ok(listed.body.data.studies.some((entry) => entry.id === made.body.data.id));
+  assert.ok(!listed.body.data.draftProjectIds.includes(made.body.data.projectId));
   const found = await call("owner", "GET", `/api/vcr/studies/of-project/${made.body.data.projectId}`);
   assert.equal(found.status, 200, found.text);
   assert.deepEqual(Object.keys(found.body.data).sort(), ["abilities", "id", "intendedUse", "projectId", "status", "steps"]);
@@ -421,15 +427,19 @@ test("C2-12 the ledger the browser reads carries the keys its reader takes, all 
   assert.deepEqual(site.body.data.referrals.map((/** @type {any} */ row) => row.subjectKey).sort(), ["S-own-1", "S-own-2"], "a site reads its own referrals only");
   assert.equal((await call("lead", "GET", `${S}/referrals?state=contactable`)).body.data.referrals.length, 0);
 
-  // The library page's adoption: the account's own model, written by the server as literature-tier from the trials named.
+  // The library preserves cited trials separately from an assessed population; registration alone grants no applicability.
   const adopted = await call("owner", "POST", "/api/vcr/models", { name: `page-model-${suffix}`, version: "2.1.0", risk: "medium", endpointType: "time_to_event", sources: ["NCT02296125", "CTR20990001"] });
   assert.equal(adopted.status, 201, adopted.text);
   const model = (await rows(`SELECT tier, risk, applicability FROM evimed_vcr.models WHERE name = $1`, [`page-model-${suffix}`]))[0];
   assert.equal(model.tier, "literature");
   assert.equal(model.risk, "medium");
-  assert.match(String(model.applicability.population), /NCT02296125/);
+  assert.deepEqual(model.applicability.sources, ["NCT02296125", "CTR20990001"]);
+  assert.equal(model.applicability.population, undefined, "unassessed population is not inferred from source identifiers");
   const library = await call("owner", "GET", "/api/vcr/models");
-  assert.ok(library.body.data.models.some((/** @type {any} */ row) => row.name === `page-model-${suffix}`));
+  const libraryModel = library.body.data.models.find((/** @type {any} */ row) => row.name === `page-model-${suffix}`);
+  assert.ok(libraryModel);
+  assert.deepEqual(libraryModel.sourceRefs, ["NCT02296125", "CTR20990001"], "the canonical browser view preserves both cited trials");
+  assert.equal(libraryModel.scope, null);
 });
 
 test("PA-11 the first human stop, through HTTP: a coordinator confirms one patient by name; a viewer and a site cannot; the second click writes nothing more", options, async () => {
@@ -884,11 +894,15 @@ test("shared exports serve all VCR kinds to current members without a new resear
   assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`)).status, 404);
 });
 
-test("a draft nobody spoke in is swept with its project an hour on, through the real server; one that was named is not a draft and stays", options, async () => {
+test("automatic draft expiry preserves projects and inputs through the real server", options, async (t) => {
   const projectIds = async () => (await call("viewer", "GET", "/api/projects")).body.data.map((/** @type {any} */ project) => project.id);
   const draft = await call("viewer", "POST", "/api/vcr/studies", {});
   assert.equal(draft.status, 201, draft.text);
   const { id, projectId } = draft.body.data;
+  t.after(async () => {
+    const removed = await call("viewer", "DELETE", `/api/projects/${projectId}`, { confirm: projectId });
+    assert.equal(removed.status, 200, removed.text);
+  });
   assert.equal((await rows(`SELECT status FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].status, "draft");
   assert.ok((await projectIds()).includes(projectId), "the project is there while the draft is");
 
@@ -898,12 +912,71 @@ test("a draft nobody spoke in is swept with its project an hour on, through the 
 
   const named = await call("viewer", "POST", "/api/vcr/studies", { name: "已命名的研究" });
   assert.equal(named.status, 201, named.text);
+  t.after(async () => {
+    const namedProjectId = named.body.data.projectId;
+    const removed = await call("viewer", "DELETE", `/api/projects/${namedProjectId}`, { confirm: namedProjectId });
+    assert.equal(removed.status, 200, removed.text);
+  });
   await rows(`UPDATE evimed_vcr.studies SET created_at = now() - interval '3 hours' WHERE id = ANY($1)`, [[id, named.body.data.id]]);
 
   const swept = await context.app.vcr.drafts.sweep();
-  assert.ok(swept.deleted >= 1, "the old draft is deleted");
-  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 0, "the study row goes");
-  assert.equal((await projectIds()).includes(projectId), false, "and its project with it");
+  assert.equal(swept.deleted, 0, "expiry cannot prove absence against concurrent project writes");
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 1, "the study row stays");
+  assert.equal((await projectIds()).includes(projectId), true, "the project and its materials stay");
+  await context.app.vcr.store.updateStudy(id, { question: "Saved after candidate selection" }, accounts.viewer);
+  assert.equal((await context.app.vcr.drafts.sweep()).deleted, 0);
+  assert.equal((await context.app.vcr.store.studyById(id)).question, "Saved after candidate selection");
   assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [named.body.data.id]))[0].n, 1, "a study that is not a draft is never swept");
   assert.deepEqual(await context.app.vcr.drafts.sweep().then((result) => result.deleted), 0, "a second sweep has nothing left to do");
+});
+
+
+test("real source registration reaches the composed VCR parameter route without confusing source IDs with content hashes", options, async () => {
+  const study = await sharedStudy();
+  const text = "Synthetic source only. Control response was 40%; intervention response was 60%.";
+  const textSha256 = createHash("sha256").update(text).digest("hex");
+  const sources = context.app.sourceService;
+  const jobs = new ProductJobs(context.app.vcr.store.database);
+  const { source } = await sources.register(accounts.owner, { projectId: study.projectId,
+    connector: { type: "upload", id: "library" }, path: "knowledge-base/vcr-reference.txt", sha256: textSha256,
+    size: Buffer.byteLength(text), mimeType: "text/plain", mtime: "2026-10-19T00:00:00Z" });
+  assert.equal(source.id, sourceIdFor(study.projectId, textSha256), "use the real intake ID, not a route-shaped fixture");
+  assert.match(source.id, /^src_[a-f0-9]{32}$/);
+  const ingest = await jobs.claim(["ingest"], "vcr-composed-source", { leaseMs: 30000 });
+  assert.equal(ingest.payload.sourceId, source.id);
+  await sources.beginIngestion(accounts.owner, source.id, { generation: source.payload.generation, job: ingest });
+  await sources.freezeCapture(ingest, { text, summary: "Synthetic reference", extractor: { name: "fixture", version: "1", parser: "fallback" },
+    units: [{ id: "page1", unitType: "page", status: "extracted", itemIds: [] }] });
+  const route = `/api/vcr/studies/${study.id}/model-sources/${source.id}`;
+  const read = await call("owner", "GET", route);
+  assert.equal(read.status, 200, read.text);
+  const preview = read.body.data;
+  assert.equal(preview.sourceId, source.id);
+  assert.equal(preview.textSha256, textSha256, "the preserved content digest remains the full 64 hexadecimal characters");
+  assert.equal(preview.generation, source.payload.generation);
+  assert.deepEqual(preview.parameters.map((value) => [value.value, value.unit]), [[40, "%"], [60, "%"]]);
+  const sourceCard = { literatureSource: { sourceId: source.id, generation: preview.generation, textSha256: preview.textSha256 },
+    executionProfile: "patients.binary", parameterBindings: [
+      { field: "truth.controlRate", candidateId: preview.parameters[0].id },
+      { field: "truth.treatmentRate", candidateId: preview.parameters[1].id },
+    ] };
+  const adopted = await call("owner", "POST", "/api/vcr/models", { studyId: study.id, name: `source-bound-${suffix}`, version: "1", card: sourceCard });
+  assert.equal(adopted.status, 201, adopted.text);
+  const changedHash = await call("owner", "POST", "/api/vcr/models", { studyId: study.id, name: `changed-source-${suffix}`, version: "1",
+    card: { ...sourceCard, literatureSource: { ...sourceCard.literatureSource, textSha256: "f".repeat(64) } } });
+  assert.equal(changedHash.status, 409, changedHash.text);
+  assert.equal(changedHash.body.code, "source_changed");
+  assert.equal((await call("stranger", "GET", route)).status, 404);
+  const listed = await call("owner", "GET", "/api/vcr/studies");
+  let other = listed.body.data.studies.find((row) => row.id !== study.id && row.projectId !== study.projectId);
+  if (!other) {
+    const created = await call("owner", "POST", "/api/vcr/studies", { name: "Other source project", action: "patients" });
+    assert.equal(created.status, 201, created.text);
+    other = created.body.data;
+  }
+  assert.notEqual(other.projectId, study.projectId);
+  assert.equal((await call("owner", "GET", `/api/vcr/studies/${other.id}/model-sources/${source.id}`)).status, 404);
+  for (const invalid of [`src_${"a".repeat(31)}`, `src_${"a".repeat(33)}`, `src_${"a".repeat(64)}`, `src_${"A".repeat(32)}`]) {
+    assert.equal((await call("owner", "GET", `/api/vcr/studies/${study.id}/model-sources/${invalid}`)).status, 404, invalid);
+  }
 });

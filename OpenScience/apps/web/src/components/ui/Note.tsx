@@ -54,8 +54,9 @@ export function NoteParts({ parts }: { parts: readonly NotePart[] }) {
 
 function NumberPart({ n, to, onOpen, label }: NoteNumber) {
   // No weight of its own: a figure that opens what it counts is the link colour at the sentence's weight, so it is the same control as any
-  // other link of the page — in a 14 px note, an 18 px headline or a heading — and not a 14 / 500 beside the page's 14 / 400.
-  const look = "rounded tabular-nums text-link hover:underline hover:underline-offset-4";
+  // other link of the page — in a 14 px note, an 18 px headline or a heading — and not a 14 / 500 beside the page's 14 / 400. Underlined
+  // always: inside a sentence a link told apart by colour alone fails `link-in-text-block` (the walk's axe scan of 2026-10-24).
+  const look = "rounded tabular-nums text-link underline decoration-1 underline-offset-4 hover:decoration-2";
   if (to) return <Link to={to} aria-label={label} className={look}>{n}</Link>;
   if (onOpen) return <button type="button" aria-label={label} onClick={onOpen} className={cn(look, "align-baseline")}>{n}</button>;
   return <span className="tabular-nums">{n}</span>;

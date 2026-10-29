@@ -24,7 +24,6 @@ import fs from "node:fs";
 import { constants as fsConstants } from "node:fs";
 import fsp from "node:fs/promises";
 import http from "node:http";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { certifiedDeepSeekModel, createModelGatewayHandler, supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
@@ -552,7 +551,8 @@ async function startCountingGateway(config, manager) {
   });
   // Every interface: the runtime container reaches this by the deployment's own
   // service name, not by loopback, because it is a different container.
-  server.listen(0, "0.0.0.0");
+  const endpoint = new URL(config.releaseGateModelGatewayInternalUrl);
+  server.listen(Number(endpoint.port), "0.0.0.0");
   await new Promise((resolve, reject) => {
     server.once("listening", resolve);
     server.once("error", reject);
@@ -616,11 +616,12 @@ async function assertReceiptDestinationWritable(receiptPath) {
  * @param {{ config?: Record<string, any>, timeoutMs: number }} input
  */
 async function runDshChain({ config: supplied, timeoutMs }) {
-  const [{ loadConfig }, { DshRuntimeAdapter }, { RuntimeManager }] = await Promise.all([
+  const [{ loadConfig }, { DshRuntimeAdapter }, { RuntimeManager, releaseGateModelGatewayUrl }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/dshRuntimeAdapter.mjs"),
     import("../../apps/server/src/runtimeManager.mjs"),
   ]);
+  /** @type {Record<string, any>} */
   const config = supplied ?? loadConfig();
   if (String(config.runtimeMode ?? "") !== "kernel") throw failure("deepseek_release_runtime_mode_invalid");
   if (String(config.runtimeSandboxMode ?? "") !== "docker") throw failure("deepseek_release_runtime_sandbox_invalid");
@@ -676,23 +677,11 @@ async function runDshChain({ config: supplied, timeoutMs }) {
     await Promise.all([workspaceDir, project.runtimeDir, project.metaDir]
       .map((dir) => fsp.mkdir(dir, { recursive: true, mode: 0o700 })));
 
+    releaseGateModelGatewayUrl(config, project, "release-gate");
     manager = new RuntimeManager(config);
     gateway = await startCountingGateway(config, manager);
-    // The path is the deployment's; the authority is THIS process's. Taking the
-    // hostname from `modelGatewayInternalUrl` would name the web container —
-    // which is not where the gate runs, so the runtime would dial a port
-    // nothing listens on and the run would fail as "no gateway traffic", which
-    // names the symptom of a wrong address rather than the address.
-    //
-    // `os.hostname()` inside a container is its id, and Docker's embedded DNS
-    // resolves it for every container on the same user-defined network — the
-    // runtime network this launch plan attaches to. The override exists for a
-    // deployment whose DNS does not.
-    const deployed = new URL(String(config.modelGatewayInternalUrl ?? ""));
-    const gatewayHost = String(process.env.OPEN_SCIENCE_RELEASE_GATE_GATEWAY_HOST ?? "").trim() || os.hostname();
-    config.modelGatewayInternalUrl = `http://${gatewayHost}:${gateway.port}${deployed.pathname.replace(/\/$/, "")}`;
 
-    const runtime = await manager.start(project);
+    const runtime = await manager.start(project, { modelGatewayProfile: "release-gate" });
     const transport = {
       // The gate makes unary calls only. `stream` is required by the transport
       // contract and refuses rather than being left undefined: an adapter path
@@ -773,7 +762,7 @@ async function runDshChain({ config: supplied, timeoutMs }) {
     // in practice, an address the container could not resolve.
     if (gateway.state.requests === 0) {
       const error = failure("deepseek_release_gateway_unreachable");
-      error.diagnostic = JSON.stringify({ gatewayUrl: config.modelGatewayInternalUrl });
+      error.diagnostic = JSON.stringify({ gatewayUrl: config.releaseGateModelGatewayInternalUrl });
       throw error;
     }
     if (!gatewayOnly) throw failure("deepseek_release_gateway_bypass_detected");
@@ -901,6 +890,16 @@ export async function runDeepSeekKernelReleaseGate({
   // makes it unwritable while it still looks present and correct.
   await assertReceiptDestinationWritable(receiptPath);
 
+  // Deterministic deployment mistakes must be refused before a paid provider call.
+  const [{ loadConfig }, { releaseGateModelGatewayUrl }] = await Promise.all([
+    import("../../apps/server/src/config.mjs"), import("../../apps/server/src/runtimeManager.mjs"),
+  ]);
+  const checkedConfig = suppliedConfig ?? loadConfig();
+  if (String(checkedConfig.runtimeMode ?? "") !== "kernel") throw failure("deepseek_release_runtime_mode_invalid");
+  if (String(checkedConfig.runtimeSandboxMode ?? "") !== "docker") throw failure("deepseek_release_runtime_sandbox_invalid");
+  if (!String(checkedConfig.dataDir ?? "")) throw failure("deepseek_release_data_dir_missing");
+  releaseGateModelGatewayUrl(checkedConfig, { userId: "release-gate", tenantId: "release-gate", id: "gate-000000000000" }, "release-gate");
+
   // Asked of the provider first, and separately: a model that cannot stream or
   // hold a tool loop fails here in seconds with a name, instead of fifteen
   // minutes later as "the run produced no tool results".
@@ -910,7 +909,7 @@ export async function runDeepSeekKernelReleaseGate({
     model: REQUIRED_MODEL,
   });
 
-  const chain = await runDshChain({ config: suppliedConfig, timeoutMs });
+  const chain = await runDshChain({ config: checkedConfig, timeoutMs });
   const unsignedReceipt = {
     schemaVersion: 1,
     id: receiptId,

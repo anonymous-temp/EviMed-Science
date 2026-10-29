@@ -23,6 +23,7 @@ import {
 } from "../src/runtimeManager.mjs";
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES, GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS,
   MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+import { GEO_ANALYSIS_REGISTRY } from "../src/geoAnalysisRegistry.mjs";
 import { GEO_READ_FILTER_FIELDS } from "../src/geoGateway.mjs";
 import { GEO_READ_MAX_ITEMS } from "../src/geoService.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "../src/socialCrawlClient.mjs";
@@ -443,6 +444,7 @@ test("the scheduled-task tools reach a runtime only where the feature is on and 
     assert.deepEqual(disabled(on), []);
     for (const [overrides, reason] of [
       [{ taskToolsEnabled: false }, "off"],
+      [{ autopilotEnabled: false }, "scheduled execution is off"],
       [{ stateStore: "file" }, "no product ledger to keep a task in"],
       [{ publicSourceGatewayInternalUrl: "" }, "the tools authenticate with the source gateway's token; without it they have none"],
     ]) {
@@ -454,6 +456,8 @@ test("the scheduled-task tools reach a runtime only where the feature is on and 
       tasks: "https://evimed.example/runtime-gateway/tasks/v1", adapters: {} } };
     const remoteEnv = dshProfileInput(dshConfig({ taskToolsEnabled: true, stateStore: "postgres" }), project, remote, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
     assert.equal(remoteEnv.EVIMED_TASKS_GATEWAY_URL, "https://evimed.example/runtime-gateway/tasks/v1", "a remote session is given the public prefix");
+    const remoteOff = dshProfileInput(dshConfig({ taskToolsEnabled: true, autopilotEnabled: false, stateStore: "postgres" }), project, remote, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
+    assert.equal(remoteOff.EVIMED_TASKS_GATEWAY_URL, undefined, "a remote address cannot enable a stopped scheduler");
     assert.deepEqual(disabled(remoteEnv), []);
   } finally {
     await rm(tmp, { recursive: true, force: true });
@@ -1169,6 +1173,9 @@ test("frontier_search offers exactly the domain's lanes and specialties, and the
   assert.equal(schema.properties.limit.maximum, FRONTIER_SEARCH_MAX_LIMIT);
   assert.equal(schema.properties.limit.default, FRONTIER_SEARCH_DEFAULT_LIMIT);
   assert.equal(schema.properties.q.maxLength, FRONTIER_SEARCH_MAX_QUERY_LENGTH);
+  // `id` reads one item (c3-ask): the tool's pattern is the gateway's own id shape, and the description says how a conversation names it.
+  assert.equal(schema.properties.id.pattern, "^[a-z0-9]{12,32}$");
+  assert.match(description, /frontier:<id>/);
   assert.equal(schema.required, undefined, "no field is required: without q the tool lists the newest items");
   assert.match(description, /leads, not evidence/);
 });
@@ -1199,6 +1206,8 @@ test("the GEO tools offer exactly the domain's vocabularies and the gateway's ow
   assert.equal(read.properties.filter.properties.limit.maximum, GEO_READ_MAX_ITEMS);
   // a filter field offered and not accepted (or accepted and never offered) is a read the model cannot make or is refused for
   assert.deepEqual(Object.keys(read.properties.filter.properties).sort(), [...GEO_READ_FILTER_FIELDS].sort());
+  assert.deepEqual([...read.properties.filter.properties.viewId.enum].sort(), Object.keys(GEO_ANALYSIS_REGISTRY).sort());
+  assert.deepEqual(read.properties.filter.properties.ownedMetricId.enum, ["M-08", "M-08S"]);
   assert.equal(read.properties.filter.properties.key.type, "string");
   assert.deepEqual(tools.geo_write.inputSchema.properties.what.enum, [...GEO_WRITE_WHATS]);
   const social = tools.social_posts_search.inputSchema;

@@ -381,6 +381,8 @@ curated_smoke() {
 import importlib.util
 import json
 import pathlib
+import subprocess
+import sys
 import tempfile
 
 root = pathlib.Path("/usr/local/share/evimed/skills/curated-scientific")
@@ -420,7 +422,8 @@ with tempfile.TemporaryDirectory() as temporary:
             path = output_dir / artifact
             if not path.is_file() or path.stat().st_size == 0:
                 raise SystemExit(f"curated smoke artifact missing: {name}/{artifact}")
-print(f"smoked {len(shared)} shared curated skill implementations; {len(contracts) - len(shared)} with their own entrypoints are smoked next")
+subprocess.run([sys.executable, str(root / "_runtime/smoke_native_methods.py"), "--root", str(root)], check=True)
+print(f"smoked {len(shared)} shared curated skill implementations and adopted native methods; {len(contracts) - len(shared)} with their own entrypoints are smoked next")
 PY
 }
 
@@ -593,6 +596,15 @@ profile_seed() {
   # The plugin manager writes this image-owned manifest with mode 0600.
   # Runtime users must be able to read it before the seed becomes read-only.
   chmod 0644 "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
+  # pnpm's file: installation hardlinks these source bytes into its profile store.
+  # The catalogue deliberately exports only single-link files; detach the trusted
+  # source tree after installation without weakening that runtime guard.
+  skill_source=/opt/evimed/socket/presets/evimed-universal/skills
+  detached_skills="$(mktemp -d /opt/evimed/socket/presets/evimed-universal/.skills-detached.XXXXXX)"
+  cp -a --no-preserve=links "${skill_source}/." "${detached_skills}/"
+  chmod -R a+rX,a-w "${detached_skills}"
+  rm -rf "${skill_source}"
+  mv "${detached_skills}" "${skill_source}"
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime
   chmod -R a-w "${DSH_HOME_SEED}"
 }

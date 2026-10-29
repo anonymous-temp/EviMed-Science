@@ -1,15 +1,27 @@
 // The operator's counters for sharing memory inside the platform (evidence-flywheel plan §7, F17-F19, 2026-10-05).
 //
-// What is shared, imported, tried, declined and taken down, by channel, and what the write-side defences refused: a pack
-// that carried more than text, a uses-exhausted or expired link, an uncorroborated guest pack that was kept out of platform
-// learning, an evidence-zone subscription recalled. A counter is a label: counting never changes the operation counted, and
-// a counter that cannot be read costs the scrape one gauge and the operation nothing.
+// What is shared, opened, imported, enabled, applied and corrected (the funnel), tried, declined and taken down, by channel,
+// and what the write-side defences refused: a pack that carried more than text, a uses-exhausted or expired link, an
+// uncorroborated guest pack that was kept out of platform learning, an evidence-zone subscription recalled. A counter is a
+// label: counting never changes the operation counted, and a counter that cannot be read costs the scrape one gauge and the
+// operation nothing.
+//
+// The funnel is six stages of one family (`open_science_capsule_share_funnel_total{stage,channel}`), each an event counted where it
+// happens: `sent` (a pack handed over: one per recipient of a delivery, one per link made, one per file exported), `opened` (a
+// delivery opened the first time, a link looked at the first time by an account, a file previewed), `imported` (a new pack taken in;
+// an upgrade in place is the same pack), `enabled` (the click that put a received pack in force), `applied` (a run handed the pack's
+// methods opened one, once per run and pack) and `corrected` (the researcher then corrected that run, once per run and pack). They
+// are events and not people: a pack enabled again after being switched off counts again, and a file previewed twice counts twice. The
+// last two are read from the run (`capsuleShareOutcomes.mjs`) and live in this process only, so a restart between a run and its
+// follow-up drops that one pair.
 //
 // Module-level like `evidenceCardMetrics.mjs`: one process, one table, read by `/api/ops/metrics`. Every series exists from the
 // start at zero, so the first event is an increase `increase()` can see; an unknown label is ignored, never counted under a
 // made-up one.
 
 export const CAPSULE_SHARE_CHANNELS = Object.freeze(["file", "delivery", "link"]);
+/** The stages of the funnel, in the order a pack goes through them. */
+export const CAPSULE_SHARE_STAGES = Object.freeze(["sent", "opened", "imported", "enabled", "applied", "corrected"]);
 const REFUSALS = Object.freeze(["not_text_only", "link_expired", "link_revoked", "link_exhausted", "taken_down", "rate_limited", "snapshot_limit"]);
 const TAKEDOWN_BY = Object.freeze(["author", "operator"]);
 const SUBSCRIPTION_EVENTS = Object.freeze(["subscribed", "unsubscribed", "recalled"]);
@@ -22,14 +34,17 @@ const KEEPER_OUTCOMES = Object.freeze(["counted", "account_too_new", "too_few_ru
 const KDF_REFUSALS = Object.freeze(["account_busy", "queue_full", "waited_out", "params_unsupported"]);
 const SNAPSHOT_FILES = Object.freeze(["orphan", "revoked", "temporary", "discarded", "failed"]);
 const ACCOUNT_CLEANUP = Object.freeze(["completed", "rolled_back", "failed"]);
+// A pack enabled or disabled while a runtime is up: the runtimes were asked to take the new set (`asked`), or the ask failed and the
+// click stood (`failed`) — the next launch mounts the right set either way.
+const RUNTIME_REFRESH = Object.freeze(["asked", "failed"]);
 
 /** @param {readonly string[]} labels */
 const table = (labels) => new Map(labels.map((label) => [label, 0]));
 /** @param {Map<string, number>} map @param {string} key */
 function bump(map, key, by = 1) { if (map.has(key)) map.set(key, (map.get(key) ?? 0) + by); }
 
-const shared = table(CAPSULE_SHARE_CHANNELS);
-const imported = table(CAPSULE_SHARE_CHANNELS);
+/** One count per stage and channel, keyed `stage/channel`. */
+const funnel = table(CAPSULE_SHARE_STAGES.flatMap((stage) => CAPSULE_SHARE_CHANNELS.map((channel) => `${stage}/${channel}`)));
 const trials = table(CAPSULE_SHARE_CHANNELS);
 const declined = table(["delivery"]);
 const takedowns = table(TAKEDOWN_BY);
@@ -41,11 +56,22 @@ const keepers = table(KEEPER_OUTCOMES);
 const kdfRefusals = table(KDF_REFUSALS);
 const snapshotFiles = table(SNAPSHOT_FILES);
 const accountCleanup = table(ACCOUNT_CLEANUP);
+const runtimeRefresh = table(RUNTIME_REFRESH);
 
+/** One event of the funnel; a stage or channel the funnel does not hold is ignored (a platform pack's channel is `official`, and is not a share). @param {string} stage @param {unknown} channel */
+export function recordShareStage(stage, channel) { bump(funnel, `${stage}/${String(channel)}`); }
 /** A pack handed to others. @param {string} channel */
-export function recordShared(channel) { bump(shared, channel); }
+export function recordShared(channel) { recordShareStage("sent", channel); }
+/** A shared pack opened by its recipient: a delivery the first time, a link the first time an account looks, a file previewed. @param {string} channel */
+export function recordShareOpened(channel) { recordShareStage("opened", channel); }
 /** A shared pack imported by a recipient. @param {string} channel */
-export function recordShareImported(channel) { bump(imported, channel); }
+export function recordShareImported(channel) { recordShareStage("imported", channel); }
+/** A received pack put in force by its recipient. @param {unknown} channel */
+export function recordShareEnabled(channel) { recordShareStage("enabled", channel); }
+/** A run that was handed a received pack opened one of its methods. @param {unknown} channel */
+export function recordShareApplied(channel) { recordShareStage("applied", channel); }
+/** The researcher corrected a run that had opened a received pack's method. @param {unknown} channel */
+export function recordShareCorrected(channel) { recordShareStage("corrected", channel); }
 /** A shared pack tried once. @param {string} channel */
 export function recordShareTrial(channel) { bump(trials, channel); }
 /** A delivery declined by its recipient. */
@@ -67,26 +93,28 @@ export function recordKdfRefused(reason) { bump(kdfRefusals, reason); }
 export function recordSnapshotFile(event, count = 1) { bump(snapshotFiles, event, Math.max(0, Math.trunc(count) || 0)); }
 /** How one account's capsule cleanup after a deletion attempt ended. @param {string} outcome */
 export function recordAccountCleanup(outcome) { bump(accountCleanup, outcome); }
+/** Running runtimes asked to take the capsules now in force, or that could not be asked. @param {string} outcome */
+export function recordCapsuleRuntimeRefresh(outcome) { bump(runtimeRefresh, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetCapsuleShareMetrics() {
-  for (const map of [shared, imported, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning, keepers, kdfRefusals, snapshotFiles, accountCleanup]) {
+  for (const map of [funnel, trials, declined, takedowns, takedownCopies, refusals, subscriptions, learning, keepers, kdfRefusals, snapshotFiles, accountCleanup, runtimeRefresh]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
 
 /** @param {Map<string, number>} map @param {string} label */
 const series = (map, label) => [...map].map(([key, value]) => ({ value, labels: { [label]: key } }));
+/** The funnel's rows: a stage and a channel each. */
+const funnelSeries = () => [...funnel].map(([key, value]) => { const [stage, channel] = key.split("/"); return { value, labels: { stage, channel } }; });
 
 /**
  * @returns {Array<{ name: string, help: string, type: "counter" | "gauge", series: Array<{ value: number, labels?: Record<string, string> }> }>}
  */
 export function capsuleShareMetricFamilies() {
   return [
-    { name: "open_science_capsule_shares_total", type: "counter", series: series(shared, "channel"),
-      help: "Packs handed to other accounts, by channel: a file, a delivery to a named account, or a share link." },
-    { name: "open_science_capsule_share_imports_total", type: "counter", series: series(imported, "channel"),
-      help: "Shared packs a recipient imported, by channel." },
+    { name: "open_science_capsule_share_funnel_total", type: "counter", series: funnelSeries(),
+      help: "Where shared packs go, by stage and channel (file, delivery, link): sent, opened by the recipient, imported, enabled, applied (a run handed the pack opened one of its methods) and corrected (the researcher then corrected that run). Events, not people; applied and corrected are counted once per run and pack, in this process." },
     { name: "open_science_capsule_share_trials_total", type: "counter", series: series(trials, "channel"),
       help: "Shared packs a recipient tried once (a conversation that reads only the pack), by channel." },
     { name: "open_science_capsule_share_declines_total", type: "counter", series: series(declined, "channel"),
@@ -119,5 +147,7 @@ export function capsuleStewardshipMetricFamilies() {
       help: "Snapshot files taken off the disk, by why: no snapshot record names them, their snapshot was revoked, they were a crashed write's leftover, or a revoke discarded them; and the ones that could not be removed." },
     { name: "open_science_capsule_account_cleanup_total", type: "counter", series: series(accountCleanup, "outcome"),
       help: "Capsule cleanup after an account's deletion attempt, by how it ended: finished, rolled back (the account stayed and its capsules were released), or failed and retried later." },
+    { name: "open_science_capsule_runtime_refresh_total", type: "counter", series: series(runtimeRefresh, "outcome"),
+      help: "Enabling or disabling a received pack, as it reached the running runtimes: asked to take the new set of capsule methods, or the ask failed and the next launch carries it." },
   ];
 }

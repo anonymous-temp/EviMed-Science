@@ -1,10 +1,11 @@
 import { useId, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { ExternalLink, UsersRound } from "lucide-react";
 import {
   bindVcrPack,
   compareVcrDefinition,
   getVcrLibrary,
+  getVcrHome,
   getVcrLibraryDetail,
   getVcrPacks,
   promoteVcrPack,
@@ -25,6 +26,7 @@ import { cn } from "@/lib/cn";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { FactList } from "@/components/ui/FactList";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
@@ -32,7 +34,7 @@ import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { VcrSmdDot } from "./VcrDiagrams";
-import { VCR_HOME_PATH } from "./vcrTabs";
+import { VCR_HOME_PATH, vcrTabPath } from "./vcrTabs";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { numberText } from "./vcrText";
@@ -144,7 +146,7 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
   return (
     <div data-vcr-pack={pack.status} className="flex flex-col gap-2">
       <p className="flex flex-wrap items-center gap-2 text-ui text-text">
-        <span className="font-medium">{packName(pack)}</span>
+        <span className="font-semibold">{packName(pack)}</span>
         <span className="text-caption text-text-3">{counts}</span>
         {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
@@ -206,7 +208,7 @@ function PlatformRequest({ studyId, request, onChanged }: { studyId: string; req
       )}
       {failing.length > 0 && (
         <div role="status" data-vcr-platform-failing="" className="rounded-card border border-border bg-surface-1 p-3">
-          <p className="text-ui font-medium text-text">复核没有通过，病种定义包仍是你账号里的：</p>
+          <p className="text-ui font-semibold text-text">复核没有通过，病种定义包仍是你账号里的：</p>
           <ul className="mt-1.5 flex flex-col gap-1 text-caption text-text-2">
             {failing.map((entry) => <li key={`${entry.section ?? ""}-${entry.id}-${entry.code}`}>{`${entry.section ? `${entry.section} · ` : ""}${entry.id}：${entry.detail}`}</li>)}
           </ul>
@@ -262,20 +264,22 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
   const [saving, setSaving] = useState<string | null>(null);
   // Read here, once, for the section's own sake: whether there is a library definition to use decides whether the section has anything
   // in it. A section that held a heading and no control was the 「定义库」 of every study whose account had saved nothing.
-  const { state: library } = useVcrLoad("vcr:library", () => getVcrLibrary());
-  if (!knowledge) return null;
-  const used = knowledge.definitions;
+  const { state: library, reload: reloadLibrary } = useVcrLoad("vcr:library", () => getVcrLibrary());
+  const used = knowledge?.definitions ?? [];
   const comparable = used.filter((definition, index) => definition.versions >= 2 && used.findIndex((other) => other.definitionId === definition.definitionId) === index);
-  const saveable = canWrite && knowledge.savable.length > 0;
+  const saveable = canWrite && (knowledge?.savable.length ?? 0) > 0;
   const usable = canWrite && library.kind === "ready" && library.data.length > 0 ? library.data : null;
   const comparing = canRun && comparable.length > 0;
-  if (!saveable && !usable && !comparing && knowledge.comparisons.length === 0) return null;
+  if (library.kind === "loading" && !knowledge) return <VcrTabSkeleton rows={1} />;
+  if (library.kind === "error" && !knowledge) return <VcrTabError message={library.message} onRetry={reloadLibrary} />;
+  if (!saveable && !usable && !comparing && used.length === 0 && (knowledge?.comparisons.length ?? 0) === 0) return null;
   return (
     <Section title="定义库">
       <div data-vcr-definitions="" className="flex flex-col gap-4">
+        {used.length > 0 && <FactList rows={used.map(definition => ({ label: `${definition.name} v${definition.version}`, value: definition.text || "已用于本研究的模板版本" }))} />}
         {saveable && (
           <List label="可存入定义库的人群" divided>
-            {knowledge.savable.map((population) => (
+            {(knowledge?.savable ?? []).map((population) => (
               <ListRow
                 key={population.populationId}
                 title={population.name ? `${population.label} · ${population.name}` : population.label}
@@ -286,7 +290,7 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
         )}
         {usable && <UseDefinition studyId={studyId} library={usable} onChanged={onChanged} />}
         {comparing && <CompareVersions studyId={studyId} definitions={comparable} onChanged={onChanged} />}
-        {knowledge.comparisons.map((comparison) => (
+        {(knowledge?.comparisons ?? []).map((comparison) => (
           <ComparisonCard key={comparison.id} comparison={comparison} name={used.find((definition) => definition.definitionId === comparison.definitionId)?.name ?? "人群定义"} />
         ))}
       </div>
@@ -294,7 +298,7 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
         <SaveDefinitionDrawer
           studyId={studyId}
           populationId={saving}
-          suggested={knowledge.savable.find((population) => population.populationId === saving)?.name ?? ""}
+          suggested={knowledge?.savable.find((population) => population.populationId === saving)?.name ?? ""}
           onClose={() => setSaving(null)}
           onSaved={onChanged}
         />
@@ -346,18 +350,21 @@ function SaveDefinitionDrawer({ studyId, populationId, suggested, onClose, onSav
 
 /** Pick a library definition (and a version) and define this study's population from it. */
 function UseDefinition({ studyId, library, onChanged }: { studyId: string; library: readonly VcrLibraryEntry[]; onChanged: () => void }) {
-  const [definitionId, setDefinitionId] = useState("");
-  const [version, setVersion] = useState("");
+  const [params] = useSearchParams();
+  const initial = library.find(entry => entry.id === params.get("template"));
+  const initialVersion = Number(params.get("version"));
+  const [definitionId, setDefinitionId] = useState(initial?.id ?? "");
+  const [version, setVersion] = useState(initial && Number.isInteger(initialVersion) && initialVersion > 0 && initialVersion <= initial.versions ? String(initialVersion) : "");
   const [busy, setBusy] = useState(false);
   const holding = useRef(false);
   const definitionSelect = useId();
   const versionSelect = useId();
   const entry = library.find((item) => item.id === definitionId) ?? null;
   const use = () => {
-    if (!entry || holding.current) return;
+    if (!entry || !version || holding.current) return;
     holding.current = true;
     setBusy(true);
-    void reuseVcrDefinition(studyId, entry.id, version ? { version: Number(version) } : {})
+    void reuseVcrDefinition(studyId, entry.id, { version: Number(version) })
       .then((done) => {
         const notes = [
           done.renamed.length > 0 ? `已按字段对应改了 ${done.renamed.length} 列` : null,
@@ -377,17 +384,27 @@ function UseDefinition({ studyId, library, onChanged }: { studyId: string; libra
           {library.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </Select>
       </div>
-      {entry && entry.versions > 1 && (
+      {entry && (
         <div className="w-32">
           <Select id={versionSelect} label="版本" value={version} onChange={(event) => setVersion(event.target.value)}>
-            <option value="">最新</option>
+            <option value="">请选择具体版本</option>
             {Array.from({ length: entry.versions }, (_, index) => entry.versions - index).map((number) => <option key={number} value={String(number)}>{`v${number}`}</option>)}
           </Select>
         </div>
       )}
-      <Button variant="secondary" loading={busy} disabled={!entry} onClick={use}>用于本研究</Button>
+      {entry && version && <DefinitionVersionPreview key={`${entry.id}:${version}`} entry={entry} version={Number(version)} />}
+      <Button variant="secondary" loading={busy} disabled={!entry || !version} onClick={use}>用于本研究</Button>
     </div>
   );
+}
+
+/** A template is a saved definition; preview its selected version before applying it to this study. */
+function DefinitionVersionPreview({ entry, version }: { entry: VcrLibraryEntry; version: number }) {
+  const { state, reload } = useVcrLoad(`vcr:definition-preview:${entry.id}:${version}`, () => getVcrLibraryDetail(entry.id));
+  if (state.kind === "loading") return <VcrTabSkeleton rows={1} />;
+  if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
+  const selected = state.data.versions.find(row => row.version === version);
+  return <div className="w-full" data-vcr-template-preview=""><FactList rows={[{ label: "所选模板", value: `${entry.name} v${version}` }, { label: "入排条件", value: selected?.text || "此版本未填写文字说明，请核对条件后使用。" }]} /></div>;
 }
 
 /** Two versions of one definition, applied to the study's dataset by the engine. */
@@ -473,7 +490,7 @@ export function ComparisonCard({ comparison, name }: { comparison: VcrComparison
                     <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text">{entry.covariate}</th>
                     <td className="px-2 py-1.5 text-right tabular-nums text-text-2">{entry.skipped ? "—" : numberText(entry.meanA ?? null, 2)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums text-text-2">{entry.skipped ? "—" : numberText(entry.meanB ?? null, 2)}</td>
-                    <td className={cn("py-1.5 pl-2 text-right tabular-nums", flagged ? "font-medium text-warn-strong" : "text-text-2")}>
+                    <td className={cn("py-1.5 pl-2 text-right tabular-nums", flagged ? "text-warn-strong" : "text-text-2")}>
                       {smd !== null ? Math.abs(smd).toFixed(2) : "未比较"}
                     </td>
                     <td className="py-1.5 pl-2">{smd !== null && <VcrSmdDot smd={smd} floor={floor} label={entry.covariate} />}</td>
@@ -493,6 +510,8 @@ export function ComparisonCard({ comparison, name }: { comparison: VcrComparison
 /** 人群定义库 on the module home: the account's definitions, their versions and the studies that used them. */
 export function VcrDefinitionsPanel() {
   const { state, reload } = useVcrLoad("vcr:library", () => getVcrLibrary());
+  const studies = useVcrLoad("vcr:template-context", getVcrHome);
+  const [studyId, setStudyId] = useState("");
   if (state.kind === "error" && state.off) return <EmptyState icon={UsersRound} title={VCR_OFF_SENTENCE} />;
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
@@ -507,13 +526,17 @@ export function VcrDefinitionsPanel() {
     );
   }
   return (
-    <List label="人群定义库" divided>
-      {state.data.map((entry) => <LibraryRow key={entry.id} entry={entry} />)}
-    </List>
+    <div className="flex flex-col gap-4">
+      {studies.state.kind === "ready" && studies.state.data.studies.length > 0 && <Select label="选择研究以使用模板" value={studyId} onChange={event => setStudyId(event.target.value)}><option value="">先选择研究，再查看模板版本</option>{studies.state.data.studies.map(study => <option key={study.id} value={study.id}>{study.name}</option>)}</Select>}
+      {studies.state.kind === "error" && <VcrTabError message={studies.state.message} onRetry={studies.reload} />}
+      <List label="人群定义库" divided>
+        {state.data.map((entry) => <LibraryRow key={entry.id} entry={entry} studyId={studyId} />)}
+      </List>
+    </div>
   );
 }
 
-function LibraryRow({ entry }: { entry: VcrLibraryEntry }) {
+function LibraryRow({ entry, studyId }: { entry: VcrLibraryEntry; studyId: string }) {
   const [open, setOpen] = useState(false);
   const { state } = useVcrLoad(open ? `vcr:library:${entry.id}` : "vcr:library:closed", () => (open ? getVcrLibraryDetail(entry.id) : Promise.resolve(null)));
   return (
@@ -530,7 +553,8 @@ function LibraryRow({ entry }: { entry: VcrLibraryEntry }) {
         <li className="mb-2 flex flex-col gap-3 px-2 pb-3">
           {state.data.versions.map((version) => (
             <div key={version.version} data-vcr-library-version={version.version} className="rounded border border-border p-3">
-              <p className="text-ui font-medium text-text">{`v${version.version}`}</p>
+              <p className="text-ui font-semibold text-text">{`v${version.version}`}</p>
+              {studyId && <Link to={`${vcrTabPath(studyId, "population")}?${new URLSearchParams({ template: entry.id, version: String(version.version) })}`} className="rounded text-ui text-link hover:underline">在研究内使用此版本</Link>}
               {version.text && <p className="mt-1 text-caption text-text-2">{version.text}</p>}
               {version.rules.length > 0 && (
                 <p className="mt-2 flex flex-wrap gap-1.5">{version.rules.map((rule, index) => <Tag key={`${rule.name ?? index}`}>{rule.name ?? `条件 ${index + 1}`}</Tag>)}</p>

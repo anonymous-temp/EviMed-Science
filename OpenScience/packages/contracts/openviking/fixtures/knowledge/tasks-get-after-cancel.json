@@ -5,7 +5,7 @@
       "items": [
         {
           "seq": 1,
-          "recorded_at": "2026-10-12T23:57:41.514027+00:00",
+          "recorded_at": "2026-10-23T05:49:39.162691+00:00",
           "kind": "created",
           "status": "pending",
           "stage": null,
@@ -14,7 +14,7 @@
         },
         {
           "seq": 2,
-          "recorded_at": "2026-10-12T23:57:41.514599+00:00",
+          "recorded_at": "2026-10-23T05:49:39.163639+00:00",
           "kind": "stage_changed",
           "status": "pending",
           "stage": "queued",
@@ -23,7 +23,7 @@
         },
         {
           "seq": 3,
-          "recorded_at": "2026-10-12T23:57:42.153077+00:00",
+          "recorded_at": "2026-10-23T05:49:39.540739+00:00",
           "kind": "status_changed",
           "status": "running",
           "stage": "submitting",
@@ -32,7 +32,7 @@
         },
         {
           "seq": 4,
-          "recorded_at": "2026-10-12T23:57:42.153077+00:00",
+          "recorded_at": "2026-10-23T05:49:39.540739+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "submitting",
@@ -41,34 +41,34 @@
         },
         {
           "seq": 5,
-          "recorded_at": "2026-10-12T23:57:42.266670+00:00",
+          "recorded_at": "2026-10-23T05:49:39.665570+00:00",
           "kind": "stage_changed",
           "status": "running",
-          "stage": "compile: loading_skill",
+          "stage": "compile: collecting_context",
           "operation": null,
           "error": null
         },
         {
           "seq": 6,
-          "recorded_at": "2026-10-12T23:57:47.284443+00:00",
-          "kind": "stage_changed",
-          "status": "running",
-          "stage": "compile: agent",
+          "recorded_at": "2026-10-23T05:49:51.337865+00:00",
+          "kind": "status_changed",
+          "status": "cancelling",
+          "stage": "compile: collecting_context",
           "operation": null,
           "error": null
         },
         {
           "seq": 7,
-          "recorded_at": "2026-10-12T23:57:53.560445+00:00",
-          "kind": "status_changed",
+          "recorded_at": "2026-10-23T05:49:51.406936+00:00",
+          "kind": "stage_changed",
           "status": "cancelling",
-          "stage": "compile: agent",
+          "stage": "compile: pipeline",
           "operation": null,
           "error": null
         },
         {
           "seq": 8,
-          "recorded_at": "2026-10-12T23:57:58.798833+00:00",
+          "recorded_at": "2026-10-23T05:50:21.453451+00:00",
           "kind": "stage_changed",
           "status": "cancelling",
           "stage": "compile: cancelled",
@@ -77,7 +77,7 @@
         },
         {
           "seq": 9,
-          "recorded_at": "2026-10-12T23:57:58.803192+00:00",
+          "recorded_at": "2026-10-23T05:50:21.456398+00:00",
           "kind": "status_changed",
           "status": "cancelled",
           "stage": "compile: cancelled",
@@ -88,12 +88,12 @@
       "dropped_count": 0,
       "started_mid_task": false
     },
-    "task_id": "cmp_dcb642d3d6f7f745ed8bd944d26ca10e08de6e18a8238a044b4131dfa8e001a8",
+    "task_id": "cmp_11929cbe580980eb169a23f762fb79a3da180b4a087656141813281ab2de0a12",
     "task_type": "compile",
     "status": "cancelled",
-    "created_at": 1791849461.5133889,
-    "updated_at": 1791849478.8031838,
-    "processing_seconds": 16.650070073024835,
+    "created_at": 1792734579.1621351,
+    "updated_at": 1792734621.4563951,
+    "processing_seconds": 41.916027545928955,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
       "request": {
@@ -103,17 +103,22 @@
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-cancelled",
         "skill": "viking://agent/skills/llm-wiki"
       },
-      "token_usage": {
-        "input_tokens": 394,
-        "output_tokens": 3,
-        "total_tokens": 397
+      "pipeline": {
+        "errors": [
+          "CancelledError"
+        ],
+        "tokens": {
+          "cached": 1152,
+          "input": 6275,
+          "output": 41
+        }
       }
     },
     "stage": "cancelled",
     "result": null,
     "error": null,
-    "created_at_iso": "2026-10-12T23:57:41.513389+00:00",
-    "updated_at_iso": "2026-10-12T23:57:58.803184+00:00"
+    "created_at_iso": "2026-10-23T05:49:39.162135+00:00",
+    "updated_at_iso": "2026-10-23T05:50:21.456395+00:00"
   },
   "error": null,
   "telemetry": null,

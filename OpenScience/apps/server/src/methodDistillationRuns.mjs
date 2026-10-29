@@ -1,3 +1,5 @@
+import { contextPolicyIdentity } from "./geoContextItems.mjs";
+import { scopedMethodName } from "./geoContextProvenance.mjs";
 /**
  * Turning one finished run into at most one proposed method.
  *
@@ -12,9 +14,16 @@
  * Three rules the input builder enforces, all of which exist because the input
  * to this step is a researcher's own conversation:
  *
- *  - Only the excerpt the trigger points at. A whole transcript invites the
- *    model to generalise from whatever it finds interesting, which is how a
- *    library fills with plausible methods nobody asked for.
+ *  - What the person asked and did, not the tail of the platform's transcript. The
+ *    input opens with a trajectory digest (`trajectoryDigest`, domain): the
+ *    verbatim first request of each turn, every intervention with its place,
+ *    the files the run left and the order of its work's tools with the platform's
+ *    choreography removed in code. Beside it, an excerpt anchored on each
+ *    intervention (twelve messages either side) and nothing else; a routine
+ *    carries its members' digests and no raw lines. The input used to be
+ *    `slice(-limit)` of the stored transcript, which for a delegating run is the
+ *    last child's submit, repair and summary: seventy methods were learnt from it
+ *    and all of them were about the platform's own bookkeeping (audit 2026-10-23).
  *  - Nothing sensitive, and the drop is counted. `transcriptExcerpt` removes a
  *    message carrying a credential or a patient identifier rather than
  *    redacting it, and reports how many it removed, because an excerpt that
@@ -32,14 +41,17 @@
 import { createHash } from "node:crypto";
 
 import {
-  carriesPlatformContext, HANDBOOK_TEXT_LIMITS, METHOD_OPERATIONS, methodScientific, parseSkillFrontmatter, projectMethodResultLinks, SKILL_AUTHORING_LIMITS, unwrapUserWrappers,
+  METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
+  parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
+import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
-import { learnedMethodId, methodScopeOf } from "./learningService.mjs";
-import { lessonPeers } from "./learningTriggers.mjs";
+import { readToolTraces } from "./toolExecutionEdges.mjs";
+import { learnedMethodId, methodScopeOf, methodSourceProjects } from "./learningService.mjs";
+import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
-import { endedBeforeReset } from "./researchMemory.mjs";
+import { endedBeforeReset } from "./memorySettings.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The file the run reads its frozen input from. */
@@ -48,12 +60,14 @@ export const DISTILLATION_INPUT_FILE = "distillation-input.json";
 /**
  * What may set a distillation job going.
  *
- * `delivered` and `routine` joined on 2026-09-20, when the loop stopped
- * waiting for clicks (`learningTriggers.mjs`): a delivery that finished, and
- * the Nth successful run of one capability, whose shared routine is induced
- * from all N transcripts at once.
+ * `routine` joined on 2026-09-20, when the loop stopped waiting for clicks (`learningTriggers.mjs`): the Nth successful run of one
+ * capability, whose shared routine is induced from all N transcripts at once. A trigger this list does not name (a lesson queued under
+ * a deleted one) is refused here and reads as `other` in the metrics. `script` (2026-10-25) is a program the researcher's runs keep carrying:
+ * the same normalised code in three runs of two conversations (`scriptLessons.mjs`), whose method may attach it as a code skill.
+ * `adopted` (2026-10-25) is the person asking, on the next turn, that the way a finished run did its work be kept
+ * (`learningTriggers.adoptedLessonFor`): a lesson at once, with their words as its evidence and the run's own trajectory as what to write down.
  */
-export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction", "delivered", "routine"]);
+export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "correction", "routine", "script", "adopted"]);
 
 /** Bumped when the input shape or the cleaning rules change, so a re-run under
  *  new rules is a different job rather than a duplicate of the old one. */
@@ -70,22 +84,31 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepte
 // the results produced under its revision and the scope it declared — and the related methods carry the same — so a
 // lesson drawn from a correction narrows the method that was read instead of writing a near-duplicate beside it, and a
 // lesson read under the old shape would be learnt without them (N14).
-// "6" since 2026-10-12: the input states the text limit of a lesson filed as an account handbook (`authoringLimits.maxHandbookChars`), and the
-// capability learns the researcher's research methods, not the delivery gate's bookkeeping; a lesson re-queued under the new rules is a new
-// dispatch and does not adopt the run that wrote an over-long handbook under the old ones.
+// "6" since 2026-10-12: the capability learns the researcher's research methods, not the delivery gate's bookkeeping; a lesson re-queued under
+// the new rules is a new dispatch and does not adopt the run that wrote one under the old ones.
 // "7" since 2026-10-13: a method is how this person does this kind of work, not only a research method, and a turn of an ordinary
 // conversation that produced or changed a file is a lesson (`learningTriggers.leftFiles`); a lesson re-queued under the old definition
 // is a new dispatch and does not adopt a run that read it.
-export const DISTILLATION_EXTRACTOR_VERSION = "7";
+// "8" since 2026-10-23: the input is a trajectory digest (`trajectory`) with an excerpt anchored on each intervention, not the tail of
+// the transcript; a routine carries its members' digests; the related methods are the nearest by meaning; and what the lesson rests on
+// is quoted and checked in code. A lesson read under the old shape learnt the platform's choreography.
+// "9" since 2026-10-25: a lesson has no handbook to be filed as. The input says nothing of the account handbook arm any more (`signal` is the
+// researcher's or the run's, `methodsUsed` has no handbooks, `authoringLimits` no handbook length, and the gate's findings, `repairIssues`, are not carried), so a lesson read under the old shape is a new dispatch.
+export const DISTILLATION_EXTRACTOR_VERSION = "9";
 
 /**
- * How many messages of context each trigger is worth.
- *
- * An edit diff points at the writing of one deliverable; a repair points at the
- * rounds; a correction points at the sentences either side of it. Handing all
- * three the same window would mean two of them get the wrong one.
+ * How many messages of context a trigger that points at no intervention is worth: an edit diff points at the writing of one
+ * deliverable. Every other trigger is read through the digest and the excerpts anchored on its
+ * interventions (`TRAJECTORY_ANCHOR_RADIUS`), which is what the plan's own instruction asked for.
  */
-const TRIGGER_WINDOW = Object.freeze({ edit_diff: 60, repair_accepted: 80, correction: 30, delivered: 60, routine: 40 });
+const TAIL_WINDOW = Object.freeze({ edit_diff: 60 });
+
+/** How many anchored windows one lesson reads, and how many messages the closing window holds when nothing anchors one. */
+const MAX_WINDOWS = 4;
+const CLOSING_WINDOW = TRAJECTORY_ANCHOR_RADIUS * 2;
+
+/** What the executor's verdict says when it could not run the scripts at all, which is not the same as them failing. */
+const CODE_VERIFICATION_UNAVAILABLE = new Set(["candidate_static_check_unavailable", "candidate_dependencies_unavailable", "code_skill_verification_unavailable"]);
 
 /** How many other runs a routine induction reads beside the one that
  *  triggered it — the job's own list, bounded again here because the payload
@@ -95,6 +118,16 @@ const MAX_PEER_RUNS = 4;
 /** How many of the researcher's own corrections one lesson carries. */
 const MAX_CORRECTIONS = 12;
 
+/** How many related methods a lesson is shown, and how many of the library are ranked to pick them. */
+const MAX_RELATED = 8;
+const RELATED_POOL = 100;
+
+/** How many quotations a method stores as the evidence it rests on, and how long one may be (`storedEvidenceQuotes` reads the same bounds). */
+const MAX_EVIDENCE = 20;
+const EVIDENCE_LENGTH = METHOD_EVIDENCE_QUOTE_LENGTH;
+/** A quotation shorter than this is kept only as the researcher's own reaction (`verifiedEvidence`): short strings of anything else are in every text. */
+const SHORT_QUOTE_BELOW = 8;
+
 /**
  * What a lesson's evidence is, from what the input holds — a closed reading,
  * not a judgement of any sentence:
@@ -102,50 +135,27 @@ const MAX_CORRECTIONS = 12;
  *  - `researcher` — the researcher corrected the run or edited what it
  *    delivered. Their own words; the only source a personal method may come
  *    from (build spec iron rule 3).
- *  - `reviewer` — the run repaired against the platform's own findings and
- *    nothing else: no correction, no edit. What it teaches is how to pass
- *    EviMed's checks, which is the capability's handbook, not this person's
- *    way of working (audit 2026-09-26, L-G3).
  *  - `run` — a delivery or a repeated routine: what the researcher's own work
  *    did, with nobody correcting it.
+ *
+ * There was a third, `reviewer`: a run that repaired against the platform's own findings and nothing else, whose lesson was how to pass EviMed's
+ * checks and was filed as the capability's handbook, never as this person's method (audit 2026-09-26, L-G3). Its one trigger is deleted
+ * (2026-10-25), and with it the handbook.
  * @param {{trigger: string, corrections?: readonly any[], feedback?: readonly any[]}} input
- * @returns {"researcher" | "reviewer" | "run"}
+ * @returns {"researcher" | "run"}
  */
 export function lessonSignal(input) {
   if ((input.corrections?.length ?? 0) > 0 || (input.feedback?.length ?? 0) > 0) return "researcher";
-  return input.trigger === "repair_accepted" ? "reviewer" : "run";
+  return "run";
 }
 
-/** The text parts of one transcript message, joined. @param {any} message */
-function messageText(message) {
-  return (message?.parts ?? []).filter((/** @type {any} */ part) => part?.type === "text").map((/** @type {any} */ part) => String(part.text ?? "")).join("\n");
-}
-
-/**
- * The turns of a run's own session that belong to the run, by the rule the
- * ledger assigns history with (`runHistory` in agentRuns.mjs): a turn one of
- * the run's own request ids entered, or the native turn it was adopted from
- * when it has no request ids. Null when the run names neither — a record from
- * before turn identity — and then every turn is read.
- * @param {any[]} messages the run's own session @param {any} run
- * @returns {Set<number> | null}
- */
-function ownTurns(messages, run) {
-  const requestIds = new Set(Array.isArray(run?.kernelRequestIds) ? run.kernelRequestIds : []);
-  /** @type {Set<number>} */
-  const turns = new Set();
-  for (const message of messages) {
-    if (message?.role === "user" && message.source === "user" && Number.isSafeInteger(message.turnStartSeq)
-      && requestIds.has(message.sourceRequestId)) turns.add(message.turnStartSeq);
-  }
-  if (!requestIds.size && Number.isSafeInteger(run?.nativeTurn?.startSeq)) turns.add(run.nativeTurn.startSeq);
-  return turns.size ? turns : null;
-}
+/** @param {any} message The text parts of one transcript message, joined. */
+const messageText = transcriptMessageText;
 
 /**
  * The corrections the researcher typed into the run, in their own words.
  *
- * Found by two structural marks, never by reading what the message says:
+ * Found by two structural marks, never by reading what the message says (`steeredMessages`, the domain's one reading):
  *
  *  - `<evimed-correction>` — a message sent through the steer route (the
  *    messaging channel's 补充) is wrapped so a compaction keeps it
@@ -163,35 +173,17 @@ function ownTurns(messages, run) {
  * Only the run's own session, and within it only the run's own turns when the
  * run says which they are: a session holds every earlier run's turns too, and
  * a correction made to one of those is not a correction of this run. Read from
- * the whole of those turns rather than from the excerpt window — the window
- * ends where the run ended, and a correction early in a long run is the one
- * most likely to fall outside it. The excerpt's own cleaning applies: a
- * message carrying a credential or a patient identifier is dropped, and
- * counted.
+ * the whole of those turns rather than from an excerpt window — a correction
+ * early in a long run is the one most likely to fall outside any window. The
+ * excerpt's own cleaning applies: a message carrying a credential or a patient
+ * identifier is dropped, and counted.
  * @param {{messages?: any[]} | null | undefined} transcript
  * @param {any} [run] the ledger's record of the run: `sessionId`, `kernelRequestIds`, `nativeTurn`
  * @returns {{corrections: {source: "steered", sessionId: string | null, seq: number | null, text: string}[], dropped: {sensitive: number, bounded: number}}}
  */
 export function steeredCorrections(transcript, run = null) {
-  const root = typeof run?.sessionId === "string" && run.sessionId ? run.sessionId : null;
-  const messages = (transcript?.messages ?? []).filter((message) => !root || message?.sessionId === root);
-  const turns = ownTurns(messages, run);
-  /** Where each turn's first typed message is. @type {Map<number, number>} */
-  const opening = new Map();
-  for (const message of messages) {
-    if (message?.role !== "user" || message.source !== "user" || !Number.isSafeInteger(message.turnStartSeq)) continue;
-    const first = opening.get(message.turnStartSeq);
-    if (first === undefined || Number(message.seq) < first) opening.set(message.turnStartSeq, Number(message.seq));
-  }
-  const steered = messages.filter((message) => {
-    if (message?.role !== "user" || (turns && !turns.has(message.turnStartSeq))) return false;
-    const text = messageText(message);
-    if (text.includes("<evimed-correction")) return true;
-    return message.source === "user" && Number.isSafeInteger(message.turnStartSeq)
-      && Number(message.seq) > (opening.get(message.turnStartSeq) ?? Number.POSITIVE_INFINITY)
-      && !carriesPlatformContext(text);
-  });
-  const cleaned = transcriptExcerpt(steered, { limit: MAX_CORRECTIONS });
+  const { messages } = rootSessionOf(transcript, run);
+  const cleaned = transcriptExcerpt(steeredMessages(messages, run), { limit: MAX_CORRECTIONS });
   return {
     corrections: cleaned.messages.map((message) => ({
       source: /** @type {"steered"} */ ("steered"),
@@ -204,6 +196,115 @@ export function steeredCorrections(transcript, run = null) {
 }
 
 /**
+ * What the researcher did to a run that its transcript does not hold, read off the lesson's feedback events: a result corrected in
+ * the page (`result-corrected`), and the learning-evidence events (`learning-evidence`: a steer the ledger recorded, a follow-up
+ * judged on the next turn). Their own words; the rule a judge drew from them rides beside, never in place of them.
+ * @param {readonly any[] | undefined} feedback
+ * @returns {import("@evimed/domain").TrajectoryReaction[]}
+ */
+export function reactionsOf(feedback) {
+  /** @type {import("@evimed/domain").TrajectoryReaction[]} */
+  const reactions = [];
+  for (const event of feedback ?? []) {
+    const detail = event?.detail ?? {};
+    if (event?.trigger === "result-corrected" && typeof detail.instruction === "string" && detail.instruction.trim()) {
+      reactions.push({ kind: "result-corrected", text: detail.instruction });
+    } else if (event?.trigger === "learning-evidence" && typeof detail.quote === "string" && detail.quote.trim()
+      && ["steer", "follow-up", "result-corrected"].includes(detail.evidence)) {
+      reactions.push({ kind: detail.evidence, text: detail.quote, rule: typeof detail.rule === "string" ? detail.rule : null,
+        verdict: typeof detail.verdict === "string" ? detail.verdict : null });
+    }
+  }
+  return reactions;
+}
+
+/**
+ * Messages with the platform's own choreography taken out of them: a call of a tool that is plumbing (`isPlatformChoreographyTool`, a closed
+ * list) is dropped from the message that made it, and a message left with nothing is dropped. What the model is shown of a run is what the
+ * work did and what was said; the platform's plan, delegate, submit and check calls were left to a sentence in the prompt to ignore.
+ * @param {readonly any[]} messages @returns {any[]}
+ */
+function withoutChoreography(messages) {
+  /** @type {any[]} */
+  const kept = [];
+  for (const message of messages) {
+    const parts = (message?.parts ?? []).filter((/** @type {any} */ part) => {
+      if (part?.type !== "tool") return true;
+      const name = String(part.tool ?? "");
+      return !isPlatformChoreographyTool(name) && !(isMcpToolName(name) && isPlatformChoreographyTool(mcpToolBaseName(name) ?? ""));
+    });
+    if (parts.length) kept.push(parts.length === (message?.parts ?? []).length ? message : { ...message, parts });
+  }
+  return kept;
+}
+
+/** @param {{ from: number, to: number }[]} windows @returns {{ from: number, to: number }[]} overlapping or touching windows folded into one */
+function foldWindows(windows) {
+  /** @type {{ from: number, to: number }[]} */
+  const folded = [];
+  for (const window of [...windows].sort((left, right) => left.from - right.from)) {
+    const last = folded[folded.length - 1];
+    if (last && window.from <= last.to + 1) last.to = Math.max(last.to, window.to);
+    else folded.push({ ...window });
+  }
+  return folded;
+}
+
+/**
+ * The excerpts a lesson is read through: one window of twelve messages either side of each intervention that has a place in this
+ * run's transcript, and a closing window for an intervention that has none (a follow-up judged on the next turn, a result corrected
+ * in the page — each is about what the run delivered, which is where it ended). A trigger that points at no intervention reads a
+ * tail (an edit or a repair); a routine, and everything else, reads none.
+ * @param {{ runId: string, trigger: string, messages: readonly any[], interventions: readonly { seq: number | null }[], rootSessionId: string | null }} input
+ * @returns {{ excerpts: { runId: string, sessionId: string | null, anchor: { kind: string, seq: number | null }, seqRange: [number, number] | null, messages: any[] }[], dropped: { sensitive: number, bounded: number } }}
+ */
+function anchoredExcerpts({ runId, trigger, messages, interventions, rootSessionId }) {
+  const dropped = { sensitive: 0, bounded: 0 };
+  /** @type {{ runId: string, sessionId: string | null, anchor: { kind: string, seq: number | null }, seqRange: [number, number] | null, messages: any[] }[]} */
+  const excerpts = [];
+  /** @param {string | null} sessionId @param {{ kind: string, seq: number | null }} anchor @param {{ sessionId?: string, fromSeq?: number, toSeq?: number, limit: number }} range */
+  const read = (sessionId, anchor, range) => {
+    const cut = transcriptExcerpt(messages, range);
+    dropped.sensitive += cut.dropped.sensitive;
+    dropped.bounded += cut.dropped.bounded;
+    const held = withoutChoreography(cut.messages);
+    if (!held.length) return;
+    const seqs = held.map((message) => Number(message.seq)).filter(Number.isFinite);
+    excerpts.push({ runId, sessionId, anchor, seqRange: seqs.length ? [Math.min(...seqs), Math.max(...seqs)] : null, messages: held });
+  };
+  const root = rootSessionId ?? null;
+  const rootMessages = messages.filter((message) => !root || message?.sessionId === undefined || message.sessionId === root);
+  const lastRoot = rootMessages.reduce((most, message) => (Number.isFinite(message?.seq) ? Math.max(most, message.seq) : most), -1);
+  const tail = Object.hasOwn(TAIL_WINDOW, trigger) ? TAIL_WINDOW[/** @type {keyof typeof TAIL_WINDOW} */ (trigger)] : 0;
+  if (tail) {
+    // A tail is of the whole capture, as it always was: a repair happened in whichever session repaired.
+    const cut = transcriptExcerpt(messages, { limit: tail });
+    dropped.sensitive += cut.dropped.sensitive;
+    dropped.bounded += cut.dropped.bounded;
+    /** @type {Map<string | null, any[]>} */
+    const bySession = new Map();
+    for (const message of withoutChoreography(cut.messages)) bySession.set(message.sessionId ?? null, [...(bySession.get(message.sessionId ?? null) ?? []), message]);
+    for (const [sessionId, held] of bySession) {
+      const seqs = held.map((message) => Number(message.seq)).filter(Number.isFinite);
+      excerpts.push({ runId, sessionId, anchor: { kind: "tail", seq: null }, seqRange: seqs.length ? [Math.min(...seqs), Math.max(...seqs)] : null, messages: held });
+    }
+    return { excerpts, dropped };
+  }
+  // An adoption is read as a correction is: the closing messages of the run are what the person kept (the reply they answered).
+  if (trigger !== "correction" && trigger !== "adopted") return { excerpts, dropped };
+  const placed = interventions.filter((entry) => Number.isSafeInteger(entry.seq));
+  const windows = foldWindows(placed.map((entry) => ({ from: Number(entry.seq) - TRAJECTORY_ANCHOR_RADIUS, to: Number(entry.seq) + TRAJECTORY_ANCHOR_RADIUS })));
+  for (const window of windows.slice(0, MAX_WINDOWS)) {
+    read(root, { kind: "intervention", seq: Math.round((window.from + window.to) / 2) }, { ...(root ? { sessionId: root } : {}), fromSeq: window.from, toSeq: window.to, limit: TRAJECTORY_ANCHOR_RADIUS * 2 + 1 });
+  }
+  // An intervention with no place in this run's transcript, and a correction whose words could not be placed at all, are about the end.
+  if (placed.length < interventions.length || !windows.length) {
+    read(root, { kind: "closing", seq: lastRoot >= 0 ? lastRoot : null }, { ...(root ? { sessionId: root } : {}), ...(lastRoot >= 0 ? { fromSeq: lastRoot - CLOSING_WINDOW + 1 } : {}), limit: CLOSING_WINDOW });
+  }
+  return { excerpts, dropped };
+}
+
+/**
  * Assemble the frozen input for one distillation run.
  *
  * Pure apart from the transcript read, so the cleaning rules are testable
@@ -212,32 +313,39 @@ export function steeredCorrections(transcript, run = null) {
  * The researcher comes first. What they corrected and what they changed in a
  * delivery are the evidence a personal method may rest on, so they open the
  * input — before the transcript and before the platform reviewer's findings —
- * and `signal` says which of the three kinds of evidence this lesson has
+ * and `signal` says which kind of evidence this lesson has
  * (`lessonSignal`). Both production methods of 2026-09 were learnt from the
  * reviewer's findings alone and read as the researcher's own way of working
  * (audit 2026-09-26, L-G3).
- * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[],
- *   peerRuns?: {runId: string, transcript: {header: any, messages: any[]} | null}[],
- *   correctionRecords?: {recordId: string, key?: string | null, text: string}[],
- *   methodsUsed?: {invoked?: any[], handbooks?: any[], passedOver?: any[], unresolved?: any[]} | null}} input
+ *
+ * Then the trajectory (`trajectoryDigest`): what was asked, what was done to it, what it left. The excerpts follow, each anchored on
+ * an intervention; a lesson with none (a routine, a clean delivery) has the digests and nothing raw.
+ * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], relatedMethods?: any[], mountedTools?: string[],
+ *   shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null,
+ *   scripts?: {hash: string, runs: number, conversations: number, exemplars: {runId: string, at?: string, source: string}[]} | null,
+ *   peerRuns?: {runId: string, run?: any, shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null, transcript: {header: any, messages: any[]} | null}[],
+ *   methodsUsed?: {invoked?: any[], passedOver?: any[], unresolved?: any[]} | null}} input
  *   `methodsUsed`: what the run read, resolved to revisions with what became of the results produced under each
  *   (`MethodFeedbackService.usedForLesson`); absent when this deployment cannot say, which is not "none".
+ *   `shapes`: the run's files' structure by path (`readArtifactShapes`); absent, the digest has path and format only.
+ *   `toolTraces`: the run's executed tool trace (`readToolTraces`); absent or empty, the digest's tool order is read from the transcript's own calls.
+ *   `scripts`: for a `script` lesson, the program that recurred — how often, and the source of up to three of its occurrences, so the variants are seen.
  */
 export function buildDistillationInput(input) {
   if (!DISTILLATION_TRIGGERS.includes(input.trigger)) {
     throw new HttpError(400, "distillation_trigger_invalid", "Unknown distillation trigger.");
   }
-  const limit = TRIGGER_WINDOW[/** @type {keyof typeof TRIGGER_WINDOW} */ (input.trigger)] ?? 40;
-  const excerpt = input.transcript
-    ? transcriptExcerpt(input.transcript.messages, { limit })
-    : { messages: [], dropped: { sensitive: 0, bounded: 0 } };
+  const digestOf = (/** @type {any} */ run, /** @type {any} */ transcript, /** @type {any} */ shapes, /** @type {any} */ reactions = [], /** @type {any} */ toolTraces = null) => trajectoryDigest(
+    transcript, run ?? {}, { shapes, reactions, toolTraces },
+  );
+  const reactions = reactionsOf(input.feedback);
+  const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions, input.toolTraces);
   const steered = steeredCorrections(input.transcript, input.run);
-  const corrections = [
-    ...steered.corrections,
-    ...(input.correctionRecords ?? [])
-      .filter((record) => record && typeof record.text === "string" && record.text.trim())
-      .map((record) => ({ source: /** @type {"memory"} */ ("memory"), recordId: String(record.recordId ?? ""), key: record.key ?? null, text: record.text.slice(0, 4000) })),
-  ].slice(0, MAX_CORRECTIONS);
+  const { sessionId: rootSessionId } = rootSessionOf(input.transcript, input.run);
+  const anchored = input.transcript
+    ? anchoredExcerpts({ runId: input.run?.id ?? "", trigger: input.trigger, messages: input.transcript.messages, interventions: trajectory.interventions, rootSessionId })
+    : { excerpts: [], dropped: { sensitive: 0, bounded: 0 } };
+  const corrections = steered.corrections.slice(0, MAX_CORRECTIONS);
   const feedback = (input.feedback ?? []).slice(0, 20);
   return {
     schemaVersion: 1,
@@ -250,21 +358,23 @@ export function buildDistillationInput(input) {
     feedback,
     runId: input.run?.id ?? "",
     capabilityId: input.run?.effectiveAgentId ?? null,
+    // Where the work happened: the capability, or the ordinary conversation. A method learnt here is offered to runs of the same scope.
+    scope: learningScopeOf(input.run),
     // Said out loud rather than implied by a short list: a run whose transcript
     // was never captured, or was captured partially, produces a method drawn
     // from evidence the loop cannot see. The SKILL.md tells the model to weigh
     // this, and the promotion rule refuses to spend evaluation budget on a
     // candidate distilled from an incomplete record.
     transcriptCompleteness: input.transcript?.header?.completeness ?? "unavailable",
-    excerptDropped: excerpt.dropped,
-    transcriptExcerpts: excerpt.messages,
-    // The platform reviewer's findings, after everything the researcher did.
-    repairIssues: (input.repairIssues ?? []).slice(0, 20),
+    // What was asked, what was done to it, what it left and how the work went — built in code from the stored transcript.
+    trajectory,
+    excerptDropped: { sensitive: anchored.dropped.sensitive + trajectory.dropped.sensitive, bounded: anchored.dropped.bounded },
+    transcriptExcerpts: anchored.excerpts,
     // With its status: a retired method reached the distiller looking like a
     // method on file until 2026-09-29, so the lesson that had been stopped —
     // two were, for writing package bookkeeping into reports — could be
     // proposed again from the next run that showed the same habit.
-    relatedMethods: (input.relatedMethods ?? []).slice(0, 8).map((method) => {
+    relatedMethods: (input.relatedMethods ?? []).slice(0, MAX_RELATED).map((method) => {
       const status = method.payload?.status ?? method.status ?? null;
       const statusReason = status === "retired" ? (method.payload?.statusReason ?? method.statusReason ?? null) : null;
       const digest = method.payload?.contentDigest ?? method.digest;
@@ -289,35 +399,150 @@ export function buildDistillationInput(input) {
     // correction has to account for; one that was passed over was not evidence of anything.
     methodsUsed: {
       invoked: (input.methodsUsed?.invoked ?? []).slice(0, 8),
-      handbooks: (input.methodsUsed?.handbooks ?? []).slice(0, 4),
       passedOver: (input.methodsUsed?.passedOver ?? []).slice(0, 8),
       unresolved: (input.methodsUsed?.unresolved ?? []).slice(0, 8),
       known: Boolean(input.methodsUsed),
     },
+    // The program a `script` lesson is about, as the researcher's runs carried it: what stays and what varies between the occurrences is the method's
+    // parameters. Absent for every other trigger, so their inputs are what they were.
+    ...(input.trigger === "script" && input.scripts ? { scripts: {
+      hash: input.scripts.hash, runs: input.scripts.runs, conversations: input.scripts.conversations,
+      exemplars: input.scripts.exemplars.slice(0, 3).map((exemplar) => ({ runId: exemplar.runId, ...(exemplar.at ? { at: exemplar.at } : {}), source: String(exemplar.source).slice(0, 16_000) })),
+    } } : {}),
     authoringLimits: {
       maxBodyLines: SKILL_AUTHORING_LIMITS.maxBodyLines,
       maxDescriptionChars: SKILL_AUTHORING_LIMITS.maxDescriptionChars,
       minTestScenarios: SKILL_AUTHORING_LIMITS.minTestScenarios,
-      // A `reviewer` lesson is filed as an account handbook and offered to the platform's, whose text (name, description and body together) is at
-      // most this many characters; the contract returns a longer one to be shortened in place.
-      maxHandbookChars: HANDBOOK_TEXT_LIMITS.max,
     },
     mountedTools: input.mountedTools ?? [],
-    // The other successful runs of the same capability a `routine` induction
-    // compares against, each under the same cleaning rules as the main
-    // excerpt. Empty for every other trigger.
-    peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map((peer) => {
-      const peerExcerpt = peer.transcript
-        ? transcriptExcerpt(peer.transcript.messages, { limit })
-        : { messages: [], dropped: { sensitive: 0, bounded: 0 } };
-      return {
-        runId: peer.runId,
-        transcriptCompleteness: peer.transcript?.header?.completeness ?? "unavailable",
-        excerptDropped: peerExcerpt.dropped,
-        transcriptExcerpts: peerExcerpt.messages,
-      };
-    }),
+    // The other clean runs of the same kind a `routine` induction compares against: each by its digest — what it was asked, what it
+    // left, the order of its tools — and no raw lines. Empty for every other trigger.
+    peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map((peer) => ({
+      runId: peer.runId,
+      transcriptCompleteness: peer.transcript?.header?.completeness ?? "unavailable",
+      trajectory: peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes, [], peer.toolTraces) : null,
+    })),
   };
+}
+
+/** @param {unknown} text @returns {string} white space folded: what a quotation is compared as */
+const squashed = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
+
+/**
+ * The text of everything a distillation was shown of each run it names, squashed: the corpus a stored quotation is checked against.
+ * The person's own words and what the run's messages said — not tool output, which is not evidence of how a person works.
+ * @param {any} input a built distillation input @returns {Map<string, string>} run id to its text
+ */
+export function evidenceCorpus(input) {
+  /** @type {Map<string, string[]>} */
+  const parts = new Map();
+  const add = (/** @type {string} */ runId, /** @type {unknown} */ text) => {
+    if (!runId || typeof text !== "string" || !text.trim()) return;
+    parts.set(runId, [...(parts.get(runId) ?? []), squashed(text)]);
+  };
+  const runId = String(input?.runId ?? "");
+  /** @param {string} id @param {any} trajectory */
+  const addTrajectory = (id, trajectory) => {
+    for (const request of trajectory?.requests ?? []) add(id, request.text);
+    for (const intervention of trajectory?.interventions ?? []) { add(id, intervention.text); add(id, intervention.rule); }
+  };
+  addTrajectory(runId, input?.trajectory);
+  for (const correction of input?.corrections ?? []) add(runId, correction.text);
+  for (const event of input?.feedback ?? []) {
+    const detail = event?.detail ?? {};
+    add(runId, detail.instruction); add(runId, detail.quote); add(runId, detail.rule);
+  }
+  for (const excerpt of input?.transcriptExcerpts ?? []) {
+    for (const message of excerpt?.messages ?? []) add(String(excerpt.runId || runId), messageText(message));
+  }
+  for (const peer of input?.peerRuns ?? []) addTrajectory(String(peer.runId), peer.trajectory);
+  return new Map([...parts].map(([id, texts]) => [id, texts.join("\n")]));
+}
+
+/**
+ * What the researcher themselves said of each run the distillation was shown, squashed, as the texts a SHORT quotation may be checked
+ * against: the words of each intervention (a steer, a follow-up, a corrected result) and of each correction typed into the run, and the
+ * instruction of a result corrected in the page. Not the judge's rule and not the run's own prose: a two-character quotation is in
+ * every text, so it proves something only where the text is the person's reaction (「太长了」 said after a delivery).
+ * @param {any} input a built distillation input @returns {Map<string, string[]>} run id to the person's reaction texts
+ */
+export function reactionCorpus(input) {
+  /** @type {Map<string, string[]>} */
+  const texts = new Map();
+  const add = (/** @type {string} */ runId, /** @type {unknown} */ text) => {
+    if (!runId || typeof text !== "string" || !text.trim()) return;
+    texts.set(runId, [...(texts.get(runId) ?? []), squashed(text)]);
+  };
+  const runId = String(input?.runId ?? "");
+  for (const intervention of input?.trajectory?.interventions ?? []) add(runId, intervention.text);
+  for (const correction of input?.corrections ?? []) add(runId, correction.text);
+  for (const event of input?.feedback ?? []) { add(runId, event?.detail?.instruction); add(runId, event?.detail?.quote); }
+  for (const peer of input?.peerRuns ?? []) for (const intervention of peer?.trajectory?.interventions ?? []) add(String(peer.runId), intervention.text);
+  return texts;
+}
+
+/**
+ * The quotations a candidate says it rests on, kept only where they are in what the distillation was shown: each as
+ * `{ runId, seqRange, quote }`, the quote a substring of that run's text (white space folded), two to six hundred characters, at
+ * most twenty — and one shorter than eight characters only when it is a substring of something the researcher themselves said of that
+ * run (`reactions`, `reactionCorpus`; without it, none). A quotation that is not there is dropped and counted, never repaired — the model's
+ * word that it was quoting is not evidence, and a merge later checks its bodies against these (`bodyPreservation`).
+ * @param {unknown} entries the candidate's `evidence` @param {Map<string, string>} corpus
+ * @param {Map<string, string[]>} [reactions]
+ * @returns {{ kept: { runId: string, seqRange: [number, number], quote: string }[], dropped: number }}
+ */
+export function verifiedEvidence(entries, corpus, reactions = new Map()) {
+  /** @type {{ runId: string, seqRange: [number, number], quote: string }[]} */
+  const kept = [];
+  let dropped = 0;
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const quote = squashed(entry?.quote);
+    const runId = typeof entry?.runId === "string" ? entry.runId : "";
+    const range = Array.isArray(entry?.seqRange) ? entry.seqRange : [];
+    const inReactions = quote.length >= SHORT_QUOTE_BELOW || (reactions.get(runId) ?? []).some((text) => text.includes(quote));
+    const present = quote.length >= EVIDENCE_LENGTH.min && quote.length <= EVIDENCE_LENGTH.max && inReactions && (corpus.get(runId) ?? "").includes(quote);
+    if (!present || range.length !== 2 || !range.every((/** @type {unknown} */ bound) => Number.isSafeInteger(bound))) { dropped += 1; continue; }
+    if (kept.some((held) => held.quote === quote)) continue;
+    if (kept.length >= MAX_EVIDENCE) { dropped += 1; continue; }
+    kept.push({ runId, seqRange: [range[0], range[1]], quote });
+  }
+  return { kept, dropped };
+}
+
+/**
+ * The quotations a method already stands on and the ones a lesson adds, once each (by their folded text), at most twenty — the
+ * newest kept when there are more. Entries stay as stored, with their run and span.
+ * @param {readonly any[]} earlier @param {readonly any[]} added
+ * @returns {any[]}
+ */
+export function unionEvidence(earlier, added) {
+  /** @type {any[]} */
+  const united = [];
+  const seen = new Set();
+  for (const entry of [...earlier, ...added]) {
+    const quote = squashed(typeof entry === "string" ? entry : entry?.quote);
+    if (quote.length < EVIDENCE_LENGTH.min || quote.length > EVIDENCE_LENGTH.max || seen.has(quote)) continue;
+    seen.add(quote);
+    united.push(entry);
+  }
+  return united.slice(-MAX_EVIDENCE);
+}
+
+/**
+ * What a lesson is about, as one text to find the library's nearest methods by: the rules and words the person gave, what they
+ * first asked, and the shape of what was left. The nearest eight by meaning are what the distiller is shown first
+ * (`MethodSimilarity.nearest`); the eight most recently written were shown until 2026-10-23.
+ * @param {{ run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], shapes?: Record<string, any> | null }} input
+ * @returns {string}
+ */
+export function lessonQueryText(input) {
+  const trajectory = trajectoryDigest(input.transcript, input.run ?? {}, { shapes: input.shapes, reactions: reactionsOf(input.feedback) });
+  const words = [
+    ...trajectory.interventions.flatMap((entry) => [entry.rule ?? "", entry.text]),
+    ...trajectory.requests.slice(0, 2).map((entry) => entry.text),
+    ...trajectory.artifacts.flatMap((artifact) => [artifact.format, ...(artifact.shape?.labels ?? [])]),
+  ];
+  return words.map(squashed).filter(Boolean).join("\n").slice(0, 1_500);
 }
 
 /** The dispatch identity, stable for a (run, trigger, rules) triple so a
@@ -334,12 +559,6 @@ export function distillationDispatchId(runId, trigger, discriminator = "") {
 
 export class MethodDistillationRuns {
   /**
-   * `readCorrections` reads the correction memories a `correction` lesson
-   * names (`job.payload.corrections`) — the researcher's own words, quoted and
-   * checked when the extractor wrote them — so they open the input rather than
-   * stay behind a record id the run cannot resolve. Optional: without it the
-   * corrections typed into the run itself still come first.
-   *
    * `resolveProject` resolves one project of the lesson's own account, for a
    * `routine` peer that ran in another of the researcher's projects
    * (`lessonPeers`). Optional: without it such a peer reads as unavailable.
@@ -349,26 +568,113 @@ export class MethodDistillationRuns {
    * `resetInstant` says when the account last reset its memory: a lesson drawn from a conversation that ended before it is
    * not written, even when its run was already under way when the reset came (the job was cancelled, and its worker only
    * learns that after the write). Optional: without it nothing is held against a reset.
+   *
+   * `similarity` (`methodSimilarity.mjs`) picks the related methods by the meaning of the lesson; without it, or when it
+   * degrades, they are the library's most recently written. `resolveRun` reads one run's ledger record in a project, for the
+   * digest of a routine's peer; without it a peer is digested from its transcript alone.
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any, jobs?: any, notifications?: any,
-   *   readCorrections?: ((userId: string, recordIds: string[]) => Promise<{recordId: string, key?: string | null, text: string}[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
    *   usedMethods?: ((project: any, run: any) => Promise<any>) | null,
-   *   resetInstant?: ((userId: string) => Promise<string | null>) | null}} dependencies
+   *   resetInstant?: ((userId: string) => Promise<string | null>) | null,
+   *   similarity?: { nearest: (query: string, methods: readonly any[], options?: { limit?: number }) => Promise<{ method: any, score: number }[]> } | null,
+   *   resolveRun?: ((project: any, runId: string) => Promise<any>) | null,
+   *   scriptUses?: { exemplars: (userId: string, hash: string) => Promise<{runId: string, at?: string, source: string}[]> } | null,
+   *   verifyCode?: ((candidate: { files: Record<string, string>, dependencies: [] }, options: { signal?: AbortSignal }) => Promise<{ ok: boolean, issues: { code: string, message?: string, path?: string }[] }>) | null,
+   *   onCodeSkill?: ((outcome: string) => void) | null,
+   *   contextProvenance?: any,
+   *   onEvidence?: ((counts: { kept: number, dropped: number }) => void) | null}} dependencies
+   *   `scriptUses` gives a `script` lesson the sources of the program that recurred; `verifyCode` runs a candidate's attached scripts and their tests in the disposable
+   *   executor before any method that carries them is written (`onCodeSkill` counts `verified`, `failed`, `unavailable`).
    */
-  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null, resolveProject = null, usedMethods = null, resetInstant = null }) {
+  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, resolveProject = null, usedMethods = null, resetInstant = null,
+    similarity = null, resolveRun = null, scriptUses = null, verifyCode = null, onCodeSkill = null, onEvidence = null, contextProvenance = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
     if (!learning) throw new TypeError("Method distillation requires the learning service.");
+    this.contextProvenance = contextProvenance;
     this.dispatch = dispatch;
     this.readResult = readResult;
     this.learning = learning;
     this.jobs = jobs;
     this.notifications = notifications;
-    this.readCorrections = readCorrections;
     this.resolveProject = resolveProject;
     this.usedMethods = usedMethods;
     this.resetInstant = resetInstant;
+    this.similarity = similarity;
+    this.resolveRun = resolveRun;
+    this.scriptUses = scriptUses;
+    this.verifyCode = verifyCode;
+    this.onCodeSkill = onCodeSkill;
+    this.onEvidence = onEvidence;
+  }
+
+  /**
+   * The methods a lesson is shown first: the nearest by meaning to what the lesson is about, among the whole library (a retired one
+   * included, with its status, so a stopped lesson is not proposed again). A library the similarity cannot rank, or no similarity at
+   * all, is the most recently written, as it was.
+   * @param {string} userId @param {string} query
+   * @returns {Promise<any[]>}
+   */
+  async #related(userId, query, policy = null) {
+    const pool = this.contextProvenance ? await this.contextProvenance.scopedMethods(userId, policy)
+      : await this.learning.listMethods(userId, { limit: RELATED_POOL }).then((page) => page.items ?? []).catch(() => []);
+    if (!this.similarity || !query.trim() || pool.length <= MAX_RELATED) return pool.slice(0, MAX_RELATED);
+    try {
+      return (await this.similarity.nearest(query, pool, { limit: MAX_RELATED })).map((entry) => entry.method);
+    } catch {
+      return pool.slice(0, MAX_RELATED);
+    }
+  }
+
+  /**
+   * The program a `script` lesson is about, as the account's own runs carried it. A lesson whose occurrences are gone (the project was deleted, the account
+   * reset its memory) has nothing to read and nothing to retry.
+   * @param {any} job @returns {Promise<{hash: string, runs: number, conversations: number, exemplars: {runId: string, at?: string, source: string}[]}>}
+   */
+  async #scriptsOf(job) {
+    const hash = String(job.payload?.scriptHash ?? "");
+    const exemplars = this.scriptUses && /^[a-f0-9]{32}$/.test(hash) ? await this.scriptUses.exemplars(job.userId, hash) : [];
+    if (!exemplars.length) throw new HttpError(409, "distillation_run_unavailable", "The program this lesson was queued for is no longer on record.");
+    return { hash, runs: Number(job.payload?.runs) || exemplars.length, conversations: Number(job.payload?.conversations) || 1, exemplars };
+  }
+
+  /**
+   * Prove a candidate's attached scripts run before any method that carries them is written: the static checks and each script's own test, in the
+   * disposable executor (`verifyCode`). A candidate that fails is no method — never a verdict on the researcher's work, which was done long before. An
+   * executor that could not run them is not a failure of the candidate: the job is retried, and a method carrying code nobody ran is never written.
+   * @param {Record<string, string> | undefined} files @param {AbortSignal | undefined} [signal]
+   * @returns {Promise<{ ok: boolean, issues: string[] }>}
+   */
+  async #verifiedCode(files, signal = undefined) {
+    if (!files || !Object.keys(files).some((path) => /^scripts\/[^/]+\.py$/.test(path))) return { ok: true, issues: [] };
+    if (!this.verifyCode) {
+      this.#codeSkill("unavailable");
+      throw new HttpError(503, "code_skill_verification_unavailable", "A method that carries code is not written without running it, and this deployment cannot run it.");
+    }
+    /** @type {Awaited<ReturnType<NonNullable<typeof this.verifyCode>>>} */
+    let verdict;
+    try {
+      verdict = await this.verifyCode({ files, dependencies: [] }, { signal });
+    } catch (error) {
+      this.#codeSkill("unavailable");
+      throw error instanceof HttpError ? error : new HttpError(503, "code_skill_verification_unavailable", "The scripts could not be run.");
+    }
+    if (verdict.issues?.some((issue) => CODE_VERIFICATION_UNAVAILABLE.has(issue.code))) {
+      this.#codeSkill("unavailable");
+      throw new HttpError(503, "code_skill_verification_unavailable", "The scripts could not be run.");
+    }
+    if (!verdict.ok) {
+      this.#codeSkill("failed");
+      return { ok: false, issues: (verdict.issues ?? []).map((issue) => String(issue.code)).slice(0, 8) };
+    }
+    this.#codeSkill("verified");
+    return { ok: true, issues: [] };
+  }
+
+  /** @param {string} outcome */
+  #codeSkill(outcome) {
+    try { this.onCodeSkill?.(outcome); } catch { /* a counter never decides what is written */ }
   }
 
   /**
@@ -392,40 +698,82 @@ export class MethodDistillationRuns {
   }
 
   /**
-   * @param {{job: any, project: any, run: any, feedback?: any[], repairIssues?: any[]}} request
+   * @param {{job: any, project: any, run: any, feedback?: any[]}} request
    * @returns {Promise<{state: string, runId?: string, sessionId?: string, methodId?: string, operation?: string}>}
    */
-  async execute({ job, project, run, feedback = [], repairIssues = [] }) {
+  async execute({ job, project, run, feedback = [] }) {
     const trigger = String(job.payload?.trigger ?? "");
-    const transcript = await readRunTranscript(project, run.id).catch(() => null);
-    const recordIds = Array.isArray(job.payload?.corrections)
-      ? job.payload.corrections.map((entry) => String(entry?.recordId ?? "")).filter(Boolean).slice(0, MAX_CORRECTIONS)
-      : [];
-    const correctionRecords = recordIds.length && this.readCorrections
-      ? await this.readCorrections(job.userId, recordIds).catch(() => [])
-      : [];
-    // The researcher's whole library: a method learnt in another project is
-    // the one to amend, not a near-duplicate to write beside it.
-    const related = await this.learning.listMethods(job.userId, { limit: 20 })
-      .then((page) => page.items ?? [])
-      .catch(() => []);
+    // A shared GEO project's lesson reads only what a person's attributed input said (`GeoContextProvenance.observeRun`): the user turns of
+    // the transcript are replaced by the observed human text, and nothing outside the project is shown.
+    const policy = await this.contextProvenance?.policyFor(project);
+    const shared = policy?.kind === 'geo-project';
+    const observation = shared ? await this.contextProvenance.observeRun(project, run) : null;
+    let transcript = await readRunTranscript(project, run.id).catch(() => null);
+    if (shared && transcript) transcript = { ...transcript, messages: transcript.messages.map(message => {
+      if (message.role !== 'user') return message;
+      const original = observation.humanMessages.find(item => item.seq === message.seq && (!message.sessionId || message.sessionId === run.sessionId));
+      return { ...message, parts: [{ type: 'text', text: original?.text ?? '' }] };
+    }) };
+    // What the run left, read for its shape: the digest says what kind of thing it made, not only where it put it.
+    const files = [...new Set(["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(run?.[field]) ? run[field] : [])
+      .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
+    const shapes = files.length ? await readArtifactShapes(project, files).catch(() => ({})) : {};
+    const toolTraces = await readToolTraces(project, run.id);
+    // The researcher's whole library, ranked by what this lesson is about: a method learnt in another project is the one to amend,
+    // not a near-duplicate to write beside it.
+    const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, shapes }), policy);
     // Each peer by run and project; a lesson queued before 2026-09-28 names
     // run ids only, all in its own project (`lessonPeers`).
     const peers = trigger === "routine"
       ? lessonPeers(job.payload).filter((peer) => peer.runId !== run.id).slice(0, MAX_PEER_RUNS)
       : [];
     const peerRuns = [];
-    for (const peer of peers) {
-      const peerProject = await this.#peerProject(job, project, peer);
-      peerRuns.push({ runId: peer.runId, transcript: peerProject ? await readRunTranscript(peerProject, peer.runId).catch(() => null) : null });
+    const sourceObservations = observation ? [observation] : [];
+    if (shared) for (const sourceId of job.payload?.sourceRunIds ?? []) {
+      if (sourceObservations.some(source=>source.runId===sourceId)) continue;
+      const source=await this.contextProvenance.resolveSourceRun(job.userId,project.id,sourceId);
+      if (!source) throw new HttpError(409,'geo_learning_source_unverified','A correction source is unavailable.');
+      sourceObservations.push(await this.contextProvenance.observeRun(project,source));
     }
-    const methodsUsed = this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords, methodsUsed });
-    const dispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
+    for (const peer of peers) {
+      if (shared && peer.projectId && peer.projectId !== policy.controlProjectId) continue;
+      const peerProject = await this.#peerProject(job, project, peer);
+      const peerRun = peerProject && this.resolveRun ? await this.resolveRun(peerProject, peer.runId).catch(() => null) : null;
+      if (shared) {
+        if (!peerRun || !peerProject) continue;
+        sourceObservations.push(await this.contextProvenance.observeRun(peerProject, peerRun));
+      } else if (this.contextProvenance && peerProject && (await this.contextProvenance.policyFor(peerProject)).kind === 'geo-project') continue;
+      const peerFiles = ["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(peerRun?.[field]) ? peerRun[field] : [])
+        .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))).filter(Boolean);
+      peerRuns.push({
+        runId: peer.runId,
+        ...(peerRun ? { run: peerRun } : {}),
+        shapes: peerProject && peerFiles.length ? await readArtifactShapes(peerProject, peerFiles).catch(() => ({})) : null,
+        toolTraces: peerProject ? await readToolTraces(peerProject, peer.runId) : [],
+        transcript: peerProject ? await readRunTranscript(peerProject, peer.runId).catch(() => null) : null,
+      });
+    }
+    const methodsUsed = !shared && this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
+    const scripts = trigger === "script" ? await this.#scriptsOf(job) : null;
+    const input = buildDistillationInput({ run: shared ? {...run,question:observation.humanText} : run, trigger, transcript,
+      feedback: shared ? feedback.filter(event => typeof (event.detail?.quote ?? event.detail?.instruction) === 'string'
+        && sourceObservations.some(source=>source.humanText.includes(event.detail.quote ?? event.detail.instruction))) : feedback,
+      relatedMethods: related, peerRuns, methodsUsed, shapes, toolTraces, scripts });
+    if (shared && trigger==='correction' && sourceObservations.length>1) {
+      input.corrections.push(...sourceObservations.filter(source=>source.runId!==run.id).flatMap(source=>source.humanMessages.map(message=>
+        ({source:'accepted-input',recordId:message.referenceId,key:null,text:message.text}))));
+      input.signal='researcher';
+    }
+    // Shared results predating the frozen-input contract cannot be adopted.
+    const priorDispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
+    const dispatchId = priorDispatchId + (shared ? '-gcp1' : '');
+    const generationInputRef=shared?await this.contextProvenance.freezeInput(job.userId,policy,dispatchId,input,
+      input.relatedMethods.map(method=>related.find(row=>row.id===method.id)),sourceObservations):null;
     const identity = await this.dispatch({
       userId: job.userId,
       projectId: job.projectId,
       dispatchId,
+      ...(shared?{unprovenPriorDispatchId:priorDispatchId}:{}),
       job,
       capabilityId: "method-distillation",
       contractKind: "method-candidate",
@@ -449,7 +797,9 @@ export class MethodDistillationRuns {
     if (result.status !== "succeeded") {
       throw new HttpError(409, "method_distillation_run_failed", "The distillation run did not succeed.");
     }
-    const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal });
+    const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal,
+      evidence: shared ? new Map(sourceObservations.map(source => [source.runId, source.humanText])) : evidenceCorpus(input), reactions: reactionCorpus(input),
+      policy, sourceObservations, generationInputRef });
     return { state: "complete", ...identityRecord, ...applied };
   }
 
@@ -460,12 +810,13 @@ export class MethodDistillationRuns {
    * `validateMethodSkill` the store will run again — deliberately twice, once
    * where the run can repair it and once where nothing can talk past it.
    *
-   * A lesson whose only evidence is the platform reviewer's findings
-   * (`lessonSignal` = `reviewer`) is kept as a handbook candidate and never
-   * reaches the researcher's library, whatever operation it proposes: it is
-   * about passing EviMed's checks, not about how this person works.
+   * What the method rests on is stored beside it: the quotations the candidate names (`candidate.evidence`) that are in what the
+   * distillation was shown (`context.evidence`, `evidenceCorpus`), as `{ runId, seqRange, quote }` in `provenance.evidence`. A
+   * candidate applied with no corpus stores none: a quotation nobody checked is the model's word, and a merge later holds its
+   * bodies to these. The lesson's `scope` — the capability it came from, or `conversation` — is stored with them, so a later run
+   * of the same scope is offered the method (`learnedMethodMount.mjs`).
    * @param {any} job @param {any} run @param {Record<string, any>} output
-   * @param {{signal?: string}} [context] what the lesson's evidence was; read from the job when absent
+   * @param {{signal?: string, evidence?: Map<string, string>, reactions?: Map<string, string[]>, abortSignal?: AbortSignal, policy?: any, sourceObservations?: any[], generationInputRef?: string|null}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run
    */
   async applyCandidate(job, run, output, context = {}) {
     const candidate = output.candidate ?? output["method-candidate.json"] ?? output;
@@ -482,8 +833,7 @@ export class MethodDistillationRuns {
     }
     const signal = context.signal ?? lessonSignal({
       trigger: String(job.payload?.trigger ?? ""),
-      corrections: [...(Array.isArray(job.payload?.corrections) ? job.payload.corrections : []),
-        ...(Number(job.payload?.steeredCorrections ?? 0) > 0 ? [{ steered: true }] : [])],
+      corrections: Number(job.payload?.steeredCorrections ?? 0) > 0 ? [{ steered: true }] : [],
       feedback: Array.isArray(job.payload?.feedback) ? job.payload.feedback : [],
     });
     // Where the lesson came from: the job's own project, or — when that
@@ -492,6 +842,16 @@ export class MethodDistillationRuns {
     const sourceProjectId = typeof job.payload?.sourceProjectId === "string" && job.payload.sourceProjectId
       ? job.payload.sourceProjectId
       : job.projectId && job.projectId !== LEARNING_PROJECT_ID ? String(job.projectId) : null;
+    const policy = context.policy ?? (sourceProjectId && this.contextProvenance
+      ? await this.contextProvenance.policyFor({userId:job.userId,id:sourceProjectId}) : null);
+    const shared = policy?.kind === 'geo-project';
+    if (shared) {
+      const project = await this.contextProvenance.projectFor(job.userId, sourceProjectId);
+      if (!project) throw new HttpError(409, 'geo_learning_source_unverified', 'The shared learning source cannot be verified.');
+      const observed = await this.contextProvenance.observeRun(project, run);
+      // Model evidence can quote only original authenticated human parts.
+      context.evidence = new Map((context.sourceObservations ?? [observed]).map(source => [source.runId, source.humanText]));
+    }
     const skillText = String(output.skill ?? output["SKILL.md"] ?? "");
     const parsed = parseSkillFrontmatter(skillText);
     if (parsed.issues.length) {
@@ -526,15 +886,22 @@ export class MethodDistillationRuns {
         { role: "original", versionId: event.detail?.original?.versionId, digest: event.detail?.original?.digest },
         { role: "successor", versionId: event.detail?.successor?.versionId, digest: event.detail?.successor?.digest },
       ]));
+    const lessonScope = learningScopeOf(run);
+    const verified = context.evidence ? verifiedEvidence(candidate?.evidence, context.evidence, context.reactions) : { kept: [], dropped: 0 };
+    if (context.evidence) this.onEvidence?.({ kept: verified.kept.length, dropped: verified.dropped });
     const provenance = {
       origin: "inferred",
       runId: run.id,
       feedbackEventIds: job.payload?.feedbackEventIds ?? [],
       ...(resultLinks.length ? { results: resultLinks } : {}),
       ...(sourceProjectId ? { sourceProjectId } : {}),
+      ...(context.generationInputRef ? {generationInputRef:context.generationInputRef} : {}),
+      ...(shared ? {contextPolicy:contextPolicyIdentity(policy), sourceRunIds:[...context.evidence.keys()]} : {}),
       ...(typeof run.effectiveAgentId === "string" && run.effectiveAgentId ? { capabilityId: run.effectiveAgentId } : {}),
       ...(job.payload?.trigger ? { trigger: String(job.payload.trigger) } : {}),
       signal,
+      scope: lessonScope,
+      ...(verified.kept.length ? { evidence: verified.kept } : {}),
       ...(candidate?.risk?.touchesSafety ? { safetyRelated: true } : {}),
     };
     // Only what the proposal itself attaches. `output.files` is the delivered
@@ -544,32 +911,30 @@ export class MethodDistillationRuns {
     // after its run had passed the same rules (2026-09-21, the first two
     // lessons production ever finished).
     const files = candidate?.files;
+    // A method that carries code is written only once its scripts and their tests have run (`#verifiedCode`); one that fails to is no method.
+    const codeVerdict = await this.#verifiedCode(files, context.abortSignal);
+    if (!codeVerdict.ok) return { operation: "no_change", methodId: undefined, skipped: "code_skill_unverified", issues: codeVerdict.issues };
     // The steps in the researcher's language, beside the method and never in
     // it (M-5); cleaned by the store.
     const steps = typeof candidate?.display?.steps === "string" ? candidate.display.steps : undefined;
     // The situation it is for and the ones it must not be loaded into, in the candidate's own words (the contract
     // requires both); the store cleans and bounds them and keeps them beside the method, outside its digest.
     const scope = { applicability: candidate?.applicability, counterexamples: candidate?.counterexamples };
-    if (signal === "reviewer") {
-      const kept = await this.learning.recordHandbookCandidate(job.userId, {
-        frontmatter: parsed.frontmatter,
-        body: parsed.body,
-        ...(files ? { files } : {}),
-        provenance,
-        dependencies: candidate?.dependencies ?? [],
-        capabilityId: provenance.capabilityId ?? null,
-        ...(candidate?.display ? { display: candidate.display } : {}),
-        ...(steps ? { steps } : {}),
-      });
-      return { operation: "handbook", methodId: kept?.id };
-    }
     // A method's id is its name, account-wide (`learnedMethodId`). A `create`
     // under a name the library already holds is that method's next revision,
     // not a second method: without this it was refused as a revision conflict,
     // retried, and lost (the same name learnt in two projects).
-    const existing = operation === "create"
-      ? await this.learning.getMethod(job.userId, learnedMethodId(String(parsed.frontmatter?.name ?? ""))).catch(() => null)
-      : null;
+    const getTarget = async id => this.contextProvenance
+      ? this.contextProvenance.methodFor(job.userId, id, policy ?? {kind:'owned',ownerId:job.userId})
+      : this.learning.getMethod(job.userId, id).catch(() => null);
+    let existing = operation === "create" ? await getTarget(learnedMethodId(String(parsed.frontmatter?.name ?? ''))) : null;
+    if (operation === 'create' && !existing && this.contextProvenance) {
+      const collision = (await this.contextProvenance.rows(job.userId,'method')).some(row => row.id === learnedMethodId(String(parsed.frontmatter?.name ?? '')));
+      if (collision) {
+        parsed.frontmatter.name = scopedMethodName(parsed.frontmatter.name, policy ?? {kind:'owned',ownerId:job.userId});
+        existing = await getTarget(learnedMethodId(String(parsed.frontmatter.name)));
+      }
+    }
     if (operation === "create" && !existing) {
       const created = await this.learning.createCandidate(job.userId, {
         // The project it was learnt in, as provenance; the method itself is
@@ -591,20 +956,70 @@ export class MethodDistillationRuns {
     }
     const targetId = existing ? String(existing.id) : String(candidate?.targetMethodId ?? "");
     if (!targetId) throw new HttpError(422, "method_candidate_invalid", "An amend or merge must name the method it changes.");
-    const target = await this.learning.getMethod(job.userId, targetId);
+    const target = await getTarget(targetId);
+    if (!target) throw new HttpError(409,'geo_learning_target_unverified','The learning target is outside this project.');
+    // A merge folds the methods it names into the target. They are read here, by the account's own ledger and never by the
+    // candidate's word for them, and listed for retirement the way the builder's merges are (`pendingRetirements`,
+    // `MethodConsolidation.completePendingMerges`): each stops once the merged method has cleared the harm test on runs of its own,
+    // and its body still carries what the folded one required.
+    /** @type {any[]} */
+    const folded = [];
+    if (operation === "merge" && !existing) {
+      for (const foldedId of [...new Set((Array.isArray(candidate?.mergedMethodIds) ? candidate.mergedMethodIds : []).map(String))].filter((named) => named && named !== targetId).slice(0, MAX_RELATED - 1)) {
+        const method = await getTarget(foldedId);
+        if (!method && shared) throw new HttpError(409,"geo_learning_target_unverified","A merge source is outside this project.");
+        if (method && method.payload?.status !== "retired") folded.push(method);
+      }
+    }
+    // What the method already stands on stays: the quotations of every lesson that shaped it, and the scope it was learnt in, which a
+    // lesson from another scope widens to none (a method with no scope is offered everywhere) and never narrows.
+    const sources = [target, ...folded];
+    const scopes = new Set(sources.map((method) => method.payload?.provenance?.scope ?? null).concat(lessonScope));
+    const evidence = unionEvidence(sources.flatMap((method) => (Array.isArray(method.payload?.provenance?.evidence) ? method.payload.provenance.evidence : [])), verified.kept);
     const amended = await this.learning.amendMethod(job.userId, targetId, {
       expectedRevision: target.revision,
       frontmatter: parsed.frontmatter,
       body: parsed.body,
       ...(files ? { files } : {}),
-      provenance,
+      provenance: {
+        ...provenance,
+        scope: scopes.size === 1 && target.payload?.provenance?.scope ? lessonScope : undefined,
+        evidence: evidence.length ? evidence : undefined,
+        ...(folded.length ? {
+          // The merged method rests on the projects the folded ones were learnt in as well (`LearningService.amendMethod` unions them in).
+          sourceProjectIds: folded.flatMap((method) => methodSourceProjects(method.payload?.provenance)),
+          consolidatedBy: `consolidate:distill:${job.id ?? run.id}`,
+          mergedFrom: folded.map((method) => ({ methodId: method.id, digest: method.payload.contentDigest })),
+          pendingRetirements: folded.map((method) => ({ methodId: method.id, baseDigest: method.payload.contentDigest, assignment: `distill:${run.id}` })),
+        } : {}),
+      },
       dependencies: candidate?.dependencies ?? target.payload.dependencies ?? [],
       ...(candidate?.display ? { display: candidate.display } : {}),
       ...(steps ? { steps } : {}),
       scope,
     });
     await this.#enqueueIntegrate(job, amended.id, amended.revision);
+    // The amendment is in force at once; whether it contradicts what the person accepted is read afterwards, never waited for.
+    await this.#enqueueReplay(job, amended, target.payload?.contentDigest);
     return { operation: existing ? "amend" : operation, methodId: amended.id };
+  }
+
+  /**
+   * Ask for the replay of a method this lesson has just changed (`methodReplay.mjs`): against the body it holds now, naming the one it replaced.
+   * Nothing when the body did not change or the store did not say. Keyed on the body, so a retried distillation queues no second.
+   * @param {any} job @param {any} method the method as amended @param {unknown} previousDigest
+   */
+  async #enqueueReplay(job, method, previousDigest) {
+    const digest = method?.payload?.contentDigest;
+    if (!this.jobs || typeof digest !== "string" || !digest || typeof previousDigest !== "string" || previousDigest === digest) return;
+    try {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "replay", methodId: method.id, digest, previousDigest }, {
+        idempotencyKey: `consolidate:replay:${method.id}:${digest}`,
+        projectId: LEARNING_PROJECT_ID,
+      });
+    } catch {
+      // isolated: an amendment that was not replayed stands on its own runs' counters, as it did before the replay existed
+    }
   }
 
   /**
@@ -621,8 +1036,11 @@ export class MethodDistillationRuns {
    */
   async #enqueueIntegrate(job, methodId, revision = 0) {
     if (!this.jobs) return;
+    const sourceProjectId = job.payload?.sourceProjectId ?? job.projectId;
+    const origin = {sourceProjectId,...(job.payload?.contextPolicy ? {contextPolicy:job.payload.contextPolicy} : {}),
+      ...(job.payload?.inputReceiptRefs ? {inputReceiptRefs:job.payload.inputReceiptRefs} : {})};
     try {
-      await this.jobs.enqueue(job.userId, "consolidate", { action: "integrate", methodId }, {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "integrate", methodId, ...origin }, {
         idempotencyKey: `consolidate:integrate:${methodId}:${revision}`,
         projectId: LEARNING_PROJECT_ID,
       });
@@ -630,7 +1048,7 @@ export class MethodDistillationRuns {
       // isolated: evimed_learning_integrate_enqueue_failed_total
     }
     try {
-      await this.jobs.enqueue(job.userId, "consolidate", { action: "sleep", date: new Date().toISOString(), after: methodId }, {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "sleep", date: new Date().toISOString(), after: methodId, ...origin }, {
         idempotencyKey: `consolidate:sleep:after:${methodId}:${revision}`,
         projectId: LEARNING_PROJECT_ID,
       });

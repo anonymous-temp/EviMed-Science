@@ -56,7 +56,7 @@ describe("how a task says when", () => {
     expect(scheduleLine(agenda())).toBe("每周五 09:00 · 中国标准时间 · 下次 10月2日 09:00");
     viewer.zone = "America/New_York";
     expect(scheduleLine(agenda())).toBe("每周五 09:00 · 中国标准时间 · 下次 10月2日 09:00");
-    expect(scheduleLine(agenda({ enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null }))).toBe("每周五 09:00 · 中国标准时间");
+    expect(scheduleLine(agenda({ enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null }))).toBe("每周五 09:00 · 中国标准时间 · 已暂停");
   });
 
   it("groups a task as upcoming, paused or done: a finished one-time task is done and not paused", () => {
@@ -65,12 +65,12 @@ describe("how a task says when", () => {
     expect(taskGroupOf(agenda({ scheduleState: "completed" }))).toBe("completed");
   });
 
-  it("counts executions from the first, and names one by its place and its day", () => {
+  it("sorts history and keeps labels stable when earlier pages are absent", () => {
     const list = executionsOf("agenda-1", [episode("c", { createdAt: "2026-10-01T01:00:00Z" }), episode("a", { createdAt: "2026-09-22T00:00:00Z" }), episode("x", { agendaId: "other" }), episode("b", { createdAt: "2026-09-30T00:00:00Z" })]);
     expect(list.map(item => item.id)).toEqual(["a", "b", "c"]);
-    expect(executionLabel(list[2], 3, "Asia/Shanghai", NOW)).toBe("第 3 次 · 今天");
-    expect(executionLabel(list[1], 2, "Asia/Shanghai", NOW)).toBe("第 2 次 · 昨天");
-    expect(executionLabel(list[0], 1, "Asia/Shanghai", NOW)).toBe("第 1 次 · 9月22日");
+    expect(executionLabel(list[2], "Asia/Shanghai")).toBe("2026年10月1日 09:00:00");
+    expect(executionLabel(list[1], "Asia/Shanghai")).toBe("2026年9月30日 08:00:00");
+    expect(executionLabel(list[0], "Asia/Shanghai")).toBe("2026年9月22日 08:00:00");
   });
 });
 

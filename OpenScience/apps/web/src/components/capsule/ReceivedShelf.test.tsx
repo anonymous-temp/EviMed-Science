@@ -15,12 +15,11 @@ const client = vi.hoisted(() => ({
 vi.mock("@/lib/memoryClient", () => client);
 const share = vi.hoisted(() => ({ listPendingDeliveries: vi.fn(), openDelivery: vi.fn(), importDelivery: vi.fn(), declineDelivery: vi.fn() }));
 vi.mock("@/lib/capsuleShareClient", () => share);
+// Deliveries between accounts exist only where the server has sharing on (`features.capsuleShare` of `/api/me`); on unless a test says otherwise.
+const sharing = vi.hoisted(() => ({ value: "on" as "on" | "off" | "error" }));
+vi.mock("@/lib/capsuleShareFeature", () => ({ useCapsuleShareFeature: () => sharing.value }));
 vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => "project-a" }));
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: () => "操作未完成，请重试。" }));
-vi.mock("@/lib/projects", () => {
-  const state = { currentId: "project-a", projects: [{ id: "project-a", name: "阿司匹林研究" }, { id: "project-b", name: "别的项目" }] };
-  return { useProjectStore: (select: (value: typeof state) => unknown) => select(state) };
-});
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
@@ -50,7 +49,7 @@ function shelf() {
 }
 
 describe("收到的胶囊: trusted whole, one switch each way", () => {
-  beforeEach(() => { vi.clearAllMocks(); share.listPendingDeliveries.mockResolvedValue([]); });
+  beforeEach(() => { vi.clearAllMocks(); sharing.value = "on"; share.listPendingDeliveries.mockResolvedValue([]); });
   afterEach(cleanup);
 
   it("says what a pack brings, and nothing of the back office", async () => {
@@ -65,6 +64,32 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     for (const gone of [/签名已验证/, /收到于/, /自动检查/, /参考胶囊/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
     // No entry to approve one by one.
     expect(screen.queryByRole("button", { name: "采用" })).not.toBeInTheDocument();
+  });
+
+  it("lists the platform's own starter packs apart from what people sent, by the platform as sender, switched on, with nothing of the back office", async () => {
+    const official = {
+      ...structuredClone(pack), id: "official-copy:daily-writing", title: "日常文稿", enabled: true, official: { packId: "daily-writing" }, counts: { method_preference: 3 },
+      methods: ["周报与进展汇报：事实只用你给的", "邮件：一件事，写清要对方做什么"],
+      card: { title: "日常文稿", author: "EviMed 证据中心", summary: "周报、纪要、邮件这类日常文稿的写法。" }, scan: { model: "ok", checkedAt: "2026-10-25T00:00:00Z", dropped: [] },
+    };
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(official), structuredClone(pack)]);
+    const { container } = shelf();
+    const defaults = await screen.findByRole("list", { name: "EviMed 的默认做法" });
+    expect(within(defaults).getByText("日常文稿")).toBeInTheDocument();
+    expect(within(defaults).getByText(/EviMed 证据中心提供 · 周报、纪要、邮件这类日常文稿的写法。/)).toBeInTheDocument();
+    expect(within(defaults).getByRole("switch", { name: "启用“日常文稿”" })).toBeChecked();
+    // What a person was sent is the other list, and keeps saying who sent it.
+    const sent = screen.getByRole("list", { name: "收到的胶囊" });
+    expect(within(sent).getByText("李主任的工作方式")).toBeInTheDocument();
+    expect(within(sent).queryByText("日常文稿")).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/official|packId|来自 EviMed|分享|扫描|签名/);
+  });
+
+  it("shows no list of defaults when the account holds none", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+    shelf();
+    await screen.findByText("李主任的工作方式");
+    expect(screen.queryByRole("list", { name: "EviMed 的默认做法" })).not.toBeInTheDocument();
   });
 
   it("does not say whether the publisher could be verified", async () => {
@@ -91,21 +116,19 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(client.disableCapsule).toHaveBeenCalledWith("pack-1");
   });
 
-  // Build spec §9.4 #6: 「启用范围可选账号或某个项目」.
-  it("puts a pack in force in the project the shell is in only, from the row's 「⋯」, and says where it is in force", async () => {
-    client.fetchReceivedCapsules.mockResolvedValueOnce([structuredClone(pack)])
-      .mockResolvedValue([{ ...structuredClone(pack), enabled: true, enabledIn: "project" }]);
-    client.enableReceivedCapsule.mockResolvedValue({ ...pack, enabled: true, enabledIn: "project" });
-    shelf();
+  // 2026-10-24: a person has one capsule, and a pack is in force for the account. It could be put in force for one project alone until then.
+  it("offers no way to put a pack in force for one project: the switch is the account's, and the row's 「⋯」 holds only the trial", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+    client.enableReceivedCapsule.mockResolvedValue({ ...pack, enabled: true });
+    const { container } = shelf();
     await userEvent.click(await screen.findByRole("button", { name: "更多" }));
-    await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "只在“阿司匹林研究”启用" }));
-    await waitFor(() => expect(client.enableReceivedCapsule).toHaveBeenCalledWith("pack-1", "project-a"));
-    expect(toasts.success.mock.calls.at(-1)![0]).toBe("已在“阿司匹林研究”启用“李主任的工作方式”");
-    expect(await screen.findByText(/只在“阿司匹林研究”启用/)).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toHaveAttribute("aria-checked", "true");
-    // In force already: the menu offers no second way in.
-    await userEvent.click(screen.getByRole("button", { name: "更多" }));
-    expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /只在/ })).toBeNull();
+    const items = within(await screen.findByRole("menu")).getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["试用一次"]);
+    expect(container.textContent).not.toMatch(/只在/);
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(await screen.findByRole("switch", { name: "启用“李主任的工作方式”" }));
+    expect(client.enableReceivedCapsule).toHaveBeenCalledTimes(1);
+    expect(client.enableReceivedCapsule.mock.calls[0]).toEqual(["pack-1"]);
   });
 
   it("「试用一次」, in the row's 「⋯」, marks a new conversation as the trial, then opens it under that id", async () => {
@@ -132,6 +155,22 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(screen.getByText("9月27日更新：新增 2 条、移除 1 条")).toBeInTheDocument();
   });
 
+  // 2026-10-23: where sharing is off the server answers 404 `capsule_share_not_enabled` to the list of deliveries, and the shelf showed
+  // 「暂时读不到待收下的分享。」 with 重试 for ever, on the import tab of every deployment that kept the default.
+  it("does not ask for deliveries where sharing is off or unknown, so no error is drawn for a thing that does not exist; the packs are still there", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);
+    for (const value of ["off", "error"] as const) {
+      sharing.value = value;
+      share.listPendingDeliveries.mockRejectedValue(new Error("capsule_share_not_enabled"));
+      const { container, unmount } = shelf();
+      expect(await screen.findByText("李主任的工作方式")).toBeInTheDocument();
+      expect(share.listPendingDeliveries).not.toHaveBeenCalled();
+      expect(container.textContent).not.toMatch(/暂时读不到待收下的分享/);
+      expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+      unmount();
+    }
+  });
+
   it("is silent when nothing was received", async () => {
     client.fetchReceivedCapsules.mockResolvedValueOnce([]);
     shelf();
@@ -146,6 +185,19 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(await screen.findByText("已被平台下架并停用：平台复核后下架")).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+  });
+
+  // The sender's button is 撤回, so that is what the recipient reads when the sender pressed it: withdrawn, and stopped.
+  it("a pack its author withdrew says it was withdrawn and is no longer in force, with the reason when the author gave one", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([{ ...structuredClone(pack), enabled: true, takenDown: { by: "author", at: "2026-10-05T00:00:00Z", reason: "这条做法有误" } }]);
+    const { unmount } = shelf();
+    expect(await screen.findByText("作者已撤回，这份已停用：这条做法有误")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+    unmount();
+    client.fetchReceivedCapsules.mockResolvedValue([{ ...structuredClone(pack), takenDown: { by: "author", at: "2026-10-05T00:00:00Z", reason: null } }]);
+    shelf();
+    expect(await screen.findByText("作者已撤回，这份已停用")).toBeInTheDocument();
   });
 
   // A delivery reaches a recipient as an inbox notice, but one who did not come through the inbox had no way to find it (flywheel F17).

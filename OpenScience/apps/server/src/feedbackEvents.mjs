@@ -22,18 +22,15 @@
  *
  * Idempotency is the event's own identity, not a timestamp. A memory event is
  * identified by the record and the version the change produced, so replaying
- * the same PATCH is the same event; an adoption is identified by its
+ * the same request is the same event; an adoption is identified by its
  * deliverable, because adopting twice is one fact; an edit is identified by the
  * content it produced, because two different edits are two lessons and the same
  * edit reported twice is one.
  *
- * What is live today, and what waits on a surface. The three memory triggers
- * are the ones the product writes by itself: the memory PATCH and DELETE routes
- * record them. A removal (`memory-rejected`) is read back, whole, by extraction
- * (`rejectedMemoryKeys`) so that an inference does not write a memory the
- * researcher took out straight back, and by the timeline; an acceptance and an
- * edit are read only by the evolution roll-up, and nothing yet answers the
- * extractor's own thresholds from them. The two deliverable triggers
+ * What is live today, and what waits on a surface. The three memory triggers (`memory-inference-accepted`, `memory-value-edited`,
+ * `memory-rejected`) were written by the legacy memory engine's page routes and are no longer produced (that engine was deleted on
+ * 2026-10-25: a memory file's edits and removals are the overlay's revisions and its rejection list, `nativeMemoryOverlay.mjs`); the
+ * words stay in the vocabulary because the ledger holds rows of them, which the timeline and the evolution roll-up still read. The two deliverable triggers
  * are the only ones the producer below reads, and no page posts them yet: they
  * have an HTTP route (`POST /api/feedback/events`) and a typed client function
  * (`reportWebDeliverableFeedback` in `apps/web/src/lib/apiClient.ts`), and
@@ -64,7 +61,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { fitResultCorrection, projectResultCorrection } from "@evimed/domain";
+import {
+  LEARNING_ACCEPT_VERDICTS, LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_SUBJECT_TYPE, LEARNING_EVIDENCE_TRIGGER, cleanLearningEvidence, fitResultCorrection, projectResultCorrection,
+} from "@evimed/domain";
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HttpError } from "./security.mjs";
 import {
@@ -113,13 +112,6 @@ const MAX_DETAIL_BYTES = 4_096;
 /** @param {unknown} value @param {number} max */
 function boundedText(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-
-/** A value's identity without its text; the empty string stays empty, so an
- * edit from or to nothing is still visible. @param {unknown} value */
-function valueDigest(value) {
-  const text = String(value ?? "");
-  return text ? createHash("sha256").update(text).digest("hex").slice(0, 32) : "";
 }
 
 /** @param {unknown} value @param {string} field */
@@ -196,65 +188,6 @@ function event(row) {
   } : null;
 }
 
-/**
- * Which feedback events one structured-memory update produced.
- *
- * A pure function on the record before and after, so "what did the researcher
- * just tell us" is decided in one readable place and can be tested without a
- * database. Three of them, because they mean three different things: accepting
- * an inference says the extractor was right, editing a value says it was close
- * but wrong, and archiving says it should not have been learned at all.
- *
- * The version the change produced is the identity: replaying the same PATCH
- * lands on the same event id and writes nothing.
- *
- * @param {any} before @param {any} after
- * @returns {{trigger:string,identity:string[],detail:Record<string,any>}[]}
- */
-export function memoryFeedbackEvents(before, after) {
-  if (!before || !after) return [];
-  const version = String(after.version ?? 0);
-  const key = boundedText(after.key ?? before.key, 255);
-  const events = [];
-  if (before.status === "pending" && after.status === "active") {
-    events.push({
-      trigger: "memory-inference-accepted",
-      identity: [version],
-      detail: { key, kind: after.kind ?? before.kind, previousOrigin: before.origin ?? null, version: after.version ?? null },
-    });
-  }
-  if (String(before.value ?? "") !== String(after.value ?? "")) {
-    // The fact of the edit, never its text. This table has no delete path, so a
-    // value copied here outlives the memory the researcher later deletes — the
-    // reason `recordMemoryDeletion` below stores a key, a kind and a version and
-    // no value at all. A digest keeps what the consumer this substrate is for
-    // needs: whether the value changed, and whether a later edit went back to
-    // one the researcher had before. And a record the extractor marked
-    // sensitive carries no digest either: a short value is guessable from an
-    // unsalted digest, and that flag is the extractor saying this is exactly
-    // the content worth guessing. Either side of the change setting it is
-    // enough: the same PATCH can clear the flag and rewrite the value, and the
-    // value being replaced was still sensitive when it was written.
-    const sensitive = Boolean(after.sensitive) || Boolean(before.sensitive);
-    events.push({
-      trigger: "memory-value-edited",
-      identity: [version],
-      detail: {
-        key, kind: after.kind ?? before.kind, version: after.version ?? null, sensitive,
-        ...(sensitive ? {} : { previousValueDigest: valueDigest(before.value), nextValueDigest: valueDigest(after.value) }),
-      },
-    });
-  }
-  if (before.status !== "archived" && after.status === "archived") {
-    events.push({
-      trigger: "memory-rejected",
-      identity: [version],
-      detail: { key, kind: after.kind ?? before.kind, version: after.version ?? null, reason: "archived" },
-    });
-  }
-  return events;
-}
-
 /** Append-only feedback ledger, and the one producer that reads it. */
 export class FeedbackEvents {
   /** @param {{database:any,jobs?:any,now?:()=>Date,onRecorded?:((event:any)=>Promise<any>)|null,evolutionSignals?:any}} dependencies */
@@ -314,40 +247,6 @@ export class FeedbackEvents {
       try{await this.evolutionSignals?.record({userId:user,projectId,eventId:id,moduleId:trigger.startsWith("memory-")?"memory":"evidence",kind:signalKind,capability:"unknown",operation:trigger.startsWith("memory-")?"recall":"edit",dataShape:"none",version:detail.version??null});}catch{/* feedback remains recorded */}
     }
     return { event: recorded, created, distillJob };
-  }
-
-  /**
-   * Every event one structured-memory update produced.
-   * @param {string} userId @param {{before:any,after:any,projectId?:string|null}} input
-   */
-  async recordMemoryUpdate(userId, { before, after, projectId = null }) {
-    const results = [];
-    for (const item of memoryFeedbackEvents(before, after)) {
-      results.push(await this.record(userId, {
-        trigger: item.trigger, subject: { type: "memory-record", id: String(after.id ?? before.id ?? "") },
-        identity: item.identity, detail: item.detail, projectId,
-      }));
-    }
-    return results;
-  }
-
-  /**
-   * Deleting a memory is rejecting it. The version is the one that was deleted,
-   * so deleting the same record twice is one event. Undoing the write that
-   * created a memory is the same rejection, said as `undone`.
-   * @param {string} userId @param {{record:any,projectId?:string|null,reason?:"deleted"|"undone"}} input
-   */
-  async recordMemoryDeletion(userId, { record, projectId = null, reason = "deleted" }) {
-    return this.record(userId, {
-      trigger: "memory-rejected",
-      subject: { type: "memory-record", id: String(record?.id ?? "") },
-      identity: [String(record?.version ?? 0)],
-      detail: {
-        key: boundedText(record?.key, 255), kind: record?.kind ?? null, version: record?.version ?? null,
-        reason: reason === "undone" ? "undone" : "deleted",
-      },
-      projectId,
-    });
   }
 
   /**
@@ -416,8 +315,10 @@ export class FeedbackEvents {
       } catch { throw new HttpError(400, "feedback_cursor_invalid", "Invalid feedback cursor."); }
     }
     await migrateProductStore(this.database);
+    // Learning evidence is the loop's own bookkeeping, one row per run reacted to: a listing that did not ask for it by name would
+    // fill its 200 newest with it and push the memory events the timeline and the activity read out of the page.
     const result = await this.database.query(`SELECT * FROM evimed_product.feedback_events
-      WHERE user_id=$1 AND ($2::text IS NULL OR trigger_kind=$2)
+      WHERE user_id=$1 AND ($2::text IS NULL OR trigger_kind=$2) AND ($2::text IS NOT NULL OR trigger_kind <> 'learning-evidence')
       AND ($3::text IS NULL OR (subject_type=$3 AND subject_id=$4))
       AND ($6::timestamptz IS NULL OR (occurred_at,id) < ($6::timestamptz,$7::text))
       ORDER BY occurred_at DESC,id DESC LIMIT $5`,
@@ -454,6 +355,80 @@ export class FeedbackEvents {
       WHERE user_id=$1 AND trigger_kind='memory-rejected' AND detail->>'key'=ANY($2::text[])`,
     [productId(userId, "user"), [...new Set([...wanted].map((pair) => pair.slice(pair.indexOf("\u0000") + 1)))]]);
     return new Set(found.rows.map((/** @type {any} */ row) => `${row.kind}\u0000${row.key}`).filter((/** @type {string} */ pair) => wanted.has(pair)));
+  }
+
+  /**
+   * One reaction of the researcher to a run, for the learning loop (`@evimed/domain` `learningEvidence.mjs`). The detail is cleaned and
+   * fitted to the ledger's allowance by the domain, and an event the vocabulary does not hold is refused here rather than written. One
+   * event per run, kind and `key` (a steer's request id, a follow-up's turn): recording it again records it once.
+   *
+   * @param {string} userId
+   * @param {{ runId: string, projectId?: string | null, key?: string, occurredAt?: any, detail: Record<string, any> }} input
+   * @returns {Promise<{event:any,created:boolean,distillJob:any}>}
+   */
+  async recordLearningEvidence(userId, { runId, projectId = null, key = "", occurredAt = undefined, detail }) {
+    const clean = cleanLearningEvidence(detail);
+    if (!clean) throw new HttpError(400, "feedback_event_invalid", "A learning evidence event holds one of the closed kinds and verdicts.");
+    return this.record(userId, {
+      trigger: LEARNING_EVIDENCE_TRIGGER,
+      subject: { type: LEARNING_EVIDENCE_SUBJECT_TYPE, id: runId },
+      identity: [clean.evidence, String(key).slice(0, 200)],
+      projectId, runId: runId.length <= 200 ? runId : null,
+      detail: clean, occurredAt: occurredAt ?? clean.at,
+    });
+  }
+
+  /**
+   * Every learning evidence event of one run, oldest first: what the researcher did to it, and whether it was left alone.
+   * @param {string} userId @param {string} runId
+   * @returns {Promise<any[]>}
+   */
+  async learningEvidenceOf(userId, runId) {
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`SELECT * FROM evimed_product.feedback_events
+      WHERE user_id=$1 AND trigger_kind=$2 AND subject_type=$3 AND subject_id=$4 ORDER BY occurred_at,id LIMIT 100`,
+    [productId(userId, "user"), LEARNING_EVIDENCE_TRIGGER, LEARNING_EVIDENCE_SUBJECT_TYPE, boundedText(runId, 400)]);
+    return result.rows.map(event);
+  }
+
+  /**
+   * The runs of one scope that were kept and never corrected, in one window of time, oldest first, each with the shape of what it left:
+   * the family a routine is counted over. Kept is the person's own act: an acceptance or an adoption on the next turn, or one of the run's
+   * delivered files opened or downloaded (`used`). Silence is not in it (a run nobody reacted to is unknown, not approved), and neither is
+   * a next message about something else. A run that was corrected at any time, by a steer or a follow-up read that way or a result corrected
+   * in the page, is not in it, however late the correction came (`learningRunOutcome` says the same in code).
+   *
+   * The shape comes from an event of the run that carries one (the settling `silent` row, or the follow-up), so a use that arrives after
+   * the settling needs none of its own; the window is the one in which that event was recorded.
+   *
+   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null }} window
+   * @returns {Promise<{ runId: string, projectId: string | null, at: string, endedAt: string | null, shape: any[] }[]>}
+   */
+  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined }) {
+    productInteger(limit, 1, 1000);
+    if (projectId != null) productId(projectId,"project");
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`SELECT DISTINCT ON (e.subject_id) e.subject_id, e.project_id, e.occurred_at, e.detail->>'endedAt' AS ended_at, e.detail->'shape' AS shape
+      FROM evimed_product.feedback_events e
+      WHERE e.user_id=$1 AND e.trigger_kind='learning-evidence' AND e.subject_type='run' AND e.detail->>'scope'=$2
+        AND e.occurred_at >= $3 AND e.occurred_at < $4
+        AND ($7::boolean=false OR e.project_id IS NOT DISTINCT FROM $8::text)
+        AND e.detail->>'evidence' IN ('silent','follow-up','used') AND e.detail ? 'shape'
+        AND EXISTS (SELECT 1 FROM evimed_product.feedback_events k
+          WHERE k.user_id=e.user_id AND k.trigger_kind='learning-evidence' AND k.subject_type='run' AND k.subject_id=e.subject_id
+            AND (k.detail->>'evidence'='used' OR (k.detail->>'evidence'='follow-up' AND k.detail->>'verdict'=ANY($6::text[]))))
+        AND NOT EXISTS (SELECT 1 FROM evimed_product.feedback_events c
+          WHERE c.user_id=e.user_id AND c.trigger_kind='learning-evidence' AND c.subject_type='run' AND c.subject_id=e.subject_id
+            AND (c.detail->>'evidence'='result-corrected'
+              OR (c.detail->>'evidence' IN ('steer','follow-up') AND c.detail->>'verdict'=ANY($5::text[]))))
+      ORDER BY e.subject_id, e.occurred_at, e.id`,
+    [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS], [...LEARNING_ACCEPT_VERDICTS],
+      projectId !== undefined, projectId ?? null]);
+    return result.rows
+      .map((/** @type {any} */ row) => ({ runId: String(row.subject_id), projectId: row.project_id ?? null, at: new Date(row.occurred_at).toISOString(),
+        endedAt: Number.isFinite(Date.parse(String(row.ended_at ?? ""))) ? new Date(row.ended_at).toISOString() : null, shape: Array.isArray(row.shape) ? row.shape : [] }))
+      .sort((left, right) => left.at.localeCompare(right.at) || left.runId.localeCompare(right.runId))
+      .slice(-limit);
   }
 
   /** @param {string} userId @param {string} id */

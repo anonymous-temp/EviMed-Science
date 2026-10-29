@@ -3,8 +3,12 @@
 #   docker compose -f docker-compose.yml -f docker-compose.api-only.yml up -d
 #
 # What runs: the control plane (`open-science-web`, API only), PostgreSQL (the
-# record store every memory lives in) and OpenViking (the derived recall index,
-# with its one-shot init). What does not: the browser application, the runtime
+# capsules, the accounts' switches and the overlay of what the engine did) and OpenViking (the engine every account's
+# memory is kept in, with its one-shot init). The CDSS's accounts — the institution's and every doctor's, made on the first
+# write — are on that engine like any other account's (`docs/AGENT_MEMORY_API.md`); there is no second engine, and nothing in this
+# shape pins one.
+#
+# What does not run: the browser application, the runtime
 # controller and every research runtime, and the six specialist engines. This is
 # the shape the TCM CDSS plan asks for — 「记忆胶囊以独立服务方式部署，通过接口与中医
 # CDSS 对接」 — where the CDSS is the only client and reaches memory through
@@ -28,15 +32,17 @@
 # - The agent-memory API is switched on here, and it publishes an account's
 #   memory to whoever holds one of its keys. Put a TLS terminator in front that
 #   forwards `/api/agent-memory/v1/` and, for the operator, `/api/auth/*`,
-#   `/api/me`, `/api/agent-keys` and `/api/capsules/*`; nothing else of the
-#   control plane needs to be reachable from outside.
+#   `/api/me`, `/api/agent-keys`, `/api/capsules/transfers/*` and
+#   `/api/capsules/<id>/enable`; nothing else of the control plane needs to be
+#   reachable from outside.
 # - With no browser application, the operator works over HTTP with a session:
 #   sign in (`POST /api/auth/login`), read the CSRF token from `GET /api/me`
 #   and send it as `X-Open-Science-CSRF` on every write, then mint the CDSS's
 #   integration key with
 #   `POST /api/agent-keys {"name":"CDSS","scopes":["memory.read","memory.write","memory.manage","memory.observe"],"subjects":true}`
 #   and import the lineage packs (`scripts/ops/pack-lineage-capsule.mjs`) with
-#   `POST /api/capsules/transfers/preview` then `.../import`.
+#   `POST /api/capsules/transfers/preview` then `.../import`, and put each in
+#   force with `POST /api/capsules/<id>/enable` (an empty JSON body).
 # - Only the base file and this one. The product overlays (ingestion,
 #   knowledge, AgentBay, SaaS) add to what this one takes away; monitoring and
 #   backup combine with it.
@@ -122,9 +128,15 @@ services:
       OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED: ${OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED:-false}
       OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED: ${OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED:-false}
       OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ${OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:-false}
-      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ${OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:-false}
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: ${OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:-false}
+      # Sharing between accounts is on by default everywhere else (config.mjs, `.env.example`, 2026-10-23); this shape has an institution
+      # and the subjects it made, no people to hand a capsule to, so it stays off here. As with the lines above, a `.env` made from
+      # `.env.example` (which says true) turns it on here too: remove that line from it. (A literal would end the question, and
+      # `deploymentEnvReachesTheContainer.test.mjs` refuses a lever written down: an operator must be able to move it.)
       OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ${OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:-false}
+      # The official starter packs are for the people who use the web app; the accounts this shape serves are an institution's and the subjects
+      # it made, which are given none (`OfficialPacks.ensureFor`), so nothing would read them: off here, publishing included.
+      OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED: ${OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED:-false}
       OPEN_SCIENCE_REVIEW_ENABLED: ${OPEN_SCIENCE_REVIEW_ENABLED:-false}
       OPEN_SCIENCE_IM_ENABLED: ${OPEN_SCIENCE_IM_ENABLED:-false}
       # 「虚拟临床研究」 is a product surface with an engine of its own: off here, and

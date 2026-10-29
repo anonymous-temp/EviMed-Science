@@ -1,33 +1,53 @@
 import { createHash } from "node:crypto";
-import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from "@evimed/domain";
+import { carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
-import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
+import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
+import { HttpError } from './security.mjs';
 import {
-  recordNativeCheck, recordNativeCommit, recordNativeOperations, recordNativePass, recordNativeWrite,
+  recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeExtractionFailure, recordNativeOperations, recordNativePass, recordNativeWrite,
+  recordPolicySync, recordRejectionLines, recordResetSweep,
 } from "./nativeMemoryMetrics.mjs";
+import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
+import { containsRemoved, nearRemoved } from "./nativeMemoryRejections.mjs";
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
-import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
+import { OPENVIKING_MEMORY_TYPES } from "./openVikingLayout.mjs";
+import { PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri } from "./openVikingSessions.mjs";
 
 /**
  * The overlay's worker: what the native memory engine did, read into the overlay, and what it cannot do for itself, done.
  *
- * Each pass, for every account on the native engine:
+ * Each pass, for every account the memory plane knows (`overlay.accounts()`):
  *  1. **Registration.** An account the engine's admin routes do not know cannot have its settings changed or be deleted;
  *     the gateway registers on first sight, this catches what it could not.
  *  2. **The commit ledger.** The gateway writes a row for every commit it forwarded; the engine's own idle commits never
- *     pass it, so the account's session archives are scanned and an archive the ledger lacks is entered.
+ *     pass it, so registered namespace archives are scanned and an archive the ledger lacks is entered. At most eight
+ *     namespaces per account are scanned per pass, rotating fairly; already recorded commits are processed independently.
  *  3. **Ingestion.** A finished commit's `memory_diff.json` becomes revisions (before / after: the timeline, 「刚记住了」, the
  *     undo), the files' project tags (a pack restore loses tags, so the overlay keeps them too), and the sources a memory names.
+ *     What the extraction said about itself — the operations it skipped and the engine's reason for each, what it extracted, the
+ *     types it was allowed — goes on the ledger row and into the metrics (`extractionFacts`), read from the task when the diff is
+ *     empty: a commit that wrote no file was either a model that proposed nothing or an engine that refused what it proposed.
  *  4. **The deterministic checks after the fact.** A line the engine wrote that carries an identifier's shape (a phone, an ID
  *     or card number, an e-mail, a key), platform-injected text or a platform identifier, or that the person removed before
  *     and the engine wrote back verbatim (unless the person said it again themselves, word for word, in that conversation: their
  *     words win over their deletion), is taken out again — the file restored or deleted when nothing else is left — and
  *     the revision says why. The templates are the first line (the "never keep" block); this is the code that holds the
  *     closed half of it, seconds after the write rather than before (README §5.3 of the course correction).
+ *  4b. **What a reset could not wait for.** An extraction the engine had accepted before the person reset their memory still writes files
+ *     after it. The reset wrote down the commits it found running (`native_reset_tombstones`); each pass asks the engine about them, and
+ *     whenever one finishes, the files it wrote that still hold exactly what its diff says are taken out again, however late that is
+ *     (`#sweepTombstones`; an archive the reset had in its ledger and the scan finds again is settled the same way). A task the engine
+ *     no longer holds is closed as `unknown` after a day: nothing could be said of it, and it is counted.
+ *  4c. **Where each line came from.** The first commit that brought a line is kept per line (`native_line_origins`), beyond the 32
+ *     revisions a file holds; an account's older revisions are read into it once (`#indexOrigins`).
+ *  4d. **The type allowlist.** An account whose settings were stored before a memory type was added keeps the old list (a settings PATCH
+ *     stores one; the deployment's default applies only to an account never PATCHed): the pass checks the list against the deployment's
+ *     and rewrites it, restating the account's learning switch (`#syncPolicy`, idempotent, every six hours at most).
+ *  4e. **A repeated choice.** After a commit that wrote a note of the `observations` type, the notes two different conversations wrote
+ *     are promoted to preferences (`nativeMemoryObservations.mjs`).
  *  5. **Replay.** A failed extraction is never retried upstream: its archive keeps the messages and a `.failed.json`. The
  *     messages are committed again as a new session, with a cap and a back-off, so one rate-limited minute does not lose a
  *     conversation for good.
- *  6. **Runtimes.** An idle runtime launched for the engine its account is no longer on is let go, so the next one is right.
  *
  * Source labels (`labelSource`) are written here too, on the call of whoever learns that a source changed.
  *
@@ -36,6 +56,10 @@ import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openV
 
 /** How long a commit may stay without a diff, a failure marker or a task before it is treated as failed and replayed. */
 const LOST_AFTER_MS = 30 * 60_000;
+/** How long a reset's tombstone waits for an extraction before it is closed as unknown: the engine keeps a task a day. */
+const TOMBSTONE_MAX_AGE_MS = 24 * 3_600_000;
+/** The catch-all project: it has no subject of its own, and so no card and no recent work (`residentProfile.mjs`). */
+const CATCH_ALL_PROJECT_ID = "default";
 /** The back-off between replays: one minute, doubled each time, an hour at most. */
 const replayDelay = (/** @type {number} */ attempts) => Math.min(3_600_000, 60_000 * 2 ** Math.max(0, attempts));
 
@@ -47,20 +71,23 @@ const statementOf = (/** @type {string} */ line) => line.trim().replace(/^(?:[-*
 
 /**
  * Why one line may not stay, or null. Closed, decidable checks only (principle 5): an identifier's shape, a platform tag or
- * identifier, or a line the person removed.
- * @param {string} line @param {Set<string>} rejected fingerprints
- * @returns {"identifier_shape" | "platform_text" | "rejected_line" | null}
+ * identifier, or a line the person removed — a verbatim repeat (`rejected` a set of fingerprints), or one decided by
+ * `nativeMemoryRejections.mjs` (`rejected` a map from fingerprint to the reason: a removed line with something added, or one a model
+ * judged to say the same).
+ * @param {string} line @param {Set<string> | Map<string, string>} rejected
+ * @returns {"identifier_shape" | "platform_text" | "rejected_line" | "rejected_reworded" | "rejected_judged" | null}
  */
 export function lineRefusal(line, rejected) {
   const text = statementOf(line);
   if (!text || isLabelLine(line) || /^#{1,6}\s/.test(line.trim())) return null;
   if (identifierShapesIn(text).length) return "identifier_shape";
   if (carriesPlatformContext(text) || platformIdentifiersIn(text).length) return "platform_text";
-  if (rejected.has(lineFingerprint(text))) return "rejected_line";
-  return null;
+  const print = lineFingerprint(text);
+  if (rejected instanceof Map) return /** @type {any} */ (rejected.get(print) ?? null);
+  return rejected.has(print) ? "rejected_line" : null;
 }
 
-/** A body without the lines `refused` names, and whether a statement is left. @param {string} body @param {Set<string>} rejected */
+/** A body without the lines `refused` names, and whether a statement is left. @param {string} body @param {Set<string> | Map<string, string>} rejected */
 export function cleanBody(body, rejected) {
   const kept = [];
   /** @type {string[]} */
@@ -74,21 +101,75 @@ export function cleanBody(body, rejected) {
   return { text, reasons, hasStatements: memoryLines(kept.filter((line) => !isLabelLine(line)).join("\n")).some((line) => !/^#/.test(line)) };
 }
 
+/** Whether a commit's diff wrote (or changed) a note of the `observations` type. @param {any} diff @param {string} root `nativeMemoryRoot(userId)` */
+export function touchesObservations(diff, root) {
+  return ["adds", "updates"].some((list) => (Array.isArray(diff?.operations?.[list]) ? diff.operations[list] : []).some((/** @type {any} */ operation) => observationFile(String(operation?.uri ?? ""), root) !== null));
+}
+
+const REASON_CODE = /^[a-z][a-z0-9_]{0,59}$/;
+
+/**
+ * What an extraction said about itself, from the two places the engine says it (both present on v0.5.0 and v0.5.1.1): the
+ * archive's `memory_diff.json` (`skipped_operations[].reason_code` and `summary.total_skipped`) and the commit's task result
+ * (`memories_extracted` per category, `memory_extraction.skipped_operations`, `effective_memory_types`). Counts and the
+ * engine's reason codes only: a skipped operation's own text is never kept. The diff is the record of the commit; the task's
+ * list is read only for a reason the diff does not give (a diff written with nothing in it still comes with its reasons).
+ * @param {any} diff the parsed `memory_diff.json` @param {any} [task] `OpenVikingSessions.task()`: `{ status, result }`, or null
+ * @returns {{ skipped: number, skipReasons: Record<string, number>, extracted: Record<string, number>, memoryTypes: string[], fromTask: boolean }}
+ */
+export function extractionFacts(diff, task = null) {
+  const list = (/** @type {any} */ value) => (Array.isArray(value) ? value : []);
+  const fromDiff = list(diff?.skipped_operations);
+  const result = task?.result && typeof task.result === "object" ? task.result : null;
+  const fromTask = list(result?.memory_extraction?.skipped_operations);
+  const named = fromDiff.length ? fromDiff : fromTask;
+  /** @type {Record<string, number>} */
+  const skipReasons = {};
+  for (const item of named) {
+    const code = typeof item?.reason_code === "string" && REASON_CODE.test(item.reason_code) ? item.reason_code : "unknown";
+    skipReasons[code] = (skipReasons[code] ?? 0) + 1;
+  }
+  const count = (/** @type {unknown} */ value) => Math.max(0, Math.trunc(Number(value)) || 0);
+  const skipped = Math.max(count(diff?.summary?.total_skipped), count(result?.memory_extraction?.skipped), named.length);
+  /** @type {Record<string, number>} */
+  const extracted = {};
+  for (const [category, amount] of Object.entries(result?.memories_extracted && typeof result.memories_extracted === "object" ? result.memories_extracted : {}).slice(0, 12)) {
+    if (REASON_CODE.test(category) && count(amount)) extracted[category] = count(amount);
+  }
+  const memoryTypes = list(result?.effective_memory_types).filter((/** @type {unknown} */ type) => typeof type === "string" && REASON_CODE.test(type)).slice(0, 16);
+  return { skipped, skipReasons, extracted, memoryTypes, fromTask: Boolean(result) };
+}
+
 export class NativeMemoryWorker {
   /**
-   * @param {{ config: any, researchMemory: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
-   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, runtimeManager?: any,
+   * @param {{ config: any, memorySettings: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
+   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, nativeMemory?: any,
    *   projectOfSession?: ((userId: string, sessionId: string) => Promise<string | null>) | null,
+   *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
+   *   rejectionJudge?: ReturnType<typeof import("./nativeMemoryRejections.mjs").createRejectionJudge> | null,
    *   now?: () => Date, report?: (line: string) => void }} dependencies
    *   `projectOfSession` names the project a platform conversation belongs to, for a commit the gateway never saw.
+   *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
+   *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, researchMemory, sessions, overlay, runtimeManager = null, projectOfSession = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, memoryContexts = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
     this.config = config ?? {};
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.sessions = sessions;
     this.overlay = overlay;
-    this.runtimeManager = runtimeManager;
+    this.nativeMemory = nativeMemory;
     this.projectOfSession = projectOfSession;
+    this.memoryContexts = memoryContexts;
+    /** Namespace scans rotate independently of pending commits. @type {Map<string, string>} */
+    this.scanCursors = new Map();
+    this.rejectionJudge = rejectionJudge;
+    /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {{ tick: (userId: string) => Promise<string> } | null} */
+    this.consolidation = null;
+    /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
+    this.observations = nativeMemory && typeof nativeMemory.keepRepeatedChoice === "function"
+      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, keepRepeatedChoice: (userId, choice) => nativeMemory.keepRepeatedChoice(userId, choice), report }) : null;
+    /** When each account's type allowlist was last checked against the deployment's (`#syncPolicy`). @type {Map<string, number>} */
+    this.policyChecked = new Map();
     this.now = now;
     this.report = report;
     this.replayAttempts = Math.max(0, Math.trunc(Number(this.config.nativeMemoryReplayAttempts ?? 5)));
@@ -101,7 +182,7 @@ export class NativeMemoryWorker {
   }
 
   get applicable() {
-    return this.config.ovNativeMemoryEnabled === true && Boolean(this.sessions?.configured && this.overlay?.configured && this.researchMemory?.configured);
+    return this.config.memoryEngineEnabled === true && Boolean(this.sessions?.configured && this.overlay?.configured && this.memorySettings?.configured);
   }
 
   /** What readiness reports: whether the worker applies here, whether it is running, and what its last pass did. */
@@ -133,18 +214,32 @@ export class NativeMemoryWorker {
     let commits = 0;
     let accounts = 0;
     try {
-      const native = await this.researchMemory.accountsOnEngine("native");
-      for (const { userId } of native) {
+      // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
+      await this.overlay.deleteExpiredImports().catch(() => 0);
+      for (const userId of await this.overlay.accounts()) {
         accounts += 1;
         try {
           await this.#register(userId);
+          await this.#syncPolicy(userId);
+          await this.#indexOrigins(userId);
+          await this.#sweepTombstones(userId);
           await this.scanArchives(userId);
+        } catch (error) {
+          this.report(`native memory worker: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+        }
+        // An unavailable namespace scan cannot strand other already-recorded
+        // commits for the same account.
+        try {
           commits += await this.processCommits({ userId });
+          await this.nativeMemory?.processAdmissions(userId);
+          // The weekly consolidation of the account's memories, where it is switched on (`nativeMemoryConsolidation.mjs`).
+          // The account scheduler owns only the personal namespace. Project
+          // consolidation needs a namespace-specific task ledger before scheduling.
+          await this.consolidation?.tick(userId);
         } catch (error) {
           this.report(`native memory worker: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
         }
       }
-      await this.runtimeManager?.releaseMemoryEngineRuntimes?.().catch(() => []);
       this.last = { at: this.now().toISOString(), ok: true, accounts, commits, error: null };
       recordNativePass(true);
     } catch (error) {
@@ -163,20 +258,190 @@ export class NativeMemoryWorker {
     recordNativeWrite("registration");
   }
 
+  #personalContext(userId) {
+    return { kind: 'owned', ownerId: userId, namespaceId: this.sessions.engineUser(userId), projectId: null,
+      userRoot: this.sessions.userRoot(userId), sessions: this.sessions };
+  }
+
+  async #contextForUri(userId, uri) {
+    if (this.memoryContexts) return this.memoryContexts.forUri(userId, uri);
+    const context = this.#personalContext(userId);
+    if (typeof uri !== 'string' || !uri.startsWith(`${context.userRoot}/`)) throw new HttpError(403, 'memory_scope_denied', 'The archive is outside the native memory account.');
+    return context;
+  }
+
+  async #commitContext(commit, known = null) {
+    const context = known ?? await this.#contextForUri(commit.userId, commit.archiveUri);
+    if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
+    const parsed = parseArchiveUri(commit.archiveUri);
+    if (context.ownerId !== commit.userId || !parsed || parsed.rest || parsed.archiveUri !== commit.archiveUri
+      || parsed.userRoot !== context.userRoot || parsed.session !== commit.engineSession
+      || context.kind === 'geo-project' && commit.projectId != null && commit.projectId !== context.projectId) {
+      throw new HttpError(403, 'memory_scope_denied', 'The native commit does not match its registered context.');
+    }
+    if (context.kind === 'geo-project' && commit.projectId == null) {
+      commit = { ...commit, projectId: context.projectId };
+      await this.overlay.recordCommit(commit);
+    }
+    return { context, commit };
+  }
+
+  /**
+   * The account's type allowlist in the engine is the deployment's. The engine applies `server.user_config_defaults` to an account whose
+   * settings were never stored; a settings PATCH stores them (every PATCH of ours restates the list), so an account that was PATCHed
+   * before `observations` and `recent_work` existed would never extract them. Idempotent: an account already on the list is left alone, and
+   * the check is made at most once in six hours per account in a process. The account's own learning switch is restated, not changed.
+   * @param {string} userId
+   */
+  async #syncPolicy(userId) {
+    const checked = this.policyChecked.get(userId);
+    if (checked !== undefined && this.now().getTime() - checked < 6 * 3_600_000) return;
+    try {
+      const held = await this.sessions.settings(userId);
+      // An account the engine's admin routes do not know yet has the default; it is looked at again at the next pass.
+      if (!held) return;
+      const expected = [...OPENVIKING_MEMORY_TYPES].sort();
+      if (held.memoryTypes.length === expected.length && held.memoryTypes.every((type, index) => type === expected[index])) {
+        recordPolicySync("current");
+      } else {
+        const settings = await this.memorySettings.settings(userId);
+        await this.sessions.setLearning(userId, !settings.learningPaused);
+        recordPolicySync("rewritten");
+      }
+      this.policyChecked.set(userId, this.now().getTime());
+    } catch (error) {
+      recordPolicySync("failed");
+      this.report(`native memory policy: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+    }
+  }
+
+  /**
+   * Once per account: the lines of the revisions the overlay already holds are read into the per-line origin index, oldest first, so that a
+   * line brought before the index existed still names the commit that brought it. A person's edit or a platform check takes lines out
+   * of the index as it takes them out of the file; the file's present text has the last word.
+   * @param {string} userId
+   */
+  async #indexOrigins(userId) {
+    if (await this.overlay.originsIndexed(userId)) return;
+    let after = "0";
+    for (;;) {
+      const page = await this.overlay.revisionsForIndex(userId, { afterId: after, limit: 500 });
+      if (!page.length) break;
+      for (const revision of page) {
+        after = revision.id;
+        const brought = revision.actor === "engine" && revision.reason !== "consolidation" && revision.change !== "deleted" && revision.after !== null;
+        await this.overlay.syncOrigins(userId, revision.uri, {
+          after: revision.change === "deleted" || revision.after === null ? "" : String(revision.after),
+          before: String(revision.before ?? ""),
+          origin: brought ? { revisionId: revision.id, engineSession: revision.engineSession, archiveUri: revision.archiveUri, projectId: revision.projectId, at: revision.changedAt } : null,
+        });
+      }
+      if (page.length < 500) break;
+    }
+    // What the files say now has the last word: a line that left them by a route no revision records is not in the index either.
+    for (const file of (await this.overlay.files(userId)).values()) {
+      if (file.body !== null) await this.overlay.syncOrigins(userId, file.uri, { after: file.body });
+    }
+    await this.overlay.noteOriginsIndexed(userId);
+  }
+
+  /**
+   * The extractions a reset found still running (`native_reset_tombstones`): when one has finished, the files it wrote after the reset are
+   * taken out. The engine's task says whether it is still running and where its diff is; a task it no longer holds (it keeps one a day) is
+   * closed as unknown, and an archive with no task is looked for where it was.
+   * @param {string} userId
+   */
+  async #sweepTombstones(userId) {
+    for (const tombstone of await this.overlay.openTombstones(userId)) {
+      try {
+        const age = this.now().getTime() - Date.parse(String(tombstone.resetAt));
+        // The namespace the archive is in (the account's own, or a shared GEO project's): its engine user is the one that can read it.
+        const sessions = (await this.#contextForUri(userId, tombstone.archiveUri)).sessions;
+        const task = tombstone.taskId ? await sessions.task(userId, tombstone.taskId) : null;
+        if (task && (task.status === "running" || task.status === "pending") && age < TOMBSTONE_MAX_AGE_MS) { recordResetSweep("waiting"); continue; }
+        const diffUri = typeof task?.result?.memory_diff_uri === "string" ? task.result.memory_diff_uri : `${tombstone.archiveUri}/memory_diff.json`;
+        const diffText = await sessions.read(userId, diffUri);
+        let diff = null;
+        try { diff = diffText ? JSON.parse(diffText) : null; } catch { diff = null; }
+        if (diff && typeof diff === "object") {
+          const removed = await this.#removeWrittenBy(userId, diff, sessions);
+          await this.overlay.closeTombstone(userId, tombstone.archiveUri, "swept", removed);
+          recordResetSweep("swept", removed);
+        } else if (task && ["completed", "failed", "cancelled"].includes(String(task.status))) {
+          // It ended and wrote nothing to take out.
+          await this.overlay.closeTombstone(userId, tombstone.archiveUri, "swept", 0);
+          recordResetSweep("swept");
+        } else if (age >= TOMBSTONE_MAX_AGE_MS) {
+          await this.overlay.closeTombstone(userId, tombstone.archiveUri, "unknown", 0);
+          recordResetSweep("unknown");
+        } else {
+          recordResetSweep("waiting");
+        }
+      } catch (error) {
+        this.report(`native memory reset sweep: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      }
+    }
+  }
+
+  /**
+   * The files an extraction's diff added or updated that still hold exactly what the diff says it left — a file that says anything else
+   * was written since, by a later conversation or by the person, and is theirs — removed from the engine and the overlay.
+   * @param {string} userId @param {any} diff @returns {Promise<number>} files removed
+   */
+  async #removeWrittenBy(userId, diff, sessions = this.sessions) {
+    const root = sessions.memoryRoot(userId);
+    let removed = 0;
+    for (const list of ["adds", "updates"]) {
+      for (const operation of Array.isArray(diff?.operations?.[list]) ? diff.operations[list] : []) {
+        const uri = String(operation?.uri ?? "");
+        if (!nativeMemoryFile(uri, root) && !observationFile(uri, root)) continue;
+        const current = await sessions.read(userId, uri).catch(() => null);
+        if (current === null || contentHash(current) !== contentHash(String(operation?.after ?? ""))) continue;
+        await sessions.remove(userId, uri);
+        await this.overlay.removeFile(userId, uri);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
   /**
    * Enter in the ledger every archive of the account it does not hold: the engine's idle commits, and any commit whose ledger
    * row the gateway could not write.
    * @param {string} userId @returns {Promise<number>} archives entered
    */
-  async scanArchives(userId) {
-    const root = `${this.sessions.userRoot(userId)}/sessions`;
-    const nodes = await this.sessions.tree(userId, root, { levelLimit: 4, showHidden: true });
-    const known = await this.overlay.knownArchives(userId);
+  async scanArchives(userId, { context = null } = {}) {
+    const views = context ? [context] : this.memoryContexts ? await this.memoryContexts.all(userId) : [this.#personalContext(userId)];
+    const cursor = context ? null : this.scanCursors.get(userId);
+    const start = cursor ? views.findIndex(view => view.namespaceId === cursor) + 1 : 0;
+    const ordered = [...views.slice(start), ...views.slice(0, start)].slice(0, 8);
+    let entered = 0; const errors = [];
+    for (const view of ordered) {
+      try { entered += await this.#scanView(userId, view); }
+      catch (error) { errors.push(error); }
+      if (!context) {
+        if (this.scanCursors.size >= 10000 && !this.scanCursors.has(userId)) this.scanCursors.delete(this.scanCursors.keys().next().value);
+        this.scanCursors.set(userId, view.namespaceId);
+      }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Some native memory namespace scans could not finish.');
+    await this.overlay.noteScanned(userId);
+    return entered;
+  }
+
+  async #scanView(userId, context) {
+    if (context.ownerId !== userId) throw new HttpError(403, 'memory_scope_denied', 'The scan owner does not match.');
+    if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
+    if (context.kind === 'geo-project') await this.memoryContexts.configure(context);
+    const sessions = context.sessions, root = `${context.userRoot}/sessions`;
+    const nodes = await sessions.tree(userId, root, { levelLimit: 4, showHidden: true });
+    const known = await this.overlay.knownArchives(userId, { userRoot: context.userRoot });
     /** @type {Map<string, { session: string, failed: boolean, finished: boolean }>} */
     const archives = new Map();
     for (const node of nodes) {
       const parsed = parseArchiveUri(node.uri);
       if (!parsed) continue;
+      if (parsed.userRoot !== context.userRoot) throw new HttpError(403, 'memory_scope_denied', 'The scan returned another memory namespace.');
       const entry = archives.get(parsed.archiveUri) ?? { session: parsed.session, failed: false, finished: false };
       if (parsed.rest === ".failed.json") entry.failed = true;
       if (parsed.rest === "memory_diff.json" || parsed.rest === ".done") entry.finished = true;
@@ -185,12 +450,11 @@ export class NativeMemoryWorker {
     let entered = 0;
     for (const [archiveUri, entry] of archives) {
       if (known.has(archiveUri)) continue;
-      const projectId = await this.#projectOf(userId, entry.session);
+      const projectId = context.kind === 'geo-project' ? context.projectId : await this.#projectOf(userId, entry.session);
       const recorded = await this.overlay.recordCommit({ userId, archiveUri, engineSession: entry.session, projectId, origin: "scan",
         state: entry.failed && !entry.finished ? "failed" : "pending", error: entry.failed ? "found failed by the archive scan" : "" });
       if (recorded.inserted) { entered += 1; recordNativeCommit("found_by_scan"); }
     }
-    await this.overlay.noteScanned(userId);
     return entered;
   }
 
@@ -222,22 +486,51 @@ export class NativeMemoryWorker {
 
   /** A pending commit: its diff ingested, its failure noted, or left to finish. @param {any} commit */
   async #settle(commit) {
-    const diffText = await this.sessions.read(commit.userId, `${commit.archiveUri}/memory_diff.json`);
+    const resolved = await this.#commitContext(commit);
+    commit = resolved.commit;
+    const context = resolved.context, sessions = context.sessions;
+    const diffText = await sessions.read(commit.userId, `${commit.archiveUri}/memory_diff.json`);
     if (diffText !== null) {
       let diff;
       try { diff = JSON.parse(diffText); } catch { diff = null; }
       if (diff && typeof diff === "object") {
-        const operations = await this.ingest(commit, diff);
-        await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations });
+        this.#assertDiffContext(commit, diff, context);
+        // An extraction the engine had accepted before the account reset its memory finishes after it: its files are what the
+        // person asked to forget, and they are taken out again instead of being read into the overlay as new memories. A reset
+        // that found this very archive running wrote it down, and then no message needs to be readable to know.
+        const tombstone = await this.overlay.tombstone(commit.userId, commit.archiveUri);
+        const removed = tombstone ? await this.#removeWrittenBy(commit.userId, diff, sessions) : await this.#undoBeforeReset(commit, diff, context);
+        if (tombstone && tombstone.state === "open") await this.overlay.closeTombstone(commit.userId, commit.archiveUri, "swept", removed ?? 0);
+        if (removed !== null) {
+          await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations: 0, extraction: { skipped: 0, skipReasons: {}, extracted: {}, memoryTypes: [], fromTask: false, beforeReset: removed } });
+          recordNativeCommit("before_reset");
+          return true;
+        }
+        const operations = await this.ingest(commit, diff, { context });
+        // A note of the observations type may have just been written by a second conversation. The account's own namespace only: a shared
+        // GEO project's keeps no observations (`OPENVIKING_PROJECT_MEMORY_TYPES`) and no preferences to promote them to.
+        if (this.observations && context.kind !== 'geo-project' && touchesObservations(diff, sessions.memoryRoot(commit.userId))) await this.observations.promote(commit.userId);
+        // A commit that wrote nothing is the one worth asking about: the engine's task result says what the extraction did and
+        // what it refused. A task that is gone (the engine keeps them a day) or unreadable leaves the diff's own account.
+        const task = operations === 0 && commit.taskId ? await sessions.task(commit.userId, commit.taskId).catch(() => null) : null;
+        const extraction = extractionFacts(diff, task);
+        await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations, extraction });
         recordNativeCommit(operations ? "ingested" : "empty");
+        recordNativeExtraction(operations, extraction);
         return true;
       }
     }
-    const failed = await this.sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`);
+    const failed = await sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`);
     let reason = failed !== null ? "the extraction failed" : "";
+    // Why, as far as the engine's own marker says (v0.5.2 fails an extraction whose output ran out of room as `budget_exhausted` and does not retry it).
+    if (failed !== null) {
+      let detail = failed;
+      try { detail = String(JSON.parse(failed)?.error ?? failed); } catch { /* the marker's text is the detail */ }
+      recordNativeExtractionFailure(detail);
+    }
     if (!reason && commit.taskId) {
-      const task = await this.sessions.task(commit.userId, commit.taskId);
-      if (task?.status === "failed") reason = String(task.error ?? "the extraction failed").slice(0, 300);
+      const task = await sessions.task(commit.userId, commit.taskId);
+      if (task?.status === "failed") { reason = String(task.error ?? "the extraction failed").slice(0, 300); recordNativeExtractionFailure(task.error); }
       else if (task?.status === "running" || task?.status === "pending") return false;
     }
     if (!reason && Date.now() - Date.parse(String(commit.createdAt)) > LOST_AFTER_MS) reason = "no diff, no failure and no task after thirty minutes";
@@ -248,18 +541,55 @@ export class NativeMemoryWorker {
   }
 
   /**
+   * Whether this commit's conversation was over before the account last reset its memory — every message of its archive carries a
+   * time and the latest is earlier than the reset — and, when it was, what it wrote is removed: the files its diff added or updated
+   * that still hold exactly the text the diff says it left (a file that says anything else has been written since, by a later
+   * conversation or by the person, and is theirs). A message with no time places the commit nowhere: a rule that needs the metadata
+   * to be there before it lets anything through is one missing field away from a platform that stops learning.
+   * @param {any} commit @param {any} diff @param {any} context @returns {Promise<number | null>} files removed, or null when the commit is not from before a reset
+   */
+  async #undoBeforeReset(commit, diff, context) {
+    const sessions = context.sessions;
+    if (typeof this.memorySettings?.resetInstant !== "function") return null;
+    const resetAt = await this.memorySettings.resetInstant(commit.userId).catch(() => null);
+    if (!resetAt) return null;
+    const raw = await sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`).catch(() => null);
+    let latest = Number.NEGATIVE_INFINITY;
+    let timed = 0;
+    for (const line of String(raw ?? "").split("\n")) {
+      if (!line.trim()) continue;
+      let message;
+      try { message = JSON.parse(line); } catch { continue; }
+      const at = Date.parse(String(message?.created_at ?? ""));
+      if (!Number.isFinite(at)) return null;
+      timed += 1;
+      latest = Math.max(latest, at);
+    }
+    if (!timed || latest >= Date.parse(resetAt)) return null;
+    return this.#removeWrittenBy(commit.userId, diff, sessions);
+  }
+
+  /**
    * A failed commit, committed again from its archive's messages as a new session. The account must still be on the engine
    * and learning; the cap and the back-off bound what one conversation can cost.
    * @param {any} commit
    */
   async #replay(commit) {
+    const resolved = await this.#commitContext(commit);
+    commit = resolved.commit;
+    const context = resolved.context, sessions = context.sessions;
     const userId = commit.userId;
-    if (await this.researchMemory.memoryEngine(userId) !== "native") {
-      await this.overlay.abandonCommit(userId, commit.archiveUri, "the account is no longer on the native engine");
-      recordNativeCommit("abandoned");
-      return true;
-    }
-    const settings = await this.researchMemory.settings(userId);
+    const external = typeof this.overlay.admissionOfCommit === "function" ? await this.overlay.admissionOfCommit(userId, commit) : null;
+    const authorized = async () => {
+      if (!external) return true;
+      const policy = await this.overlay.admissionAuthority(userId, external);
+      if (policy.allowed) return true;
+      await this.overlay.updateAdmission(userId, external.candidateId, external.revision, { state: policy.state, error: policy.reason, release: true });
+      if (policy.state === "cancelled") await this.overlay.abandonCommit(userId, commit.archiveUri, policy.reason);
+      return false;
+    };
+    if (!await authorized()) return false;
+    const settings = await this.memorySettings.settings(userId);
     if (settings.learningPaused || (commit.projectId && settings.pausedProjects.includes(commit.projectId))) {
       await this.overlay.abandonCommit(userId, commit.archiveUri, "learning is paused");
       recordNativeCommit("abandoned");
@@ -270,7 +600,7 @@ export class NativeMemoryWorker {
       recordNativeCommit("abandoned");
       return true;
     }
-    const raw = await this.sessions.read(userId, `${commit.archiveUri}/messages.jsonl`);
+    const raw = await sessions.read(userId, `${commit.archiveUri}/messages.jsonl`);
     const messages = [];
     for (const line of String(raw ?? "").split("\n")) {
       if (!line.trim()) continue;
@@ -289,13 +619,26 @@ export class NativeMemoryWorker {
     }
     const session = `evimed-replay-${createHash("sha256").update(commit.archiveUri).digest("hex").slice(0, 16)}-${commit.attempts + 1}`;
     try {
-      await this.sessions.createSession(userId, session, { timeoutMs: this.sessions.timeoutMs });
-      const state = await this.sessions.readSession(userId, session).catch(() => null);
+      if (!await authorized()) return false;
+      if (context.kind === 'geo-project') {
+        await this.memoryContexts.configure(context);
+        await this.memoryContexts.noteInternal(context, session, { kind: 'replay', sourceArchiveUri: commit.archiveUri });
+      }
+      await sessions.createSession(userId, session, { timeoutMs: sessions.timeoutMs });
+      const state = await sessions.readSession(userId, session).catch(() => null);
       // A replay session that already holds the messages (an earlier attempt that failed after writing them) is committed as it is.
-      if (!(Number(state?.result?.message_count) > 0)) for (const message of messages) await this.sessions.addMessage(userId, session, message);
-      const answer = await this.sessions.commit(userId, session);
+      if (!(Number(state?.result?.message_count) > 0)) for (const message of messages) {
+        if (!await authorized()) return false;
+        await sessions.addMessage(userId, session, message);
+      }
+      if (!await authorized()) return false;
+      const answer = await sessions.commit(userId, session);
       const result = answer?.result ?? {};
       if (result.status !== "accepted" || typeof result.archive_uri !== "string") throw Object.assign(new Error("the replay commit was not accepted"), { code: "native_replay_not_accepted" });
+      const archive = parseArchiveUri(result.archive_uri);
+      if (!archive || archive.userRoot !== context.userRoot || archive.session !== session || archive.rest || archive.archiveUri !== result.archive_uri) {
+        throw new HttpError(403, 'memory_scope_denied', 'The replay archive does not match its original namespace.');
+      }
       await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId: commit.projectId, origin: "replay",
         taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText: commit.pendingText, attempts: commit.attempts + 1 });
       await this.overlay.markReplayed(userId, commit.archiveUri, result.archive_uri);
@@ -313,24 +656,50 @@ export class NativeMemoryWorker {
     }
   }
 
+  /** @param {any} commit @param {any} diff @param {any} context */
+  #assertDiffContext(commit, diff, context) {
+    const root = context.sessions.memoryRoot(commit.userId);
+    const operations = diff?.operations ?? {};
+    if (context.kind === 'geo-project') {
+      if (diff?.archive_uri !== commit.archiveUri) throw new HttpError(403, 'memory_scope_denied', 'The memory diff does not identify its accepted archive.');
+      const entries = ['adds', 'updates', 'deletes'].flatMap(key => Array.isArray(operations[key]) ? operations[key] : []);
+      if (entries.length > 20000) throw new HttpError(502, 'memory_index_listing_too_large', 'The memory diff exceeds its operation bound.');
+      for (const entry of entries) {
+        const file = nativeMemoryFile(entry?.uri, root);
+        this.memoryContexts.assertUri(context, entry?.uri);
+        if (!file || !context.sessions.memoryTypes.includes(file.type)) throw new HttpError(403, 'memory_scope_denied', 'The memory diff contains an unapproved project file.');
+      }
+    }
+  }
+
   /**
    * One commit's diff into the overlay, with the checks after the fact. Idempotent: a diff read twice writes each revision once.
-   * @param {any} commit @param {any} diff @returns {Promise<number>} operations read
+   * @param {any} commit @param {any} diff @param {{context?:any}} [options] @returns {Promise<number>} operations read
    */
-  async ingest(commit, diff) {
+  async ingest(commit, diff, { context = null } = {}) {
+    const resolved = await this.#commitContext(commit, context);
+    commit = resolved.commit; context = resolved.context;
     const userId = commit.userId;
-    const root = this.sessions.memoryRoot(userId);
+    const root = context.sessions.memoryRoot(userId);
     const operations = diff?.operations ?? {};
+    this.#assertDiffContext(commit, diff, context);
     const counts = { added: 0, updated: 0, deleted: 0 };
     const changedAt = typeof diff?.extracted_at === "string" && Number.isFinite(Date.parse(diff.extracted_at)) ? new Date(diff.extracted_at).toISOString() : null;
     const base = { userId, archiveUri: commit.archiveUri, engineSession: commit.engineSession, changedAt };
+    // What the commit brought that repeats, in other words, a line the person removed: decided once for the whole commit.
+    const rewordings = await this.#rewordings(commit, operations, context).catch((error) => {
+      // Never a reason to lose the commit: the lines are kept, as they were before the rewording was looked for. But said.
+      this.report(`native memory rewordings: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      return new Map();
+    });
     for (const [list, change] of /** @type {const} */ ([["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]])) {
       for (const operation of Array.isArray(operations[list]) ? operations[list] : []) {
         const uri = String(operation?.uri ?? "");
-        const file = nativeMemoryFile(uri, root);
+        // A note of the observations type is written and counted like a memory file; nothing but `nativeMemoryObservations.mjs` reads it back.
+        const file = nativeMemoryFile(uri, root) ?? observationFile(uri, root);
         if (!file) continue;
         counts[change] += 1;
-        const projectId = PROJECT_MEMORY_TYPES.includes(file.type) ? commit.projectId ?? null : null;
+        const projectId = context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? commit.projectId ?? null : null;
         if (change === "deleted") {
           await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "", before: operation?.deleted_content ?? operation?.before ?? null, after: null, projectId });
           await this.overlay.removeFile(userId, uri);
@@ -339,7 +708,10 @@ export class NativeMemoryWorker {
         const after = String(operation?.after ?? "");
         const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
-        await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, fresh: recorded !== null, archiveUri: commit.archiveUri });
+        const body = await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context, rewordings });
+        // The lines this commit brought are recorded as its own, beyond the revisions a file keeps (what the checks took out is not).
+        if (body !== null) await this.overlay.syncOrigins(userId, uri, { after: body, before: change === "updated" ? String(operation?.before ?? "") : "",
+          origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId, at: changedAt } });
       }
     }
     recordNativeOperations(counts);
@@ -347,63 +719,244 @@ export class NativeMemoryWorker {
   }
 
   /**
+   * What the engine's consolidation of an account's memories did, read into the overlay (`nativeMemoryConsolidation.mjs`). The engine
+   * lists the files it added, updated and deleted and no content, so each file is read as it is now and set beside what the overlay held:
+   * a revision by the engine (`reason: "consolidation"`, one per file and task) with the text before and after, which is what the
+   * memory page's undo restores from. The checks after the fact hold what a consolidation wrote as they hold what an extraction wrote —
+   * a merge can bring back a line the person removed, in its words or in others' — and a file that is unchanged from what the overlay
+   * held is not a change however the engine lists it.
+   * @param {string} userId @param {{ taskId: string, adds?: readonly string[], updates?: readonly string[], deletes?: readonly string[] }} task
+   * @param {{ context?: any }} [options]
+   * @returns {Promise<{ added: number, updated: number, deleted: number }>}
+   */
+  async ingestConsolidation(userId, { taskId, adds = [], updates = [], deletes = [] }, { context = null } = {}) {
+    context ??= await this.#contextForUri(userId, this.sessions.memoryRoot(userId));
+    if (context.ownerId !== userId) throw new HttpError(403, 'memory_scope_denied', 'The consolidation owner does not match.');
+    if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
+    const sessions = context.sessions;
+    const root = sessions.memoryRoot(userId);
+    // A task is bound before its result is read or judged. The account scheduler
+    // supplies no project context; it may never consume a project namespace.
+    for (const uri of [...adds, ...updates, ...deletes]) {
+      const file = nativeMemoryFile(uri, root);
+      if (!file || context.kind === 'geo-project' && !sessions.memoryTypes.includes(file.type)) {
+        throw new HttpError(403, 'memory_scope_denied', 'The consolidation contains a file outside its memory context.');
+      }
+      if (this.memoryContexts) this.memoryContexts.assertUri(context, uri);
+    }
+    const held = await this.overlay.files(userId);
+    // One revision per file and task, however often the same task is read (the revisions' own uniqueness key).
+    const archiveUri = `consolidation:${taskId}`;
+    const counts = { added: 0, updated: 0, deleted: 0 };
+    for (const uri of deletes) {
+      const file = nativeMemoryFile(uri, root);
+      if (!file || await sessions.read(userId, uri) !== null) continue;
+      const prior = held.get(uri);
+      const recorded = await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: "deleted", actor: "engine", reason: "consolidation",
+        before: prior?.body ?? null, after: null, archiveUri, projectId: context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? prior?.projectId ?? null : null });
+      await this.overlay.removeFile(userId, uri);
+      if (recorded) counts.deleted += 1;
+    }
+    /** @type {{ uri: string, type: string, projectId: string | null, before: string, after: string }[]} */
+    const written = [];
+    for (const uri of new Set([...adds, ...updates])) {
+      const file = nativeMemoryFile(uri, root);
+      if (!file) continue;
+      const current = await sessions.read(userId, uri);
+      if (current === null) continue;
+      const prior = held.get(uri);
+      const before = prior?.body ?? null;
+      if (before !== null && contentHash(before) === contentHash(current)) continue;
+      const projectId = context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? prior?.projectId ?? null : null;
+      const recorded = await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: before === null ? "added" : "updated", actor: "engine", reason: "consolidation",
+        before, after: current, archiveUri, projectId });
+      if (recorded) counts[before === null ? "added" : "updated"] += 1;
+      written.push({ uri, type: file.type, projectId, before: before ?? "", after: current });
+    }
+    const rewordings = await this.#rewordings({ userId, projectId: null, archiveUri: null }, {
+      adds: written.filter((entry) => !entry.before).map(({ uri, after }) => ({ uri, after })),
+      updates: written.filter((entry) => entry.before).map(({ uri, before, after }) => ({ uri, before, after })),
+    }, context).catch((error) => {
+      this.report(`native memory rewordings: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      return new Map();
+    });
+    // The tag of a project's file is put back: a rewrite is not known to keep it.
+    for (const entry of written) {
+      const body = await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, memoryContext: context, rewordings });
+      // A line the consolidation wrote anew names no conversation; a line it kept is already in the index with its own.
+      if (body !== null) await this.overlay.syncOrigins(userId, entry.uri, { after: body, before: entry.before, origin: { engineSession: null, archiveUri, projectId: entry.projectId } });
+    }
+    return counts;
+  }
+
+  /**
    * What follows an engine write of one file: the checks, the project tag, the sources and their labels, the overlay's copy.
    * Acts on the file as it is now, not as the diff says: a later commit may already have changed it.
-   * @param {string} userId @param {string} uri @param {string} type @param {{ projectId: string | null, diffAfter: string, fresh: boolean, archiveUri: string }} context
+   * @param {string} userId @param {string} uri @param {string} type
+   * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string | null, memoryContext: any, rewordings?: Map<string, { rejected: string, via: "contained" | "judged" }> }} context
+   * @returns {Promise<string | null>} the file's text after the checks, or null when the file is gone
    */
-  async #afterWrite(userId, uri, type, { projectId, diffAfter, fresh, archiveUri }) {
-    const current = await this.sessions.read(userId, uri);
-    if (current === null) return;
-    const rejected = await this.overlay.rejectedFingerprints(userId, type);
-    // Only what this write brought is held to the checks.
-    const broughtLines = memoryLines(diffAfter);
-    const brought = new Set(broughtLines.map(lineFingerprint));
-    const relevant = new Set([...rejected].filter((print) => brought.has(print)));
-    // The person's own words win over their earlier deletion: a line they said again in this very conversation, word for word,
-    // is theirs, and is taken off the rejection list. Exact containment of the line in one of their messages and nothing looser
-    // — whether a reworded line means the same is language, and the engine's own extraction already decided that.
-    const stated = relevant.size ? await this.#statedByThePerson(userId, archiveUri, broughtLines.filter((line) => relevant.has(lineFingerprint(line)))) : [];
-    if (stated.length) {
-      for (const line of stated) relevant.delete(lineFingerprint(line));
-      await this.overlay.unreject(userId, type, stated);
+  async #afterWrite(userId, uri, type, { projectId, diffAfter, diffBefore = "", fresh, archiveUri, memoryContext, rewordings = new Map() }) {
+    const sessions = memoryContext.sessions;
+    const rejectionType = nativeMemoryRejectionType(type, memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null);
+    const current = await sessions.read(userId, uri);
+    if (current === null) return null;
+    // What a project was last worked on is the project's: a conversation of the catch-all has no project to carry it, and a file written
+    // from one is taken out (the project card is never handed over in the default project either).
+    if (type === "recent_work" && projectId === CATCH_ALL_PROJECT_ID) {
+      recordNativeCheck("recent_work_default_project");
+      await sessions.remove(userId, uri);
+      await this.overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "platform", reason: "recent_work_default_project", before: null, after: null, projectId });
+      await this.overlay.removeFile(userId, uri);
+      return null;
     }
-    const cleaned = cleanBody(current, relevant);
+    const rejected = await this.overlay.rejectedFingerprints(userId, rejectionType);
+    // Only what this write brought is held to the checks: the lines of the text it left that the text it found did not have (a line the
+    // person wrote themselves, or the engine wrote earlier and the checks let stay, is not this write's to be asked about again).
+    const found = new Set(memoryLines(diffBefore).map(lineFingerprint));
+    const broughtLines = memoryLines(diffAfter).filter((line) => !found.has(lineFingerprint(line)));
+    const brought = new Set(broughtLines.map(lineFingerprint));
+    /** @type {Map<string, string>} the fingerprints of the lines to take out, by why */
+    const refused = new Map();
+    /** @type {Map<string, string>} each of them to the removed line it repeats */
+    const repeats = new Map();
+    for (const print of rejected) if (brought.has(print)) { refused.set(print, "rejected_line"); repeats.set(print, print); }
+    for (const line of broughtLines) {
+      const print = lineFingerprint(line);
+      const hit = refused.has(print) ? null : rewordings.get(`${rejectionType}\u0000${print}`);
+      if (hit) { refused.set(print, hit.via === "judged" ? "rejected_judged" : "rejected_reworded"); repeats.set(print, hit.rejected); }
+    }
+    // The person's own words win over their earlier deletion: a line they said again in this very conversation, word for word,
+    // is theirs, and the removal it repeats is lifted. Exact containment of the line in one of their messages and nothing looser
+    // here; a restatement in other words than the engine's is the judge's to see (it is shown what the person said).
+    const stated = refused.size ? await this.#statedByThePerson(userId, archiveUri, broughtLines.filter((line) => refused.has(lineFingerprint(line))), memoryContext) : [];
+    if (stated.length) {
+      for (const line of stated) refused.delete(lineFingerprint(line));
+      await this.overlay.unrejectFingerprints(userId, rejectionType, stated.map((line) => repeats.get(lineFingerprint(line)) ?? lineFingerprint(line)));
+    }
+    const cleaned = cleanBody(current, refused);
     const reasons = [...new Set(cleaned.reasons)];
     let body = current;
     if (reasons.length) {
       for (const reason of cleaned.reasons) recordNativeCheck(reason);
+      const contained = cleaned.reasons.filter((reason) => reason === "rejected_reworded").length;
+      if (contained) recordRejectionLines("contained", contained);
+      // A reworded line that was taken out is remembered as removed in its own words too: the next repeat of it is exact.
+      const reworded = broughtLines.filter((line) => ["rejected_reworded", "rejected_judged"].includes(refused.get(lineFingerprint(line)) ?? ""));
+      if (reworded.length) await this.overlay.reject(userId, rejectionType, uri, reworded);
       if (cleaned.hasStatements) {
-        await this.sessions.replace(userId, uri, cleaned.text);
+        await sessions.replace(userId, uri, cleaned.text);
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: "updated", actor: "platform", reason: reasons.join(","), before: current, after: cleaned.text, projectId });
         body = cleaned.text;
       } else {
-        await this.sessions.remove(userId, uri);
+        await sessions.remove(userId, uri);
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "platform", reason: reasons.join(","), before: null, after: null, projectId });
         await this.overlay.forgetText(userId, uri);
         await this.overlay.removeFile(userId, uri);
-        return;
+        return null;
       }
     }
     if (projectId) {
       const held = await this.overlay.file(userId, uri);
       if (held?.projectId !== projectId || fresh) {
-        await this.sessions.setTags(userId, uri, [`project=${projectId}`]).then(() => recordNativeWrite("project_tag")).catch(() => {});
+        await sessions.setTags(userId, uri, [`project=${projectId}`]).then(() => recordNativeWrite("project_tag")).catch(() => {});
       }
     }
     await this.overlay.upsertFile({ userId, uri, memoryType: type, body, ...(projectId ? { projectId } : {}) });
     await this.overlay.setSources(userId, uri, sourcesNamedIn(body));
     // A source already known to have changed: its label goes back into the file the engine just rewrote.
     for (const source of await this.overlay.sources(userId, [uri])) {
-      if (source.state in LABEL_WORDS) await this.#writeLabel(userId, uri, type, source, source.state);
+      if (source.state in LABEL_WORDS) await this.#writeLabel(userId, uri, type, source, source.state, memoryContext);
     }
+    return body;
+  }
+
+  /**
+   * The lines a commit brought that repeat, in other words, a line the person removed from memories of that type. A line that contains
+   * a removed line's words is decided here in code; a line that is only near one is put, with the others of the commit, to one model
+   * call (`nativeMemoryRejections.mjs`), which is also shown what the person said in the conversation, so that a restatement of theirs
+   * is not taken out. Whatever the judge cannot say is kept. Keyed by memory type and line fingerprint.
+   * @param {any} commit @param {any} operations the diff's operations @param {any} context
+   * @returns {Promise<Map<string, { rejected: string, via: "contained" | "judged" }>>}
+   */
+  async #rewordings(commit, operations, context) {
+    const userId = commit.userId;
+    const root = context.sessions.memoryRoot(userId);
+    /** @type {Map<string, { rejected: string, via: "contained" | "judged" }>} */
+    const found = new Map();
+    /** @type {{ key: string, type: string, text: string, removed: { fingerprint: string, text: string }[] }[]} */
+    const candidates = [];
+    /** @type {Map<string, { fingerprint: string, text: string }[]>} */
+    const removedByType = new Map();
+    for (const list of ["adds", "updates"]) {
+      for (const operation of Array.isArray(operations?.[list]) ? operations[list] : []) {
+        const file = nativeMemoryFile(String(operation?.uri ?? ""), root);
+        if (!file) continue;
+        const rejectionType = nativeMemoryRejectionType(file.type, context.kind === 'geo-project' ? context.namespaceId : null);
+        let removed = removedByType.get(rejectionType);
+        if (!removed) {
+          removed = (await this.overlay.rejectedLines(userId, rejectionType)).filter((line) => line.text).map((line) => ({ fingerprint: line.fingerprint, text: /** @type {string} */ (line.text) }));
+          removedByType.set(rejectionType, removed);
+        }
+        if (!removed.length) continue;
+        const exact = new Set(removed.map((line) => line.fingerprint));
+        const already = new Set(memoryLines(String(operation?.before ?? "")).map(lineFingerprint));
+        for (const line of memoryLines(String(operation?.after ?? ""))) {
+          const print = lineFingerprint(line);
+          // What the write found there is not what it brought.
+          if (list === "updates" && already.has(print)) continue;
+          const key = `${rejectionType}\u0000${print}`;
+          if (exact.has(print) || found.has(key) || candidates.some((candidate) => candidate.key === key)) continue;
+          // A line the checks take out for what it is made of is not asked about.
+          if (lineRefusal(line, new Set()) !== null) continue;
+          const contained = removed.find((entry) => containsRemoved(line, entry.text));
+          if (contained) { found.set(key, { rejected: contained.fingerprint, via: "contained" }); continue; }
+          const near = nearRemoved(line, removed).map((entry) => ({ fingerprint: entry.fingerprint, text: /** @type {string} */ (entry.text) }));
+          if (near.length) candidates.push({ key, type: rejectionType, text: line, removed: near });
+        }
+      }
+    }
+    if (!candidates.length) return found;
+    if (!this.rejectionJudge) { recordRejectionLines("judge_failed", candidates.length); return found; }
+    const judged = await this.rejectionJudge.same({
+      userId, projectId: commit.projectId ?? null,
+      candidates: candidates.map((candidate) => ({ text: candidate.text, removed: candidate.removed })),
+      said: await this.#userWords(userId, commit.archiveUri, context),
+    });
+    for (const [index, rejected] of judged.same) {
+      const candidate = candidates[index];
+      if (!candidate) continue;
+      // The person said it themselves in this conversation: their words win, and the removal it repeats is lifted.
+      if (judged.stated.has(index)) { await this.overlay.unrejectFingerprints(userId, candidate.type, [rejected]); continue; }
+      found.set(candidate.key, { rejected, via: "judged" });
+    }
+    return found;
+  }
+
+  /** What the person wrote in an archive's conversation, a few messages of it, as plain text. @param {string} userId @param {string | null} archiveUri @param {any} context @returns {Promise<string[]>} */
+  async #userWords(userId, archiveUri, context) {
+    if (!archiveUri) return [];
+    const raw = await context.sessions.read(userId, `${archiveUri}/messages.jsonl`).catch(() => null);
+    /** @type {string[]} */
+    const said = [];
+    for (const line of String(raw ?? "").split("\n")) {
+      let message;
+      try { message = JSON.parse(line); } catch { continue; }
+      if (message?.role !== "user") continue;
+      const text = typeof message.content === "string" ? message.content
+        : Array.isArray(message.parts) ? message.parts.filter((/** @type {any} */ part) => part?.type === "text").map((/** @type {any} */ part) => String(part.text ?? "")).join("\n") : "";
+      if (text.trim()) said.push(text.trim());
+    }
+    return said.slice(-6);
   }
 
   /**
    * Which of these lines one of the person's own messages of an archive carries word for word.
-   * @param {string} userId @param {string} archiveUri @param {readonly string[]} lines @returns {Promise<string[]>}
+   * @param {string} userId @param {string | null} archiveUri @param {readonly string[]} lines @param {any} context @returns {Promise<string[]>}
    */
-  async #statedByThePerson(userId, archiveUri, lines) {
-    const raw = await this.sessions.read(userId, `${archiveUri}/messages.jsonl`);
+  async #statedByThePerson(userId, archiveUri, lines, context) {
+    if (!archiveUri) return [];
+    const raw = await context.sessions.read(userId, `${archiveUri}/messages.jsonl`);
     if (!raw) return [];
     const flat = (/** @type {string} */ text) => text.replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
     const said = [];
@@ -426,32 +979,67 @@ export class NativeMemoryWorker {
    * @returns {Promise<number>} files labelled or unlabelled
    */
   async labelSource(userId, source, state) {
-    if (!this.applicable || await this.researchMemory.memoryEngine(userId) !== "native") return 0;
+    if (!this.applicable) return 0;
     let touched = 0;
     for (const link of await this.overlay.filesNaming(source, { userId })) {
-      if (link.state === state) continue;
-      await this.overlay.markSource(userId, link.uri, source, state);
+      // A check moves a link only where it adds knowledge (`linkStatesLeftFor`, the rule the retired records engine kept): a correction
+      // never lowers a retraction, a check that could not answer never undoes a finding, and a clean answer is only what a link nobody
+      // had answered for becomes (or a document that is back in the library, `removed`): it never lifts a retraction, a correction
+      // or an expiry. A link already in this state is read again, so that a label an interrupted pass missed is repaired.
+      if (link.state !== state && !linkStatesLeftFor(state).includes(link.state)) continue;
       const held = await this.overlay.file(userId, link.uri);
       if (await this.#writeLabel(userId, link.uri, held?.memoryType ?? "project_facts", source, state)) touched += 1;
+      // Do not mark a failed label write as delivered. Re-reading an already
+      // marked link also repairs labels missed by earlier interrupted passes.
+      if (link.state !== state) await this.overlay.markSource(userId, link.uri, source, state);
     }
     return touched;
   }
 
-  /** @param {string} userId @param {string} uri @param {string} type @param {{ type: string, id: string }} source @param {string} state */
-  async #writeLabel(userId, uri, type, source, state) {
-    const current = await this.sessions.read(userId, uri);
+  /** @param {string} userId @param {string} uri @param {string} type @param {{ type: string, id: string }} source @param {string} state @param {any} [context] */
+  async #writeLabel(userId, uri, type, source, state, context = null) {
+    context ??= await this.#contextForUri(userId, uri);
+    if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
+    const sessions = context.sessions, file = nativeMemoryFile(uri, sessions.memoryRoot(userId));
+    if (!file || context.kind === 'geo-project' && !sessions.memoryTypes.includes(file.type)) throw new HttpError(403, 'memory_scope_denied', 'The source label is outside the approved memory files.');
+    type = file.type;
+    const held = await this.overlay.file(userId, uri);
+    const projectId = context.kind === 'geo-project' ? context.projectId : held?.projectId ?? null;
+    const current = await sessions.read(userId, uri);
     if (current === null) return false;
-    const lines = current.split("\n").filter((line) => !(isLabelLine(line) && line.includes(source.id)));
     const words = /** @type {Record<string, string>} */ (LABEL_WORDS)[state];
-    if (words) lines.push(`${SOURCE_LABEL_PREFIX}${source.id} ${words}（${this.now().toISOString().slice(0, 10)}）`);
+    let retained = false;
+    const lines = current.split("\n").filter((line) => {
+      // Compare the entire source identity and state suffix, never a DOI substring.
+      const label = line.trim();
+      const ownState = Object.values(LABEL_WORDS).find(value => {
+        const prefix = `${SOURCE_LABEL_PREFIX}${source.id} ${value}（`;
+        return label.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}）$/.test(label.slice(prefix.length));
+      });
+      if (!ownState) return true;
+      if (ownState === words && !retained) { retained = true; return true; }
+      return false;
+    });
+    if (words && !retained) lines.push(`${SOURCE_LABEL_PREFIX}${source.id} ${words}（${this.now().toISOString().slice(0, 10)}）`);
     const next = lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
-    if (contentHash(next) === contentHash(current)) return false;
-    await this.sessions.replace(userId, uri, next);
-    await this.overlay.addRevision({ userId, uri, memoryType: type, change: "updated", actor: "platform", reason: words ? `source ${state}` : "source current again", before: current, after: next });
-    await this.overlay.upsertFile({ userId, uri, memoryType: type, body: next });
+    const changed = contentHash(next) !== contentHash(current);
+    if (changed) await sessions.replace(userId, uri, next);
+    // A retry may find the engine write already complete while the overlay still
+    // owes its revision, body or labels. Finish each step before marking the link.
+    const before = changed ? current : held?.body;
+    const reason = words ? `source ${state}` : "source current again";
+    if (before != null && before !== next) {
+      const latest = (await this.overlay.revisionsOf(userId, uri, { limit: 1 }))[0];
+      if (latest?.actor !== "platform" || latest.reason !== reason || latest.before !== before || latest.after !== next) {
+        await this.overlay.addRevision({ userId, uri, memoryType: type, change: "updated", actor: "platform", reason, before, after: next, projectId });
+      }
+    }
+    if (!held || held.body !== next || held.contentHash !== contentHash(next) || held.memoryType !== type || held.projectId !== projectId) {
+      await this.overlay.upsertFile({ userId, uri, memoryType: type, body: next, projectId });
+    }
     const labels = next.split("\n").filter(isLabelLine).map((line) => line.slice(SOURCE_LABEL_PREFIX.length));
-    await this.overlay.setLabels(userId, uri, labels);
-    recordNativeWrite(words ? "source_label_added" : "source_label_removed");
-    return true;
+    if (!held || JSON.stringify(held.labels) !== JSON.stringify(labels.slice(0, 16))) await this.overlay.setLabels(userId, uri, labels);
+    if (changed) recordNativeWrite(words ? "source_label_added" : "source_label_removed");
+    return changed;
   }
 }

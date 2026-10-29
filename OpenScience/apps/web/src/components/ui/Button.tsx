@@ -15,7 +15,7 @@ import { cn } from "@/lib/cn";
  *    view's main one is `secondary` or `text` with `destructive`.
  *
  * Heights (spec §16.3, appendix E #9): 28 inside a row, a table or a toolbar
- * (`sm`, 13 px text), 36 on a page, a form, a dialog (`md`, the default), 44
+ * (`sm`, 14 px text), 36 on a page, a form, a dialog (`md`, the default), 44
  * for a form's primary action and the login (`lg`) — the heights the Vue
  * shell's Element Plus theme already had, so one product has one set. They
  * are the token heights (`h-sm` / `h-control` / `h-form-primary`), not steps
@@ -42,10 +42,11 @@ const variantClasses: Record<Exclude<ButtonVariant, "ghost">, string> = {
 
 // Padding 10 / 14 / 18 and icon gap 4 / 6 / 8, from the size table (§16.3).
 const sizeClasses: Record<ButtonSize, string> = {
-  // 28 — inside a row, a table, a toolbar. 13 / 400 like the chip beside it: a small control at 500 was a second 13 px pair on every
-  // page that held a chip and a text button (the walk's `type-pairs`: 循证 GEO, 记忆, 信源, 额度 on the owner's data), and the fonts a
-  // Chinese reader's Windows carries draw 500 as 400 anyway.
-  sm: "h-sm gap-1 px-2.5 text-compact font-normal",
+  // 28 — inside a row, a table, a toolbar. 14 / 400 like the chip beside it and the page's own text: a small control at 13 / 400 (and,
+  // before that, 13 / 500) was a size pair of its own on every page that held a toolbar (the walk's `type-pairs`), and the fonts a Chinese
+  // reader's Windows carries draw 500 as 400 anyway. Since R19.2 that holds for every size: the base is `font-normal`, and what makes a
+  // button a button is its ground, its border and its colour.
+  sm: "h-sm gap-1 px-2.5 text-ui",
   md: "h-control gap-1.5 px-3.5 text-ui", // 36 — a page's controls, a form, a dialog
   lg: "h-form-primary gap-2 px-[18px] text-ui", // 44 — a form's primary action, the login
 };
@@ -64,7 +65,7 @@ export function buttonClasses({
 } = {}): string {
   const look = variant === "ghost" ? "secondary" : variant;
   return cn(
-    "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded font-medium outline-none transition-colors duration-fast",
+    "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded font-normal outline-none transition-colors duration-fast",
     // No ring here: the global `:focus-visible` outline in index.css draws the
     // 2 px focus ring on every control alike.
     "disabled:cursor-not-allowed disabled:opacity-disabled",

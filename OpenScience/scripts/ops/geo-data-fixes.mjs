@@ -12,11 +12,13 @@
  *     [--strategy-file <path>]                      the strategy run's deliverables/geo-strategy/strategy.json (G4)
  *     [--keep-owned]                                do not disown lillymedical.cn / lm.qa.lilly.cn (G22)
  *     [--disown <domain>]                           disown another domain as well; repeatable
- *     [--no-materials] [--no-collected]             skip attaching corrections (G7) / dating real phrasings (G9)
+ *     [--correction-pairs <path>]                   JSON [{errorId, articleId}]: which correction answers which cross-attached error
+ *     [--no-materials] [--no-collected]             skip the corrections step (G7) / dating real phrasings (G9)
  *
  * Every run ends by counting the project's stored answers again under the
- * registry as it now stands and re-measuring every round (G2) — no model is
- * asked. It reads the database from the same sources the server does and
+ * registry as it now stands and re-measuring every round that heard an
+ * answer (G2) — no model is asked — and removes the empty cells of rounds
+ * that heard none (`emptyRounds`, 2026-10-25). It reads the database from the same sources the server does and
  * prints one JSON object with counts and the headline numbers, never a
  * record's text. Run it after the release that carries `geoDataFixes.mjs`.
  */
@@ -38,9 +40,10 @@ function bool(value, flag) {
 /** @param {string[]} argv */
 export function parseGeoDataFixArguments(argv) {
   /** @type {{ apply: boolean, geoProjectId: string | null, ourSingleSource: boolean | null, ourGenericAliases: string[],
-   *   competitorSingleSource: Record<string, boolean>, strategyFile: string | null, disown: string[], materials: boolean, collected: boolean }} */
+   *   competitorSingleSource: Record<string, boolean>, strategyFile: string | null, disown: string[], materials: boolean, correctionPairsFile: string | null,
+   *   collected: boolean }} */
   const options = { apply: false, geoProjectId: null, ourSingleSource: null, ourGenericAliases: [], competitorSingleSource: {}, strategyFile: null,
-    disown: [...GEO_NOT_OWNED_DOMAINS], materials: true, collected: true };
+    disown: [...GEO_NOT_OWNED_DOMAINS], materials: true, correctionPairsFile: null, collected: true };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = () => {
@@ -61,6 +64,7 @@ export function parseGeoDataFixArguments(argv) {
     else if (flag === "--keep-owned") options.disown = options.disown.filter((domain) => !GEO_NOT_OWNED_DOMAINS.includes(domain));
     else if (flag === "--disown") options.disown.push(value().toLowerCase());
     else if (flag === "--no-materials") options.materials = false;
+    else if (flag === "--correction-pairs") options.correctionPairsFile = value();
     else if (flag === "--no-collected") options.collected = false;
     else throw new Error(`unknown argument ${flag}`);
   }
@@ -84,12 +88,14 @@ function databaseUrl() {
 async function main() {
   const options = parseGeoDataFixArguments(process.argv.slice(2));
   const strategy = options.strategyFile ? JSON.parse(fs.readFileSync(options.strategyFile, "utf8")) : null;
+  const correctionPairs = options.correctionPairsFile ? JSON.parse(fs.readFileSync(options.correctionPairsFile, "utf8")) : null;
+  if (correctionPairs !== null && !Array.isArray(correctionPairs)) throw new Error("--correction-pairs names a JSON array of {errorId, articleId}");
   const database = new ControlPlaneDatabase({ databaseUrl: databaseUrl(), databasePoolMax: 2, databaseConnectionTimeoutMs: 5_000 });
   try {
     const report = await runGeoDataFixes({ database, geoProjectId: /** @type {string} */ (options.geoProjectId), apply: options.apply,
       disown: options.disown, ourSingleSource: options.ourSingleSource, ourGenericAliases: options.ourGenericAliases,
       competitorSingleSource: options.competitorSingleSource, strategy,
-      materials: options.materials, collected: options.collected });
+      materials: options.materials, correctionPairs, collected: options.collected });
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } finally {
     await database.close();

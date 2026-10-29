@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { Input } from "@/components/ui/Input";
 
-/** A study's name is one line of 1 to 40 characters: the project that carries it has the same limit. */
-export const VCR_STUDY_NAME_MAX = 40;
+import { normalizeVcrStudyName, vcrStudyNameError } from "@/lib/vcrStudyName";
+export { VCR_STUDY_NAME_MAX } from "@/lib/vcrStudyName";
 
 /**
  * 「重命名」: the AI named the study from what it was asked, and the researcher may name it as they like — here and from the
@@ -24,8 +24,8 @@ export function VcrRenameDialog({ studyId, name, onClose, onRenamed }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const holding = useRef(false);
-  const next = value.replace(/\s+/g, " ").trim();
-  const valid = next.length > 0 && [...next].length <= VCR_STUDY_NAME_MAX;
+  const next = normalizeVcrStudyName(value);
+  const valid = next.length > 0 && !vcrStudyNameError(next);
 
   const save = () => {
     if (!valid || holding.current) return;
@@ -45,9 +45,8 @@ export function VcrRenameDialog({ studyId, name, onClose, onRenamed }: {
         <Input
           label="研究名称"
           value={value}
-          maxLength={VCR_STUDY_NAME_MAX}
           onChange={(event) => setValue(event.target.value)}
-          error={error ?? undefined}
+          error={vcrStudyNameError(value) ?? error ?? undefined}
         />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>

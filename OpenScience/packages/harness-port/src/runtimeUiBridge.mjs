@@ -132,9 +132,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         if (disposed) return;
         // Retains the session for the main view, which is what makes its
         // scope (and so its composer) exist for the draft below.
-        target.__EVIMED_RESULT_REVISION__?.clear();
+        target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
-        if (intent.draft !== undefined || (Array.isArray(intent.references) && intent.references.length)) {
+        if (intent.draft !== undefined || intent.resultRevision || intent.geoPlanContext || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
           if (!scope) throw new Error('Native session scope unavailable');
           const input = ctx.conversation.input.for(scope);
@@ -147,9 +147,13 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
             const span = input.actions?.captureInsertion?.();
             if (!span || !input.insertReference(kit.knowledgeChip(reference), span)) throw new Error('Native reference chip refused');
           }
+          if (intent.geoPlanContext) {
+            if (!target.__EVIMED_GEO_PLAN__) throw new Error('GEO planning transport unavailable');
+            target.__EVIMED_GEO_PLAN__.stage({ sessionId, referenceId: intent.geoPlanContext.referenceId, draft: intent.draft ?? '' });
+          }
           if (intent.resultRevision) {
             if (!target.__EVIMED_RESULT_REVISION__) throw new Error('Result revision transport unavailable');
-            target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft });
+            target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft ?? '' });
           }
         }
         activated = true; selectedSession = sessionId; previousSession = sessionId;
@@ -195,7 +199,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
     if (sessionId === previousSession) return;
-    target.__EVIMED_RESULT_REVISION__?.clear();
+    target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear();
     previousSession = sessionId;
     selectedSession = sessionId;
     const lineage = sessionId === null ? {} : lineageOf(snapshot, sessionId);
@@ -281,7 +285,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     'source-scope-result'(data) {
       if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
       return { requestId: data.requestId, ok: data.ok === true, sessionId: validId(data.sessionId) ? data.sessionId : null,
-        originReference: data.originReference?.kind === 'frontier-event' && /^[a-z0-9]{12,32}$/.test(data.originReference.id) && typeof data.originReference.title === 'string' ? { kind: 'frontier-event', id: data.originReference.id, title: data.originReference.title.slice(0, 300) } : null,
+        originReference: (data.originReference?.kind === 'frontier-event' || data.originReference?.kind === 'frontier-item') && /^[a-z0-9]{12,32}$/.test(data.originReference.id) && typeof data.originReference.title === 'string' ? { kind: data.originReference.kind, id: data.originReference.id, title: data.originReference.title.slice(0, 300) } : null,
+        sourceScopeMode: data.sourceScopeMode === 'selected' ? 'selected' : 'project',
         sourceIds: (Array.isArray(data.sourceIds) ? data.sourceIds : []).filter((/** @type {unknown} */ id) => typeof id === 'string' && /^src_[a-f0-9]{32}$/.test(id)).slice(0, 50) };
     },
     /** @param {any} data */
@@ -480,9 +485,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       intent.references = intent.references.map((/** @type {any} */ reference) => ({ id: reference.id, title: reference.title.slice(0, 300) }));
     }
     if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== 'string'
-      || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || typeof intent.draft !== 'string' || !intent.draft)) return;
+      || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId))) return;
+    if (intent.geoPlanContext && (Object.keys(intent.geoPlanContext).length !== 1 || !/^gpc_[a-f0-9]{64}$/.test(intent.geoPlanContext.referenceId))) return;
     incoming = data.seq;
-    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.resultRevision?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
+    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.resultRevision?.referenceId ?? null, intent.geoPlanContext?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
     const existing = requests.get(data.requestId);
     if (existing) {
       if (existing.signature !== signature) return;
@@ -570,6 +576,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return /^[a-z0-9]{12,32}$/.test(fields?.eventId ?? '') ? { eventId: fields.eventId } : null;
     },
     /** @param {any} fields */
+    'open-item'(fields) {
+      return /^[a-z0-9]{12,32}$/.test(fields?.itemId ?? '') ? { itemId: fields.itemId } : null;
+    },
+    /** @param {any} fields */
     'open-source'(fields) {
       if (!/^src_[a-f0-9]{32}$/.test(fields.sourceId)) return null;
       return { sourceId: fields.sourceId,
@@ -580,10 +590,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     },
     /** @param {any} fields */
     'source-scope'(fields) {
+      if (fields.sourceScopeMode !== undefined && fields.sourceScopeMode !== 'project' && fields.sourceScopeMode !== 'selected') return null;
       if (!validId(fields.sessionId) || typeof fields.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(fields.requestId)
         || (fields.sourceIds !== undefined && (!Array.isArray(fields.sourceIds) || fields.sourceIds.length > 50
         || fields.sourceIds.some((/** @type {unknown} */ id) => typeof id !== 'string' || !/^src_[a-f0-9]{32}$/.test(id))))) return null;
       return { requestId: fields.requestId, sessionId: fields.sessionId,
+        ...(fields.sourceScopeMode === 'selected' || fields.sourceScopeMode === 'project' ? { sourceScopeMode: fields.sourceScopeMode } : {}),
         ...(fields.sourceIds === undefined ? {} : { sourceIds: [...new Set(fields.sourceIds)] }) };
     },
     /** @param {any} fields */
@@ -702,7 +714,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     searches.clear();
     pendingNavigation = undefined;
     if (target.__EVIMED_SHELL__) delete target.__EVIMED_SHELL__;
-    requests.clear(); target.__EVIMED_RESULT_REVISION__?.clear(); target.__DSH_TRANSPORT__?.dispose?.();
+    requests.clear(); target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__DSH_TRANSPORT__?.dispose?.();
   }, 'evimed.runtime-ui.bridge');
 }
 

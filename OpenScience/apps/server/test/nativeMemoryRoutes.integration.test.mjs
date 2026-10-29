@@ -1,5 +1,4 @@
-// The memory page's routes for an account on the native engine: the same paths and, wherever the engine allows, the same
-// shapes as the legacy path, served from the engine's files. The real routes over HTTP, a real PostgreSQL, a stub engine.
+// The memory page's routes, served from the engine's files (the shapes the page has always read; until 2026-10-25 a legacy path served the same routes from PostgreSQL records). The real routes over HTTP, a real PostgreSQL, a stub engine.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
@@ -9,19 +8,19 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { createMemoryRoutes } from "../src/memoryRoutes.mjs";
 import { NativeMemoryOverlay } from "../src/nativeMemoryOverlay.mjs";
-import { NativeMemoryStore, nativeFileId } from "../src/nativeMemoryStore.mjs";
+import { NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "../src/nativeMemoryWorker.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { HttpError, sendJson } from "../src/security.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-const config = { ovNativeMemoryEnabled: true, memoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, maxJsonBytes: 1_000_000 };
+const config = { memoryEngineEnabled: true, memoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, maxJsonBytes: 1_000_000 };
 
 /** @type {ControlPlaneDatabase} */
 let database;
@@ -29,7 +28,7 @@ const users = [];
 before(async () => {
   if (!url) return;
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
 });
 after(async () => {
   if (!url) return;
@@ -45,16 +44,16 @@ async function fixture(t, { nativeConfigured = true, extract = () => ({}) } = {}
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
   const overlay = new NativeMemoryOverlay({ database });
-  const researchMemory = new ResearchMemoryStore(config, { database });
+  const memorySettings = new MemorySettingsStore(config, { database });
   const nativeMemory = nativeConfigured ? new NativeMemoryStore({ sessions, overlay }) : new NativeMemoryStore({ sessions: { configured: false }, overlay });
-  const worker = new NativeMemoryWorker({ config, researchMemory, sessions, overlay });
+  const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay });
   const audits = [];
   const routes = createMemoryRoutes({
-    config, researchMemory, nativeMemory, feedbackEvents: null,
+    config, memorySettings, nativeMemory,
     store: { ensureUser: async () => ({ id: userId }), requireProject: async (_user, id) => { if (id === "p_missing") throw new HttpError(404, "project_not_found", "x"); return { id }; } },
     context: async () => ({ user: { id: userId, name: "Native routes test" }, project: { id: "p1" } }),
     audit: async (_ctx, action, outcome, detail) => { audits.push({ action, outcome, detail }); },
-    recordFeedback: async () => {}, decodeRouteComponent: (value) => decodeURIComponent(value),
+    decodeRouteComponent: (value) => decodeURIComponent(value),
   });
   const server = createServer((req, res) => {
     routes(req, res).then((handled) => { if (!handled) sendJson(res, 404, { error: { code: "not_found" } }); })
@@ -71,23 +70,23 @@ async function fixture(t, { nativeConfigured = true, extract = () => ({}) } = {}
   };
   const engineUser = sessions.engineUser(userId);
   await sessions.register(userId);
-  return { userId, stub, sessions, overlay, researchMemory, call, audits, worker, engineUser, seed: (rel, text, extra) => stub.seedMemory(engineUser, rel, text, extra) };
+  return { userId, stub, sessions, overlay, memorySettings, call, audits, worker, engineUser, seed: (rel, text, extra) => stub.seedMemory(engineUser, rel, text, extra) };
 }
 
-test("the list, the profile and the settings say which engine they are from and keep the legacy shape", options, async (t) => {
+test("the list, the profile and the settings come from the engine's files in the shape the page reads", options, async (t) => {
   const { call, seed } = await fixture(t);
   const uri = seed("preferences/language.md", "Replies in Simplified Chinese.", { type: "preferences" });
   seed("profile.md", "# Profile\n- A nurse in a paediatric ward", { type: "profile" });
   const settings = await call("GET", "/api/memory/settings");
-  assert.equal(settings.json.data.engine, "native");
+  assert.equal("engine" in settings.json.data, false, "one engine: the settings say nothing of which");
   assert.equal(settings.json.data.learningPaused, false);
   const profile = await call("GET", "/api/memory/profile");
   assert.equal(profile.status, 200);
   const data = profile.json.data;
-  assert.equal(data.engine, "native");
+  assert.equal("engine" in data, false);
   assert.deepEqual(Object.keys(data.groups).sort(), ["correction", "decision", "follow_up", "preference", "profile", "project_fact"]);
   assert.equal(data.groups.preference[0].uri, uri);
-  for (const field of ["id", "scope", "scopeId", "kind", "key", "value", "summary", "origin", "status", "version", "createdAt", "updatedAt", "revisions", "engine", "nativeType", "uri", "contentHash"]) {
+  for (const field of ["id", "scope", "scopeId", "kind", "key", "value", "summary", "origin", "status", "version", "createdAt", "updatedAt", "revisions", "nativeType", "uri", "contentHash"]) {
     assert.ok(field in data.groups.preference[0], `a record carries ${field}`);
   }
   assert.equal(data.groups.profile[0].document.uri.endsWith("/memories/profile.md"), true);
@@ -170,7 +169,7 @@ test("pausing learning is the engine's own policy too, and reset empties the eng
   const { call, seed, stub, engineUser, sessions, userId } = await fixture(t);
   const uri = seed("preferences/x.md", "Something.", { type: "preferences" });
   const paused = await call("PUT", "/api/memory/settings", { learningPaused: true });
-  assert.equal(paused.json.data.engine, "native");
+  assert.equal(paused.json.data.learningPaused, true);
   assert.equal(stub.users.get(engineUser).learning, false, "the engine does not extract for a paused account");
   assert.ok(stub.users.get(engineUser).memoryTypes.includes("preferences"), "the whole type allowlist travels with every settings change");
   await call("PUT", "/api/memory/settings", { learningPaused: false });
@@ -181,32 +180,19 @@ test("pausing learning is the engine's own policy too, and reset empties the eng
   assert.equal((await call("GET", "/api/memory/records")).json.data.length, 0);
 });
 
-test("the project tab's card is the project's own project-context memory; a conflict has nothing to settle", options, async (t) => {
+test("the project tab's card is the project's own project-context memory; there is no conflict to settle", options, async (t) => {
   const { call, seed } = await fixture(t);
   seed("projects/trial.md", "# Statin trial\n领域：心血管\n## 目标\n- 比较两种他汀\n## 约束\n- 只用公开数据", { type: "project_context", tags: ["project=p_trial"] });
   const overview = await call("GET", "/api/memory/projects/p_trial/overview");
   assert.equal(overview.status, 200);
   assert.deepEqual(overview.json.data.card.map((entry) => entry.slot), ["field", "goal", "constraints"]);
   const conflict = await call("POST", "/api/memory/conflicts/resolve", { keepId: "a", otherId: "b" });
-  assert.equal(conflict.json.error.code, "memory_engine_unsupported");
+  assert.equal(conflict.status, 404, "the route that settled two disagreeing records went with the engine that had them");
 });
 
-test("an account on the native engine in a deployment that cannot reach the engine is told so, never served the legacy rows", options, async (t) => {
+test("a deployment that cannot reach the engine is told so, with no other store to serve the page from", options, async (t) => {
   const { call } = await fixture(t, { nativeConfigured: false });
   const answer = await call("GET", "/api/memory/profile");
   assert.equal(answer.status, 503);
   assert.equal(answer.json.error.code, "memory_engine_unavailable");
-});
-
-test("an account on the legacy engine keeps the legacy page, and remember is refused by name", options, async (t) => {
-  const { call, researchMemory, userId } = await fixture(t);
-  await researchMemory.setMemoryEngine(userId, "legacy");
-  const profile = await call("GET", "/api/memory/profile");
-  assert.equal(profile.status, 200);
-  assert.notEqual(profile.json.data.engine, "native");
-  assert.equal((await call("GET", "/api/memory/settings")).json.data.engine, "legacy");
-  const remember = await call("POST", "/api/memory/remember", { text: "x" });
-  assert.equal(remember.status, 400);
-  assert.equal(remember.json.error.code, "memory_engine_unsupported");
-  assert.ok(nativeFileId("viking://x"));
 });

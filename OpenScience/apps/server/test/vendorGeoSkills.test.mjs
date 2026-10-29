@@ -267,9 +267,13 @@ test("the repository tracks only the root's README, and the image copies the roo
   const agentbay = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.agentbay"), "utf8");
   const install = await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8");
   const preset = await readFile(path.join(repoRoot, "packages/socket/presets/evimed-universal/agent.cordis.yml"), "utf8");
-  for (const [name, text] of [["Dockerfile", dockerfile], ["Dockerfile.delta", delta], ["Dockerfile.agentbay", agentbay]]) {
+  for (const [name, text] of [["Dockerfile", dockerfile], ["Dockerfile.agentbay", agentbay]]) {
     assert.match(text, /^COPY runtime\/skills\/geo-private \/opt\/evimed\/skills\/geo-private$/m, `${name} does not copy the private root`);
   }
+  assert.match(delta, /^COPY runtime\/skills\/geo-private \/tmp\/evimed-geo-pack-source$/m);
+  assert.match(delta, /^COPY deploy\/runtime-dsh\/refresh-geo-pack.mjs \/tmp\/evimed-refresh-geo-pack.mjs$/m);
+  assert.match(delta, /node \/tmp\/evimed-refresh-geo-pack.mjs \/tmp\/evimed-geo-pack-source \/opt\/evimed\/skills\/geo-private/,
+    "a delta uses the verified preserve-or-replace helper rather than erasing the base private pack");
   assert.match(install, /cp -a \/opt\/evimed\/skills\/geo-private \/opt\/evimed\/socket\/presets\/evimed-universal\/skills\/geo-private/);
   assert.match(delta, /cp -a \/opt\/evimed\/skills\/geo-private \/opt\/evimed\/socket\/presets\/evimed-universal\/skills\/geo-private/);
   assert.match(preset, /EVIMED_PRESET_SKILLS_DIR \+ '\/geo-private\/skills'/);

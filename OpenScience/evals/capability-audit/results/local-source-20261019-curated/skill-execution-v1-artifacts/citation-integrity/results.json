@@ -1,0 +1,14 @@
+{
+  "citations": {
+    "doiCount": 2,
+    "duplicateDois": [
+      "10.1000/example.1"
+    ],
+    "numericCitationLabels": [
+      "1"
+    ],
+    "uniqueDois": [
+      "10.1000/example.1"
+    ]
+  }
+}

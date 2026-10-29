@@ -6,19 +6,18 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { legacyProfile, legacySettings, nativeProfile, nativeSettings } from "@/components/memory/__fixtures__/memoryProfiles";
+import { nativeProfile, nativeSettings } from "@/components/memory/__fixtures__/memoryProfiles";
 import { MemoryHubPage } from "./MemoryHubPage";
 
 const api = vi.hoisted(() => ({
   fetchMemoryProfile: vi.fn(), searchMemories: vi.fn(), fetchMemorySettings: vi.fn(), updateMemorySettings: vi.fn(), resetMemory: vi.fn(),
 }));
 const memory = vi.hoisted(() => ({ fetchMyCapsule: vi.fn(), rememberMemory: vi.fn(), fetchProjectOverview: vi.fn(), fetchMemoryGrowth: vi.fn(), fetchMemoryLearned: vi.fn() }));
-const practice = vi.hoisted(() => ({ listAllMethods: vi.fn(), listAllHandbooks: vi.fn() }));
+const practice = vi.hoisted(() => ({ listAllMethods: vi.fn() }));
 
 vi.mock("@/lib/apiClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")), getWebProjectId: () => "prj_1", ...api }));
 vi.mock("@/lib/memoryClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), ...memory }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: practice.listAllMethods }));
-vi.mock("@/lib/handbooksClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/handbooksClient")>("@/lib/handbooksClient")), listAllHandbooks: practice.listAllHandbooks }));
 vi.mock("@/lib/geoClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/geoClient")>("@/lib/geoClient")), useGeoFeature: () => "off", listGeoProjects: () => Promise.resolve([]) }));
 vi.mock("@/lib/vcrClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/vcrClient")>("@/lib/vcrClient")), useVcrFeature: () => "off", getVcrHome: () => Promise.resolve({ studies: [] }) }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
@@ -46,7 +45,6 @@ beforeEach(() => {
   memory.fetchMemoryGrowth.mockResolvedValue({ unit: null, first: null, fromStart: false, points: [], moments: [], timeZone: "Asia/Shanghai" });
   memory.fetchMemoryLearned.mockResolvedValue({ days: [], timeZone: "Asia/Shanghai" });
   practice.listAllMethods.mockResolvedValue([]);
-  practice.listAllHandbooks.mockResolvedValue([]);
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ projects: [], currentId: "default" }); });
 
@@ -84,15 +82,17 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(document.body.textContent).not.toMatch(BACK_OFFICE);
   });
 
-  it("offers 记住这一条, and the older kind of account does not", async () => {
+  it("offers 记住这一条", async () => {
     open();
     expect(await screen.findByRole("button", { name: "记住这一条" })).toBeInTheDocument();
-    cleanup();
-    api.fetchMemoryProfile.mockResolvedValue(legacyProfile);
-    api.fetchMemorySettings.mockResolvedValue(legacySettings);
+  });
+
+  it("offers 从其他 AI 导入 in the 「⋯」, which opens the import and reads the list again once something is saved", async () => {
     open();
     await screen.findByRole("list", { name: "背景" });
-    expect(screen.queryByRole("button", { name: "记住这一条" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "记忆设置" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "从其他 AI 导入" }));
+    expect(await screen.findByRole("dialog", { name: "从其他 AI 导入" })).toBeInTheDocument();
   });
 
   it("hands the words over, closes, and shows them as 正在记住 until the memory has written them", async () => {

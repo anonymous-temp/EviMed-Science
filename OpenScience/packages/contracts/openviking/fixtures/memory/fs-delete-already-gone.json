@@ -1,6 +1,6 @@
 {
   "note": "The same delete again.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "DELETE",
     "path": "/api/v1/fs?uri=viking%3A%2F%2Fuser%2Ffx-user-a%2Fmemories%2Fevimed%2Fuser%2Fpreference%2Frec3.md",
@@ -16,7 +16,8 @@
     "status": "ok",
     "result": {
       "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec3.md",
-      "estimated_deleted_count": 0
+      "estimated_deleted_count": 0,
+      "task_id": "82e8202a-ac6f-46a0-8c53-7843aed30f10"
     },
     "error": null,
     "telemetry": null,

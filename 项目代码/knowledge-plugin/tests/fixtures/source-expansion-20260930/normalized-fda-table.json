@@ -35,7 +35,16 @@
         "link-derived"
       ],
       "content_sha256": "29bf866771b38f4af636b981af1518ffb2a7b97ed7f78cccf60a6ea22d7537ac",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -60,7 +69,16 @@
         "short-summary"
       ],
       "content_sha256": "5e56c401ef73e072d940392790d152bc306bed6620926aff7ff751f57b7ff0f6",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -84,7 +102,16 @@
         "link-derived"
       ],
       "content_sha256": "9aa6943b0f387bbbefd8465e18824f2e729ea52945834d9e24cefbe3558b84ca",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -108,7 +135,16 @@
         "link-derived"
       ],
       "content_sha256": "0a2ce105d3a89993ef98cf8319285f40143453393985c815d13f9c48528dd4e5",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -132,7 +168,16 @@
         "link-derived"
       ],
       "content_sha256": "e1ac9e6cecfdc2eee2e0c5f6421474b030054dd630d3e804bc4119eb12a7bfe2",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -156,7 +201,16 @@
         "link-derived"
       ],
       "content_sha256": "2e0a434f470699a3f314af3851e4e3b00c0644df1c29d0b2d45a486a2e829e47",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -180,7 +234,16 @@
         "link-derived"
       ],
       "content_sha256": "86dfaa05ebe7fafdd908b39c9c535f147ceb4b01af365c248dee1e4b0bbaa9c1",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -205,7 +268,16 @@
         "short-summary"
       ],
       "content_sha256": "152220574c0c973a4a620f48fdb3f82c7eb0f630fd18b219928c99570ca5a9ea",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -230,7 +302,16 @@
         "short-summary"
       ],
       "content_sha256": "b3179fe0defefd7a5272f828e594a29ba45d8b4629eb8898f06e3bb8b411b8d4",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -255,7 +336,16 @@
         "short-summary"
       ],
       "content_sha256": "71633b1a2279dd983a77c133309145baff80a0d55157a603a83716d91b8a3509",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -280,7 +370,16 @@
         "short-summary"
       ],
       "content_sha256": "87ba19a99316b9a3a163f3ef0999ffd36e7d7e8f2d8f591b9c034721c2b01d98",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -304,7 +403,16 @@
         "link-derived"
       ],
       "content_sha256": "b83ce4e98216e5a68961e1f6fd711ac329a513cdbba93a9bab0e6aa5f528b25f",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -328,7 +436,16 @@
         "link-derived"
       ],
       "content_sha256": "0b7cc2cbd7584afeb6fb7dbe2b072ca8fe10b5d9acc7686754c9b2e8fa52c69a",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -352,7 +469,16 @@
         "link-derived"
       ],
       "content_sha256": "9d6564ac17037d11a1fff56d34d4192e3de6ed9720573934977512f775bf1829",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -377,7 +503,16 @@
         "short-summary"
       ],
       "content_sha256": "01c21d8641e91910800ec282a9a26cc4ab17c73345436cf1dc61fdb786c2ca4c",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -402,7 +537,16 @@
         "short-summary"
       ],
       "content_sha256": "b32d5899d52d75a4f3df96612e0ea390ed681bade98e6465ecc0e6cbad680b0e",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -427,7 +571,16 @@
         "short-summary"
       ],
       "content_sha256": "1db75b0855e4e624a9bd7a3e09e177797190b02a6e394eadd87914557cbf3070",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -451,7 +604,16 @@
         "link-derived"
       ],
       "content_sha256": "487b1bc21eb060e77a608803aab8fc556e9a6684a5321959e719222070021797",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -476,7 +638,16 @@
         "short-summary"
       ],
       "content_sha256": "13edd7401db9d849e6bb66975e898092932212875cacc8865bd7a7502d01fcb8",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -500,7 +671,16 @@
         "link-derived"
       ],
       "content_sha256": "c0ae2ce5f70d8a517f50c94afa3351918722d5ecc0f5d63abadebacc4c9064e3",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -524,7 +704,16 @@
         "link-derived"
       ],
       "content_sha256": "ec8d6125278c89dbefc218f5516be464e37eb5d1a0e9c48e05488a2be5c729ef",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -549,7 +738,16 @@
         "short-summary"
       ],
       "content_sha256": "d2cabd052f8cfa5e557db247d2845202086d7c1cf51cd18e34998bb580908ee8",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -573,7 +771,16 @@
         "link-derived"
       ],
       "content_sha256": "7fe9c189413fed2dae078ecbd9a86ce33e047f32afaeb95e49c30ba43e99f0c6",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -597,7 +804,16 @@
         "link-derived"
       ],
       "content_sha256": "edc21ce0410460f5d80e3ba4ec52646766b5cf7b73d49bc21319c4232aefc18c",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -622,7 +838,16 @@
         "short-summary"
       ],
       "content_sha256": "3d7f1d50a5b567dcbafbda89dda833fb4ea56a41dd2567ffb8ca69d16c2d250b",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -646,7 +871,16 @@
         "link-derived"
       ],
       "content_sha256": "98334a71bbf7d4c462c997ec33cf7e9d8f65503af7673cc49952e1a06b5ff012",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -670,7 +904,16 @@
         "link-derived"
       ],
       "content_sha256": "b3ab467bd5822e2e8d6daefba6496d94f11febef8a60f2418ddaa1add85017a3",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -694,7 +937,16 @@
         "link-derived"
       ],
       "content_sha256": "ad65190c1c64ded263ea83f90a91f75dfe1ccc752556ef13d9fd2f196c5a79a1",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -718,7 +970,16 @@
         "link-derived"
       ],
       "content_sha256": "e48eb02f1b9dd6590e41878af832ed4822100c92fd4be85d6d3313731a824b79",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -743,7 +1004,16 @@
         "short-summary"
       ],
       "content_sha256": "662c9e5190afa62157911cea21675f8a711f77f9006b57392e0a3abacd09d065",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -767,7 +1037,16 @@
         "link-derived"
       ],
       "content_sha256": "16f31c6e611690e845dc989d9ffe941f9498b8d7f728164ffbb449f8f55e6180",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -791,7 +1070,16 @@
         "link-derived"
       ],
       "content_sha256": "6cd3552f86c0b5f423c3a4863f3e696dfc6319d9ebcc44db109211637ce1f020",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -815,7 +1103,16 @@
         "link-derived"
       ],
       "content_sha256": "0a93ae56915ff7e148a89d0cf43e1d1685a5a42652be702658a025fee483b4b3",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -839,7 +1136,16 @@
         "link-derived"
       ],
       "content_sha256": "fd2046b66d34c80bc695865da71b4d07c8a2a19c2cfafeb97a856cbbd27271e7",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -864,7 +1170,16 @@
         "short-summary"
       ],
       "content_sha256": "c51497d77f8dfce37ba4f91bd7c1951f7e5e084ed3e38a151144880ddd9b11d6",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -888,7 +1203,16 @@
         "link-derived"
       ],
       "content_sha256": "d0b4f472ad33e2af0f5d1c4ee6b74803f4aa15a7ef23f80abb89ffdb8d60a97d",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -912,7 +1236,16 @@
         "link-derived"
       ],
       "content_sha256": "ff7e7e58a495181f5145223935e422b2abdae4f8189f061d229595233a068385",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -936,7 +1269,16 @@
         "link-derived"
       ],
       "content_sha256": "629ac40fff746010daf8261aa1067a87a78aecf5a1d148794810eaa46be51ac9",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -961,7 +1303,16 @@
         "short-summary"
       ],
       "content_sha256": "191a9bb1bb8aaddcc7108ae14709b5458367afc33ca39871ac4a8cb900512036",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -985,7 +1336,16 @@
         "link-derived"
       ],
       "content_sha256": "30766b8b58ae90b90405dbfc0e84770335957d83f5d0322805ae359ace4c57d4",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -1009,7 +1369,16 @@
         "link-derived"
       ],
       "content_sha256": "a8ef11e1ad2996d19dd7855d66e40f2f73dd9944ec1f19b3416db4692cd2af8e",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -1033,7 +1402,16 @@
         "link-derived"
       ],
       "content_sha256": "d6a18875ea5a3f78bbfff4f84847a754ee1eb38de578b956e56142fc87161506",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -1058,7 +1436,16 @@
         "short-summary"
       ],
       "content_sha256": "07f3d0d46f3e7b1c5fab1a4e5a81f685842ba976e2c9daaccfb426fd73f0e408",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     },
     {
       "source_id": "fda-novel-drug-approvals",
@@ -1083,7 +1470,16 @@
         "short-summary"
       ],
       "content_sha256": "480303537c848b8a400aa00a65b446627e24d14d74450371e2282ba524c0c995",
-      "notes": []
+      "notes": [],
+      "channel": "regulator",
+      "platform": null,
+      "author": null,
+      "media": [],
+      "quoted": null,
+      "metrics": null,
+      "body_text": null,
+      "body_from": null,
+      "body_kind": "full"
     }
   ],
   "updated": {
@@ -1108,6 +1504,15 @@
       "link-derived"
     ],
     "content_sha256": "09ca5d038cf5e83b41a9002e59eebfe55f08029d2a72c1c36b8bbccfdac61094",
-    "notes": []
+    "notes": [],
+    "channel": "regulator",
+    "platform": null,
+    "author": null,
+    "media": [],
+    "quoted": null,
+    "metrics": null,
+    "body_text": null,
+    "body_from": null,
+    "body_kind": "full"
   }
 }

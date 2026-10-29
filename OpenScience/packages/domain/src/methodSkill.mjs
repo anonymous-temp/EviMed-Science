@@ -33,10 +33,11 @@
  * test walks that list, because an issue code that no test constructs is a
  * rule nobody has ever seen fire.
  */
-import { HANDBOOK_TEXT_LIMITS, SKILL_AUTHORING_LIMITS } from './constants.mjs'
+import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
 import { RUNTIME_SKILL_ROOTS } from './skillRoots.mjs'
 import { unmountedToolReferences, MOUNTED_TOOL_NAMES } from './toolNames.mjs'
 import { hasSensitiveText, sensitiveTextTokens } from './sensitiveText.mjs'
+import { retiredFeaturesOfMethod } from './retiredFeatures.mjs'
 
 /** The `metadata.evimed_schema` value this module understands. */
 export const METHOD_SKILL_SCHEMA = 'method-skill/1'
@@ -188,6 +189,7 @@ export const METHOD_SKILL_ISSUE_CODES = Object.freeze([
   'method_reuse_reference_shape',
   'method_skill_root_leak',
   'method_sensitive_content',
+  'method_stale_feature',
   'method_files_prefix',
   'method_files_path',
   'method_files_too_large',
@@ -386,25 +388,6 @@ export function renderSkillFrontmatter(frontmatter) {
 /** @param {Record<string, unknown>} frontmatter @param {string} body @returns {string} */
 export function renderMethodSkill(frontmatter, body) {
   return `${renderSkillFrontmatter(frontmatter)}\n\n${String(body ?? '').trim()}\n`
-}
-
-/**
- * The text of a lesson as a platform handbook carries it, and its length: name, description and body, the description on one line and the body
- * trimmed. The control plane's field check (`handbookFieldChecks`) and the `method-candidate` contract read the length from here, so the run is
- * held to the number it will be judged by.
- * @param {{name?: unknown, description?: unknown} | null | undefined} frontmatter @param {unknown} body
- * @returns {{ name: string, description: string, body: string, length: number }}
- */
-export function handbookText(frontmatter, body) {
-  const name = String(frontmatter?.name ?? '').trim()
-  const description = String(frontmatter?.description ?? '').replace(/\s+/g, ' ').trim()
-  const text = typeof body === 'string' ? body.trim() : ''
-  return { name, description, body: text, length: `${name}\n${description}\n${text}`.length }
-}
-
-/** Whether a lesson's text is within what the platform's handbooks take. @param {{ length: number }} text @returns {boolean} */
-export function handbookTextFits(text) {
-  return text.length <= HANDBOOK_TEXT_LIMITS.max
 }
 
 /* -------------------------------------------------------------------- cards */
@@ -966,6 +949,11 @@ export function validateMethodSkill(input) {
     if (hasSensitiveText(body)) {
       issues.push(issue('method_sensitive_content', `The body carries ${sensitiveTextTokens(body).join(', ')}. A method is mounted into every later run of the project; it may not carry credentials or patient identifiers.`))
     }
+  }
+
+  /* a feature the platform no longer has (`retiredFeatures.mjs`): a closed list of names, never a reading of the prose */
+  for (const stale of retiredFeaturesOfMethod({ frontmatter, body, files })) {
+    issues.push(issue('method_stale_feature', `The method names \`${stale.term}\`, which the platform has not had since ${stale.since} (${stale.feature}). A lesson about it tells a run to do something that no longer matters; leave it out, or keep what the researcher did apart from it.`))
   }
 
   /* attached files */

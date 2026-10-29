@@ -211,3 +211,136 @@ test("a runtime carries the learned methods of the work it is for, and the platf
   const named = await selectLearnedMethods(lookup, { userId: "u1", projectId: "p1", family: null, trialMethodIds: ["method:learned:geo"] });
   assert.deepEqual(named, []);
 });
+
+/* ------------------------------------------------- the mount follows the question (2026-10-23) */
+
+import { createMethodSimilarity } from "../src/methodSimilarity.mjs";
+import { CONVERSATION_SCOPE, methodFitsScope, methodScopeId, runScopeOf } from "../src/learnedMethodMount.mjs";
+
+/** A method with its own words, so closeness to a question is decided by what the question says. */
+const topical = (/** @type {string} */ id, /** @type {string} */ name, /** @type {string} */ description, /** @type {any} */ extra = {}) => ({
+  id: `method:learned:${id}`,
+  payload: payloadFor(name, {
+    frontmatter: { name, description, whenToUse: description, metadata: { role: "functional", evimed_schema: METHOD_SKILL_SCHEMA, applies_when: description } },
+    statusChangedAt: extra.approvedAt ?? "2026-09-01T00:00:00.000Z",
+    ...(extra.payload ?? {}),
+  }),
+});
+const lexical = () => createMethodSimilarity();
+const ask = (/** @type {any[]} */ documents, /** @type {any} */ scope) => selectLearnedMethods(fakeLearning(documents), { userId: "u1", projectId: "p1", similarity: lexical(), ...scope });
+
+test("a topical first message mounts the nearest method and what it reuses, and says why", async () => {
+  const pin = `sha256:${"a".repeat(64)}`;
+  const grade = topical("grade", "grade-first", "Report GRADE certainty of evidence before effect sizes in every evidence summary table");
+  grade.payload.dependencies = [{ name: "tidy-numbers", digest: pin }];
+  grade.payload.frontmatter.metadata.depends_on = `tidy-numbers@${pin}`;
+  const documents = [
+    grade,
+    topical("slides", "slide-titles", "Write slide titles as full sentences stating the conclusion of each slide"),
+    // Nothing in what it says is near the question; the nearest one reuses it.
+    topical("tidy", "tidy-numbers", "Round every figure to the precision the source gives and keep one decimal convention"),
+  ];
+  const selected = await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "Summarize GRADE certainty of evidence and effect sizes for the evidence summary table" });
+  assert.deepEqual(selected.map((method) => [method.name, method.reason]), [
+    ["grade-first", "similarity"], ["tidy-numbers", "dependency"], ["slide-titles", "explore"],
+  ], "the nearest, what it reuses whatever its own closeness, and the one slot of exposure for what nothing picked");
+  assert.equal(selected.mode, "lexical", "no embedder was composed: the shared words ranked it, and the mount says so");
+  assert.ok(selected.topScore !== null && selected.topScore > 0);
+  // A message none of them is near leaves only the exposure.
+  const unrelated = await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "Plan a weekend kayak trip down the river" });
+  assert.deepEqual(unrelated.map((method) => method.reason), ["explore"]);
+  assert.equal(unrelated.topScore, null);
+});
+
+test("what the nearest reuse is capped by level, the highest first: one abstract, three functional, every atomic", async () => {
+  const dep = (/** @type {string} */ name) => ({ name, digest: `sha256:${"a".repeat(64)}` });
+  const make = (/** @type {string} */ name, /** @type {string[]} */ uses, /** @type {string} */ words) => {
+    const document = topical(name, name, words);
+    document.payload.dependencies = uses.map(dep);
+    return document;
+  };
+  // Levels come from the graph: atoms and func-3 / func-4 (which reuse nothing) 0, func-1 / func-2 1, the abstracts 2, top 3.
+  const documents = [
+    make("top", ["abstract-a", "abstract-b", "func-1", "func-2", "func-3", "func-4", "atom-1", "atom-2"], "unmatched zebra quartz vineyard topology"),
+    make("abstract-a", ["func-1"], "alpha"), make("abstract-b", ["func-2"], "beta"),
+    make("func-1", ["atom-1"], "gamma"), make("func-2", ["atom-2"], "delta"), make("func-3", [], "epsilon"), make("func-4", [], "zeta"),
+    make("atom-1", [], "eta"), make("atom-2", [], "theta"),
+  ];
+  const selected = await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "unmatched zebra quartz vineyard topology" });
+  const reasons = Object.fromEntries(selected.map((method) => [method.name, method.reason]));
+  assert.deepEqual(reasons, {
+    top: "similarity", "abstract-a": "dependency", "func-1": "dependency", "func-2": "dependency", "func-3": "dependency", "func-4": "dependency",
+    "atom-1": "dependency", "atom-2": "dependency", "abstract-b": "explore",
+  }, "the second abstract method is left out of the dependencies, and only the exposure slot can still take it");
+  // And the functional cap: four functional methods reused, three pulled in.
+  const wide = [make("wide-top", ["f1", "f2", "f3", "f4"], "quokka marmalade zeppelin nebula"),
+    ...["f1", "f2", "f3", "f4"].map((name) => make(name, [`${name}-atom`], `${name} words`)), ...["f1", "f2", "f3", "f4"].map((name) => make(`${name}-atom`, [], `${name} atom words`))];
+  const pulled = (await ask(wide, { scopeId: CONVERSATION_SCOPE, query: "quokka marmalade zeppelin nebula" })).filter((method) => method.reason === "dependency").map((method) => method.name);
+  assert.equal(pulled.filter((name) => /^f\d$/.test(name)).length, 3, "three functional methods, and the atoms they reuse");
+  assert.equal(pulled.filter((name) => name.endsWith("-atom")).length, 3);
+});
+
+test("the exposure slot goes round: the method that has been in front of a model least, then the next", async () => {
+  const documents = ["one", "two", "three"].map((name, index) => topical(name, `${name}-method`, `Unrelated topic number ${name} widget`, { approvedAt: `2026-09-0${index + 1}T00:00:00.000Z` }));
+  const query = "completely different words about kayaks and rivers";
+  /** @param {any[]} docs */
+  const explored = async (docs) => (await ask(docs, { scopeId: CONVERSATION_SCOPE, query })).filter((method) => method.reason === "explore").map((method) => method.name);
+  assert.deepEqual(await explored(documents), ["one-method"], "nothing is near the question: one card of exposure, the oldest first");
+  documents[0].payload.learning = { counts: { carried: 4, explored: 1 } };
+  assert.deepEqual(await explored(documents), ["two-method"], "the one carried most is passed over for the one carried least");
+  documents[1].payload.learning = { counts: { explored: 3 } };
+  documents[2].payload.learning = { counts: { carried: 9 } };
+  assert.deepEqual(await explored(documents), ["two-method"], "carried and explored are both exposure");
+  documents[1].payload.learning = { counts: { explored: 30 } };
+  assert.deepEqual(await explored(documents), ["one-method"], "and it goes to the next one once the least has had its share");
+});
+
+test("without a question there is nothing to rank by: the most recently approved, as before, and no slot of exposure", async () => {
+  const documents = ["one", "two", "three"].map((name, index) => topical(name, `${name}-method`, `Topic ${name}`, { approvedAt: `2026-09-0${index + 1}T00:00:00.000Z` }));
+  const selected = await ask(documents, { scopeId: CONVERSATION_SCOPE });
+  assert.deepEqual(selected.map((method) => [method.name, method.reason]), [["three-method", "recent"], ["two-method", "recent"], ["one-method", "recent"]]);
+  assert.equal(selected.mode, "recent");
+  // A similarity module that cannot answer is the same mount, never a run without its methods.
+  const broken = await selectLearnedMethods(fakeLearning(documents), { userId: "u1", projectId: "p1", scopeId: CONVERSATION_SCOPE, query: "anything at all",
+    similarity: { nearest: async () => { throw new Error("embedding down"); } } });
+  assert.deepEqual(broken.map((method) => method.reason), ["recent", "recent", "recent"]);
+});
+
+test("a method is mounted for the runs of the scope it declares, the family reading stays for the ones that declare none", async () => {
+  const declared = (/** @type {string} */ scope, /** @type {string} */ name) => topical(name, name, `Words for ${name}`, { payload: { provenance: { origin: "inferred", scope } } });
+  const documents = [
+    declared("meta-analysis", "meta-method"), declared("conversation", "chat-method"), declared("geo-content", "geo-method"),
+    topical("legacy-research", "legacy-research", "Words for legacy research", { payload: { provenance: { origin: "inferred", capabilityId: "meta-analysis" } } }),
+    topical("legacy-geo", "legacy-geo", "Words for legacy geo", { payload: { provenance: { origin: "inferred", capabilityId: "geo-content" } } }),
+  ];
+  const names = async (/** @type {any} */ scope) => (await ask(documents, scope)).map((method) => method.name).sort();
+  assert.deepEqual(await names({ scopeId: "meta-analysis" }), ["legacy-research", "meta-method"], "a capability's run carries its own and the unscoped research ones");
+  assert.deepEqual(await names({ scopeId: CONVERSATION_SCOPE }), ["chat-method", "legacy-research"]);
+  assert.deepEqual(await names({ scopeId: "geo-content" }), ["geo-method", "legacy-geo"], "a GEO run never carries a research method, nor a research run a GEO one");
+  assert.deepEqual(await names({ scopeId: null }), ["chat-method", "legacy-research"], "a start with no run in view is the conversation's");
+  assert.deepEqual(await names({ scopeId: null, family: "geo" }), ["geo-method", "legacy-geo"]);
+  assert.deepEqual(await names({ family: null }), [], "the platform's own work carries none");
+  assert.deepEqual(await names({}), ["chat-method", "geo-method", "legacy-geo", "legacy-research", "meta-method"], "no scope and no family named is the whole library, as before");
+  assert.equal(methodScopeId(documents[0].payload), "meta-analysis");
+  assert.equal(methodScopeId({ provenance: { scope: "Not A Scope!" } }), null);
+  assert.equal(runScopeOf("meta-analysis"), "meta-analysis");
+  assert.equal(runScopeOf("open-domain-answer"), CONVERSATION_SCOPE);
+  assert.equal(runScopeOf(null), CONVERSATION_SCOPE);
+  assert.equal(methodFitsScope({ provenance: { scope: "meta-analysis" } }, { scopeId: "meta-analysis", family: "research" }), true);
+});
+
+test("a tight budget drops the exposure first and the nearest last, and counts what it left out", async () => {
+  const documents = [
+    topical("near", "grade-first", "Report GRADE certainty of evidence before effect sizes in every evidence summary table"),
+    topical("far", "kayak-notes", "Kayak river rafting notes for the weekend"),
+  ];
+  const query = "GRADE certainty of evidence before effect sizes in the evidence summary table";
+  const all = await ask(documents, { scopeId: CONVERSATION_SCOPE, query, cardDirectory: "/runtime/capsule-methods" });
+  assert.deepEqual(all.map((method) => method.reason), ["similarity", "explore"]);
+  const nearCard = all[0].promptBytes;
+  /** @type {string[]} */
+  const left = [];
+  const tight = await ask(documents, { scopeId: CONVERSATION_SCOPE, query, cardDirectory: "/runtime/capsule-methods", maxBytes: nearCard, onLeftOut: (/** @type {string} */ id) => left.push(id) });
+  assert.deepEqual(tight.map((method) => method.name), ["grade-first"]);
+  assert.deepEqual(left, ["method:learned:far"]);
+});

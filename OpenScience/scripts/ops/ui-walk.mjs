@@ -82,9 +82,10 @@
  *     unless an entry of `ui-walk-baseline.json` accepts it: a view, the rule up to a number or a literal part of the sentence, an owner, a
  *     day and a reason. After its day an entry accepts nothing. The report prints the delta (accepted by entry, not accepted, expired, no
  *     longer needed, can be lowered). The baseline is embedded in this file (`embed-walk-tables.mjs`); `OPEN_SCIENCE_WALK_BASELINE`
- *     names another file, or `none`. Two walks, two sets of debts: `OPEN_SCIENCE_WALK_PROFILE` is `owner` (the release walk on the
- *     owner-view account, the default; many pages hold no data, so a coverage gap — `not-observable`, `not-walked` — may be accepted) or
- *     `fixture` (the local walk on the data-rich fixture, which accepts none).
+ *     names another file, or `none`. Two walks, two sets of debts: `OPEN_SCIENCE_WALK_PROFILE` is `owner` (the production release walk,
+ *     the default, on a throwaway account that holds nothing: the pages that need an object of the account's own cannot be observed, so a
+ *     coverage gap — `not-observable`, `not-walked` — may be accepted; the name is the one the baseline files carry, from the account the
+ *     walk used to sign in as) or `fixture` (the local walk on the data-rich fixture, which accepts none).
  *     `scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for.
  *   - A STEP THAT CANNOT RUN FAILS. A step that throws, times out before its target or finds its element absent is a failure naming
  *     what it did not reach (`STEP_TARGETS`); 18.1's `ReferenceError: drawerMarks is not defined` was a notice for a release. No baseline
@@ -101,35 +102,41 @@
  *   - Information that is not a finding (a retried load, what a guarded click refused, the axe line, the candidate check) is `report.info`.
  *     `OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>` adds the kernel candidate check to it (report only).
  *
- * What it changes on the deployment: a session (it logs in and logs out), and
- * — only when asked for the chat page — the account's default runtime. The
- * shell warms that runtime from every page, not only the conversation, so a
- * walk that let those requests through started a runtime on each run
- * (2026-09-26 audit, F-G20: a walk began 14:46:59Z, the acceptance account's
- * default runtime started 14:47:07Z). Every `start_runtime` is therefore
- * refused in the browser, and counted per page in the report.
+ * What it changes on the deployment: one account of its own, and — only when asked for the chat page — that account's default
+ * runtime. The production walk signs in as nobody: it registers a throwaway account through the product's own self-registration
+ * (`walk-<UTC yyyymmddHHMM>-<6 hex>`, a random password held in memory), walks as it — an account with nothing in it, judged like any
+ * other empty account — and deletes it through the product's own `DELETE /api/account` at the end, on a pass, on a failure and on an
+ * interrupt (`throwaway-account.mjs`, which is mounted beside this file). It prints `account created:` and `account deleted:`, and a
+ * deletion that cannot be done is a `FAIL` line naming the account and a failed walk: a leftover account is never silent. (Until
+ * 2026-10-25 the walk signed in as the owner's own account, and every walk left its sessions in it.) The `fixture` profile signs in as
+ * the account `seed-walk-fixture.mjs` made on a local control plane (`OPEN_SCIENCE_WALK_USER`, `OPEN_SCIENCE_WALK_PASSWORD_FILE`) and
+ * logs out; the production profile refuses those two settings, so a stale file cannot name an account the walk would then ignore.
+ *
+ * The shell warms the account's default runtime from every page, not only the conversation, so a walk that let those requests through
+ * started a runtime on each run (2026-09-26 audit, F-G20: a walk began 14:46:59Z, the walk account's default runtime started
+ * 14:47:07Z). Every `start_runtime` is therefore refused in the browser, and counted per page in the report.
  *
  * It opens the chat page only when asked (`OPEN_SCIENCE_WALK_CHAT=1`), and
  * there it lets `start_runtime` through, because a frame bound to a live
  * session needs the account's default runtime — and it should be asked after
  * every release: on 2026-09-21 every page here walked clean while no
- * conversation of the acceptance account could load at all (its kernel frame
+ * conversation of the walk's account could load at all (its kernel frame
  * fetched a plugin bundle from a runtime that had not composed it, a 404, and
  * stopped at 「对话界面 60 秒内没有载入完成」). With it the walk waits for the
  * frame's composer, fails on any 4xx for a kernel application file, and
- * records whether the kernel's session statistics line is on screen.
+ * records whether the kernel's session statistics line is on screen. A brand-new account has no runtime, and the host's network
+ * changes the moment its first container starts, which aborts whatever the browser is loading then (2026-10-24: 「打开超时，请重试」);
+ * so a throwaway account's runtime is started through the API first, while the browser is idle, and the page then finds it up.
  *
- * The release switch (host-release-switch.sh) runs it after every release, in
- * a container of the release's runtime image, as the account
- * `shared/ui-walk.env` names.
+ * The release switch (host-release-switch.sh) runs it after every release, in a container of the release's runtime image, with this file
+ * and `throwaway-account.mjs` mounted side by side.
  *
  * Nothing is added to package.json: a browser automation dependency would
  * change the lockfile, and a changed lockfile makes the next release a full
  * runtime image rebuild. Point it at an installed playwright-core instead.
  *
  *   OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org \
- *   OPEN_SCIENCE_WALK_USER=<account> \
- *   OPEN_SCIENCE_WALK_PASSWORD_FILE=/path/to/password \
+ *   [OPEN_SCIENCE_WALK_USER=<account> OPEN_SCIENCE_WALK_PASSWORD_FILE=/path/to/password]   # the fixture profile only \
  *   OPEN_SCIENCE_PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core \
  *   [OPEN_SCIENCE_WALK_CHROMIUM=/path/to/chrome] \
  *   [OPEN_SCIENCE_WALK_OUT=/tmp/ui-walk] \
@@ -150,6 +157,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliDecompressSync } from "node:zlib";
+import { contextTransport, openThrowawayAccount } from "./throwaway-account.mjs";
 
 /**
  * The embedded tables (written by `scripts/ops/embed-walk-tables.mjs` from `page-templates.json` and `ui-walk-baseline.json`; the walk is
@@ -159,7 +167,7 @@ import { brotliDecompressSync } from "node:zlib";
 const WALK_TABLES = {
   "pageTemplates": {
     "version": 1,
-    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO's is a step rail above its tabs.","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's views (`module`) keep the same visible workflow rail and one contextual view selector; both 虚拟临床研究 and 循证 GEO retain their step states during conversation, including on a phone (owner, 2026-10-20). `workflow` says how a module navigates: `compact`, the steps folded beside one pinned 「查看：」 result selector; `rail`, 循证 GEO since its V3 plan (2026-10-23, §一.1 and §3.1, written at the owner's request), the eight steps are the one business navigation, a step's own views are a contextual 「分析视图」 select, and no project-level 「查看：」 selector is drawn; a module row without one keeps the rail and one pinned selector (虚拟临床研究).","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
     "templates": {
       "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
       "T2": {"name":"master-detail page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
@@ -172,23 +180,31 @@ const WALK_TABLES = {
     },
     "budgets": {
       "frontier": {"controls":9,"colors":8},
-      "data": {"controls":10,"colors":7,"borders":3},
-      "geo": {"controls":10,"colors":7,"borders":6},
+      "data": {"controls":10,"colors":7,"borders":3,"typePairs":5},
+      "geo": {"controls":10,"colors":7,"borders":6,"typePairs":5},
       "extension": {"controls":9,"borders":5}
     },
     "views": [
-      {"view":"frontier","route":"/app/frontier","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
-      {"view":"frontier-hot","route":"/app/frontier?view=hot","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
+      {"view":"frontier","route":"/app/frontier","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10,"colors":9},"budgetNote":"colours: the cards' titles are title-ink, the deep brand blue the owner asked for (2026-10-23), one colour more — 9 on the live walk of evimed-01e965e99a11-1; controls: the 「AI 评分」 pill on every card (owner 2026-10-23: a score says its name and opens its four parts) is a control of its own — 22 px, 12 px, round, one look for its three tiers — beside the shell's, the tabs, the search, the 「筛选」 button and its tokens (the 栏目 sit inside it since c2-band 2026-10-25), ☆/⋯ and the card titles: 10 kinds (fixture walk 2026-10-23, fr2; re-measured with the walk's functions on the one-row band, c2-band)","shapes":3,"rows":true},
+      {"view":"frontier-hot","route":"/app/frontier?view=hot","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"typePairs":5},"budgetNote":"type pairs: 「热点话题」 above the ranking adds its 18/600 section heading — 5 pairs (c2-leads 2026-10-25, measured with the walk's functions at both sizes)","shapes":3,"rows":true},
       {"view":"frontier-daily","route":"/app/frontier?view=daily","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10},"budgetNote":"a published issue with a lead has both its 24px headline link and 16px row links","shapes":3,"rows":true},
-      {"view":"frontier-all","route":"/app/frontier?view=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
-      {"view":"frontier-following","route":"/app/frontier?view=following","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","shapes":3,"rows":false},
+      {"view":"frontier-all","route":"/app/frontier?view=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10,"colors":9},"budgetNote":"colours: the cards' titles are title-ink, the deep brand blue the owner asked for (2026-10-23), one colour more — 9 on the live walk of evimed-01e965e99a11-1; controls: the 「AI 评分」 pill on every card (owner 2026-10-23: a score says its name and opens its four parts) is a control of its own — 22 px, 12 px, round, one look for its three tiers — beside the shell's, the tabs, the search, the 「筛选」 button and its tokens (the 栏目 sit inside it since c2-band 2026-10-25), ☆/⋯ and the card titles: 10 kinds (fixture walk 2026-10-23, fr2; re-measured with the walk's functions on the one-row band, c2-band)","shapes":3,"rows":true},
+      {"view":"frontier-following","route":"/app/frontier?view=following&follow=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4,"controls":12,"colors":9},"budgetNote":"colours: title-ink on the cards' titles (see frontier); controls: the feed's ten (see frontier) and the 「查看全部关注专区」 text link, 11 (fixture walk 2026-10-23, fr2), and the framed field 「关注一个药物、试验或问题」 of a typed follow, 12 (c3-watch; fixture walk 2026-10-25) — the 全部关注 entry of the 关注 view (c2-band 2026-10-25: a bare ?view=following opens 与我相关 beside the follow list); borders: the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","shapes":3,"rows":false},
       {"view":"frontier-zones","route":"/app/frontier/zones","pattern":"/app/frontier/zones","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's field","shapes":3,"rows":true},
+      {"view":"frontier-track","route":"/app/frontier?view=track","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"typePairs":5},"budgetNote":"追踪 · 审批 (c3-track): 12/400 meta, 14/400 the year's line, 16/600 the rows' drug names, 18/600 the months' headings, 24/600 the title — 5 pairs (fixture walk 2026-10-25); its rows open the reader the feed's rows open, clicked on 精选","shapes":3,"rows":false},
+      {"view":"frontier-track-guidelines","route":"/app/frontier?view=track&segment=guidelines","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetNote":"追踪 · 指南 (c3-track): its rows open the reader the feed's rows open, clicked on 精选","shapes":3,"rows":false},
+      {"view":"frontier-track-congresses","route":"/app/frontier?view=track&segment=congresses","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"typePairs":5},"budgetNote":"追踪 · 会议 (c3-track): 12/400 meta, 14/400 the dates and place, 16/600 the congresses' names, 18/600 进行中 / 即将召开 / 近期 headings, 24/600 the title — 5 pairs (fixture walk 2026-10-25); a row opens the congress hub, walked as frontier-congress","shapes":3,"rows":false},
       {"view":"frontier-daily-empty","route":"/app/frontier?view=daily&day=2020-01-01","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","rows":false},
       {"view":"frontier-zone","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budget":"frontier","rows":false},
       {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-evidence","template":"T5","budget":"frontier","budgetOverride":{"controls":14,"borders":4},"budgetNote":"the reading card: list rows, two chips, search, 显示更多, the contents rail and 回到顶部, the disclosures and the tally button are 12 kinds of control without the shell's own, about 14 with them, and four kinds of border: the shell's rule, the fold's faint row rule, the list's row hairline and the question box's frame (r19-pagesb, measured in a harness; to be set from a live walk)","rows":false},
       {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-author","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","rows":false},
+      {"view":"frontier-item","discovered":true,"pattern":"/app/frontier/items/:itemId","family":"frontier-item","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6,"controls":10},"budgetNote":"controls: a bare address in the text is a link now (owner 2026-10-23), one look more beside the 解读's citations, 中文/原文, the pictures and the shell — 10 on the live walk of evimed-e22de8a9736e-1; type pairs: the 导读 and a full text's section headings at 18/400 (owner 2026-10-22: the lead a size above the text, as AIHOT sets it) — 5 pairs; a structured abstract's run-in headings at 16/600 — 6 (rt-web, measured in the harness)","rows":false},
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
+      {"view":"frontier-congress","discovered":true,"pattern":"/app/frontier/congress/:congressId","family":"frontier-congress","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a congress hub (c3-track), as the topic page: 12/400 meta, 14/400 the dates and caveats, 16/400 the day's 「AI 速递」, 16/600 the items' titles, 18/600 the days' headings, 24/600 the title — 6 pairs (fixture walk 2026-10-25)","rows":false},
+      {"view":"frontier-topic","discovered":true,"pattern":"/app/frontier/topics/:topicId","family":"frontier-topic","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a hot-event topic's reading page: 12/400 meta, 14/400 the question and the peg, 16/400 the cited overview, 16/600 the items' titles, 18/600 the three section headings, 24/600 the title — 6 pairs (c2-leads 2026-10-25, measured with the walk's functions at both sizes)","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
+      {"view":"method-workbench","primaryPlacement":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
+      {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"calculation-workbench","template":"T1","rows":true},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","budgetOverride":{"borders":4},"budgetNote":"a list beside its record: the band's hairline and the table's header rule (one kind), the selected tab's underline, the rows' faint rules (list, fact list and table share one kind) and the divider between the list and the record (r19-guards2, measured)","rows":false},
@@ -196,11 +212,12 @@ const WALK_TABLES = {
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T1","shapes":2,"rows":true},
-      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","shapes":3,"rows":true},
+      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","budget":"data","shapes":3,"rows":true},
       {"view":"files-reader","discovered":true,"pattern":"/app/files/:sourceId","family":"knowledge-record","template":"T5","budget":"data","rows":false},
-      {"view":"memory","route":"/app/memory","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-methods","route":"/app/memory?tab=methods","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory-overview","route":"/app/memory/overview","pattern":"/app/memory/overview","family":"memory","template":"T4","budget":"data","shapes":2,"rows":true},
       {"view":"memory-map","route":"/app/memory/map","pattern":"/app/memory/map","family":"memory","template":"T4","budget":"data","shapes":3,"rows":true},
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
@@ -211,21 +228,21 @@ const WALK_TABLES = {
       {"view":"account-connectors","route":"/app/account?tab=connectors","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-projects","route":"/app/account?tab=projects","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-notifications","route":"/app/account?tab=notifications","pattern":"/app/account","family":"settings","template":"T6","rows":false},
-      {"view":"ops","route":"/app/ops","pattern":"/app/ops","family":"ops","template":"T4","rows":false},
-      {"view":"extensions-plugins","route":"/app/extensions/plugins","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
-      {"view":"extensions-skills","route":"/app/extensions/skills","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
+      {"view":"ops","route":"/app/ops","pattern":"/app/ops","family":"ops","template":"T4","budgetOverride":{"colors":6},"budgetNote":"the 前沿标签 card's 撤回 and 显示更多 are text buttons in text-2, which no other card of the page draws while it is healthy: 6 on the live walk of evimed-e22de8a9736e-1 (2026-10-24)","rows":false},
+      {"view":"extensions-discover","route":"/app/extensions/discover","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":false},
+      {"view":"extensions-installed","route":"/app/extensions/installed","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
       {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"not-found","route":"/app/does-not-exist","pattern":"/app/*","family":"screen","template":"screen","rows":false},
-      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
-      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
-      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
-      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
+      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
+      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
+      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
+      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"rail","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the eight-step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
       {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
@@ -236,6 +253,7 @@ const WALK_TABLES = {
       {"view":"evidence-matrix","discovered":true,"pattern":"/app/runs/:runId/files/*","family":"run-file","template":"T5","budget":"data","rows":false}
     ],
     "unwalked": [
+      {"pattern":"/app/home","template":"kernel","why":"the global entry opens the default project conversation; OPEN_SCIENCE_WALK_CHAT=1 walks this entry and verifies its final project"},
       {"pattern":"/app/chat/:sessionId?","template":"kernel","why":"the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it"},
       {"pattern":"/app/handoff","template":"screen","why":"opens only with a hand-off in the address; without one it returns to the conversation"},
       {"pattern":"/app/runs","template":"screen","why":"a redirect to the newest run's conversation, decided at run time"},
@@ -246,62 +264,28 @@ const WALK_TABLES = {
   },
   "baseline": {
     "version": 1,
-    "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, `name@*`, `*`, or the name a finding gives, such as `geo-answer`) and one finding: `rule` names a measured rule (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `orphan-sentence`, `long-page`, … and the coverage gaps `not-observable` and `not-walked`) and `max` is the largest number accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the owner-view account, whose data leaves many pages empty, `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both). `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for; `check` validates this file."],
+    "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, `name@*`, `*`, or the name a finding gives, such as `geo-answer`) and one finding: `rule` names a measured rule (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `orphan-sentence`, `long-page`, … and the coverage gaps `not-observable` and `not-walked`) and `max` is the largest number accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the throwaway account it registers and deletes (2026-10-25; an account that holds nothing, so many pages are empty), `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both). `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for; `check` validates this file."],
     "entries": [
-      {"view":"frontier@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"frontier-hot@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"frontier-daily@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"frontier-all@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"frontier-zones@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"capabilities@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"virtual-research@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"virtual-research-models@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"virtual-research-precedents@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"knowledge-graph@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"memory-project@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"memory-map@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"autopilot@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"inbox@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"account-appearance@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"account-connectors@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"account-projects@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"account-notifications@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"extensions-plugins@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"extensions-skills@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"extensions-plugin-missing@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"extensions-skill-missing@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-overview@desktop","rule":"type-pairs","max":11,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-visibility@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-accuracy@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-questions@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-actions@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-plan@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-evidence@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"geo-answer@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-overview@desktop","rule":"type-pairs","max":9,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-population@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-patients@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-data@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-overview@2@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-comparator@2@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-trial@2@desktop","rule":"type-pairs","max":9,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-data@2@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"frontier-zone@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"frontier-evidence@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"frontier-event@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"files-reader@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"ops@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"},
-      {"view":"memory@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"},
-      {"view":"files","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"geo@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"memory-project@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"account-usage@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"ops@desktop","contains":"identifiers in the visible text: standardized_ratio","owner":"controller","until":"2026-11-01","why":"a raw field name on the operator console (R19.1 walk); fix, not a debt to keep"},
-      {"view":"geo-sources@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"}
+      {"view":"files","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the owner's knowledge base holds no finished PDF, so the original of a PDF is not read on the production walk (the fixture walk reads one); data, not a defect"},
+      {"view":"memory-project@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the project the production walk opens on 记忆胶囊's 项目 has no memories and no works, so no row is there to open (the fixture walk opens one); data, not a defect"},
+      {"view":"chat@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
+      {"view":"chat@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
+      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"},
+      {"view":"calculation-history","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"evidence-matrix","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"files-reader","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"geo@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"virtual-research@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"files@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"knowledge-pages@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"knowledge-graph@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-methods@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-overview@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-map@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"autopilot@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-map@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-overview@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"on the throwaway account the production walk registers (2026-10-25) every card of the overview is its empty recipe, so the headline sentence and the cards have nothing to be compared on; the fixture walk compares them with data"}
     ]
   },
   "operatorSentences": [
@@ -310,8 +294,8 @@ const WALK_TABLES = {
     "OpenViking 数据卷最近一次备份失败了，之前的备份仍在；请查看宿主机备份任务的日志。",
     "OpenViking 数据卷的备份回执读不懂或不可信（格式、权限或内容不对），请查看宿主机的备份任务。",
     "OpenViking 没有加载平台的记忆模板目录，原生记忆暂停；请检查模板目录的挂载和权限。",
-    "OpenViking 的编译请求没有经过身份转发程序，知识编译暂停；请检查它的配置和启动入口。",
-    "OpenViking 的编译身份转发程序没有应答，知识编译暂停；请查看该容器。",
+    "OpenViking 没有可用的编译运行时（内置机器人没有启动，或它的配置没有生效），知识编译暂停；请检查机器人的开关和渲染出的配置。",
+    "OpenViking 的编译检查没有得到预期的结果（身份没有传到编译运行时，或它没有应答），知识编译暂停；请查看该容器的日志。",
     "OpenViking 的记忆类型白名单和平台的不一致，原生记忆暂停；请重新生成它的配置文件。",
     "OpenViking 还没有登记平台的账户（新数据卷首次启动后最多约五分钟），稍后会自动再查。",
     "OpenViking 这一天的模型预算已经用完，新的记忆提取和知识编译会被拒绝；可以调高预算，或等额度恢复。",
@@ -349,7 +333,7 @@ const WALK_TABLES = {
     "备份目录读不到或写不进，请检查挂载和权限。",
     "备份还没有做过恢复演练，请完成一次并记录。",
     "安全响应头被关闭了，生产环境必须开启。",
-    "官方编译技能还没有就绪，所以还没有检查编译身份转发程序。",
+    "官方编译技能还没有就绪，所以还没有检查编译运行时。",
     "定时备份在报告异常，请查看备份任务的日志。",
     "定时备份已经很久没有成功运行，请查看备份任务。",
     "宿主机命令行开着，生产环境必须关闭。",
@@ -370,7 +354,7 @@ const WALK_TABLES = {
     "数据目录是符号链接，不被允许，请指向真实目录。",
     "数据目录的路径不是一个目录。",
     "数据目录读不到或写不进，请检查挂载和权限。",
-    "检查编译身份转发程序时没有读到任务编号，知识编译暂停。",
+    "检查编译运行时时没有读到任务编号，知识编译暂停。",
     "模型服务的地址配置无效。",
     "模型网关的内部地址配置无效。",
     "模型网关的地址配置无效。",
@@ -446,6 +430,50 @@ const WALK_TABLES = {
     "额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。"
   ]
 };
+// Canonical frontend grouping, compiled at build time from vcrMethodDisplay.ts; never a hand-maintained taxonomy.
+const WALK_METHOD_GROUPING = (() => {
+const exports = {};
+const VCR_LONGITUDINAL_METHODS = {"forecast.trajectories":{"version":"1.0.0","modelTier":null},"forecast.evaluate":{"version":"1.1.0","modelTier":null},"forecast.compare":{"version":"1.1.0","modelTier":null},"forecast.trial_benchmark":{"version":"1.0.0","modelTier":null}};
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.METHOD_FAMILIES = void 0;
+exports.methodTask = methodTask;
+exports.methodEntryId = methodEntryId;
+exports.methodEntries = methodEntries;
+exports.completeMethodCatalogue = completeMethodCatalogue;
+exports.METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "招募与匹配"];
+const PATIENT_MODES = ["patients.binary", "patients.continuous", "patients.time_to_event", "patients.longitudinal"];
+const ROBUSTNESS = ["comparator.evalue", "comparator.covariate_sets", "comparator.negative_control", "comparator.tipping_point", "forecast.evaluate", "forecast.compare", "forecast.trial_benchmark"];
+function methodTask(method) {
+    if (/^(profile|cohort|population)\./.test(method))
+        return exports.METHOD_FAMILIES[0];
+    if (method.startsWith("patients.") || method === "forecast.trajectories")
+        return exports.METHOD_FAMILIES[1];
+    if (method.startsWith("evidence."))
+        return exports.METHOD_FAMILIES[2];
+    if (/^(accrual|matching)\./.test(method))
+        return exports.METHOD_FAMILIES[6];
+    if (ROBUSTNESS.includes(method))
+        return exports.METHOD_FAMILIES[5];
+    if (method.startsWith("comparator."))
+        return exports.METHOD_FAMILIES[3];
+    if (method.startsWith("design."))
+        return exports.METHOD_FAMILIES[4];
+    return "其他方法";
+}
+function methodEntryId(method) { return PATIENT_MODES.includes(method.method ?? method.id) ? "patient-outcomes" : method.id; }
+function methodEntries(methods) {
+    const seen = new Set();
+    return methods.filter(method => { const id = methodEntryId(method); if (seen.has(id))
+        return false; seen.add(id); return true; });
+}
+const FORECAST_TITLES = { "forecast.trajectories": "预测后续轨迹", "forecast.evaluate": "验证预测与后续结局", "forecast.compare": "比较预测版本", "forecast.trial_benchmark": "验证试验效果预测" };
+/** The domain owns these four protocols; an older server catalogue can omit rows, never their identity. Availability is checked against each study's actual inputs. */
+function completeMethodCatalogue(methods) {
+    return [...methods, ...Object.entries(VCR_LONGITUDINAL_METHODS).filter(([id]) => !methods.some(row => (row.method ?? row.id) === id)).map(([id, protocol]) => ({ id, method: id, name: FORECAST_TITLES[id], version: protocol.version }))];
+}
+return exports;
+})();
 // END EMBEDDED WALK TABLES
 
 /** The page table: every view the walk visits with its template, budgets and the kinds of check it is held to. @type {any} */
@@ -556,7 +584,7 @@ const ROW_CLICK_LISTS_PER_PAGE = 8;
  * @returns {{ primary: string | null, second: string | null }}
  */
 export function pickVcrStudies(studies) {
-  const rows = Array.isArray(studies) ? studies.filter((row) => typeof row?.id === "string") : [];
+  const rows = Array.isArray(studies) ? studies.filter((row) => typeof row?.id === "string" && row.purpose !== "calculation") : [];
   const produced = (row) => Object.values(row.steps ?? {}).filter((step) => ["done", "minimal"].includes(step?.status)).length;
   let primary = null;
   for (const row of rows) if (primary === null || produced(row) > produced(primary)) primary = row;
@@ -579,22 +607,36 @@ export function geoAnswerSnapshot(diagnosis) {
 
 /**
  * The ids of the 前沿动态 pages the walk opens, from the lists it reads: the first evidence zone, the first card of the first official
- * zone, that card's author and the first event on the hot list. A missing id is a page not walked, with the reason in the notices.
- * @param {{ zones?: any, cards?: any, links?: any, hot?: any }} read the `data` of each GET
- * @returns {{ zoneId: string | null, official: string | null, cardId: string | null, authorId: string | null, eventId: string | null }}
+ * zone that holds one (an official zone made empty at start — 「热点求证」, c2 2026-10-25 — may come first in the list), that card's
+ * author, the first event on the hot list and the first hot-event topic. A missing id is a page not walked, with the reason in the
+ * notices.
+ * @param {{ zones?: any, cards?: any, links?: any, hot?: any, topics?: any }} read the `data` of each GET
+ * @returns {{ zoneId: string | null, official: string | null, cardId: string | null, authorId: string | null, eventId: string | null, topicId: string | null }}
  */
-export function frontierTargets({ zones, cards, links, hot }) {
+export function frontierTargets({ zones, cards, links, hot, topics, congresses }) {
   const text = (value) => (typeof value === "string" && value ? value : null);
   const zoneList = Array.isArray(zones?.items) ? zones.items : [];
   const cardList = Array.isArray(cards?.items) ? cards.items : [];
   const events = Array.isArray(hot?.events) ? hot.events : [];
+  const topicList = Array.isArray(topics?.topics) ? topics.topics : [];
+  const congressList = Array.isArray(congresses?.congresses) ? congresses.congresses : [];
+  const officials = zoneList.filter((zone) => zone?.kind === "official");
   return {
     zoneId: text(zoneList[0]?.id),
-    official: text(zoneList.find((zone) => zone?.kind === "official")?.id),
+    official: text((officials.find((zone) => Number(zone?.evidenceCount) > 0) ?? officials[0])?.id),
     cardId: text(cardList[0]?.id),
     authorId: text(links?.author?.id),
     eventId: text(events[0]?.id),
+    topicId: text(topicList[0]?.id),
+    // 追踪's 会议 (c3-track): a congress whose hub is a page of its own — the first listed that has items, else the first listed.
+    congressId: text((congressList.find((congress) => Number(congress?.itemCount) > 0) ?? congressList[0])?.id),
   };
+}
+
+/** The first published article offered by the account-scoped frontier items endpoint. */
+export function frontierItemRoute(page) {
+  const item = Array.isArray(page?.items) ? page.items.find((entry) => typeof entry?.id === "string" && entry.id) : null;
+  return item ? `/app/frontier/items/${encodeURIComponent(item.id)}` : null;
 }
 
 /**
@@ -669,6 +711,30 @@ async function readData(context, base, pathname, failures) {
   return (await answer.json().catch(() => null))?.data ?? null;
 }
 
+/** A calculation's historical list has answered; a visible failure is terminal, never an empty-history success. */
+export function calculationHistoryReady() {
+  return [...document.querySelectorAll("main ul[aria-label='此计算空间的历史'] > li, main [role='alert']")].some((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+}
+
+/** Find a genuine calculation with frozen, readable history. Programme studies and unreadable results cannot stand in for it. */
+export async function discoverCalculationHistory(context, base, studies, failures = []) {
+  for (const candidate of (Array.isArray(studies) ? studies : []).filter((row) => row?.purpose === "calculation" && typeof row.id === "string").slice(0, 8)) {
+    const at = `/api/vcr/studies/${encodeURIComponent(candidate.id)}`;
+    const detail = await readData(context, base, at, failures);
+    if (detail?.purpose !== "calculation" || detail?.id !== candidate.id) continue;
+    const history = await readData(context, base, `${at}/jobs`, failures);
+    for (const job of (Array.isArray(history?.jobs) ? history.jobs : []).filter((row) => row?.state === "succeeded" && typeof row.id === "string").slice(0, 20)) {
+      const prefix = `${at}/jobs/${encodeURIComponent(job.id)}`;
+      const result = await readData(context, base, `${prefix}/result`, failures);
+      const configuration = await readData(context, base, `${prefix}/configuration`, failures);
+      if (typeof result?.result?.id === "string" && typeof configuration?.subjectId === "string" && typeof configuration?.method === "string") {
+        return { studyId: candidate.id, jobId: job.id, resultId: result.result.id, method: configuration.method, route: `/app/capabilities/calculations/${encodeURIComponent(candidate.id)}` };
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * The pages whose address holds an id the deployment's own lists name, read from the same GET endpoints the pages use: one GEO
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
@@ -692,7 +758,11 @@ async function discoverRoutes(context, base, notices, failures) {
     else skip("geo-answer", "the first project lists no wrong sentence with an answer");
   }
 
-  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies", failures))?.studies);
+  const studies = (await readData(context, base, "/api/vcr/studies", failures))?.studies;
+  const calculation = await discoverCalculationHistory(context, base, studies, failures);
+  if (calculation) routes.push(["calculation-history", calculation.route]);
+  else skip("calculation-history", "the account has no calculation-purpose workspace with readable configuration and successful history");
+  const { primary, second } = pickVcrStudies(studies);
   for (const [id, suffix] of [[primary, ""], [second, "@2"]]) {
     if (!id) continue;
     const at = `/app/virtual-research/${encodeURIComponent(id)}`;
@@ -700,9 +770,14 @@ async function discoverRoutes(context, base, notices, failures) {
   }
   if (primary && !second) skip("vcr-*@2", "the account has one study");
 
+  const article = frontierItemRoute(await readData(context, base, "/api/frontier/items?limit=1", failures));
+  if (article) routes.push(["frontier-item", article]);
+  else skip("frontier-item", "the account has no published frontier article");
   const zones = await readData(context, base, "/api/frontier/zones", failures);
   const hot = await readData(context, base, "/api/frontier/hot", failures);
-  const first = frontierTargets({ zones, hot });
+  const topics = await readData(context, base, "/api/frontier/topics?status=recent&limit=1", failures);
+  const congresses = await readData(context, base, "/api/frontier/track/congresses", failures);
+  const first = frontierTargets({ zones, hot, topics, congresses });
   const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`, failures) : null;
   const cardId = frontierTargets({ cards }).cardId;
   const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`, failures) : null;
@@ -715,6 +790,10 @@ async function discoverRoutes(context, base, notices, failures) {
   else skip("frontier-author", "the first card names no author page");
   if (targets.eventId) routes.push(["frontier-event", `/app/frontier/events/${encodeURIComponent(targets.eventId)}`]);
   else skip("frontier-event", "the hot list is empty or not offered");
+  if (targets.topicId) routes.push(["frontier-topic", `/app/frontier/topics/${encodeURIComponent(targets.topicId)}`]);
+  else skip("frontier-topic", "no hot-event topic yet, or topics are not offered");
+  if (targets.congressId) routes.push(["frontier-congress", `/app/frontier/congress/${encodeURIComponent(targets.congressId)}`]);
+  else skip("frontier-congress", "no congress is on, coming in 60 days or ended in the last 30, or 追踪 is not offered");
 
   const matrix = matrixRoute(await readData(context, base, "/api/agent-runs", failures));
   if (!matrix) skip("evidence-matrix", "no run of this account delivered a clinical-evidence package");
@@ -766,11 +845,11 @@ export function findingText(entry) {
   return typeof entry === "string" ? entry : entry.text;
 }
 
-/** What a page could not be looked at for want of data on the account: the owner walk may be given these by the baseline, a fixture walk never. */
+/** What a page could not be looked at for want of data on the account: the production (`owner`) walk may be given these by the baseline, a fixture walk never. */
 export const COVERAGE_RULES = new Set(["not-observable", "not-walked"]);
 /** A probe that did not run proves nothing about the page it was for; no baseline entry accepts it. */
 export const UNACCEPTABLE_RULES = new Set(["step-failed"]);
-/** The two walks the baseline tells apart: the release walk on the owner-view account (many pages hold no data) and the local walk on the data-rich fixture. */
+/** The two walks the baseline tells apart: the production release walk on a throwaway account (it holds no data) and the local walk on the data-rich fixture. */
 export const WALK_PROFILES = ["owner", "fixture"];
 
 /**
@@ -944,7 +1023,10 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
       budgetFindings.push(`${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`);
     }
     const pairs = measured.sizeWeightPairs ?? [];
-    if (pairs.length > TYPE_PAIR_NOTICE) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`, pairs.length));
+    // Four pairs a page; a data page (the `data` and `geo` budgets: metric figures, two levels of heading) five — the owner's ruling
+    // of 2026-10-19, DESIGN.md §「The nine sizes」.
+    const typeBudget = /** @type {any} */ (budget).typePairs ?? TYPE_PAIR_NOTICE;
+    if (pairs.length > typeBudget) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${typeBudget}): ${pairs.join(", ")}`, pairs.length));
   }
   failures.push(...budgetFindings);
   return { failures, notices };
@@ -975,18 +1057,93 @@ export function unexpectedRefusals(name, httpErrors) {
   return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)));
 }
 
-/** A Docker network change can leave Chromium retrying its error page. Reset it before one recorded retry. */
+/** Replace a tab, keeping its authenticated context and reinstalling its observers. */
+export async function replaceWalkPage(context, previous, install) {
+  if (previous) await previous.close().catch(() => {});
+  const page = await context.newPage();
+  install(page);
+  return page;
+}
+
+/** Retry one network-change navigation on a clean tab; the callback retains the first failure. */
 export async function navigateForWalk(page, url, onRetry) {
   const options = { waitUntil: "domcontentloaded", timeout: 60_000 };
   try {
     return await page.goto(url, options);
   } catch (error) {
     if (!/net::ERR_NETWORK_CHANGED\b/.test(String(error))) throw error;
-    onRetry();
-    await page.goto("about:blank", options);
-    await page.waitForTimeout(1_000);
-    return page.goto(url, options);
+    const replacement = await onRetry(error);
+    if (!replacement) throw error;
+    return replacement.goto(url, options);
   }
+}
+
+/** Preserve the full error and the failed tab before replacing it, including timeout DOM evidence. */
+export async function walkFailureDiagnostics(page, out, view, phase, error, requestFailures = []) {
+  const evidence = { phase, error: String(error), stack: error instanceof Error ? error.stack : null,
+    url: page?.url() ?? null, requestFailures: [...requestFailures], files: {}, captureErrors: [] };
+  for (const [kind, capture] of [
+    ["dom", async () => { const file = `${view}.${phase}.html`; await writeFile(path.join(out, file), await page.content()); return file; }],
+    ["screenshot", async () => { const file = `${view}.${phase}.jpg`; await page.screenshot({ path: path.join(out, file), type: "jpeg", quality: CAPTURE_QUALITY, timeout: 5_000 }); return file; }],
+  ]) {
+    try { evidence.files[kind] = await capture(); }
+    catch (captureError) { evidence.captureErrors.push(`${kind}: ${String(captureError)}`); }
+  }
+  return evidence;
+}
+
+export function assertWalkAuthenticated(url) {
+  if (/\/(?:login|auth)(?:[/?#]|$)/.test(new URL(url).pathname)) throw new Error(`walk_auth_redirect: ${new URL(url).pathname}`);
+}
+
+/** A visible failed read is not a successfully loaded module without its chrome. */
+export function routeLoadProbe() {
+  const visible = (el) => { const box = el.getBoundingClientRect(); const style = getComputedStyle(el); return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none"; };
+  const alerts = [...document.querySelectorAll("main [role='alert']")].filter(visible);
+  const failed = alerts.find((el) => [...el.querySelectorAll("button")].some((button) => visible(button) && button.textContent?.trim() === "重试"));
+  return { failed: Boolean(failed), message: failed?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) ?? null };
+}
+
+/** Retry a rendered load error once only after this view's observed network change, never an HTTP failure. */
+export async function recoverWalkLoad(page, url, errors, httpErrors, navigationRetried = false, replacePage) {
+  const initial = await page.evaluate(routeLoadProbe);
+  const networkChanges = errors.filter((entry) => /net::ERR_NETWORK_CHANGED\b/.test(entry)).length;
+  if (!initial?.failed) return { loaded: true, retried: false, networkChanges };
+  if (navigationRetried || networkChanges === 0 || httpErrors.length > 0) return { loaded: false, retried: false, initial, networkChanges, httpErrors: [...httpErrors] };
+  // Retry the same address once, with a clean tab when provided. Keep the original error in the report.
+  try {
+    if (replacePage) page = await replacePage(initial);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    assertWalkAuthenticated(page.url());
+    await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+    await page.waitForTimeout(3_000);
+    const final = await page.evaluate(routeLoadProbe);
+    return { loaded: !final?.failed, retried: true, initial, final, networkChanges, httpErrors: [...httpErrors] };
+  } catch (error) {
+    return { loaded: false, retried: true, initial, networkChanges, retryError: String(error), retryStack: error instanceof Error ? error.stack : null, httpErrors: [...httpErrors] };
+  }
+}
+
+/** A separate row probe may use a populated tab without changing the assertion on the explicit self address. */
+export function memoryRowCoverage(tabs, emptyTitle) {
+  const selected = tabs?.find((tab) => tab.selected);
+  if (selected?.name !== "关于你" || selected.count !== 0 || emptyTitle !== "还没有关于你的记忆") return null;
+  const next = tabs.find((tab) => ["项目", "做法"].includes(tab.name) && tab.count > 0);
+  if (!next) return null;
+  return { explicitEmpty: "self", emptyTitle, rowTab: next.name === "项目" ? "project" : "methods", route: `/app/memory?tab=${next.name === "项目" ? "project" : "methods"}` };
+}
+
+/** Only a real scheduled pending day may use a separately identified published archive for row coverage. */
+export function dailyRowCoverage(emptyTitle, archive) {
+  const publication = archive?.publication;
+  const schedule = archive?.schedule;
+  if (publication?.state !== "pending" || !/^\d{4}-\d{2}-\d{2}$/.test(publication.day ?? "") || !/^\d{2}:\d{2}$/.test(schedule?.time ?? "")) throw new Error("daily_pending_identity_missing");
+  const [, month, day] = publication.day.split("-").map(Number);
+  const zone = schedule.timeZone === "Asia/Shanghai" ? "北京时间" : schedule.timeZone;
+  if (typeof zone !== "string" || !emptyTitle?.includes(`${month}月${day}日`) || !emptyTitle.includes("尚未发布") || !emptyTitle.includes(schedule.time) || !emptyTitle.includes(zone)) throw new Error("daily_pending_ui_mismatch");
+  const latest = archive.dailies?.filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry.day ?? "") && entry.day < publication.day && entry.itemCount > 0 && Number.isFinite(Date.parse(entry.generatedAt ?? ""))).sort((a, b) => b.day.localeCompare(a.day))[0];
+  if (!latest) throw new Error("daily_published_archive_missing");
+  return { publicationDay: publication.day, publicationState: publication.state, schedule, publishedDay: latest.day, route: `/app/frontier?view=daily&day=${latest.day}` };
 }
 
 /**
@@ -1063,7 +1220,7 @@ export function measureStructure() {
   const side = {
     landmarks: sidebars.length,
     holdsDivider: sidebar ? [...sidebar.querySelectorAll("*")].some((el) => el.getAttribute("role") === "separator") : false,
-    chatLink: sidebar ? [...sidebar.querySelectorAll("a")].some((el) => el.getAttribute("href") === "/app/chat") : false,
+    chatLink: sidebar ? [...sidebar.querySelectorAll("a")].some((el) => el.getAttribute("href") === "/app/home") : false,
     closed: sidebar ? sidebar.getBoundingClientRect().width <= 1 : false,
     inert: sidebar ? hasAttribute(sidebar, "inert") || sidebar.inert === true : false,
   };
@@ -1257,7 +1414,7 @@ export function measureComposition([options] = [{}]) {
     const total = Number(/(\d+)\s*\/\s*(\d+)/.exec(chip?.getAttribute("aria-label") ?? "")?.[2] ?? 0);
     stepRail = {
       ...box(railEl), folded, count: folded ? total : steps.length, inChrome: railEl.closest("[data-page-chrome]") !== null,
-      steps: steps.map((el) => ({ id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
+      steps: steps.map((el) => ({ current: Boolean(el.querySelector("[aria-current='step']")), href: el.querySelector("a[href]")?.getAttribute("href") ?? null, stateVisible: [...el.querySelectorAll("span")].some((span) => visible(span) && !span.classList.contains("sr-only") && span.classList.contains("text-caption") && Boolean(span.textContent?.trim())), id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
     };
   }
 
@@ -1355,11 +1512,42 @@ export function measureComposition([options] = [{}]) {
     return cs.cursor === "pointer" || cs.textDecorationLine.includes("underline");
   }).map((el) => ({ text: cut(el.textContent, 20), tag: el.tagName.toLowerCase(), ...box(el) }));
 
-  // The one primary action of a page stands on the header's row. Empty states, recipes and forms carry their own.
+  // Ordinary primary actions belong to the header. A named analysis workbench has a measured main-area Run contract.
   const titleBottom = title ? title.bottom : 0;
   const primaries = live("button, a, [role='button']").filter((el) => el.classList.contains("bg-accent")).map((el) => {
     const at = box(el);
-    return { text: nameOf(el), ...at, inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+    const bar = el.closest("[data-vcr-run-actions]");
+    const workbench = bar?.closest("[data-vcr-method-workbench]");
+    let run = null;
+    if (bar && workbench) {
+      const targets = [workbench.querySelector("[data-vcr-method-configuration]"), workbench.querySelector("[data-vcr-method-results]")];
+      const scroller = scrollerOf(bar);
+      const room = scroller.scrollHeight - scroller.clientHeight;
+      const saved = scroller.scrollTop;
+      const reachable = () => {
+        const rect = el.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return rect.top >= 0 && rect.bottom <= window.innerHeight && rect.left >= 0 && rect.right <= window.innerWidth && Boolean(hit && (hit === el || el.contains(hit)));
+      };
+      const before = Math.round(bar.getBoundingClientRect().top);
+      const initialReachable = reachable();
+      let held = null;
+      if (hold && room > 0) {
+        scroller.scrollTop = Math.min(room, 480);
+        const scrolled = scroller.scrollTop - saved;
+        const after = Math.round(bar.getBoundingClientRect().top);
+        const inset = Number.parseFloat(getComputedStyle(bar).top);
+        const boundary = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+        held = { scrolled, after, expected: Math.round(Math.max(before - scrolled, boundary + inset)), reachable: reachable() };
+        scroller.scrollTop = saved;
+      }
+      run = { named: Boolean((el.getAttribute("aria-label") || (el.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim() || el.textContent || "").trim()), height: at.height, bars: workbench.querySelectorAll("[data-vcr-run-actions]").length,
+        primaries: workbench.querySelectorAll(".bg-accent").length, position: getComputedStyle(bar).position, initialReachable, room, held,
+        beforeContent: workbench.querySelectorAll("[data-vcr-method-configuration]").length === 1 && workbench.querySelectorAll("[data-vcr-method-results]").length === 1 && targets.every((target) => target && !bar.contains(target) && Boolean(bar.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING)) };
+    }
+    return { text: nameOf(el), ...at, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
   });
 
   // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
@@ -1395,12 +1583,186 @@ export function measureComposition([options] = [{}]) {
   const notes = live("[data-note]").map((el) => ({ text: cut(el.textContent, 60), action: el.querySelector(PRESS) !== null, number: /\d/.test(el.textContent ?? "") }));
 
   const read = {
-    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail, tablists, viewGroups, toolbars, controlsAfterContent,
+    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail,
+    workbenchActions: { workbenches: live("[data-vcr-method-workbench]").length, bars: live("[data-vcr-method-workbench] [data-vcr-run-actions]").length },
+    viewSelector: (() => {
+      const choices = live("[data-page-chrome] button[aria-label]").filter((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
+      return { count: choices.length, top: choices[0] ? box(choices[0]).top : null };
+    })(),
+    compactWorkflow: (() => {
+      const progress = live("button[aria-label]").find((el) => /^进度，已完成 \d+\/(\d+) 步/.test(el.getAttribute("aria-label") ?? ""));
+      const views = live("button[aria-label]").find((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
+      const folded = !views ? live("[data-page-chrome] button[aria-label]").find((el) => /^筛选(?:，|$)/.test(el.getAttribute("aria-label") ?? "")) : null;
+      return progress ? { count: Number(progress.getAttribute("aria-label")?.match(/\/(\d+) 步/)?.[1]), views: Boolean(views), folded: Boolean(folded), inChrome: Boolean((views ?? folded)?.closest("[data-page-chrome]")) } : null;
+    })(), tablists, viewGroups, toolbars, controlsAfterContent,
     orphans, tags, tagLike, words, primaries, zeroCounts, outline, chartGrids, empties, notes, headline: live("[data-headline]").length,
     activity: live("[data-activity]").length, stepStates: live("[data-step-state]").map((el) => el.getAttribute("data-step-state")),
   };
   if (startScroller && startTop) startScroller.scrollTop = startTop;
   return read;
+}
+
+/** Open the folded toolbar and prove every GEO destination remains available, then restore its closed state. */
+export async function verifyCompactWorkflowViews(page) {
+  const trigger = page.locator("[data-page-chrome]").getByRole("button", { name: /^筛选(?:，|$)/ });
+  await trigger.click();
+  try {
+    const menu = page.getByRole("menu", { name: "筛选", exact: true });
+    await menu.waitFor({ state: "visible" });
+    for (const label of ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"]) {
+      await menu.getByRole("menuitemradio", { name: label, exact: true }).waitFor({ state: "visible" });
+    }
+    return true;
+  } finally {
+    await page.keyboard.press("Escape");
+    await page.getByRole("menu", { name: "筛选", exact: true }).waitFor({ state: "hidden" });
+  }
+}
+
+/** Module controls can precede their lazy result; wait until content has stopped showing loading placeholders. */
+export function moduleReady() {
+  const main = document.querySelector("main");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
+  const body = main?.querySelector("[data-page-body]");
+  return Boolean(body) && ![...body.querySelectorAll(".animate-pulse:not([data-forced-colors='preserve']), [aria-busy='true'], [role='status']")].some((el) => visible(el) && (el.getAttribute("role") !== "status" || el.textContent?.trim() === "正在载入"));
+}
+
+/** Read the selected result, not its toolbar or the native conversation surface. A retry panel alone is a failed read;
+ * the same panel beside retained scientific results is a partial result, never a whole-page veto.
+ */
+export function moduleResultProbe() {
+  const body = document.querySelector("main [data-page-body]");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  if (!body) return { status: "unobservable", coverage: false, errors: [], warnings: [], empty: [] };
+  const native = document.querySelector("[data-page-chrome] button[aria-label='查看：对话']") ?? body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
+  if (native && visible(native)) return { status: "conversation", coverage: false, boundary: "native conversation inspected separately; no runtime started", errors: [], warnings: [], empty: [] };
+  const alerts = [...body.querySelectorAll("[role='alert']")].filter(visible);
+  const retry = alerts.filter((alert) => [...alert.querySelectorAll("button, a")].some((control) => /^(?:重试|重新载入|重新加载)$/u.test(control.textContent?.trim() ?? "")));
+  const warnings = alerts.filter((alert) => !retry.includes(alert)).map((alert) => alert.textContent?.trim().slice(0, 180));
+  const empty = [...body.querySelectorAll("[data-empty]")].filter(visible).map((el) => el.textContent?.trim().slice(0, 120));
+  const wholeFailure = [...body.querySelectorAll("[data-state-screen][role='alert']")].some(visible);
+  const retained = [...body.querySelectorAll("table tr:has(td), ul li, ol li, dl dd, [data-stat-band], [data-chart], canvas, [data-prose], article")]
+    .filter((el) => visible(el) && !el.closest("[role='alert'], [data-empty], [data-step-state], [data-state-screen], [data-study-pane]"));
+  const errors = retry.map((alert) => alert.textContent?.trim().slice(0, 180));
+  const status = wholeFailure || (retry.length > 0 && retained.length === 0) ? "error"
+    : retained.length > 0 ? (alerts.length > 0 ? "partial" : "content") : empty.length > 0 ? "empty" : "unobservable";
+  return { status, coverage: status === "content" || status === "partial", retained: retained.length, errors, warnings, empty };
+}
+
+/** Wait through a selected result's loading phase, then classify what actually arrived. */
+export async function readModuleResult(page, target) {
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const result = await page.evaluate(moduleResultProbe);
+  if (result.status === "error") throw new Error(`${target}: selected result could not be read: ${result.errors.join("; ") || "terminal page failure"}`);
+  return result;
+}
+
+/** Expected result choices, including the canonical conversation only where it exists. */
+export function moduleViewLabels(module, programme = true, canonical = false) {
+  if (module === "geo") return ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
+  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"] : ["总览", "定义与证据", "人群", "匹配与招募"])];
+}
+
+/** Standalone walk mirror of vcrTabs.vcrTabPath, studyLocation.vcrChatPath, geoLocation.geoChatPath and
+ * GeoBand.destination/useOpenGeoConversation. Result switches keep only the context those helpers own.
+ */
+export function moduleViewAddressHolds(module, label, initial, before, after, { programme = true } = {}) {
+  const start = new URL(initial);
+  const from = new URL(before);
+  const to = new URL(after);
+  if (to.origin !== start.origin) return false;
+  const match = start.pathname.match(module === "geo" ? /^\/app\/geo\/([^/]+)/u : programme ? /^\/app\/virtual-research\/([^/]+)/u : /^\/app\/capabilities\/calculations\/([^/]+)/u);
+  if (!match) return false;
+  const id = match[1];
+  const labels = module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"];
+  const keys = module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "data", "population", "patients", "comparator", "trial", "matching"];
+  const key = keys[labels.indexOf(label)];
+  const base = module === "geo" ? `/app/geo/${id}` : programme ? `/app/virtual-research/${id}` : `/app/capabilities/calculations/${id}`;
+  const path = to.pathname.replace(/\/$/u, "");
+  if (module === "vcr") {
+    if (label === "对话") return path === `/app/virtual-research/${id}/chat`;
+    return Boolean(key) && (path === `${base}/${key}` || (key === "overview" && path === base));
+  }
+  const part = from.pathname.slice(`/app/geo/${id}`.length).split("/")[1];
+  const previous = part === "chat" ? from.searchParams.get("result") ?? "overview" : part === "answers" ? "questions" : part || "overview";
+  const addressedSession = part === "chat" ? from.pathname.split("/")[5] : null;
+  const session = addressedSession ?? from.searchParams.get("session");
+  if (label === "对话") {
+    const chatBase = `${base}/chat`;
+    const chatSession = path.startsWith(`${chatBase}/`) ? path.slice(chatBase.length + 1) : null;
+    const chat = path === chatBase || (chatSession && /^[A-Za-z0-9_-]{1,160}$/u.test(chatSession));
+    if (!chat || (session && chatSession !== session) || to.searchParams.get("result") !== previous) return false;
+    return [...from.searchParams].every(([name, value]) => name === "result" || to.searchParams.get(name) === value);
+  }
+  if (!key || !(path === `${base}/${key}` || (key === "overview" && path === base))) return false;
+  if (session && to.searchParams.get("session") !== session) return false;
+  if (to.searchParams.get("step") !== from.searchParams.get("step")) return false;
+  return to.searchParams.get("view") === (key === previous ? from.searchParams.get("view") : null);
+}
+
+/**
+ * Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. `views: false` is a module whose
+ * steps are its navigation (循证 GEO's `rail`, page table): every step is clicked and read, and there is no selector to go through.
+ */
+export async function verifyModuleNavigation(page, module, { programme = true, canonical = false, views: selector = true } = {}) {
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  await readModuleResult(page, `${module} initial view`);
+  const initial = page.url();
+  const expected = module === "geo" ? 8 : 7;
+  const rail = page.locator("[data-page-chrome] [data-step-rail]");
+  const steps = rail.locator("[data-rail-step]");
+  const ids = await steps.evaluateAll((items) => items.map((item) => item.getAttribute("data-rail-step")));
+  if (programme && (ids.length !== expected || new Set(ids).size !== expected)) throw new Error(`the ${module} rail must expose ${expected} distinct steps`);
+  const destinations = [];
+  const notices = [];
+  const recordCoverage = (target, result) => {
+    if (["empty", "unobservable"].includes(result.status)) notices.push(`not observable: ${target} reached ${result.status} content; navigation is not positive result coverage`);
+  };
+  for (const id of programme ? ids : []) {
+    const item = rail.locator(`[data-rail-step="${id}"]`);
+    const link = item.locator("a[href]");
+    if (await link.count() !== 1) throw new Error(`step ${id} has no unique destination`);
+    const href = await link.getAttribute("href");
+    const state = await item.getAttribute("data-rail-state");
+    if (!state) throw new Error(`step ${id} has no state`);
+    await link.scrollIntoViewIfNeeded();
+    await link.click();
+    await page.waitForFunction(({ id }) => Boolean(document.querySelector(`[data-rail-step="${id}"] [aria-current="step"]`)), { id }, { timeout: 15_000 });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    // Result effects publish contextual toolbar controls after the body commits. Let those effects settle before opening its menu.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const target = new URL(href, initial);
+    const actual = new URL(page.url());
+    if (actual.pathname !== target.pathname || actual.search !== target.search || actual.hash !== target.hash) throw new Error(`step ${id} did not reach its destination`);
+    const result = await readModuleResult(page, `${module} step ${id}`);
+    recordCoverage(`step ${id}`, result);
+    destinations.push({ id, state, address: actual.pathname + actual.search + actual.hash, result });
+  }
+  const labels = selector ? moduleViewLabels(module, programme, canonical) : [];
+  const views = [];
+  for (const label of labels) {
+    const selector = page.locator("[data-page-chrome]").getByRole("button", { name: /^查看：/ });
+    if (await selector.count() !== 1) throw new Error("the module has no unique pinned result selector");
+    await selector.click();
+    const choices = page.getByRole("menuitemradio");
+    const shown = (await choices.allTextContents()).map((text) => text.trim());
+    if (shown.length !== labels.length || labels.some((choice) => !shown.includes(choice))) throw new Error(`the ${module} result selector omits or adds destinations: ${shown.join(", ")}`);
+    const before = page.url();
+    await page.getByRole("menuitemradio", { name: label, exact: true }).click();
+    await page.waitForFunction((label) => [...document.querySelectorAll("[data-page-chrome] button")].some((button) => button.getAttribute("aria-label") === `查看：${label}`), label, { timeout: 15_000 });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    // Result effects publish contextual toolbar controls after the body commits. Let those effects settle before opening its menu.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    if (!moduleViewAddressHolds(module, label, initial, before, page.url(), { programme })) throw new Error(`${module} view ${label}: selector label changed without reaching its canonical destination (${new URL(page.url()).pathname + new URL(page.url()).search})`);
+    if (programme && await rail.locator("[data-rail-step]").count() !== expected) throw new Error(`the rail disappeared in ${label}`);
+    const result = await readModuleResult(page, `${module} view ${label}`);
+    recordCoverage(`view ${label}`, result);
+    views.push({ label, address: new URL(page.url()).pathname + new URL(page.url()).search, result });
+  }
+  await page.goto(initial, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  return { destinations, views, notices };
 }
 
 /** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
@@ -1434,7 +1796,7 @@ export function compositionFindings(name, viewportName, c) {
   const current = `${name}@${viewportName}`;
   /** @type {Finding[]} */ const found = [];
   if (!c) return { failures: [], notices: [finding("not-observable", current, `${current}: not observable: the page's composition was not read`)] };
-  const { template } = templateOf(name);
+  const { view, template } = templateOf(name);
   const add = (/** @type {string} */ rule, /** @type {string} */ text, /** @type {number} */ value) => found.push(finding(rule, current, `${current}: [${rule}] ${text}`, value));
   const pageLevel = (/** @type {Array<{ inSection: boolean }>} */ list) => list.filter((entry) => !entry.inSection);
   const quote = (/** @type {string[]} */ list, limit = 3) => `${list.slice(0, limit).map((text) => `“${text}”`).join("、")}${list.length > limit ? ` and ${list.length - limit} more` : ""}`;
@@ -1465,11 +1827,26 @@ export function compositionFindings(name, viewportName, c) {
   for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
   if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
   if (template) {
+    if ((view?.module || view?.band) && c.viewSelector) {
+      const expected = (view.module ?? view.band) === "vcr" ? 7 : 8;
+      if (!c.stepRail || c.stepRail.folded || c.stepRail.count !== expected) add("step-rail", `the module must show all ${expected} workflow steps`);
+      if (c.stepRail?.steps?.some((step) => !step.state || !step.href || !step.stateVisible)) add("step-rail", "a workflow step has no visible state or destination");
+      // 循证 GEO's steps are its one business navigation since its V3 plan (2026-10-23, §一.1 and §3.1, written at the owner's request):
+      // a step's own views are a contextual 「分析视图」 select, and a second, project-level 「查看：」 selector of the eight result views is
+      // what the plan removed. 虚拟临床研究 keeps its pinned selector.
+      if (view.workflow === "rail") {
+        if (c.viewSelector.count !== 0) add("chrome", "the module's steps are its navigation: a second, project-level result selector (「查看：…」) stands beside them");
+      } else if (c.viewSelector.count !== 1) add("chrome", "the module must expose exactly one pinned result-view selector");
+    }
     // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
     if (template.stepRail === "every-tab") {
       if (!c.chrome) add("chrome", "a module page has no band ([data-page-chrome]) for its steps and tabs");
-      if (!c.stepRail && !dotted) add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
+      if (!c.stepRail && !dotted && view?.workflow !== "compact") add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
+    }
+    if (view?.workflow === "compact" && !c.stepRail) {
+      if (c.compactWorkflow?.count !== 8) add("step-rail", "the compact workflow does not expose all eight steps");
+      if (!c.compactWorkflow?.views || !c.compactWorkflow?.inChrome) add("chrome", "the compact workflow has no result-view selector in the page band");
     }
     if (template.stepRail === "none" && c.stepRail) add("template-slot", `a ${template.name} has a step rail (only a module page does)`);
     if (template.tablist === "none" && tablists.length > 0) add("template-slot", `a ${template.name} has a tab list: ${quote(tablists.map((entry) => entry.label || "unnamed"))}`, tablists.length);
@@ -1486,8 +1863,16 @@ export function compositionFindings(name, viewportName, c) {
   }
   for (const control of c.tagLike) add("tag-as-control", `the ${control.tag} “${control.text}” is drawn as a tag (the tag's height, corner and type size) and can be pressed`);
   for (const word of c.words) add("word-as-link", `“${word.text}” is plain text in a ${word.tag} that looks pressable, and is the name of a tab or a step`);
+  if (view?.primaryPlacement === "method-workbench" && (c.workbenchActions?.workbenches !== 1 || c.workbenchActions?.bars !== 1
+    || c.primaries.filter((primary) => primary.markedRun && primary.run?.named).length !== 1)) {
+    add("primary-action", "the method workbench must expose one Run action bar and one named primary action");
+  }
   for (const primary of c.primaries) {
-    if (!primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
+    const run = primary.run;
+    const workbenchRun = view?.primaryPlacement === "method-workbench" && run && run.named && run.height >= 44 && run.bars === 1 && run.primaries === 1
+      && run.beforeContent && run.position === "sticky" && run.initialReachable
+      && (run.room <= 0 || (run.held && run.held.scrolled >= Math.min(100, run.room) && run.held.reachable && Math.abs(run.held.after - run.held.expected) <= BAND_TOLERANCE_PX));
+    if (primary.markedRun && view?.primaryPlacement === "method-workbench" ? !workbenchRun : !primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
   }
   for (const zero of c.zeroCounts) add("zero-count", `the ${zero.role} “${zero.text}” counts 0: a switch to an empty place is hidden or disabled`);
 
@@ -1539,10 +1924,10 @@ export function familyFindings(pages) {
   }
   for (const [key, tabs] of modules) {
     if (tabs.length < 2) continue;
-    const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
+    const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : c.compactWorkflow?.count ?? (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
     const counts = tabs.map((tab) => steps(tab.c));
     if (new Set(counts).size > 1) found.push(finding("module-steps", key, `${key}: the steps are not the same on every tab: ${tabs.map((tab, index) => `${tab.name} ${counts[index]}`).join(", ")}`, Math.max(...counts) - Math.min(...counts)));
-    const tops = tabs.map((tab) => tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
+    const tops = tabs.map((tab) => tab.c.viewSelector ? tab.c.viewSelector.top ?? tab.c.stepRail?.top ?? null : tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
     const known = tops.filter((top) => top !== null);
     if (known.length > 1 && Math.max(...known) - Math.min(...known) > BAND_TOLERANCE_PX) {
       found.push(finding("module-chrome", key, `${key}: the tab row stands at a different height on some tabs: ${tabs.map((tab, index) => `${tab.name} ${tops[index]} px`).join(", ")}`, Math.max(...known) - Math.min(...known)));
@@ -1745,6 +2130,7 @@ export function pageProbe([kind, arg]) {
   const all = (selector, root = main) => [...root.querySelectorAll(selector)];
   const outside = (el) => !el.closest("[role='dialog'], nav, aside");
 
+  if (kind === "calculationHistory") return { rows: all("ul[aria-label='此计算空间的历史'] > li").filter(visible).length };
   if (kind === "geoMarketOff") {
     const el = all("[data-geo-market-off]")[0];
     return el ? { present: true, top: Math.round(el.getBoundingClientRect().top), viewport: window.innerHeight } : { present: false };
@@ -1777,8 +2163,8 @@ export function pageProbe([kind, arg]) {
     };
   }
   if (kind === "memoryTabs") {
-    // The page's tab list is the band's (关于你 · 项目 · 做法 · 地图); the growth tab and its sentence went into the map in R19.
-    const names = ["关于你", "项目", "做法", "地图"];
+    // The page's tab list is the band's (总览 · 地图 · 关于你 · 项目 · 做法); the growth tab and its sentence went into the map in R19, and into the overview's first card after.
+    const names = ["总览", "地图", "关于你", "项目", "做法"];
     const tabs = all("[role='tab']").filter(visible).map((el) => {
       const text = words(el);
       const name = names.find((candidate) => text.startsWith(candidate)) ?? text;
@@ -1793,12 +2179,41 @@ export function pageProbe([kind, arg]) {
   }
   if (kind === "memoryMap") {
     const text = words(main);
+    // The sentence over the picture and the marks of the list under it, read as the page draws them: a mark's shape is its first aria-hidden
+    // character (`MarkGlyph`), amber when it needs a look; a replaced one says so in its line, a folded group has the hexagon.
+    const marksList = all("main ul[aria-label='标记']").find(visible);
+    const marks = marksList ? [...marksList.querySelectorAll(":scope > li")].map((li) => {
+      const glyph = li.querySelector("span[aria-hidden='true']");
+      return { glyph: glyph ? words(glyph) : "", warn: Boolean(glyph && String(glyph.className).includes("text-warn")), replaced: words(li).includes("已被后来的说法替代") };
+    }) : [];
     return {
+      headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
+      marks,
+      more: all("[data-show-more]").some(visible),
       views: all("[role='group'][aria-label='地图的视图'] button").filter(visible).map(words),
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
       thin: text.includes("再多聊几次，这里会长出你的地图"),
       empty: text.includes("还没有记住什么"),
+    };
+  }
+  if (kind === "memoryOverview") {
+    // The six cards as the page draws them, by the markers of `OverviewCard`: which part, in what state (loading, error, recipe or content), in what
+    // shape, the number in its heading and what it draws — the rows and the bars — so the walk can hold the sentence over the cards to them.
+    const trailingNumber = (el) => Number(/(\d+)\s*$/.exec(el.getAttribute("aria-label") ?? "")?.[1] ?? NaN);
+    return {
+      headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
+      tabs: all("[role='tablist'][aria-label='记忆'] [role='tab']").filter(visible).map(words),
+      canvases: all("[data-chart]").filter(visible).length,
+      cards: all("[data-overview-card]").filter(visible).map((el) => ({
+        part: el.getAttribute("data-overview-card"), state: el.getAttribute("data-state"), shape: el.getAttribute("data-shape"),
+        count: el.hasAttribute("data-count") ? Number(el.getAttribute("data-count")) : null,
+        memories: el.hasAttribute("data-memories") ? Number(el.getAttribute("data-memories")) : null,
+        rows: [...el.querySelectorAll("[data-overview-row]")].filter(visible).length,
+        bars: [...el.querySelectorAll("ul[aria-label] [role='img'][aria-label]")].filter(visible).map(trailingNumber),
+        more: Number(el.getAttribute("data-more") ?? 0),
+      })),
+      look: (() => { const section = document.querySelector("[data-overview-look]"); return section ? { count: Number(section.getAttribute("data-overview-look")), rows: section.querySelectorAll("[data-overview-row]").length } : null; })(),
     };
   }
   if (kind === "knowledgeGraph") {
@@ -1835,7 +2250,21 @@ export function pageProbe([kind, arg]) {
   }
   if (kind === "opsOrder") {
     const text = words(main);
-    const tokens = [...new Set(text.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? [])].slice(0, 5);
+    // Only what a reader sees, and where it stands (R19.2): a token inside a collapsed list or a closed row is not on the
+    // page, and a finding that names the card it sits in can be fixed without walking the page again.
+    /** @type {Map<string, string>} */
+    const found = new Map();
+    for (const el of all("*")) {
+      const own = ownText(el);
+      if (!own || !visible(el)) continue;
+      for (const token of own.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? []) {
+        if (found.has(token)) continue;
+        const card = el.closest("section, article, [data-card]");
+        const heading = card ? card.querySelector("h1, h2, h3, h4, [role='heading']") : null;
+        found.set(token, heading ? words(heading).slice(0, 24) : "");
+      }
+    }
+    const tokens = [...found.entries()].slice(0, 5).map(([token, where]) => (where ? `${token} (in ${where})` : token));
     return { health: text.indexOf("运行状况"), config: text.indexOf("部署配置检查"), tokens };
   }
   if (kind === "notFound") {
@@ -1878,6 +2307,7 @@ export const PAGE_PROBES = {
   "frontier-following": [["followingEmpty", ["desktop", "phone"]]],
   "frontier-event": [["eventGroups", ["desktop", "phone"]]],
   frontier: [["firstRowTop", ["phone"]]],
+  "calculation-history": [["calculationHistory", ["desktop", "phone"]]],
   "virtual-research": [["rowWidth", ["phone"]]],
   capabilities: [["capabilityCards", ["desktop"]]],
   memory: [["memoryTabs", ["desktop"]]],
@@ -1885,6 +2315,7 @@ export const PAGE_PROBES = {
   "memory-methods": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
   "memory-map": [["memoryMap", ["desktop", "phone"]]],
+  "memory-overview": [["memoryOverview", ["desktop", "phone"]]],
   "knowledge-graph": [["knowledgeGraph", ["desktop", "phone"]]],
   inbox: [["inboxSafety", ["desktop"]]],
   account: [["feishuRows", ["desktop"]]],
@@ -1900,8 +2331,9 @@ export const PAGE_PROBES = {
 
 /** The record that is not there on each walked missing-record address: what the drawer says, its button, and the list it returns to. */
 export const MISSING_RECORDS = {
-  "extensions-plugin-missing": { sentence: "找不到这个插件，它可能已被移除。", back: "回到插件列表", to: "/app/extensions/plugins" },
-  "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/skills" },
+  // The page's two views are 发现 and 已添加; a record's address opens 已添加, so that is the list its drawer returns to.
+  "extensions-plugin-missing": { sentence: "找不到这个插件，它可能已被移除。", back: "回到插件列表", to: "/app/extensions/installed" },
+  "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/installed" },
 };
 
 /** The five views of 记忆地图, in the order its one row of switches shows them. */
@@ -1930,6 +2362,111 @@ export function memoryMapFindings(name, read) {
     if (read.closed.dialog) failures.push(`${current}: the drawer did not close`);
     if (read.closed.address) failures.push(`${current}: the drawer closed and its mark is still in the address`);
   } else if (read.opened.dialog) failures.push(`${current}: the drawer has no 关闭 button to press`);
+  return { failures, notices };
+}
+
+/**
+ * The sentence over 记忆地图 against the list under it: the headline's numbers must be the rows the page draws, and a page that says it
+ * holds nothing has proved nothing. Pure, so the rule is tested without a browser.
+ *
+ * The sentence is 「EviMed 记住了你的 N 件事，其中 M 件…」 (N memories in force, M of them needing a look), or — when no memory is written — 「胶囊里有
+ * … ，还没有记下关于你的事」 / 「还没有记住什么」. The rows are the marks of the list: a memory is a ● or a ◆ (a replaced one says so in its line and
+ * is not counted, as the server does not), a mark that needs a look wears the amber. The two are compared only when the list is whole: a
+ * list with a 显示更多 left, or with a folded group (⬢) in it, holds more than its rows, and says so as a notice, not a pass.
+ *
+ * A headline of zero memories is **not observable**: nothing was there to compare, which is a different thing from agreeing.
+ * @param {string} current the report's `name@viewport`
+ * @param {{ headline?: string | null, marks?: Array<{ glyph: string, warn: boolean, replaced: boolean }>, more?: boolean }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function memoryMapHeadlineFindings(current, read) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (read.headline === undefined || read.marks === undefined) return { failures, notices };
+  if (!read.headline) {
+    notices.push(`${current}: not observable: the page has no headline, so its numbers were not compared with its rows`);
+    return { failures, notices };
+  }
+  const said = /记住了你的\s*(\d+)\s*件事/u.exec(read.headline);
+  const memories = said ? Number(said[1]) : 0;
+  const looks = said ? Number(/其中\s*(\d+)\s*件/u.exec(read.headline)?.[1] ?? 0) : 0;
+  const drawn = read.marks.filter((mark) => (mark.glyph === "●" || mark.glyph === "◆") && !mark.replaced);
+  if (memories === 0) {
+    if (drawn.length > 0) failures.push(`${current}: the headline holds no memory (“${read.headline}”) and the list draws ${drawn.length}`);
+    else notices.push(`${current}: not observable: the headline holds no memory, so its numbers were not compared with any row`);
+    return { failures, notices };
+  }
+  if (read.more || read.marks.some((mark) => mark.glyph === "⬢")) {
+    notices.push(`${current}: not compared: the list is longer or folded, so its rows are not the headline's ${memories} memories`);
+    return { failures, notices };
+  }
+  if (drawn.length !== memories) failures.push(`${current}: the headline says ${memories} memories and the list draws ${drawn.length}`);
+  const amber = drawn.filter((mark) => mark.warn).length;
+  if (amber !== looks) failures.push(`${current}: the headline says ${looks} need a look and the list marks ${amber}`);
+  return { failures, notices };
+}
+
+/** The parts of the overview, in the order its cards stand. */
+export const MEMORY_OVERVIEW_PARTS = Object.freeze(["growth", "you", "projects", "methods", "knowledge", "received"]);
+/** The tabs of 记忆胶囊, in the order its band shows them. */
+export const MEMORY_TABS = Object.freeze(["总览", "地图", "关于你", "项目", "做法"]);
+
+/**
+ * The overview, judged: its six cards in order and none still loading or silently failed; the sentence over them is the cards' numbers; each
+ * card draws as many things as its heading counts; the page has one canvas. A page that has nothing to compare is **not observable**, never a pass.
+ *
+ * The sentence names three counts — 「N 件关于你和项目的事」 (the 关于你 card's memories and the 项目 card's), 「N 种做法」 and 「N 份资料」 — and a
+ * card that counts something the sentence leaves out is as wrong as a sentence that counts what no card has. A card whose heading carries no
+ * number (a recipe, an error) counts as nothing; one in error is named, because a failed read is not a zero.
+ *
+ * What a card draws: a card of `rows` lists its things one by one, so its rows are its number (项目's table and 收到的 list are cut at eight, and
+ * say how many more there are); a card of `bars` or `types` ranks what it counts, so its bars add up to its number.
+ * @param {string} current the report's `name@viewport`
+ * @param {{ headline: string | null, tabs?: string[], canvases?: number, cards: Array<{ part: string, state: string, shape: string | null, count: number | null, memories: number | null, rows: number, bars: number[], more: number }>, look?: { count: number, rows: number } | null }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function memoryOverviewFindings(current, read) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  const order = read.cards.map((card) => card.part).join(",");
+  if (order !== MEMORY_OVERVIEW_PARTS.join(",")) failures.push(`${current}: the cards read “${read.cards.map((card) => card.part).join("、")}” (${MEMORY_OVERVIEW_PARTS.join("、")})`);
+  if (read.tabs && read.tabs.length > 0 && read.tabs.map((tab) => tab.replace(/\s*\d+$/, "")).join(",") !== MEMORY_TABS.join(",")) failures.push(`${current}: the tabs read “${read.tabs.join("、")}” (${MEMORY_TABS.join("、")})`);
+  if ((read.canvases ?? 0) > 1) failures.push(`${current}: ${read.canvases} canvases on the page (one: the growth strip; every other card is words and rows)`);
+  for (const card of read.cards) {
+    if (card.state === "loading") failures.push(`${current}: the ${card.part} card is still loading`);
+    if (card.state === "error") failures.push(`${current}: the ${card.part} card could not be read`);
+  }
+  const by = Object.fromEntries(read.cards.map((card) => [card.part, card]));
+  const counted = (part) => (by[part]?.state === "content" ? by[part].count ?? 0 : 0);
+  const unread = read.cards.some((card) => card.state === "error" || card.state === "loading");
+  const expected = { memories: counted("you") + (by.projects?.state === "content" ? by.projects.memories ?? 0 : 0), methods: counted("methods"), documents: counted("knowledge") };
+  const said = (pattern) => { const found = pattern.exec(read.headline ?? ""); return found ? Number(found[1]) : 0; };
+  const sentence = { memories: said(/(\d+)\s*件关于你和项目的事/u), methods: said(/(\d+)\s*种做法/u), documents: said(/(\d+)\s*份资料/u) };
+  if (!unread) {
+    if (!read.headline) {
+      if (expected.memories + expected.methods + expected.documents > 0) failures.push(`${current}: the cards count ${expected.memories} memories, ${expected.methods} methods and ${expected.documents} documents and the page has no sentence over them`);
+    } else {
+      for (const [name, word] of [["memories", "memories"], ["methods", "methods"], ["documents", "documents"]]) {
+        if (sentence[name] !== expected[name]) failures.push(`${current}: the sentence says ${sentence[name]} ${word} and the cards count ${expected[name]}`);
+      }
+    }
+  }
+  for (const card of read.cards) {
+    if (card.state !== "content" || card.count === null) continue;
+    if (card.shape === "rows") {
+      const drawn = card.rows + card.more;
+      if (drawn !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} and draws ${drawn}`);
+    } else if (card.shape === "table") {
+      if (card.rows + card.more !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} projects and draws ${card.rows + card.more}`);
+    } else if (card.shape === "bars" || card.shape === "types") {
+      const sum = card.bars.reduce((total, bar) => total + (Number.isFinite(bar) ? bar : 0), 0);
+      if (card.part !== "knowledge" || card.bars.length > 0) {
+        if (sum !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} and its bars add up to ${sum}`);
+      }
+    }
+  }
+  if (read.look && read.look.rows > 5) failures.push(`${current}: ${read.look.rows} rows of what needs a look (five, and the count)`);
+  if (read.cards.length > 0 && read.cards.every((card) => card.state === "recipe")) notices.push(`${current}: not observable: every card is a recipe, so the sentence and the cards were not compared`);
   return { failures, notices };
 }
 
@@ -2011,7 +2548,7 @@ async function walkKnowledgeGraph(page, base, route) {
 }
 
 /** The tabs a memory address names, and the one it must open on. */
-const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法" };
+const MEMORY_TAB_OF = { memory: "关于你", "memory-project": "项目", "memory-methods": "做法" };
 
 /**
  * What a probe read, judged. A probe that returned nothing (a page that did not render what it looks for) is not a pass the walk
@@ -2053,7 +2590,7 @@ export function probeFindings(name, viewportName, kind, r) {
       const count = (tabName) => r.tabs.find((tab) => tab.name === tabName)?.count ?? 0;
       const wanted = MEMORY_TAB_OF[/** @type {keyof typeof MEMORY_TAB_OF} */ (key)];
       if (wanted && selected && selected.name !== wanted) failures.push(`${current}: the address names ${wanted} and the page opens on ${selected.name}`);
-      if (key === "memory" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
+      if (key === "memory-landing" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
         failures.push(`${current}: the page opens on an empty 关于你 while 项目 holds ${count("项目")} and 做法 ${count("做法")}`);
       }
       break;
@@ -2064,6 +2601,21 @@ export function probeFindings(name, viewportName, kind, r) {
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
+      {
+        const counted = memoryMapHeadlineFindings(current, r);
+        failures.push(...counted.failures);
+        notices.push(...counted.notices);
+      }
+      break;
+    }
+    case "memoryOverview": {
+      const judged = memoryOverviewFindings(current, r);
+      failures.push(...judged.failures);
+      notices.push(...judged.notices);
+      break;
+    }
+    case "calculationHistory": {
+      if (!(r.rows > 0)) failures.push(`${current}: the calculation workspace shows no readable historical calculation`);
       break;
     }
     case "knowledgeGraph": {
@@ -2388,12 +2940,12 @@ export function skillDrawerProbe() {
  */
 export function skillDrawerFindings(opened, refused, writes) {
   const failures = [];
-  if (!opened) return ["extensions-skills@desktop: 新建技能 did not open a drawer"];
-  if (!opened.title) failures.push("extensions-skills@desktop: the new-skill drawer is not titled 新建技能");
-  if (opened.captions < 2) failures.push(`extensions-skills@desktop: the new-skill drawer has ${opened.captions} caption(s) under its fields (two)`);
-  if (!opened.switchLabel) failures.push("extensions-skills@desktop: the new-skill drawer has no switch for using the skill in this project");
-  if (refused && !(refused.needName && refused.needHow)) failures.push("extensions-skills@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place");
-  if (writes.length) failures.push(`extensions-skills@desktop: 保存 with empty fields sent a request: ${writes.join(", ")}`);
+  if (!opened) return ["extensions-installed@desktop: 创建技能 did not open a drawer"];
+  if (!opened.title) failures.push("extensions-installed@desktop: the new-skill drawer is not titled 新建技能");
+  if (opened.captions < 2) failures.push(`extensions-installed@desktop: the new-skill drawer has ${opened.captions} caption(s) under its fields (two)`);
+  if (!opened.switchLabel) failures.push("extensions-installed@desktop: the new-skill drawer has no switch for using the skill in this project");
+  if (refused && !(refused.needName && refused.needHow)) failures.push("extensions-installed@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place");
+  if (writes.length) failures.push(`extensions-installed@desktop: 保存 with empty fields sent a request: ${writes.join(", ")}`);
   return failures;
 }
 
@@ -2558,8 +3110,10 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   };
   const text = document.body.innerText || "";
   // What the vocabulary checks read: the page less what it quotes. A source's own words in a <blockquote> or <q> can say
-  // "undefined" (「…is undefined.」 in the DECLARE–TIMI 58 abstract a card quotes) or 「…起生效」 and are not the product talking.
-  const unquoted = [...document.querySelectorAll("blockquote, q")].reduce((rest, el) => rest.replace(el.innerText, " "), text);
+  // "undefined" (「…is undefined.」 in the DECLARE–TIMI 58 abstract a card quotes) or 「…起生效」 and are not the product talking —
+  // nor are a document's or an item's own words marked `data-prose` (a 前沿动态 card's title and 导读 said a policy's 「11月1日起生效」,
+  // and the walk of evimed-01e965e99a11-1 read it as the back office, 2026-10-23).
+  const unquoted = [...document.querySelectorAll("blockquote, q, [data-prose]")].reduce((rest, el) => rest.replace(el.innerText, " "), text);
   const kinds = (values) => new Set(values).size;
 
   // The style inventory of the 2026-09-23 walk (the plan's §3 numbers were
@@ -2742,7 +3296,8 @@ export function routeReady() {
 /**
  * The first row of each list on the page, found, clicked and read again, in the
  * page (`page.evaluate`, so it reads nothing from this module). `["targets"]`
- * names the lists whose first row is a control; `["click", i]` clicks the
+ * names the lists whose first row is a control, `["inPlace"]` those whose
+ * first row opens where it is (a button, not a link); `["click", i]` clicks the
  * i-th; `["external", i]` says whether the i-th opens an outside address in a
  * new tab; `["state"]` reports what is on screen: whether a dialog is open, the
  * address, and how many rows are open in place. A row whose title is not a
@@ -2775,6 +3330,9 @@ export function rowProbe([action, index = 0]) {
     targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
+  // The lists whose rows open where they are (a button: a drawer, or the row itself), not those whose rows go to a page (a link). On 记忆胶囊's
+  // 项目 the works above the memories are links to their documents (R19.1 production walk: the owner's 关于你 is empty, so the page lands there).
+  if (action === "inPlace") return targets.filter(({ control }) => control.tagName !== "A").map(({ label }) => label);
   const target = typeof index === "string" ? targets.find(({ label }) => label === index) : targets[index];
   if (action === "has") return Boolean(target);
   if (action === "external") {
@@ -2788,6 +3346,23 @@ export function rowProbe([action, index = 0]) {
 
 /** What the first row of a page's first list opened to, and the probe that reads it (`afterClickProbe`). */
 export const AFTER_CLICK_KIND = { "geo-sources": "sourceDrawer", autopilot: "taskPage" };
+/**
+ * The list whose first row the probe is about, where it is not the page's first: 循证 GEO's 信源 view draws its 「发现与处理」 findings
+ * above the 信源 list once a round has findings (V3), and a finding's row opens its finding, not a site's drawer — the fixture walk of
+ * b559d4b7e read that as "the first source opened no drawer" while a 信源 row opened its drawer.
+ */
+export const AFTER_CLICK_LIST = { "geo-sources": "信源" };
+
+/**
+ * Which of the lists the walk clicks (`labels`, in order) the after-click probe reads: the named list, else the first; -1 for a page with
+ * no probe, or whose named list is not among them.
+ * @param {string} name @param {readonly string[]} labels @returns {number}
+ */
+export function afterClickIndex(name, labels) {
+  if (!(name in AFTER_CLICK_KIND)) return -1;
+  const wanted = /** @type {Record<string, string>} */ (AFTER_CLICK_LIST)[name];
+  return wanted ? labels.indexOf(wanted) : 0;
+}
 
 /** How long the walk waits for a cleanup that never finishes to give up (`CLEANUP_WAIT_MS` of the shell, plus the margin of a slow start). */
 const CLEANUP_WALK_WAIT_MS = 135_000;
@@ -2800,7 +3375,7 @@ const CLEANUP_WALK_WAIT_MS = 135_000;
 export const STEP_TARGETS = {
   "files-pdf": "the original of the knowledge base's first finished PDF, opened on its own page",
   "files-return": "a document opened from a search of the knowledge base, and both ways back to that search",
-  "extensions-skills-create": "the new-skill drawer, saved empty with every write refused",
+  "extensions-create": "the new-skill drawer, opened from the 「添加技能」 menu and saved empty with every write refused",
   "memory-map-drawer": "the first mark of 记忆地图's list, and the drawer it opens",
   "knowledge-graph-mark": "the first mark of the knowledge graph, and the page it opens",
   "evidence-matrix": "a finished package's evidence matrix, and the dialog a row opens",
@@ -2970,6 +3545,68 @@ export function knowledgeReturnFindings(title, read) {
   return { failures, notices };
 }
 
+/** The calculation catalogue first chooses a task family, then displays its methods. This is filtering, not a drawer.
+ * Kept separate from the generic row verdict so an unrelated state change cannot certify an inert record row.
+ */
+export function calculationTaskFamilyReady(family) {
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  const main = document.querySelector("main");
+  if (!main) return false;
+  const selected = [...main.querySelectorAll("[data-page-chrome] button[aria-label]")].some((el) => visible(el) && el.getAttribute("aria-label") === `计算任务：${family}`);
+  const chooser = [...main.querySelectorAll("ul[aria-label='选择计算任务']")].some(visible);
+  const lists = [...main.querySelectorAll("[data-vcr-method-catalogue] ul[aria-label]")].filter(visible);
+  return selected && !chooser && lists.length === 1 && lists[0].getAttribute("aria-label") === family
+    && [...lists[0].querySelectorAll("[data-vcr-method]")].some((el) => visible(el) && Boolean(el.getAttribute("data-vcr-method")));
+}
+
+/** Authenticated same-origin catalogue read, serialized independently like every browser probe. */
+export async function calculationMethodCatalogueProbe() {
+  const response = await fetch("/api/vcr/models", { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`calculation task catalogue could not be read (HTTP ${response.status})`);
+  return (await response.json())?.data;
+}
+
+/** Derive displayed identities from the authenticated catalogue using the product's embedded, source-checked grouping helpers. */
+export function calculationFamilyMethodIds(catalogue, family) {
+  if (!Array.isArray(catalogue?.methods)) throw new Error("calculation task catalogue has no readable methods");
+  const complete = WALK_METHOD_GROUPING.completeMethodCatalogue(catalogue.methods);
+  const entries = WALK_METHOD_GROUPING.methodEntries(complete);
+  return entries.filter(method => WALK_METHOD_GROUPING.methodTask(method.method ?? method.id) === family).map(WALK_METHOD_GROUPING.methodEntryId);
+}
+
+/** Actually select a task, read its matching method list, and open its first method in this calculation's scope. */
+export async function walkCalculationTaskFamily(page, { timeout = 15_000 } = {}) {
+  const initial = new URL(page.url());
+  const match = /^\/app\/capabilities\/calculations\/([^/]+)\/?$/u.exec(initial.pathname);
+  if (!match) throw new Error("calculation task selection has no calculation workspace identity");
+  const chooser = page.getByRole("list", { name: "选择计算任务", exact: true });
+  const control = chooser.locator("button[data-row-title]").first();
+  const family = (await control.innerText()).trim();
+  if (!family) throw new Error("calculation task selection has no named task");
+  const catalogue = await page.evaluate(calculationMethodCatalogueProbe);
+  const allowed = new Set(calculationFamilyMethodIds(catalogue, family));
+  if (allowed.size === 0) throw new Error(`calculation task ${family} has no declared catalogue methods`);
+  await control.click();
+  await page.waitForFunction(calculationTaskFamilyReady, family, { timeout }).catch((cause) => {
+    throw new Error(`calculation task ${family} did not produce its matching method list and selected filter`, { cause });
+  });
+  if (new URL(page.url()).pathname !== initial.pathname) throw new Error("calculation task selection left its calculation workspace");
+  const methods = page.getByRole("list", { name: family, exact: true }).locator("[data-vcr-method]");
+  const methodIds = await methods.evaluateAll((items) => items.map((item) => item.getAttribute("data-vcr-method")));
+  const method = methodIds[0];
+  if (!method || new Set(methodIds).size !== methodIds.length) throw new Error("calculation task methods have no distinct identities");
+  const unexpected = methodIds.filter(id => !allowed.has(id));
+  if (unexpected.length) throw new Error(`calculation task ${family} lists unknown or wrong-family catalogue methods: ${unexpected.join(", ")}`);
+  await methods.first().click();
+  const expected = `/app/capabilities/methods/${encodeURIComponent(method)}`;
+  await page.waitForFunction(({ origin, path, study }) => location.origin === origin && location.pathname === path && new URLSearchParams(location.search).get("study") === study,
+    { origin: initial.origin, path: expected, study: decodeURIComponent(match[1]) }, { timeout }).catch((cause) => {
+    throw new Error("calculation task method did not open its exact method and study destination", { cause });
+  });
+  await page.locator("[data-vcr-method-workbench]").waitFor({ state: "visible", timeout });
+  return { family, methodIds, method, studyId: decodeURIComponent(match[1]), address: new URL(page.url()).pathname + new URL(page.url()).search };
+}
+
 /**
  * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`. The first list's first row is read again with `afterClickProbe` while it is open. Every page is clicked
  * behind a guard that refuses every request that is not a read, so the walk's clicks write nothing even where a row marks itself read on
@@ -2996,6 +3633,10 @@ async function walkRowClicks(page, base, route, name, popups) {
   /** @type {Array<{ label: string, shown: boolean, after?: any }>} */ const rows = [];
   try {
     const labels = ((await page.evaluate(rowProbe, ["targets", 0])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
+    const probeAt = afterClickIndex(name, labels);
+    if (name in AFTER_CLICK_KIND && probeAt < 0 && labels.length > 0) {
+      notices.push(`${name}@desktop: not observable: the list whose first row is read after the click (“${/** @type {Record<string, string>} */ (AFTER_CLICK_LIST)[name]}”) is not among the lists on the page`);
+    }
     for (let index = 0; index < labels.length; index += 1) {
       if (index > 0) {
         // The last click may have opened a drawer or left the page: start the next from the page as it loads.
@@ -3007,6 +3648,11 @@ async function walkRowClicks(page, base, route, name, popups) {
       // A route's shell can be ready while its issue is still loading. Wait for the named list after each reload;
       // carrying its earlier numeric position into a partial response could click nothing or a different lane.
       await page.waitForFunction(rowProbe, ["has", labels[index]], { timeout: 30_000 });
+      if (name === "calculation-history" && labels[index] === "选择计算任务") {
+        const task = await walkCalculationTaskFamily(page);
+        rows.push({ label: labels[index], shown: true, after: { kind: "calculation-task-family", ...task } });
+        continue;
+      }
       const external = await page.evaluate(rowProbe, ["external", labels[index]]);
       popups.count = 0;
       await page.evaluate(rowProbe, ["click", labels[index]]);
@@ -3014,12 +3660,12 @@ async function walkRowClicks(page, base, route, name, popups) {
       const after = await page.evaluate(rowProbe, ["state"]);
       rows.push({ label: labels[index], shown: rowClickShown(before, after, popups.count, external === true) });
       const kind = AFTER_CLICK_KIND[/** @type {keyof typeof AFTER_CLICK_KIND} */ (name)];
-      if (index === 0 && kind) {
-        // The first list's first row is open: read what it opened to, before the next load closes it. A task's page draws its pane once
+      if (index === probeAt && kind) {
+        // The probed list's first row is open: read what it opened to, before the next load closes it. A task's page draws its pane once
         // the task and its executions are read.
         if (kind === "taskPage") await page.waitForFunction(taskPaneReady, undefined, { timeout: 6_000 }).catch(() => null);
         const opened = await page.evaluate(afterClickProbe, [kind]);
-        rows[0].after = opened;
+        rows[index].after = opened;
         const judged = afterClickFindings(name, kind, opened);
         failures.push(...judged.failures);
         notices.push(...judged.notices);
@@ -3055,31 +3701,50 @@ export function clickFirstMarkProbe() {
 
 /** Whether a drawer is open, and whether the address says so (`open=`). */
 export function drawerStateProbe() {
-  return { dialog: [...document.querySelectorAll("[role='dialog']")].some((el) => el.getBoundingClientRect().width > 0), address: new URLSearchParams(location.search).has("open") };
+  return { open: new URLSearchParams(location.search).get("open"), dialog: [...document.querySelectorAll("[role='dialog']")].some((el) => el.getBoundingClientRect().width > 0), address: new URLSearchParams(location.search).has("open") };
 }
 
 /**
  * 记忆地图's mark and its drawer: the first mark of the list is pressed, the drawer is read as open and in the address, and its own 关闭
  * is pressed and read again. Pressing a mark opens a drawer and reads; nothing here writes.
  */
-async function walkMemoryMap(page, base, route) {
+export async function walkMemoryMap(page, base, route) {
   await openRoute(page, base, route);
+  await waitMemory(page, true, { selected: "地图" });
   const rows = await page.evaluate(markRowsProbe);
   if (rows === 0) return { ...memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null }), read: { rows } };
   await page.evaluate(clickFirstMarkProbe);
-  await page.waitForTimeout(1_500);
+  await page.waitForFunction(() => new URLSearchParams(location.search).has("open") && Boolean(document.querySelector("[role='dialog']")), undefined, { timeout: 15_000 });
   const opened = await page.evaluate(drawerStateProbe);
-  const pressed = opened.dialog ? await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]) : false;
-  await page.waitForTimeout(800);
+  if (!opened.dialog) return { ...memoryMapFindings("memory-map", { rows, opened, closed: null }), read: { rows, opened, closed: null } };
+  if (!opened.open) throw new Error("the first mark has no addressed identity");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitMemory(page, true, { selected: "地图" });
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  const reload = await page.evaluate(drawerStateProbe);
+  if (reload.open !== opened.open || !reload.dialog) throw new Error("reloading the mark lost its addressed identity or drawer");
+  // Reloading the document preserves the pushed entry; Back must still return to the unfiltered map.
+  await page.goBack();
+  await waitMemory(page, true, { selected: "地图" });
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  const back = await page.evaluate(drawerStateProbe);
+  if (back.address || back.dialog) throw new Error("Back did not close the mark");
+  await page.evaluate(clickFirstMarkProbe);
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  const reopened = await page.evaluate(drawerStateProbe);
+  if (reopened.open !== opened.open) throw new Error("the first unfiltered mark changed identity");
+  const pressed = await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]);
+  if (pressed) await page.getByRole("dialog").waitFor({ state: "hidden" });
   const closed = pressed ? await page.evaluate(drawerStateProbe) : null;
   const judged = memoryMapFindings("memory-map", { rows, opened, closed });
-  return { ...judged, read: { rows, opened, closed } };
+  return { ...judged, read: { rows, opened, reload, back, reopened, closed } };
 }
 
 /**
- * The new-skill drawer: opened from the 新建技能 menu, it says what its fields are for and offers to use the skill in this project,
- * and 保存 with every field empty names what is missing in place. The save button writes, so every request that is not a read is
- * refused in the browser before it leaves, and the step fails if one was tried.
+ * The new-skill drawer: opened from the header's 「添加技能」 menu by 创建技能, it says what its fields
+ * are for and offers to use the skill in this project, and 保存 with every field empty names what is missing in place. The save
+ * button writes, so every request that is not a read is refused in the browser before it leaves, and the step fails if one was
+ * tried. A control the step cannot find fails it: a walk that did not reach the drawer has not walked it.
  */
 async function walkSkillDrawer(page, base, route) {
   await openRoute(page, base, route);
@@ -3091,9 +3756,9 @@ async function walkSkillDrawer(page, base, route) {
   };
   await page.route("**/api/**", guard);
   try {
-    if (!await page.evaluate(clickNamed, ["button", "新建技能"])) return { failures: [], notices: ["extensions-skills@desktop: no 新建技能 button to open"] };
+    if (!await page.evaluate(clickNamed, ["button", "添加技能"])) return { failures: ["extensions-installed@desktop: no 「添加技能」 menu to open"] };
     await page.waitForTimeout(500);
-    if (!await page.evaluate(clickNamed, ["menuitem", "创建技能"])) return { failures: [], notices: ["extensions-skills@desktop: the 新建技能 menu has no 创建技能"] };
+    if (!await page.evaluate(clickNamed, ["menuitem", "创建技能"])) return { failures: ["extensions-installed@desktop: the 「添加技能」 menu has no 创建技能"] };
     await page.waitForTimeout(800);
     const opened = await page.evaluate(skillDrawerProbe);
     let refused = null;
@@ -3153,7 +3818,7 @@ async function walkCleanupCover(context, base, waitMs) {
       headers: { "content-type": "application/json", "retry-after": "5" },
       body: JSON.stringify({ error: "The previous runtime is still being cleaned up.", code: "runtime_cleanup_required" }),
     }));
-    await probe.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await probe.goto(`${base}/app/home`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await probe.waitForTimeout(10_000);
     const early = await probe.evaluate(cleanupProbe);
     let late = null;
@@ -3165,7 +3830,8 @@ async function walkCleanupCover(context, base, waitMs) {
         if (late.alertButtons) break;
       }
     }
-    return { failures: cleanupFindings(early, late), notices: cleanupNotices(early), read: { early, late } };
+    const address = globalConversationAddress(probe);
+    return { failures: [...cleanupFindings(early, late), ...(address.valid ? [] : [`chat@desktop: the global entry did not open the default conversation (${address.loadedRoute})`])], notices: cleanupNotices(early), read: { early, late, loadedRoute: address.loadedRoute } };
   } finally {
     await probe.close().catch(() => {});
   }
@@ -3173,24 +3839,28 @@ async function walkCleanupCover(context, base, waitMs) {
 
 async function main() {
   const base = required("OPEN_SCIENCE_WALK_BASE_URL").replace(/\/+$/, "");
-  const username = required("OPEN_SCIENCE_WALK_USER");
-  // Read from a file and never printed: the password is not an argument, an
-  // environment value or a log line.
-  const password = (await readFile(required("OPEN_SCIENCE_WALK_PASSWORD_FILE"), "utf8")).trim();
+  const setting = await walkSetting();
+  const signIn = walkSignIn(setting.profile);
+  const problems = [...setting.problems, ...signIn.problems];
+  if (problems.length) {
+    for (const problem of problems) console.error(`the walk cannot start: ${problem}`);
+    return 2;
+  }
+  // The fixture's password is read from a file and never printed: it is not an argument, an environment value or a log line. The
+  // production walk has none: its account's password is made and held by `throwaway-account.mjs`.
+  const password = signIn.mode === "seeded" ? (await readFile(signIn.passwordFile, "utf8")).trim() : "";
   const require = createRequire(import.meta.url);
   const playwright = require(required("OPEN_SCIENCE_PLAYWRIGHT_CORE"));
   const out = process.env.OPEN_SCIENCE_WALK_OUT?.trim() || "/tmp/evimed-ui-walk";
   await mkdir(out, { recursive: true });
-  const setting = await walkSetting();
-  if (setting.problems.length) {
-    for (const problem of setting.problems) console.error(`the walk cannot start: ${problem}`);
-    return 2;
-  }
 
   const browser = await playwright.chromium.launch({
     headless: true,
     ...(process.env.OPEN_SCIENCE_WALK_CHROMIUM ? { executablePath: process.env.OPEN_SCIENCE_WALK_CHROMIUM } : {}),
     args: ["--no-sandbox"],
+    // An interrupt is the walk's to answer: it deletes its account first, through the browser context's session, and only then closes the
+    // browser (the playwright default closes the browser and exits at once, which would leave the account behind).
+    handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
   });
   /** @type {string[]} */ const failures = [];
   /** @type {Array<string | Finding>} */ const notices = [];
@@ -3199,6 +3869,8 @@ async function main() {
   const runtimeStartsRefused = {};
   let current = "";
   let allowRuntimeStart = false;
+  /** The production walk's own account, until it is deleted. @type {Awaited<ReturnType<typeof openThrowawayAccount>> | null} */
+  let throwaway = null;
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: "zh-CN", timezoneId: "Asia/Shanghai" });
     await context.addInitScript(forgetProjectChoice);
@@ -3210,12 +3882,24 @@ async function main() {
       runtimeStartsRefused[current] = (runtimeStartsRefused[current] ?? 0) + 1;
       return route.abort();
     });
-    const login = await context.request.post(`${base}/api/auth/login`, {
-      data: { username, password }, headers: { "content-type": "application/json" },
-    });
-    if (login.status() !== 200) {
-      console.error(`login answered ${login.status()}; nothing was walked.`);
-      return 2;
+    if (signIn.mode === "seeded") {
+      const login = await context.request.post(`${base}/api/auth/login`, {
+        data: { username: signIn.username, password }, headers: { "content-type": "application/json" },
+      });
+      if (login.status() !== 200) {
+        console.error(`login answered ${login.status()}; nothing was walked.`);
+        return 2;
+      }
+    } else {
+      // The session is the context's own: the registration signs the new account in, and its cookie is the one every page below carries.
+      try {
+        throwaway = await openThrowawayAccount({ base, send: contextTransport(context, base), prefix: "walk", onSignal: () => browser.close() });
+      } catch (error) {
+        console.error(`the walk cannot start: ${String(/** @type {any} */ (error)?.message ?? error)}; nothing was walked.`);
+        if (/** @type {any} */ (error)?.account) console.log(`FAIL account ${/** @type {any} */ (error).account} may exist and was not deleted: the registration did not finish; an operator has to look for it`);
+        return 2;
+      }
+      report.account = { id: throwaway.id, deleted: false };
     }
     // The catalogue the leak check is derived from. An unreadable catalogue
     // fails the walk: silently checking against no ids would pass every page.
@@ -3230,7 +3914,8 @@ async function main() {
     // Whether this account is an operator's: its conversation draws session statistics and the context ring by design (R13 E-17), a
     // researcher's does not. Presentation only, as in the app (`useOperator`): an unreadable answer is a researcher.
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
-    const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
+    const meData = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data ?? {} : {};
+    const operator = meData.operator === true;
     const found = await discoverRoutes(context, base, notices, failures);
     const everything = [...ROUTES, ...found.routes];
     // A name that is no view of this walk is a typo that would walk nothing and pass.
@@ -3249,15 +3934,23 @@ async function main() {
     }
     /** @type {Array<{ view: string, result: any }>} */ const axeScans = [];
     report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
-    const page = await context.newPage();
-    // A row that opens a link in a new tab has shown something: the tab is
-    // counted and closed.
+    let page;
     const popups = { count: 0 };
-    page.on("popup", (popup) => { popups.count += 1; popup.close?.().catch(() => {}); });
     const consoleErrors = {};
     const httpErrors = {};
-    page.on("console", (message) => { if (message.type() === "error") (consoleErrors[current] ||= []).push(message.text().slice(0, 160)); });
-    page.on("response", (response) => { if (response.status() >= 400) (httpErrors[current] ||= []).push(`${response.status()} ${new URL(response.url()).pathname.slice(0, 60)}`); });
+    const requestFailures = {};
+    const installObservers = (tab) => {
+      const view = current;
+      tab.on("popup", (popup) => { popups.count += 1; popup.close?.().catch(() => {}); });
+      tab.on("console", (message) => { if (message.type() === "error") (consoleErrors[view] ||= []).push(message.text().slice(0, 160)); });
+      tab.on("response", (response) => { if (response.status() >= 400) (httpErrors[view] ||= []).push(`${response.status()} ${new URL(response.url()).pathname.slice(0, 60)}`); });
+      tab.on("requestfailed", (request) => { (requestFailures[view] ||= []).push({ method: request.method(), url: request.url().split("?")[0], error: request.failure()?.errorText ?? "unknown" }); });
+    };
+    const freshPage = async (viewport) => {
+      page = await replaceWalkPage(context, page, installObservers);
+      await page.setViewportSize(viewport);
+      return page;
+    };
     // An open tab after a release asks for a page chunk the new image no
     // longer has (2026-09-23 plan §2.1). Played here by refusing the inbox's
     // chunk to a fresh page and navigating to it in place: the sidebar must
@@ -3280,7 +3973,7 @@ async function main() {
         await probe.waitForTimeout(8_000);
         const state = await probe.evaluate(() => ({
           english: /Unexpected Application Error|dynamically imported module|Failed to fetch/.test(document.body.innerText),
-          sidebar: Boolean(document.querySelector("aside a[href='/app/chat']")),
+          sidebar: Boolean(document.querySelector("aside a[href='/app/home']")),
           text: document.body.innerText.replace(/\s+/g, " ").slice(0, 200),
         }));
         await probe.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
@@ -3294,16 +3987,44 @@ async function main() {
       }
     }
     for (const [viewportName, viewport] of VIEWPORTS) {
-      await page.setViewportSize(viewport);
       for (const [name, route] of routes) {
         current = `${name}@${viewportName}`;
+        let phase = "navigation";
+        const navigationFailures = [];
         try {
-          await navigateForWalk(page, `${base}${route}`, () => report.info.push(`${current}: retried once after Chromium reported a host network change`));
+          await freshPage(viewport);
+          let navigationRetried = false;
+          await navigateForWalk(page, `${base}${route}`, async (error) => {
+            navigationRetried = true;
+            navigationFailures.push(await walkFailureDiagnostics(page, out, current, "navigation-initial", error, requestFailures[current]));
+            report.info.push(`${current}: retried once on a clean tab after Chromium reported a host network change; initial failure retained`);
+            return freshPage(viewport);
+          });
+          assertWalkAuthenticated(page.url());
+          phase = "route-ready";
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+          assertWalkAuthenticated(page.url());
           await page.waitForTimeout(3_000);
+          phase = "route-load";
+          const routeLoad = await recoverWalkLoad(page, `${base}${route}`, consoleErrors[current] ?? [], unexpectedRefusals(name, httpErrors[current] ?? []), navigationRetried, async (initial) => {
+            navigationFailures.push(await walkFailureDiagnostics(page, out, current, "read-initial", new Error(initial.message ?? "failed read"), requestFailures[current]));
+            return freshPage(viewport);
+          });
+          if (!routeLoad.loaded) {
+            report.pages[current] = { route, routeLoad, navigationFailures, requestFailures: requestFailures[current] ?? [], consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+            report.pages[current].diagnostic = await walkFailureDiagnostics(page, out, current, phase, new Error(routeLoad.retryError ?? routeLoad.initial?.message ?? "failed read"), requestFailures[current]);
+            failures.push(`${current}: route load failed (${routeLoad.initial?.message ?? "failed read"}); composition was not judged`);
+            continue;
+          }
+          if (routeLoad.retried) report.info.push(`${current}: visible read error retried once after an observed network change; initial error retained in routeLoad`);
+          if (name === "calculation-history") await page.waitForFunction(calculationHistoryReady, undefined, { timeout: 30_000 });
+          // The overview's cards each read on their own: the map's document takes seconds on an account of many memory files, and a card still
+          // loading is not a page measured.
+          if (name === "memory-overview") await page.waitForFunction(overviewReady, undefined, { timeout: 30_000 }).catch(() => null);
+          phase = "measurement";
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
             RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);
-          report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
+          report.pages[current] = { route, routeLoad, navigationFailures, requestFailures: requestFailures[current] ?? [], ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
           const refusals = unexpectedRefusals(name, httpErrors[current] ?? []);
           const verdict = pageFindings(name, viewportName, measured, refusals);
@@ -3318,6 +4039,14 @@ async function main() {
           // The composition (R19): what the framework's markers say about the order and the places of the page's parts. It moves the scroll
           // area by a few hundred pixels and puts it back, so it is read before anything is clicked.
           const composition = await page.evaluate(measureComposition, [{ hold: true }]);
+          if (templateOf(name).view?.workflow === "compact" && composition.compactWorkflow?.folded) {
+            composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
+          }
+          if (composition.viewSelector && /^(?:geo|vcr)-overview(?:@\d+)?$/.test(name)) {
+            const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr", { views: templateOf(name).view?.workflow !== "rail" });
+            report.pages[current].navigation = navigation;
+            notices.push(...navigation.notices.map((notice) => `${current}: ${notice}`));
+          }
           report.pages[current].composition = composition;
           const arranged = compositionFindings(name, viewportName, composition);
           failures.push(...arranged.failures);
@@ -3367,10 +4096,28 @@ async function main() {
             const where = await page.evaluate(() => location.pathname);
             if (!clicked || where !== record.to) failures.push(`${current}: ${record.back} ${clicked ? `goes to ${where}` : "is not on the page"} (${record.to})`);
           }
+          phase = "row-interactions";
           if (viewportName === "desktop" && ROW_CLICK_PAGES.has(name)) {
             // Read-only by construction: a row's title opens a drawer, a page or itself; the pages new to the walk in R13 also have
             // every request that is not a read refused in the browser while their row is clicked (`walkRowClicks`).
-            const clicked = await walkRowClicks(page, base, route, name, popups);
+            let rowRoute = route;
+            if (name === "memory") {
+              const read = await page.evaluate(pageProbe, ["memoryTabs"]);
+              const coverage = memoryRowCoverage(read?.tabs, composition.empties?.[0]?.title);
+              if (coverage) { report.pages[current].rowCoverage = coverage; rowRoute = coverage.route; await openRoute(page, base, rowRoute); }
+            }
+            if (name === "frontier-daily" && composition.empties?.length) {
+              const response = await context.request.get(`${base}/api/frontier/dailies?limit=30`);
+              if (!response.ok()) throw new Error(`daily_archive_http_${response.status()}`);
+              const coverage = dailyRowCoverage(composition.empties[0].title, (await response.json())?.data);
+              report.pages[current].rowCoverage = coverage;
+              rowRoute = coverage.route;
+              await openRoute(page, base, rowRoute);
+              const loaded = new URL(page.url());
+              if (loaded.pathname !== "/app/frontier" || loaded.searchParams.get("day") !== coverage.publishedDay || loaded.searchParams.get("view") !== "daily") throw new Error("daily_archive_address_mismatch");
+              report.pages[current].rowCoverage.loadedAddress = loaded.pathname + loaded.search;
+            }
+            const clicked = await walkRowClicks(page, base, rowRoute, name, popups);
             report.pages[current].rowClicks = clicked.rows;
             failures.push(...clicked.failures);
             notices.push(...clicked.notices);
@@ -3378,17 +4125,24 @@ async function main() {
             if (name === "files" && found.pdfTitle) await recordStep(report, failures, notices, "files-pdf", () => walkPdfPreview(page, base, route, found.pdfTitle));
             // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
-            if (name === "extensions-skills") await recordStep(report, failures, notices, "extensions-skills-create", () => walkSkillDrawer(page, base, route));
+            if (name === "extensions-installed") await recordStep(report, failures, notices, "extensions-create", () => walkSkillDrawer(page, base, route));
             if (name === "memory-map") await recordStep(report, failures, notices, "memory-map-drawer", () => walkMemoryMap(page, base, route));
             if (name === "knowledge-graph") await recordStep(report, failures, notices, "knowledge-graph-mark", () => walkKnowledgeGraph(page, base, route));
           }
         } catch (error) {
-          failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);
+          const diagnostic = await walkFailureDiagnostics(page, out, current, phase, error, requestFailures[current]);
+          report.pages[current] = { ...report.pages[current], route, navigationFailures, diagnostic,
+            consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+          failures.push(`${current}: did not load [${phase}] (${String(error).slice(0, 300)})`);
+        } finally {
+          await page?.close().catch(() => {});
+          page = undefined;
         }
       }
       if (found.matrix) {
         // A finished package's evidence matrix, read at this width (R11); it is a page of the run's own files, found from the run list.
         current = `evidence-matrix@${viewportName}`;
+        await freshPage(viewport);
         await recordStep(report, failures, notices, current, () => walkMatrix(page, base, found.matrix, viewportName));
       }
     }
@@ -3399,8 +4153,8 @@ async function main() {
     report.axe = { from: axe.from, version: axe.version, scanned: axeScans.filter((scan) => scan.result).length, why: axe.why };
     // R13 (V-7), the cases that are more than a page's measure and run at the desktop width: where the reader is lives in the address (A08), and
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
-    await page.setViewportSize(VIEWPORTS[0][1]);
     current = "address@desktop";
+    await freshPage(VIEWPORTS[0][1]);
     if (!setting.only.length) await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
     const eventRoute = found.routes.find(([name]) => name === "frontier-event")?.[1] ?? null;
     if (setting.only.length) { /* a partial walk takes no step that is not about a page it was asked for */ }
@@ -3408,8 +4162,10 @@ async function main() {
     else notices.push("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read");
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
+      // A throwaway account has no runtime yet: start it now, through the API, while no page is loading.
+      if (throwaway) report.info.push(await prewarmRuntime(context, base, throwaway.csrfToken, meData?.project?.id));
+      await freshPage(VIEWPORTS[0][1]);
       allowRuntimeStart = true;
-      await page.setViewportSize(VIEWPORTS[0][1]);
       const kernelMisses = [];
       page.on("response", (response) => {
         if (response.status() >= 400 && /\/__evimed\/[ka]\//.test(new URL(response.url()).pathname)) {
@@ -3418,7 +4174,7 @@ async function main() {
       });
       const chat = await walkChat(page, base).catch((error) => ({ loaded: false, error: String(error).slice(0, 160) }));
       await page.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
-      report.pages[current] = { route: "/app/chat", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
+      report.pages[current] = { route: "/app/home", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
       else if (chat.retriedAfterNetworkChange) report.info.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
@@ -3429,19 +4185,33 @@ async function main() {
       allowRuntimeStart = false;
       await recordStep(report, failures, notices, "chat-cleanup-cover", () => walkCleanupCover(context, base, waitMs));
     }
-    // Log out for real: the request needs the shell's origin and the
-    // session's CSRF token (under `data` in /api/me), and without them the
-    // logout answered 403 and left a seven-day session behind after every
-    // walk. Checked, not assumed — /api/me must answer 401 afterwards.
-    const me = await context.request.get(`${base}/api/me`).catch(() => null);
-    const csrf = me?.ok() ? (await me.json().catch(() => ({})))?.data?.csrfToken : undefined;
-    const logout = await context.request.post(`${base}/api/auth/logout`, {
-      headers: { origin: base, ...(csrf ? { "x-open-science-csrf": String(csrf) } : {}) },
-    }).catch(() => null);
-    const after = await context.request.get(`${base}/api/me`).catch(() => null);
-    report.logout = { status: logout?.status() ?? null, meAfter: after?.status() ?? null };
-    if (after?.status() !== 401) failures.push(`logout: /api/me still answers ${after?.status() ?? "nothing"} after logging out — the walk's session is alive`);
+    if (throwaway) {
+      // The production walk ends by deleting its account, which ends its session. Checked, not assumed: the account is gone or the walk
+      // fails naming it (`throwaway-account.mjs` printed the FAIL line), and /api/me must answer 401 afterwards.
+      const outcome = await throwaway.close();
+      report.account = { id: throwaway.id, deleted: outcome.deleted, ...(outcome.reason ? { reason: outcome.reason } : {}) };
+      if (!outcome.deleted) failures.push(`account: ${throwaway.id} was not deleted (${outcome.reason}); nobody can sign in to it, so an operator has to remove it`);
+      const after = await context.request.get(`${base}/api/me`).catch(() => null);
+      report.logout = { status: null, meAfter: after?.status() ?? null };
+      if (outcome.deleted && after?.status() !== 401) failures.push(`account: /api/me still answers ${after?.status() ?? "nothing"} after ${throwaway.id} was deleted — the walk's session is alive`);
+    } else {
+      // Log out for real: the request needs the shell's origin and the
+      // session's CSRF token (under `data` in /api/me), and without them the
+      // logout answered 403 and left a seven-day session behind after every
+      // walk. Checked, not assumed — /api/me must answer 401 afterwards.
+      const me = await context.request.get(`${base}/api/me`).catch(() => null);
+      const csrf = me?.ok() ? (await me.json().catch(() => ({})))?.data?.csrfToken : undefined;
+      const logout = await context.request.post(`${base}/api/auth/logout`, {
+        headers: { origin: base, ...(csrf ? { "x-open-science-csrf": String(csrf) } : {}) },
+      }).catch(() => null);
+      const after = await context.request.get(`${base}/api/me`).catch(() => null);
+      report.logout = { status: logout?.status() ?? null, meAfter: after?.status() ?? null };
+      if (after?.status() !== 401) failures.push(`logout: /api/me still answers ${after?.status() ?? "nothing"} after logging out — the walk's session is alive`);
+    }
   } finally {
+    // A walk that ended on an error still deletes its account (the browser's session is needed for it, so before the browser closes);
+    // the call is idempotent, and on a normal end it has already been made above.
+    await throwaway?.close();
     await browser.close();
   }
   // Nothing the walk saw is only reported: a finding fails the walk unless the baseline accepts it, with an owner and a day (R19 S4).
@@ -3519,7 +4289,7 @@ function describeEntry(entry) {
 }
 
 /**
- * What the walk is set up to be: its profile (`OPEN_SCIENCE_WALK_PROFILE`, the owner-view release walk unless the local fixture walk says
+ * What the walk is set up to be: its profile (`OPEN_SCIENCE_WALK_PROFILE`, the production release walk unless the local fixture walk says
  * `fixture`), the day it counts deadlines from (`OPEN_SCIENCE_WALK_TODAY`, only a test sets it), and the baseline it was built with — or
  * the file `OPEN_SCIENCE_WALK_BASELINE` names, or `none` for a walk that accepts nothing. Problems are sentences; the walk exits 2 on any.
  * @param {Record<string, string | undefined>} [env]
@@ -3551,6 +4321,28 @@ export async function walkSetting(env = process.env) {
   // gate never sets it.
   const only = (env.OPEN_SCIENCE_WALK_ONLY ?? "").split(",").map((name) => name.trim()).filter(Boolean);
   return { profile, today, baseline, baselineSource, problems, only };
+}
+
+/**
+ * How the walk gets signed in, by its profile. The production (`owner`) walk registers a throwaway account and signs in as nobody else,
+ * so it refuses the two settings that name an account: a host file that still names one (`shared/ui-walk.env` did until 2026-10-25)
+ * would otherwise be ignored in silence, and the person who wrote it would think the walk went through it. The `fixture` walk signs in
+ * as the account its local control plane was seeded with, so it needs both. Problems are sentences; the walk exits 2 on any.
+ * @param {string} profile @param {Record<string, string | undefined>} [env]
+ * @returns {{ mode: "register" | "seeded", username: string, passwordFile: string, problems: string[] }}
+ */
+export function walkSignIn(profile, env = process.env) {
+  const username = (env.OPEN_SCIENCE_WALK_USER ?? "").trim();
+  const passwordFile = (env.OPEN_SCIENCE_WALK_PASSWORD_FILE ?? "").trim();
+  /** @type {string[]} */ const problems = [];
+  if (profile === "fixture") {
+    if (!username) problems.push("OPEN_SCIENCE_WALK_USER is required by the fixture profile: the account seed-walk-fixture.mjs made");
+    if (!passwordFile) problems.push("OPEN_SCIENCE_WALK_PASSWORD_FILE is required by the fixture profile: the file seed-walk-fixture.mjs wrote its password to");
+    return { mode: "seeded", username, passwordFile, problems };
+  }
+  const named = [username && "OPEN_SCIENCE_WALK_USER", passwordFile && "OPEN_SCIENCE_WALK_PASSWORD_FILE"].filter(Boolean);
+  if (named.length) problems.push(`${named.join(" and ")} name${named.length === 1 ? "s" : ""} an account, and the production walk signs in as none: it registers a throwaway account and deletes it at the end (they are the fixture profile's settings)`);
+  return { mode: "register", username: "", passwordFile: "", problems };
 }
 
 /* ------------------------------------------------------------------------- R13: axe-core (V-6) */
@@ -3754,7 +4546,7 @@ export function addressAct([kind, first = "", second = ""]) {
 /**
  * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's selected tab, or the memory
  * page's selected tab and the text of its search box.
- * @param {["inbox" | "memory"]} args
+ * @param {["inbox" | "memory" | "memory-map"]} args
  */
 export function addressProbe([kind]) {
   const visible = (el) => {
@@ -3769,13 +4561,14 @@ export function addressProbe([kind]) {
     const selected = list ? [...list.querySelectorAll("[role='tab'][aria-selected='true']")].map(words) : [];
     return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
-  if (kind === "memory") {
+  if (kind === "memory" || kind === "memory-map") {
     // The page's tab list is the band's, named 记忆 (the inbox's toolbar has a tab list of its own, 消息视图).
     const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "记忆" && visible(el));
     const tabs = list ? [...list.querySelectorAll("[role='tab']")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-selected") === "true");
-    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
-    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null };
+    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === (kind === "memory-map" ? "搜索记忆地图" : "搜索记忆") && visible(el));
+    const views = [...document.querySelectorAll("[role='group'][aria-label='地图的视图'] button[aria-pressed='true']")].filter(visible);
+    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null, ...(kind === "memory-map" ? { view: views[0] ? words(views[0]) : null } : {}) };
   }
   return null;
 }
@@ -3787,8 +4580,38 @@ export function addressProbe([kind]) {
  */
 export const ADDRESS_CASES = [
   { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["tab", "未读"]], fill: null, search: { filter: "unread" }, state: { selected: "未读" } },
-  { page: "memory", route: "/app/memory", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
+  { page: "memory", route: "/app/memory?tab=self", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
+  { page: "memory-map", route: "/app/memory/map", probe: "memory-map", act: [["chip", "地图的视图", "维度"]], fill: ["搜索记忆地图", "探针"], search: { view: "dims", q: "探针" }, state: { selected: "地图", view: "维度", query: "探针" } },
 ];
+
+/** Whether every card of the overview has finished reading (loaded, failed or empty), and the page has drawn its cards at all. Read in the page as source text. */
+export function overviewReady() {
+  const cards = [...document.querySelectorAll("[data-overview-card]")];
+  return cards.length > 0 && cards.every((el) => el.getAttribute("data-state") !== "loading");
+}
+
+/** Memory controls mount before data. An error is terminal but never empty or successful coverage.
+ * @param {{ map: boolean, selected?: string, query?: string }} wanted
+ */
+export function memoryReady(wanted) {
+  const main = document.querySelector("main");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
+  if (!main || location.pathname !== (wanted.map ? "/app/memory/map" : "/app/memory")) return false;
+  const selected = [...main.querySelectorAll("[role='tablist'][aria-label='记忆'] [aria-selected='true']")].find(visible);
+  if (!selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
+  const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === (wanted.map ? "搜索记忆地图" : "搜索记忆") && visible(el));
+  if (!box || (wanted.query !== undefined && box.value !== wanted.query)) return false;
+  if ([...main.querySelectorAll("[role='alert']")].some(visible)) return true;
+  if ([...main.querySelectorAll(".animate-pulse, [aria-busy='true']")].some(visible)) return false;
+  return Boolean(main.querySelector("[data-page-body]"));
+}
+
+/** Wait for memory data as well as its controls; fail an unreadable page instead of calling it empty. */
+export async function waitMemory(page, map, state = {}) {
+  await page.waitForFunction(memoryReady, { map, ...state }, { timeout: 30_000 });
+  const errors = await page.locator("main [role='alert']").allTextContents();
+  if (errors.length) throw new Error(`memory data could not be read: ${errors.join("; ").slice(0, 180)}`);
+}
 
 /**
  * Whether a page's state is what a case says. Strings match by prefix, except a search box's text, which is exact.
@@ -3869,8 +4692,10 @@ export function addressOpenFindings(page, read) {
 async function walkAddressState(page, base) {
   /** @type {string[]} */ const notices = [];
   const reads = {};
+  const failures = [];
   for (const c of ADDRESS_CASES) {
     await openRoute(page, base, c.route);
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.probe === "memory-map" ? "地图" : "关于你" });
     const pressed = [];
     for (const act of c.act) {
       pressed.push(Boolean(await page.evaluate(addressAct, act)));
@@ -3881,6 +4706,7 @@ async function walkAddressState(page, base) {
       await page.getByRole("searchbox", { name: c.fill[0] }).fill(c.fill[1], { timeout: 5_000 }).catch(() => null);
       await page.waitForTimeout(1_200);
     }
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
     const first = await page.evaluate(addressProbe, [c.probe]);
     let away = null;
     let back = null;
@@ -3892,22 +4718,37 @@ async function walkAddressState(page, base) {
         away = await page.evaluate(() => location.pathname);
         await page.goBack();
         await page.waitForTimeout(1_500);
+        if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
         back = await page.evaluate(addressProbe, [c.probe]);
       }
       // The address loaded again: a reload, a pasted link.
       await openRoute(page, base, `${first.path}${first.search}`);
+      if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
       reload = await page.evaluate(addressProbe, [c.probe]);
     }
     const read = { pressed, first, away, back, reload };
     reads[c.page] = read;
     notices.push(...addressStateFindings(c, read).notices);
   }
-  // A memory row that opens in a drawer: in the address while open, closed by Back.
+  // Test the unqualified landing separately; explicit self must never be overridden because another tab has rows.
   await openRoute(page, base, "/app/memory");
-  const rows = (await page.evaluate(rowProbe, ["targets"])) ?? [];
+  const landingRoute = page.url();
+  const landing = await page.evaluate(pageProbe, ["memoryTabs"]);
+  reads["memory-landing"] = { route: landingRoute, ...landing };
+  if (!/\/memory\/(?:map|overview)$/.test(new URL(landingRoute).pathname)) {
+    failures.push(...probeFindings("memory-landing", "desktop", "memoryTabs", landing).failures);
+  }
+  await openRoute(page, base, "/app/memory?tab=self");
+  await waitMemory(page, false, { selected: "关于你" });
+  const self = await page.evaluate(pageProbe, ["memoryTabs"]);
+  const composition = await page.evaluate(measureComposition, [{ hold: false }]);
+  const coverage = memoryRowCoverage(self?.tabs, composition.empties?.[0]?.title);
+  if (coverage) { await openRoute(page, base, coverage.route); await waitMemory(page, false); }
+  reads["memory-row-coverage"] = coverage ?? { route: "/app/memory?tab=self" };
+  const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
   if (rows.length > 0) {
-    await page.evaluate(rowProbe, ["click", 0]);
+    await page.evaluate(rowProbe, ["click", rows[0]]);
     await page.waitForTimeout(1_200);
     open.opened = await page.evaluate(addressProbe, ["memory"]);
     await page.goBack();
@@ -3916,7 +4757,7 @@ async function walkAddressState(page, base) {
   }
   reads["memory-open"] = open;
   notices.push(...addressOpenFindings("memory", open).notices);
-  return { failures: [], notices, read: reads };
+  return { failures, notices, read: reads };
 }
 
 /**
@@ -3954,7 +4795,7 @@ export function handoffProbe([action]) {
  * the two equal): none of them sends. `originReference` (where the conversation came from) was added there and not here, and every
  * event page's 深入研究 read as carrying a field a draft does not need (r19-guards2).
  */
-export const HANDOFF_FIELDS = ["draft", "kind", "originReference", "projectId", "references", "requestId", "resultRevision", "sessionId"];
+export const HANDOFF_FIELDS = ["draft", "geoPlanContext", "kind", "originReference", "projectId", "references", "requestId", "resultRevision", "scope", "sessionId"];
 
 /**
  * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and
@@ -4145,6 +4986,12 @@ async function walkComposer(page, operator) {
   return { failures: [...a.failures, ...b.failures], notices: [...a.notices, ...b.notices], read: { desktop, phone } };
 }
 
+/** @param {any} page */
+function globalConversationAddress(page) {
+  const address = new URL(page.url());
+  return { loadedRoute: address.pathname + address.search, valid: /^\/app\/chat(?:\/[^/]+)?$/.test(address.pathname) && address.searchParams.get("project") === "default" };
+}
+
 /**
  * Open the conversation page and wait for the kernel frame's composer.
  *
@@ -4157,12 +5004,35 @@ async function walkComposer(page, operator) {
  * says so in the report instead of failing the release on its own vantage.
  * @param {any} page @param {string} base
  */
+/**
+ * Start a throwaway account's default runtime through the API, before the chat page is opened. The page's own start would do the same,
+ * but the walk's browser shares the host's network, and the first runtime container of an account adds a network interface at the moment
+ * the page is loading: Chromium aborts what is in flight with ERR_NETWORK_CHANGED and the shell says 「打开超时，请重试」 after a minute
+ * (2026-10-24, a live check of a brand-new account; an account whose runtime is already up never saw it, which is why the owner's walk
+ * did not). Started here, nothing is loading; the page then finds a runtime that is up. Not a gate: a start that is refused or slow is
+ * a line in the report, and the page's own start and its retry take over as they always did.
+ * @param {any} context @param {string} base @param {string} csrf @param {unknown} projectId the account's default project, as `/api/me` names it
+ * @returns {Promise<string>} the line for the report
+ */
+async function prewarmRuntime(context, base, csrf, projectId) {
+  const started = Date.now();
+  try {
+    const project = String(projectId ?? "default");
+    const answer = await context.request.post(`${base}/api/commands/start_runtime`, {
+      data: {}, headers: { origin: base, "x-open-science-csrf": csrf, "x-open-science-project": project }, timeout: 150_000,
+    });
+    return `chat: the throwaway account's runtime was started through the API first (${answer.status()} after ${Math.round((Date.now() - started) / 1000)} s)`;
+  } catch (error) {
+    return `chat: the throwaway account's runtime could not be started through the API first (${String(/** @type {any} */ (error)?.message ?? error).slice(0, 80)}); the page starts it`;
+  }
+}
+
 async function walkChat(page, base) {
   let networkChanged = 0;
   const onFailed = (request) => { if (/ERR_NETWORK_CHANGED/.test(request.failure()?.errorText ?? "")) networkChanged += 1; };
   page.on?.("requestfailed", onFailed);
   try {
-    await page.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto(`${base}/app/home`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     let retried = false;
     let deadline = Date.now() + 120_000;
     while (Date.now() < deadline) {
@@ -4174,7 +5044,11 @@ async function walkChat(page, base) {
           // On screen: a researcher's statistics are in the document and hidden (R13 E-17), and are not what this records.
           stats: [...document.querySelectorAll("[data-composer-stats],[data-composer-stat]")].filter((node) => node.getClientRects().length > 0).map((node) => node.textContent?.trim() ?? ""),
         })).catch(() => null);
-        if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+        if (seen?.composer) {
+          const address = globalConversationAddress(page);
+          if (!address.valid) return { loaded: false, loadedRoute: address.loadedRoute, state: `the global entry did not open the default conversation (${address.loadedRoute})` };
+          return { loaded: true, loadedRoute: address.loadedRoute, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+        }
       }
       const shell = await page.evaluate(() => document.body.innerText).catch(() => "");
       if (/秒内没有载入完成|无法载入|载入失败|打开超时|暂时无法打开|无法连接/.test(shell)) {

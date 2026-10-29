@@ -12,3 +12,21 @@ from pathlib import Path
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 if str(FIXTURES) not in sys.path:
     sys.path.insert(0, str(FIXTURES))
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def fresh_chain_state():
+    """The paper text chain keeps two things per process — the hosts that refused an exit (``landing.VERDICTS``) and
+    the feeds read (``feeds.CACHE``); every test starts without them, as each recorded case was recorded."""
+    from knowledge_plugin.enrich import feeds, landing
+
+    landing.VERDICTS.until.clear()
+    feeds.CACHE.entries.clear()
+    feeds.CACHE.locks.clear()
+    yield
+    landing.VERDICTS.until.clear()
+    feeds.CACHE.entries.clear()
+    feeds.CACHE.locks.clear()

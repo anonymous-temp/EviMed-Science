@@ -8,7 +8,10 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { HttpError, sendError } from "../src/security.mjs";
 import { createCapsuleRoutes } from "../src/capsuleRoutes.mjs";
-import { capsuleShareMetricFamilies, recordCorroborationKeepers, recordShareRefused, recordShared, recordTakedown, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
+import {
+  CAPSULE_SHARE_CHANNELS, CAPSULE_SHARE_STAGES, capsuleShareMetricFamilies, recordCorroborationKeepers, recordShareApplied, recordShareCorrected, recordShareEnabled,
+  recordShareImported, recordShareOpened, recordShareRefused, recordShared, recordTakedown, resetCapsuleShareMetrics,
+} from "../src/capsuleShareMetrics.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { unzipSync } from "fflate";
 
@@ -16,6 +19,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 async function fixture(t, { operator = false, subscriptionsEnabled = true, shareEnabled = true, audience = true } = {}) {
   const calls = [];
+  /** How each received pack of the fixture reached the account, as `received()` reports it. @type {Record<string, any>} */
+  const sharedFromOf = { "pack-link": { channel: "link" }, "pack-file": { channel: "file" }, "pack-delivery": { channel: "delivery" }, "pack-platform": { channel: "official" } };
   const own = (user, id) => { if (id !== "mine") throw new HttpError(404, "capsule_not_found", "The capsule is unavailable."); };
   const transferService = {
     assertOwnCapsule: async (user, id) => own(user, id),
@@ -45,7 +50,10 @@ async function fixture(t, { operator = false, subscriptionsEnabled = true, share
     requireProject: async (_user, id) => { if (id !== "owned-project") throw new HttpError(404, "project_not_found", "Project unavailable."); return { id }; },
   };
   const links = { list: async () => [], revoke: async () => ({}) };
-  const handle = createCapsuleRoutes({ store, service: {}, transferService, sharing, links, subscriptions, maxJsonBytes: 262144, isOperator: () => operator,
+  // The two routes the funnel counts at: enabling a received pack (its view says how it reached the account) and previewing a file.
+  const service = { enableReceived: async (user, id) => { calls.push(["enableReceived", user, id]); return { id, sharedFrom: sharedFromOf[id] ?? null }; } };
+  transferService.preview = async (user) => { calls.push(["preview", user]); return { archiveSha256: "a".repeat(64) }; };
+  const handle = createCapsuleRoutes({ store, service, transferService, sharing, links, subscriptions, maxJsonBytes: 262144, isOperator: () => operator,
     shareEnabled, frontier: { allows: () => audience } });
   const server = createServer((req, res) => { handle(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -62,7 +70,7 @@ test("with the share switch off every sharing route is a 404 by name and reaches
     ["GET", `/api/capsules/shared/${token}`], ["POST", `/api/capsules/shared/${token}/import`, {}], ["GET", "/api/capsules/deliveries"], ["GET", "/api/capsules/deliveries/dlv_1"],
     ["POST", "/api/capsules/deliveries/dlv_1/decline", {}], ["POST", "/api/capsules/takedowns", { authorId: "someone" }],
     ["POST", "/api/capsules/mine/deliveries", { recipients: ["x"] }], ["GET", "/api/capsules/mine/deliveries"], ["POST", "/api/capsules/mine/links", {}], ["GET", "/api/capsules/mine/links"],
-    ["DELETE", "/api/capsules/mine/links/l1"], ["POST", "/api/capsules/mine/exports/s1/takedown", {}], ["GET", "/api/capsules/mine/methods/export?format=agent-skills"],
+    ["DELETE", "/api/capsules/mine/links/l1"], ["POST", "/api/capsules/mine/exports/s1/takedown", {}],
   ]) {
     const response = await fetch(`${base}${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
     assert.equal(response.status, 404, `${method} ${url}`);
@@ -71,6 +79,10 @@ test("with the share switch off every sharing route is a 404 by name and reaches
   assert.deepEqual(calls, [], "nothing of sharing was called");
   const own = await fetch(`${base}/api/capsules/subscriptions?projectId=owned-project`, { headers });
   assert.equal(own.status, 200, "a zone subscription is not sharing: it has its own switch");
+  // The method pack hands nothing to anyone on this deployment: it is a download of the account's own methods, so it works with sharing off.
+  const pack = await fetch(`${base}/api/capsules/mine/methods/export?format=agent-skills`, { headers });
+  assert.equal(pack.status, 200, "the Agent Skills pack is not behind the sharing switch");
+  assert.equal(pack.headers.get("content-type"), "application/zip");
 });
 
 test("a zone subscription is the frontier's: an account outside its audience reads the answer an unknown path gets, and nothing is read or written", async (t) => {
@@ -143,11 +155,11 @@ test("a subscription is a route of one project the account owns; with the switch
 test("the counters start at zero for every label and count only what they are told", () => {
   resetCapsuleShareMetrics();
   const read = () => Object.fromEntries(capsuleShareMetricFamilies().map((family) => [family.name, family.series]));
-  assert.ok(read().open_science_capsule_shares_total.every((row) => row.value === 0));
+  assert.ok(read().open_science_capsule_share_funnel_total.every((row) => row.value === 0));
   recordShared("link"); recordShared("not-a-channel"); recordTakedown("operator", 3); recordShareRefused("not_text_only"); recordShareRefused("made-up");
   const now = read();
-  assert.equal(now.open_science_capsule_shares_total.find((row) => row.labels.channel === "link").value, 1);
-  assert.equal(now.open_science_capsule_shares_total.reduce((sum, row) => sum + row.value, 0), 1, "an unknown label is ignored, never counted under a made-up one");
+  assert.equal(now.open_science_capsule_share_funnel_total.find((row) => row.labels.stage === "sent" && row.labels.channel === "link").value, 1);
+  assert.equal(now.open_science_capsule_share_funnel_total.reduce((sum, row) => sum + row.value, 0), 1, "an unknown label is ignored, never counted under a made-up one");
   assert.equal(now.open_science_capsule_takedown_copies_total.find((row) => row.labels.by === "operator").value, 3);
   assert.equal(now.open_science_capsule_share_refused_total.find((row) => row.labels.reason === "not_text_only").value, 1);
   // The keepers a corroboration judgement saw: counted, or left out and why (review C4b).
@@ -155,6 +167,57 @@ test("the counters start at zero for every label and count only what they are to
   recordCorroborationKeepers("counted", 2); recordCorroborationKeepers("account_too_new", 1); recordCorroborationKeepers("not-an-outcome", 9); recordCorroborationKeepers("too_few_runs", -4);
   const keepers = Object.fromEntries(read().open_science_capsule_share_keepers_total.map((row) => [row.labels.outcome, row.value]));
   assert.deepEqual(keepers, { counted: 2, account_too_new: 1, too_few_runs: 0 }, "an unknown outcome is ignored and a count below zero adds nothing");
+  resetCapsuleShareMetrics();
+});
+
+// The funnel (B-landscape 1.9 / platform brief P4): one counter per stage a pack goes through, each by channel, each moved by its own event.
+test("the funnel counts each stage by channel, from zero, and ignores a channel or stage it does not hold", () => {
+  resetCapsuleShareMetrics();
+  const read = () => Object.fromEntries(capsuleShareMetricFamilies().find((family) => family.name === "open_science_capsule_share_funnel_total").series
+    .map((row) => [`${row.labels.stage}/${row.labels.channel}`, row.value]));
+  assert.deepEqual(CAPSULE_SHARE_STAGES, ["sent", "opened", "imported", "enabled", "applied", "corrected"]);
+  assert.deepEqual(CAPSULE_SHARE_CHANNELS, ["file", "delivery", "link"]);
+  const start = read();
+  assert.equal(Object.keys(start).length, 18, "six stages by three channels exist from the start");
+  assert.ok(Object.values(start).every((value) => value === 0));
+  /** @type {[string, (channel: string) => void][]} */
+  const recorders = [["sent", recordShared], ["opened", recordShareOpened], ["imported", recordShareImported], ["enabled", recordShareEnabled],
+    ["applied", recordShareApplied], ["corrected", recordShareCorrected]];
+  for (const [index, [stage, record]] of recorders.entries()) {
+    // Each stage by itself: the same call ten times over would show a recorder wired to the wrong stage.
+    for (let times = 0; times <= index; times += 1) record("delivery");
+    record("link");
+    assert.equal(read()[`${stage}/delivery`], index + 1, `${stage} counts under delivery`);
+    assert.equal(read()[`${stage}/link`], 1, `${stage} counts under link`);
+    assert.equal(read()[`${stage}/file`], 0, `${stage} did not touch file`);
+  }
+  const before = read();
+  for (const [, record] of recorders) { record("official"); record("not-a-channel"); record(undefined); record(null); }
+  assert.deepEqual(read(), before, "a platform pack's channel, an unknown one and a missing one are ignored, never counted under a made-up label");
+  resetCapsuleShareMetrics();
+  assert.ok(Object.values(read()).every((value) => value === 0));
+});
+
+test("the funnel's enabled is the click on a received pack by the channel it came by, and a file read is the file channel's opened", async (t) => {
+  resetCapsuleShareMetrics();
+  const { base, headers } = await fixture(t);
+  const funnel = () => Object.fromEntries(capsuleShareMetricFamilies().find((family) => family.name === "open_science_capsule_share_funnel_total").series
+    .filter((row) => row.value > 0).map((row) => [`${row.labels.stage}/${row.labels.channel}`, row.value]));
+  const enable = (id) => fetch(`${base}/api/capsules/${id}/enable`, { method: "POST", headers, body: "{}" });
+  assert.equal((await enable("pack-link")).status, 200);
+  assert.equal((await enable("pack-link")).status, 200);
+  assert.equal((await enable("pack-delivery")).status, 200);
+  assert.equal((await enable("pack-file")).status, 200);
+  assert.deepEqual(funnel(), { "enabled/link": 2, "enabled/delivery": 1, "enabled/file": 1 }, "an enable click counts under the channel the pack came by");
+  assert.equal((await enable("pack-platform")).status, 200);
+  assert.equal((await enable("pack-unknown")).status, 200);
+  assert.deepEqual(funnel(), { "enabled/link": 2, "enabled/delivery": 1, "enabled/file": 1 }, "a platform pack and one with no channel are no share");
+
+  const preview = () => fetch(`${base}/api/capsules/transfers/preview`, { method: "POST", headers, body: JSON.stringify({ archive: "{}", password: "x" }) });
+  assert.equal((await preview()).status, 200);
+  assert.equal(funnel()["opened/file"], 1, "a file previewed is opened on the file channel");
+  assert.equal(funnel()["opened/delivery"], undefined, "and never on the delivery or link channel, which are opened by their own routes");
+  assert.equal(funnel()["opened/link"], undefined);
   resetCapsuleShareMetrics();
 });
 
@@ -189,8 +252,10 @@ test("the sharing levers have the defaults the plan names, are range-checked by 
   assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, false, "the frontier being on does not turn it on");
   assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true", OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, true);
   assert.equal(configUnder({ OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, false, "and its own switch does not turn it on without the frontier");
-  assert.equal(defaults.capsuleShareEnabled, false);
-  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).capsuleShareEnabled, false, "sharing is not the frontier's");
+  // Sharing stays on (owner ruling 2026-10-10; the default was false until 2026-10-23): it is turned off, never on.
+  assert.equal(defaults.capsuleShareEnabled, true);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).capsuleShareEnabled, true, "sharing is not the frontier's");
+  assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: "false" }).capsuleShareEnabled, false);
   assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: "true" }).capsuleShareEnabled, true);
   assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS: "7", OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES: "" }).capsuleShareLinkTtlDays, 7);
   for (const [name, , , bad] of LEVERS) for (const value of bad) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);

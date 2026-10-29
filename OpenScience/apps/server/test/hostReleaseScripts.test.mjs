@@ -234,3 +234,40 @@ test("configured replay delta uses repository context and release labels without
   const file = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile.result-replay"), "utf8");
   for (const label of ["version", "revision", "created"]) assert.match(file, new RegExp(`org.opencontainers.image.${label}=`));
 });
+
+test("host dependency preparation precedes release CLI module imports and moving current", async () => {
+  const source = await code('host-release-switch.sh');
+  const prepared = source.indexOf('prepare-host-ops-dependencies.mjs');
+  const imported = source.indexOf('result-replay-deployment.mjs');
+  const moved = source.indexOf('require("node:fs").renameSync(process.argv[1], process.argv[2])');
+  assert.ok(prepared > 0 && prepared < imported && prepared < moved);
+  assert.match(source, /prepare-host-ops-dependencies\.mjs" --source-root "\$\{REL\}\/OpenScience"/);
+});
+
+test("a delta whose office scripts changed replaces the tree and runs the full build's office smoke on it, never the base's copy", async () => {
+  // 2026-10-25: the GEO v3 exports changed office/shared/render_document.py; the delta stopped and asked for a full build the host
+  // had no room for. It now does what the full build does for that tree, with the source's own install-runtime.sh.
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const install = await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8");
+  assert.match(delta, /^COPY deploy\/runtime-dsh\/install-runtime\.sh \/tmp\/evimed-install-runtime\.sh$/m);
+  assert.match(delta, /bash \/tmp\/evimed-install-runtime\.sh office-smoke/);
+  assert.match(delta, /cp -a --no-preserve=links "\$\{source\}" "\$\{live\}"/, "the replaced tree holds single-link files");
+  assert.match(install, /install -m 0644 \/usr\/local\/share\/evimed\/skills\/office\/shared\/render_document\.py \/opt\/evimed\/export\/render_document\.py/,
+    "the office smoke installs the export renderer where the document renderer runs it");
+});
+
+test("a delta whose curated scripts or assets changed replaces the tree and runs the full build's curated and office smokes on it", async () => {
+  // 2026-10-25: the skills and plugin centre adopted three pinned upstream methods with scripts, references and assets under
+  // curated-scientific; the delta stopped and asked for a full build. It now replaces the tree and smokes it as the full build does.
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const curated = delta.slice(delta.indexOf("COPY runtime/skills/curated-scientific /tmp/evimed-curated-source"), delta.indexOf("COPY runtime/skills/office /tmp/evimed-office-source"));
+  assert.ok(curated.length > 0);
+  assert.match(curated, /^COPY deploy\/runtime-dsh\/install-runtime\.sh \/tmp\/evimed-install-runtime\.sh$/m, "the source's own phases run, never the base's");
+  assert.match(curated, /cp -a --no-preserve=links "\$\{source\}" "\$\{live\}"/);
+  assert.match(curated, /bash \/tmp\/evimed-install-runtime\.sh curated-smoke/);
+  assert.doesNotMatch(curated, /changed beyond their prose; build the full Dockerfile/);
+  assert.match(curated, /build the full Dockerfile/, "a package the base lacks still stops the delta");
+  assert.match(delta, /if \[ -e \/tmp\/evimed-curated-moved \]; then bash \/tmp\/evimed-install-runtime\.sh office-smoke/,
+    "the curated skills with entrypoints of their own are smoked by the office phase");
+  assert.equal((delta.match(/^COPY deploy\/runtime-dsh\/install-runtime\.sh /gm) ?? []).length, 1);
+});

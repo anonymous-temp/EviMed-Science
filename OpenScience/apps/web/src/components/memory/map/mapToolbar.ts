@@ -3,10 +3,12 @@ import type { FilterOption } from "@/components/ui/FilterChips";
 import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
 import { formatDay } from "@/lib/format";
 import { kindTitle } from "@/lib/memoryGroups";
-import { MAP_VIEWS, type MapView, type MemoryMap } from "@/lib/memoryMapClient";
+import { MAP_VIEWS, type MapPart, type MapView, type MemoryMap } from "@/lib/memoryMapClient";
 import type { MapSelection } from "./useMapSelection";
 
 export const VIEW_NAMES: Record<MapView, string> = { graph: "关系", topics: "主题", dims: "维度", time: "时间", activity: "活跃" };
+/** What each part of the capsule is called where a card of the overview has opened the map on it: the overview's own words. */
+export const PART_NAMES: Record<MapPart, string> = { you: "关于你", project: "项目", method: "做法", knowledge: "知识" };
 const VIEW_OPTIONS: FilterOption<MapView>[] = MAP_VIEWS.map((value) => ({ value, label: VIEW_NAMES[value] }));
 
 const RANGES: FilterOption<string>[] = [
@@ -35,6 +37,7 @@ export function rangeLabel(range: string): string {
  *    that lets go of it, like a topic.
  */
 export function mapToolbar({ selection, doc, topicName, aspectName, focusLabel, onView, onNarrow, onClear, search }: {
+  /** `part` is the card of the overview the map was opened from: one mark that lets go of it, like a topic. */
   selection: MapSelection;
   /** Null until the document is read: the views and the search are there from the first moment, so the band does not change. */
   doc: Pick<MemoryMap, "facets" | "summary"> | null;
@@ -66,6 +69,7 @@ export function mapToolbar({ selection, doc, topicName, aspectName, focusLabel, 
   if (kinds.length > 0) filters.push({ kind: "select", label: "种类", allLabel: "全部种类", options: kinds, value: selection.kind, onChange: (kind) => onNarrow({ kind }) });
   // Only when something needs a look (or the page is already narrowed to it, so it can be let go): a chip for nothing is a filter that empties the page.
   if ((doc?.summary.needsLook ?? 0) > 0 || selection.look) filters.push({ kind: "toggle", label: "只看需要看一眼的", pressed: selection.look, onChange: (look) => onNarrow({ look }) });
+  if (selection.part) filters.push({ kind: "toggle", label: `只看：${PART_NAMES[selection.part]}`, pressed: true, icon: X, onChange: () => onNarrow({ part: null }) });
   if (topicName) filters.push({ kind: "toggle", label: `主题：${topicName}`, pressed: true, icon: X, onChange: () => onNarrow({ topic: null }) });
   if (aspectName) filters.push({ kind: "toggle", label: `维度：${aspectName}`, pressed: true, icon: X, onChange: () => onNarrow({ dimension: null }) });
   if (selection.focus && focusLabel) {

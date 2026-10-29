@@ -1,11 +1,11 @@
 // An OpenViking that lives in a test: the routes the native memory path calls, answering in the envelopes recorded from
-// v0.5.0 (`packages/contracts/openviking/fixtures/memory/`). It keeps files, sessions and tasks in memory, runs an
+// v0.5.1.1 (`packages/contracts/openviking/fixtures/memory/`). It keeps files, sessions and tasks in memory, runs an
 // "extraction" the test supplies at commit, and records every request it was sent — headers included — so a test can
 // assert what reached the engine and what did not.
 //
 // What it copies from the real server, because the code under test depends on it: a commit answers at once with a task and
 // an archive URI; the task ends `completed` with a `memory_diff_uri` or `failed` with a `.failed.json` beside the archive's
-// `messages.jsonl`; a failed archive is never retried; a file made by `content/write mode=create` has no memory type; a
+// `messages.jsonl`; a failed archive is never retried; a file made by `content/write` has no memory type (`create` is an alias of `replace`, and `replace` creates a missing file); a
 // settings PATCH without `memory_types` opens the user to every built-in type; an unregistered user's admin routes are 404;
 // a user being deleted answers 412; `fs/tree` pages with `has_more`.
 import { once } from "node:events";
@@ -15,7 +15,7 @@ const ok = (result, extra = {}) => ({ status: "ok", result, error: null, telemet
 const fail = (code, message) => ({ status: "error", result: null, error: { code, message }, telemetry: null, profile: null });
 
 const BUILT_IN_TYPES = ["cases", "entities", "events", "experiences", "identity", "preferences", "profile", "soul", "trajectories"];
-export const STUB_MEMORY_TYPES = ["corrections", "decisions", "entities", "follow_ups", "preferences", "profile", "project_context", "project_facts"];
+export const STUB_MEMORY_TYPES = ["corrections", "decisions", "entities", "follow_ups", "observations", "preferences", "profile", "project_context", "project_facts", "recent_work"];
 
 export class OpenVikingStub {
   /**
@@ -24,8 +24,17 @@ export class OpenVikingStub {
    *   `extract` decides what a commit writes: operations in the engine's own diff shape (`{ uri, memory_type, after }`,
    *   `{ uri, memory_type, before, after }`, `{ uri, memory_type, deleted_content }`), or `"fail"` for a failed extraction.
    */
-  constructor({ extract = () => ({}), account = "evimed", apiKey = "stub-root-key" } = {}) {
+  constructor({ extract = () => ({}), consolidate = () => ({}), account = "evimed", apiKey = "stub-root-key" } = {}) {
     this.extract = extract;
+    /**
+     * What `compile --skill memory` does to an account's memories: `({ user, to, files, instruction }) => { adds?: { uri, text }[], updates?: { uri, text }[],
+     * deletes?: string[], errors?: string[], fail?: string }` — the stub applies it to its files and answers the task with the URIs only, as the engine does.
+     */
+    this.consolidate = consolidate;
+    /** How many times a consolidation task answers `running` before it is done. */
+    this.consolidationPolls = 1;
+    /** @type {Map<string, string>} idempotency key → task id */
+    this.compileKeys = new Map();
     this.account = account;
     this.apiKey = apiKey;
     /** @type {Map<string, string>} uri → text (files of every kind: memories, archives' own files) */
@@ -40,6 +49,10 @@ export class OpenVikingStub {
     this.users = new Map();
     /** @type {Set<string>} users being deleted */
     this.deleting = new Set();
+    /** @type {Set<string>} `${user}/${target}` privacy configurations a v0.5.2 engine keeps beside a session; an engine without any answers 404 to the delete, as v0.5.1.1 does */
+    this.privacyConfigs = new Set();
+    /** What `/health` says the engine is. */
+    this.version = "v0.5.1.1";
     /** @type {any[]} every request, in order */
     this.requests = [];
     this.taskSeq = 0;
@@ -99,7 +112,7 @@ export class OpenVikingStub {
       res.writeHead(status, { "content-type": contentType });
       res.end(typeof json === "string" ? json : JSON.stringify(json));
     };
-    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: "v0.5.0", auth_mode: "trusted", user_id: user || null });
+    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: this.version, auth_mode: "trusted", user_id: user || null });
     if (req.headers["x-api-key"] !== this.apiKey) return send(401, fail("UNAUTHENTICATED", "Invalid API key"));
     if (this.failWith) return send(this.failWith, fail("UNAVAILABLE", "stub: down"));
     const admin = /^\/api\/v1\/admin\/accounts\/([^/]+)\/users(?:\/([^/]+)(\/settings)?)?$/.exec(url.pathname);
@@ -111,6 +124,12 @@ export class OpenVikingStub {
     const own = `viking://user/${user}`;
     const within = (uri) => uri === own || uri.startsWith(`${own}/`) || uri === "viking://user" || uri.startsWith("viking://resources") || uri.startsWith("viking://agent");
 
+    const privacy = /^\/api\/v1\/privacy-configs\/session\/([^/]+)$/.exec(path);
+    if (privacy && req.method === "DELETE") {
+      const key = `${user}/${decodeURIComponent(privacy[1])}`;
+      if (!this.privacyConfigs.delete(key)) return send(404, fail("NOT_FOUND", "Privacy config not found"));
+      return send(200, ok({ deleted: true }));
+    }
     if (path === "/api/v1/sessions" && req.method === "POST") {
       const id = String(body?.session_id ?? `auto-${this.sessions.size + 1}`);
       if (this.#session(user, id)) return send(409, fail("ALREADY_EXISTS", `Session already exists: ${id}`));
@@ -123,7 +142,8 @@ export class OpenVikingStub {
       const session = this.#session(user, id);
       if (!session) return send(404, fail("NOT_FOUND", `Session not found: ${id}`));
       if (!action && req.method === "GET") {
-        return send(200, ok({ session_id: id, message_count: session.messages.length, commit_count: session.commitCount, pending_tokens: session.messages.length * 50, uri: `${own}/sessions/${id}` }));
+        return send(200, ok({ session_id: id, message_count: session.messages.length, commit_count: session.commitCount, pending_tokens: session.messages.length * 50, uri: `${own}/sessions/${id}`,
+          user: { account_id: this.account, user_id: user } }));
       }
       if (!action && req.method === "DELETE") { this.sessions.delete(`${user}/${id}`); return send(200, ok({ session_id: id })); }
       if (action === "messages" && req.method === "POST") {
@@ -136,7 +156,35 @@ export class OpenVikingStub {
     if (taskMatch && req.method === "GET") {
       const task = this.tasks.get(taskMatch[1]);
       if (!task || task.user !== user) return send(404, fail("NOT_FOUND", "Task not found"));
-      return send(200, ok(task.public));
+      if (task.final && task.polls > 0) { task.polls -= 1; return send(200, ok(task.public)); }
+      return send(200, ok(task.final ?? task.public));
+    }
+    if (path === "/api/v1/compile" && req.method === "POST") {
+      if (body?.skill !== "memory") return send(400, fail("INVALID_ARGUMENT", "the stub compiles nothing but memory"));
+      const to = String(body?.to ?? "");
+      if (!within(to) || !to.startsWith(`${own}/memories`)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
+      if (body?.from !== undefined) return send(400, fail("INVALID_ARGUMENT", "--from is not accepted in memory mode"));
+      const key = String(req.headers["idempotency-key"] ?? "");
+      const earlier = key ? this.compileKeys.get(`${user}/${key}`) : null;
+      // The engine answers a key it has seen with the task it made (a failed one too), while it still holds that task.
+      if (earlier && this.tasks.has(earlier)) return send(200, ok(this.tasks.get(earlier).public));
+      const taskId = `00000000-0000-4000-9000-${String(++this.taskSeq).padStart(12, "0")}`;
+      if (key) this.compileKeys.set(`${user}/${key}`, taskId);
+      const outcome = this.consolidate({ user, to, files: this.files, instruction: body?.instruction ?? null }) ?? {};
+      const adds = outcome.adds ?? [];
+      const updates = outcome.updates ?? [];
+      const deletes = outcome.deletes ?? [];
+      if (!outcome.fail) {
+        for (const item of [...adds, ...updates]) { this.files.set(item.uri, item.text); if (!this.tags.has(item.uri)) this.tags.set(item.uri, []); }
+        for (const uri of deletes) { this.files.delete(uri); this.tags.delete(uri); }
+      }
+      const running = { task_id: taskId, task_type: "compile", status: "running", stage: "consolidating", result: null, error: null };
+      const final = outcome.fail
+        ? { ...running, status: "failed", stage: "failed", error: outcome.fail, result: null }
+        : { ...running, status: "completed", stage: "completed", result: { memory_type: null, trace_id: "trace-stub", adds: adds.map((item) => item.uri), updates: updates.map((item) => item.uri), deletes,
+          total_adds: adds.length, total_updates: updates.length, total_deletes: deletes.length, errors: outcome.errors ?? [], memory_types: ["entities", "preferences", "profile"] } };
+      this.tasks.set(taskId, { user, public: { ...running, status: "pending", stage: "queued" }, final: { ...final }, polls: this.consolidationPolls });
+      return send(200, ok({ ...running, status: "pending", stage: "queued" }));
     }
     if (path === "/api/v1/fs/tree" || path === "/api/v1/fs/ls") {
       const uri = String(q.get("uri") ?? "");
@@ -196,13 +244,14 @@ export class OpenVikingStub {
     if (path === "/api/v1/content/write" && req.method === "POST") {
       const uri = String(body?.uri ?? "");
       if (!within(uri)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
-      if (body?.mode === "create" && this.files.has(uri)) return send(409, fail("ALREADY_EXISTS", `File exists: ${uri}`));
-      if (body?.mode === "replace" && !this.files.has(uri) && !uri.includes("/memories/evimed/")) return send(404, fail("NOT_FOUND", `File not found: ${uri}`));
+      // v0.5.1.1: `create` is an alias of `replace` (no 409 on an existing file), and `replace` creates a file that is not there.
       this.files.set(uri, String(body?.content ?? ""));
       if (!this.tags.has(uri)) this.tags.set(uri, []);
       return send(200, ok({ uri, mode: body?.mode, written_bytes: Buffer.byteLength(String(body?.content ?? "")), content_updated: true, vector_status: "complete" }));
     }
     if (path === "/api/v1/search/search" || path === "/api/v1/search/find") {
+      const context = body?.mode === "context";
+      if ((!context && (Object.hasOwn(body ?? {}, "exclude_uris") || Object.hasOwn(body ?? {}, "query_expansion"))) || (context && Object.hasOwn(body ?? {}, "target_uri"))) return send(400, fail("INVALID_ARGUMENT", "Context-only fields require context mode; context mode forbids target_uri"));
       const exclude = Array.isArray(body?.exclude_uris) ? body.exclude_uris : [];
       const target = String(body?.target_uri ?? `${own}/memories`);
       if (!within(target)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
@@ -246,20 +295,24 @@ export class OpenVikingStub {
     const taskId = `00000000-0000-4000-8000-${String(++this.taskSeq).padStart(12, "0")}`;
     const paused = this.users.get(user)?.learning === false;
     const outcome = paused ? {} : this.extract({ user, session: id, messages, files: this.files });
-    if (outcome === "fail") {
-      this.files.set(`${archive}/.failed.json`, JSON.stringify({ stage: "memory_extraction", error: "Error code: 429 - stub", failed_at: new Date().toISOString() }));
-      this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "failed", resource_id: id, result: null, error: "Error code: 429 - stub" } });
+    if (outcome === "fail" || typeof outcome?.fail === "string") {
+      // `{ fail: "<the engine's own error text>" }` names why (v0.5.2: `budget_exhausted`); a bare "fail" is the 429 of a rate-limited minute.
+      const error = typeof outcome?.fail === "string" ? outcome.fail : "Error code: 429 - stub";
+      this.files.set(`${archive}/.failed.json`, JSON.stringify({ stage: "memory_extraction", error, failed_at: new Date().toISOString() }));
+      this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "failed", resource_id: id, result: null, error } });
     } else {
       const operations = { adds: outcome.adds ?? [], updates: outcome.updates ?? [], deletes: outcome.deletes ?? [] };
       for (const add of operations.adds) { this.files.set(add.uri, add.after); this.tags.set(add.uri, [`memory_type=${add.memory_type}`]); }
       for (const update of operations.updates) this.files.set(update.uri, update.after);
       for (const removed of operations.deletes) { this.files.delete(removed.uri); this.tags.delete(removed.uri); }
       const diffUri = `${archive}/memory_diff.json`;
-      this.files.set(diffUri, JSON.stringify({ archive_uri: archive, extracted_at: new Date().toISOString(), operations,
-        summary: { total_adds: operations.adds.length, total_updates: operations.updates.length, total_deletes: operations.deletes.length } }));
+      const skipped = outcome.skipped ?? [];
+      this.files.set(diffUri, JSON.stringify({ archive_uri: archive, extracted_at: new Date().toISOString(), operations, skipped_operations: skipped,
+        summary: { total_adds: operations.adds.length, total_updates: operations.updates.length, total_deletes: operations.deletes.length, total_skipped: skipped.length } }));
       this.files.set(`${archive}/.done`, "");
       this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "completed", resource_id: id,
-        result: { session_id: id, archive_uri: archive, memories_extracted: { memory_write: operations.adds.length + operations.updates.length }, memory_diff_uri: diffUri }, error: null } });
+        result: { session_id: id, archive_uri: archive, memories_extracted: operations.adds.length + operations.updates.length ? { memory_write: operations.adds.length + operations.updates.length } : {},
+          memory_extraction: { skipped: skipped.length, skipped_operations: skipped }, effective_memory_types: [...STUB_MEMORY_TYPES], memory_diff_uri: diffUri }, error: null } });
     }
     return { session_id: id, status: "accepted", task_id: taskId, archive_uri: archive, archived: true };
   }
@@ -312,6 +365,10 @@ export class OpenVikingStub {
         const name = message.params?.name;
         const args = message.params?.arguments ?? {};
         let text = "ok";
+        if (name === "search" && ((args.mode !== "context" && (Object.hasOwn(args, "exclude_uris") || Object.hasOwn(args, "query_expansion"))) || (args.mode === "context" && Object.hasOwn(args, "target_uri")))) {
+          out.push({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "Error: INVALID_ARGUMENT: context-only search fields" }], isError: true } });
+          continue;
+        }
         if (name === "read") text = (args.uris ?? []).map((uri) => this.files.get(uri) ?? "").join("\n");
         if (name === "list") text = [...this.files.keys()].filter((uri) => uri.startsWith(`${args.uri}/`)).map((uri) => `[file] ${uri.slice(String(args.uri).length + 1)}`).join("\n");
         if (name === "search") text = `Found: ${[...this.files.keys()].filter((uri) => uri.startsWith(`${args.target_uri}/`) && !(args.exclude_uris ?? []).some((prefix) => uri.startsWith(prefix))).join(", ")}`;

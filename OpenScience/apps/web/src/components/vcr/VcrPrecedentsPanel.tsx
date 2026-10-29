@@ -12,13 +12,14 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { useVcrToolbar } from "./studyFrameContext";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
+import { VcrReferenceSearch } from "./VcrReferenceSearch";
 import { numberText } from "./vcrText";
 
 /** What a registry's enrolment figure is: what happened, or what a sponsor hoped for. */
 const ENROLMENT_KIND: Readonly<Record<string, string>> = Object.freeze({ actual: "实际", anticipated: "预计", estimated: "预计" });
 
 /**
- * 试验先例: what comparable trials actually planned and what they actually
+ * 参考试验: what comparable trials actually planned and what they actually
  * enrolled.
  *
  * Planned and actual are two columns and never one. A registry's estimated
@@ -37,14 +38,13 @@ export function VcrPrecedentsPanel() {
   const [asked, setAsked] = useState("");
   const { state, reload } = useVcrLoad(`vcr:precedents:${asked}`, () => getVcrPrecedents(asked ? { q: asked } : {}));
   const off = state.kind === "error" && state.off === true;
-  const unavailable = state.kind === "ready" && !state.data.available;
   // The search and the count are the page's one toolbar, beside its views; a library that is not composed here has neither.
-  useVcrToolbar(off || unavailable
+  useVcrToolbar(off
     ? null
     : {
-      label: "试验先例的检索",
+      label: "参考试验的检索",
       search: {
-        label: "搜索先例",
+        label: "搜索登记试验",
         value: query,
         onChange: (next) => {
           setQuery(next);
@@ -53,37 +53,35 @@ export function VcrPrecedentsPanel() {
         onClear: () => { setQuery(""); setAsked(""); },
         inputProps: { onKeyDown: (event) => { if (event.key === "Enter") setAsked(query.trim()); } },
       },
-      summary: state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined,
+      summary: !asked && state.kind === "ready" ? `已保存 ${state.data.precedents.length} 项` : undefined,
     });
   if (off) return <EmptyState icon={Library} title={VCR_OFF_SENTENCE} />;
-  if (state.kind === "ready" && !state.data.available) {
-    return (
-      <div data-vcr-precedents-unavailable="">
-        <EmptyState icon={Library} title={state.data.message ?? "试验先例库在本部署尚未接入。"} />
-      </div>
-    );
-  }
+  const searchExample = () => { setQuery("diabetes"); setAsked("diabetes"); };
 
   return (
     <div className="flex flex-col gap-4">
-      {state.kind === "loading" ? <VcrTabSkeleton />
+      {asked && <VcrReferenceSearch key={asked} query={asked} onApplied={reload} />}
+      {/* With nothing saved the example search is the empty state's own action, not a line above it. */}
+      {!asked && !(state.kind === "ready" && state.data.available && state.data.precedents.length === 0) && <Button variant="text" onClick={searchExample}>检索示例：diabetes</Button>}
+      {!asked && (state.kind === "loading" ? <VcrTabSkeleton />
         : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} />
-          : state.data.precedents.length === 0
+          : !state.data.available ? <div data-vcr-precedents-unavailable=""><EmptyState icon={Library} title={state.data.message ?? "参考试验库在本部署尚未接入。"} /></div>
+            : state.data.precedents.length === 0
             ? (
               <EmptyState
                 icon={Library}
-                title={asked ? "没有找到先例" : "先例库里还没有先例"}
-                action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : undefined}
+                title={asked ? "没有找到已保存的参考试验" : "尚未保存参考试验"}
+                action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : <Button variant="secondary" onClick={searchExample}>检索示例：diabetes</Button>}
               />
             )
-            : <VcrPrecedentTable rows={state.data.precedents} />}
+            : <VcrPrecedentTable rows={state.data.precedents} />)}
 
       {/* What the registries could and could not be read for is the answer to 「为什么没有这一条」, one click under the precedents rather than above them. */}
-      {state.kind === "ready" && (state.data.registryCoverage?.length ?? 0) > 0 && (
+      {!asked && state.kind === "ready" && (state.data.registryCoverage?.length ?? 0) > 0 && (
         <Disclosure
           summary={(
             <span className="inline-flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              <span className="font-medium text-text">注册源覆盖</span>
+              <span className="font-semibold text-text">注册源覆盖</span>
               <span data-vcr-coverage-summary="" className="text-caption text-text-3">{registryCoverageSummary(state.data.registryCoverage ?? [])}</span>
             </span>
           )}
@@ -146,7 +144,7 @@ export function VcrPrecedentTable({ rows, withUse = false }: {
     },
     { key: "design", header: "设计", isEmpty: (row) => !row.design, cell: (row) => row.design ?? "—" },
     { key: "planned", header: "计划入组", align: "right", isEmpty: (row) => row.planned == null, cell: (row) => <span className="text-text-3">{numberText(row.planned, 0)}</span> },
-    { key: "actual", header: "实际入组", align: "right", isEmpty: (row) => row.actual == null, cell: (row) => <span className="font-medium">{numberText(row.actual, 0)}</span> },
+    { key: "actual", header: "实际入组", align: "right", isEmpty: (row) => row.actual == null, cell: (row) => <span>{numberText(row.actual, 0)}</span> },
     { key: "sites", header: "中心数", align: "right", isEmpty: (row) => row.sites == null, cell: (row) => numberText(row.sites, 0) },
     { key: "plannedMonths", header: "计划入组月数", align: "right", isEmpty: (row) => row.plannedMonths == null, cell: (row) => <span className="text-text-3">{numberText(row.plannedMonths, 0)}</span> },
     { key: "actualMonths", header: "实际入组月数", align: "right", isEmpty: (row) => row.actualMonths == null, cell: (row) => numberText(row.actualMonths, 0) },
@@ -157,7 +155,7 @@ export function VcrPrecedentTable({ rows, withUse = false }: {
   return (
     <>
       <DataTable
-        label="试验先例"
+        label="参考试验"
         minWidth="min-w-[48rem]"
         columns={columns}
         rows={rows}

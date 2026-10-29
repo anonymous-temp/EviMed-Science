@@ -1,10 +1,27 @@
-"""``python -m knowledge_plugin [serve|migrate|check-registry]``.
+"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|hot-lists|wechat-bodies|retext]``.
 
 ``serve`` (the default and the image's command) opens the pool, applies the schema, syncs the
 registry file into ``sources``, and — unless ``KNOWLEDGE_PLUGIN_CRAWL=0`` — starts the crawler in
 the same process as the API (one image, one process; plan 14.5). ``migrate`` applies the schema
 and exits; ``check-registry`` validates the registry file (and the adapters' view of each row)
 and exits non-zero on a problem, without touching a database.
+
+``lifecycle`` prints, one JSON line each, the sources the lifecycle rules would retire now and why, and a last line
+with the counts by reason; it writes nothing (``lifecycle --apply`` retires them and syncs the registry, what the
+hourly discovery run does once a day). ``discover`` runs the discovery cycle once in the foreground and prints its
+report (``--lines journal,directory`` limits the gathering; ``--caps line=n,…`` overrides the day's caps).
+``hot-lists`` reads the configured hot lists once in the foreground (``hotlists.py``), keeps the snapshots, and prints
+what each board gave or why it failed.
+
+``wechat-bodies`` prints, one JSON line each, the WeChat articles answered ``unavailable`` without their text in the last
+``--days`` (default 7) and a last line with the count and what buying them would cost; it writes nothing and calls nobody.
+``wechat-bodies --apply`` buys them through Dajiala within the day's cap and delivers each recovered entry again
+(``social.lost_bodies``).
+
+``retext`` prints, by kind and source, the stored texts the 2026-10-22 reader-text fixes would read again (WeChat bodies,
+page texts, Crossref abstracts with an entity escaped twice) and what the WeChat part costs; ``retext --apply`` reads them
+again and delivers each entry whose text changed as its next revision (``retext``). ``--kinds journal`` (named only) reads
+the journal entries the platform asked for that have no text at all through the paper text chain again.
 """
 
 from __future__ import annotations
@@ -32,14 +49,14 @@ async def _startup(settings: Settings, state: dict) -> None:
     from .budget import HostBudget, PgCounterStore, host_rules
     from .db import create_pool, migrate
     from .fetch import ProtectedFetcher
-    from .registry import load_registry, sync_registry
+    from .registry import load_registry
+    from .dynamic_registry import sync_dynamic_registry
     from .scheduler import Crawler
 
-    rows = load_registry(settings.registry_path)
     pool = await create_pool(settings)
     async with pool.connection() as conn:
         await migrate(conn)
-        await sync_registry(conn, rows, datetime.now(timezone.utc))
+        await sync_dynamic_registry(conn, lambda: load_registry(settings.registry_path), datetime.now(timezone.utc))
     budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
     await budget.load()
     fetcher = ProtectedFetcher(settings, budget)
@@ -87,6 +104,159 @@ async def _migrate(settings: Settings) -> None:
         async with pool.connection() as conn:
             await migrate(conn)
     finally:
+        await pool.close()
+
+
+async def _lifecycle(settings: Settings, apply: bool) -> int:
+    import json
+    from collections import Counter
+    from datetime import datetime, timezone
+
+    from .db import create_pool
+    from .lifecycle import retirement_plan
+    from .registry import load_registry
+
+    pool = await create_pool(settings)
+    try:
+        now = datetime.now(timezone.utc)
+        curated = {row.source.id for row in load_registry(settings.registry_path)}
+        if apply:
+            from .discovery import apply_retirements, shanghai_day
+            from .dynamic_registry import sync_dynamic_registry
+            async with pool.connection() as conn:
+                async with conn.transaction():
+                    plan = await apply_retirements(conn, now, shanghai_day(now), curated)
+                    await sync_dynamic_registry(conn, lambda: load_registry(settings.registry_path), now)
+            for item in plan:
+                print(json.dumps(item, ensure_ascii=False))
+            print(json.dumps({"applied": len(plan), "by_reason": dict(Counter(i["reason"] for i in plan))}))
+            return 0
+        async with pool.connection() as conn:
+            plan = await retirement_plan(conn, now, curated)
+        for decision in plan:
+            print(json.dumps({"source_id": decision.source_id, "reason": decision.reason,
+                              "registry_row": decision.source_id in curated, "evidence": decision.evidence},
+                             ensure_ascii=False, default=str))
+        print(json.dumps({"would_retire": len(plan), "by_reason": dict(Counter(d.reason for d in plan))}))
+        return 0
+    finally:
+        await pool.close()
+
+
+async def _discover(settings: Settings, lines: list[str] | None, caps: str | None) -> int:
+    import json
+    from datetime import datetime, timezone
+
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .discovery import parse_caps, run_discovery
+    from .fetch import ProtectedFetcher
+
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        report = await run_discovery(settings, pool, fetcher, lambda: datetime.now(timezone.utc),
+                                     caps=parse_caps(caps if caps is not None else settings.discovery_caps),
+                                     outbound_pages=settings.discovery_outbound_pages, gather_lines=lines)
+        print(json.dumps(report, ensure_ascii=False, default=str, indent=1))
+        return 0
+    finally:
+        await fetcher.aclose()
+        await pool.close()
+
+
+async def _hot_lists(settings: Settings) -> int:
+    import json
+
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .fetch import ProtectedFetcher
+    from .hotlists import HotListReader
+
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        report = await HotListReader(settings, pool, fetcher).tick()
+        print(json.dumps(report, ensure_ascii=False, indent=1))
+        return 0 if report["read"] else 1
+    finally:
+        await fetcher.aclose()
+        await pool.close()
+
+
+async def _wechat_bodies(settings: Settings, days: int, apply: bool) -> int:
+    import json
+    from datetime import datetime, timezone
+
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .fetch import ProtectedFetcher
+    from .social import lost_bodies
+    from .social.collector import SocialCollector
+
+    def clock():
+        return datetime.now(timezone.utc)
+
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        collector = SocialCollector(settings, pool, fetcher, clock=clock)
+        if apply:
+            outcome = await lost_bodies.apply(collector, pool, clock, days=days)
+        else:
+            outcome = await lost_bodies.report(collector, pool, clock(), days=days)
+        for line in outcome["entries"]:
+            print(json.dumps(line, ensure_ascii=False, default=str))
+        print(json.dumps(outcome["summary"], ensure_ascii=False, default=str))
+        return 0
+    finally:
+        await fetcher.aclose()
+        await pool.close()
+
+
+async def _retext(settings: Settings, args: list[str], apply: bool) -> int:
+    import json
+    from datetime import datetime, timezone
+
+    from . import retext
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .fetch import ProtectedFetcher
+    from .social.collector import SocialCollector
+
+    def clock():
+        return datetime.now(timezone.utc)
+
+    flags = retext.window(args, clock())
+    if isinstance(flags, str):
+        print(flags, file=sys.stderr)
+        return 2
+    kinds, since, before, limit = flags
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        collector = SocialCollector(settings, pool, fetcher, clock=clock)
+        if apply:
+            def emit(line: dict) -> None:
+                print(json.dumps(line, ensure_ascii=False, default=str), flush=True)
+            outcome = await retext.apply(collector, pool, fetcher, settings, clock, kinds, since=since, before=before,
+                                         limit=limit, emit=emit)
+        else:
+            outcome = await retext.report(collector, pool, clock(), kinds, since=since, before=before, limit=limit)
+            for line in outcome["entries"]:
+                print(json.dumps(line, ensure_ascii=False, default=str))
+        print(json.dumps(outcome["summary"], ensure_ascii=False, default=str), flush=True)
+        return 0
+    finally:
+        await fetcher.aclose()
         await pool.close()
 
 
@@ -139,7 +309,31 @@ def main(argv: list[str] | None = None) -> int:
     if command == "migrate":
         asyncio.run(_migrate(settings))
         return 0
-    print(f"unknown command {command!r}; use serve, migrate or check-registry", file=sys.stderr)
+    if command == "lifecycle":
+        return asyncio.run(_lifecycle(settings, apply="--apply" in argv[1:]))
+    if command == "discover":
+        lines = caps = None
+        for flag, value in zip(argv[1:], argv[2:]):
+            if flag == "--lines":
+                lines = [line.strip() for line in value.split(",") if line.strip()]
+            elif flag == "--caps":
+                caps = value
+        return asyncio.run(_discover(settings, lines, caps))
+    if command == "hot-lists":
+        return asyncio.run(_hot_lists(settings))
+    if command == "wechat-bodies":
+        days = 7
+        for flag, value in zip(argv[1:], argv[2:]):
+            if flag == "--days":
+                if not (value.isdigit() and 1 <= int(value) <= 30):
+                    print("--days takes a whole number of days from 1 to 30", file=sys.stderr)
+                    return 2
+                days = int(value)
+        return asyncio.run(_wechat_bodies(settings, days, apply="--apply" in argv[1:]))
+    if command == "retext":
+        return asyncio.run(_retext(settings, argv[1:], apply="--apply" in argv[1:]))
+    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover, hot-lists, wechat-bodies or retext",
+          file=sys.stderr)
     return 2
 
 

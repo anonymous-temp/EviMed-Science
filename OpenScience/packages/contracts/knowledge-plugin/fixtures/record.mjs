@@ -47,7 +47,9 @@
  *   node packages/contracts/knowledge-plugin/fixtures/record.mjs [--url http://127.0.0.1:18080]
  *
  * `--platform-source` records only what contract 1.3.0 changed (`recordPlatformSource` below) and keeps the rest; `--host-budget`
- * does the same for 1.4.0 (`recordHostBudget`).
+ * does the same for 1.4.0 (`recordHostBudget`), `--social` for 1.5.0 (`recordSocial`), `--patch` for 1.5.1 (`recordPatch`: the health
+ * answer and the manifest only), `--leads` for 1.6.0 (`recordLeads`: the health answer, the manifest and two posts to `/v1/leads`),
+ * `--hot-lists` for 1.7.0 (`recordHotLists`: the health answer, the manifest, the hot lists and a refused `since`).
  */
 
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -397,6 +399,249 @@ export async function recordHostBudget({ baseUrl, token, outDir = here, serverRo
   return recordings.map(({ name, status }) => ({ name, status }));
 }
 
+/**
+ * Re-record what contract 1.5.0 changes, off a live plugin speaking it, and leave every other recording as it was made.
+ *
+ * Hidden knowledge: 1.5.0 added social posts — `Entry.channel`, `platform`, `author`, `media`, `quoted`, `metrics`,
+ * `EntryText.body_text`, `GET /v1/media/{id}` — and `Health.providers` (with `Health.discovery`, which this recording's
+ * plugin may not report). The posts are real: an instance of 项目代码/knowledge-plugin whose social collector read X
+ * (SocialData) and WeChat (Dajiala) once (`tools/social_live_check.py`), then served with the crawler off. Recorded: the
+ * health answer (its `providers` are that instance's own ledger), the manifest, one X post that carries a quoted post (and
+ * media when one does), its text, one WeChat article whose text was bought, its text, and the bytes of an X post's first
+ * image. The stream
+ * pages, the registry pages and the earlier entries stay valid, since a minor only adds; the six-platform monitor's entries
+ * are recorded only when the instance holds one (`socialPlatform` says).
+ *
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string }} options
+ */
+export async function recordSocial({ baseUrl, token, outDir = here,
+  serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off), serving posts its social collector read live once" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  /** @type {Record<string, any>[]} */
+  const stream = [];
+  for (let after = 0, page = 0; ; page += 1) {
+    if (page >= MAX_PAGES) throw new Error("the stream did not end within the scan bound");
+    const response = await fetch(`${base}/v1/entries?after=${after}&limit=${SCAN_PAGE}&include_backfill=true`, {
+      headers: { accept: "application/json", authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) throw new Error(`scanning the stream failed with HTTP ${response.status}`);
+    const body = await response.json();
+    stream.push(...body.entries);
+    if (!body.has_more) break;
+    after = body.next_after;
+  }
+  const xPost = stream.find((entry) => entry.channel === "x" && entry.quoted && entry.media?.length && entry.text_status === "available")
+    ?? stream.find((entry) => entry.channel === "x" && entry.quoted && entry.text_status === "available")
+    ?? stream.find((entry) => entry.channel === "x" && entry.media?.length && entry.text_status === "available");
+  const withImage = xPost?.media?.length ? xPost : stream.find((entry) => entry.channel === "x" && entry.media?.length);
+  const wechatPost = stream.find((entry) => entry.channel === "wechat" && entry.text_status === "available" && !entry.backfill);
+  const socialPost = stream.find((entry) => entry.channel === "social");
+  if (!xPost || !withImage || !wechatPost) throw new Error("the instance holds no X post with media or no WeChat article with its text: run the live check first");
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+    await exchange(base, { name: "entry-x.json", path: `/v1/entries/${encodeURIComponent(xPost.entry_id)}`, ...signed }),
+    await exchange(base, { name: "text-x.json", path: `/v1/entries/${encodeURIComponent(xPost.entry_id)}/text`, ...signed }),
+    await exchange(base, { name: "entry-wechat.json", path: `/v1/entries/${encodeURIComponent(wechatPost.entry_id)}`, ...signed }),
+    await exchange(base, { name: "text-wechat.json", path: `/v1/entries/${encodeURIComponent(wechatPost.entry_id)}/text`, ...signed }),
+    ...(socialPost ? [await exchange(base, { name: "entry-social.json", path: `/v1/entries/${encodeURIComponent(socialPost.entry_id)}`, ...signed })] : []),
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const media = await mediaExchange(base, withImage.media[0].id, token);
+  expectStatus(media, 200);
+  recordings.push(media);
+  const [health, manifest] = recordings.map((recorded) => (recorded.name.endsWith(".json") ? json(recorded) : null));
+  if (manifest.contract?.version !== "1.5.0") throw new Error(`the plugin serves contract ${manifest.contract?.version}, not 1.5.0`);
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  if (!Array.isArray(health.providers)) throw new Error("the health answer has no providers: this is not a plugin of contract 1.5.0");
+  if (!String(media.headers["content-type"] ?? "").startsWith("image/")) throw new Error("the media answer is not an image");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.5.0 adds social posts (Entry.channel, platform, author, media, quoted, metrics; EntryText.body_text; GET /v1/media/{id}) and Health.providers: the health answer, the manifest, one X post with media and a quote, one WeChat article with its text, their texts and one stored image were recorded. The stream's recordings, the registry pages and the source row are the earlier plugins', still valid, since a minor only adds.",
+    socialPlatform: socialPost ? "recorded" : "not recorded: the instance held no six-platform entry (the GEO crawler answered 500 during the live check, its own database down)",
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
+/**
+ * A contract patch (1.5.1, 2026-10-22, rt-papers): `EntryText.fetched_from` gains `openalex`, `landing`, `publisher-feed`,
+ * `europepmc-fulltext` and `elsevier`, and `body_text` writes a full text's section headings as `## ` paragraphs. Nothing a
+ * recording holds changes shape, so only what names the contract — the health answer and the manifest — is recorded again off
+ * a live plugin of the new version; every other recording stays as it was made.
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string, version?: string }} options
+ */
+export async function recordPatch({ baseUrl, token, outDir = here, serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off)", version = "1.5.1" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const [health, manifest] = recordings.map(json);
+  if (manifest.contract?.version !== version) throw new Error(`the plugin serves contract ${manifest.contract?.version}, not ${version}`);
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: `Contract ${version} widens EntryText.fetched_from (openalex, landing, publisher-feed, europepmc-fulltext, elsevier) and says a full text's section headings are '## ' paragraphs: the health answer and the manifest name the new contract. Every other recording is the earlier plugins', still valid.`,
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
+/** The addresses `recordLeads` posts: two pages of a site nobody registered (one of them posted twice), and a DOI. */
+export const LEAD_POSTS = Object.freeze([
+  Object.freeze({ url: "https://med.example.cn/news/2026-10-24/1", trigger: "zh-report", query: "司美格鲁肽 肾脏结局", title: "司美格鲁肽改善肾脏结局",
+    published_hint: "2026-10-24T01:00:00.000Z" }),
+  Object.freeze({ url: "https://doi.org/10.1056/NEJMoa2599999", trigger: "primary-source" }),
+]);
+
+/**
+ * Contract 1.6.0 (2026-10-24, ct-mix): `POST /v1/leads`, the read method `lead`, `Health.leads` and `Manifest.capabilities.leads`.
+ * The health answer and the manifest are recorded again off a live plugin of 1.6.0 (they name the contract and carry the new
+ * fields), and two posts to `/v1/leads`: the first accepts its addresses, the second posts one of them again and an address that
+ * is no public page, and is answered `duplicate` and `refused`. The plugin's crawler is off, so nothing is read; every other
+ * recording stays as it was made.
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string }} options
+ */
+export async function recordLeads({ baseUrl, token, outDir = here, serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off), over an empty scratch database" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const accepted = await exchange(base, { name: "leads-accepted.json", path: "/v1/leads", method: "POST", ...signed, body: { leads: LEAD_POSTS } });
+  const again = await exchange(base, { name: "leads-duplicate.json", path: "/v1/leads", method: "POST", ...signed,
+    body: { leads: [{ url: LEAD_POSTS[0].url, trigger: "event-hot" }, { url: "https://localhost/not-public", trigger: "hot-tag" }] } });
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+    accepted, again,
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const [health, manifest, first, second] = recordings.map(json);
+  if (manifest.contract?.version !== "1.6.0") throw new Error(`the plugin serves contract ${manifest.contract?.version}, not 1.6.0`);
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  if (manifest.capabilities?.leads !== true || !health.leads) throw new Error("the plugin does not serve leads");
+  if (first.accepted !== LEAD_POSTS.length || second.duplicate !== 1 || second.refused !== 1) throw new Error("the lead posts were not answered as recorded");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  // The 1.5.1 health answer named the paid providers with the calls a live run had made, and its manifest the fields that run
+  // populated; a plugin of 1.6.0 over an empty scratch database has neither. Both are kept as they were recorded, under their
+  // version's name, and the contract test reads the providers and the fields there.
+  for (const name of ["health", "manifest"]) {
+    if (provenance.fixtures[`${name}.json`] && !provenance.fixtures[`${name}-1.5.1.json`]) {
+      await writeFile(path.join(outDir, `${name}-1.5.1.json`), await readFile(path.join(outDir, `${name}.json`)));
+      provenance.fixtures[`${name}-1.5.1.json`] = { ...provenance.fixtures[`${name}.json`] };
+    }
+  }
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.6.0 adds POST /v1/leads (the addresses the platform's lead triggers found, read under the plugin's own rules), the read method `lead`, Health.leads and Manifest.capabilities.leads: the health answer and the manifest name the new contract and carry the new fields, and two posts to /v1/leads record its answers (accepted; duplicate and refused). Every other recording is the earlier plugins', still valid.",
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
+/**
+ * Contract 1.7.0 (2026-10-25, c2-leads): `GET /v1/hot-lists`, `Health.hot_lists` and `Manifest.capabilities.hot_lists`. The
+ * health answer and the manifest are recorded again off a live plugin of 1.7.0 (they name the contract and carry the new
+ * fields), the hot lists it read live once before (`python -m knowledge_plugin hot-lists`; the relay boards fail where no relay
+ * is configured, and health says so), and its refusal of a `since` that is no date-time. The 1.6.0 health answer, which counted
+ * the two recorded lead posts, and its manifest are kept under their version's name; every other recording stays as it was made.
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string }} options
+ */
+export async function recordHotLists({ baseUrl, token, outDir = here, serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off) over a scratch database, after one live round of the hot lists (python -m knowledge_plugin hot-lists)" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+    await exchange(base, { name: "hot-lists.json", path: "/v1/hot-lists", ...signed }),
+    await exchange(base, { name: "error-hot-lists-since.json", path: "/v1/hot-lists?since=soon", ...signed }),
+  ];
+  const [health, manifest, hotLists, refused] = recordings;
+  for (const recorded of [health, manifest, hotLists]) expectStatus(recorded, 200);
+  expectStatus(refused, 400);
+  const [healthBody, manifestBody, listsBody] = [health, manifest, hotLists].map(json);
+  if (manifestBody.contract?.version !== "1.7.0") throw new Error(`the plugin serves contract ${manifestBody.contract?.version}, not 1.7.0`);
+  if (healthBody.contract !== manifestBody.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  if (manifestBody.capabilities?.hot_lists !== true || !healthBody.hot_lists) throw new Error("the plugin does not serve hot lists");
+  if (!Array.isArray(listsBody.boards) || !listsBody.boards.length) throw new Error("the plugin holds no hot list: run `python -m knowledge_plugin hot-lists` first");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  for (const name of ["health", "manifest"]) {
+    if (provenance.fixtures[`${name}.json`] && !provenance.fixtures[`${name}-1.6.0.json`]) {
+      await writeFile(path.join(outDir, `${name}-1.6.0.json`), await readFile(path.join(outDir, `${name}.json`)));
+      provenance.fixtures[`${name}-1.6.0.json`] = { ...provenance.fixtures[`${name}.json`] };
+    }
+  }
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifestBody.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifestBody.plugin, contractVersion: manifestBody.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.7.0 adds GET /v1/hot-lists (the public hot lists the plugin reads on its own pacing and keeps 72 hours: ranks, titles, heat, the board's description and link), Health.hot_lists and Manifest.capabilities.hot_lists: the health answer and the manifest name the new contract and carry the new fields, the hot lists are the snapshots a live round read, and a since that is no date-time records the refusal. Every other recording is the earlier plugins', still valid.",
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
+/** One image off `GET /v1/media/{id}`, recorded like any exchange but asking for an image. @param {string} base @param {string} id @param {string} token */
+async function mediaExchange(base, id, token) {
+  const recordedHeaders = { accept: "image/*" };
+  const response = await fetch(`${base}/v1/media/${id}`, { headers: { ...recordedHeaders, authorization: `Bearer ${token}` },
+    redirect: "error", signal: AbortSignal.timeout(60_000) });
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return { name: "media-x.jpg", request: { method: "GET", path: `/v1/media/${id}`, headers: recordedHeaders, credential: "the deployment token" },
+    status: response.status, headers: Object.fromEntries([...response.headers].sort(([left], [right]) => left.localeCompare(right))),
+    bytes, recordedAt: new Date().toISOString() };
+}
+
 function argument(/** @type {string} */ name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -411,8 +656,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exitCode = 1;
   } else {
     const serverRole = argument("server-role");
-    const recorded = process.argv.includes("--platform-source")
+    const recorded = process.argv.includes("--hot-lists")
+      ? await recordHotLists({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
+      : process.argv.includes("--leads")
+      ? await recordLeads({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
+      : process.argv.includes("--patch")
+      ? await recordPatch({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}), ...(argument("version") ? { version: argument("version") } : {}) })
+      : process.argv.includes("--platform-source")
       ? await recordPlatformSource({ baseUrl, token: loaded.value })
+      : process.argv.includes("--social")
+        ? await recordSocial({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
       : process.argv.includes("--host-budget")
         ? await recordHostBudget({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
         : await recordKnowledgePluginContract({ baseUrl, token: loaded.value });

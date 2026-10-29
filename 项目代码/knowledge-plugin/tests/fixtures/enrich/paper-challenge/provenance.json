@@ -1,0 +1,178 @@
+{
+ "case": "enrich/paper-challenge",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-22T15:28:46+00:00",
+ "note": "Unpaywall asked without a contact address (no secret read): its 422 is recorded as it came",
+ "rows": [
+  {
+   "entry_id": "j-0098-7484:f93d6ee3cdd2313f0af9889bf3d1827c",
+   "revision": 1,
+   "source_id": "j-0098-7484",
+   "external_key": "10.1001/jama.2026.20670",
+   "identity_key": "doi:10.1001/jama.2026.20670",
+   "url": "https://doi.org/10.1001/jama.2026.20670",
+   "canonical_url": "https://doi.org/10.1001/jama.2026.20670",
+   "doi": "10.1001/jama.2026.20670",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-22T08:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "0098-7484",
+    "issns": [
+     "0098-7484",
+     "1538-3598"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org"
+    ]
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "pending",
+   "text_kind": "none",
+   "fetched_from": null,
+   "abstract_chars": 0,
+   "body_chars": 0,
+   "notes": [
+    "landing_challenge:direct",
+    "landing_challenge",
+    "not_indexed_yet"
+   ]
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1001%2Fjama.2026.20670%22%5Bdoi%5D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1001%2Fjama.2026.20670%22%5Bdoi%5D",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:46+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 324,
+   "sha256": "c2a2436c2ccd39b649067268e94c6a9ed26e6ad6ae5b5f6f2e31d711e09b9e31"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1001%2Fjama.2026.20670%22&format=json&resultType=core&pageSize=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1001%2Fjama.2026.20670%22&format=json&resultType=core&pageSize=25",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:48+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 194,
+   "sha256": "8ad1acd2214e4d1dafbc2901bc08b3975c10a6b4345001e0fd9e55f64ea07431"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1001/jama.2026.20670",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1001/jama.2026.20670",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:49+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 4208,
+   "sha256": "066ecadffa27a3985adb04dec037760e3d1fa2b144e16e6408a289b50cd46789"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1001/jama.2026.20670?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.1001/jama.2026.20670?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:51+00:00",
+   "file": "04.json",
+   "gzip": false,
+   "bytes": 1323,
+   "sha256": "09314c59a9189f93da04ba7f3562a51dabc363367b3e7cd7e65394c9623295f3"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1001/jama.2026.20670?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1001/jama.2026.20670?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:52+00:00",
+   "file": "05.json",
+   "gzip": false,
+   "bytes": 231,
+   "sha256": "27fb17c8f4488e5b6fb614969dd6bb721fc54625937d338e0cc2074dbbc7eb45"
+  },
+  {
+   "method": "GET",
+   "url": "https://jamanetwork.com/journals/jama/fullarticle/2855688",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 403,
+   "final_url": "https://jamanetwork.com/journals/jama/fullarticle/2855688",
+   "headers": {
+    "content-type": "text/html; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:55+00:00",
+   "file": "06.html",
+   "gzip": false,
+   "bytes": 5686,
+   "sha256": "52da11a4e980d6cbeaf8ab36dfc3d81b873170adcbf0a1462c3a1bd914c56bea",
+   "error": {
+    "outcome": "challenge",
+    "detail": "cloudflare"
+   }
+  }
+ ]
+}

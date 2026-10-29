@@ -1,0 +1,38 @@
+{
+  "classification": "pre-main preparation calibration; not answer quality",
+  "caseId": "general-handoff",
+  "model": "deepseek-v4-pro",
+  "provider": "deepseek-pro",
+  "protocol": "chat-completions",
+  "maximumResponsesPerCheck": 2,
+  "retry": "malformed structure only; valid partial or missing scores are final",
+  "reference": "reviewed grounded proposition from unchanged user seed",
+  "checks": [
+    {
+      "id": "positive-paraphrase",
+      "answer": "For handoff notes, put the owner ahead of the due date.",
+      "requiredScore": 1
+    },
+    {
+      "id": "negated-ordering",
+      "answer": "For handoff notes, never place the owner before the deadline.",
+      "requiredScore": 0
+    },
+    {
+      "id": "reversed-ordering",
+      "answer": "For handoff notes, place the deadline before the owner.",
+      "requiredScore": 0
+    },
+    {
+      "id": "unrelated-currency",
+      "answer": "My forecast currency is EUR.",
+      "requiredScore": 0
+    },
+    {
+      "id": "missing-scope",
+      "answer": "Always put the owner before the deadline.",
+      "requiredScoreLessThan": 1
+    }
+  ],
+  "question": "Does this actual memory preserve the complete reviewed user proposition, including scope, ordering, qualifications and negation?"
+}

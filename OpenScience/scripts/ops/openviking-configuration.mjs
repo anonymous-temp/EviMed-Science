@@ -1,5 +1,5 @@
 import {
-  OPENVIKING_MEMORY_TEMPLATES_DIR, OPENVIKING_MEMORY_TYPES, OPENVIKING_SHIM_PORT, openVikingKnowledgeModelKey,
+  OPENVIKING_MEMORY_TEMPLATES_DIR, OPENVIKING_MEMORY_TYPES, openVikingKnowledgeModelKey,
 } from "../../apps/server/src/openVikingLayout.mjs";
 
 /**
@@ -13,7 +13,7 @@ export const OPENVIKING_MODEL_GATEWAY_URL = "http://open-science-web:8787/intern
  * The engine's whole configuration, rendered rather than hand-written.
  *
  * Every value here was settled against a running server — v0.4.19 for the first block, v0.5.0 for the rest
- * (the two lab records of 2026-10-12, `packages/contracts/openviking/README.md`) — and each one is a default that is
+ * (the two lab records of 2026-10-12, `packages/contracts/openviking/README.md`), and re-read on v0.5.1.1 — and each one is a default that is
  * wrong for this deployment:
  *
  *   storage.workspace   defaults to `./data` = /app/data, outside the volume
@@ -42,10 +42,15 @@ export const OPENVIKING_MODEL_GATEWAY_URL = "http://open-science-web:8787/intern
  * a session created without one is never scanned. `link_enabled` and session skill extraction stay off (nothing
  * here reads their output). `prefetch_search_topn` 10: every multi-file type shares those slots.
  *
- * COMPILE. `compile_api.base_url` is the identity shim on the container's loopback; with it set the server no longer
- * calls the bot directly, the bot itself is still started by `OPENVIKING_WITH_BOT=1`. Command execution in a compile
- * is off (the five official skills run without it), the bot's ten-minute heartbeat is off, and query expansion is off
- * (`retrieval.enable_intent`): it is one model call per recall that the control plane's own reranker already replaces.
+ * COMPILE. There is no `compile_api` section: since v0.5.1 the server forwards the caller's account and user to its
+ * Compile runtime itself, so what the v0.5.0 pin needed (`compile_api.base_url` pointing at an identity shim) is gone.
+ * Left out, the server installs its own local endpoint for the built-in bot, which `OPENVIKING_WITH_BOT=1` starts, and
+ * polls it every 30 s — a finished compile is seen up to 30 s late, which a round that takes minutes does not notice
+ * (measured on the v0.5.1.1 lab: a tiny compile ended at 31 s). The setting that would make it 5 s, `compile_api`
+ * with `base_url` on the bot's loopback and `poll_interval_ms: 5000`, has not been probed: the local default is the
+ * wiring upstream tests. Command execution in a compile is off (the five official skills run without it), the bot's
+ * ten-minute heartbeat is off, and query expansion is off (`retrieval.enable_intent`): it is one model call per recall
+ * that the control plane's own reranker already replaces.
  *
  * LANGUAGE. `output_language_override` is deliberately absent. It was `zh` while the engine extracted nothing; set, it
  * forces every memory and summary into that language whatever the user wrote (measured on v0.5.0: English, Japanese
@@ -131,7 +136,6 @@ export function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, m
         auto_commit_policy: { idle_timeout_seconds: 900, pending_token_threshold: 150_000, message_count_threshold: 100 },
       },
     },
-    compile_api: { base_url: `http://127.0.0.1:${OPENVIKING_SHIM_PORT}`, poll_interval_ms: 5_000 },
     bot: {
       agents: {
         provider: "openai",
@@ -142,7 +146,7 @@ export function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, m
         thinking: false,
       },
       heartbeat: { enabled: false },
-      sandbox: { backends: { direct: { allow_compile_exec: false } } },
+      sandbox: { backend: "direct", backends: { direct: { allow_exec: false, allow_compile_exec: false } } },
     },
     retrieval: { enable_intent: false },
     // The embedder is a public HTTPS endpoint, and the model gateway above is

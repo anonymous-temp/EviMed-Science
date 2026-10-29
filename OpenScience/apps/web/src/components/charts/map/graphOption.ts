@@ -260,9 +260,10 @@ export function graphOption(input: GraphInput): EChartsCoreOption {
     series: [{
       type: "graph",
       layout: "none",
-      // The picture fills the canvas: the library's default box leaves a margin on every side that, for a layout as wide as the
-      // canvas, cost a third of the width.
+      // Fit inside the canvas without stretching circles, squares or hexagons.
+      // ECharts compensates graph symbols with one scalar, so a stretched view distorts every mark.
       left: 12, right: 12, top: 12, bottom: 12,
+      preserveAspect: "contain",
       roam: true,
       draggable: true,
       scaleLimit: { min: 0.4, max: 8 },

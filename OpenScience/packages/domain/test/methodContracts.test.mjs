@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { HANDBOOK_TEXT_LIMITS, METHOD_RELATIONS_ACTIONS, contractKindLabel, handbookText, runGate } from "../index.mjs";
+import { METHOD_RELATIONS_ACTIONS, contractKindLabel, runGate } from "../index.mjs";
 import { parseSkillFrontmatter, renderMethodSkill, validateMethodSkill } from "../src/methodSkill.mjs";
 
 /** @param {string} text @returns {string} */
@@ -346,6 +346,29 @@ test("the analyser's four fields are required, and an abstract pattern needs thr
   );
 });
 
+test("the two directed relations name their direction: subset its WIDER method, supersedes the one that REPLACES", () => {
+  const decide = (/** @type {any} */ assignment) => gateRelations({ schemaVersion: 1, action: "decide", assignments: [{ ASSIGNMENT: "A1", SKILLS: ["a-method", "b-method"], REASON: "Why.", ...assignment }] })
+    .issues.map((entry) => entry.message).join("\n");
+  assert.match(decide({ RELATION_TYPE: "subset" }), /names no WIDER method/);
+  assert.match(decide({ RELATION_TYPE: "subset", WIDER: "c-method" }), /WIDER "c-method", which is not one of its SKILLS/);
+  assert.equal(decide({ RELATION_TYPE: "subset", WIDER: "a-method" }), "");
+  assert.match(decide({ RELATION_TYPE: "supersedes" }), /names no REPLACES method/);
+  assert.match(decide({ RELATION_TYPE: "supersedes", REPLACES: "c-method" }), /REPLACES "c-method", which is not one of its SKILLS/);
+  assert.equal(decide({ RELATION_TYPE: "supersedes", REPLACES: "b-method" }), "");
+  // The symmetric four need neither, and carry no direction to get wrong.
+  for (const type of ["shared_part", "merge", "conflicts_with"]) assert.equal(decide({ RELATION_TYPE: type }), "", type);
+});
+
+test("a build rewrites nothing under a supersedes: the library records it and stops the replaced method itself", () => {
+  const verdict = gateRelations({
+    schemaVersion: 1,
+    action: "build",
+    assignments: [{ ASSIGNMENT: "A1", SKILLS: ["a-method", "b-method"], RELATION_TYPE: "supersedes", REPLACES: "b-method", REASON: "The later one is the fuller treatment." }],
+    revisions: [{ assignment: "A1", name: "a-method", operation: "retire", baseDigest: BASE_DIGEST, supersededBy: "b-method" }],
+  });
+  assert.ok(verdict.issues.some((entry) => entry.message.includes("is supersedes, so neither method is rewritten")));
+});
+
 test("a build carries out the assignment it was given and rewrites nothing a conflict was found in", () => {
   const invented = gateRelations({
     schemaVersion: 1,
@@ -402,55 +425,15 @@ test("both kinds carry a Chinese label, because a run's inbox names them", () =>
   assert.equal(contractKindLabel("method-relations"), "方法关系");
 });
 
-/* ------------------------------------------------ a lesson filed as a handbook */
+/* ------------------------------------------------ the evidence a lesson rests on */
 
-/** A body of the same seven sections, padded with workflow steps to roughly `characters` characters. @param {number} characters */
-const bodyOfAbout = (characters) => {
-  const steps = [];
-  let length = METHOD_BODY.length;
-  for (let step = 4; length < characters; step += 1) {
-    const line = `${step}. Re-read the claim, re-open the span it is bonded to, and compare the two word for word before editing.`;
-    steps.push(line);
-    length += line.length + 1;
-  }
-  return METHOD_BODY.replace("3. Edit only the sentences the verdict names.", `3. Edit only the sentences the verdict names.\n${steps.join("\n")}`);
-};
-
-test("a lesson the run says is the reviewer's is returned to be shortened when it is over the handbook limit, and told by how much", () => {
-  const long = methodSkillText({ body: bodyOfAbout(HANDBOOK_TEXT_LIMITS.max + 1_500) });
-  const measured = handbookText(parseSkillFrontmatter(long).frontmatter, parseSkillFrontmatter(long).body);
-  assert.ok(measured.length > HANDBOOK_TEXT_LIMITS.max, "the fixture is over");
-
-  const refused = gateCandidate({ skill: long, candidate: candidateJson({ signal: "reviewer" }) });
-  assert.equal(refused.ok, false);
-  const issue = refused.issues.find((entry) => entry.check === "method-skill-rules" && /account handbook/.test(entry.message));
-  assert.ok(issue, refused.issues.map((entry) => entry.message).join("\n"));
-  assert.equal(issue.path, "SKILL.md");
-  assert.match(issue.message, new RegExp(`at most ${HANDBOOK_TEXT_LIMITS.max} characters; it is ${measured.length}, ${measured.length - HANDBOOK_TEXT_LIMITS.max} too many`));
-  assert.match(issue.message, /Shorten it in place/, "a repairable instruction, not a verdict");
-
-  // Repaired in place, it passes: the number the run is held to is the one the platform judges by.
-  const short = methodSkillText({ body: bodyOfAbout(2_000) });
-  const repaired = gateCandidate({ skill: short, candidate: candidateJson({ signal: "reviewer" }) });
-  assert.deepEqual(repaired.issues, [], repaired.issues.map((entry) => entry.message).join("\n"));
-});
-
-test("only a lesson filed as a handbook is held to the limit: the researcher's own method and one that says nothing are not", () => {
-  const long = methodSkillText({ body: bodyOfAbout(HANDBOOK_TEXT_LIMITS.max + 1_500) });
+test("a signal that is not one of the input's two is a schema defect, said once; the retired `reviewer` is one", () => {
   for (const signal of ["researcher", "run", undefined]) {
-    const verdict = gateCandidate({ skill: long, candidate: candidateJson(signal === undefined ? {} : { signal }) });
-    assert.ok(!verdict.issues.some((entry) => /account handbook/.test(entry.message)), `signal ${signal}`);
+    const verdict = gateCandidate({ candidate: candidateJson(signal === undefined ? {} : { signal }) });
+    assert.ok(!verdict.issues.some((entry) => /signal, when given/.test(entry.message)), `signal ${signal}`);
   }
-  // `no_change` writes nothing to a handbook, whatever it is filed as.
-  const unchanged = gateCandidate({ skill: long, candidate: { schemaVersion: 1, operation: "no_change", reason: "covered", targetMethodId: "m", baseDigest: BASE_DIGEST, evidence: [], signal: "reviewer" } });
-  assert.ok(!unchanged.issues.some((entry) => /account handbook/.test(entry.message)));
-  // A signal that is not one of the input's three is a schema defect, said once.
-  const odd = gateCandidate({ candidate: candidateJson({ signal: "platform" }) });
-  assert.ok(odd.issues.some((entry) => entry.check === "method-candidate-schema" && /signal, when given/.test(entry.message)));
-});
-
-test("the handbook text is name, description and body, the description on one line, so the run and the platform's field check measure the same thing", () => {
-  const measured = handbookText({ name: " a-method ", description: "one\n  two   three" }, "\n body \n");
-  assert.deepEqual(measured, { name: "a-method", description: "one two three", body: "body", length: "a-method\none two three\nbody".length });
-  assert.equal(handbookText(null, undefined).length, 2);
+  for (const signal of ["platform", "reviewer"]) {
+    const odd = gateCandidate({ candidate: candidateJson({ signal }) });
+    assert.ok(odd.issues.some((entry) => entry.check === "method-candidate-schema" && /signal, when given/.test(entry.message)), signal);
+  }
 });

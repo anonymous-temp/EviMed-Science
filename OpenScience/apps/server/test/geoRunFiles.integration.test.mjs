@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
+import { createGeoDeliveryImport, fillStrategy, GEO_IMPORTED_FILES } from "../src/geoDeliveryImport.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { GEO_TABLES, migrateGeo } from "../src/geoPersistence.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -66,7 +66,7 @@ async function projectWithBaseline() {
 /** An importer that reads from an in-memory workspace. @param {Map<string, string>} files @param {Record<string, any>} [extra] */
 function importerOf(files, extra = {}) {
   const reports = /** @type {string[]} */ ([]);
-  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code), listInsightFolders: async () => [],
+  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code),
     readFile: async (_root, file) => {
       if (!files.has(file)) throw Object.assign(new Error("missing"), { code: "ENOENT" });
       return files.get(file) ?? "";
@@ -304,6 +304,48 @@ test("an articles file enriches the articles the run registered with their chann
   assert.equal((await store.listArticles(geo.id)).length, all.length);
 });
 
+// Production, 2026-10-25: every word but "open" was read as clear, so an article whose run said its stop another way — or said nothing —
+// was registered clear and, with a passed gate, publishable without the person's 放行 the safety stop exists for.
+test("an article the run did not register is clear only when its file says clear; any other word, or none, waits for a person", options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  await database.query(`INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name) VALUES ($1, $2, $3, 1, 'P2', 'g')`,
+    [`gs-${geo.id}`, USER, geo.id]);
+  const said = /** @type {Record<string, any>} */ ({ clear: { status: "clear" }, word: "clear", open: { status: "open" }, none: undefined,
+    own: { status: "待复核" }, method: undefined });
+  const files = new Map([["deliverables/geo-content/articles.json", JSON.stringify({ articles: Object.entries(said).map(([name, safety]) => ({
+    id: name, layer: "popular", title: name, groupId: `gs-${geo.id}`, claimKeys: [], path: `articles/${name}.md`,
+    ...(safety === undefined ? {} : { safety }), ...(name === "method" ? { release_status: "held_safety" } : {}) })) })]]);
+  for (const name of Object.keys(said)) files.set(`deliverables/geo-content/articles/${name}.md`, `# ${name}\n`);
+  const { importDelivery } = importerOf(files, { articleGate: async () => "passed" });
+  const result = await importDelivery(control, { id: "run_s", status: "succeeded", deliverables: [{ id: "geo-content", capability: "geo-content" }] });
+  assert.equal(result?.files?.registered, 6);
+  const byTitle = new Map((await store.listArticles(geo.id)).map((article) => [article.title, [article.safety, article.status]]));
+  assert.deepEqual(Object.fromEntries(byTitle), {
+    clear: ["clear", "publishable"], word: ["clear", "publishable"], open: ["open", "draft"], none: ["open", "draft"], own: ["open", "draft"], method: ["open", "draft"],
+  });
+});
+
+test("the articles file the content capability describes names each article's group by the id the registration takes", () => {
+  const skill = readFileSync(fileURLToPath(new URL("../../../capability-skills/geo-content/SKILL.md", import.meta.url)), "utf8");
+  const bullet = skill.slice(skill.indexOf("- `articles.json`"), skill.indexOf("- `articles/<id>.md`"));
+  const named = [...bullet.slice(bullet.indexOf("Each article:")).matchAll(/`([A-Za-z]+)`/g)].map((match) => match[1]);
+  assert.ok(named.includes("groupId"), "an article names its question group by its id: the method's own groupKey is not stored on a group");
+  const entry = Object.fromEntries(named.map((field) => [field, field === "safety" ? { status: "clear", findings: [] } : "x"]));
+  assert.deepEqual(geoArticlesFileCoverage({ minimal: false, assumptions: [], articles: [entry] }).dropped, [], "every field described is stored, mapped or declined");
+});
+
+test("every data file a GEO capability delivers is imported at the run's end or declined by name", () => {
+  const manifests = ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"].map((id) =>
+    JSON.parse(readFileSync(fileURLToPath(new URL(`../../../deploy/runtime-dsh/capabilities/${id}.json`, import.meta.url)), "utf8")));
+  const declined = GEO_NOT_STORED["deliverable files"] ?? {};
+  for (const manifest of manifests) {
+    for (const output of manifest.produces.flatMap((/** @type {any} */ entry) => entry.outputs)) {
+      if (["report", "work"].includes(output.role)) continue;
+      assert.ok(GEO_IMPORTED_FILES.includes(output.path) || Object.hasOwn(declined, output.path), `${manifest.id}: ${output.path} is neither imported nor declined`);
+    }
+  }
+});
+
 test("an articles file's own fields are stored, mapped or declined by name", () => {
   const coverage = geoArticlesFileCoverage({ minimal: false, assumptions: [], articles: [
     { id: "a", layer: "qa", title: "t", question: "q", groupKey: "k", claimKeys: [], path: "p", recordPath: "r", audience: "a", channel: "c", author: "a", reviewer: "r",
@@ -381,4 +423,616 @@ test("a person's choices are two reversible words per action and nothing else", 
   const cleared = await store.setActionChoice({ geoId: geo.id, ownerId: USER, key, decidedBy: "editor-1", sourceDomain: null });
   assert.equal(cleared, null, "nothing decided is no row");
   assert.deepEqual(await store.actionChoices(geo.id), []);
+});
+
+test('delayed scoped strategy import uses the actual producing run basis and plain outputFiles, and retries do not create versions', options, async () => {
+  const {geo,control} = await projectWithBaseline();
+  const original = {schemaVersion:1,capturedAt:'2026-10-24T00:00:00Z',selection:{dataRevision:'original'},priceReferences:[{kind:'source_price',id:'media-quote',digest:'a'.repeat(64)}],marker:'selected group at submission'};
+  const context = {referenceId:'gpc_actual',scopeKey:'gps_group_a',basis:original,runId:'scoped-real-run',mode:'strategy'};
+  const action = {gapId:'missing',kind:'fill_gap',what:{layer:'popular',title:'Native content'},work:{mode:'new',audience:'patient',outputs:['article.md']},sequence:2,timing:{durationDays:{low:2,high:4},basis:'Supplied schedule'},effort:{unit:'hours',low:2,high:3,basis:'Supplied workload'},estimate:{currency:'CNY',low:50,high:80,basis:[{kind:'source_price',id:'media-quote',digest:'a'.repeat(64)}]}};
+  const files = new Map([['deliverables/native-plan/strategy.json',JSON.stringify({summary:'Produced from original input',actions:[action]})]]);
+  const captured = new Map(files);
+  const readRunFile = async (_project,actualRun,path)=>{assert.equal(actualRun.id,'scoped-real-run');return captured.get(path);};
+  const {importDelivery} = importerOf(files,{readRunFile,planningContext:async (_project,actualRun)=>actualRun.id==='scoped-real-run'?context:null});
+  const produced = {id:'scoped-real-run',startedAt:'2026-10-23T00:00:00Z',status:'succeeded',sessionId:'native-session',kernelRequestIds:['actual-native-request'],outputFiles:[{path:'deliverables/native-plan/strategy.json'}]};
+  await store.writeStrategy(USER,geo.id,{summary:'Unrelated global plan after generation'});
+  await store.writeStrategy(USER,geo.id,{scopeKey:context.scopeKey,basis:{marker:'another newer run'},summary:'Other run in same scope',runId:'other-run'});
+  files.set('deliverables/native-plan/strategy.json',JSON.stringify({summary:'Mutable workspace changed after producer finished'}));
+  await importDelivery(control,produced);
+  const plan = await store.latestStrategy(geo.id,{scopeKey:context.scopeKey});
+  assert.equal(plan.summary,'Produced from original input'); assert.deepEqual(plan.basis,original);
+  assert.equal(plan.actions[0].work.mode,'new'); assert.equal(plan.actions[0].sequence,2);
+  assert.equal(plan.actions[0].timing.durationDays.high,4);assert.equal(plan.actions[0].effort.high,3);assert.equal(plan.actions[0].estimate.high,80);
+  assert.equal((await store.latestStrategy(geo.id)).summary,'Unrelated global plan after generation');
+  const retry = importerOf(files,{readRunFile,planningContext:async()=>context}); await retry.importDelivery(control,produced);
+  assert.equal((await store.latestStrategy(geo.id,{scopeKey:context.scopeKey})).version,plan.version);
+});
+
+for (const field of ['presentedFiles', 'artifacts', 'unverifiedArtifacts', 'outputFiles']) test(`native scoped strategy discovers ${field} without declared deliverables and preserves the original scope`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/native-specialist/strategy.json';
+  const basis = { schemaVersion: 1, selection: { groupIds: ['original-group'], sourceId: 'original-source', questionVersion: 1 } };
+  const context = { mode: 'strategy', scopeKey: `native-${field}`, basis, runId: `native-${field}` };
+  const produced = { id: context.runId, status: 'succeeded', sessionId: 'native-session', kernelRequestIds: ['request'], progress: { deliverables: [] }, [field]: [relative] };
+  const original = JSON.stringify({ summary: 'Original immutable strategy', scopeKey: 'forged', basis: { replaced: true }, runId: 'forged' });
+  const make = () => importerOf(new Map([[relative, '{"summary":"New workspace bytes"}']]), {
+    planningContext: async () => context, readRunFile: async (_project, actual, file) => { assert.equal(actual.id, context.runId); assert.equal(file, relative); return original; },
+    listInsightFolders: async () => { throw new Error('Bound import must not scan workspace'); },
+    listDeliverableFolders: async () => { throw new Error('Bound import must not scan workspace'); },
+  }).importDelivery;
+  await store.writeStrategy(USER, geo.id, { summary: 'Global control' });
+  const importer = make();
+  const first = await importer(control, produced);
+  assert.equal(first?.files?.strategies, 1);
+  await Promise.all([importer(control, produced), importer(control, produced)]);
+  await make()(control, produced);
+  const stored = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.equal(stored?.summary, 'Original immutable strategy'); assert.equal(stored?.runId, produced.id);
+  assert.deepEqual(stored?.basis, basis);
+  assert.equal((await database.query('SELECT count(*)::int AS n FROM evimed_geo.strategy WHERE geo_project_id=$1 AND scope_key=$2', [geo.id, context.scopeKey])).rows[0].n, 1);
+  assert.equal((await store.latestStrategy(geo.id))?.summary, 'Global control');
+});
+
+test('bound structured import reports unavailable for missing, invalid or empty files and explicit recovery bypasses exhausted attempts without recapture', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/recover/strategy.json';
+  const produced = { id: 'recover-native', status: 'succeeded', sessionId: 'native-session', artifacts: [relative] };
+  const context = { mode: 'strategy', scopeKey: 'retry-original', basis: { original: true }, runId: produced.id };
+  let bytes = null, captures = 0;
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context,
+    beforeImport: async () => { captures++; }, readRunFile: async () => { if (bytes === null) throw Object.assign(new Error('missing'), { code: 'geo_plan_output_unavailable' }); return bytes; } });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = await importDelivery(control, produced);
+    assert.ok(result?.failed?.includes('geo_plan_output_unavailable'));
+  }
+  assert.equal(importDelivery.counters.imported, 0);
+  bytes = '{';
+  const invalid = await importDelivery(control, produced, { recovery: true, readRunFile: async () => bytes });
+  assert.ok(invalid?.failed?.includes('geo_plan_output_invalid'));
+  bytes = '{}';
+  const empty = await importDelivery(control, produced, { recovery: true, readRunFile: async () => bytes });
+  assert.ok(empty?.failed?.includes('geo_plan_output_unavailable'));
+  bytes = '{"summary":"Recovered original"}';
+  const recovered = await importDelivery(control, produced, { recovery: true, readRunFile: async () => bytes });
+  assert.equal(recovered?.files?.strategies, 1); assert.equal(captures, 2, 'Recovery never calls beforeImport capture');
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey }))?.runId, produced.id);
+});
+
+test('selected ordinary analysis remains a no-op even when it presents a report', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'analysis', runId: 'analysis' }),
+    readRunFile: async () => { throw new Error('No structured output'); }, listInsightFolders: async () => [], listDeliverableFolders: async () => [] });
+  const result = await importDelivery(control, { id: 'analysis', status: 'succeeded', presentedFiles: ['deliverables/analysis/report.md'] });
+  assert.equal(result?.failed, undefined); assert.equal(await store.latestStrategy(geo.id), null);
+});
+
+for (const field of ['presentedFiles', 'artifacts', 'outputFiles']) test(`native content discovers ${field} and reads article bytes only from its preserved run`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  await database.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name) VALUES ($1,$2,$3,1,'P2','Native content')`, [`native-${geo.id}`, USER, geo.id]);
+  const body = '# Preserved article\n';
+  const relative = 'deliverables/native-content/articles.json', article = 'deliverables/native-content/articles/a.md';
+  const immutable = new Map([[relative, JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'Preserved', groupId: `native-${geo.id}`, safety: 'clear', channel: 'wechat_mp', audience: 'patient' }] })], [article, body]]);
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'content', runId: `content-${field}` }),
+    readRunFile: async (_project, actual, file) => { assert.equal(actual.id, `content-${field}`); if (!immutable.has(file)) throw new Error('missing preserved file'); return immutable.get(file); },
+    readFile: async () => { throw new Error('No mutable workspace bytes'); }, listInsightFolders: async () => [], listDeliverableFolders: async () => [] });
+  const result = await importDelivery(control, { id: `content-${field}`, sessionId: 'content-session', status: 'succeeded', [field]: [relative, article] });
+  assert.equal(result?.files?.registered, 1); assert.equal(result?.failed, undefined);
+  const saved = (await store.listArticles(geo.id))[0];
+  assert.equal(saved.runId, `content-${field}`); assert.equal(saved.path, article);
+  assert.equal(saved.contentSha256, createHash('sha256').update(body).digest('hex'));
+  const repeated = await importDelivery(control, { id: `content-${field}`, sessionId: 'content-session', status: 'succeeded', [field]: [relative, article] }, { recovery: true, readRunFile: async (_p, _r, file) => immutable.get(file) });
+  assert.equal(repeated?.failed, undefined, 'An already registered identical article is a successful idempotent reconciliation');
+});
+
+test('concurrent explicit recoveries of the same immutable candidate join one import attempt', options, async () => {
+  const { control } = await projectWithBaseline();
+  const produced = { id: 'join-recovery', status: 'succeeded', sessionId: 'session', artifacts: ['deliverables/join/strategy.json'] };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'strategy', scopeKey: 'join', basis: {}, runId: produced.id }) });
+  let release, reached, reads = 0;
+  const held = new Promise(resolve => { release = resolve; }), entered = new Promise(resolve => { reached = resolve; });
+  const recovery = { recovery: true, candidateIdentity: 'same-pinned-version-and-digest', readRunFile: async () => { reads++; reached(); await held; return '{"summary":"One attempt"}'; } };
+  const first = importDelivery(control, produced, recovery); await entered;
+  const second = importDelivery(control, produced, recovery); release();
+  const results = await Promise.all([first, second]);
+  assert.equal(reads, 1); assert.deepEqual(results[0], results[1]);
+});
+
+async function nativeContentFixture(artifacts, makeFiles) {
+  const { geo, control } = await projectWithBaseline();
+  const groupId = `spec-${geo.id}`;
+  await database.query(`INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES($1,$2,$3,1,'P2','Selected')`, [groupId, USER, geo.id]);
+  const produced = { id: `spec-${geo.id}`, status: 'succeeded', sessionId: 'session', effectiveAgentId: 'geo-content', artifacts };
+  const context = { mode: 'content', runId: produced.id };
+  let files = makeFiles(groupId);
+  const makeImporter = () => importerOf(new Map(), { planningContext: async () => context, readRunFile: async (_project, _run, file) => {
+    if (!files.has(file)) throw Object.assign(new Error('No preserved bytes'), { code: 'geo_plan_output_unavailable' }); return files.get(file);
+  }, readFile: async () => { throw new Error('No workspace reads'); } }).importDelivery;
+  return { geo, control, produced, makeImporter, replaceFiles: next => { files = next(groupId); } };
+}
+
+test('SPEC-1: each manifest may register only its own canonical deliverable even when another candidate body is pinned', options, async () => {
+  const artifacts = ['deliverables/a/articles.json', 'deliverables/b/articles.json', 'deliverables/b/articles/b.md'];
+  const f = await nativeContentFixture(artifacts, groupId => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: artifacts[2], layer: 'popular', title: 'Cross-folder', groupId }] })],
+    [artifacts[1], '{"articles":[]}'], [artifacts[2], '# B'],
+  ]));
+  const importDelivery = f.makeImporter(), result = await importDelivery(f.control, f.produced);
+  assert.equal((await store.listArticles(f.geo.id)).length, 0);
+  assert.ok(result.failed?.includes('geo_plan_output_unavailable')); assert.equal(importDelivery.counters.imported, 0);
+  f.replaceFiles(groupId => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'A', groupId }] })],
+    [artifacts[1], JSON.stringify({ articles: [{ path: artifacts[2], layer: 'popular', title: 'B', groupId }] })],
+    ['deliverables/a/articles/a.md', '# A'], [artifacts[2], '# B'],
+  ]));
+  const recovered = await importDelivery(f.control, f.produced, { recovery: true });
+  assert.equal(recovered.failed, undefined);
+  assert.deepEqual((await store.listArticles(f.geo.id)).map(article => [article.path, article.deliverableId]).sort(), [
+    ['deliverables/a/articles/a.md', 'a'], ['deliverables/b/articles/b.md', 'b'],
+  ]);
+});
+
+test('SPEC-2: mixed accepted/refused entries retain useful rows but stay partial and allow bounded corrected recovery', options, async () => {
+  const artifacts = ['deliverables/a/articles.json', 'deliverables/a/articles/a.md', 'deliverables/a/articles/b.md'];
+  const files = (groupId, layer) => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'A', groupId }, { path: 'articles/b.md', layer, title: 'B', groupId }] })],
+    [artifacts[1], '# A'], [artifacts[2], '# B'],
+  ]);
+  const f = await nativeContentFixture(artifacts, groupId => files(groupId, 'invalid-layer'));
+  const importDelivery = f.makeImporter(), first = await importDelivery(f.control, f.produced);
+  assert.equal(first.files.registered, 1); assert.equal(first.files.skipped, 1); assert.ok(first.failed?.includes('geo_plan_output_unavailable'));
+  assert.equal(importDelivery.counters.imported, 0);
+  const kept = (await store.listArticles(f.geo.id))[0];
+  const retry = await importDelivery(f.control, f.produced);
+  assert.ok(retry.failed?.includes('geo_plan_output_unavailable')); assert.equal(await importDelivery(f.control, f.produced), null, 'Automatic attempts remain bounded');
+  f.replaceFiles(groupId => files(groupId, 'popular'));
+  const recovered = await importDelivery(f.control, f.produced, { recovery: true });
+  assert.equal(recovered.failed, undefined); assert.equal((await store.listArticles(f.geo.id)).length, 2);
+  assert.equal((await store.listArticles(f.geo.id)).find(article => article.path === kept.path).id, kept.id);
+  await f.makeImporter()(f.control, f.produced, { recovery: true }); assert.equal((await store.listArticles(f.geo.id)).length, 2);
+});
+
+for (const empty of ['{}', '{"articles":[]}', 'null', '42']) test(`SPEC-2: a valid first manifest cannot hide an unavailable second manifest ${empty}`, options, async () => {
+  const artifacts = ['deliverables/a/articles.json', 'deliverables/b/articles.json', 'deliverables/a/articles/a.md'];
+  const f = await nativeContentFixture(artifacts, groupId => new Map([
+    [artifacts[0], JSON.stringify({ articles: [{ path: 'articles/a.md', layer: 'popular', title: 'A', groupId }] })],
+    [artifacts[1], empty], [artifacts[2], '# A'],
+  ]));
+  const importer = f.makeImporter(), result = await importer(f.control, f.produced);
+  assert.equal(result.files.registered, 1); assert.ok(result.failed?.includes('geo_plan_output_unavailable'));
+  assert.equal(importer.counters.imported, 0); assert.equal((await store.listArticles(f.geo.id)).length, 1);
+});
+
+test('SPEC-3: an authorized bound source review imports its preserved value idempotently and rejects foreign review scope', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/review/geo-value.json';
+  const produced = { id: `review-${geo.id}`, status: 'succeeded', sessionId: 'session', effectiveAgentId: 'geo-insight', artifacts: [relative], deliverables: [{ id: 'review', capability: 'geo-insight' }] };
+  const basis = { signal: { id: 'signal', kind: 'source_changed', basisDigest: 'signal-digest' }, event: { notice: { id: 'source' }, targets: [{ key: 'selected' }] }, focusRefs: ['selected'], intent: 'review' };
+  const context = { mode: 'signal', referenceId: 'context', runId: produced.id, basis };
+  const review = { signalId: 'signal', basisDigest: 'signal-digest', contextRef: 'context', targets: [{ targetKey: 'selected', outcome: 'uncertain', reason: 'The original source is unavailable.' }] };
+  let file = JSON.stringify({ sourceChanges: [{ id: 'source', review }] });
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context, readRunFile: async (_p, actual, path) => { assert.equal(actual.id, produced.id); assert.equal(path, relative); return file; },
+    readFile: async () => { throw new Error('No workspace fallback'); } });
+  const first = await importDelivery(control, produced);
+  assert.equal(first.failed, undefined);
+  const profile = await store.latestValue(geo.id); assert.equal(profile.runId, produced.id); assert.deepEqual(profile.data.sourceChanges[0].review, review);
+  await importDelivery(control, produced, { recovery: true }); assert.equal((await store.latestValue(geo.id)).version, profile.version);
+  for (const invalid of [{ ...review, signalId: 'foreign' }, { ...review, basisDigest: 'foreign' }, { ...review, contextRef: 'foreign' },
+    { ...review, targets: [{ ...review.targets[0], targetKey: 'unselected' }] }]) {
+    file = JSON.stringify({ sourceChanges: [{ id: 'source', review: invalid }] });
+    const result = await importDelivery(control, produced, { recovery: true });
+    assert.ok(result.failed?.includes('geo_plan_output_unavailable')); assert.equal((await store.latestValue(geo.id)).version, profile.version);
+  }
+});
+
+test('QUALITY-Q2: real strategy field refusals keep valid summary partial and preserve two-attempt and corrected-recovery behavior', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/partial-strategy/strategy.json', produced = { id: `quality-${geo.id}`, status: 'succeeded', artifacts: [relative] };
+  const context = { mode: 'strategy', runId: produced.id, scopeKey: 'quality-original', basis: { original: true } };
+  let file = JSON.stringify({ summary: 'Usable preserved summary', gaps: 42 });
+  const make = () => importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => file }).importDelivery;
+  const importer = make(), first = await importer(control, produced);
+  assert.ok(first.failed?.includes('geo_plan_output_unavailable')); assert.equal(first.files.refused, 1);
+  assert.ok(first.files.unavailable.some(path => path.includes('gaps'))); assert.equal(importer.counters.imported, 0);
+  const kept = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.equal(kept.summary, 'Usable preserved summary'); assert.equal(kept.gaps, null);
+  assert.ok((await importer(control, produced)).failed?.includes('geo_plan_output_unavailable'));
+  assert.equal(await importer(control, produced), null); assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, kept.version);
+  file = JSON.stringify({ summary: 'Usable preserved summary', gaps: [{ gapId: 'corrected', class: 'benefit_only', text: 'Preserved correction' }] });
+  const recovered = await importer(control, produced, { recovery: true }); assert.equal(recovered.failed, undefined);
+  const corrected = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey }); assert.equal(corrected.gaps[0].gapId, 'corrected');
+  await make()(control, produced, { recovery: true }); assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, corrected.version);
+});
+
+test('QUALITY-Q2: invalid source rows stay partial beside a valid strategy and accepted source rows', options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const produced = { id: `quality-sources-${geo.id}`, status: 'succeeded', artifacts: ['deliverables/source-strategy/strategy.json'] };
+  const context = { mode: 'strategy', runId: produced.id, scopeKey: 'quality-source', basis: {} };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context,
+    readRunFile: async () => JSON.stringify({ summary: 'Valid strategy', sources: [{ domain: 'valid.example', name: 'Retained' }, { domain: 'not a host', name: 'Refused' }] }) });
+  const result = await importDelivery(control, produced);
+  assert.ok(result.failed?.includes('geo_plan_output_unavailable')); assert.equal(result.files.sources, 1);
+  assert.ok(result.files.unavailable.some(path => path.includes('sources'))); assert.equal(importDelivery.counters.imported, 0);
+  assert.deepEqual((await store.listSources(geo.id)).map(source => source.domain), ['valid.example']);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).summary, 'Valid strategy');
+});
+
+test('QUALITY-Q2: numeric ownership declines, advisory notices and optional markers do not make a valid strategy unavailable', options, async () => {
+  const { control } = await projectWithBaseline();
+  const produced = { id: 'quality-advisory', status: 'succeeded', artifacts: ['deliverables/advisory/strategy.json'] };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => ({ mode: 'strategy', runId: produced.id, scopeKey: 'advisory', basis: {} }),
+    readRunFile: async () => JSON.stringify({ summary: 'Supported', acceptanceMark: 'ignored', minimal: true, chosenTier: 'standard',
+      tiers: [{ tier: 'standard', placements: 2, budgetCny: 10, targets: [{ baseline: null, target: 0.98, dataType: 'forecast' }] }], expectations: [{ engine: 'deepseek', retrieval: 0.3 }],
+      actions: [{ gapId: 'unmatched', what: { layer: 'popular' } }] }) });
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined); assert.deepEqual(result.files.unavailable, []); assert.equal(importDelivery.counters.imported, 1);
+});
+
+for (const capability of ['geo-strategy', 'geo-content', 'geo-insight']) test(`QUALITY-Q3: source-review-only intent using ${capability} requires only its authorized value output`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const relative = 'deliverables/review/geo-value.json', produced = { id: `quality-review-${geo.id}`, status: 'succeeded', effectiveAgentId: capability, artifacts: [relative] };
+  const basis = { intent: 'review', signal: { kind: 'source_changed', id: 'signal', basisDigest: 'digest' }, event: { notice: { id: 'source' }, targets: [{ key: 'selected' }] }, focusRefs: ['selected'] };
+  const context = { mode: 'signal', runId: produced.id, referenceId: 'context', basis };
+  const review = { signalId: 'signal', basisDigest: 'digest', contextRef: 'context', targets: [{ targetKey: 'selected', outcome: 'uncertain', reason: 'Original unavailable' }] };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => JSON.stringify({ sourceChanges: [{ id: 'source', review }] }) });
+  const result = await importDelivery(control, produced);
+  assert.equal(result.valueFiles.imported, 1); assert.equal(result.failed, undefined); assert.equal(importDelivery.counters.imported, 1);
+  assert.deepEqual((await store.latestValue(geo.id)).data.sourceChanges[0].review, review);
+  if (capability !== 'geo-insight') {
+    const invalidDeclared = { ...produced, deliverables: [{ id: 'invalid', capability }] };
+    const partial = await importDelivery(control, invalidDeclared, { recovery: true });
+    assert.ok(partial.failed?.includes('geo_plan_output_unavailable'), 'A separately declared structured candidate keeps its own failure');
+    assert.equal(partial.valueFiles.imported, 1);
+  }
+});
+
+
+const N09_SUMMARIES = [
+  "除平台硬线外不写效果预测：g1 仅 1 条回答且未判定，M-01、M-06 均为 not_measurable（0/0）；位置数与预算也未取得依据。",
+  "平台默认档位。除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+  "除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+];
+const N09_NOTE = "平台准确率硬线 98%，不是本项目基线推算；g1 的 M-06 判定为 0/0（not_adjudicated），基线不可测。";
+const n09Tiers = () => N09_SUMMARIES.map((basis, index) => ({ tier: index + 1, basis, placements: null, budgetCny: null,
+  targets: [{ metricId: "M-06", pool: "P2", baseline: null, target: 0.98, dataType: "forecast", basis: N09_NOTE }] }));
+
+test("tier narrative aliases share canonical normalization, limits and diagnostics without refusing siblings", () => {
+  const draft = tiers => geoStrategyDraft({ tiers }).strategy.tiers;
+  assert.deepEqual(draft([{ tier: 1, basis: "  First\nSecond\u0000  ", targets: [{ metricId: "M-06", basis: " one\n two\u0000 " }] }]),
+    [{ tier: "1", summary: "First\nSecond", targets: [{ metricId: "M-06", note: "one two" }] }]);
+  for (const [summary, basis, expected] of [["Canonical", "Canonical", "Canonical"], ["First\n\nSecond", "Second", "First\n\nSecond"], ["First\n\nOne two", "One\n two", "First\n\nOne two"],
+    ["Canonical", "Extra", "Canonical\n\nExtra"], ["", "Alias", "Alias"], [null, "Alias", "Alias"]]) {
+    assert.equal(draft([{ tier: 1, summary, basis }])[0].summary, expected);
+  }
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", note: "First\n\nOne two", basis: "One\n two" }] }])[0].targets[0].note, "First One two");
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", note: "First", basis: "Second" }] }])[0].targets[0].note, "First Second");
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", basis: "Hard line in words", hardLine: true }] }])[0].targets[0].hardLine, true);
+  assert.equal(draft([{ tier: 1, summary: "x".repeat(597), basis: "y" }])[0].summary.length, 600);
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-06", note: "x".repeat(498), basis: "y" }] }])[0].targets[0].note.length, 500);
+  const unicode = "😀".repeat(600), note = "😀".repeat(500);
+  assert.equal(draft([{ tier: 1, basis: unicode, targets: [{ metricId: "M-09", basis: note }] }])[0].summary, unicode);
+  assert.equal(draft([{ tier: 1, targets: [{ metricId: "M-09", note: "One two", basis: "One\n two" }] }])[0].targets[0].note, "One two");
+  for (const bad of [{ raw: {}, code: "invalid" }, { raw: "😀".repeat(601), code: "too_long" }, { raw: " \n\u0000 ", code: "empty" }]) {
+    const input = { tiers: [{ tier: 1, summary: "Kept", basis: bad.raw, buys: "Useful", targets: [{ metricId: "M-06", note: "Held", basis: bad.raw }] }, { tier: 2, basis: "Sibling" }] };
+    const before = JSON.stringify(input), result = geoStrategyDraft(input);
+    assert.equal(result.strategy.tiers[0].summary, "Kept"); assert.equal(result.strategy.tiers[0].buys, "Useful");
+    assert.equal(result.strategy.tiers[0].targets[0].note, "Held"); assert.equal(result.strategy.tiers[1].summary, "Sibling");
+    assert.ok(result.issues.some(issue => issue.field === "tiers.basis" && issue.code === `alias_${bad.code}`));
+    assert.ok(result.issues.some(issue => issue.field === "tiers.targets[0].basis" && issue.code === `alias_${bad.code}`));
+    assert.equal(JSON.stringify(input), before);
+    assert.ok(geoStrategyFileCoverage(input).dropped.includes("tiers[0].basis"), "unconsumed aliases are still reported");
+  }
+  const overflow = geoStrategyDraft({ tiers: [{ tier: 1, summary: unicode, basis: "Extra", targets: [{ metricId: "M-06", note, basis: "Extra" }] }] });
+  assert.equal(overflow.strategy.tiers[0].summary, unicode); assert.equal(overflow.strategy.tiers[0].targets[0].note, note);
+  assert.equal(overflow.issues.filter(issue => issue.code === "alias_too_long").length, 2);
+  const unknown = geoStrategyFileCoverage({ tiers: [{ tier: 1, basis: "Fine", surprise: true, targets: [{ metricId: "M-06", basis: "Fine", unknown: 1 }] }] });
+  assert.deepEqual(unknown.dropped, ["tiers[0].surprise", "tiers[0].targets[0].unknown"]);
+});
+
+test("the exact six N09 narratives agree through direct writes, draft and file import with no numeric authority", options, async () => {
+  const preservedPath = process.env.GEO_N09_PRESERVED_STRATEGY_PATH;
+  const bytes = preservedPath ? readFileSync(preservedPath) : null;
+  if (bytes) { assert.equal(bytes.length, 11941); assert.equal(createHash("sha256").update(bytes).digest("hex"), "a74e561549c426755bec5e4925151d5274d2fdf4c3af53a48738f5268d6b12d0"); }
+  const original = bytes ? JSON.parse(bytes.toString("utf8")) : { tiers: n09Tiers(), sources: [{ domain: "n09.example.invalid", url: "https://n09.example.invalid/g1", sourceId: "n09c5-source1", availability: "unknown" }] };
+  const input = structuredClone(original), unchanged = JSON.stringify(input);
+  const draft = geoStrategyDraft(geoStrategyWriteOfFile(input));
+  assert.deepEqual(draft.strategy.tiers.map(tier => tier.summary), N09_SUMMARIES);
+  assert.deepEqual(draft.strategy.tiers.map(tier => tier.targets[0].note), [N09_NOTE, N09_NOTE, N09_NOTE]);
+  assert.equal(draft.issues.some(issue => issue.code === "ignored_fields" && issue.field?.includes("basis")), false);
+  const coverage = geoStrategyFileCoverage(input);
+  assert.equal(coverage.dropped.some(path => /^tiers.*basis$/.test(path)), false);
+  for (const key of ["url", "sourceId", "availability"]) assert.ok(coverage.dropped.includes(`sources.table[0].${key}`));
+  for (const source of draft.sources) for (const key of ["url", "sourceId", "availability", "checkEvidence"]) assert.ok(!source[key], `${key} has no source-page mapping`);
+  assert.deepEqual(draft.sources[0].valueContext, {});
+  assert.equal(draft.strategy.tiers.some(tier => "basis" in tier || tier.targets.some(target => "basis" in target || "target" in target || "hardLine" in target)), false);
+  assert.ok(draft.issues.filter(issue => issue.code === "declined_fields" && issue.field?.includes("baseline,target,dataType")).length === 3);
+  const direct = await projectWithBaseline(), imported = await projectWithBaseline();
+  await geoRuntimeWrite({ store, project: direct.geo, what: "strategy", body: { data: geoStrategyWriteOfFile(input) } });
+  const { importDelivery } = importerOf(new Map([["deliverables/n09/strategy.json", JSON.stringify(input)]]));
+  await importDelivery(imported.control, { id: "six-narratives", status: "succeeded", deliverables: [{ id: "n09", capability: "geo-strategy" }] });
+  assert.deepEqual((await store.latestStrategy(direct.geo.id)).tiers, draft.strategy.tiers);
+  assert.deepEqual((await store.latestStrategy(imported.geo.id)).tiers, draft.strategy.tiers);
+  assert.deepEqual((await store.latestTargets(imported.geo.id))?.rows ?? [], []);
+  const sources = await store.listSources(imported.geo.id);
+  assert.equal(sources[0].domain, "n09.example.invalid"); assert.notEqual(sources[0].id, "n09c5-source1");
+  assert.equal((await database.query("SELECT * FROM evimed_geo.owned_links WHERE geo_project_id=$1", [imported.geo.id])).rows.length, 0);
+  assert.equal(JSON.stringify(input), unchanged);
+  if (bytes) assert.deepEqual(readFileSync(preservedPath), bytes);
+});
+
+test("same-run tier note enrichment uses metric plus pool, preserves canonical fields and creates one semantic version", options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `rationale-${geo.id}`, relative = "deliverables/rationale/strategy.json";
+  const basis = { groups: [{ id: "g1" }], targets: { version: null, rows: [] }, sources: [{ id: "source", url: "https://n09.example.invalid/g1", availability: "unknown" }] };
+  const context = { mode: "strategy", runId, scopeKey: "original", basis };
+  const held = n09Tiers().map(({ tier }) => ({ tier: String(tier), targets: [{ metricId: "M-06", pool: "P2", level: "Held" }, { metricId: "M-06", pool: "P3", note: "Other pool" }] }));
+  await store.writeStrategy(USER, geo.id, { tiers: held, runId, scopeKey: context.scopeKey, basis });
+  const before = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  const input = { tiers: n09Tiers() }, original = JSON.stringify(input);
+  const make = () => importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => original }).importDelivery;
+  const produced = { id: runId, status: "succeeded", artifacts: [relative] };
+  await Promise.all([make()(control, produced), make()(control, produced)]);
+  const next = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.equal(next.version, before.version + 1); assert.equal(next.runId, runId); assert.deepEqual(next.basis, basis);
+  assert.deepEqual(next.tiers.map(tier => tier.summary), N09_SUMMARIES);
+  for (const tier of next.tiers) {
+    assert.equal(tier.targets.find(target => target.pool === "P2").note, N09_NOTE);
+    assert.equal(tier.targets.find(target => target.pool === "P2").level, "Held");
+    assert.equal(tier.targets.find(target => target.pool === "P3").note, "Other pool");
+  }
+  await make()(control, produced); assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, next.version);
+  assert.deepEqual((await store.latestStrategy(geo.id, { strategyVersion: before.version, scopeKey: context.scopeKey }))?.tiers ?? before.tiers, held);
+  assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []); assert.equal(JSON.stringify(input), original);
+  const conflict = { tiers: [{ tier: 1, targets: [{ metricId: "M-06", pool: "P2", note: "Extra qualification" }] }] };
+  const importer = importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => JSON.stringify(conflict) });
+  await importer.importDelivery(control, produced);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, next.version);
+  assert.ok(importer.reports.some(message => message.includes("qualification") && message.includes("P2")), "held canonical conflicts are explicit");
+});
+
+
+test("tier note enrichment is narrow, immutable and preserves generic array identity rules", () => {
+  const held = { tiers: [{ tier: "1", summary: "Held words", targets: [{ metricId: "M-06", pool: "P2", level: "Held" }] }],
+    actions: [{ metricId: "M-06", pool: "P2", reason: "Held action" }] };
+  const given = { tiers: [{ tier: "1", summary: "File words", targets: [{ metricId: "M-06", pool: "P2", note: "Missing note", level: "File" }, { metricId: "M-06", pool: "P3", note: "Distinct pool" }] }],
+    actions: [{ metricId: "M-06", pool: "P2", note: "Must not merge" }] };
+  const before = JSON.stringify({ held, given }), filled = fillStrategy(held, given);
+  assert.equal(filled.tiers[0].summary, "Held words"); assert.equal(filled.tiers[0].targets[0].level, "Held");
+  assert.equal(filled.tiers[0].targets[0].note, "Missing note"); assert.equal(filled.tiers[0].targets[1].pool, "P3");
+  assert.equal(filled.actions, undefined); assert.equal(JSON.stringify({ held, given }), before);
+});
+
+
+test("an invalid optional tier alias still writes canonical text and valid siblings through the shared writer", options, async () => {
+  const { geo } = await projectWithBaseline();
+  const data = { tiers: [{ tier: 1, summary: "Canonical", basis: {}, buys: "Useful", targets: [{ metricId: "M-06", note: "Held", basis: "😀".repeat(501) }] }, { tier: 2, basis: "Sibling" }] };
+  const original = JSON.stringify(data), draft = geoStrategyDraft(data);
+  const written = await geoRuntimeWrite({ store, project: geo, what: "strategy", body: { data } });
+  assert.equal(written.ok, true); assert.equal(written.ids.length, 1);
+  assert.ok(written.issues.some(issue => issue.code === "alias_invalid")); assert.ok(written.issues.some(issue => issue.code === "alias_too_long"));
+  assert.deepEqual((await store.latestStrategy(geo.id)).tiers, draft.strategy.tiers);
+  assert.equal((await store.latestStrategy(geo.id)).tiers[0].targets[0].note, "Held"); assert.equal(JSON.stringify(data), original);
+});
+
+
+for (const held of [false, true]) for (const alias of [
+  { name: "wrong-type", value: {}, targetValue: {}, code: "alias_invalid" },
+  { name: "blank", value: " \n\u0000 ", targetValue: " \t\u0000 ", code: "alias_empty" },
+  { name: "too-long", value: "😀".repeat(601), targetValue: "😀".repeat(501), code: "alias_too_long" },
+  { name: "canonical-plus-alias-overflow", value: "Extra", targetValue: "Extra", summary: "😀".repeat(600), note: "😀".repeat(500), code: "alias_too_long" },
+]) test(`trusted ${held ? "same-run" : "first"} import treats ${alias.name} narrative aliases as visible advisory results`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `advisory-${geo.id}`, relative = "deliverables/advisory/strategy.json";
+  const context = { mode: "strategy", runId, scopeKey: "original-advisory", basis: { targets: { version: null, rows: [] } } };
+  const input = { tiers: [{ tier: 1, summary: alias.summary ?? "Canonical text", basis: alias.value, buys: "Valid purchase scope",
+    targets: [{ metricId: "M-06", pool: "P2", note: alias.note ?? "Valid qualification", basis: alias.targetValue }] }, { tier: 2, basis: "Valid sibling rationale" }] };
+  const original = JSON.stringify(input), expected = geoStrategyDraft(input).strategy.tiers;
+  if (held) await store.writeStrategy(USER, geo.id, { tiers: expected, runId, scopeKey: context.scopeKey, basis: context.basis });
+  const make = () => importerOf(new Map(), { planningContext: async () => context,
+    readRunFile: async () => original, readFile: async () => { throw new Error("No unpreserved workspace reads"); } });
+  const { importDelivery, reports } = make(), produced = { id: runId, status: "succeeded", artifacts: [relative] };
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined, "optional aliases cannot mark the valid strategy unavailable");
+  assert.equal(result.files.strategies, 1); assert.equal(result.files.refused, 0); assert.deepEqual(result.files.unavailable, []);
+  assert.equal(importDelivery.counters.imported, 1); assert.equal(importDelivery.counters.failed, 0);
+  assert.deepEqual(result.files.notices.map(notice => [notice.path, notice.code]), [
+    [`${relative}#[0]tiers.basis`, alias.code], [`${relative}#[0]tiers.targets[0].basis`, alias.code],
+  ]);
+  for (const notice of result.files.notices) {
+    assert.match(notice.message, /kept only in the original file/);
+    assert.ok(reports.some(report => report.includes(notice.path) && report.includes(notice.code)), "the retained-original qualification remains visible");
+  }
+  assert.deepEqual(result.files.dropped, ["advisory:tiers[0].basis", "advisory:tiers[0].targets[0].basis"]);
+  const stored = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.deepEqual(stored.tiers, expected); assert.deepEqual(stored.basis, context.basis); assert.equal(stored.runId, runId);
+  assert.equal(stored.tiers[0].buys, "Valid purchase scope"); assert.equal(stored.tiers[1].summary, "Valid sibling rationale");
+  assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []); assert.equal(JSON.stringify(input), original);
+  assert.equal(await importDelivery(control, produced), null, "a successful advisory import does not consume failure retries");
+  const replay = await make().importDelivery(control, produced, { recovery: true });
+  assert.equal(replay.failed, undefined); assert.deepEqual(replay.files.notices, result.files.notices);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, stored.version);
+});
+
+for (const invalid of ["canonical", "gaps", "source"]) test(`optional narrative notices cannot hide a real invalid ${invalid} field`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `real-refusal-${geo.id}`, relative = "deliverables/real-refusal/strategy.json";
+  const context = { mode: "strategy", runId, scopeKey: "real-refusal", basis: {} };
+  const input = { summary: "Usable strategy", tiers: [{ tier: 1, summary: "Canonical", basis: {}, targets: [{ metricId: "M-06", note: "Held", basis: {} }] }],
+    ...(invalid === "canonical" ? { tiers: [{ tier: 1, summary: {}, basis: "Optional rationale" }, { tier: 2, summary: "Valid sibling", basis: {} }] } : {}),
+    ...(invalid === "gaps" ? { gaps: 42 } : {}),
+    ...(invalid === "source" ? { sources: [{ domain: "valid.example", name: "Retained" }, { domain: "not a host", name: "Refused" }] } : {}) };
+  const { importDelivery } = importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => JSON.stringify(input) });
+  const result = await importDelivery(control, { id: runId, status: "succeeded", artifacts: [relative] });
+  assert.ok(result.failed?.includes("geo_plan_output_unavailable")); assert.ok(result.files.refused > 0);
+  assert.ok(result.files.unavailable.some(path => path.includes(invalid === "canonical" ? "tiers.summary" : invalid === "source" ? "sources" : "gaps")));
+  assert.equal(result.files.unavailable.some(path => path.endsWith(".basis")), false, "only the real validation problem is unavailable");
+  assert.ok(result.files.notices.length > 0); assert.equal(importDelivery.counters.imported, 0); assert.equal(importDelivery.counters.failed, 1);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).summary, "Usable strategy");
+  if (invalid === "source") assert.deepEqual((await store.listSources(geo.id)).map(source => source.domain), ["valid.example"]);
+});
+
+
+for (const scenario of [
+  { name: "populated held note", held: "First qualification", incoming: ["First qualification", "Second qualification", "Second qualification", "Third qualification"], expected: "First qualification", extra: [1, 3] },
+  { name: "empty held and first incoming notes", held: null, incoming: [null, "First qualification", "First qualification", "Second qualification"], expected: "First qualification", extra: [3] },
+  { name: "equal repeated incoming notes", held: null, incoming: [null, null, "First qualification", "First qualification"], expected: "First qualification", extra: [] },
+]) test(`every duplicate compound target qualification is accounted for with ${scenario.name}`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `duplicate-${geo.id}`, relative = "deliverables/duplicates/strategy.json";
+  const context = { mode: "strategy", runId, scopeKey: "duplicate-notes", basis: { targets: { version: null, rows: [] } } };
+  const held = { tiers: [{ tier: "1", targets: [{ metricId: "M-06", pool: "P2", level: "Held", ...(scenario.held ? { note: scenario.held } : {}) },
+    { metricId: "M-06", pool: "P3", note: "Other pool" }] }], runId, scopeKey: context.scopeKey, basis: context.basis };
+  await store.writeStrategy(USER, geo.id, held);
+  const before = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  const input = { tiers: [{ tier: 1, targets: [...scenario.incoming.map(note => ({ metricId: "M-06", pool: "P2", ...(note ? { basis: note } : {}) })),
+    { metricId: "M-06", pool: "P3", basis: "Other pool" }, { metricId: "M-06", pool: "P3", basis: "Other pool" },
+    { metricId: "M-06", pool: "P3", basis: "Distinct other pool qualification" }] }] };
+  const original = JSON.stringify(input);
+  assert.equal(geoStrategyDraft(input).issues.length, 0);
+  const make = () => importerOf(new Map(), { planningContext: async () => context, readRunFile: async () => original });
+  const { importDelivery, reports } = make(), produced = { id: runId, status: "succeeded", artifacts: [relative] };
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined); assert.equal(result.files.refused, 0);
+  const next = await store.latestStrategy(geo.id, { scopeKey: context.scopeKey });
+  assert.equal(next.tiers[0].targets.length, 2, "equal duplicate descriptions do not create duplicate stored notes");
+  assert.equal(next.tiers[0].targets[0].note, scenario.expected); assert.equal(next.tiers[0].targets[0].level, "Held");
+  assert.equal(next.tiers[0].targets[1].note, "Other pool"); assert.equal(next.version, before.version + (scenario.held ? 0 : 1));
+  const omitted = reports.filter(report => report.includes("qualification_not_stored"));
+  assert.equal(omitted.length, scenario.extra.length + 1, "each distinct extra qualification has one original-only diagnostic");
+  for (const index of scenario.extra) assert.ok(omitted.some(report => report.includes("pool=P2") && report.includes(`qualificationSha256=${createHash("sha256").update(scenario.incoming[index]).digest("hex")}`)));
+  assert.equal(omitted.filter(report => report.includes("pool=P3")).length, 1);
+  for (const report of omitted) assert.match(report, /original file/);
+  const replay = make(); await replay.importDelivery(control, produced, { recovery: true });
+  assert.deepEqual(replay.reports.filter(report => report.includes("qualification_not_stored")), omitted);
+  assert.equal((await store.latestStrategy(geo.id, { scopeKey: context.scopeKey })).version, next.version);
+  assert.deepEqual(next.basis, context.basis); assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []);
+  assert.equal(JSON.stringify(input), original);
+});
+
+test("compound qualification accounting is immutable for missing target lists and prototype-looking identities", () => {
+  const input = { tiers: [{ tier: "1", targets: [{ metricId: "__proto__", pool: "constructor" }, { metricId: "__proto__", pool: "constructor", note: "First" },
+    { metricId: "__proto__", pool: "constructor", note: "First" }, { metricId: "__proto__", pool: "constructor", note: "Second" }] }] };
+  const held = { tiers: [{ tier: "1" }] }, original = JSON.stringify({ held, input }), notices = [];
+  const filled = fillStrategy(held, input, notice => notices.push(notice));
+  assert.equal(filled.tiers[0].targets.length, 1); assert.equal(filled.tiers[0].targets[0].note, "First");
+  assert.equal(notices.length, 1); assert.ok(notices[0].includes(`qualificationSha256=${createHash("sha256").update("Second").digest("hex")}`));
+  assert.equal(Object.prototype.polluted, undefined); assert.equal(JSON.stringify({ held, input }), original);
+});
+
+for (const held of [false, true]) for (const alias of [
+  { name: "wrong-type", value: {}, targetValue: {}, code: "alias_invalid" },
+  { name: "blank", value: " \n\u0000 ", targetValue: " \t\u0000 ", code: "alias_empty" },
+  { name: "too-long", value: "😀".repeat(601), targetValue: "😀".repeat(501), code: "alias_too_long" },
+  { name: "canonical-plus-alias-overflow", value: "Extra", targetValue: "Extra", summary: "😀".repeat(600), note: "😀".repeat(500), code: "alias_too_long" },
+]) test(`unbound ${held ? "same-run" : "first"} import preserves ${alias.name} alias diagnostics through semantic replay`, options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const runId = `unbound-advisory-${geo.id}`, relative = "deliverables/unbound-advisory/strategy.json";
+  const input = { tiers: [{ tier: 1, summary: alias.summary ?? "Held summary", basis: alias.value,
+    targets: [{ metricId: "M-06", pool: "P2", note: alias.note ?? "Held note", basis: alias.targetValue }] }] };
+  const expected = geoStrategyDraft(input).strategy.tiers, original = JSON.stringify(input);
+  if (held) await store.writeStrategy(USER, geo.id, { tiers: expected, runId });
+  const make = () => importerOf(new Map([[relative, original]]), { listDeliverableFolders: async () => [] });
+  const { importDelivery, reports } = make();
+  const produced = { id: runId, status: "succeeded", startedAt: "2000-01-01T00:00:00Z", deliverables: [{ id: "unbound-advisory", capability: "geo-strategy" }] };
+  const result = await importDelivery(control, produced);
+  assert.equal(result.failed, undefined); assert.ok(result.files, "an unchanged strategy still returns file diagnostics");
+  assert.equal(result.files.strategies, held ? 0 : 1); assert.equal(result.files.refused, 0);
+  assert.deepEqual(result.files.notices.map(notice => [notice.path, notice.code]), [
+    [`${relative}#[0]tiers.basis`, alias.code], [`${relative}#[0]tiers.targets[0].basis`, alias.code],
+  ]);
+  assert.deepEqual(result.files.dropped, ["unbound-advisory:tiers[0].basis", "unbound-advisory:tiers[0].targets[0].basis"]);
+  for (const notice of result.files.notices) {
+    assert.match(notice.message, /kept only in the original file/); assert.ok(reports.some(report => report.includes(notice.path) && report.includes(notice.code)));
+  }
+  const next = await store.latestStrategy(geo.id); assert.deepEqual(next.tiers, expected);
+  const replay = await make().importDelivery(control, produced, { recovery: true });
+  assert.deepEqual(replay.files.notices, result.files.notices); assert.deepEqual(replay.files.dropped, result.files.dropped);
+  assert.equal((await store.latestStrategy(geo.id)).version, next.version); assert.equal(JSON.stringify(input), original);
+});
+
+test("unchanged unbound files still expose unrelated dropped fields", options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const tiers = [{ tier: "1", summary: "Held summary" }]; await store.writeStrategy(USER, geo.id, { tiers });
+  const relative = "deliverables/drop-only/strategy.json";
+  const { importDelivery } = importerOf(new Map([[relative, JSON.stringify({ tiers: [{ ...tiers[0], unexpectedField: "Original-only" }] })]]), { listDeliverableFolders: async () => [] });
+  const result = await importDelivery(control, { id: `drop-only-${geo.id}`, status: "succeeded", startedAt: "2000-01-01T00:00:00Z", deliverables: [{ id: "drop-only", capability: "geo-strategy" }] });
+  assert.deepEqual(result.files?.dropped, ["drop-only:tiers[0].unexpectedField"]); assert.equal(result.files?.strategies, 0);
+});
+
+
+for (const bound of [false, true]) for (const missing of [false, true]) for (const leading of ["none", "tier", "target"]) {
+  test(`duplicate incoming tier identities account for every qualification (${bound ? "bound" : "unbound"}, ${missing ? "missing" : "held"} note, leading ${leading})`, options, async () => {
+    const { geo, control } = await projectWithBaseline();
+    const runId = `repeated-tier-${geo.id}`, relative = "deliverables/repeated-tier/strategy.json";
+    const context = { mode: "strategy", runId, scopeKey: "repeated-tier", basis: { targets: { version: null, rows: [] } } };
+    const held = { tiers: [{ tier: "1", summary: "Canonical summary", buys: "Held purchase scope", targets: [
+      { metricId: "M-06", pool: "P2", level: "Held", ...(missing ? {} : { note: "First qualification" }) },
+      { metricId: "M-06", pool: "P3", note: "Other pool" },
+    ] }], runId, ...(bound ? { scopeKey: context.scopeKey, basis: context.basis } : {}) };
+    await store.writeStrategy(USER, geo.id, held);
+    const before = await store.latestStrategy(geo.id, bound ? { scopeKey: context.scopeKey } : {});
+    const input = { tiers: [
+      ...(leading === "tier" ? [{ tier: "invalid-tier", basis: {} }] : []),
+      { tier: 1, summary: "File summary", targets: [
+        ...(leading === "target" ? [{ metricId: { invalid: true }, basis: "Refused identity" }] : []),
+        { metricId: "M-06", pool: "P2", ...(missing ? {} : { basis: "First qualification" }) },
+      ] },
+      { tier: 1, buys: "Different purchase scope", targets: [
+        ...(missing ? [{ metricId: "M-06", pool: "P2", basis: "First qualification" }] : []),
+        { metricId: "M-06", pool: "P2", basis: "Second distinct qualification" },
+        { metricId: "M-06", pool: "P2", basis: "Second distinct qualification" },
+        { metricId: "M-06", pool: "P3", basis: "Other pool" },
+        { metricId: "M-06", pool: "P3", basis: "Other pool extra qualification" },
+      ] },
+    ] };
+    const original = JSON.stringify(input);
+    const make = () => importerOf(new Map([[relative, original]]), { listDeliverableFolders: async () => [],
+      ...(bound ? { planningContext: async () => context, readRunFile: async () => original } : {}) });
+    const produced = { id: runId, status: "succeeded", startedAt: "2000-01-01T00:00:00Z",
+      ...(bound ? { artifacts: [relative] } : { deliverables: [{ id: "repeated-tier", capability: "geo-strategy" }] }) };
+    const imported = make(), result = await imported.importDelivery(control, produced);
+    const conflicts = imported.reports.filter(report => report.includes("qualification_not_stored"));
+    assert.equal(conflicts.length, 2, "later duplicate tiers and equal target descriptions cannot hide or duplicate distinct omissions");
+    for (const [pool, note] of [["P2", "Second distinct qualification"], ["P3", "Other pool extra qualification"]]) {
+      const digest = createHash("sha256").update(note).digest("hex");
+      assert.ok(conflicts.some(report => report.includes("tier=1,") && report.includes("metricId=M-06,") && report.includes(`pool=${pool},`) && report.includes(`qualificationSha256=${digest}`)));
+    }
+    for (const conflict of conflicts) {
+      assert.match(conflict, /original file/); assert.doesNotMatch(conflict, /(?:tiers|targets)\[\d+\]/, "filtered positions are never presented as raw source locations");
+    }
+    if (bound && leading === "target") {
+      assert.ok(result.failed?.includes("geo_plan_output_unavailable"));
+      assert.ok(result.files.unavailable.some(path => path.includes("tiers.targets[0].metricId")));
+    } else assert.equal(result.failed, undefined, "unknown tier words stay advisory and legacy unbound failure policy stays unchanged");
+    if (leading === "tier") assert.ok(result.files.notices.some(notice => notice.path === `${relative}#[0]tiers.basis` && notice.code === "alias_invalid"));
+    const next = await store.latestStrategy(geo.id, bound ? { scopeKey: context.scopeKey } : {});
+    assert.equal(next.version, before.version + (missing ? 1 : 0));
+    assert.equal(next.tiers[0].targets[0].note, "First qualification"); assert.equal(next.tiers[0].targets[1].note, "Other pool");
+    assert.equal(next.tiers[0].targets[0].level, "Held"); assert.equal(next.tiers[0].summary, "Canonical summary");
+    assert.equal(next.tiers[0].buys, "Held purchase scope"); assert.equal(next.tiers[0].targets.length, 2);
+    if (bound) assert.deepEqual(next.basis, context.basis);
+    const replay = make(), repeated = await replay.importDelivery(control, produced, { recovery: true });
+    assert.deepEqual(replay.reports.filter(report => report.includes("qualification_not_stored")), conflicts);
+    if (leading === "tier") assert.deepEqual(repeated.files.notices, result.files.notices);
+    assert.equal((await store.latestStrategy(geo.id, bound ? { scopeKey: context.scopeKey } : {})).version, next.version);
+    assert.deepEqual((await store.latestTargets(geo.id))?.rows ?? [], []); assert.equal(JSON.stringify(input), original);
+  });
+}
+
+test("duplicate held tiers preserve every canonical qualification while extra notes are diagnosed only once", () => {
+  const held = { tiers: [{ tier: "1", summary: "Primary", targets: [{ metricId: "M-06", pool: "P2", note: "First" }] },
+    { tier: "1", summary: "Other held tier", targets: [{ metricId: "M-06", pool: "P2", note: "Second" }] }] };
+  const data = { tiers: [{ tier: "1", targets: [{ metricId: "M-06", pool: "P2", note: "Second" }, { metricId: "M-06", pool: "P2", note: "Third" }] },
+    { tier: "1", targets: [{ metricId: "M-06", pool: "P2", note: "Third" }] }] };
+  const original = JSON.stringify({ held, data }), notices = [], filled = fillStrategy(held, data, notice => notices.push(notice));
+  assert.deepEqual(filled, {}); assert.equal(notices.length, 1);
+  assert.ok(notices[0].includes(`qualificationSha256=${createHash("sha256").update("Third").digest("hex")}`));
+  assert.equal(JSON.stringify({ held, data }), original);
+});
+
+test("duplicate new tiers inside same-run enrichment retain the first note and account for all later distinct notes", () => {
+  const held = { tiers: [] }, data = { tiers: [{ tier: "2", targets: [{ metricId: "M-06", pool: "P2", note: "First" }] },
+    { tier: "2", targets: [{ metricId: "M-06", pool: "P2", note: "First" }, { metricId: "M-06", pool: "P2", note: "Second" }] }] };
+  const original = JSON.stringify({ held, data }), notices = [], filled = fillStrategy(held, data, notice => notices.push(notice));
+  assert.equal(filled.tiers.length, 1); assert.equal(filled.tiers[0].targets.length, 1); assert.equal(filled.tiers[0].targets[0].note, "First");
+  assert.equal(notices.length, 1); assert.equal(JSON.stringify({ held, data }), original);
 });

@@ -1,0 +1,16 @@
+{
+  "benchmarkSha256": "58fb42e7a53f576ed2c5842ce84e015fe7ae78580509469d6cbcb0a7320e4180",
+  "budgetCny": 50,
+  "expectedCells": 540,
+  "lifecycleDenominator": 30,
+  "independentUnit": "question",
+  "ci": "paired percentile bootstrap, 10000 draws, 95%",
+  "noninferiority": "general and medical independently: lower CI > -0.02; otherwise inconclusive",
+  "missing": [
+    "baseline: product base URL and fixture bindings missing",
+    "candidate: product base URL and fixture bindings missing",
+    "Live shared budget wiring missing"
+  ],
+  "status": "blocked",
+  "spendCny": 0
+}

@@ -146,7 +146,9 @@ export class AutopilotWorker {
       if (job.payload?.action === "cancel") {
         await this.cancelDispatched({ userId: job.userId, projectId: job.projectId, episodeId: job.payload.episodeId,
           sessionId: job.payload.sessionId, runId: job.payload.runId,
-          verificationId: job.payload.verificationId, dispatchId: job.payload.dispatchId, runtimeGeneration: job.payload.runtimeGeneration });
+          verificationId: job.payload.verificationId, dispatchId: job.payload.dispatchId, runtimeGeneration: job.payload.runtimeGeneration,
+          // Whether this is the job's last try: what a cancellation that cannot confirm its run does then (`cancelScheduledRun`).
+          finalAttempt: job.attempts >= Number(job.maxAttempts ?? 3) });
         await this.service.markCancellationCompleted(job.userId, job.payload.episodeId, job.payload.runId, job.payload.verificationId);
         const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {
           episodeId: job.payload.episodeId, canceled: true,
@@ -157,7 +159,8 @@ export class AutopilotWorker {
       }
       const agenda = await this.service.get(job.userId, job.payload?.agendaId);
       const episode = await this.service.getEpisode(job.userId, job.payload?.episodeId);
-      if (!agenda.payload.enabled || agenda.payload.status !== "active" || !["queued", "failed", "running"].includes(episode.payload.status)) {
+      if (!agenda.payload.enabled || agenda.payload.status !== "active" || !["queued", "retry_pending", "failed", "running"].includes(episode.payload.status)) {
+        if (["queued", "retry_pending"].includes(episode.payload.status)) await this.service.markEpisodeCanceled(job.userId, episode.id);
         return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
       }
       if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
@@ -165,6 +168,7 @@ export class AutopilotWorker {
       }
       const currentAgenda = await this.service.checkInactivity(job.userId, job.payload?.agendaId);
       if (!currentAgenda.payload.enabled || currentAgenda.payload.status !== "active") {
+        if (["queued", "retry_pending"].includes(episode.payload.status)) await this.service.markEpisodeCanceled(job.userId, episode.id);
         return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
       }
       const activityLeaseRenewed = leaseLost ? false : await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs);
@@ -204,6 +208,9 @@ export class AutopilotWorker {
           jobId: job.id, code, attempts: job.attempts, retrying: retry, at: at.toISOString(), retryAt: retry ? new Date(at.getTime() + delayMs).toISOString() : null,
           ...(job.kind === "verify" ? { verificationId: job.payload.verificationId } : {}),
         });
+        if (!retry && job.kind !== "verify") await this.service.markEpisodeFailed(job.userId, job.payload.episodeId, {
+          jobId: job.id, code, attempts: job.attempts, retrying: false, at: at.toISOString(), retryAt: null,
+        });
         return null;
       }
       if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["autopilot_paused", "autopilot_stopped"].includes(code)) {
@@ -211,7 +218,7 @@ export class AutopilotWorker {
         if (job.kind === "verify") {
           await this.service.endVerificationsOfAgenda?.(job.userId, job.payload.episodeId,
             code === "autopilot_stopped" ? "agenda_stopped" : "agenda_paused", job.payload.verificationId).catch(() => {});
-        }
+        } else await this.service.markEpisodeCanceled(job.userId, job.payload.episodeId);
         await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
         return null;
       }
@@ -251,15 +258,22 @@ export class AutopilotWorker {
             { retry: true, delayMs: Math.min(60_000, 1000 * 2 ** Math.min(job.attempts, 6)) }).catch(() => {});
           return null;
         }
-      } else if (job.payload?.episodeId && code !== "product_job_lease_lost") {
-        await this.service.markEpisodeFailed(job.userId, job.payload.episodeId, { code }).catch(() => {});
       }
       if (job.payload?.action !== "cancel" && !leaseLost && code !== "product_job_lease_lost") {
         try {
-          await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: "Proactive research dispatch failed." }, {
-            retry: !TERMINAL.has(code), delayMs: TERMINAL.has(code) ? 0
-              : code === "runtime_busy" ? this.busyDelayMs : Math.min(60_000, 1000 * 2 ** Math.min(job.attempts, 6)),
+          const retry = !TERMINAL.has(code) && job.attempts < Number(job.maxAttempts ?? 3);
+          const delayMs = retry ? code === "runtime_busy" ? this.busyDelayMs : Math.min(60_000, 1000 * 2 ** Math.min(job.attempts, 6)) : 0;
+          const settled = await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: "Proactive research dispatch failed." }, {
+            retry, delayMs,
           });
+          if (job.payload?.episodeId && !dispatched && code !== "result_impact_source_unavailable") {
+            const retrying = settled ? settled.status === "queued" : retry;
+            const at = new Date();
+            await this.service.markEpisodeFailed(job.userId, job.payload.episodeId, {
+              code, jobId: job.id, attempts: job.attempts, retrying, at: at.toISOString(),
+              retryAt: retrying ? settled?.runAfter ?? new Date(at.getTime() + delayMs).toISOString() : null,
+            });
+          }
         } catch (failure) { if (failure?.code !== "product_job_lease_lost") throw failure; }
       }
       return null;

@@ -23,7 +23,8 @@ test('personal source pins remain on the live generation and native invoke uses 
   assert.deepEqual(manager.runtimePersonalSkillPins(project), [{ skillId: pin.skillId, revision: 1, digest: pin.digest, nativeName: pin.nativeName, source: 'personal' }])
   const result = await manager.invokePersonalSkill({ project, skillId: pin.skillId, revision: 1, sessionId: 'conversation', idempotencyKey: 'invoke-one' })
   assert.equal(result.accepted, true)
-  assert.deepEqual(prompt, { sessionId: 'conversation', text: '/personal-fixture', requestId: 'invoke-one' })
+  // The person invoked it, so the turn is signed attended (dispatchAttendance.test holds every dispatch site to stating it).
+  assert.deepEqual(prompt, { sessionId: 'conversation', text: '/personal-fixture', requestId: 'invoke-one', unattended: false })
   await assert.rejects(manager.invokePersonalSkill({ project, skillId: pin.skillId, revision: 2, sessionId: 'conversation', idempotencyKey: 'invoke-two' }), /waiting/u)
 })
 

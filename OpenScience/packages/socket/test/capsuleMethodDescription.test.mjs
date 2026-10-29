@@ -22,6 +22,13 @@ test('a method from an enabled capsule says it came from the capsule', () => {
   assert.doesNotMatch(text, /学到的做法/)
 })
 
+test('an official method says it is the platform\'s default, not the user\'s and not a capsule\'s', () => {
+  const text = mountedMethodDescription({ name: 'official-daily-writing-status-report', description: '周报与进展汇报：事实只用你给的', directory: `_om${'c'.repeat(32)}` })
+  assert.match(text, /^周报与进展汇报：事实只用你给的\n/)
+  assert.match(text, /EviMed 平台给每位用户的默认做法/)
+  assert.doesNotMatch(text, /学到的做法|记忆胶囊里的做法/)
+})
+
 test('a long description is shortened, never the note on where it came from', () => {
   const text = mountedMethodDescription({ name: 'long', description: 'x'.repeat(5000), directory: `_lm${'b'.repeat(32)}` })
   assert.ok(text.length <= 1024)

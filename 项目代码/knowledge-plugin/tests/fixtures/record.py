@@ -37,6 +37,7 @@ import asyncio
 import gzip
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -65,7 +66,7 @@ CONTACT_FILE = ROOT.parent.parent / ".evimed-local" / "secrets" / "unpaywall.ema
 EVIMED_KEY_FILE = ROOT.parent.parent / ".evimed-local" / "secrets" / "evimed.api-key"
 SELECTORS_FILE = ROOT.parent.parent / "outputs" / "2026-09-22-frontier-build" / "P2-selectors.json"
 REGISTRY_FILE = ROOT / "registry" / "sources.json"
-BROWSER_CDP = "http://127.0.0.1:9222"
+BROWSER_CDP = os.environ.get("KNOWLEDGE_PLUGIN_RECORD_CDP") or "http://127.0.0.1:9222"   # another port: that variable
 EVIMED_API_BASE = "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/"
 KEPT_HEADERS = ("content-type", "etag", "last-modified", "retry-after")
 GZIP_OVER = 48 * 1024
@@ -132,6 +133,17 @@ def _redact(body: bytes, content_type: str, scrub_emails: bool = False) -> tuple
     return json.dumps(redacted, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), sorted(set(hits))
 
 
+_SCRIPT_OR_STYLE = re.compile(rb"<(script|style)\b([^>]*)>.*?</\1\s*>", re.I | re.S)
+
+
+def trim_page(body: bytes) -> bytes:
+    """An HTML page without its scripts and styles, JSON-LD kept (what the landing page reader reads is the markup, the
+    meta tags and the JSON-LD; the rest is the page's machinery)."""
+    def keep(match: re.Match) -> bytes:
+        return match.group(0) if b"ld+json" in match.group(2).lower() else b""
+    return _SCRIPT_OR_STYLE.sub(keep, body)
+
+
 class RecordingBrowser(BrowserFetcher):
     """The plugin's browser egress, keeping every raw render (the page, or robots.txt as text)."""
 
@@ -174,9 +186,15 @@ class RecordingFetcher:
     production ones.
     """
 
-    def __init__(self, case_dir: Path, *, credentials: bool = True, browser_cdp: str = BROWSER_CDP) -> None:
+    def __init__(self, case_dir: Path, *, credentials: bool = True, browser_cdp: str = BROWSER_CDP,
+                 contact: bool = True, trim_html: bool = False) -> None:
         self.case_dir = case_dir
         self.credentials = credentials
+        # ``contact=False``: Unpaywall is asked without the contact address (no secret file is read; it answers 422),
+        # ``trim_html``: a stored HTML page keeps its markup, metadata and JSON-LD but not its other scripts and styles
+        # (``trim_page``), the original's sha256 beside it — rt-papers' landing pages run to 300–800 KB.
+        self.contact = contact
+        self.trim_html = trim_html
         self.scrub_emails = False
         self.browser_cdp = browser_cdp
         self._protected: ProtectedFetcher | None = None
@@ -253,7 +271,7 @@ class RecordingFetcher:
             raise FetchError("robots-denied", "robots_disallow")
         wire_url = spec.url
         host = (urlsplit(spec.url).hostname or "").lower()
-        if host == "api.unpaywall.org":
+        if host == "api.unpaywall.org" and self.contact:
             contact = CONTACT_FILE.read_text(encoding="utf-8").strip()
             wire_url += ("&" if "?" in wire_url else "?") + "email=" + contact
         wire_headers = dict(spec.headers or {})
@@ -303,6 +321,9 @@ class RecordingFetcher:
     def _store(self, meta: dict, body: bytes, content_type: str) -> None:
         original_sha = hashlib.sha256(body).hexdigest()
         body, redacted = _redact(body, content_type, self.scrub_emails)
+        if self.trim_html and "html" in content_type.lower() and len(body) > GZIP_OVER:
+            body = trim_page(body)
+            redacted = redacted + ["scripts-and-styles-trimmed"]
         name = f"{len(self.exchanges) + 1:02d}.{_ext(content_type, meta['url'])}"
         packed = len(body) > GZIP_OVER
         if packed:
@@ -410,10 +431,14 @@ ADAPTER_CASES: dict[str, dict] = {
     "rss/medrxiv-epidemiology": {"source": "medrxiv-epidemiology", "budget": 1},
     "rss/ema-new-human-medicines": {"source": "ema-new-human-medicines", "budget": 1},
     "rss/cdc-eid-ahead-of-print": {"source": "cdc-eid-journal", "budget": 1},
+    "rss/prnewswire-medical-subfeeds": {"source": "prnewswire-health", "budget": 6,
+                                        "note": "ct-src 2026-10-24: PR Newswire's six medical subject feeds"},
     "atom/mhra-drug-safety-update": {"source": "mhra-drug-safety-update", "budget": 1},
     "atom/arxiv-qbio-qm": {"source": "arxiv-qbio-qm", "budget": 1},
     # html-list
     "html-list/nhsa-notices": {"source": "nhsa-notices", "budget": 1},
+    "html-list/natcm-policy-interpretation": {"source": "natcm-policy-interpretation", "budget": 1},   # ct-src 2026-10-24
+    "html-list/ndcpa-regulations": {"source": "ndcpa-regulations", "budget": 1},                       # ct-src 2026-10-24
     "html-list/nhsa-consultations": {"source": "nhsa-consultations", "budget": 1},
     "html-list/nhsa-policy-interpretation": {"source": "nhsa-policy-interpretation", "budget": 1},
     "html-list/gov-cn-policy": {"source": "gov-cn-policy", "budget": 1},
@@ -441,6 +466,13 @@ ADAPTER_CASES: dict[str, dict] = {
     "browser-list/nmpa-label-revision-announcements": {"source": "nmpa-label-revision-announcements", "budget": 1},
     "browser-list/nmpa-other-drug-announcements": {"source": "nmpa-other-drug-announcements", "budget": 1},
     "browser-list/nmpa-innovative-approvals": {"source": "nmpa-innovative-approvals", "budget": 1},
+    # ct-src 2026-10-24: approval delivery notices, regulatory work (approvals), device recalls, consultations.
+    "browser-list/nmpa-drug-approval-delivery": {"source": "nmpa-drug-approval-delivery", "budget": 1},
+    "browser-list/nmpa-device-approval-delivery": {"source": "nmpa-device-approval-delivery", "budget": 1},
+    "browser-list/nmpa-drug-regulatory-work": {"source": "nmpa-drug-regulatory-work", "budget": 1},
+    "browser-list/nmpa-device-regulatory-work": {"source": "nmpa-device-regulatory-work", "budget": 1},
+    "browser-list/nmpa-device-recalls": {"source": "nmpa-device-recalls", "budget": 1},
+    "browser-list/nmpa-consultations": {"source": "nmpa-consultations", "budget": 1},
     "browser-list/cde-breakthrough-therapy": {
         "source": "cde-breakthrough-therapy", "budget": 1,
         "note": ("药审中心 refused this box from ~11:13Z on 2026-09-22 (403 WAF page); the stored fixture is the 11:11:15Z "

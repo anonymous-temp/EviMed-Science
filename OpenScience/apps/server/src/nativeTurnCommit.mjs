@@ -1,7 +1,10 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
 import { isPlatformStartedRun } from "./memoryAdmission.mjs";
 import { recordTurnCommit } from "./nativeMemoryMetrics.mjs";
+import { endedBeforeReset } from "./memorySettings.mjs";
 import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
+import { openVikingUserId } from './openVikingLayout.mjs';
+import { HttpError } from './security.mjs';
 
 /**
  * Commits a native account's conversation to the memory engine a few seconds after each attended turn.
@@ -35,8 +38,7 @@ import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
  *  - **Bounded.** Commits in flight at once, conversations waiting for their quiet, and the reads are each a key in
  *    `config.mjs` with a counter (`open_science_native_memory_turn_commits_total`).
  *
- * A legacy account is untouched: the engine is asked once, when the turn ends, and nothing is armed. An engine that does
- * not answer is a counted `failed`, never a fake commit and never a reason for the conversation to wait: the messages stay
+ * An engine that does not answer is a counted `failed`, never a fake commit and never a reason for the conversation to wait: the messages stay
  * pending in the engine's session, and the next turn's commit, the plugin's disposal commit or the engine's idle commit
  * archives them. A restart of the control plane forgets what was armed, and the idle commit is the net for that too.
  *
@@ -56,7 +58,7 @@ const CONVERSATION = /^[A-Za-z0-9_-]{1,160}$/;
 
 /**
  * @typedef {{
- *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any,
+ *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, context: any, namespaceId: string, endedAt: string | null,
  * }} Armed
  */
 
@@ -64,23 +66,25 @@ export class NativeTurnCommit {
   /**
    * @param {{
    *   config: any,
-   *   researchMemory: { configured?: boolean, memoryEngine: (userId: string) => Promise<string> },
+   *   memorySettings: { configured?: boolean, resetInstant?: (userId: string) => Promise<string | null>, accountExists?: (userId: string) => Promise<boolean> },
    *   sessions: { configured?: boolean, readSession: (userId: string, sessionId: string) => Promise<any> },
    *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
    *   conversations: { runsOf: (project: any, sessionId: string) => Promise<any[]> },
    *   commit: import("./memoryGateway.mjs").MemoryGatewayCommitSession,
+   *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
    *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (timer: any) => void, wait?: (ms: number) => Promise<void>,
    *   report?: (line: string) => void,
    * }} dependencies
    *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test.
    */
-  constructor({ config, researchMemory, sessions, admission, conversations, commit, setTimer = null, clearTimer = null, wait = null, report = () => {} }) {
+  constructor({ config, memorySettings, sessions, admission, conversations, commit, memoryContexts = null, setTimer = null, clearTimer = null, wait = null, report = () => {} }) {
     this.config = config ?? {};
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.sessions = sessions;
     this.admission = admission;
     this.conversations = conversations;
     this.commit = commit;
+    this.memoryContexts = memoryContexts;
     this.setTimer = setTimer ?? ((fn, ms) => { const timer = setTimeout(fn, ms); timer.unref?.(); return timer; });
     this.clearTimer = clearTimer ?? ((timer) => clearTimeout(timer));
     this.wait = wait ?? ((ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); }));
@@ -90,7 +94,7 @@ export class NativeTurnCommit {
     this.attempts = Math.max(1, Math.trunc(Number(this.config.nativeMemoryTurnCommitAttempts ?? 4)));
     this.concurrency = Math.max(1, Math.trunc(Number(this.config.nativeMemoryTurnCommitConcurrency ?? 2)));
     this.maxScheduled = Math.max(1, Math.trunc(Number(this.config.nativeMemoryTurnCommitMaxScheduled ?? 1_000)));
-    /** Conversations waiting for their quiet, by account and conversation. @type {Map<string, Armed>} */
+    /** Conversations waiting for their quiet, by account, namespace and conversation. @type {Map<string, Armed>} */
     this.armed = new Map();
     /** Conversations whose quiet has passed and that wait for a free slot, oldest first. @type {Armed[]} */
     this.queue = [];
@@ -101,16 +105,15 @@ export class NativeTurnCommit {
   }
 
   get applicable() {
-    return this.config.ovNativeMemoryEnabled === true && this.config.nativeMemoryTurnCommitEnabled !== false && this.config.memoryEnabled !== false
-      && Boolean(this.sessions?.configured && this.researchMemory?.configured);
+    return this.config.memoryEngineEnabled === true && this.config.nativeMemoryTurnCommitEnabled !== false && this.config.memoryEnabled !== false
+      && Boolean(this.sessions?.configured && this.memorySettings?.configured);
   }
 
   /** Whether the engine session of a conversation is waiting for its quiet, for readiness and tests. @param {string} userId @param {string} sessionId */
-  isArmed(userId, sessionId) { return this.armed.has(`${userId}\u0000${sessionId}`); }
+  isArmed(userId, sessionId, { namespaceId = openVikingUserId(userId) } = {}) { return this.armed.has(JSON.stringify([userId, namespaceId, sessionId])); }
 
   /**
-   * A run reached a terminal state. Arms (or re-arms) the commit of its conversation when it was an attended turn of an
-   * account on the native engine. Never throws and never waits for the commit.
+   * A run reached a terminal state. Arms (or re-arms) the commit of its conversation when it was an attended turn. Never throws and never waits for the commit.
    * @param {any} project @param {any} run
    * @returns {Promise<void>}
    */
@@ -122,18 +125,25 @@ export class NativeTurnCommit {
       if (isInternalProjectOf(this.config, project.userId, project.id)) return;
       // A turn the platform started — an automated run, a scheduled task, a LoopX continuation — is not the person's.
       if (isPlatformStartedRun(run)) { recordTurnCommit("platform_started"); return; }
-      // A legacy account is untouched; the answer is one settings read, cached by the store's row.
-      if (await this.researchMemory.memoryEngine(String(project.userId)) !== "native") return;
-      this.#arm(project, sessionId);
+      if (this.closed) return;
+      // The memory namespace the conversation writes to: the owner's own, or a shared GEO project's (`geoNativeMemoryContext.mjs`).
+      const context = this.memoryContexts ? await this.memoryContexts.forProject(project) : null;
+      if (this.memoryContexts && (!context || context.ownerId !== project.userId || context.projectId !== project.id
+        || typeof context.namespaceId !== 'string' || !context.namespaceId || typeof context.sessions?.readSession !== 'function')) {
+        throw new HttpError(403, 'memory_scope_denied', 'The conversation memory context is unavailable.');
+      }
+      if (this.closed) return;
+      this.#arm(project, sessionId, context, String(run?.finishedAt ?? run?.startedAt ?? "") || null);
     } catch (error) {
       this.report(`native turn commit: ${this.#codeOf(error)}`);
     }
   }
 
-  /** @param {any} project @param {string} sessionId */
-  #arm(project, sessionId) {
+  /** @param {any} project @param {string} sessionId @param {any} context @param {string | null} endedAt */
+  #arm(project, sessionId, context, endedAt) {
     const userId = String(project.userId);
-    const key = `${userId}\u0000${sessionId}`;
+    const namespaceId = context?.namespaceId ?? openVikingUserId(userId);
+    const key = JSON.stringify([userId, namespaceId, sessionId]);
     const held = this.armed.get(key);
     if (held) {
       // The person went on within the quiet: one commit for both turns.
@@ -145,7 +155,7 @@ export class NativeTurnCommit {
       return;
     }
     /** @type {Armed} */
-    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null };
+    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, namespaceId, context, endedAt };
     entry.timer = this.setTimer(() => { this.armed.delete(key); this.queue.push(entry); this.#pump(); }, this.debounceMs);
     this.armed.set(key, entry);
     recordTurnCommit("scheduled");
@@ -177,15 +187,32 @@ export class NativeTurnCommit {
   }
 
   /** @param {Armed} entry */
+  async #endedBeforeReset(entry) {
+    if (typeof this.memorySettings.resetInstant !== "function") return false;
+    const resetAt = await this.memorySettings.resetInstant(entry.userId).catch(() => null);
+    return endedBeforeReset({ finishedAt: entry.endedAt }, resetAt);
+  }
+
+  /** @param {Armed} entry */
   async #run(entry) {
     if (this.closed) return;
+    if (entry.context) await this.memoryContexts.assertLive(entry.context);
     if (await this.#personIsTyping(entry)) { recordTurnCommit("conversation_running"); return; }
+    // A turn that was over before the account reset its memory is not committed after it: the reset deleted the engine's sessions
+    // (and with them what was pending), and the plugin's replay of an old message must not make a session to commit from.
+    if (await this.#endedBeforeReset(entry)) { recordTurnCommit("before_reset"); return; }
+    // An account deleted while its turn waited has nothing to learn from and no settings to write: the engine is not asked about it.
+    if (typeof this.memorySettings.accountExists === "function" && !(await this.memorySettings.accountExists(entry.userId))) { recordTurnCommit("not_learning"); return; }
     const user = { id: entry.userId };
     // The admission decides who is learned from. Asked before the engine is read so that a paused account, a trial, a
     // conversation that read a patient record and the platform's own projects cost the engine nothing; the gateway's commit
     // asks again at the moment it commits.
     const admitted = await this.admission.admit({ user, project: entry.project, engineSessionId: entry.engineSessionId });
-    if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) { recordTurnCommit("not_learning"); return; }
+    if (!admitted.learn && admitted.learnReason !== "automated_run") { recordTurnCommit("not_learning"); return; }
+    if (entry.context?.kind === 'geo-project' && !await this.memoryContexts.noteCapture(entry.context, entry.engineSessionId)) {
+      recordTurnCommit('not_learning'); return;
+    }
+    const sessions = entry.context?.sessions ?? this.sessions;
 
     /** @type {{ pending: number, count: number } | null} */
     let previous = null;
@@ -197,7 +224,8 @@ export class NativeTurnCommit {
       let pending = 0;
       let count = 0;
       try {
-        const state = (await this.sessions.readSession(entry.userId, entry.engineSessionId))?.result ?? {};
+        if (entry.context) await this.memoryContexts.assertLive(entry.context);
+        const state = (await sessions.readSession(entry.userId, entry.engineSessionId))?.result ?? {};
         pending = Number(state.pending_tokens) || 0;
         count = Number(state.message_count) || 0;
         failure = null;
@@ -222,7 +250,8 @@ export class NativeTurnCommit {
   async #commitNow(entry, user) {
     // The person may have written again while the reads settled: that turn's own end commits it.
     if (await this.#personIsTyping(entry)) { recordTurnCommit("conversation_running"); return; }
-    const answer = await this.commit({ user, project: entry.project, engineSessionId: entry.engineSessionId });
+    if (entry.context) await this.memoryContexts.assertLive(entry.context);
+    const answer = await this.commit({ user, project: entry.project, engineSessionId: entry.engineSessionId, context: entry.context });
     recordTurnCommit(answer.commit === "accepted" ? "committed" : answer.commit);
   }
 

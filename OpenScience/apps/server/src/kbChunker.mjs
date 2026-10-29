@@ -7,7 +7,7 @@
  * Contextual Retrieval, NVIDIA's chunking comparison): cut along the
  * document's own structure first — a page, a slide, a sheet, a heading — and
  * only then by length; never split a table, because a row without its header is
- * a number without a meaning; and put the document's title and section path in
+ * a number without a meaning; and put the captured text's own section path in
  * front of every chunk before it is embedded or matched, which is what lets a
  * chunk that says only 「剂量：15 mg」 be found by a question about one drug.
  *
@@ -16,7 +16,10 @@
  * prefix is stored beside it, never inside it.
  */
 
-import { searchTokens } from "./memoryRecallPolicy.mjs";
+import { createHash } from "node:crypto";
+import { searchTokens } from "./searchTokens.mjs";
+
+export const KB_INDEX_METHOD = "captured-content-v1";
 
 /** Split past this many estimated tokens (plan §3.2: ~1000). */
 export const KB_CHUNK_TARGET_TOKENS = 1000;
@@ -132,10 +135,10 @@ function splitLong(text, start, end) {
  * new chunk, blocks are packed up to the target, a longer paragraph is cut at
  * sentence ends, and a table always stays whole however long it is.
  *
- * @param {{ text: string, pageMap?: { page: number, start: number, end: number }[] | null, title: string }} input
+ * @param {{ text: string, pageMap?: { page: number, start: number, end: number }[] | null }} input
  * @returns {{ ordinal: number, start: number, end: number, page: number | null, headingPath: string, prefix: string }[]}
  */
-export function chunkDocument({ text, pageMap = null, title }) {
+export function chunkDocument({ text, pageMap = null }) {
   const value = String(text ?? "");
   // Every character lands in exactly one segment, so nothing a page map fails
   // to claim drops out of the index. A page's segment begins where the one
@@ -189,10 +192,9 @@ export function chunkDocument({ text, pageMap = null, title }) {
     }
   }
   flush();
-  const name = String(title ?? "").trim();
   return spans.slice(0, KB_MAX_CHUNKS_PER_DOCUMENT).map((span, ordinal) => ({
     ordinal, start: span.start, end: span.end, page: span.page, headingPath: span.headingPath,
-    prefix: [name, span.headingPath].filter(Boolean).join(" › "),
+    prefix: span.headingPath,
   }));
 }
 
@@ -290,4 +292,12 @@ export function trigramTerms(query) {
  * @param {{ prefix: string }} chunk @param {string} content */
 export function embeddingText(chunk, content) {
   return `${chunk.prefix ? `${chunk.prefix}\n` : ""}${content}`.slice(0, MAX_EMBEDDING_CHARS);
+}
+
+/** Receipt of the exact provider inputs, independent of source metadata.
+ * @param {{ ordinal: number, prefix: string, content: string }[]} chunks */
+export function embeddingInputReceipt(chunks) {
+  const inputs = [...chunks].sort((a, b) => a.ordinal - b.ordinal)
+    .map(chunk => [chunk.ordinal, embeddingText(chunk, chunk.content)]);
+  return createHash("sha256").update(JSON.stringify([KB_INDEX_METHOD, inputs])).digest("hex");
 }

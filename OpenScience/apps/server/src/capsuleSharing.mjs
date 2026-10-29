@@ -2,8 +2,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
+import { reachableAccounts } from "./capsuleRecipients.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
-import { recordShareDeclined, recordShareRefused, recordShared, recordTakedown } from "./capsuleShareMetrics.mjs";
+import { recordShareDeclined, recordShareOpened, recordShareRefused, recordShared, recordTakedown } from "./capsuleShareMetrics.mjs";
 
 /**
  * Handing a capsule to other accounts of this deployment, in the app (evidence-flywheel plan §7, F17a, 2026-10-05): a delivery to
@@ -24,7 +25,11 @@ import { recordShareDeclined, recordShareRefused, recordShared, recordTakedown }
  *   their own notices, each saying in one sentence what happened and why. A notice that cannot be written never fails the
  *   delivery it announces: the page still has the delivery.
  * - **A take-down is a revocation that reaches the copies.** The author's revoke stops further imports and says so; a take-down
- *   (the author's of one snapshot, or the operator's of everything an author shared) also disables every recipient's copy.
+ *   (the author's of one snapshot, or the operator's of everything an author shared) also disables every recipient's copy: out of
+ *   the account's list at once (so the runtimes that are up drop its methods before their next turn, and a conversation that begins
+ *   after mounts none of it), marked on the copy, which the recipient's shelf reads as withdrawn by its author or taken down by the
+ *   platform. The web's one 「撤回」 does both, so what the author calls withdrawing is what the recipient reads. A file already
+ *   exported is out of reach only where it was imported here; one taken to another deployment is theirs.
  *
  * @module capsuleSharing
  */
@@ -81,30 +86,19 @@ export class CapsuleSharing {
    * @returns {Promise<string[]>}
    */
   async #reach(senderId, refs) {
-    const reachable = "auth_type NOT IN ('subject','platform')";
-    const ids = new Set();
-    for (const ref of refs) {
-      const byId = (await this.database.query(`SELECT id FROM evimed_control.users WHERE id=$1 AND ${reachable}`, [ref])).rows;
-      let id = byId[0]?.id ?? null;
-      if (!id) {
-        const byName = (await this.database.query(`SELECT id FROM evimed_control.users WHERE name=$1 AND ${reachable} LIMIT 2`, [ref])).rows;
-        id = byName.length === 1 ? byName[0].id : null;
-      }
-      if (id && id !== senderId) ids.add(id);
-    }
-    return [...ids];
+    return reachableAccounts(this.database, senderId, refs);
   }
 
   /**
    * Deliver a pack to named accounts of this deployment: it is exported sealed for their keys, each gets one inbox notice, and the
    * sender gets the count — never a reason, never a name back. With nobody reachable nothing is exported at all.
    * @param {string} userId @param {string} capsuleId
-   * @param {{ recipients?: unknown, scopes?: unknown, card?: unknown }} input
+   * @param {{ recipients?: unknown, scopes?: unknown, card?: unknown, excludeEntryIds?: unknown }} input
    * @param {{ accountCreatedAt?: string | null, projectId?: string | null }} [context]
    * @returns {Promise<{ delivered: number, notDelivered: number, snapshot: any | null }>}
    */
   async deliver(userId, capsuleId, input, context = {}) {
-    const allowed = ["recipients", "scopes", "card"];
+    const allowed = ["recipients", "scopes", "card", "excludeEntryIds"];
     if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((key) => !allowed.includes(key))) {
       throw new HttpError(400, "capsule_payload_invalid", "The delivery has unsupported fields.");
     }
@@ -124,7 +118,11 @@ export class CapsuleSharing {
       recordShareRefused("rate_limited");
       throw new HttpError(429, "capsule_share_rate_limited", "Too many deliveries today.");
     }
-    const result = await this.transfers.export(userId, capsuleId, { scopes: input.scopes, card: input.card, recipients }, { ...context, channel: "delivery" });
+    // A newer snapshot of what some of them already took in is that pack's next version: they upgrade in place and read the
+    // changelog, instead of holding a second capsule beside the first.
+    const supersedes = await this.#previousSnapshot(userId, capsuleId, recipients);
+    const result = await this.transfers.export(userId, capsuleId, { scopes: input.scopes, card: input.card, recipients, excludeEntryIds: input.excludeEntryIds,
+      ...(supersedes ? { supersedes } : {}) }, { ...context, channel: "delivery" });
     const snapshot = result.snapshot;
     /** @type {string[]} */
     const delivered = [];
@@ -139,6 +137,31 @@ export class CapsuleSharing {
       await this.#announce(recipient, id, snapshot);
     }
     return { delivered: delivered.length, notDelivered: refs.length - delivered.length, snapshot };
+  }
+
+  /**
+   * The snapshot a new one of this capsule continues: the newest the people it goes to have taken in — those named (`recipients`),
+   * or anybody, for a link, whose redeemers are not known beforehand — whether it reached them in a delivery or through a link.
+   * Only a snapshot somebody holds can be upgraded in place; one nobody took in is just an earlier export, and chaining to it would
+   * leave the holder of an older version with a second capsule. Nor one that was taken down: its copies were disabled and marked, an
+   * upgrade in place would keep them so and the new version would never be in force, so what replaces a taken-down version is a
+   * pack of its own. Null when there is none, and the new snapshot starts a chain.
+   * @param {string} userId @param {string} capsuleId @param {readonly string[] | null} recipients
+   * @returns {Promise<string | null>}
+   */
+  async #previousSnapshot(userId, capsuleId, recipients) {
+    const row = (await this.database.query(`SELECT taken.snapshot_id FROM (
+        SELECT d.snapshot_id, d.created_at AS at FROM evimed_share.deliveries d
+          WHERE d.owner_id=$1 AND d.capsule_id=$2 AND d.state='imported' AND ($3::text[] IS NULL OR d.recipient_id=ANY($3::text[]))
+        UNION ALL
+        SELECT l.snapshot_id, l.created_at AS at FROM evimed_share.links l JOIN evimed_share.link_uses u ON u.link_id=l.id
+          WHERE l.owner_id=$1 AND l.capsule_id=$2 AND u.imported_at IS NOT NULL AND ($3::text[] IS NULL OR u.user_id=ANY($3::text[]))
+      ) taken JOIN evimed_product.documents s ON s.user_id=$1 AND s.kind='preferences' AND s.id=taken.snapshot_id
+        AND s.deleted_at IS NULL AND s.payload->'takenDown' IS NULL
+      ORDER BY taken.at DESC LIMIT 1`, [userId, capsuleId, recipients ? [...recipients] : null])).rows[0];
+    if (!row) return null;
+    try { await this.transfers.snapshot(userId, capsuleId, row.snapshot_id); return String(row.snapshot_id); }
+    catch (error) { if (/** @type {any} */ (error)?.code === "capsule_snapshot_not_found") return null; throw error; }
   }
 
   /** The `share` notice of one delivery. Never fails the delivery. @param {string} recipient @param {string} deliveryId @param {any} snapshot */
@@ -196,7 +219,7 @@ export class CapsuleSharing {
     if (["withdrawn", "taken_down", "declined"].includes(row.state)) return { delivery: view(), preview: null };
     if (row.state === "delivered") {
       const opened = (await this.database.query("UPDATE evimed_share.deliveries SET state='opened', opened_at=clock_timestamp() WHERE id=$1 AND state='delivered' RETURNING *", [row.id])).rows[0];
-      if (opened) row = { ...opened, sender_name: row.sender_name, signed_as: row.signed_as };
+      if (opened) { row = { ...opened, sender_name: row.sender_name, signed_as: row.signed_as }; recordShareOpened("delivery"); }
     }
     let preview = null;
     try {
@@ -258,16 +281,20 @@ export class CapsuleSharing {
   /**
    * A share link for a new snapshot of the author's own capsule, sealed under a password only the platform holds. The token is in
    * this answer and nowhere else.
-   * @param {string} userId @param {string} capsuleId @param {{ scopes?: unknown, card?: unknown, ttlDays?: number, maxUses?: number }} input
+   * @param {string} userId @param {string} capsuleId @param {{ scopes?: unknown, card?: unknown, ttlDays?: number, maxUses?: number, excludeEntryIds?: unknown }} input
    * @param {{ accountCreatedAt?: string | null, projectId?: string | null }} [context]
    */
   async createLink(userId, capsuleId, input, context = {}) {
-    const allowed = ["scopes", "card", "ttlDays", "maxUses"];
+    const allowed = ["scopes", "card", "ttlDays", "maxUses", "excludeEntryIds"];
     if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((key) => !allowed.includes(key))) {
       throw new HttpError(400, "capsule_payload_invalid", "The link request has unsupported fields.");
     }
+    await migrateCapsuleShare(this.database);
     const secret = randomBytes(24).toString("base64url");
-    const result = await this.transfers.export(userId, capsuleId, { password: secret, scopes: input.scopes, card: input.card }, { ...context, channel: "link" });
+    // Whoever opens a link is not known yet: it continues the newest snapshot anybody took in.
+    const supersedes = await this.#previousSnapshot(userId, capsuleId, null);
+    const result = await this.transfers.export(userId, capsuleId, { password: secret, scopes: input.scopes, card: input.card, excludeEntryIds: input.excludeEntryIds,
+      ...(supersedes ? { supersedes } : {}) }, { ...context, channel: "link" });
     const made = await this.links.create(userId, {
       capsuleId, snapshotId: result.snapshot.id, manifestSha256: result.snapshot.manifestSha256, archiveSha256: result.snapshot.archiveSha256, secret,
     }, { ttlDays: input.ttlDays, maxUses: input.maxUses });
@@ -342,11 +369,14 @@ export class CapsuleSharing {
     await migrateCapsuleShare(this.database);
     const result = await this.transfers.takeDown({ authorId, snapshotId, by, reason });
     await this.links.revokeForSnapshots(authorId, result.snapshots);
-    const why = clip(reason, 120) || (by === "operator" ? "平台发现其中的内容不适合继续分享" : "作者不再分享它");
-    const who = by === "operator" ? "平台" : "作者";
+    // The sender's own word for it is 撤回 and the recipient is told the same word; what the platform does is 下架 and says who did it.
+    const said = clip(reason, 120);
+    const why = said || (by === "operator" ? "平台发现其中的内容不适合继续分享" : "");
+    const aside = why ? `：${why}` : "";
     for (const copy of result.copies) {
-      await this.#notify(copy.userId, `takedown/${copy.capsuleId}`, `share-takedown:${copy.capsuleId}`,
-        clip(`「${copy.title}」已被${who}下架并停用`, 150), `${clip(`「${copy.title}」已被${who}下架并停用：${why}。`, 400)}你自己的记忆和对话没有受影响。`);
+      const title = by === "operator" ? `「${copy.title}」已被平台下架并停用` : `作者撤回了「${copy.title}」，已停用`;
+      const body = by === "operator" ? `「${copy.title}」已被平台下架并停用${aside}。` : `作者撤回了「${copy.title}」，这份做法已停用${aside}。`;
+      await this.#notify(copy.userId, `takedown/${copy.capsuleId}`, `share-takedown:${copy.capsuleId}`, clip(title, 150), `${clip(body, 400)}你自己的记忆和对话没有受影响。`);
     }
     const open = result.snapshots.length
       ? (await this.database.query(`UPDATE evimed_share.deliveries SET state='taken_down', closed_at=clock_timestamp()
@@ -354,7 +384,8 @@ export class CapsuleSharing {
       : [];
     for (const row of open) {
       await this.#notify(row.recipient_id, `takedown/${row.id}`, `share-takedown:${row.id}`,
-        clip(`一份分享已被${who}下架`, 150), `${clip(`发给你的一份分享已被${who}下架：${why}。`, 400)}它不能再收下。`);
+        clip(by === "operator" ? "一份分享已被平台下架" : "作者撤回了一份分享", 150),
+        `${clip(by === "operator" ? `发给你的一份分享已被平台下架${aside}。` : `作者撤回了发给你的一份分享${aside}。`, 400)}它不能再收下。`);
     }
     recordTakedown(by, result.copies.length);
     return { snapshots: result.snapshots.length, copies: result.copies.length, withdrawn: open.length };

@@ -16,8 +16,8 @@ describe("the topic cloud", () => {
   it("makes the chosen topic the blue, heavy word", () => {
     const series: any = (wordCloudOption([topic("a", 4), topic("b", 9)], { selected: "a", palette: TEST_PALETTE, fontFamily: "sans" }) as any).series[0];
     const chosen = series.data.find((word: any) => word.id === "a");
-    expect([chosen.textStyle.color, chosen.textStyle.fontWeight]).toEqual(["#blue", 800]);
-    expect(series.data.find((word: any) => word.id === "b").textStyle.fontWeight).toBe(500);
+    expect([chosen.textStyle.color, chosen.textStyle.fontWeight]).toEqual(["#blue", 600]);
+    expect(series.data.find((word: any) => word.id === "b").textStyle.fontWeight).toBe(400);
     expect(wordColour(topic("x", 1, 0), true, TEST_PALETTE)).toBe("#blue");
   });
   it("draws at most forty words, the largest", () => {

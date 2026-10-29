@@ -71,11 +71,26 @@ export function parseRuntimeUiFramePath(target) {
   return { frameId: match[1], prefix: `/__evimed/f/${match[1]}/`, suffix: `/${match[2]}` };
 }
 
-export function issueRuntimeUiFrame({ config, req, user, session, project, now = Date.now() }) {
+const DELEGATION_FIELDS = ['kind', 'actorId', 'ownerId', 'controlProjectId', 'geoProjectId', 'rootSessionId',
+  'actorCreatedAt', 'ownerCreatedAt', 'projectCreatedAt', 'geoCreatedAt', 'membershipEpoch'];
+function assertDelegation(value, actorId, projectId, ownerId = null) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== DELEGATION_FIELDS.length
+    || DELEGATION_FIELDS.some(key => !Object.hasOwn(value, key)) || value.kind !== 'geo' || value.actorId !== actorId
+    || value.controlProjectId !== projectId || ownerId != null && value.ownerId !== ownerId
+    || !/^[A-Za-z0-9_-]{1,128}$/.test(value.rootSessionId)
+    || DELEGATION_FIELDS.filter(key => key !== 'membershipEpoch').some(key => typeof value[key] !== 'string' || !value[key] || value[key].length > 200)
+    || (value.actorId === value.ownerId ? value.membershipEpoch !== null : !/^[a-f0-9]{64}$/.test(value.membershipEpoch))) throw invalid();
+}
+
+export function issueRuntimeUiFrame({ config, req, user, session, project, delegation = null, now = Date.now() }) {
   const { uiOrigin } = runtimeUiOrigins(config);
   const frameId = randomBytes(24).toString("base64url");
-  if (!user.id || !project.id || project.userId !== user.id) throw invalid();
-  const binding = { version: 1, frameId, projectId: project.id, userId: user.id, authSessionHash: sessionFingerprint(req, config), audience: uiOrigin };
+  if (!user.id || !project.id || project.userId !== user.id && !delegation) throw invalid();
+  if (delegation) assertDelegation(delegation, user.id, project.id, project.userId);
+  // Older hosts reject version 2 instead of treating a delegated owner project
+  // as an equally named personal project during rollback or a mixed rollout.
+  const binding = { version: delegation ? 2 : 1, frameId, projectId: project.id, userId: user.id, authSessionHash: sessionFingerprint(req, config), audience: uiOrigin,
+    ...(delegation ? { delegation: structuredClone(delegation) } : {}) };
   const renewalToken = signedToken(config, { ...binding, purpose: "renew-frame", issuedAt: now, expiresAt: Number(session.expiresAt) }, RENEWAL_DOMAIN);
   return mintFrame(config, binding, session, renewalToken, now);
 }
@@ -110,12 +125,14 @@ function tokenClaims(config, ticket, domain) {
 }
 
 function assertBinding({ claims, config, req, user, session, frameId, now }) {
-  if (!claims || claims.version !== 1 || !FRAME_ID.test(frameId) || claims.frameId !== frameId
+  if (!claims || ![1, 2].includes(claims.version) || !FRAME_ID.test(frameId) || claims.frameId !== frameId
     || claims.userId !== user.id || typeof claims.projectId !== "string" || !claims.projectId
     || claims.authSessionHash !== sessionFingerprint(req, config) || claims.audience !== runtimeUiOrigins(config).uiOrigin
     || !Number.isSafeInteger(claims.issuedAt) || !Number.isSafeInteger(claims.expiresAt)
     || claims.issuedAt > now || claims.expiresAt <= claims.issuedAt || claims.expiresAt > session.expiresAt) throw invalid();
   if (claims.expiresAt <= now) throw invalid("runtime_ui_frame_expired");
+  if (claims.version === 2) assertDelegation(claims.delegation, user.id, claims.projectId);
+  else if (claims.delegation !== undefined) throw invalid();
 }
 
 export function validateRuntimeUiFrame({ config, req, user, session, frameId, now = Date.now() }) {
@@ -131,8 +148,8 @@ export function renewRuntimeUiFrame({ config, req, user, session, frameId, renew
   const claims = tokenClaims(config, renewalToken, RENEWAL_DOMAIN);
   assertBinding({ claims, config, req, user, session, frameId, now });
   if (claims.purpose !== "renew-frame") throw invalid();
-  const binding = { version: 1, frameId: claims.frameId, projectId: claims.projectId, userId: claims.userId,
-    authSessionHash: claims.authSessionHash, audience: claims.audience };
+  const binding = { version: claims.version, frameId: claims.frameId, projectId: claims.projectId, userId: claims.userId,
+    authSessionHash: claims.authSessionHash, audience: claims.audience, ...(claims.version === 2 ? { delegation: claims.delegation } : {}) };
   return mintFrame(config, binding, session, renewalToken, now);
 }
 

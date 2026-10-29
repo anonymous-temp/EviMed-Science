@@ -13,7 +13,13 @@ Semantics (RFC 9309):
   of characters, a trailing ``$`` anchors the end. An empty ``Disallow:`` allows everything.
   ``/robots.txt`` itself is always allowed.
 - A 4xx answer means "unavailable": crawl freely. A 5xx or no answer means "unreachable": assume
-  complete disallow — cached for 10 minutes only, so a flapping server costs one short pause.
+  complete disallow — cached for 10 minutes only, so a flapping server costs one short pause — unless
+  this origin's robots.txt was read before: then the last copy read stands (RFC 9309 §2.4 lets a
+  crawler keep a cached copy past 24 hours while the file is unreachable) for up to 30 days, and the
+  file is asked for again after the same 10 minutes. Production, 14 days to 2026-10-22: 2,000 of the
+  2,002 polls refused "by robots" were a robots.txt that could not be read at that moment (most
+  during a ten-day relay outage, the rest timeouts), on sources that read fine before and after;
+  2 were an actual ``Disallow``.
 - ``Crawl-delay`` (non-standard, widely used) feeds the host's minimum interval in the budget.
 """
 
@@ -30,6 +36,7 @@ AGENT_TOKEN = "evimedbot"
 MAX_ROBOTS_BYTES = 512 * 1024
 TTL_S = 3600.0
 FAILURE_TTL_S = 600.0
+STALE_MAX_S = 30 * 86400.0
 
 
 @dataclass
@@ -116,13 +123,17 @@ RobotsFetcher = Callable[[str], Awaitable[tuple[int | None, str | None]]]
 
 class RobotsCache:
     def __init__(self, fetch_robots: RobotsFetcher, *, ttl_s: float = TTL_S, failure_ttl_s: float = FAILURE_TTL_S,
-                 monotonic: Callable[[], float] = time.monotonic) -> None:
+                 stale_max_s: float = STALE_MAX_S, monotonic: Callable[[], float] = time.monotonic) -> None:
         self._fetch = fetch_robots
         self._ttl = ttl_s
         self._failure_ttl = failure_ttl_s
+        self._stale_max = stale_max_s
         self._monotonic = monotonic
         self._cache: dict[str, tuple[float, RobotsRules]] = {}
+        # The last copy each origin answered (2xx or 4xx), with when it was read: what stands while a refresh fails.
+        self._last_read: dict[str, tuple[float, RobotsRules]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self.stale_uses = 0     # refreshes that failed and were answered from the last copy read
 
     async def rules_for(self, url: str) -> RobotsRules:
         """Single flight per origin: polls of three lists on one site that start together fetch
@@ -139,14 +150,24 @@ class RobotsCache:
             return await self._refresh(origin)
 
     async def _refresh(self, origin: str) -> RobotsRules:
+        """Read the file once. A fetcher that raises (the plugin's own refusal to send — its budget, an exit this
+        deployment lacks) caches nothing: that is no answer about the site, and the caller says so by name."""
         status, text = await self._fetch(origin)
+        now = self._monotonic()
         if status is not None and 200 <= status < 300 and text is not None:
             rules, ttl = parse_robots(text[:MAX_ROBOTS_BYTES]), self._ttl
+            self._last_read[origin] = (now, rules)
         elif status is not None and 400 <= status < 500:
             rules, ttl = RobotsRules(allow_all=True), self._ttl
+            self._last_read[origin] = (now, rules)
         else:
-            rules, ttl = RobotsRules(disallow_all=True), self._failure_ttl
-        self._cache[origin] = (self._monotonic() + ttl, rules)
+            last = self._last_read.get(origin)
+            if last is not None and now - last[0] <= self._stale_max:
+                rules, ttl = last[1], self._failure_ttl
+                self.stale_uses += 1
+            else:
+                rules, ttl = RobotsRules(disallow_all=True), self._failure_ttl
+        self._cache[origin] = (now + ttl, rules)
         return rules
 
     async def check(self, url: str) -> tuple[bool, float | None, bool]:

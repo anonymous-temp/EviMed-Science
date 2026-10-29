@@ -8,7 +8,7 @@ import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from "@evimed/domain";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
-async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved", recallLimits = {} } = {}) {
+async function fixture(t, { sessions = null, recallItems = [], nativeRoutes = null, subscriptions = null, clinicalContext = null, noteInForce = true, noteStatus = "approved", recallLimits = {}, resident = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -23,15 +23,15 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const service = {
     recall: async (userId, input) => { calls.push({ action: "recall", userId, input }); return { items: structuredClone(recallItems), contextOnly: true }; },
     note: async (userId, projectId, input) => { calls.push({ action: "note", userId, projectId, input }); return { id: "note-1", payload: { status: noteStatus, capsuleId: "notes-capsule" } }; },
-    // Whether the capsule a note landed in is read by this project (`CapsuleService.inForce`).
-    inForce: async (userId, projectId, capsuleId) => { calls.push({ action: "inForce", userId, projectId, capsuleId }); return noteInForce; },
+    // Whether the capsule a note landed in is read (`CapsuleService.inForce`): the account's one list, in every project.
+    inForce: async (userId, capsuleId) => { calls.push({ action: "inForce", userId, capsuleId }); return noteInForce; },
   };
   let exists = true;
   let authorize;
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks, subscriptions, clinicalContext, ...recallLimits });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, sessions, nativeRoutes, subscriptions, clinicalContext, resident, ...recallLimits });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -67,17 +67,12 @@ test('a clinical source dependency prevents shared notes while ordinary recall a
   assert.equal(f.calls.filter(row=>row.action==='note').length,1);
 });
 
-test("a recall may name the time its question is about, and nothing else new", async (t) => {
-  const asked = [];
-  const memorySubstrate = { recall: async (userId, query, scope) => { asked.push({ userId, query, scope }); return []; } };
-  const f = await fixture(t, { memorySubstrate });
-  const timed = await f.request("recall", { query: "dose", scope: "conversation", asOf: "2025-06-30" });
-  assert.equal(timed.status, 200);
-  assert.equal((await timed.json()).asOf, "2025-06-30T23:59:59.999Z");
-  assert.equal(asked[0].scope.asOf, Date.parse("2025-06-30T23:59:59.999Z"));
-  assert.deepEqual([asked[0].userId, asked[0].scope.projectId], ["owner", "project-one"], "the account and the project still come from the credential");
-  assert.equal((await f.request("recall", { query: "dose", scope: "conversation", asOf: "last spring" })).status, 400);
-  assert.equal((await f.request("recall", { query: "dose", asOf: "2025-06-30", userId: "someone-else" })).status, 400);
+test("a recall takes no time of its own and no account: the old time field is refused with every other unknown field", async (t) => {
+  const f = await fixture(t);
+  assert.equal((await f.request("recall", { query: "dose", scope: "conversation" })).status, 200);
+  assert.equal((await f.request("recall", { query: "dose", scope: "conversation", asOf: "2025-06-30" })).status, 400, "the records engine that answered it is gone (2026-10-25)");
+  assert.equal((await f.request("recall", { query: "dose", userId: "someone-else" })).status, 400);
+  assert.equal(f.calls.filter((call) => call.action === "recall").length, 0, "the capsule is asked of nothing for a scope that is the conversation's alone");
 });
 
 // Review M6 (owner ruling of 2026-10-10): the recall tool is the one path to the memory the profile does not carry.
@@ -85,16 +80,13 @@ const toolCounter = (name, label, value) => memoryMetricFamilies().find((family)
 
 test("the recall tool answers with five by default and eight at most, asks for what the question reaches and not the standing profile, and counts what it gave", async (t) => {
   resetMemoryMetrics();
-  const asked = [];
-  const memorySubstrate = { recall: async (userId, query, scope) => { asked.push({ userId, query, scope }); return []; } };
   const items = Array.from({ length: 12 }, (_, index) => ({ id: `fact_${index}`, capsuleId: "cap", factKind: "preference", content: `偏好 ${index}`, origin: "explicit" }));
-  const f = await fixture(t, { memorySubstrate, recallItems: items });
+  const f = await fixture(t, { recallItems: items });
   const count = async (body) => (await (await f.request("recall", { query: "偏好", ...body })).json()).items.length;
   assert.equal(await count({}), 5, "the default");
   assert.equal(await count({ limit: 8 }), 8, "asked for eight");
   assert.equal(await count({ limit: 30 }), 8, "asked for more than the most: the most");
   assert.equal(await count({ limit: 2 }), 2);
-  assert.equal(asked[0].scope.standing, false, "a lookup is not padded with the profile");
   assert.equal((await f.request("recall", { query: "x", limit: 0 })).status, 400);
   assert.equal((await f.request("recall", { query: "x", limit: "many" })).status, 400);
   assert.equal(toolCounter("open_science_memory_recall_tool_total", "outcome", "hit"), 4);
@@ -105,7 +97,7 @@ test("the recall tool answers with five by default and eight at most, asks for w
   assert.equal((await (await narrow.request("recall", { query: "偏好", limit: 8 })).json()).items.length, 4, "and an operator's most");
 });
 
-test("a recall that reaches nothing above the relevance floor says so, and a paused or disabled one says what it is instead", async (t) => {
+test("a recall that reaches nothing above the relevance floor says so, and a paused one says what it is instead", async (t) => {
   resetMemoryMetrics();
   const f = await fixture(t, { recallItems: [] });
   const empty = await (await f.request("recall", { query: "完全无关的问题" })).json();
@@ -123,11 +115,6 @@ test("a recall that reaches nothing above the relevance floor says so, and a pau
   assert.match(pausedAnswer.notice, /用户已暂停记忆/, "the researcher's pause is not mistaken for an empty store");
   assert.equal(toolCounter("open_science_memory_recall_tool_total", "outcome", "paused"), 1);
 
-  const disabled = await fixture(t, { memorySubstrate: { recallEnabled: false, recall: async () => [] }, recallItems: [] });
-  const disabledAnswer = await (await disabled.request("recall", { query: "偏好" })).json();
-  assert.equal(disabledAnswer.mode, "disabled");
-  assert.equal("notice" in disabledAnswer, false, "a deployment with recall off did not look and find nothing");
-  assert.equal(toolCounter("open_science_memory_recall_tool_total", "outcome", "disabled"), 1);
 });
 
 test("capsule credentials stop working on expiry, rotation, runtime stop or account deletion", async (t) => {
@@ -175,40 +162,6 @@ test("an authorized slow request is revoked before memory mutation after runtime
   assert.equal(f.calls.length, 0);
 });
 
-test("a recall through the gateway reaches the records as well as the capsule, and says which store answered", async (t) => {
-  // The tool the runtime holds promised `scope: all` from the day it was
-  // written; the gateway answered from capsule facts alone. A delegated child
-  // asking about the researcher therefore never saw the records the extractor
-  // keeps — the memory the root had been handed in its own prompt.
-  const substrateCalls = [];
-  const memorySubstrate = {
-    async recall(userId, query, scope) {
-      substrateCalls.push({ userId, query, scope });
-      return [{ id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured", updatedAt: "2026-09-01T00:00:00.000Z" }];
-    },
-  };
-  const f = await fixture(t, { memorySubstrate });
-  const all = await (await f.request("recall", { query: "简短" })).json();
-  assert.deepEqual(all.items.map((item) => [item.source, item.id]), [["memory", "record:r1"]]);
-  assert.deepEqual(all.sources, { memory: 1, capsule: 0 });
-  assert.equal(all.contextOnly, true);
-  assert.equal(substrateCalls[0].userId, "owner");
-  assert.equal(substrateCalls[0].scope.projectId, "project-one", "the project comes from the workload credential, never the body");
-  assert.equal(f.calls.filter((call) => call.action === "recall").length, 1);
-
-  const conversation = await (await f.request("recall", { query: "简短", scope: "conversation" })).json();
-  assert.deepEqual(conversation.sources, { memory: 1, capsule: 0 });
-  assert.equal(f.calls.filter((call) => call.action === "recall").length, 1, "conversation never asks the capsule");
-
-  const capsule = await (await f.request("recall", { query: "简短", scope: "capsule" })).json();
-  assert.deepEqual(capsule.sources, { memory: 0, capsule: 0 });
-  assert.equal(substrateCalls.length, 2, "capsule never asks the records");
-
-  const agenda = await f.request("recall", { query: "简短", scope: "agenda" });
-  assert.equal(agenda.status, 400);
-  assert.match(await agenda.text(), /capsule_scope_unavailable/);
-});
-
 /**
  * The conversations a gateway call can belong to, as the run ledger and the
  * memory store would answer. 无痕 and 「本次不用」 were read here until
@@ -227,64 +180,49 @@ function sessionsDouble(running, states = {}) {
 }
 
 test("a recall from the one running conversation is that conversation's, and lands on its run", async (t) => {
-  const substrateCalls = [];
-  const memorySubstrate = {
-    async recall(userId, query, scope) {
-      substrateCalls.push(scope);
-      return [{ id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured" }];
-    },
-  };
   const sessions = sessionsDouble([{ id: "run_1", sessionId: "ses_1" }]);
   const f = await fixture(t, {
-    memorySubstrate, sessions,
+    sessions,
     recallItems: [{ id: "fact_old", factKind: "workflow", content: "旧流程" }, { id: "fact_new", factKind: "preference", content: "中文作答" }],
   });
   const answer = await (await f.request("recall", { query: "流程" })).json();
-  assert.deepEqual(answer.items.map((item) => item.id), ["record:r1", "fact_old", "fact_new"]);
-  // The substrate hears which conversation is asking.
-  assert.equal(substrateCalls[0].sessionId, "ses_1");
-  assert.equal(substrateCalls[0].excluded, undefined, "there is no set-aside list left to pass");
-  assert.equal(answer.setAside, undefined, "and nothing to report as withheld");
+  assert.deepEqual(answer.items.map((item) => item.id), ["fact_old", "fact_new"]);
+  assert.equal(answer.setAside, undefined, "there is nothing to report as withheld");
   // What the run was handed is on its own ledger line.
-  assert.deepEqual(sessions.recorded, [{ runId: "run_1", ids: ["record:r1", "fact_old", "fact_new"] }]);
+  assert.deepEqual(sessions.recorded, [{ runId: "run_1", ids: ["fact_old", "fact_new"] }]);
 });
 
 test("with several conversations running the gateway answers without naming one, and records no run", async (t) => {
-  const substrateCalls = [];
-  const memorySubstrate = { async recall(_userId, _query, scope) { substrateCalls.push(scope); return []; } };
   const running = [{ id: "run_1", sessionId: "ses_1" }, { id: "run_2", sessionId: "ses_2" }];
   const both = sessionsDouble(running);
   const f = await fixture(t, {
-    memorySubstrate, sessions: both,
+    sessions: both,
     recallItems: [{ id: "fact_a", content: "a" }, { id: "fact_b", content: "b" }, { id: "fact_c", content: "c" }],
   });
   const answer = await (await f.request("recall", { query: "x" })).json();
   assert.deepEqual(answer.items.map((item) => item.id), ["fact_a", "fact_b", "fact_c"]);
-  assert.equal(substrateCalls[0].sessionId, null, "it cannot tell which conversation is asking");
   assert.deepEqual(both.recorded, [], "and so writes no run's ledger line");
 
   // If any of them is trying someone else's capsule, nothing is written.
   const oneTrial = sessionsDouble(running, { ses_2: { trialCapsuleId: "pack-1" } });
-  const g = await fixture(t, { memorySubstrate, sessions: oneTrial, recallItems: [{ id: "fact_c", content: "c" }] });
+  const g = await fixture(t, { sessions: oneTrial, recallItems: [{ id: "fact_c", content: "c" }] });
   const note = await (await g.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
   assert.equal(note.entry, null);
   assert.equal(note.takesEffect, false);
 
   // A ledger that cannot be read leaves the recall as it was before sessions existed.
   const broken = { ...sessionsDouble([]), running: async () => { throw new Error("ledger down"); } };
-  const h = await fixture(t, { memorySubstrate, sessions: broken, recallItems: [{ id: "fact_c", content: "c" }] });
+  const h = await fixture(t, { sessions: broken, recallItems: [{ id: "fact_c", content: "c" }] });
   assert.deepEqual((await (await h.request("recall", { query: "x" })).json()).items.map((item) => item.id), ["fact_c"]);
 });
 
 test("a conversation trying someone else's capsule reads none of the researcher's memory and notes nothing", async (t) => {
-  const recalledFrom = [];
-  const memorySubstrate = { async recall(_userId, _query, scope) { recalledFrom.push(scope.sessionId); return []; } };
   const sessions = sessionsDouble([{ id: "run_1", sessionId: "ses_trial" }], { ses_trial: { trialCapsuleId: "pack-1" } });
-  const f = await fixture(t, { memorySubstrate, sessions, recallItems: [{ id: "fact_1", content: "x" }] });
+  const f = await fixture(t, { sessions, recallItems: [{ id: "fact_1", content: "x" }] });
   const recall = await (await f.request("recall", { query: "x" })).json();
   assert.deepEqual(recall.items, [], "the pack is the trial's whole memory (build spec §9.4-5)");
   assert.equal(recall.mode, "trial");
-  assert.deepEqual(recalledFrom, [], "the researcher's own memory is not even asked");
+  assert.equal(f.calls.filter((call) => call.action === "recall").length, 0, "the researcher's own capsule is not even asked");
   const note = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
   assert.equal(note.entry, null);
   assert.equal(note.incognito, undefined, "无痕 is gone, and the answer no longer carries its flag");
@@ -299,12 +237,12 @@ test("a conversation trying someone else's capsule reads none of the researcher'
 test("a conversation's first step asks what its own state adds: the pack a trial is trying, and nothing for any other", async (t) => {
   const { sessionDispatchNotes } = await import("../src/memorySessions.mjs");
   const asked = [];
-  const researchMemory = { configured: true, async sessionState(userId, projectId, sessionId) {
+  const memorySettings = { configured: true, async sessionState(userId, projectId, sessionId) {
     asked.push([userId, projectId, sessionId]);
     return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null };
   } };
   const capsules = { async trialContext(_userId, capsuleId) { return `<evimed-capsule-trial>${capsuleId}：李主任的工作方式</evimed-capsule-trial>`; } };
-  const sessions = { ...sessionsDouble([]), notes: (userId, projectId, sessionId) => sessionDispatchNotes({ researchMemory, capsules }, userId, projectId, sessionId) };
+  const sessions = { ...sessionsDouble([]), notes: (userId, projectId, sessionId) => sessionDispatchNotes({ memorySettings, capsules }, userId, projectId, sessionId) };
   const f = await fixture(t, { sessions });
   const trial = await f.request("session", { sessionId: "ses_trial" });
   assert.equal(trial.status, 200);
@@ -325,21 +263,24 @@ test("a conversation's first step asks what its own state adds: the pack a trial
 });
 
 
-test("native handbook reads and acknowledgements keep workload ownership and closed payloads", async t => {
+test("native input routes are read under the workload's ownership with a closed payload, and nothing else of the handbook arm is answered", async t => {
   const calls = [];
-  const f = await fixture(t, { handbooks: {
-    read: async (project, input) => { calls.push({ action: "read", project, input }); return { contexts: [{ requestId: "A", digest: "a".repeat(64), context: "Scoped lesson" }] }; },
-    acknowledge: async (project, input) => { calls.push({ action: "ack", project, input }); return { attached: ["A"] }; },
+  const f = await fixture(t, { nativeRoutes: {
+    read: async (project, input) => { calls.push({ action: "read", project, input }); return { routes: [{ requestId: "A", digest: "a".repeat(64), route: { effectiveAgentId: "geo-content" } }] }; },
   } });
   const input = { sessionId: "session", inputs: [{ requestId: "A", textDigest: "b".repeat(64) }] };
-  const read = await f.request("handbook-context", input);
-  assert.equal(read.status, 200); assert.equal((await read.json()).contexts[0].context, "Scoped lesson");
+  const read = await f.request("native-route", input);
+  assert.equal(read.status, 200); assert.equal((await read.json()).routes[0].route.effectiveAgentId, "geo-content");
   assert.deepEqual(calls[0].project, f.project);
   assert.deepEqual(calls[0].input, input);
-  assert.equal((await f.request("handbook-context", { ...input, userId: "other" })).status, 400);
-  assert.equal((await f.request("handbook-context", input, f.issue({ userId: "other" }))).status, 401);
-  assert.equal((await f.request("handbook-attached", { sessionId: "session", receipts: [{ requestId: "A", digest: "a".repeat(64) }] })).status, 200);
-  assert.equal(calls[1].action, "ack");
+  assert.equal((await f.request("native-route", { ...input, userId: "other" })).status, 400);
+  assert.equal((await f.request("native-route", input, f.issue({ userId: "other" }))).status, 401);
+  // The two operations of the retired handbook context are not found any more.
+  assert.equal((await f.request("handbook-context", input)).status, 404);
+  assert.equal((await f.request("handbook-attached", { sessionId: "session", receipts: [] })).status, 404);
+  // With no route store composed the answer is an empty list, never an error.
+  const none = await fixture(t);
+  assert.deepEqual(await (await none.request("native-route", input)).json(), { routes: [] });
 });
 
 test("the project's evidence-zone subscriptions are one more provider of a recall, for this project only, after what the capsules returned", async (t) => {
@@ -374,18 +315,16 @@ test("a recall of subscribed zones asks the frontier's audience first, like ever
 });
 
 // 2026-10-10 review M-1: the memory page's pause reached the records and not the capsule half. The records half
-// honours it inside the substrate; the gateway is where a runtime's recall and note reach the capsules.
+// honours it in the memory gateway; the capsule gateway is where a runtime's recall and note reach the capsules.
 //   recall paused  -> nothing is read: not the capsules, not the records, and the answer says so.
 //   learning paused -> nothing is written: the note is refused by name, never answered as taken.
 test("a recall under the researcher's pause reads no capsule fact and says paused; learning paused alone leaves the recall", async (t) => {
-  const substrateCalls = [];
-  const memorySubstrate = { async recall(_userId, _query, scope) { substrateCalls.push(scope); return []; } };
   const asked = [];
   let state = { learning: true, recall: true, trial: false };
   const sessions = { ...sessionsDouble([{ id: "run_1", sessionId: "ses_1" }]),
     paused: async (userId, projectId, sessionId) => { asked.push([userId, projectId, sessionId]); return state; } };
   const subscriptions = { recall: async () => [{ id: "ec_1", source: "evidence_zone", contextOnly: true }] };
-  const f = await fixture(t, { memorySubstrate, sessions, subscriptions, recallItems: [{ id: "fact_1", content: "先给结论" }] });
+  const f = await fixture(t, { sessions, subscriptions, recallItems: [{ id: "fact_1", content: "先给结论" }] });
 
   const paused = await (await f.request("recall", { query: "结论" })).json();
   assert.equal(paused.mode, "paused");
@@ -394,7 +333,6 @@ test("a recall under the researcher's pause reads no capsule fact and says pause
   assert.deepEqual(paused.sources, { memory: 0, capsule: 0, zone: 1 });
   assert.equal(paused.contextOnly, true);
   assert.equal(f.calls.filter((call) => call.action === "recall").length, 0, "capsule facts are memory too");
-  assert.deepEqual(substrateCalls, [], "and the records are not asked either");
   assert.deepEqual(sessions.recorded, [], "a run is not said to have been handed what it was not");
   assert.deepEqual(asked, [["owner", "project-one", "ses_1"]], "the account and the project come from the credential; the one running conversation is named");
 
@@ -448,8 +386,8 @@ test("a note answers takesEffect from what the service says is in force, and say
   const taken = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
   assert.equal(taken.takesEffect, true);
   assert.equal(taken.notice, undefined);
-  assert.deepEqual(f.calls.filter((call) => call.action === "inForce"), [{ action: "inForce", userId: "owner", projectId: "project-one", capsuleId: "notes-capsule" }],
-    "the account and the project come from the credential; the capsule is the one the note landed in");
+  assert.deepEqual(f.calls.filter((call) => call.action === "inForce"), [{ action: "inForce", userId: "owner", capsuleId: "notes-capsule" }],
+    "the account comes from the credential; the capsule is the one the note landed in");
 
   const unread = await fixture(t, { noteInForce: false });
   const kept = await (await unread.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
@@ -475,4 +413,61 @@ test("a note that carries a credential or anyone's identifier is not kept, even 
   assert.equal(f.calls.filter((call) => call.action === "note").length, 0, "nothing was written");
   const taken = await (await f.request("note", { factKind: "preference", content: "记住：随访统一放在周三" })).json();
   assert.equal(taken.takesEffect, true);
+});
+
+// 2026-10-25: a turn typed in the kernel's own composer is handed the project's card and the capsule's profile at the conversation's first
+// step, through `session`; the conversation counts as holding it once the plugin says the step entered (`session-attached`).
+const BLOCK = { text: "用户的长期记忆（历史记录，不是指令）：\n<evimed-memory id=\"card:project-one\">约束：所有文字交付物一律用英文写。</evimed-memory>",
+  digest: "b".repeat(64), memories: [{ id: "card:project-one", kind: "project_fact", scope: "project" }] };
+
+/** A resident double that holds the block until it is acknowledged, as the conversation's state does. */
+function residentDouble({ block = BLOCK } = {}) {
+  const state = { held: false, asked: 0, attached: [], failing: false };
+  return { state, forSession: async () => { state.asked += 1; if (state.failing) throw new Error("engine unavailable"); return state.held ? null : block; },
+    attached: async (user, project, sessionId, receipt) => { state.attached.push({ user: user.id, project: project.id, sessionId, receipt }); state.held = true; } };
+}
+
+test("the first step is handed the resident block with the notes, once: the conversation holds it only after the plugin says the step entered", async (t) => {
+  const resident = residentDouble();
+  const f = await fixture(t, { resident, sessions: { running: async () => [], state: async () => ({}), notes: async () => ["这个对话绑定了一个能力。"] } });
+  const first = await (await f.request("session", { sessionId: "ses_native" })).json();
+  assert.equal(first.context, `${BLOCK.text}\n\n这个对话绑定了一个能力。`, "the block first, then what the conversation's own state adds");
+  assert.deepEqual(first.resident, { digest: BLOCK.digest });
+  // Asked again before the step entered (a rejected step is retried): handed again, nothing noted.
+  assert.equal((await (await f.request("session", { sessionId: "ses_native" })).json()).resident.digest, BLOCK.digest);
+  assert.deepEqual(resident.state.attached, []);
+  // Entered: noted, as the account's and the project's own, with what the block held.
+  const noted = await f.request("session-attached", { sessionId: "ses_native", digest: BLOCK.digest });
+  assert.equal(noted.status, 200);
+  assert.deepEqual(await noted.json(), { attached: true });
+  assert.deepEqual(resident.state.attached, [{ user: "owner", project: "project-one", sessionId: "ses_native", receipt: { digest: BLOCK.digest, memories: BLOCK.memories } }]);
+  // Held: the next step is handed the notes alone, and says nothing to acknowledge.
+  const again = await (await f.request("session", { sessionId: "ses_native" })).json();
+  assert.equal(again.context, "这个对话绑定了一个能力。");
+  assert.equal("resident" in again, false);
+});
+
+test("a receipt for a block that is no longer the block is not noted: the changed card is handed with its own digest at the next step", async (t) => {
+  const resident = residentDouble();
+  const f = await fixture(t, { resident });
+  const stale = await f.request("session-attached", { sessionId: "ses_native", digest: "c".repeat(64) });
+  assert.deepEqual(await stale.json(), { attached: false });
+  assert.deepEqual(resident.state.attached, []);
+  for (const bad of [{ sessionId: "ses_native" }, { sessionId: "ses_native", digest: "not-a-digest" }, { sessionId: "../x", digest: BLOCK.digest }, { sessionId: "ses_native", digest: BLOCK.digest, extra: 1 }]) {
+    assert.equal((await f.request("session-attached", bad)).status, 400, JSON.stringify(bad));
+  }
+  assert.deepEqual(resident.state.attached, []);
+});
+
+test("a block that cannot be read, or none to give, leaves the conversation its notes, and a deployment without the block answers as it did", async (t) => {
+  const failing = residentDouble();
+  failing.state.failing = true;
+  const f = await fixture(t, { resident: failing, sessions: { running: async () => [], state: async () => ({}), notes: async () => ["注。"] } });
+  const answer = await (await f.request("session", { sessionId: "ses_native" })).json();
+  assert.deepEqual(answer, { context: "注。" }, "the conversation starts without it, and the next step asks again");
+  const none = await fixture(t, { resident: residentDouble({ block: null }), sessions: { running: async () => [], state: async () => ({}), notes: async () => [] } });
+  assert.deepEqual(await (await none.request("session", { sessionId: "ses_native" })).json(), { context: "" });
+  const bare = await fixture(t);
+  assert.deepEqual(await (await bare.request("session", { sessionId: "ses_native" })).json(), { context: "" });
+  assert.deepEqual(await (await bare.request("session-attached", { sessionId: "ses_native", digest: BLOCK.digest })).json(), { attached: false });
 });

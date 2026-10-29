@@ -20,7 +20,10 @@ import pytest
 from knowledge_plugin.settings import Settings
 
 SERVER_URL = os.environ.get("KNOWLEDGE_PLUGIN_TEST_DATABASE_URL", "postgresql://postgres@127.0.0.1:55433")
-TABLES = ("fetches", "entry_texts", "entries", "seen_keys", "sources", "host_counters", "host_state", "meta")
+TABLES = ("fetches", "entry_texts", "entries", "seen_keys", "sources", "host_counters", "host_state", "meta",
+          "source_candidates", "discovery_daily", "source_lifecycle", "source_screening",
+          "media", "media_failures", "provider_calls", "leads", "lead_sources",
+          "hot_lists", "hot_list_boards")
 FIXED_NOW = datetime(2026, 9, 22, 8, 0, 0, tzinfo=timezone.utc)
 
 
@@ -84,3 +87,10 @@ async def pool(settings):
         yield opened
     finally:
         await opened.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_social_registry(monkeypatch, tmp_path):
+    """The repository's ``registry/social-sources.json`` (contract 1.5.0) is composed with every registry sync; a test
+    syncing a registry of its own gets only that registry unless it names a social file itself."""
+    monkeypatch.setenv("KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY", str(tmp_path / "no-social-sources.json"))

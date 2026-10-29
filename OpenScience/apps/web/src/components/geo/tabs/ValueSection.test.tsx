@@ -55,6 +55,18 @@ it("shows unjudged and inapplicable answers as unknown instead of zero performan
   expect(screen.queryByText(/0%/)).not.toBeInTheDocument();
 });
 
+it("keeps the inspected scope visible beside the value observations", async () => {
+  const value = empty();
+  value.coverage = { ...value.coverage, represented: 1, assessed: 1, assessment: {
+    completeObservations: 0, partialObservations: 2, unknownObservations: 1,
+  } };
+  client.getGeoValue.mockResolvedValue(value);
+  show("coverage");
+  const coverage = await screen.findByText("条观察来自部分核查，", { exact: false });
+  expect(coverage).toHaveTextContent("2 条观察来自部分核查，1 条观察的核查范围未确定。");
+  expect(coverage).toBeVisible();
+});
+
 it("keeps the last round's coverage after the profile moves on, and says which version it measured", async () => {
   const value = { ...empty(), version: 4 };
   value.coverage = { ...value.coverage, assessed: 3, represented: 2, partial: 1, basisVersion: 3 };
@@ -260,7 +272,8 @@ describe("a project with no value analysis", () => {
     expect(start.map((button) => button.textContent)).toEqual(["开始药品价值分析"]);
     await userEvent.click(start[0]);
     expect(open).toHaveBeenCalledTimes(1);
-    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1", sessionId: "ses_geo_1" }, expect.stringContaining("开始药品价值分析"));
+    // No conversation named: the hook opens the one the page holds (`useOpenGeoConversation`).
+    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1" }, expect.stringContaining("开始药品价值分析"));
   });
 
   it("is not offered a start where an analysis exists that 方案 has nothing of: it was begun, only not in these words", async () => {

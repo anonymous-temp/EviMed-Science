@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+import csv
+import math
 import hashlib
 import html
 import json
@@ -20,7 +22,7 @@ import tempfile
 from pathlib import Path
 
 VERSION = "pandoc-chromium-v1"
-MIME = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "pdf": "application/pdf", "html": "text/html; charset=utf-8"}
+MIME = {"csv": "text/csv; charset=utf-8", "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "pdf": "application/pdf", "html": "text/html; charset=utf-8"}
 CSS = """@page { size:A4; margin:20mm 16mm; } body { font:11pt 'Noto Sans CJK SC','Noto Sans',sans-serif; line-height:1.65; color:#17212b; overflow-wrap:anywhere; } h1,h2,h3 { break-after:avoid; } math { font-family:"TeX Gyre Termes Math","STIX Two Math","Cambria Math",serif; } table { border-collapse:collapse; width:100%; font-size:9pt; } thead { display:table-header-group; } tr { break-inside:avoid; } th,td { border:1px solid #aaa; padding:5px; text-align:left; } img { max-width:100%; max-height:230mm; } pre { white-space:pre-wrap; } .pagebreak { break-before:page; }"""
 
 
@@ -163,6 +165,85 @@ def pdf(html_text: str, output: Path) -> None:
             browser.close()
 
 
+def reader_basis(cover) -> list | None:
+    """The basis a reader sees, when the producer wrote one: labelled lines (`cover.basis`), never the frozen record beside them."""
+    basis = cover.get("basis") if isinstance(cover, dict) else None
+    if not isinstance(basis, list) or not basis or len(basis) > 200:
+        return None
+    rows = []
+    for item in basis:
+        if not isinstance(item, dict) or not isinstance(item.get("label"), str) or not isinstance(item.get("value"), str):
+            return None
+        rows.append((item["label"][:200], item["value"][:32000]))
+    return rows
+
+
+def write_typed_table(document: dict, fmt: str, target: Path) -> None:
+    """Write typed constants; never guess IDs, execute formulas or collapse null to zero."""
+    table = document.get("typedTable")
+    if document.get("sourceType") != "typed-table" or not isinstance(table, dict) or set(table) != {"columns", "rows"}:
+        raise ValueError("document_input_invalid")
+    columns, rows = table["columns"], table["rows"]
+    if not isinstance(columns, list) or not 0 < len(columns) <= 40 or not isinstance(rows, list) or len(rows) > 20000:
+        raise ValueError("document_input_invalid")
+    keys = set()
+    for col in columns:
+        if set(col) != {"key", "label", "type"} or not isinstance(col["key"], str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", col["key"]) or col["key"] in keys or not isinstance(col["label"], str) or len(col["label"]) > 200 or col["type"] not in {"text", "number"}:
+            raise ValueError("document_input_invalid")
+        keys.add(col["key"])
+    for row in rows:
+        if not isinstance(row, dict) or set(row) - keys:
+            raise ValueError("document_input_invalid")
+        for col in columns:
+            value = row.get(col["key"])
+            if value is None:
+                continue
+            if col["type"] == "number":
+                if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value):
+                    raise ValueError("document_input_invalid")
+            elif not isinstance(value, str) or len(value) > 32767:
+                raise ValueError("document_input_invalid")
+    if fmt == "csv":
+        def safe(value):
+            if isinstance(value, str) and re.match(r"^[\s\x00-\x1f]*[=+@-]", value):
+                return "'" + value
+            return value
+        with target.open("w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow([safe(col["label"]) for col in columns])
+            for row in rows:
+                writer.writerow([safe(row.get(col["key"])) for col in columns])
+    else:
+        import xlsxwriter
+        basis = reader_basis(document.get("cover", {}))
+        with xlsxwriter.Workbook(target, {"strings_to_formulas": False, "strings_to_urls": False}) as book:
+            sheet = book.add_worksheet("所选数据" if basis is not None else "Selected data")
+            for index, col in enumerate(columns):
+                sheet.write_string(0, index, col["label"])
+            for row_index, row in enumerate(rows, 1):
+                for col_index, col in enumerate(columns):
+                    value = row.get(col["key"])
+                    if value is None:
+                        sheet.write_blank(row_index, col_index, None)
+                    elif col["type"] == "number":
+                        sheet.write_number(row_index, col_index, value)
+                    else:
+                        sheet.write_string(row_index, col_index, value)
+            sheet.freeze_panes(1, 0)
+            sheet.autofilter(0, 0, len(rows), len(columns)-1)
+            if basis is not None:
+                # A document written for readers lists its basis in words; the frozen record stays in the export, not the sheet.
+                metadata = book.add_worksheet("依据")
+                for index, (label, value) in enumerate(basis):
+                    metadata.write_string(index, 0, label)
+                    metadata.write_string(index, 1, value)
+            else:
+                metadata = book.add_worksheet("Basis")
+                raw = json.dumps(document.get("cover", {}), ensure_ascii=False, sort_keys=True)
+                for index in range(0, len(raw), 32000):
+                    metadata.write_string(index // 32000, 0, raw[index:index+32000])
+
+
 def render(document: dict, root: Path, output: Path) -> dict:
     if document.get("version") != 1 or document.get("rendererVersion") != VERSION:
         raise ValueError("document_version_invalid")
@@ -175,7 +256,7 @@ def render(document: dict, root: Path, output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     findings = []
     assets = verified_assets(document, root)
-    ast = safe_ast(markdown, assets, findings)
+    ast = None
     markup = None
     markup_failure = None
     outcomes = {}
@@ -184,13 +265,19 @@ def render(document: dict, root: Path, output: Path) -> dict:
         target = output / ("document." + fmt)
         code = "document_render_failed"
         try:
-            if fmt == "docx":
+            if fmt in {"csv", "xlsx"}:
+                write_typed_table(document, fmt, target)
+            elif fmt == "docx":
+                if ast is None:
+                    ast = safe_ast(markdown, assets, findings)
                 pandoc(["--from=json", "--to=docx", "--output=" + str(target)], docx_ast(ast))
             else:
                 # DOCX never depends on HTML conversion. Cache a failed HTML
                 # attempt as well, so PDF+HTML do not repeat the same failure.
                 if markup is None and markup_failure is None:
                     try:
+                        if ast is None:
+                            ast = safe_ast(markdown, assets, findings)
                         body = pandoc(["--from=json", "--to=html5", "--mathml"], ast)
                         markup = ('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
                                   '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'">'
@@ -214,6 +301,7 @@ def render(document: dict, root: Path, output: Path) -> dict:
             outcomes[fmt] = {"state": "failed", "code": code, "message": type(exc).__name__}
         # A timeout or process death during the next format still leaves a
         # complete receipt for every format already written.
+        manifest["findings"] = sorted(set(findings))
         temporary = output / ".manifest.tmp"
         temporary.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
         os.replace(temporary, output / "manifest.json")

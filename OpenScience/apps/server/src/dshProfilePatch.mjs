@@ -88,6 +88,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [evolutionGatewayUrl]
  * @property {string} [platformSkillsDir]
  * @property {string} [personalSkillsDir]
+ * @property {string[]} [disabledPlatformSkills]
  * @property {string} [extensionProjectionFile]
  * @property {string} [extensionGatewayUrl]
  * @property {string} capsuleGatewayUrl
@@ -96,6 +97,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [publicSourceGatewayUrl]
  * @property {string} [webSearchGatewayUrl]
  * @property {string} [modelGatewayTokenFile]
+ * @property {{publicKey:string,userId:string,projectId:string}} [attendanceAuthority]
  * @property {string} workloadTokenFile
  * @property {string} bundleVersion
  * @property {string} dshVersion
@@ -661,7 +663,7 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'disabledPlatformSkills'|'disabledClientBundles'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'attendanceAuthority'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -705,6 +707,8 @@ export function runtimeEnvironment(input) {
     EVIMED_EVOLUTION_GATEWAY_URL: input.evolutionGatewayUrl ?? '',
     EVIMED_PLATFORM_SKILLS_DIR: input.platformSkillsDir ?? '',
     EVIMED_PERSONAL_SKILLS_DIR: input.personalSkillsDir ?? '/opt/evimed/personal-skills',
+    EVIMED_DISABLED_PLATFORM_SKILLS: JSON.stringify(input.disabledPlatformSkills ?? []),
+    EVIMED_DISABLED_CLIENT_BUNDLES: JSON.stringify(input.disabledClientBundles ?? []),
     EVIMED_EXTENSION_PROJECTION_FILE: input.extensionProjectionFile ?? '',
     EVIMED_EXTENSION_GATEWAY_URL: input.extensionGatewayUrl ?? '',
     EVIMED_CAPSULE_GATEWAY_URL: input.capsuleGatewayUrl,
@@ -716,6 +720,9 @@ export function runtimeEnvironment(input) {
     // the container was never given it.
     EVIMED_WEB_SEARCH_GATEWAY_URL: input.webSearchGatewayUrl ?? "",
     EVIMED_MODEL_GATEWAY_TOKEN_FILE: input.modelGatewayTokenFile ?? "",
+    EVIMED_ATTENDANCE_PUBLIC_KEY: input.attendanceAuthority?.publicKey ?? "",
+    EVIMED_ATTENDANCE_USER_ID: input.attendanceAuthority?.userId ?? "",
+    EVIMED_ATTENDANCE_PROJECT_ID: input.attendanceAuthority?.projectId ?? "",
     EVIMED_WORKLOAD_TOKEN_FILE: input.workloadTokenFile,
     EVIMED_BUNDLE_VERSION: input.bundleVersion,
     EVIMED_ASK_USER: input.flags.askUser ? "1" : "0",
@@ -745,14 +752,13 @@ export function runtimeEnvironment(input) {
     EVIMED_MAX_TOKENS: String(integer(input.limits.maxTokens, 400_000)),
     EVIMED_EVIDENCE_STALE_MINUTES: String(integer(input.limits.evidenceStaleMinutes, 10)),
     EVIMED_SCREENING_BATCH_SIZE: String(integer(input.limits.screeningBatchSize, 50)),
-    // The compaction rows read these five with `!!js`, so all five are always
+    // The compaction rows read these four with `!!js`, so all four are always
     // sent. Written out rather than spread from the caller for the reason this
     // whole function exists: the preset and this map are one contract in two
     // files, and a name that appears only when a caller happens to pass it is a
     // plugin left on its schema default while the deployment believes it
     // configured one. A test walks the preset's `process.env` names against
     // these keys in both directions.
-    EVIMED_COMPACTION_POLICY: String(input.compaction?.EVIMED_COMPACTION_POLICY ?? "basic"),
     EVIMED_COMPACTION_THRESHOLD_RATIO: String(input.compaction?.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8),
     EVIMED_COMPACTION_RETAIN_RATIO: String(input.compaction?.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16),
     EVIMED_COMPACTION_MAX_TOKENS: String(integer(Number(input.compaction?.EVIMED_COMPACTION_MAX_TOKENS), 8192)),

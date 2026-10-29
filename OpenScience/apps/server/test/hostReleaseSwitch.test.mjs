@@ -163,21 +163,31 @@ process.exit(2);
 `;
 
 /** A host with one built release, a live stack and a docker that is a script. */
-async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1` } = {}) {
+async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, walkEnv = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1` } = {}) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "release-switch-"));
   const rel = path.join(root, "releases", NEW, "OpenScience");
   const web = path.join(rel, "deploy/web");
   await mkdir(path.join(web, "monitoring"), { recursive: true });
   await mkdir(path.join(rel, "scripts/ops"), { recursive: true });
-  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs"]) {
+  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs", "prepare-host-ops-dependencies.mjs"]) {
     await copyFile(path.join(repoRoot, "scripts/ops", script), path.join(rel, "scripts/ops", script));
+  }
+  await mkdir(path.join(rel, "packages/domain"), { recursive: true });
+  await writeFile(path.join(rel, "packages/domain/package.json"), JSON.stringify({
+    name: "@evimed/domain", type: "module", exports: { ".": "./index.mjs" },
+  }));
+  await writeFile(path.join(rel, "packages/domain/index.mjs"), "export {};\n");
+  await mkdir(path.join(rel, "apps/server/src"), { recursive: true });
+  for (const name of ["internalProjects.mjs", "security.mjs"]) {
+    await writeFile(path.join(rel, "apps/server/src", name), "import '@evimed/domain';\n");
   }
   const skill = { name: "core", source: "runtime/skills/core", files: 25, digest: "sha256:recorded" };
   await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({
     app: { releaseId }, source: { revision: NEW },
     runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill],
   }));
-  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_RELEASE_ID=${releaseId}\nOPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`);
+  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_RELEASE_ID=${releaseId}\nOPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`
+    + "OPEN_SCIENCE_GEO_PROBE_URL=http://203.0.113.9:9999\nOPEN_SCIENCE_GEO_SOCIAL_URL=http://203.0.113.9:9966\n");
   await writeFile(path.join(web, "monitoring/open-science.rules.json"), "{}\n");
   await mkdir(path.join(root, "shared", `ops-source-${NEW}`), { recursive: true });
   await writeFile(path.join(root, "shared", `ops-source-${NEW}`, "compose.builtin.override.yml"), "services: {}\n");
@@ -221,13 +231,8 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   await chmod(path.join(bin, "sleep"), 0o755);
   await writeFile(path.join(root, "docker-state.json"), JSON.stringify(state));
   if (walkExit !== undefined) {
-    await writeFile(path.join(root, "shared/secrets/walk-password"), "x\n");
-    await writeFile(path.join(root, "shared/ui-walk.env"), [
-      "OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org",
-      "OPEN_SCIENCE_WALK_USER=cdss-access",
-      `OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=${root}/shared/secrets/walk-password`,
-      "",
-    ].join("\n"));
+    // The file as it is kept since 2026-10-25: the address and the switches, and no account or password (the walk makes its own).
+    await writeFile(path.join(root, "shared/ui-walk.env"), (walkEnv ?? ["OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org", "OPEN_SCIENCE_WALK_CHAT=1"]).concat("").join("\n"));
   }
   return { root, rel };
 }
@@ -237,6 +242,8 @@ function runSwitch(root, flags = []) {
   // --env-file` never overrides a variable the caller already has.
   const env = { ...process.env };
   delete env.OPEN_SCIENCE_PUBLIC_HEALTH_URL;
+  delete env.OPEN_SCIENCE_GEO_PROBE_URL;
+  delete env.OPEN_SCIENCE_GEO_SOCIAL_URL;
   delete env.OPEN_SCIENCE_EDGE_PROXY_URL;
   delete env.OPEN_SCIENCE_MANAGED_BROWSER_ENABLED;
   return new Promise((resolve) => {
@@ -275,6 +282,8 @@ test("the switch restarts what still reads the previous release through current,
     // The probe targets were written from the release's `.env` before the move.
     const tls = JSON.parse(await readFile(path.join(rel, "deploy/web/monitoring/targets/tls.json"), "utf8"));
     assert.deepEqual(tls[0], { targets: ["https://evimed.example.org/api/health"], labels: { probe: "public-tls" } });
+    const external = JSON.parse(await readFile(path.join(rel, "deploy/web/monitoring/targets/external.json"), "utf8"));
+    assert.deepEqual(external.map((group) => group.targets), [["http://203.0.113.9:9999/providers"], ["http://203.0.113.9:9966/health"]]);
     // ...and Alertmanager's route to the control plane's alert receiver, the
     // one delivery every alert has (until 2026-09-28 they were all dropped).
     assert.match(result.stdout, /=== alert receiver follows the release ===/);
@@ -384,11 +393,32 @@ test("the live pages are walked after the switch, and a failed walk says the rel
       const walk = calls.split("\n").find((line) => line.startsWith("run ") && line.includes("--entrypoint sh"));
       assert.ok(walk, "the walk ran in a container");
       assert.match(walk, /open-science-runtime:x-1cf308956b6e/, "in the release's own runtime image");
-      assert.match(walk, /-v \S+\/shared\/secrets\/walk-password:\/run\/walk\/password:ro/, "with the password as a read-only file, not a value");
+      assert.doesNotMatch(walk, /walk\/password|WALK_PASSWORD_HOST_FILE/, "the walk is given no password: it registers an account of its own");
       assert.match(walk, /-e OPEN_SCIENCE_WALK_ONLY= /, "always the whole walk: a partial walk named in ui-walk.env is emptied");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  }
+});
+
+test("the walk is mounted with every file it imports, and an old ui-walk.env cannot decide whom it signs in as", { skip }, async () => {
+  // The walk is the one file the container is given; each relative import it makes (the throwaway-account helper) is mounted beside it,
+  // or the first release after an import is added would end 「UI WALK COULD NOT RUN」 for a missing module.
+  const imports = [...(await readFile(path.join(repoRoot, "scripts/ops/ui-walk.mjs"), "utf8")).matchAll(/^import [^;]*? from "\.\/([\w-]+\.mjs)";$/gm)].map((match) => match[1]);
+  assert.ok(imports.includes("throwaway-account.mjs"), "the walk imports the helper that registers and deletes its account");
+  // The file an operator wrote before 2026-10-25 still names the owner's account and a password file; neither reaches the walk.
+  const { root } = await host({ walkExit: 0, walkEnv: ["OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org", "OPEN_SCIENCE_WALK_USER=an-old-account", "OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=/nowhere/password"] });
+  try {
+    const result = await runSwitch(root, ["--no-prune"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const walk = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n").find((line) => line.startsWith("run ") && line.includes("--entrypoint sh"));
+    for (const file of ["ui-walk.mjs", ...imports]) {
+      assert.match(walk, new RegExp(`-v \\S+/current/OpenScience/scripts/ops/${file.replace(".", "\\.")}:/walk/${file.replace(".", "\\.")}:ro`), `${file} is mounted into /walk`);
+    }
+    assert.match(walk, /-e OPEN_SCIENCE_WALK_USER= -e OPEN_SCIENCE_WALK_PASSWORD_FILE= /, "the settings that name an account are emptied, so the production walk registers its own");
+    assert.ok(walk.indexOf("--env-file") < walk.indexOf("-e OPEN_SCIENCE_WALK_USER="), "after the file, which they override");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 
@@ -646,4 +676,16 @@ test("custom immutable manifest identity governs health and owned maintenance re
 
 test("manifest versus env identity mismatch refuses before current or shared configuration changes",{skip},async()=>{
  const {root,rel}=await host();try{const env=path.join(rel,"deploy/web/.env");await writeFile(env,(await readFile(env,"utf8")).replace(`OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1`,`OPEN_SCIENCE_RELEASE_ID=foreign-release`));const result=await runSwitch(root,["--no-prune"]);assert.notEqual(result.code,0);await assert.rejects(realpath(path.join(root,"current")));assert.doesNotMatch(result.stdout,/probe targets follow|current ->/);}finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test("an invalid host dependency shadow refuses the switch before Docker or current changes", { skip }, async t => {
+  const { root, rel } = await host();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(rel, "apps/server/node_modules/@evimed/domain"), { recursive: true });
+  const result = await runSwitch(root, ["--no-prune"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /host_ops_dependency_invalid/);
+  await assert.rejects(readFile(path.join(root, "docker.log"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(realpath(path.join(root, "current")), { code: "ENOENT" });
 });

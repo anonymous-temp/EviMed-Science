@@ -20,8 +20,8 @@
  *   office document is kept as itself, and read by the intake like any
  *   upload. Nothing refetches by itself; 「重新读取」 is the researcher's.
  * - **A refresh or a save replaces.** The same address (or the same note)
- *   always writes the same path, so changed bytes are the next version of
- *   one document. The researcher refreshed or edited one thing; the version it
+ *   keeps the same logical path; intake stages immutable version bytes and
+ *   publishes their path through the source ledger. The researcher refreshed or edited one thing; the version it
  *   replaces goes, and what rests on it is told (`SourceService.register`'s
  *   replacement hand-off). Identical bytes change nothing but the fetch time.
  *
@@ -40,7 +40,7 @@ const URL_MAX_CHARS = 2048;
 /** How much of a title becomes part of a file name. */
 const SLUG_MAX_CHARS = 48;
 
-/** @param {string} value */
+/** @param {string | Buffer} value */
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 
 /**
@@ -155,6 +155,18 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
     const family = await sources.documents.list(user.id, "source", { projectId: current.projectId, filter: { familyId }, limit: 100 });
     for (const older of family.items) {
       if (older.id === current.id) continue;
+      const replacedPaths = new Set(current.payload.paths ?? []);
+      const remaining = (older.payload.paths ?? []).filter(file => !replacedPaths.has(file));
+      if (remaining.length) {
+        // One digest can be registered at several paths. Replacing one path
+        // does not retire the unchanged copies or their preserved capture.
+        if (remaining.length !== older.payload.paths.length) {
+          await sources.documents.put(user.id, "source", older.id,
+            { ...older.payload, paths: remaining, updatedAt: now().toISOString() },
+            { projectId: older.projectId, expectedRevision: older.revision });
+        }
+        continue;
+      }
       await sources.remove(user.id, older.id, { expectedRevision: older.revision, accountCreatedAt: user.accountCreatedAt });
     }
   }
@@ -190,7 +202,7 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
     const text = String(page?.text ?? "").trim();
     if (!text) throw new HttpError(422, "source_link_unreadable", "The page has no text to read.");
     if (kept?.bytes && kept.extension === "html") {
-      const original = originalPath(slug, "html");
+      const original = originalPath(`${slug}-${digest(kept.bytes).slice(0, 16)}`, "html");
       await write({ user, project, rel: original, buffer: kept.bytes, register: false });
       link.original = original;
     }
@@ -209,20 +221,32 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
    */
   async function standingSnapshot(user, project, rel, markdown) {
     const found = await sources.documents.list(user.id, "source", { projectId: project.id, filter: { paths: [rel] }, limit: 1 });
-    const standing = found.items[0];
+    const standing = found.items[0] ?? (await sources.documents.list(user.id, "source", {
+      projectId: project.id, filter: { logicalPath: rel }, limit: 1,
+    })).items[0];
     if (!standing) return null;
     try {
-      const previous = (await readFile(project, rel)).toString("utf8");
+      const previous = (await readFile(project, standing.payload.paths[0])).toString("utf8");
       return snapshotBody(previous) === snapshotBody(markdown) ? standing : null;
     } catch { return null; }
   }
 
-  /** @param {any} user @param {any} project @param {string} rel @param {Buffer} buffer @param {Record<string, any>} meta */
-  async function writeEntry(user, project, rel, buffer, meta) {
-    const registered = await write({ user, project, rel, buffer, meta });
-    if (!registered?.source) throw new HttpError(503, "source_state_unavailable", "Source intake is not available.");
-    if (!registered.duplicate) await retireOlderVersions(user, registered.source);
-    return registered;
+  /** @param {any} user @param {any} project @param {string} rel @param {Buffer} buffer @param {Record<string, any>} meta @param {any} [expectedSource] */
+  async function writeEntry(user, project, rel, buffer, meta, expectedSource = null) {
+    const publish = async () => {
+      if (expectedSource) {
+        const base = await sources.get(user.id, expectedSource.id);
+        if (base.projectId !== project.id || base.payload.publication?.current === false || base.revision !== expectedSource.revision) {
+          throw new HttpError(409, "source_revision_conflict", "The note changed; open its current version before saving.");
+        }
+      }
+      const registered = await write({ user, project, rel, buffer, meta: { ...meta, logicalPath: rel } });
+      if (!registered?.source) throw new HttpError(503, "source_state_unavailable", "Source intake is not available.");
+      if (sourceOriginOf({ connectorType: registered.source.payload?.connector?.type, path: rel }) === "wiki") await retireOlderVersions(user, registered.source);
+      return registered;
+    };
+    return sources.withRegistrationLocks
+      ? sources.withRegistrationLocks([`publication:${user.id}:${project.id}:${rel}`], publish) : publish();
   }
 
   /** @param {unknown} value */
@@ -344,9 +368,10 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
           { title: String(readKnowledgePage(text, { path: where.rel }).title || title || where.rel).slice(0, TITLE_MAX_CHARS) });
         return { ...registered, changed: !registered.duplicate };
       }
-      const rel = requireNote(source);
+      const notePath = requireNote(source);
+      const rel = source.payload?.logicalPath ?? notePath;
       const heading = noteTitle(title);
-      const registered = await writeEntry(user, project, rel, Buffer.from(noteMarkdown(heading, noteBody(body)), "utf8"), { title: heading });
+      const registered = await writeEntry(user, project, rel, Buffer.from(noteMarkdown(heading, noteBody(body)), "utf8"), { title: heading }, source);
       return { ...registered, changed: !registered.duplicate };
     },
   };

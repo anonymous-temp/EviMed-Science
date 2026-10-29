@@ -72,8 +72,8 @@ export const METHOD_APPLICABILITY_STATES = Object.freeze(['unknown', 'flagged', 
 /** How many entries one method record keeps. The oldest go first; a count is never a megabyte. */
 export const METHOD_FEEDBACK_LIMIT = 60
 
-/** What a method's record says about how it was left: returned to an earlier body, or stopped. */
-export const METHOD_LINK_TYPES = Object.freeze(['rolled_back_for_regression', 'retired_for_regression'])
+/** What a method's record says about how it was left: returned to an earlier body, or stopped — because the results made under the newer body were found wrong (`*_for_regression`), or because the newer text contradicted runs the person had accepted (`*_for_replay`, `MethodReplay`: `results` is the runs it was read against, `against` the contradictions). */
+export const METHOD_LINK_TYPES = Object.freeze(['rolled_back_for_regression', 'retired_for_regression', 'rolled_back_for_replay', 'retired_for_replay'])
 
 /** How many revision links one method keeps. */
 export const METHOD_LINK_LIMIT = 20
@@ -169,7 +169,7 @@ export function diagnosticApplicability({ raised, known }) {
  * One entry as the record keeps it: a closed projection, bounded, with every identifier checked for its shape. Throws
  * when an entry does not name what it is about — a signal with no result version, a digest that is not a method's.
  *
- * `digest` is the content digest of the revision of the method (or handbook) the producing run read. `result` is the
+ * `digest` is the content digest of the revision of the method the producing run read. `result` is the
  * version the signal is about; `successor` is a correction's system-generated successor, kept as the second half of the
  * pair and never as evidence of its own. `replay` and `event` name the recalculation or the feedback event that is the
  * signal's source, so every entry can be traced to a record that exists independently.

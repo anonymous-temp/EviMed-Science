@@ -5,7 +5,7 @@
  * Hidden knowledge: this is the smallest possible change and it is the one the
  * whole learning loop stands on. `onRunFinished` has always read the kernel
  * transcript while the container is still alive — it hands it to
- * `memoryIntelligence.recordRun` — and has always thrown it away afterwards.
+ * the memory side's consumers — and has always thrown it away afterwards.
  * The container exits, `sessionTranscript` starts answering
  * `runtime_not_running`, and the only durable trace of the run is the ledger's
  * counters. Nothing can be distilled from a counter.
@@ -36,9 +36,9 @@ import { runOwnsRuntimeScope } from "./runUsage.mjs";
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
+import { SOCKET_TOOL_NAMES, identifierShapesIn } from "@evimed/domain";
 import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
-import { HttpError, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
+import { HttpError, openScopedFileNoFollow, readStableFileHandle, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** Directory under a project's meta root that holds one file per finished run. */
 export const TRANSCRIPT_DIR_NAME = "transcripts";
@@ -617,6 +617,28 @@ export async function readRunTranscript(project, runId) {
   return { header, messages };
 }
 
+/** Repair reads the exact retained bytes, never a live session or a reserialized transcript.
+ * @param {any} project @param {any} run @param {string} expectedSha256 */
+export async function readVerifiedRunTranscript(project, run, expectedSha256) {
+  if (!/^[a-f0-9]{64}$/.test(expectedSha256 ?? "") || run.transcript?.sha256 !== expectedSha256) {
+    throw new HttpError(409, "run_transcript_changed", "The retained transcript does not match the expected digest.");
+  }
+  let opened;
+  try {
+    opened = await openScopedFileNoFollow(project.rootDir, transcriptPath(project, run.id));
+    if (opened.stat.size > TRANSCRIPT_MAX_BYTES || opened.stat.size !== run.transcript.bytes) throw new HttpError(409, "run_transcript_changed", "The retained transcript size changed.");
+    const bytes = await readStableFileHandle(opened.handle, opened.stat);
+    if (createHash("sha256").update(bytes).digest("hex") !== expectedSha256) throw new HttpError(409, "run_transcript_changed", "The retained transcript bytes changed.");
+    const rows = new TextDecoder("utf-8", { fatal: true }).decode(bytes).split("\n").filter(Boolean).map(line => JSON.parse(line));
+    const header = rows.shift();
+    if (header?.schemaVersion !== TRANSCRIPT_SCHEMA_VERSION || header.runId !== run.id || !Array.isArray(header.sessions)
+      || !header.sessions.some(session => session.sessionId === run.sessionId && session.parentSessionId === null)) {
+      throw new HttpError(409, "run_transcript_scope_invalid", "The retained transcript does not belong to this run.");
+    }
+    return { header, messages: rows };
+  } finally { await opened?.handle.close(); }
+}
+
 /**
  * Remove transcripts older than the retention window.
  *
@@ -654,16 +676,26 @@ export async function pruneRunTranscripts(project, options = {}) {
   return { removed };
 }
 
+/** Every string a value holds, in order, however deep. @param {unknown} value @param {string[]} [into] @returns {string[]} */
+function stringLeaves(value, into = []) {
+  if (typeof value === "string") into.push(value);
+  else if (Array.isArray(value)) for (const entry of value) stringLeaves(entry, into);
+  else if (value && typeof value === "object") for (const entry of Object.values(value)) stringLeaves(entry, into);
+  return into;
+}
+
 /**
  * The excerpt a distillation run is allowed to see.
  *
  * Two filters, both of which are the reason this lives here rather than in the
- * distiller: a message carrying a credential or a patient identifier is dropped
+ * distiller: a message carrying a credential or an identifier by SHAPE (`identifierShapesIn`: an ID number, a phone, a card, an e-mail,
+ * a provider key, a secret assigned to a name, a long bare token — not a word list, which dropped any message that mentioned a
+ * `token`, a `secret` or 密码, tool output included) is dropped
  * whole rather than redacted, and the excerpt is bounded by message count so a
  * pathological run cannot fill the model's context with its own loop. What is
  * dropped is counted, because an excerpt that silently lost the decisive
  * message produces a confident method about something that did not happen.
- * @param {any[]} messages
+ * @param {readonly any[]} messages
  * @param {{ sessionId?: string, fromSeq?: number, toSeq?: number, limit?: number }} range
  * @returns {{ messages: any[], dropped: { sensitive: number, bounded: number } }}
  */
@@ -677,8 +709,8 @@ export function transcriptExcerpt(messages, range = {}) {
     return message.seq >= from && message.seq <= to;
   });
   const clean = inRange.filter((message) => {
-    const text = JSON.stringify(message.parts ?? "");
-    if (hasSensitiveText(text)) { sensitive += 1; return false; }
+    // The strings a message holds, as text: the shapes are those of plain text, and JSON's escaping would break a labelled secret in two.
+    if (identifierShapesIn(stringLeaves(message.parts).join("\n")).length) { sensitive += 1; return false; }
     return true;
   });
   const bounded = Math.max(0, clean.length - limit);

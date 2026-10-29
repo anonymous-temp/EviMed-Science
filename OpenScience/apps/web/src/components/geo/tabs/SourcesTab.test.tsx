@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +16,7 @@ const client = vi.hoisted(() => ({
   getGeoCluster: vi.fn(),
   runGeoStep: vi.fn(),
 }));
+vi.mock("../GeoAnalysisWorkbench",()=>({GeoAnalysisWorkbench:({initialView}:{initialView:string})=><div data-testid="source-analysis">{initialView}</div>}));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   ...client,
@@ -39,6 +40,27 @@ function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/so
     </MemoryRouter>,
   );
 }
+
+it("keeps source search and sorting through a delayed scope read without exposing old rows", async () => {
+  const project = geoProject();
+  const user = userEvent.setup();
+  let finish: (value: typeof sourcesFilled) => void = () => undefined;
+  const delayed = new Promise<typeof sourcesFilled>(resolve => { finish = resolve; });
+  client.getGeoSources.mockResolvedValueOnce(sourcesFilled).mockReturnValueOnce(delayed);
+  const node = (engine: string) => <MemoryRouter initialEntries={["/app/geo/geo_1/sources"]}>
+    <GeoFrameHarness geoId="geo_1" project={project} tab="sources" scope={{ engines: [engine] }}><SourcesTab geoId="geo_1" project={project} /></GeoFrameHarness>
+  </MemoryRouter>;
+  const shown = render(node("deepseek"));
+  const search = await screen.findByLabelText("搜索信源");
+  await user.type(search, "丁香");
+  await user.click(screen.getByRole("button", { name: "按讲错的回答排序" }));
+  shown.rerender(node("kimi"));
+  await waitFor(() => expect(client.getGeoSources).toHaveBeenLastCalledWith("geo_1", { engines: ["kimi"] }));
+  expect(screen.queryByRole("button", { name: /丁香医生/ })).not.toBeInTheDocument();
+  await act(async () => { finish(sourcesFilled); await delayed; });
+  expect(await screen.findByLabelText("搜索信源")).toHaveValue("丁香");
+  expect(screen.getByRole("button", { name: "按讲错的回答排序，当前从多到少" })).toBeVisible();
+});
 
 const site = (overrides: Partial<GeoActionSource> & Pick<GeoActionSource, "domain">): GeoActionSource => ({
   channel: null, name: null, kind: null, layer: null, why: null, citedFor: {}, conditions: {}, price: null, available: null,
@@ -86,6 +108,22 @@ const rowOf = (domain: string): HTMLElement | null => (document.querySelector(`[
 const domains = () => [...document.querySelectorAll("[data-geo-source]")].map((node) => node.getAttribute("data-geo-source"));
 
 describe("信源: two views in the band", () => {
+  it("retains other project platforms when the returned citations only include the selected platform", async () => {
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: sourcesFilled.sources.map(source => ({ ...source, cited: { deepseek: source.cited.deepseek ?? 1 } })) });
+    renderTab(geoProject(), "/app/geo/geo_1/sources?engine=deepseek");
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^引擎/ }));
+    expect(await screen.findByRole("menuitemradio", { name: "豆包" })).toBeVisible();
+  });
+  it("clears an empty-result search and its column filters in one URL update", async () => {
+    renderTab(geoProject(), "/app/geo/geo_1/sources?engine=deepseek&only=wrong&sourceSearch=not-found&session=s1");
+    const clear = await screen.findAllByRole("button", { name: "清除筛选" });
+    await userEvent.click(clear[clear.length - 1]);
+    const query = new URLSearchParams(screen.getByTestId("search").textContent ?? "");
+    expect(query.has("engine")).toBe(false); expect(query.has("only")).toBe(false); expect(query.has("sourceSearch")).toBe(false);
+    expect(query.get("session")).toBe("s1");
+    expect(await screen.findByLabelText("搜索信源")).toHaveValue("");
+  });
   it("switches between who the engines cite and where an article could go, in the address", async () => {
     renderTab();
     await screen.findByText("3 个信源");
@@ -100,63 +138,13 @@ describe("信源: two views in the band", () => {
   });
 });
 
-describe("信源: the pictures above the list", () => {
-  it("draws the kinds of site and the concentration before the list, and a kind is the list's filter", async () => {
-    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many });
-    renderTab();
-    await screen.findByText("6 个信源");
-    const grid = document.querySelector("[data-chart-grid]") as HTMLElement;
-    const list = screen.getByRole("list", { name: "信源" });
-    expect(grid.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const kinds = within(grid).getByRole("list", { name: "各类站点被引用的次数" });
-    // the kinds, the most cited first
-    expect(within(kinds).getAllByRole("button").map((button) => button.textContent)).toEqual([expect.stringContaining("新闻媒体"), expect.stringContaining("社区")]);
-    await userEvent.click(within(kinds).getAllByRole("button")[1]);
-    expect(screen.getByTestId("search")).toHaveTextContent("kind=forum");
-    expect(domains()).toEqual(["site4.cn", "site5.cn"]);
-    await userEvent.click(within(toolbar()).getByRole("button", { name: /^类型：社区/ }));
-    expect(domains()).toHaveLength(6);
-  });
-
-  it("names the kind of site cited most among those the platform could name, never 「其他」 as the conclusion", async () => {
-    const unnamed: GeoSourceRow[] = [
-      { ...many[0], id: "u0", domain: "u0.cn", kind: "其他", cited: { doubao: 50 } },
-      { ...many[0], id: "u3", domain: "u3.cn", kind: null, cited: { doubao: 5 } },
-      { ...many[1], id: "u1", domain: "u1.cn", kind: "news", cited: { doubao: 4 } },
-      { ...many[2], id: "u2", domain: "u2.cn", kind: "encyclopedia", cited: { doubao: 7 } },
-    ];
-    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: unnamed });
-    renderTab();
-    await screen.findByText("4 个信源");
-    const grid = document.querySelector("[data-chart-grid]") as HTMLElement;
-    expect(within(grid).getByRole("heading", { name: "百科是被引用最多的一类，7 次" })).toBeInTheDocument();
-    // 「其他」 stays a bar (and a filter): the sites with no kind are real citations
-    expect(within(within(grid).getByRole("list", { name: "各类站点被引用的次数" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      expect.stringContaining("其他"), expect.stringContaining("百科"), expect.stringContaining("新闻媒体"),
-    ]);
-  });
-
-  it("draws no kinds card where no site has a kind, and the concentration takes the row", async () => {
-    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many.map((row) => ({ ...row, kind: null })) });
-    renderTab();
-    await screen.findByText("6 个信源");
-    const grid = document.querySelector("[data-chart-grid]") as HTMLElement;
-    expect(within(grid).queryByRole("list", { name: "各类站点被引用的次数" })).toBeNull();
-    expect(grid.querySelector("[data-source-concentration]")).not.toBeNull();
-    expect(grid.querySelectorAll("[data-chart-row] > div")).toHaveLength(1);
-  });
-
-  it("states the share of the busiest sites as the title, and the sites cited once as a fact of the legend", async () => {
-    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many });
-    renderTab();
-    await screen.findByText("6 个信源");
-    const concentration = document.querySelector("[data-source-concentration]") as HTMLElement;
-    const card = concentration.closest("section") as HTMLElement;
-    expect(within(card).getByRole("heading", { name: /^前 6 个站占了 100% 的引用$/ })).toBeInTheDocument();
-    expect(within(card).queryByText(/只被引用过一次/)).toBeNull();
-    expect(concentration).toHaveTextContent("只被引用 1 次");
-    expect(concentration).toHaveTextContent("5 个");
-  });
+describe("selected source analysis",()=>{
+ it("uses the server selected source union presenter before the existing source actions",async()=>{
+  client.getGeoSources.mockResolvedValue({...sourcesFilled,sources:many});renderTab();await screen.findByText("6 个信源");
+  const workbench=screen.getByTestId("source-analysis"),list=screen.getByRole("list",{name:"信源"});
+  expect(workbench).toHaveTextContent("V17");expect(workbench.compareDocumentPosition(list)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole("list",{name:"各类站点被引用的次数"})).toBeNull();
+ });
 });
 
 describe("信源: what the list can be narrowed to", () => {
@@ -285,4 +273,14 @@ describe("信源: a site's drawer", () => {
     expect(screen.getByTestId("search")).toHaveTextContent("source=dxy.com");
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
+});
+
+it('opens an exact registered source detail action beyond the bounded catalogue list',async()=>{
+ const base=sourcesFilled.sources[0],detail=sourceDetailOf(base);
+ client.getGeoSources.mockResolvedValue({...sourcesFilled,selection:{reference:'gsel_tail'}});
+ client.getGeoSource.mockResolvedValue({...detail,source:{...detail.source,id:'source-2001',domain:'d2001.example',name:'Registered source 2001'},selection:{reference:'gsel_tail'}});
+ renderTab(geoProject(),'/app/geo/geo_1/sources?source=source-2001&selectionRef=gsel_tail&session=s1');
+ expect(await screen.findByRole('dialog',{name:'Registered source 2001'})).toBeInTheDocument();
+ expect(client.getGeoSource).toHaveBeenCalledWith('geo_1','source-2001',{selectionRef:'gsel_tail'});
+ expect(screen.getByRole('button',{name:'查看相关实施方案'})).toBeInTheDocument();
 });

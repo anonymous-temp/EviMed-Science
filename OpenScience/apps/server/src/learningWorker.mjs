@@ -27,7 +27,9 @@ import { HttpError } from "./security.mjs";
  */
 export class LearningWorker {
   /**
-   * @param {{jobs: any, distillation: any, consolidation: any, resolveProject?: (job: any) => Promise<any>,
+   * `evidence` settles a finished run thirty minutes after it ended (`learningEvidence.mjs`, job kind `learning-evidence`); without it the
+   * kind is not claimed.
+   * @param {{jobs: any, distillation: any, consolidation: any, evidence?: { settle: (request: { job: any }) => Promise<any> } | null, resolveProject?: (job: any) => Promise<any>,
    *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>, sweep?: () => Promise<unknown>,
    *          enabled?: boolean, window?: string, windowTimeZone?: string, concurrency?: number,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies
@@ -36,6 +38,7 @@ export class LearningWorker {
     jobs,
     distillation,
     consolidation,
+    evidence = null,
     resolveProject = async () => null,
     resolveRun = async () => null,
     maintain = async () => {},
@@ -69,6 +72,7 @@ export class LearningWorker {
     this.jobs = jobs;
     this.distillation = distillation;
     this.consolidation = consolidation;
+    this.evidence = evidence;
     this.resolveProject = resolveProject;
     this.resolveRun = resolveRun;
     this.maintain = maintain;
@@ -87,7 +91,7 @@ export class LearningWorker {
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
     this.now = now;
-    this.kinds = ["distill", "consolidate"];
+    this.kinds = ["distill", "consolidate", ...(evidence ? ["learning-evidence"] : [])];
     this.workerId = `learning-${randomUUID()}`;
     // Named `timer` and `reconcileTimer` because `pauseRecurringWork` reaches
     // for those two fields by name to drain the system for maintenance. A
@@ -98,11 +102,6 @@ export class LearningWorker {
     this.concurrency = concurrency;
     /** @type {Set<Promise<any>>} */
     this.lanes = new Set();
-    // Paired evaluations of a handbook in progress on this worker (the optional `evaluate` hook of
-    // `HandbookConsolidation`, which no deployment composes). One at a time: each holds a lane and a
-    // background runtime for hours, and two of them held both lanes and half the deployment's runtimes
-    // on 2026-09-21.
-    this.evaluating = 0;
     // Set when the process is shutting down (`interrupt`): a job that ends now
     // ended because the platform is restarting, not because of anything in it.
     this.closing = false;
@@ -236,25 +235,13 @@ export class LearningWorker {
 
   /** @param {any} job */
   async #execute(job) {
+    if (job.kind === "learning-evidence") return this.evidence.settle({ job });
     if (job.kind === "consolidate") {
       const action = String(job.payload?.action ?? "");
       if (!CONSOLIDATE_ACTIONS.includes(action)) {
         const error = new Error("Unknown consolidation action.");
         /** @type {any} */ (error).code = "consolidate_action_invalid";
         throw error;
-      }
-      if (action === "optimize" && this.consolidation.handbookConsolidation?.evaluate) {
-        if (this.evaluating >= 1) {
-          const error = new Error("Another paired evaluation is running; this one waits its turn.");
-          /** @type {any} */ (error).code = "learning_evaluation_busy";
-          throw error;
-        }
-        this.evaluating += 1;
-        try {
-          return await this.consolidation.run({ job });
-        } finally {
-          this.evaluating -= 1;
-        }
       }
       return this.consolidation.run({ job });
     }
@@ -268,7 +255,7 @@ export class LearningWorker {
       /** @type {any} */ (error).code = "distillation_run_unavailable";
       throw error;
     }
-    return this.distillation.execute({ job, project, run, feedback: job.payload?.feedback ?? [], repairIssues: job.payload?.repairIssues ?? [] });
+    return this.distillation.execute({ job, project, run, feedback: job.payload?.feedback ?? [] });
   }
 
   /**

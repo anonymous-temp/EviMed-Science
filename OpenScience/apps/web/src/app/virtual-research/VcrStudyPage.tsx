@@ -33,6 +33,9 @@ import { VcrExportDialog, VcrRenameDialog } from "@/components/vcr/VcrStudyDialo
 import { VcrIntakeDrawer } from "@/components/vcr/VcrIntakeDrawer";
 import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
 import { StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
+import { VcrStudyMethods } from "@/components/vcr/VcrStudyMethods";
+import { VcrStudyBrief } from "@/components/vcr/VcrStudyBrief";
+import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { StudyPane } from "@/components/vcr/StudyPane";
 import { useStudy } from "@/components/vcr/useStudy";
 import { useVcrRun } from "@/components/vcr/useVcrRun";
@@ -45,7 +48,7 @@ import { ComparatorTab } from "@/components/vcr/tabs/ComparatorTab";
 import { TrialTab } from "@/components/vcr/tabs/TrialTab";
 import { MatchingTab } from "@/components/vcr/tabs/MatchingTab";
 import { DataTab } from "@/components/vcr/tabs/DataTab";
-import { resolveVcrTab, VCR_HOME_PATH, vcrTabPath } from "@/components/vcr/vcrTabs";
+import { resolveVcrTab, VCR_HOME_PATH, vcrStepPath, vcrTabPath } from "@/components/vcr/vcrTabs";
 
 /**
  * What a tab is given: the study, the id its routes are addressed by, and how to read the study again after a change that moves the
@@ -93,6 +96,7 @@ export function VcrStudyPage() {
   const { studyId = "", tab: tabParam } = useParams();
   const navigate = useNavigate();
   const feature = useVcrFeature();
+  const [query] = useSearchParams();
   const chat = tabParam === "chat";
   const { tab, moved } = chat ? { tab: "overview" as VcrTabKey, moved: false } : resolveVcrTab(tabParam);
   const view: StudyView = chat ? "chat" : tab;
@@ -101,8 +105,8 @@ export function VcrStudyPage() {
   useEffect(() => {
     // An address that named a step is rewritten to the tab that holds it, in
     // place, so a reader who came in on a step link leaves with a tab link.
-    if (moved && studyId) navigate(vcrTabPath(studyId, tab), { replace: true });
-  }, [moved, studyId, tab, navigate]);
+    if (moved && studyId) navigate(tabParam === "definition" || tabParam === "evidence" ? vcrStepPath(studyId, tabParam) : vcrTabPath(studyId, tab), { replace: true });
+  }, [moved, studyId, tab, tabParam, navigate]);
 
   if (feature === "off" || loaded.kind === "off") return <VcrOffPage />;
   if (loaded.kind === "missing") {
@@ -123,8 +127,15 @@ export function VcrStudyPage() {
       </PageShell>
     );
   }
+  if (loaded.study.purpose === "calculation" && ((tab === "overview" && !query.has("package")) || (chat && !loaded.study.conversation.sessionId))) return <CalculationRedirect studyId={studyId} />;
   // Keyed by the study: the menu's dialogs and the run guard never outlive it.
   return <StudyView key={studyId} studyId={studyId} study={loaded.study} view={view} tab={tab} reload={reload} />;
+}
+
+function CalculationRedirect({ studyId }: { studyId: string }) {
+  const navigate = useNavigate();
+  useEffect(() => { navigate(vcrCalculationPath(studyId), { replace: true }); }, [navigate, studyId]);
+  return <VcrStudySkeleton />;
 }
 
 /** Which of the page's panels is open over it. */
@@ -134,10 +145,12 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const { run, busy: running } = useVcrRun(study, { refresh: reload });
-  const [panel, setPanel] = useState<Panel>(null);
+  const [panel, setPanel] = useState<Panel>(() => params.get("intake") === "1" ? "intake" : null);
   const [deleting, setDeleting] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const packageId = params.get("package");
+  const methodsOpen = params.get("methods") === "1";
   const Tab = TABS[tab];
   // What this reader may do here, from the roles the server says they hold:
   // the menu offers only the actions that will not be refused (the routes
@@ -240,8 +253,8 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   }, [navigate, sessionId, study.projectId, studyId]);
   const openView = useCallback((next: StudyView) => {
     if (next === "chat") openChat();
-    else navigate(vcrTabPath(studyId, next));
-  }, [navigate, openChat, studyId]);
+    else navigate(study.purpose === "calculation" ? `${vcrCalculationPath(studyId)}/${next}` : vcrTabPath(studyId, next));
+  }, [navigate, openChat, studyId, study.purpose]);
 
   const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法取消，请稍后重试。" }))); };
 
@@ -264,14 +277,14 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   ), [Tab, tab, studyId, study, reload]);
 
   return (
-    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
+    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView} methodsOpen={methodsOpen} onMethods={() => setParams(current => { const next = new URLSearchParams(current); if (methodsOpen) next.delete("methods"); else next.set("methods", "1"); return next; })}>
       {view === "chat" ? (
-        <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
+        study.status === "draft" && !submitted && !study.conversation.submitted && !study.activity?.run && !study.activity?.last ? <VcrStudyBrief study={study} onStarted={async (_remote, _answer, isCurrent) => { if (!isCurrent()) return false; setSubmitted(true); reload(); return true; }} onDataRequested={async (_remote, isCurrent) => { if (!isCurrent()) return false; setPanel("intake"); navigate(`${vcrTabPath(studyId, "data")}?intake=1`); return true; }} /> : <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
       ) : (
         <>
           {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
           {budgetNote}
-          {packageId ? (
+          {methodsOpen ? <VcrStudyMethods key={tab} studyId={studyId} tab={tab} /> : packageId ? (
             <VcrPackageReader
               studyId={studyId}
               exportId={packageId}
@@ -286,7 +299,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
       {panel === "members" && <VcrMembersDialog studyId={studyId} onClose={() => setPanel(null)} />}
       {panel === "changes" && <VcrChangeLogDrawer study={study} onClose={() => setPanel(null)} />}
       {panel === "runs" && <VcrBackgroundRunsDrawer studyId={studyId} study={study} onClose={() => setPanel(null)} />}
-      {panel === "intake" && <VcrIntakeDrawer studyId={studyId} onClose={() => setPanel(null)} onChanged={reload} />}
+      {panel === "intake" && <VcrIntakeDrawer studyId={studyId} onClose={() => { setPanel(null); if (params.has("intake")) setParams(current => { const next = new URLSearchParams(current); next.delete("intake"); return next; }, { replace: true }); }} onChanged={reload} />}
 
       {panel === "budget" && (
         <VcrBudgetDialog

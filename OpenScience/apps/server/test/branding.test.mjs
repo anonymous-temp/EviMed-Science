@@ -16,7 +16,7 @@ async function productionTsxFiles(directory) {
   return files;
 }
 
-test("all visible application branding uses EviMed", async () => {
+test("all visible application branding uses EviMed Science", async () => {
   const frontendFiles = await productionTsxFiles(path.join(repoRoot, "apps/web/src"));
   const frontend = (await Promise.all(frontendFiles.map((file) => readFile(file, "utf8")))).join("\n");
   const html = await readFile(path.join(repoRoot, "apps/web/index.html"), "utf8");
@@ -25,8 +25,9 @@ test("all visible application branding uses EviMed", async () => {
 
   assert.doesNotMatch(frontend, /Open Science/i);
   assert.doesNotMatch(frontend, /logo\.webp/);
-  assert.match(frontend, />\s*EviMed\s*</);
-  assert.match(html, /<title>EviMed<\/title>/);
+  // The display name is 「EviMed Science」 since the skills and plugin centre's branding pass (2026-10-25); the mark keeps 「EviMed」.
+  assert.match(frontend, />\s*EviMed Science\s*</);
+  assert.match(html, /<title>EviMed Science<\/title>/);
   assert.doesNotMatch(html, /Open Science/i);
   assert.match(mark, /aria-label="EviMed"/);
   assert.doesNotMatch(mockRuntime, /OPENCODE|OpenCode/);

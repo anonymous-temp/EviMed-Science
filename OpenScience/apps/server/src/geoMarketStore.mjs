@@ -32,6 +32,14 @@ export function articleRefusalAtSend(article, checkedSha256) {
   return null;
 }
 
+/** A review may change after capture, but it applies only to the exact pinned version and digest. */
+function reviewOfVersion(article, version) {
+  const same = article.currentResultVersionId === version.result_version_id && article.contentSha256 === version.digest;
+  const review = same ? article : version.review?.digest === version.digest ? version.review : version.association;
+  return { ...version.association, status: article.status === "withdrawn" ? "withdrawn" : review.status,
+    safety: review.safety, gate: review.gate, contentSha256: version.digest };
+}
+
 /** The refusal a second live order for one article gets, from this store and its double alike. */
 export function articleLiveError() {
   return new HttpError(409, "geo_order_article_live", "The article already has a live order.");
@@ -347,6 +355,7 @@ export function mapOrder(row) {
     userId: row.user_id,
     geoProjectId: row.geo_project_id,
     articleId: row.article_id,
+    articleResultVersionId: row.article_result_version_id ?? null, articleDigest: row.article_digest ?? null,
     mediaType: row.media_type,
     resourceId: row.resource_id,
     vendorOrderNid: row.vendor_order_nid ?? null,
@@ -400,6 +409,7 @@ export function mapArticle(row) {
     status: row.status ?? null, isControl: Boolean(row.is_control), placementLabel: row.placement_label ?? null, createdAt: iso(row.created_at),
     // Where the run said the article is to be published: an owned platform (the brand publishes it) or `media_market`; null = not said.
     channel: row.channel ?? null,
+    currentResultVersionId: row.current_result_version_id ?? null, onlineUpdateNeeded: row.online_update_needed === true,
   };
 }
 
@@ -678,6 +688,19 @@ export class GeoMarketStore {
     return result.rows.map(mapArticle);
   }
 
+  /** Resolve an order's immutable business version; an unprovable legacy pin is never filled from the current head. */
+  async getOrderArticle(order) {
+    const [article] = await this.getArticles([order.articleId]);
+    if (!article) return null;
+    if (!order.articleResultVersionId) return article.currentResultVersionId ? null : article;
+    const version = (await this.#query(`SELECT * FROM evimed_geo.article_versions WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
+      [order.geoProjectId, order.articleId, order.articleResultVersionId])).rows[0];
+    if (!version || version.digest !== order.articleDigest) return null;
+    return { ...article, ...reviewOfVersion(article, version), id: article.id, isControl: article.isControl,
+      currentResultVersionId: version.result_version_id, contentSha256: version.digest, path: version.path,
+      runId: version.run_id, onlineUpdateNeeded: false };
+  }
+
   /**
    * Move an article forward (placed, published); never backward. A paid placement records its label (广告 or 商业合作) on the
    * article, and a later move keeps the one that is there.
@@ -749,10 +772,12 @@ export class GeoMarketStore {
       return await this.#transaction(async (client) => {
         const created = [];
         for (const row of rows) {
+          const article = (await client.query(`SELECT current_result_version_id, content_sha256 FROM evimed_geo.articles WHERE geo_project_id=$1 AND id=$2 FOR SHARE`,
+            [row.geoProjectId, row.articleId])).rows[0];
           const inserted = await client.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, media_type, resource_id,
-              state, reserve_cny, price_cny, checks, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, 'planned', $7, $8, '[]'::jsonb, $9, $9) RETURNING *`,
-          [row.id, row.userId, row.geoProjectId, row.articleId, row.mediaType, row.resourceId, row.reserveCny, row.priceCny, when]);
+              state, reserve_cny, price_cny, checks, created_at, updated_at, article_result_version_id, article_digest)
+            VALUES ($1, $2, $3, $4, $5, $6, 'planned', $7, $8, '[]'::jsonb, $9, $9, $10, $11) RETURNING *`,
+          [row.id, row.userId, row.geoProjectId, row.articleId, row.mediaType, row.resourceId, row.reserveCny, row.priceCny, when, article?.current_result_version_id ?? null, article?.current_result_version_id ? article.content_sha256 : null]);
           await insertEvent(client, { orderId: row.id, at: when, fromState: null, toState: "planned", detail: row.detail });
           created.push(mapOrder(inserted.rows[0]));
         }
@@ -797,9 +822,16 @@ export class GeoMarketStore {
       const current = await client.query(`SELECT * FROM evimed_geo.orders WHERE id = $1 FOR UPDATE`, [String(orderId)]);
       const row = current.rows[0];
       if (!row || row.state !== "planned") return null;
-      const article = await client.query(`SELECT status, safety, gate, content_sha256 FROM evimed_geo.articles WHERE id = $1 FOR SHARE`, [row.article_id]);
-      const refusal = articleRefusalAtSend(article.rows[0] ? { status: article.rows[0].status, safety: article.rows[0].safety, gate: article.rows[0].gate,
-        contentSha256: article.rows[0].content_sha256 } : null, articleSha256);
+      const article = await client.query(`SELECT status, safety, gate, content_sha256, current_result_version_id FROM evimed_geo.articles WHERE id = $1 FOR SHARE`, [row.article_id]);
+      let checked = article.rows[0] ? { status: article.rows[0].status, safety: article.rows[0].safety, gate: article.rows[0].gate,
+        contentSha256: article.rows[0].content_sha256 } : null;
+      if (row.article_result_version_id) {
+        const version = (await client.query(`SELECT result_version_id, digest, association, review FROM evimed_geo.article_versions
+          WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`, [row.geo_project_id,row.article_id,row.article_result_version_id])).rows[0];
+        if (!version || version.digest !== row.article_digest || version.digest !== articleSha256) return { refused: "article_changed_since_review" };
+        checked = article.rows[0] ? reviewOfVersion({ ...checked, currentResultVersionId: article.rows[0].current_result_version_id }, version) : null;
+      } else if (article.rows[0]?.current_result_version_id) return { refused: "article_changed_since_review" };
+      const refusal = articleRefusalAtSend(checked, articleSha256);
       if (refusal) return { refused: refusal };
       const project = await client.query(`SELECT budget, status FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [row.geo_project_id]);
       if (!project.rows[0]) return { refused: "project_missing" };

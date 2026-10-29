@@ -29,6 +29,18 @@ class ToolContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.server = load_server()
 
+    def test_nullable_union_types_keep_each_branch_constraints(self):
+        schema = {"type": ["string", "null"], "maxLength": 3}
+        for value in [None, "yes"]:
+            self.server._validate(value, schema, "value")
+        for value in [17, True, [], {}, "long"]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.server._validate(value, schema, "value")
+        self.server._validate(2.5, {"type": ["integer", "number"]}, "value")
+        self.server._validate(None, {"type": "null"}, "value")
+        with self.assertRaises(ValueError):
+            self.server._validate("null", {"type": "null"}, "value")
+
     def test_topic_schema_accepts_only_bounded_research_context(self):
         schema = self.server.TOOLS["research_topic_selection"]["inputSchema"]
         request = {"action": "start", "researchDirection": "Dialysis adherence",

@@ -40,9 +40,14 @@ CREATE TABLE IF NOT EXISTS evimed_kb.documents (
   token_estimate integer NOT NULL CHECK (token_estimate >= 0),
   chunk_count integer NOT NULL CHECK (chunk_count >= 0),
   embedding_model text,
+  index_method text,
+  embedding_input_sha256 text CHECK (embedding_input_sha256 IS NULL OR embedding_input_sha256 ~ '^[a-f0-9]{64}$'),
   indexed_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, sha256, parser_revision, text_sha256)
 );
+ALTER TABLE evimed_kb.documents ADD COLUMN IF NOT EXISTS index_method text;
+ALTER TABLE evimed_kb.documents ADD COLUMN IF NOT EXISTS embedding_input_sha256 text
+  CHECK (embedding_input_sha256 IS NULL OR embedding_input_sha256 ~ '^[a-f0-9]{64}$');
 CREATE TABLE IF NOT EXISTS evimed_kb.chunks (
   user_id text NOT NULL,
   sha256 text NOT NULL,

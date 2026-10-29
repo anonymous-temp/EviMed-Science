@@ -14,10 +14,37 @@ const recallPaused = () => ({
 /** What a recall answers when nothing reached the relevance floor: an answer the model can act on — look again in other words, or go on without. */
 const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以换个说法再查一次，或不依赖记忆直接回答。";
 
+/**
+ * The capsule's half of an account's `search` (`memoryGateway.mjs`, item 9): the recall the capsule tool answers with, for the
+ * capsules in force (the entries of the whole account and of this project) and the evidence zones the project follows, and nothing of the
+ * account's own memory files (those are the engine's). The index nominates and PostgreSQL decides, as for the recall tool, so a fact the
+ * person forgot or an entry still waiting for them is never returned however long the index lags. A failure of either half is that half's alone.
+ * A shared GEO project's search (`contextPolicy.kind === "geo-project"`) reads only the owner's project-labelled entries that the context
+ * authorization admits (`contextItems.capsule`), never the owner's personal capsule.
+ * @param {{ service: { recall: Function } | null, contextItems?:any, subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null }} dependencies
+ * @returns {(request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>}
+ */
+export function createNativeCapsuleSearch({ service, subscriptions = null, contextItems = null }) {
+  return async ({ user, project, query, limit, contextPolicy = null }) => {
+    if(contextPolicy?.kind === "geo-project" && (contextPolicy.ownerId!==project.userId || contextPolicy.controlProjectId!==project.id)) return [];
+    if (!service || !String(query ?? "").trim()) return [];
+    const [capsule, reference] = await Promise.all([
+      (contextPolicy?.kind === "geo-project"
+        ? service.recall(project.userId,{query,projectId:project.id,limit,projectOnly:true,authorizeEntry:(activation,entry)=>contextItems?.capsule(contextPolicy,activation,entry) ?? false})
+        : recallAcrossMemory({ capsules: service }, user, { query, projectId: project.id, limit, standing: false, scope: "capsule" }))
+        .then((answer) => answer.items).catch(() => []),
+      subscriptions ? subscriptions.recall(contextPolicy?.kind === "geo-project" ? project.userId : user.id, project.id, query).catch(() => []) : [],
+    ]);
+    return [...capsule, ...reference];
+  };
+}
+
 /** The workload credential, never a caller-supplied field, fixes account and project.
  *
- * `memorySubstrate` is the research-memory half of a recall; without it the
- * gateway answers from capsule facts alone, as it did before 2026-09-16.
+ * What this answers is the capsule's: its facts, its notes, the methods it mounts — and the route of the input a conversation is about to
+ * run (`native-route`, `nativeInputRoute.mjs`). The account's own memory is
+ * the engine's, reached through the memory gateway (`memoryGateway.mjs`); the records half this route once added to a recall was
+ * the legacy engine's and is gone (2026-10-25).
  *
  * `sessions` tells the gateway which conversation it is answering. The
  * runtime's credential names a project, not a conversation, so the gateway asks
@@ -34,9 +61,17 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
  * credential still fixes the account and the project; a conversation of
  * another project is one with no state here.
  *
+ * `session` also hands a conversation the resident block — the project's card and the capsule's profile entries (`residentProfile.mjs`) —
+ * when the conversation does not already hold it. A turn the control plane dispatched carries that block in its prompt; a turn typed in
+ * the kernel's own composer, which is the product's main path, passes through no dispatch, and this is the first place the control plane
+ * is asked anything for it (2026-10-25: the card never reached such a conversation, so a rule the person gave a project was not in front of
+ * its next one). The block is part of the answer's `context`, and `resident.digest` names it: the plugin says it entered the step
+ * (`session-attached`), and only then does the conversation count as holding it — a step the kernel rejects is asked again and handed it again.
+ * A conversation a dispatch is running has the block already and is told nothing; one the platform started (an automated run) is told the
+ * capsule's profile and no project card, as at a dispatch.
+ *
  * `paused` is the researcher's own 「记忆」 switches (`memoryPausedFor`): the account's, 「本项目不使用记忆」, and a trial conversation's.
- * The records half of a recall honours them inside `memorySubstrate`; this is where the capsule half and the note do (2026-10-10
- * review M-1). Recall paused answers `mode: "paused"` and reads nothing; learning paused refuses the note by name. Asked of the one
+ * This is where the capsule half and the note honour them (2026-10-10 review M-1). Recall paused answers `mode: "paused"` and reads nothing; learning paused refuses the note by name. Asked of the one
  * running conversation, or of none when several are running (then the account's and the project's switches only); a switch that
  * cannot be read fails the call, so the tool reports memory unavailable instead of reading for a researcher who may have asked for none.
  *
@@ -48,19 +83,26 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
  * `subscriptions` is the project's evidence-zone subscriptions (`evidenceZoneSubscription.mjs`, flywheel F18): one more provider of a
  * recall, read for this project alone, appended after what the capsules and memory returned, never counted in the run's recalled
  * memories (a zone's card is reference context, not a memory) and never read in a conversation that is trying someone's pack.
- * `memoryEngine` is which engine keeps an account's memory (`ResearchMemoryStore.memoryEngine`): on the native one the
- * research-memory half of a recall is not read here.
- * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, evaluationIsolation?: any, handbooks?: any,
- *   recallLimit?: number, recallMaxLimit?: number, memoryEngine?: ((userId: string) => Promise<string>) | null,
+ * With the memory engine on, a conversation's own entrance is the engine's plugin, whose `search` also covers the capsule's half
+ * (`createNativeCapsuleSearch`, `memoryGateway.mjs`), and the capsule's recall and note tools are not registered for it
+ * (`packages/socket/plugins/capsule.mjs`, `memoryEnabled`); the recall and note actions here are for a deployment without the engine.
+ * @param {{ runtimeManager: any, store: any, service: any, evaluationIsolation?: any, nativeRoutes?: any,
+ *   recallLimit?: number, recallMaxLimit?: number,
  *   subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null,
  *   clinicalContext?: ((identity:any,runs:any[])=>Promise<boolean>) | null,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
- *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
-  recallLimit = 5, recallMaxLimit = 8, memoryEngine = null }) {
+ *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null,
+ *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
+ *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
+ *   contextPolicies?: any, contextItems?: any }} dependencies
+ *   `resident.forSession` answers the block a conversation is to be handed at its first step, or null when it holds it already (or is not to have one);
+ *   `resident.attached` notes that it has been handed. `contextPolicies` says whether the workload's project is a shared GEO project, whose
+ *   recall reads only the entries `contextItems` admits and whose notes are refused (`contextOnly`). */
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, nativeRoutes = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
+  resident = null, recallLimit = 5, recallMaxLimit = 8, contextPolicies = null, contextItems = null }) {
   const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
   const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
   const windows = new Map();
@@ -69,7 +111,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
     try {
       const url = new URL(req.url, "http://evimed.local");
       const action = url.pathname.slice(CAPSULE_GATEWAY_PATH.length + 1);
-      if (req.method !== "POST" || url.search || !["recall", "note", "session", "handbook-context", "handbook-attached"].includes(action)) {
+      if (req.method !== "POST" || url.search || !["recall", "note", "session", "session-attached", "native-route"].includes(action)) {
         throw new HttpError(404, "not_found", "Capsule operation not found.");
       }
       const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
@@ -86,10 +128,9 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       windows.set(key, window);
       if (++window.count > 120) throw new HttpError(429, "capsule_rate_limited", "Too many memory operations.");
       const body = await readJson(req, 64 * 1024);
-      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "asOf", "limit"]
-        : action === "handbook-context" ? ["sessionId", "inputs"]
-          : action === "handbook-attached" ? ["sessionId", "receipts"]
-        : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];
+      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "limit"]
+        : action === "native-route" ? ["sessionId", "inputs"]
+        : action === "session" ? ["sessionId"] : action === "session-attached" ? ["sessionId", "digest"] : ["factKind", "content", "origin"];
       if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((field) => !allowed.includes(field))) {
         throw new HttpError(400, "capsule_payload_invalid", "Unsupported memory fields.");
       }
@@ -98,10 +139,13 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       const currentUser = await store.userById(identity.userId);
       if (!currentUser) throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable.");
       const project = await store.requireProject(currentUser, identity.projectId);
-      if (action === "handbook-context" || action === "handbook-attached") {
-        if (!handbooks) { sendJson(res, 200, action === "handbook-context" ? { contexts: [] } : { attached: [] }); return; }
-        const answer = action === "handbook-context" ? await handbooks.read(project, body) : await handbooks.acknowledge(project, body);
-        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "handbook", answer) : answer);
+      const contextPolicy=contextPolicies ? await contextPolicies.forProject(project) : {kind:"owned"};
+      const shared=contextPolicy?.kind === "geo-project";
+      if(!contextPolicy) throw new HttpError(403,"memory_scope_denied","Project context is unavailable.");
+      if (action === "native-route") {
+        if (!nativeRoutes) { sendJson(res, 200, { routes: [] }); return; }
+        const answer = await nativeRoutes.read(project, body);
+        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "native-route", answer) : answer);
         return;
       }
       if (action === "session") {
@@ -109,9 +153,26 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
           throw new HttpError(400, "capsule_payload_invalid", "Invalid session id.");
         }
         // An unreadable selection cannot silently widen the knowledge-base scope.
-        const notes = sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId)
+        const notes = !shared && sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId)
           .catch(() => [SOURCE_SCOPE_UNAVAILABLE_CONTEXT]) : [];
-        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "session-memory", { context: notes.join("\n\n") }) : { context: notes.join("\n\n") });
+        // The block a conversation of this project is handed up front, once. Best effort: a block that cannot be read is no reason for the
+        // conversation not to start (the memory is an enhancement, and the next step asks again).
+        const block = resident ? await resident.forSession(currentUser, project, body.sessionId).catch(() => null) : null;
+        const context = [...(block?.text ? [block.text] : []), ...notes].join("\n\n");
+        const answer = evaluationIsolation ? await evaluationIsolation.filter(identity, "session-memory", { context }) : { context };
+        // What the plugin is to acknowledge once the step has entered; absent when there is no block, so a step with none acknowledges nothing.
+        sendJson(res, 200, block?.text ? { ...answer, resident: { digest: block.digest } } : answer);
+        return;
+      }
+      if (action === "session-attached") {
+        if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId) || typeof body.digest !== "string" || !/^[a-f0-9]{64}$/.test(body.digest)) {
+          throw new HttpError(400, "capsule_payload_invalid", "Invalid session receipt.");
+        }
+        // The block as it was when it was handed: asked again, and noted only if it is still the block the plugin names (a card that changed
+        // between the two calls is handed again, with its own digest, at the next step).
+        const current = resident ? await resident.forSession(currentUser, project, body.sessionId).catch(() => null) : null;
+        if (resident && current && current.digest === body.digest) await resident.attached(currentUser, project, body.sessionId, { digest: current.digest, memories: current.memories });
+        sendJson(res, 200, { attached: Boolean(current && current.digest === body.digest) });
         return;
       }
       // Whose conversation this is, as far as the ledger can say (see above).
@@ -160,10 +221,10 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         }
         // `standing: false`: this is the lookup; the researcher's standing profile was handed over up front, and an answer
         // padded with it could never be empty (`ResidentProfiles`).
-        // On the native engine the account's memories are the engine's and are recalled through its tools: the PostgreSQL
-        // records a switched account keeps for the fallback window are not read here (one account, one path).
-        const native = Boolean(memoryEngine) && await /** @type {(userId: string) => Promise<string>} */ (memoryEngine)(currentUser.id).catch(() => "legacy") === "native";
-        const recalled = pause?.recall ? recallPaused() : await recallAcrossMemory({ capsules: service, memorySubstrate: native ? null : memorySubstrate }, currentUser, {
+        const recalled = pause?.recall ? recallPaused() : shared ? await service.recall(project.userId,{
+          ...body,query:body.query,limit,scope:"capsule",projectId:project.id,projectOnly:true,
+          authorizeEntry:(activation,entry)=>contextItems?.capsule(contextPolicy,activation,entry) ?? false,
+        }) : await recallAcrossMemory({ capsules: service }, currentUser, {
           ...body, limit, standing: false, projectId: identity.projectId,
           sessionId: running.length === 1 ? running[0].sessionId : null,
         });
@@ -179,9 +240,12 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
           ? { ...recalled, items: [...recalled.items, ...reference], sources: { ...recalled.sources, zone: reference.length } } : recalled;
         // Nothing above the relevance floor is an answer, said as one: the model reformulates or goes on, and an empty list
         // is not mistaken for a tool that failed. A recall the researcher paused already carries its own notice, and says so.
-        const answer = !pause?.recall && found.mode !== "disabled" && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
-        recordRecallTool(pause?.recall ? "paused" : recalled.mode === "disabled" ? "disabled" : answer.items.length ? "hit" : "empty", answer.items.length);
+        const answer = !pause?.recall && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
+        recordRecallTool(pause?.recall ? "paused" : answer.items.length ? "hit" : "empty", answer.items.length);
         sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", answer) : answer);
+      } else if (shared) {
+        sendJson(res,200,{entry:null,reviewRequired:false,takesEffect:false,contextOnly:true,status:"not_kept",
+          notice:"请通过本项目的记忆入口记录需要保留的内容。"});
       } else if (writesNothing) {
         // A conversation trying someone else's capsule leaves nothing behind.
         sendJson(res, 200, {
@@ -210,14 +274,14 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         // a method (capsuleMethods.mjs). `reviewRequired` stays in the answer
         // as false, for a runtime that still reads it.
         const entry = await service.note(user.id, identity.projectId, { factKind: body.factKind, content: body.content, origin: "inferred" });
-        // "At once" is true of a note that is approved and sits in a capsule this project reads. A note kept in a capsule
-        // nothing reads (the project's list is full), or one the researcher already undid, is stored and does not take
+        // "At once" is true of a note that is approved and sits in a capsule that is in force. A note kept in a capsule nothing
+        // reads (the researcher switched their capsule off), or one the researcher already undid, is stored and does not take
         // effect, and the model is told so (2026-10-10 review M-8: the answer was a constant).
         const takesEffect = entry?.payload?.status === "approved"
-          && await service.inForce(user.id, identity.projectId, String(entry.payload.capsuleId));
+          && await service.inForce(user.id, String(entry.payload.capsuleId));
         sendJson(res, 200, {
           entry, reviewRequired: false, takesEffect, contextOnly: true,
-          ...(takesEffect ? {} : { notice: "这条已存下，但目前不会被读取：本项目已启用的胶囊数已到上限，或这条已被用户撤销。" }),
+          ...(takesEffect ? {} : { notice: "这条已存下，但目前不会被读取：用户的记忆胶囊没有启用，或这条已被用户撤销。" }),
         });
       }
     } catch (error) {

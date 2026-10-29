@@ -149,11 +149,15 @@ function cut(value, max) {
 /**
  * The task types an agenda may run now: the ones it enables, less the ones
  * paused for repeated failures (`taskTypeState`, kept by `foldOutcome`).
- * @param {{taskTypes?: string[], taskTypeState?: Record<string, {pausedAt?: string|null}>}} payload
+ * @param {{taskTypes?: string[], taskIntent?:string, taskTypeState?: Record<string, {pausedAt?: string|null,lastOutcome?:string} >}} payload
  * @returns {string[]}
  */
 export function eligibleTaskTypes(payload) {
   const state = payload?.taskTypeState ?? {};
+  // A task whose intent is an ordinary job (`taskIntent`, set only by an explicit choice: the form's or the tool's `routine` alone,
+  // or the model's decision) does not rotate into research when that job keeps failing: its routine type paused pauses the task.
+  // Intent never narrows what the decision is offered otherwise, and history (a routine outcome, a fallback's choice) is no intent.
+  if (payload?.taskIntent === ROUTINE_TASK_TYPE && state[ROUTINE_TASK_TYPE]?.pausedAt) return [];
   return (Array.isArray(payload?.taskTypes) ? payload.taskTypes : [])
     .filter((type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type)) && !state[type]?.pausedAt);
 }

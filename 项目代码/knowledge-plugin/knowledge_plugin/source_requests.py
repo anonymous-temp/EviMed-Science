@@ -1,4 +1,9 @@
-"""Pull-only source requests, admitted by plugin policy rather than platform instructions."""
+"""Pull-only source requests, admitted by plugin policy rather than platform instructions.
+
+The AI discovery lane is admitted here directly (supported readers on the approved scholarly hosts, ``discovery_only``).
+A request in any other lane is not refused any more: it becomes a candidate of the discovery's ``request`` line
+(``discovery_lines.request_candidates``) and is validated, tried and admitted like every other candidate.
+"""
 from __future__ import annotations
 
 from urllib.parse import urlsplit
@@ -19,6 +24,9 @@ def admitted_requests(document: dict, existing: list) -> tuple[list, list[dict]]
         if sid in known:
             dispositions.append({"id": sid, "status": "already_registered"})
             continue
+        if isinstance(request, dict) and request.get("lane") != "ai":
+            dispositions.append({"id": sid, "status": "candidate"})
+            continue
         try:
             row = {**request, "enabled": True, "disabled_reason": None}
             config = row.get("config", {})
@@ -28,7 +36,7 @@ def admitted_requests(document: dict, existing: list) -> tuple[list, list[dict]]
                 raise ValueError("unsupported_reader")
             if not hosts or not hosts <= DISCOVERY_HOSTS or any(urlsplit(url).hostname not in hosts for url in urls):
                 raise ValueError("unapproved_host")
-            if row.get("lane") != "ai" or not config.get("discovery_only"):
+            if not config.get("discovery_only"):
                 raise ValueError("discovery_only_required")
             parsed = parse_registry({"sources": [row]})[0]
             if validate_config(parsed.source):

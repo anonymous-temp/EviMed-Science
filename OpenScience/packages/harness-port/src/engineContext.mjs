@@ -1,7 +1,7 @@
 /** Per-invocation model policy for specialist and deterministic MCP bodies. */
 export const ENGINE_EXECUTION_CONTEXT = '__evimed_execution_context'
 const ENGINE_TOOLS = Object.freeze(['meta_analysis', 'mendelian_randomization', 'bibliometric_analysis',
-  'research_topic_selection', 'peer_review', 'drug_safety_analysis', 'research_calculate', 'kb_search'].map(name => `mcp__evimed__${name}`))
+  'research_topic_selection', 'peer_review', 'drug_safety_analysis', 'research_calculate', 'kb_search', 'kb_browse'].map(name => `mcp__evimed__${name}`))
 
 /**
  * Decorate existing global definitions without registering scoped shadows or
@@ -28,10 +28,20 @@ export function decorateEngineToolContext(ctx) {
         const forwarded = { ...args }
         delete forwarded[ENGINE_EXECUTION_CONTEXT]
         const session = exec.agent?.session
+        let knowledgeSession = session
+        if (name === 'mcp__evimed__kb_search' || name === 'mcp__evimed__kb_browse') {
+          const visited = new Set()
+          while (knowledgeSession?.header?.origin === 'subagent') {
+            if (visited.has(knowledgeSession.id) || visited.size >= 8 || ctx.sessions?.get?.(knowledgeSession.id) !== knowledgeSession) throw new Error('Knowledge session lineage unavailable')
+            visited.add(knowledgeSession.id)
+            knowledgeSession = ctx.sessions.get(knowledgeSession.header.parentSession)
+            if (!knowledgeSession) throw new Error('Knowledge session lineage unavailable')
+          }
+        }
         const config = session?.requestHeader?.()?.config
         if (config && typeof session.id === 'string') {
           forwarded[ENGINE_EXECUTION_CONTEXT] = {
-            v: 1, sessionId: session.id, callId: String(exec.callId), rootCallId: String(exec.rootCallId ?? exec.callId),
+            v: 1, sessionId: knowledgeSession.id, callId: String(exec.callId), rootCallId: String(exec.rootCallId ?? exec.callId),
             provider: config.provider, model: config.model,
             ...(config.reasoningEffort === undefined ? {} : { reasoningEffort: String(config.reasoningEffort) }),
           }

@@ -12,7 +12,7 @@ import { VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME } from "@evimed/dom
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VcrStore, vcrStudyNameFrom } from "../src/vcrStore.mjs";
 import { VcrService } from "../src/vcrService.mjs";
-import { createVcrDraftSweeper } from "../src/vcrDrafts.mjs";
+import { createVcrDraftSweeper, createVcrDraftUsage } from "../src/vcrDrafts.mjs";
 import { applyStudyNames, planStudyNames } from "../src/vcrNaming.mjs";
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 
@@ -386,4 +386,39 @@ test("renaming a study renames its project when the project still carries the ol
   // A person moves a study between the user's states; `draft` is the platform's.
   assert.equal((await call("PATCH", `/api/vcr/studies/${created.id}`, { status: "draft" })).status, 400);
   assert.equal((await call("PATCH", `/api/vcr/studies/${created.id}`, { status: "paused" })).status, 200);
+});
+
+
+test("saved draft inputs stay visible and retained without a run; automatic scaffolding is empty", options, async () => {
+  const user = { id: `u_${randomUUID().slice(0, 8)}` };
+  const created = await service.createStudy(user, { draft: true }, hooksFor("vcr-input", `prj_${randomUUID()}`));
+  const draft = await store.studyById(created.id);
+  const used = createVcrDraftUsage({ store, projectUsed: async () => false });
+  assert.equal(await store.draftHasResearchContent(draft.id), false);
+  assert.equal(await used(draft), false, "membership and held definition are scaffolding");
+  await store.setConversationSession(draft.id, "automatic-session");
+  assert.equal(await used(draft), false, "binding alone is not input");
+  await store.updateStudy(draft.id, { question: "Compare treatment strategies" }, user.id);
+  assert.equal(await used(draft), true, "fresh read sees a brief saved after candidate collection");
+  await store.updateStudy(draft.id, { question: "", name: "Research draft" }, user.id);
+  assert.equal(await used(draft), true, "a saved name is enough");
+  await store.updateStudy(draft.id, { name: VCR_DRAFT_STUDY_NAME }, user.id);
+  await store.query("INSERT INTO evimed_vcr.sources (id,user_id,study_id,name) VALUES ($1,$2,$3,$4)", [`src_${randomUUID()}`, user.id, draft.id, "Saved material"]);
+  assert.equal(await store.draftHasResearchContent(draft.id), true);
+  assert.equal(await used(draft), true, "registered materials do not need an AI prompt");
+  service.attach({ draftSpokenIn: used });
+  assert.ok((await service.listStudies(user)).studies.some((item) => item.id === draft.id));
+});
+
+test("unknown draft usage preserves the draft and owner/project scopes cannot be substituted", async () => {
+  const study = { id: "s", userId: "u", projectId: "p", status: "draft", name: VCR_DRAFT_STUDY_NAME, question: "" };
+  const make = (overrides = {}, projectUsed = async () => false) => createVcrDraftUsage({ store: {
+    studyById: async () => study, draftHasResearchContent: async () => false, ...overrides,
+  }, projectUsed });
+  assert.equal(await make()(study), false);
+  assert.equal(await make()({ ...study, userId: "foreign" }), true);
+  assert.equal(await make()({ ...study, projectId: "foreign" }), true);
+  assert.equal(await make({ draftHasResearchContent: async () => { throw new Error("unavailable"); } })(study), true);
+  assert.equal(await make({}, async () => { throw new Error("source unavailable"); })(study), true);
+  assert.equal(await make({}, async () => true)(study), true, "any project run or source counts");
 });

@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 export function TaskGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section aria-label={label} className="space-y-1">
-      <h2 className="px-2 text-caption font-medium text-text-3">{label}</h2>
+      <h2 className="px-2 text-caption text-text-3">{label}</h2>
       {children}
     </section>
   );

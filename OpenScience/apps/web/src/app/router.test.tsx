@@ -50,8 +50,8 @@ function landOn(path: string) {
 
 describe("every address people already have still arrives", () => {
   it.each([
-    ["/", "/app/chat"],
-    ["/app", "/app/chat"],
+    ["/", "/app/home"],
+    ["/app", "/app/home"],
     ["/live", "/app/chat"],
     ["/live/session-42", "/app/chat/session-42"],
     // The run ledger page was deleted on 2026-09-20; its addresses resolve to
@@ -68,7 +68,7 @@ describe("every address people already have still arrives", () => {
     ["/settings", "/app/account?tab=appearance"],
     ["/app/sources", "/app/files?tab=sources"],
     ["/app/notebooks", "/app/files"],
-    ["/app/capsules", "/app/memory?tab=capsules"],
+    ["/app/capsules", "/app/memory/overview"],
     ["/app/settings", "/app/account?tab=appearance"],
     // 运维 left 设置 for a page of its own (`AccountPage` sends the section's old address, `?tab=ops`, there: its own test).
     ["/app/ops", "/app/ops"],
@@ -177,6 +177,14 @@ describe("循证 GEO's addresses", () => {
     expect(chain("/app/geo/geo_1").params.tab).toBeUndefined();
     expect(chain("/app/geo/geo_1/sources")).toMatchObject({ paths: ["/app", undefined, "geo/:geoId", ":tab"], params: { geoId: "geo_1", tab: "sources" } });
     expect(chain("/app/geo/geo_1/evidence").params).toMatchObject({ tab: "evidence" });
+  });
+
+  it("addresses a GEO conversation under the same authorized project layout", () => {
+    expect(chain("/app/geo/geo_1/chat/ses_1")).toMatchObject({
+      paths: ["/app", undefined, "geo/:geoId", "chat/:sessionId?"],
+      params: { geoId: "geo_1", sessionId: "ses_1" },
+    });
+    expect(chain("/app/geo/geo_1/chat").params.tab).toBeUndefined();
   });
 
   it("opens one answer inside the project's layout, not as a tab called 「answers」", () => {

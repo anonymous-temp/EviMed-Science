@@ -46,6 +46,12 @@
 //   cards do not have, is asking about items. A card search that fails costs
 //   the run the cards and nothing else: the items stand, and the answer says
 //   `cardsUnavailable` rather than reading as "no card matched".
+// - Hot-event topics ride the same way (c2-leads 2026-10-25): an active or
+//   recent topic a query names is a result of kind `topic` — the general
+//   medical question a public event raised, its field, the attributed line
+//   on the event, its overview and the items to read — an index, never
+//   evidence, and never the names of the event's people. A topic search that
+//   fails costs the topics only (`topicsUnavailable`).
 
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES } from "@evimed/domain";
 import { CARD_SEARCH_MAX } from "./evidenceCardSearch.mjs";
@@ -53,6 +59,10 @@ import { FRONTIER_WINDOWS } from "./frontierService.mjs";
 
 const gatewayPath = "/internal/frontier/v1/search";
 const allowedFields = new Set(["q", "lane", "specialty", "window", "mode", "limit"]);
+/** A public item id, as the page's addresses spell it. */
+const ITEM_ID = /^[a-z0-9]{12,32}$/;
+/** What of an item's text one answer carries, in characters (c3-ask: the contract's 6,000). */
+const ITEM_TEXT_LIMIT = 6_000;
 /** The page's own bound on a search (`frontierService.mjs`). */
 const maxQueryLength = 200;
 const maxLimit = 20;
@@ -124,6 +134,21 @@ function closedField(body, field, allowed, fallback, code) {
     throw gatewayError(400, code, `${field} must be one of: ${allowed.join(", ")}.`);
   }
   return value;
+}
+
+/**
+ * The item a request asks to read, or null when it is a search. `id` reads one item and takes no other field.
+ * @param {Record<string, unknown>} body @returns {string | null}
+ */
+function requestedItemId(body) {
+  if (body.id == null) return null;
+  if (typeof body.id !== "string" || !ITEM_ID.test(body.id)) {
+    throw gatewayError(400, "frontier_search_id_invalid", "id must be the public id of an item, as in frontier:<id>.");
+  }
+  if (Object.keys(body).some((key) => key !== "id")) {
+    throw gatewayError(400, "frontier_search_request_invalid", "id reads one item and takes no other field.");
+  }
+  return body.id;
 }
 
 /** @param {Record<string, unknown>} body */
@@ -239,6 +264,74 @@ async function search(service, user, request) {
 }
 
 /**
+ * An item's text for the model: the whole of it when it fits, else its head cut at the last paragraph or sentence that leaves at
+ * least 60 % of the limit (else at the limit itself), with the length it was cut from.
+ * @param {string} value @returns {{ text: string, truncated: boolean, length: number }}
+ */
+export function itemText(value) {
+  const full = value.replace(/\r\n?/g, "\n").trim();
+  const points = [...full];
+  if (points.length <= ITEM_TEXT_LIMIT) return { text: full, truncated: false, length: points.length };
+  const head = points.slice(0, ITEM_TEXT_LIMIT).join("");
+  const floor = Math.floor(head.length * 0.6);
+  const paragraph = head.lastIndexOf("\n\n");
+  const sentence = Math.max(head.lastIndexOf("。"), head.lastIndexOf(". "), head.lastIndexOf("；"));
+  const at = paragraph >= floor ? paragraph : sentence >= floor ? sentence + 1 : head.length;
+  return { text: head.slice(0, at).trimEnd(), truncated: true, length: points.length };
+}
+
+/**
+ * The 要点 as the model reads them: the genre's fields in their own words, a field's text or its list.
+ * @param {any} brief
+ */
+function projectedBrief(brief) {
+  if (!brief || !Array.isArray(brief.points)) return null;
+  const points = brief.points.flatMap((/** @type {any} */ point) => {
+    const label = text(point?.label);
+    const body = text(point?.text);
+    const list = Array.isArray(point?.items) ? point.items.filter((/** @type {unknown} */ entry) => text(entry)) : [];
+    return label && (body || list.length) ? [{ label, ...(body ? { text: body } : {}), ...(list.length ? { items: list } : {}) }] : [];
+  });
+  const quote = text(brief.quote?.text) ? { label: text(brief.quote.label) ?? "原文结论", text: brief.quote.text } : null;
+  return points.length || quote ? { points, ...(quote ? { quote } : {}) } : null;
+}
+
+/**
+ * One item read for a conversation that was opened from it: the index projection, the 导读 and 要点, and the text the platform holds
+ * with the kind of text it is. The item is the page's own, so what is withdrawn or hidden by the source's switch is not found.
+ * @param {any} service @param {{ id: string }} user @param {string} id
+ */
+async function readItem(service, user, id) {
+  let answer;
+  try {
+    answer = await service.getItem(user, id);
+  } catch (error) {
+    if (/** @type {any} */ (error)?.code === "frontier_item_not_found") {
+      throw gatewayError(404, "frontier_search_item_not_found", "That item is no longer in 前沿动态: read the original from the link the conversation has, or search the feed.");
+    }
+    throw error;
+  }
+  const item = answer?.body?.item;
+  if (!item || typeof item !== "object") throw new Error("The frontier item answered without an item.");
+  const body = item.body && typeof item.body === "object" ? item.body : null;
+  // The reader's best text (full text, abstract or excerpt) in the language it was published in; the abstract before nothing.
+  const held = text(body?.original) ?? text(item.abstract);
+  const kind = text(body?.original) ? text(body?.source) : held ? "abstract" : null;
+  const reading = held ? itemText(held) : null;
+  return {
+    query: { id },
+    asOf: new Date().toISOString(),
+    item: {
+      ...projectedItem(item),
+      lead: text(item.lead),
+      points: projectedBrief(item.brief),
+      ...(reading ? { text: reading.text, textKind: kind, textTruncated: reading.truncated, textLength: reading.length } : {}),
+      textLanguage: text(item.lang),
+    },
+  };
+}
+
+/**
  * The cards of a query, or what it says when it could not read them: never a throw, because the items are an
  * answer without them.
  * @param {{ search: (user: { id: string }, request: { q: string, limit: number }, context?:any) => Promise<{ cards: any[], more: boolean }> } | null} cards
@@ -253,6 +346,23 @@ async function cardPart(cards, user, request, report, context) {
   } catch (error) {
     report(typeof /** @type {any} */ (error)?.code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(/** @type {any} */ (error).code) ? /** @type {any} */ (error).code : "cards_unavailable");
     return { cards: [], cardsMore: false, cardsUnavailable: true };
+  }
+}
+
+/**
+ * The topics of a query (kind `topic`), or what it says when it could not read them: never a throw, like the cards.
+ * @param {{ search: (user: { id: string }, request: { q: string, limit: number }) => Promise<{ topics: any[] }> } | null} topics
+ * @param {{ id: string }} user @param {ReturnType<typeof validatedRequest>} request @param {(code: string) => void} report
+ */
+async function topicPart(topics, user, request, report) {
+  if (!topics) return {};
+  if (request.q == null || request.lane || request.specialty) return { topics: [] };
+  try {
+    const found = await topics.search(user, { q: request.q, limit: Math.min(3, request.limit) });
+    return { topics: Array.isArray(found?.topics) ? found.topics : [] };
+  } catch (error) {
+    report(typeof /** @type {any} */ (error)?.code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(/** @type {any} */ (error).code) ? /** @type {any} */ (error).code : "topics_unavailable");
+    return { topics: [], topicsUnavailable: true };
   }
 }
 
@@ -279,12 +389,12 @@ export function frontierGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ service: any, cards?: any, evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
+ * @param {{ service: any, cards?: any, topics?: any, evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
  *   or null when the module is off; `cards` the evidence-card search (`evidenceCardSearch.mjs`), absent where there are no cards;
  *   `report` hears the code of a failure the run is only told was one; `budgetMs`
  *   is the plan's five seconds everywhere but in a test that would otherwise wait them out
  */
-export function createFrontierGatewayHandler(config, runtimeManager, { service, cards = null, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
+export function createFrontierGatewayHandler(config, runtimeManager, { service, cards = null, topics = null, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
   const windows = new Map();
   return async function frontierGatewayHandler(req, res, onFailure) {
     try {
@@ -313,13 +423,20 @@ export function createFrontierGatewayHandler(config, runtimeManager, { service, 
       const window = windows.get(key) ?? { until: now + 60_000, count: 0 };
       windows.set(key, window);
       if (++window.count > windowLimit) throw gatewayError(429, "frontier_search_rate_limited", "Too many frontier searches in a minute.");
-      const request = validatedRequest(await readJsonBody(req, 16 * 1024));
+      const requestBody = await readJsonBody(req, 16 * 1024);
+      const itemId = requestedItemId(requestBody);
+      const request = itemId ? null : validatedRequest(requestBody);
       let timer;
       // An evaluation run is frozen at a date and kept from what the platform has written since: a card is
       // written after any such cutoff, and may be about the very paper being evaluated.
-      const cardsForRun = cards && !(evaluationIsolation && await evaluationIsolation.isEvaluation(identity)) ? cards : null;
+      const isolated = Boolean(evaluationIsolation && await evaluationIsolation.isEvaluation(identity));
+      const cardsForRun = cards && !isolated ? cards : null;
+      // A topic is written after any evaluation's cutoff too.
+      const topicsForRun = topics && !isolated ? topics : null;
       const result = await Promise.race([
-        Promise.all([search(service, user, request), cardPart(cardsForRun, user, request, report, { projectId: identity.projectId, runId: identity.runId ?? null })]).then(([items, found]) => ({ ...items, ...found })),
+        itemId ? readItem(service, user, itemId) : Promise.all([search(service, user, /** @type {ReturnType<typeof validatedRequest>} */ (request)),
+          cardPart(cardsForRun, user, /** @type {ReturnType<typeof validatedRequest>} */ (request), report, { projectId: identity.projectId, runId: identity.runId ?? null }),
+          topicPart(topicsForRun, user, /** @type {ReturnType<typeof validatedRequest>} */ (request), report)]).then(([items, found, topicsFound]) => ({ ...items, ...found, ...topicsFound })),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(gatewayError(504, "frontier_search_timeout", "Frontier search timed out.")), budgetMs);
           timer.unref?.();

@@ -5295,6 +5295,20 @@ test("workspace previews are sandboxed and downloads sanitize filenames", async 
   });
 });
 
+test("workspace downloads retain Unicode names through an ASCII-safe disposition", async () => {
+  await withApp(async ({ base }) => {
+    const name = "Alpha 协议 📊.md";
+    const written = await command(base, "write_workspace_file", { path: name, content: "# Original bytes\n" });
+    assert.equal(written.res.status, 200);
+    const response = await fetch(`${base}/api/files/download/${encodeURIComponent(name)}`);
+    assert.equal(response.status, 200);
+    const disposition = response.headers.get("content-disposition");
+    assert.match(disposition, /^[\x20-\x7e]+$/);
+    assert.ok(disposition.includes(`filename*=UTF-8''${encodeURIComponent(name)}`));
+    assert.equal(await response.text(), "# Original bytes\n");
+  });
+});
+
 test("a PDF preview is framed by the shell and drawn by the browser's own viewer", async () => {
   // 2026-09-24: every PDF preview in the product showed Chrome's
   // 「该内容被屏蔽了」. The shell's policy allowed no frame of its own origin,

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { REFERENCE_PRICE_LIST, priceUsage } from "@evimed/domain";
 import {
+  RETIRED_ACCOUNT_TABLES,
   UNEXPORTED_ACCOUNT_TABLES,
   accountExportTables,
   exportPluginDocumentRow,
@@ -125,6 +126,36 @@ function fakeDatabase(usage, documents = [], feedbackEvents = []) {
   };
   return database;
 }
+
+test("account snapshots hydrate compact reviews into the legacy portable shape and keep unavailable records with an honest omission", async () => {
+  const base = { artifactId: `ra_${"a".repeat(64)}`, versionId: `rv_${"b".repeat(64)}`, projectId: "default", path: "report.md", digest: "c".repeat(64),
+    size: 12, coverage: { gaps: [] }, producer: { kind: "deliverable" }, findings: [], recordType: "result-version" };
+  const compact = { status: "available", matrixVersionId: `rv_${"d".repeat(64)}`, matrixDigest: "e".repeat(64), verificationSnapshot: { digest: "f".repeat(64), size: 1234, schemaVersion: 1 } };
+  const rows = [{ id: base.versionId, kind: "result-version", projectId: "default", payload: { ...base, review: compact } },
+    { id: "legacy", kind: "result-version", projectId: "default", payload: { ...base, review: { ...compact, verificationSnapshot: undefined, matrixText: '{"claims":[]}', verification: { claims: [] } } } },
+    { id: "fact", kind: "fact", payload: { content: "usable" } }];
+  const user = { id: "user-1", accountCreatedAt: "2026-09-06 00:00:00+00" };
+  const calls = [];
+  const readResultReview = async (actor, row) => { calls.push([actor.id, row.id]); return { ...row.payload.review, matrixText: '{"claims":[]}', verification: { claims: [] } }; };
+  const exportState = (read = readResultReview) => withAccountExportSnapshot(fakeDatabase([], rows), user, {}, async snapshot => JSON.parse(snapshot.data.toString()), { readResultReview: read, report: () => {} });
+  const allowed = await exportState();
+  assert.equal(allowed.documents[0].payload.review.matrixText, '{"claims":[]}');
+  assert.deepEqual(allowed.documents[0].payload.review.verification, { claims: [] });
+  assert.equal(allowed.documents[0].payload.review.verificationSnapshot, undefined);
+  assert.equal(allowed.documents[1].payload.review.matrixText, '{"claims":[]}');
+  assert.equal(calls.length, 2);
+  for (const state of ["unknown", "unavailable"]) {
+    const denied = await exportState(async () => ({ status: state, matrixText: null, verification: null }));
+    assert.equal(denied.documents.length, 3);
+    assert.equal(denied.documents[0].payload.review.status, state);
+    assert.equal(denied.documents[0].payload.review.matrixText, null);
+    assert.equal(denied.documents[0].payload.review.verificationSnapshot, undefined);
+    assert.equal(denied.documents.find(row => row.kind === "fact").payload.content, "usable");
+    assert.deepEqual(denied.omissions, [{ kind: "result-version", reason: "review_unavailable", documents: 2, revisions: 0 }]);
+  }
+  await assert.rejects(withAccountExportSnapshot(fakeDatabase([], rows), user, {}, async snapshot => snapshot, { maxBytes: 8192,
+    readResultReview: async () => ({ status: "available", matrixText: "x".repeat(8192), verification: {} }) }), { code: "archive_too_large" });
+});
 
 test("an exported account snapshot resolves the price versions of its own usage rows", async () => {
   const database = fakeDatabase([
@@ -298,6 +329,7 @@ test("the archive carries the account's own feedback ledger", async () => {
     async (snapshot) => JSON.parse(snapshot.data.toString()),
   );
   assert.deepEqual(empty.feedbackEvents, []);
+  assert.deepEqual(empty.scriptUses, [], "the programs a script lesson was counted from: an empty list, not a missing key");
 });
 
 /** The migration modules, read as the text they are. */
@@ -308,9 +340,11 @@ const migrationSources = [
   "evidenceZonePersistence.mjs",
   "frontierEventReading.mjs",
   "usagePersistence.mjs",
-  "researchMemoryPersistence.mjs",
+  "memorySettingsPersistence.mjs",
   // The share schema (`evimed_share`) is two accounts' relation, so its tables name the account by `owner_id` or `recipient_id`, not `user_id`.
   "capsuleShareLinks.mjs",
+  // The programs a script lesson is counted from (`evimed_learning.script_uses`): the account's own code, so the archive carries it.
+  "scriptLessons.mjs",
 ];
 
 /** The columns that make a table one account's: the owner's, a recipient's, or the plain `user_id`. */
@@ -373,13 +407,14 @@ test("the exported table list is derived from the queries, joins included", () =
     "evimed_share.links",
     "evimed_share.link_uses",
     "evimed_share.deliveries",
+    "evimed_learning.script_uses",
   ]) {
     assert.ok(
       exported.includes(table),
       `${table} is not read by any export query`,
     );
   }
-  assert.equal(exported.length, 24, `the export reads ${exported.join(", ")}`);
+  assert.equal(exported.length, 25, `the export reads ${exported.join(", ")}`);
 });
 
 test("every account-scoped table is either exported or declared unexported with a reason", () => {
@@ -451,6 +486,19 @@ test("every account-scoped table is either exported or declared unexported with 
       `${table} is left out without a stated reason`,
     );
   }
+  // The tables that only a database from an earlier release can still hold
+  // (the legacy memory engine's records, kept by `legacyMemoryRetirement.mjs`
+  // when they hold rows) are declared on their own list, and the declaration
+  // is held the other way round: no migration may create one again without it
+  // being classified like every other table, and none is also declared as
+  // simply unexported.
+  for (const [table, reason] of Object.entries(RETIRED_ACCOUNT_TABLES)) {
+    assert.equal(tables.has(table), false, `${table} is declared retired but a migration creates it`);
+    assert.ok(!exported.includes(table), `${table} is declared retired and is exported by a query`);
+    assert.ok(!Object.hasOwn(UNEXPORTED_ACCOUNT_TABLES, table), `${table} is declared both retired and unexported`);
+    assert.ok(reason.length > 30, `${table} is retired without a stated reason`);
+  }
+  assert.ok(Object.hasOwn(RETIRED_ACCOUNT_TABLES, "evimed_memory.records"), "the records table is the one the archive still hands over");
   // `evimed_control.users` is the account itself and carries no user_id column,
   // so the scan does not ask about it; the snapshot's own locking SELECT is
   // what exports it, as `state.account`.

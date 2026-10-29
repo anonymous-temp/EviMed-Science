@@ -1,0 +1,46 @@
+{
+  "id": "c22-repeated-demonstration",
+  "class": "keep-repeated-demonstration",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C22) and reversed on 2026-10-25 by owner decision 6; every name, number and identifier is invented",
+  "expected": "Kept after the second conversation, not after the first: the same choice (a pivot table in the summary) made in two different conversations and never called a rule is a preference (owner decision 6, 2026-10-25; this case used to assert that nothing is kept, under principle 18 as it stood).",
+  "decidable": true,
+  "judge": "Is the pivot-table choice written as a standing preference of the person's, in their words, and not as a fact about either spreadsheet?",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "seed": {
+      "messages": [
+        {
+          "id": "u1",
+          "role": "user",
+          "text": "做个 12 个月预算表，要有透视表。"
+        },
+        {
+          "id": "a1",
+          "role": "assistant",
+          "text": "好的，12 个月预算表已做好，并附了按月份和科目汇总的透视表。"
+        }
+      ]
+    },
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "月度汇总也做成带透视表的。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，月度汇总已加上透视表。"
+      }
+    ]
+  },
+  "expect": {
+    "requireAnyKind": [
+      "preference"
+    ],
+    "requireTextContains": [
+      "透视表"
+    ]
+  }
+}

@@ -1,10 +1,13 @@
+import { CONTEXT_ITEM_FIELDS } from "./geoContextItems.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { CAPSULE_FACT_KINDS, CAPSULE_FACT_ORIGINS, CAPSULE_FACT_STATES, CAPSULE_LAYERS, capsuleActivationMode, stripPlatformTags } from "@evimed/domain";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { sharedFrom } from "./capsuleShareLabel.mjs";
-import { DOCUMENT_MEMORY_LAYER, documentEntryProjects } from "./derivedMemory.mjs";
+import { entryProject } from "./capsuleEntryProject.mjs";
+import { DOCUMENT_MEMORY_LAYER, RUNTIME_PROJECT_PROVENANCE_PREFIX, documentEntryProjects } from "./derivedMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
+import { recordCapsuleRuntimeRefresh } from "./capsuleShareMetrics.mjs";
 
 /** How many entries one list of `mine` reads at most — a researcher's notes number in the hundreds; the bound is there so one account that has thousands cannot make a page read forever. */
 export const CAPSULE_MINE_LIMIT = 2000;
@@ -35,24 +38,24 @@ function provenance(value) {
   }));
 }
 
-/** @param {string|null} projectId */
-function activationKey(projectId) {
-  return projectId == null ? "active-capsules:account" : `active-capsules:project:${productId(projectId, "projectId")}`;
-}
-
-/** How many capsules are in force together: the activation limit, and the window every reader of the lists looks through. */
-const ACTIVE_CAPSULE_LIMIT = 8;
+/** The one list of capsules in force: a person's, in every project. */
+export const ACTIVATION_KEY = "active-capsules:account";
 
 /**
- * The capsules in force in a project, as every reader sees them: the project's own list first, then the account's,
- * each capsule once, at most eight.
- * @param {{ items: any[] }} local @param {{ items: any[] }} global
+ * What a project's own list of capsules was called, and the id its notes capsule had. Both are read only to fold them into the
+ * one capsule (`capsuleOneCapsule.mjs`); nothing writes either any more.
  */
-function inForceWindow(local, global) {
-  return [...local.items, ...global.items]
-    .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
-    .slice(0, ACTIVE_CAPSULE_LIMIT);
-}
+export const LEGACY_PROJECT_ACTIVATION_PREFIX = "active-capsules:project:";
+export const LEGACY_NOTES_CAPSULE_PREFIX = "runtime-notes:";
+
+/** @param {string} projectId */
+const legacyNotesCapsuleId = (projectId) => `${LEGACY_NOTES_CAPSULE_PREFIX}${createHash("sha256").update(projectId).digest("hex")}`;
+
+/** The project a scan's model call is booked to when the caller names none: every account has it, and the spend is the account's own. */
+export const SCAN_METER_PROJECT = "default";
+
+/** How many capsules are in force together: the activation limit, and the window every reader of the list looks through. */
+export const ACTIVE_CAPSULE_LIMIT = 8;
 
 /** The label fields a recalled entry of a received pack carries; nothing for the researcher's own. @param {any} capsule @param {any} payload */
 function labelled(capsule, payload) {
@@ -88,31 +91,63 @@ function methodHeading(content) {
 
 export class CapsuleService {
   /** @param {import('./productStore.mjs').ProductDocuments} documents
-   *  @param {{indexing?:any,strictIndex?:boolean,scanner?:import('./capsuleScan.mjs').CapsuleScanner|null}} [options] */
-  constructor(documents, { indexing = null, strictIndex = false, scanner = null } = {}) {
+   *  @param {{indexing?:any,strictIndex?:boolean,scanner?:import('./capsuleScan.mjs').CapsuleScanner|null,
+   *    onActivationChanged?: ((change: { userId: string, capsuleId: string, change: "enabled" | "disabled" }) => Promise<unknown> | unknown) | null}} [options]
+   *  `onActivationChanged` is told that the capsules in force changed, so a runtime that mounted the old ones can take the new
+   *  (`RuntimeManager.refreshCapsuleMethods`): the list is the account's, so it is every project's runtime of that account. */
+  constructor(documents, { indexing = null, strictIndex = false, scanner = null, onActivationChanged = null } = {}) {
     this.documents = documents;
     this.indexing = indexing;
     /** The automatic scan a received pack passes before it takes effect. */
     this.scanner = scanner;
+    this.onActivationChanged = onActivationChanged;
     // A derived index is an optimisation, and the facts it ranks are all in
     // PostgreSQL anyway. When it is down, a recall should return what the
-    // lexical search finds rather than fail — the same choice `memorySubstrate`
+    // lexical search finds rather than fail — the same choice `memoryIndexProvider`
     // makes for research memory. An operator who would rather see the failure
     // sets the strict switch.
     this.strictIndex = Boolean(strictIndex);
     this.lastIndexError = null;
+    /**
+     * The platform's official starter packs (`officialPacks.mjs`), assigned by the composition root beside this service: each account's
+     * copies are brought up to date when the account first reads its capsules (`received`, the mount), and their methods are the lowest
+     * tier of what a run is given (`learnedMethodMount.mjs`). Absent, the account has no official pack and nothing here changes.
+     * @type {import('./officialPacks.mjs').OfficialPacks | null}
+     */
+    this.official = null;
   }
 
-  /** @param {string} userId @param {Record<string,any>} input */
-  async create(userId, input) {
-    return this.documents.put(userId, "capsule", randomUUID(), {
-      title: text(input.title, "title", 150), description: text(input.description, "description", 2000, false),
-      activationMode: "own", imported: false,
-    }, { expectedRevision: 0 });
+  /**
+   * Every capsule of an account of the kind `filter` names, page by page. An account holds its own capsule and every pack it received
+   * (and, until `capsuleOneCapsule.mjs` has run, one notes capsule per project), so a read that took the first hundred could drop the
+   * rest without a word (2026-10-23 review S9: received packs vanished from the shelf).
+   * @param {string} userId @param {Record<string, any>} [filter]
+   * @returns {Promise<any[]>}
+   */
+  async #allCapsules(userId, filter = {}) {
+    /** @type {any[]} */
+    const capsules = [];
+    /** @type {string | null} */
+    let cursor = null;
+    for (let pages = 0; pages < 50; pages += 1) {
+      const page = await this.documents.list(userId, "capsule", { limit: 100, cursor, filter });
+      capsules.push(...page.items);
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+    return capsules;
   }
 
-  /** @param {string} userId @param {Record<string,any>} options */
-  async list(userId, options = {}) { return this.documents.list(userId, "capsule", options); }
+  /**
+   * Say that the capsules in force changed. A runtime that is up mounted the old ones when it launched, so it is told; the click
+   * that caused this has already worked and never fails for it.
+   * @param {string} userId @param {string} capsuleId @param {"enabled" | "disabled"} change
+   */
+  async #activationChanged(userId, capsuleId, change) {
+    if (!this.onActivationChanged) return;
+    try { await this.onActivationChanged({ userId, capsuleId, change }); recordCapsuleRuntimeRefresh("asked"); }
+    catch { recordCapsuleRuntimeRefresh("failed"); }
+  }
 
   /**
    * 「我的记忆胶囊」 — the one capsule a person has (owner ruling 2026-09-19:
@@ -126,7 +161,7 @@ export class CapsuleService {
    * @param {string} userId @param {{ create?: boolean }} [options]
    */
   async ownCapsule(userId, { create = false } = {}) {
-    const current = await this.active(userId, null);
+    const current = await this.active(userId);
     for (const item of current.items) {
       if (item.mode !== "own") continue;
       const found = await this.documents.get(userId, "capsule", String(item.capsuleId));
@@ -147,11 +182,11 @@ export class CapsuleService {
       }
     }
     for (let attempt = 0; attempt < 3; attempt++) {
-      const latest = await this.active(userId, null);
+      const latest = await this.active(userId);
       if (latest.items.some((item) => item.capsuleId === id && item.mode === "own")) break;
       const items = [{ capsuleId: id, mode: "own" }, ...latest.items.filter((item) => item.capsuleId !== id && item.mode !== "own")].slice(0, 8);
       try {
-        await this.documents.put(userId, "preferences", activationKey(null), { items }, { expectedRevision: latest.record?.revision ?? 0 });
+        await this.documents.put(userId, "preferences", ACTIVATION_KEY, { items }, { expectedRevision: latest.record?.revision ?? 0 });
         break;
       } catch (error) { if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 2) throw error; }
     }
@@ -159,11 +194,14 @@ export class CapsuleService {
   }
 
   /**
-   * Everything in the researcher's own capsules, as one: the account capsule,
-   * the notes each project's runs wrote, and any capsule made by hand before
+   * Everything in the researcher's own capsule, as one: the account capsule —
+   * the notes each project's runs wrote are its entries, labelled with the
+   * project (`projectId` on the entry) — and any capsule made by hand before
    * there was only one. Borrowed capsules are not in it — they are the
-   * received shelf. `entries` are the ones in force; `forgotten` the ones the
-   * researcher retired, which 「已忘记的内容」 lists and restores.
+   * received shelf. `entries` are the ones in force; `candidates` the ones an
+   * outside agent proposed and the researcher has not confirmed (2026-10-23: they
+   * were stored and shown nowhere); `forgotten` the ones the researcher retired,
+   * which 「已忘记的内容」 lists and restores.
    *
    * What a knowledge-base document yielded is not a memory the page lists
    * (2026-09-24): it belongs to its document and is shown there, and it is
@@ -180,7 +218,7 @@ export class CapsuleService {
    * @param {string} userId @param {{ limit?: number }} [options]
    */
   async mine(userId, { limit = CAPSULE_MINE_LIMIT } = {}) {
-    const own = (await this.documents.list(userId, "capsule", { limit: 100 })).items
+    const own = (await this.#allCapsules(userId))
       .filter((/** @type {any} */ capsule) => !capsule.payload.imported);
     const capsule = await this.ownCapsule(userId);
     /** @param {string} status */
@@ -207,8 +245,22 @@ export class CapsuleService {
       capsule,
       capsules: own.map((/** @type {any} */ item) => ({ id: item.id, title: item.payload.title, projectId: item.projectId ?? null, revision: item.revision })),
       entries: await read("approved"),
+      // Notes an outside agent proposed through the agent-memory API's `/note` (`note(..., { review: true })`): not in force until the
+      // researcher confirms them, and nowhere else visible to them. The memory page lists them with 待确认 and 确认 / 不要 — the
+      // entry's own status paths (`updateEntry`: approved, retired). Apart from `entries` so that whatever counts the notes in
+      // force (the map, the growth card) is not counting a proposal.
+      candidates: await read("candidate"),
       forgotten: await read("retired"),
     };
+  }
+
+  /**
+   * The methods of the platform's official packs this account may be given, with the account's own switches applied. What a run is given of
+   * them is chosen against the person's own methods (`selectOfficialMethods`, `learnedMethodMount.mjs`); this is only who holds what.
+   * @param {string} userId
+   */
+  async officialMethods(userId) {
+    return this.official ? this.official.methodsFor(userId) : [];
   }
 
   /** @param {string} userId @param {string} capsuleId */
@@ -218,25 +270,11 @@ export class CapsuleService {
     return value;
   }
 
-  /** @param {string} userId @param {string} capsuleId @param {Record<string,any>} input */
-  async update(userId, capsuleId, input) {
-    const current = await this.get(userId, capsuleId);
-    const payload = { ...current.payload };
-    if (input.title !== undefined) payload.title = text(input.title, "title", 150);
-    if (input.description !== undefined) payload.description = text(input.description, "description", 2000, false);
-    return this.documents.put(userId, "capsule", capsuleId, payload, { expectedRevision: input.expectedRevision });
-  }
-
-  /** @param {string} userId @param {string} capsuleId @param {number} revision */
-  async remove(userId, capsuleId, revision) { await this.get(userId, capsuleId); return this.documents.remove(userId, "capsule", capsuleId, revision); }
-
-  /** @param {string} userId @param {string} capsuleId @param {number} revision */
-  async restore(userId, capsuleId, revision) { return this.documents.restore(userId, "capsule", capsuleId, revision); }
-
   /** @param {string} userId @param {string} capsuleId @param {Record<string,any>} options */
   async entries(userId, capsuleId, options = {}) {
     await this.get(userId, capsuleId);
-    return this.documents.list(userId, "fact", { limit: options.limit, cursor: options.cursor, filter: { capsuleId } });
+    return this.documents.list(userId, "fact", { limit: options.limit, cursor: options.cursor, projectId: options.projectId,
+      fields: options.fields, filter: { capsuleId } });
   }
 
   /** Generated/inferred entries are candidates; the user approves them explicitly.
@@ -245,8 +283,9 @@ export class CapsuleService {
    * and that document's project (`LibraryService.publishSourceUnderstanding`):
    * such an entry is recalled only in that project (`recall`) and is not one
    * of the memories the capsule page lists (`mine`).
-   * @param {string} userId @param {string} capsuleId @param {Record<string,any>} input */
-  async addEntry(userId, capsuleId, input) {
+   * @param {string} userId @param {string} capsuleId @param {Record<string,any>} input
+   * @param {{ publicationKey?: string }} [options] internal source-publication identity, never read from input */
+  async addEntry(userId, capsuleId, input, { publicationKey } = {}) {
     await this.get(userId, capsuleId);
     const origin = member(input.origin ?? "explicit", CAPSULE_FACT_ORIGINS, "origin");
     const layer = member(input.layer ?? "knowledge", CAPSULE_LAYERS, "layer");
@@ -257,7 +296,21 @@ export class CapsuleService {
     if (derived && (!/^src_[a-f0-9]{32}$/.test(derived.sourceId) || layer !== DOCUMENT_MEMORY_LAYER)) {
       throw new HttpError(400, "capsule_payload_invalid", "Invalid document origin.");
     }
-    return this.documents.put(userId, "fact", randomUUID(), {
+    const publicationId = publicationKey && derived
+      ? `source-fact:${createHash("sha256").update(JSON.stringify([capsuleId, derived.sourceId, derived.projectId, publicationKey])).digest("hex")}` : null;
+    if (publicationId) {
+      const existing = await this.documents.get(userId, "fact", publicationId, { includeDeleted: true });
+      if (existing) {
+        // Platform withdrawal can follow a restored source; an explicit user forget or correction always wins.
+        if (existing.deletedAt && existing.payload.withdrawn && existing.payload.withdrawn.userSuppressed === false && !existing.payload.correctedAt) {
+          const { withdrawn: _withdrawn, ...payload } = existing.payload;
+          return this.documents.put(userId, "fact", publicationId, { ...payload, status: "approved" },
+            { expectedRevision: existing.revision, restoreDeleted: true });
+        }
+        return existing;
+      }
+    }
+    return this.documents.put(userId, "fact", publicationId ?? randomUUID(), {
       capsuleId, factKind: member(input.factKind, CAPSULE_FACT_KINDS, "fact kind"),
       layer,
       content: text(input.content, "content", 20_000), origin,
@@ -301,33 +354,37 @@ export class CapsuleService {
     return this.documents.put(userId, "fact", entryId, payload, { expectedRevision: input.expectedRevision });
   }
 
-  /** The active capsules for a scope. A stored `blend` — the retired third
+  /** The capsules in force: the account's one list, in every project. A stored `blend` — the retired third
    *  mode, never told apart from `guest` by anything — reads as `guest`, and
    *  so does a mode this build does not know: a reference contributes methods
    *  and standards, never an identity, which is the safe reading of an unknown.
-   *  @param {string} userId @param {string|null} projectId */
-  async active(userId, projectId = null) {
-    const record = await this.documents.get(userId, "preferences", activationKey(projectId));
-    const items = (record?.payload.items ?? []).map((/** @type {any} */ item) => ({
-      ...item, mode: capsuleActivationMode(item?.mode) ?? "guest",
-    }));
-    return { record, items };
+   *  @param {string} userId */
+  async active(userId) {
+    const record = await this.documents.get(userId, "preferences", ACTIVATION_KEY);
+    return { record, items: this.activationItems(record) };
   }
 
-  /** @param {string} userId @param {string} capsuleId @param {{ mode?: string, projectId?: string|null }} options */
-  async activate(userId, capsuleId, { mode: requested = "own", projectId = null } = {}) {
+  /** The items of a record of capsules in force, each with a mode this build knows. @param {any} record @returns {{ capsuleId: string, mode: string, [key: string]: any }[]} */
+  activationItems(record) {
+    return (record?.payload?.items ?? []).map((/** @type {any} */ item) => ({ ...item, mode: capsuleActivationMode(item?.mode) ?? "guest" }));
+  }
+
+  /**
+   * Put a received pack in force: after the researcher's own capsule (their words come before anyone's), the pack enabled last
+   * ahead of the ones enabled before it — where two packs disagree the later one is read first (build spec §9.4 #6). The
+   * researcher's own capsule is put in force by `ownCapsule`, which makes it, and never by this. A capsule is in force for the
+   * account and so in every project: there is no list of a project's own.
+   * @param {string} userId @param {string} capsuleId
+   */
+  async activate(userId, capsuleId) {
     assertNotTakenDown(await this.get(userId, capsuleId));
-    // `blend` is accepted and stored as what it always meant.
-    const mode = capsuleActivationMode(requested);
-    if (!mode) throw new HttpError(400, "capsule_payload_invalid", "Invalid activation mode.");
     for (let attempt = 0; attempt < 3; attempt++) {
-      const current = await this.active(userId, projectId);
-      const items = mode === "own" ? [{ capsuleId, mode }]
-        : [...current.items.filter((x) => x.capsuleId !== capsuleId), { capsuleId, mode }];
-      if (items.length > 8) throw new HttpError(400, "capsule_activation_limit", "At most eight capsules may be active together.");
+      const current = await this.active(userId);
+      const others = current.items.filter((x) => x.capsuleId !== capsuleId);
+      const items = [...others.filter((x) => x.mode === "own"), { capsuleId, mode: "guest" }, ...others.filter((x) => x.mode !== "own")];
+      if (items.length > ACTIVE_CAPSULE_LIMIT) throw new HttpError(400, "capsule_activation_limit", "At most eight capsules may be active together.");
       try {
-        return await this.documents.put(userId, "preferences", activationKey(projectId), { items },
-          { expectedRevision: current.record?.revision ?? 0, projectId });
+        return await this.documents.put(userId, "preferences", ACTIVATION_KEY, { items }, { expectedRevision: current.record?.revision ?? 0 });
       } catch (error) { if (error.code !== "product_revision_conflict" || attempt === 2) throw error; }
     }
   }
@@ -336,23 +393,24 @@ export class CapsuleService {
 
   /**
    * 「收到的胶囊」: each pack someone else shared — what it brings, what its
-   * scan dropped, and whether it is in force (account-wide, or for this
-   * project). A pack is trusted whole (plan §3.3 #4); there is no entry to
-   * approve one by one.
-   * @param {string} userId @param {{ projectId?: string | null }} [options]
+   * scan dropped, and whether it is in force (for the whole account: a pack
+   * is never enabled for one project). A pack is trusted whole (plan §3.3 #4);
+   * there is no entry to approve one by one.
+   * @param {string} userId
    */
-  async received(userId, { projectId = null } = {}) {
-    const packs = (await this.documents.list(userId, "capsule", { limit: 100 })).items
-      .filter((/** @type {any} */ capsule) => capsule.payload.imported === true);
-    const account = new Set((await this.active(userId, null)).items.map((item) => String(item.capsuleId)));
-    const project = new Set(projectId ? (await this.active(userId, projectId)).items.map((item) => String(item.capsuleId)) : []);
+  async received(userId) {
+    // The platform's own packs are on every ordinary account's shelf: an account's first read of it brings them there (`OfficialPacks.ensureFor`).
+    await this.official?.ensureFor(userId).catch(() => null);
+    const packs = await this.#allCapsules(userId, { imported: true });
+    const account = new Set((await this.active(userId)).items.map((item) => String(item.capsuleId)));
+    const stopped = this.official ? await this.official.stoppedBodies().catch(() => new Set()) : new Set();
     const result = [];
     for (const capsule of packs) {
       // Only what the shelf shows: a status and a kind to count, and the first
       // words of a method. The whole entries were a hundred packs of a hundred
       // entries of 20,000 characters each, per read (security review 2026-09-20).
       const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id },
-        fields: { status: true, factKind: true, content: 120 } });
+        fields: { status: true, factKind: true, content: 120, official: true } });
       /** @type {Record<string, number>} */
       const counts = {};
       const methods = [];
@@ -360,6 +418,8 @@ export class CapsuleService {
       for (const entry of page.items) {
         if (entry.payload.status === "candidate") waiting += 1;
         if (entry.payload.status !== "approved") continue;
+        // A method of the platform's that its own runs' outcomes stopped is not offered on the shelf either (`OfficialPacks.recordApplied`).
+        if (entry.payload.official && stopped.has(`${entry.payload.official.key}@${entry.payload.official.sha}`)) continue;
         counts[entry.payload.factKind] = (counts[entry.payload.factKind] ?? 0) + 1;
         if (entry.payload.factKind === "method_preference" && methods.length < 5) methods.push(methodHeading(entry.payload.content));
       }
@@ -372,10 +432,10 @@ export class CapsuleService {
         sharedFrom: sharedFrom(capsule), takenDown: capsule.payload.takenDown ? { by: capsule.payload.takenDown.by, at: capsule.payload.takenDown.at,
           reason: capsule.payload.takenDown.reason ?? null } : null,
         issuerTrust: capsule.payload.transfer?.issuerTrust ?? "unverified", importedAt: capsule.payload.transfer?.importedAt ?? capsule.createdAt ?? null,
-        enabled: account.has(capsule.id) || project.has(capsule.id),
-        // Where it is in force (build spec §9.4 #6): every project, or only
-        // the one this read was made in.
-        enabledIn: account.has(capsule.id) ? "account" : project.has(capsule.id) ? "project" : null,
+        // An official pack is enabled unless its account switched it off, and it is never one of the capsules in force (`active`): it does not
+        // count towards the eight.
+        enabled: capsule.payload.official ? capsule.payload.official.disabled !== true && !capsule.payload.takenDown : account.has(capsule.id),
+        ...(capsule.payload.official ? { official: { packId: String(capsule.payload.official.packId) } } : {}),
         counts, methods,
         // A pack imported before whole-pack trust still holds candidates; the
         // first enable or trial scans it and settles them.
@@ -407,9 +467,11 @@ export class CapsuleService {
     const live = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId } })).items
       .filter((/** @type {any} */ entry) => entry.payload.status !== "retired");
     const scanner = this.scanner ?? new CapsuleScanner({});
-    const result = await scanner.scan({ userId, projectId: projectId ?? "" },
+    // With no project in view the language check is metered to the account's own default project: an enable from somewhere that
+    // names none must not leave every entry `unscanned` — context, never mounted — until a later enable from a project.
+    const result = await scanner.scan({ userId, projectId: projectId || SCAN_METER_PROJECT },
       live.map((/** @type {any} */ entry) => ({ id: entry.id, factKind: entry.payload.factKind, content: entry.payload.content })),
-      { useModel: Boolean(projectId) });
+      { useModel: true });
     const kept = new Set(result.kept);
     const unchecked = new Set(result.unchecked ?? (result.model === "ok" ? [] : result.kept));
     const held = new Set(Array.isArray(result.held) ? result.held : []);
@@ -434,17 +496,27 @@ export class CapsuleService {
 
   /**
    * One click: the pack is in force as a reference — it brings methods and
-   * standards, never an identity (plan §3.3 #4) — in every project, or with
-   * `onlyProject` in `projectId` alone (build spec §9.4 #6: 「启用范围可选账号
-   * 或某个项目」). `projectId` is also where the scan's model call is metered.
-   * @param {string} userId @param {string} capsuleId @param {{ projectId?: string | null, onlyProject?: boolean }} [options]
+   * standards, never an identity (plan §3.3 #4) — for the whole account, so in
+   * every project (a pack was once enabled for one project alone; 2026-10-24,
+   * one capsule per person). `projectId` is only where the scan's model call is
+   * metered.
+   * @param {string} userId @param {string} capsuleId @param {{ projectId?: string | null }} [options]
    */
-  async enableReceived(userId, capsuleId, { projectId = null, onlyProject = false } = {}) {
-    if (onlyProject && !projectId) throw new HttpError(400, "capsule_payload_invalid", "Enabling for one project needs the project.");
+  async enableReceived(userId, capsuleId, { projectId = null } = {}) {
+    const held = await this.get(userId, capsuleId);
+    if (held.payload.official) {
+      // One of the platform's own packs: its scan was the publisher's, once (`OfficialPacks`), and it is in force by its own flag, not by the
+      // account's list of eight.
+      assertNotTakenDown(held);
+      await this.#setOfficialEnabled(userId, held, true);
+      await this.#activationChanged(userId, capsuleId, "enabled");
+      return (await this.received(userId)).find((pack) => pack.id === capsuleId) ?? null;
+    }
     await this.#scannedPack(userId, capsuleId, projectId);
-    await this.activate(userId, capsuleId, { mode: "guest", projectId: onlyProject ? projectId : null });
+    await this.activate(userId, capsuleId);
     await this.#keep(userId, capsuleId, true);
-    return (await this.received(userId, { projectId })).find((pack) => pack.id === capsuleId) ?? null;
+    await this.#activationChanged(userId, capsuleId, "enabled");
+    return (await this.received(userId)).find((pack) => pack.id === capsuleId) ?? null;
   }
 
   /**
@@ -469,14 +541,42 @@ export class CapsuleService {
   }
 
   /**
+   * Switch one official pack on or off for this account. The flag lives on the account's copy and is kept across upgrades (`adoptOfficial`):
+   * a pack that was switched off stays off when its next version arrives.
+   * @param {string} userId @param {any} capsule @param {boolean} enabled
+   */
+  async #setOfficialEnabled(userId, capsule, enabled) {
+    let current = capsule;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if ((current.payload.official.disabled !== true) === enabled) return current;
+      const at = new Date().toISOString();
+      const { disabled: _off, disabledAt: _at, ...official } = current.payload.official;
+      try {
+        return await this.documents.put(userId, "capsule", current.id, { ...current.payload,
+          official: enabled ? { ...official, enabledAt: at } : { ...official, disabled: true, disabledAt: at } }, { expectedRevision: current.revision });
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 2) throw error;
+        current = await this.get(userId, current.id);
+      }
+    }
+    return current;
+  }
+
+  /**
    * One click: the pack stops contributing anything — out of the account's
-   * list and every project's. Recall stops at once; a method it had mounted
-   * leaves the runtime at its next start.
+   * list (and out of any project's list an earlier release left, before
+   * `capsuleOneCapsule.mjs` has folded it). Recall stops at once, and a method it
+   * had mounted leaves the runtimes that are up before their next turn (`onActivationChanged`).
    * @param {string} userId @param {string} capsuleId
    */
   async disable(userId, capsuleId) {
-    await this.get(userId, capsuleId);
-    // Every activation list, the account's and each project's, page by page:
+    const held = await this.get(userId, capsuleId);
+    if (held.payload.official) {
+      await this.#setOfficialEnabled(userId, held, false);
+      await this.#activationChanged(userId, capsuleId, "disabled");
+      return { disabled: true, lists: 0 };
+    }
+    // Every activation list, the account's and any project's left from before, page by page:
     // the same kind also holds the export snapshots.
     /** @type {any[]} */
     const lists = [];
@@ -504,6 +604,8 @@ export class CapsuleService {
       }
     }
     await this.#keep(userId, capsuleId, false);
+    // The runtimes that mounted it, every project's of the account, are told once.
+    if (lists.length) await this.#activationChanged(userId, capsuleId, "disabled");
     return { disabled: true, lists: lists.length };
   }
 
@@ -513,6 +615,9 @@ export class CapsuleService {
    * @param {string} userId @param {string} capsuleId @param {{ projectId?: string | null }} [options]
    */
   async prepareTrial(userId, capsuleId, { projectId = null } = {}) {
+    const held = await this.get(userId, capsuleId);
+    // An official pack was scanned once, by its publisher: a trial of it asks nothing more of the model.
+    if (held.payload.official) { assertNotTakenDown(held); return held; }
     return this.#scannedPack(userId, capsuleId, projectId);
   }
 
@@ -557,6 +662,11 @@ export class CapsuleService {
    * Something the assistant wrote down because the researcher asked it to
    * (「记住…」), or a decision the researcher made on an autopilot digest.
    *
+   * It is an entry of the researcher's one capsule, labelled with the project it
+   * was written in (`entryProject`): the project's conversations read it and no
+   * other project's does, as the project's own notes capsule was read (a project
+   * has none now, 2026-10-24).
+   *
    * It takes effect at once (owner ruling 2026-09-19: no confirmation step
    * anywhere). What replaces the confirmation is what it is labelled as — an
    * `inferred` entry, the assistant's wording of what it was asked, never the
@@ -571,42 +681,29 @@ export class CapsuleService {
     productId(projectId, "projectId");
     const content = text(input.content, "content", 20_000);
     const factKind = member(input.factKind, CAPSULE_FACT_KINDS, "fact kind");
-    const current = await this.active(userId, projectId);
-    let capsule = null;
-    for (const item of current.items) {
-      if (item.mode !== "own") continue;
-      const found = await this.documents.get(userId, "capsule", item.capsuleId);
-      if (found && !found.payload.imported) { capsule = found; break; }
-    }
-    if (!capsule) {
-      const id = `runtime-notes:${createHash("sha256").update(projectId).digest("hex")}`;
-      capsule = await this.documents.get(userId, "capsule", id, { includeDeleted: true });
-      if (capsule?.deletedAt) throw new HttpError(409, "capsule_notes_paused", "Restore the project notes capsule before recording new suggestions.");
-      if (!capsule) {
-        try { capsule = await this.documents.put(userId, "capsule", id,
-          { title: "项目笔记", description: "这个项目的研究运行记下的内容。", imported: false, activationMode: "own" },
-          { expectedRevision: 0, projectId }); }
-        catch (error) { if (error.code !== "product_revision_conflict") throw error; capsule = await this.get(userId, id); }
-      }
-      await this.#putNotesInForce(userId, projectId, capsule.id);
-    }
+    const capsule = await this.ownCapsule(userId, { create: true });
     // Where the suggestion came from, when the caller knows: a digest decision
     // is the researcher's own act, not a runtime inference about the project,
     // and the entry they are asked to approve should say so.
     const origin = input.provenance == null
-      ? [{ type: "source", id: `runtime-project:${projectId}` }]
+      ? [{ type: "source", id: `${RUNTIME_PROJECT_PROVENANCE_PREFIX}${projectId}` }]
       : provenance(input.provenance);
-    const id = `runtime-note:${createHash("sha256").update(JSON.stringify([capsule.id, factKind, content])).digest("hex")}`;
-    const existing = await this.documents.get(userId, "fact", id);
+    // The same words in the same project are one entry. A note written before the project's capsule was folded into the account's
+    // keeps the id it had (`legacyNotesCapsuleId`), so writing it again finds it and does not make a second.
+    const hash = (/** @type {unknown[]} */ parts) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+    const id = `runtime-note:${hash([capsule.id, projectId, factKind, content])}`;
+    const existing = await this.documents.get(userId, "fact", id)
+      ?? await this.documents.get(userId, "fact", `runtime-note:${hash([legacyNotesCapsuleId(projectId), factKind, content])}`);
     if (existing) return existing;
     try {
-      return await this.documents.put(userId, "fact", id, { capsuleId: capsule.id, factKind,
+      return await this.documents.put(userId, "fact", id, { capsuleId: capsule.id, projectId, factKind,
         layer: factKind === "method_preference" ? "methods" : "knowledge", content, origin: "inferred",
         // The platform's own notes take effect (owner ruling 2026-09-19); a
         // third party's wait for the owner, as the agent-memory API promises
         // its integrators (agentMemoryOpenApi.mjs, rule 1).
         status: input.review === true ? "candidate" : "approved",
-        provenance: origin, contextOnly: true }, { expectedRevision: 0, projectId });
+        provenance: origin, contextOnly: true,
+        ...(input.review === true && input.externalSession ? { externalSession: input.externalSession } : {}) }, { expectedRevision: 0, projectId });
     } catch (error) {
       if (error.code !== "product_revision_conflict") throw error;
       return this.documents.get(userId, "fact", id);
@@ -614,40 +711,13 @@ export class CapsuleService {
   }
 
   /**
-   * Put the project's notes capsule among the capsules in force there, ahead of what is enabled already — the
-   * researcher's own first, a borrowed pack kept — so a note is read by the recall and the profile that follow it.
-   * It was done only when the project's list was empty, which left a note stored, approved, in a capsule nothing read
-   * the moment a received pack was enabled for the project (2026-10-10 review M-8). A list already full (eight)
-   * evicts nothing: the note is kept and `inForce` says it is not read. Returns whether it is in force.
-   * @param {string} userId @param {string} projectId @param {string} capsuleId
+   * Whether a capsule is read: in the account's list, inside the window of eight every reader looks through, and not taken
+   * down. What the gateway tells the model about a note rests on this. Which project reads an entry is `entryProject`'s, not this.
+   * @param {string} userId @param {string} capsuleId
    */
-  async #putNotesInForce(userId, projectId, capsuleId) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const local = await this.active(userId, projectId);
-      const global = projectId ? await this.active(userId, null) : { items: [] };
-      if (inForceWindow(local, global).some((item) => item.capsuleId === capsuleId)) return true;
-      if (local.items.length >= ACTIVE_CAPSULE_LIMIT) return false;
-      try {
-        await this.documents.put(userId, "preferences", activationKey(projectId),
-          { items: [{ capsuleId, mode: "own" }, ...local.items.filter((item) => item.capsuleId !== capsuleId)] },
-          { expectedRevision: local.record?.revision ?? 0, projectId });
-        return true;
-      } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "product_revision_conflict") throw error;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Whether a capsule is read in a project: in its list or the account's, inside the window of eight every reader
-   * looks through, and not taken down. What the gateway tells the model about a note rests on this.
-   * @param {string} userId @param {string | null} projectId @param {string} capsuleId
-   */
-  async inForce(userId, projectId, capsuleId) {
-    const local = projectId ? await this.active(userId, projectId) : { items: [] };
-    const global = await this.active(userId, null);
-    if (!inForceWindow(local, global).some((item) => item.capsuleId === capsuleId)) return false;
+  async inForce(userId, capsuleId) {
+    const { items } = await this.active(userId);
+    if (!items.slice(0, ACTIVE_CAPSULE_LIMIT).some((item) => item.capsuleId === capsuleId)) return false;
     const capsule = await this.documents.get(userId, "capsule", capsuleId);
     return Boolean(capsule) && !capsule.payload.takenDown;
   }
@@ -689,7 +759,7 @@ export class CapsuleService {
    * Undo the last change to one entry: its previous revision saved forward, or
    * — for an entry whose only revision is its creation — its removal, which
    * the capsule's trash can still restore. The same one click research memory
-   * offers (`ResearchMemoryStore.undo`), for the same reason: nothing asks
+   * offers (`MemorySettingsStore.undo`), for the same reason: nothing asks
    * first, so everything can be taken back.
    * @param {string} userId @param {string} capsuleId @param {string} entryId @param {{ expectedRevision: number }} input
    * @returns {Promise<{ undone: "restored" | "removed", entry: any }>}
@@ -712,7 +782,9 @@ export class CapsuleService {
 
   /**
    * The approved entries of the given kinds in the researcher's own active
-   * capsules — what the resident profile renders (`capsuleProfile.mjs`).
+   * capsule — what the resident profile renders (`capsuleProfile.mjs`): the
+   * entries of the whole account and those labelled with `projectId`, never
+   * another project's (`entryProject`).
    *
    * "Own" is the predicate `note()` already uses: activated as `own` and not
    * imported. A guest (reference) activation carries someone else's methods and
@@ -724,21 +796,20 @@ export class CapsuleService {
    */
   async profileFacts(userId, projectId, kinds) {
     for (const kind of kinds) member(kind, CAPSULE_FACT_KINDS, "fact kind");
-    const local = await this.active(userId, projectId);
-    const global = projectId ? await this.active(userId, null) : { items: [] };
-    const own = [...local.items, ...global.items]
-      .filter((item, index, all) => item.mode === "own" && all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
-      .slice(0, 8);
+    const own = (await this.active(userId)).items.filter((item) => item.mode === "own").slice(0, ACTIVE_CAPSULE_LIMIT);
     const facts = [];
     for (const selection of own) {
       const capsule = await this.documents.get(userId, "capsule", selection.capsuleId);
       if (!capsule || capsule.payload.imported) continue;
       for (const factKind of kinds) {
-        // Newest fifty of each kind is more than a 1,500-token block can hold.
-        const page = await this.documents.list(userId, "fact", { limit: 50, filter: { capsuleId: capsule.id, status: "approved", factKind } });
-        for (const entry of page.items) {
-          facts.push({ id: entry.id, capsuleId: capsule.id, factKind, content: String(entry.payload.content ?? ""), updatedAt: entry.updatedAt ?? null,
-            origin: String(entry.payload.origin ?? "") });
+        // Newest fifty of each kind is more than a 1,500-token block can hold. The account's entries and the project's are read
+        // apart, so a project that wrote a great many notes cannot crowd out what holds for every project.
+        for (const label of projectId == null ? [null] : [null, projectId]) {
+          const page = await this.documents.list(userId, "fact", { limit: 50, projectId: label, filter: { capsuleId: capsule.id, status: "approved", factKind } });
+          for (const entry of page.items) {
+            facts.push({ id: entry.id, capsuleId: capsule.id, factKind, content: String(entry.payload.content ?? ""), updatedAt: entry.updatedAt ?? null,
+              origin: String(entry.payload.origin ?? "") });
+          }
         }
       }
     }
@@ -748,18 +819,15 @@ export class CapsuleService {
   /**
    * How many entries the active capsules hold that the resident profile does not carry — what a recall could find there, as
    * the line beside the profile counts it (review M6): the approved entries of a guest capsule, and of the researcher's own
-   * capsules those of a kind the profile does not list. Approximate on purpose: it is a pointer to where to look, and the
-   * recall itself decides what a project may be handed (`#inProject`).
+   * capsule those of a kind the profile does not list and that this project reads (`entryProject`). Approximate on purpose: it is a
+   * pointer to where to look, and the recall itself decides what a project may be handed (`#inProject`).
    * @param {string} userId @param {string|null} projectId @param {readonly string[]} profileKinds
    * @returns {Promise<number>}
    */
   async lookupCount(userId, projectId, profileKinds) {
     const database = this.documents.database;
     if (typeof database?.query !== "function") return 0;
-    const local = await this.active(userId, projectId);
-    const global = projectId ? await this.active(userId, null) : { items: [] };
-    const active = [...local.items, ...global.items]
-      .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index).slice(0, 8);
+    const active = (await this.active(userId)).items.slice(0, ACTIVE_CAPSULE_LIMIT);
     /** @type {string[]} */ const own = [];
     /** @type {string[]} */ const guest = [];
     for (const selection of active) {
@@ -770,8 +838,9 @@ export class CapsuleService {
     if (own.length === 0 && guest.length === 0) return 0;
     const result = await database.query(`SELECT count(*)::integer AS n FROM evimed_product.documents
       WHERE user_id=$1 AND kind='fact' AND deleted_at IS NULL AND payload->>'status'='approved'
-        AND ((payload->>'capsuleId' = ANY($2::text[]) AND coalesce(payload->>'factKind','') <> ALL($4::text[]))
-          OR payload->>'capsuleId' = ANY($3::text[]))`, [userId, own, guest, [...profileKinds]]);
+        AND ((payload->>'capsuleId' = ANY($2::text[]) AND coalesce(payload->>'factKind','') <> ALL($4::text[])
+            AND (project_id IS NULL OR project_id IS NOT DISTINCT FROM $5::text))
+          OR payload->>'capsuleId' = ANY($3::text[]))`, [userId, own, guest, [...profileKinds], projectId]);
     return Number(result.rows[0]?.n) || 0;
   }
 
@@ -781,16 +850,16 @@ export class CapsuleService {
    * named school at a time. The caller has checked that each is this account's
    * own; the eight-capsule bound applies to it as to the active list.
    * @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string, accountCreatedAt?:string,
-   *   selection?: { capsuleId: string, mode: string }[] | null }} input */
-  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined, selection: named = null }) {
+   *   projectOnly?:boolean, authorizeEntry?:Function|null, selection?: { capsuleId: string, mode: string }[] | null }} input */
+  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined, selection: named = null, projectOnly = false, authorizeEntry = null }) {
     const needle = text(query, "query", 2000);
     if (!["all", "capsule"].includes(scope)) throw new HttpError(400, "capsule_scope_unavailable", "This memory scope is unavailable.");
     if (!Array.isArray(factKinds) || factKinds.length > CAPSULE_FACT_KINDS.length) throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
     for (const kind of factKinds) member(kind, CAPSULE_FACT_KINDS, "fact kind");
     productInteger(limit, 1, 30);
-    const local = Array.isArray(named) ? { items: named } : await this.active(userId, projectId);
-    const global = projectId && !Array.isArray(named) ? await this.active(userId, null) : { items: [] };
-    const active = [...local.items, ...global.items].filter((x, i, all) => all.findIndex((y) => y.capsuleId === x.capsuleId) === i).slice(0, 8);
+    const listed = Array.isArray(named) ? named : (await this.active(userId)).items;
+    const active = listed.filter((x, i, all) => all.findIndex((y) => y.capsuleId === x.capsuleId) === i).slice(0, ACTIVE_CAPSULE_LIMIT);
+    if (projectOnly) return this.#projectRecall(userId, { needle, active, limit, factKinds, since, projectId, authorizeEntry });
     if (this.indexing && active.length) {
       try {
         const semantic = await this.#semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt });
@@ -836,15 +905,60 @@ export class CapsuleService {
     return { items: matches.slice(0, limit), mode: "lexical", contextOnly: true };
   }
 
+  /** Shared lookup never nominates whole capsule roots. Metadata authorization
+   * precedes exact-project SQL text search, and activation/revision are rechecked. */
+  async #projectRecall(userId, {needle,active,limit,factKinds,since,projectId,authorizeEntry}) {
+    const items=[], snapshots=new Map();
+    if (!projectId || typeof authorizeEntry !== "function") return {items,mode:"lexical",contextOnly:true};
+    for (const selection of active) {
+      if (!await this.inForce(userId,selection.capsuleId)) continue;
+      const capsule=await this.get(userId,selection.capsuleId);
+      let cursor=null; const seen=new Set();
+      do {
+        const page=await this.entries(userId,capsule.id,{limit:100,cursor,projectId,fields:CONTEXT_ITEM_FIELDS});
+        const permitted=[];
+        for (const row of page.items) if (row.projectId===projectId && row.payload.projectId===projectId
+          && row.payload.status==="approved" && await authorizeEntry(selection,row)) permitted.push(row);
+        if (permitted.length) {
+          const found=await this.documents.search(userId,"fact",needle,{limit:100,projectId,ids:permitted.map(row=>row.id),
+            expectedRevisions:permitted.map(row=>({id:row.id,revision:row.revision})),
+            filter:{capsuleId:capsule.id,status:"approved"},since,any:{field:"factKind",values:factKinds}});
+          for (const row of found) {
+            const nominated=permitted.find(item=>item.id===row.id);
+            if (!nominated || nominated.revision!==row.revision || row.projectId!==projectId || row.payload.projectId!==projectId
+              || !await authorizeEntry(selection,row) || !await this.inForce(userId,capsule.id)) continue;
+            snapshots.set(row.id,{row,selection});
+            items.push({id:row.id,capsuleId:capsule.id,capsuleTitle:capsule.payload.title,mode:selection.mode,
+              factKind:row.payload.factKind,layer:row.payload.layer,content:row.payload.content,origin:row.payload.origin,
+              provenance:row.payload.provenance,revision:row.revision,contextOnly:true,...labelled(capsule,row.payload)});
+          }
+        }
+        cursor=page.nextCursor;
+        if(cursor && seen.has(cursor)) throw new HttpError(503,"capsule_unavailable","Capsule listing did not advance.");
+        seen.add(cursor);
+      } while(cursor);
+    }
+    // A later page or authorizer may observe revocation of an earlier capsule.
+    const current=(await this.active(userId)).items.slice(0,ACTIVE_CAPSULE_LIMIT);
+    const result=[];
+    for(const item of items) {
+      const snapshot=snapshots.get(item.id);
+      if(current.some(selection=>selection.capsuleId===item.capsuleId) && await this.inForce(userId,item.capsuleId)
+        && await authorizeEntry(snapshot.selection,snapshot.row)) result.push(item);
+      if(result.length===limit) break;
+    }
+    return {items:result,mode:"lexical",contextOnly:true};
+  }
+
   /**
-   * The entries a recall in `projectId` may hand over: every entry the
-   * researcher or a run wrote, and of what a knowledge-base document yielded
-   * only what came from a document of that project.
+   * The entries a recall in `projectId` may hand over: every entry of the whole account, those labelled with this project
+   * (`entryProject`: what a conversation in it noted), and of what a knowledge-base document yielded only what came from a
+   * document of that project.
    *
    * A document belongs to the project it was put in, like a file in a
    * ChatGPT project or a NotebookLM notebook; until 2026-09-24 its facts were
    * recalled in every project of the account. A recall that names no project
-   * reaches no document's facts. An entry published before the entries
+   * reaches no document's facts, and none labelled with a project. An entry published before the entries
    * carried their project is placed by its publication ledger
    * (`documentEntryProjects`); one nothing places belongs to no project.
    * @template {{ id: string, payload: any }} T
@@ -853,12 +967,11 @@ export class CapsuleService {
    */
   async #inProject(userId, projectId, rows) {
     const derived = rows.filter((row) => row.payload?.layer === DOCUMENT_MEMORY_LAYER);
-    if (derived.length === 0) return rows;
-    if (projectId == null) return rows.filter((row) => row.payload?.layer !== DOCUMENT_MEMORY_LAYER);
-    const unplaced = derived.filter((row) => typeof row.payload.projectId !== "string").map((row) => row.id);
+    const unplaced = projectId == null ? [] : derived.filter((row) => typeof row.payload.projectId !== "string").map((row) => row.id);
     const placed = unplaced.length ? await documentEntryProjects(this.documents.database, userId, unplaced) : new Map();
-    return rows.filter((row) => row.payload?.layer !== DOCUMENT_MEMORY_LAYER
-      || (typeof row.payload.projectId === "string" ? row.payload.projectId : placed.get(row.id)) === projectId);
+    return rows.filter((row) => row.payload?.layer === DOCUMENT_MEMORY_LAYER
+      ? projectId != null && (typeof row.payload.projectId === "string" ? row.payload.projectId : placed.get(row.id)) === projectId
+      : entryProject(/** @type {any} */ (row)) === null || entryProject(/** @type {any} */ (row)) === projectId);
   }
 
   /** @param {string} userId @param {Record<string,any>} input */

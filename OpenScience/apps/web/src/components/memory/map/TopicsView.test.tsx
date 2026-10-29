@@ -71,10 +71,10 @@ describe("主题", () => {
     expect(onChanged).toHaveBeenCalledTimes(2);
   });
 
-  it("draws no cloud under six topics: the ranking says it better", () => {
+  it("draws a topic visualization even for a small real collection", () => {
     view();
     expect(screen.getByRole("list", { name: "主题排行" })).toBeInTheDocument();
-    expect(document.querySelector("[data-chart='topic-cloud']")).toBeNull();
+    expect(document.querySelector("[data-chart='topic-cloud']")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/先看右边/u);
   });
 

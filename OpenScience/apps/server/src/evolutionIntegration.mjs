@@ -93,8 +93,6 @@ export class EvolutionIntegration {
       const review=unit?.disagreement;
       if(review?.codeVerified!==true || review.verificationProof?.proofHash!==event.proofHash || !['paper_error','reasonable_difference'].includes(review.verdict)) return;
       return this.service.callbacks.adjudicationOpportunity?.({evaluationId:evaluation.id,proofHash:event.proofHash,verdict:review.verdict,publicPaperId:/^(?:10\.\d{4,9}\/[^\s]{1,180}|PMID:\d+|PMC\d+)$/i.test(unit?.publishedPaperId??'') ? unit.publishedPaperId : null});
-    } else if (event.type === "handbook-gap-scan") {
-      return this.service.callbacks.scanHandbookGaps?.();
     } else if (event.type === "lead-source-scan") {
       return this.service.callbacks.scanLeadSources?.();
     } else if (event.type === "source-facts-scan") {
@@ -134,8 +132,8 @@ export class EvolutionIntegration {
       return this.scoutPublication(event);
     } else if (event.type === "meta-evidence-update") {
       return this.metaUpdateOpportunity(event);
-    } else if (["runtime-gap", "handbook-gap"].includes(event.type)) {
-      return this.service.addLead({ source: event.type === "runtime-gap" ? "runtime-failure" : "handbook",
+    } else if (event.type === "runtime-gap") {
+      return this.service.addLead({ source: "runtime-failure",
         track: event.track ?? "M", gapCode: event.gapCode, code: event.code, userId: event.userId, projectId: event.projectId, sourceEventId: event.id });
     }
   }

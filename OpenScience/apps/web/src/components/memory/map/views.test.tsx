@@ -23,12 +23,12 @@ describe("维度", () => {
     expect(onAxis).toHaveBeenCalledWith("aspect:a");
   });
 
-  it("lets go of a chosen axis on a second press, and says the sentence instead of a radar that would be a needle", async () => {
+  it("lets go of a chosen axis and draws sparse dimensions as comparable bars", async () => {
     const onAxis = vi.fn();
     const user = userEvent.setup();
     render(<DimsView dimensions={[work, memory]} selected="aspect:a" onAxis={onAxis} />);
-    expect(screen.getByText("最近 30 天的对话还不多，这里先不画图。")).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /在做什么/u })).toBeNull();
+    expect(screen.getByRole("img", { name: /在做什么/u })).toBeInTheDocument();
+    expect(document.querySelector('[data-dimension-view="bars"]')).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "偏好 8" }));
     expect(onAxis).toHaveBeenCalledWith(null);
   });

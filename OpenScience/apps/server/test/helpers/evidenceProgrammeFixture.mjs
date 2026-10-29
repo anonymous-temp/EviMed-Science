@@ -148,6 +148,30 @@ export async function programmeFixture({ url, label, config: over = {}, callMode
     return id;
   }
 
+  /**
+   * A hot-event topic as the frontier's trigger writes it (`evimed_frontier.topics`, contract §T): active, accepted `hoursAgo` before the
+   * test's clock, seen on `boards` (`{ board, peakRank }`). Returns its public id.
+   * @param {{ id?: string, title?: string, question?: string, peg?: string | null, pegSource?: any, subjectNames?: string[], boards?: any[], surge?: boolean,
+   *   hoursAgo?: number, status?: string, programmeState?: string | null, programmeAt?: string | null }} [over]
+   */
+  async function topic(over = {}) {
+    const id = over.id ?? `tp${randomUUID().replaceAll("-", "").slice(0, 18)}`;
+    const accepted = new Date(clock.at.getTime() - (over.hoursAgo ?? 2) * 3_600_000).toISOString();
+    await database.query(`INSERT INTO evimed_frontier.topics(public_id, group_key, title_zh, question_zh, peg_zh, peg_source, domain, subject_names, boards, surge, status,
+        first_seen_at, accepted_at, programme_state, programme_at)
+      VALUES($1, $2, $3, $4, $5, $6::jsonb, 'public-figure', $7::text[], $8::jsonb, $9, $10, $11::timestamptz, $11::timestamptz, $12, $13::timestamptz)`,
+    [id, `group-${id}`, over.title ?? "年轻人心源性猝死的风险有多大？", over.question ?? "年轻人发生心源性猝死的风险有多大，哪些人风险更高，出现什么征兆应及时就医？",
+      over.peg === undefined ? "据新华社报道，一位知名人士因心源性猝死去世。" : over.peg, JSON.stringify(over.pegSource ?? { name: "新华社", url: "https://example.org/report", date: "2026-10-04" }),
+      over.subjectNames ?? ["张某某"], JSON.stringify(over.boards ?? [{ board: "weibo", peakRank: 5 }]), over.surge === true, over.status ?? "active", accepted,
+      over.programmeState ?? null, over.programmeAt ?? null]);
+    return id;
+  }
+
+  /** A topic's programme columns as they stand. @param {string} id */
+  async function topicRow(id) {
+    return (await database.query("SELECT programme_state, programme_card_id, programme_at FROM evimed_frontier.topics WHERE public_id = $1", [id])).rows[0] ?? null;
+  }
+
   async function close() {
     await store.close();
     await isolated.drop();
@@ -155,7 +179,7 @@ export async function programmeFixture({ url, label, config: over = {}, callMode
   }
 
   return { databaseUrl: isolated.url, store, database, documents, jobs, ledger, vocabulary, zones, autopilot, planner, plannerCalls, budget, programme, results, resultsByRun, rawByVersion,
-    config, clock, now, spend, reader, feedItem, importedZone, publisherUser, operatorId, researcherId, decisions, close };
+    config, clock, now, spend, reader, feedItem, importedZone, topic, topicRow, publisherUser, operatorId, researcherId, decisions, close };
 }
 
 /** The sha-256 of a string. @param {string} value */

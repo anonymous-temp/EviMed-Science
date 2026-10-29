@@ -77,6 +77,8 @@ export const ALERT_NOTICES = Object.freeze({
   GeoUrgentFindingsOpen: { title: "循证 GEO 有严重的回答偏差未处理", sentence: "有 AI 引擎把客户药品讲错，严重度为 S3 或 S4，可能影响用药安全，请尽快处理或关闭。" },
   GeoProbeLoopStalled: { title: "循证 GEO 的探测停了", sentence: "探测循环超过三十分钟没有成功跑完一轮，可见度和准确度的数据停在了上一轮。" },
   GeoProbeEnginesPaused: { title: "有 AI 引擎被暂停探测", sentence: "探测主机上有引擎被暂停超过一小时，多半是被登出了，请到探测主机重新登录。" },
+  GeoProbeHostDown: { title: "循证 GEO 的探测主机连不上", sentence: "AI 引擎探测主机十五分钟没有回应，GEO 测量（可见度与准确度）全部停了；主机在业主的服务器上，平台无法自行恢复，请业主重启探测服务。" },
+  GeoSocialCrawlerDown: { title: "社媒爬虫服务不可用", sentence: "社媒爬虫十五分钟没有正常回应，GEO 社媒监测和前沿动态的六平台监测都拿不到内容；爬虫在业主的服务器上，平台无法自行恢复，请业主修复。" },
 });
 
 /** The title an alert this table does not know is delivered under. */

@@ -4,6 +4,15 @@ import { geoCoverageDifference, geoCoverageKey, geoCoverageStatement, geoSurface
 
 const round = { setVersion: 2, pools: ["P2", "P1", "P3", "P4"], engines: ["kimi", "doubao", "deepseek"], surface: { mode: "web" } };
 
+test("measurement methods are part of comparison identity and unknown methods cannot imply an improvement", () => {
+  const old = geoCoverageKey({ ...round, methodVersion: "geo-measurement-1" });
+  const current = geoCoverageKey({ ...round, methodVersion: "geo-measurement-2" });
+  assert.equal(geoCoverageDifference(old, current).comparable, false);
+  assert.ok(parseGeoCoverageKey(current), "the four-part key remains readable");
+  assert.equal(geoCoverageKey({ ...round, methodVersion: null }), null);
+  assert.equal(geoCoverageDifference(current, current).comparable, true);
+});
+
 test("a coverage key is the same however the round listed what it measured, and names what was measured", () => {
   const key = geoCoverageKey(round);
   assert.equal(key, "v2|P1,P2,P3,P4|deepseek,doubao,kimi|web");

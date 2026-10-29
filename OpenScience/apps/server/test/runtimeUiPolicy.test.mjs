@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { connect as connectSocket } from "node:net";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -15,6 +15,7 @@ import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { MODEL_REASONING_EFFORTS } from "../src/modelReasoningPolicy.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
+import { GeoNativeFramePolicy, createGeoFrameResolver } from "../src/geoNativeFramePolicy.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
 import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
@@ -22,6 +23,15 @@ import { isDeniedRuntimeUiMethod, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_N
 
 const UI_ORIGIN = "https://science.example:8443";
 const SHELL_ORIGIN = "https://science.example";
+
+/** Wait for a condition that takes seconds (a recheck runs once a second), failing instead of spinning past the test. */
+async function within(milliseconds, predicate, message) {
+  const deadline = Date.now() + milliseconds;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, message);
+    await delay(50);
+  }
+}
 
 async function eventually(predicate) {
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -31,8 +41,23 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, noteFileRead = null, beforeDataCleanup = null, shared = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
+  const peers = new Set(), clients = new Set();
+  let upstream, wss, ui;
+  t.after(async () => {
+    const errors = [];
+    const attempt = async operation => { try { await operation(); } catch (error) { errors.push(error); } };
+    if (beforeDataCleanup) await attempt(beforeDataCleanup);
+    for (const client of clients) await attempt(() => client.terminate());
+    for (const peer of peers) await attempt(() => peer.terminate());
+    if (ui) await attempt(() => ui.close());
+    if (wss) await attempt(() => new Promise(resolve => wss.close(resolve)));
+    if (upstream?.listening) await attempt(() => new Promise(resolve => upstream.close(resolve)));
+    await attempt(() => rm(dataDir, { recursive: true, force: true }));
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "Runtime UI fixture cleanup failed");
+  });
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
     runtimeUiPublicOrigin: UI_ORIGIN, publicUrl: SHELL_ORIGIN, ...overrides,
@@ -44,13 +69,17 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
   const res = { getHeader() { return undefined; }, setHeader(_name, value) { cookie = String(value).split(";")[0]; } };
   const session = await store.createSession(user, req, res);
   const loginCookie = cookie;
-  const frame = issueRuntimeUiFrame({ config, req: { headers: { cookie } }, user, session, project: await store.requireProject(user, "default") });
+  if (shared) await store.createUser('geo-owner', 'local-fixture-password', 'Owner');
+  const owner = shared ? await store.userById('geo-owner') : user;
+  const project = await store.requireProject(owner, 'default');
+  const delegation = shared ? { kind: 'geo', actorId: user.id, ownerId: owner.id, controlProjectId: project.id, geoProjectId: 'geo-shared', rootSessionId: 'shared-root',
+    actorCreatedAt: '2026-01-01', ownerCreatedAt: '2026-01-01', projectCreatedAt: '2026-01-01', geoCreatedAt: '2026-01-01', membershipEpoch: 'a'.repeat(64) } : null;
+  const frame = issueRuntimeUiFrame({ config, req: { headers: { cookie } }, user, session, project, delegation });
   cookie += `; ${frame.cookie.split(";")[0]}`;
   const received = [];
   const handshakes = [];
-  const peers = new Set();
-  const upstream = createServer();
-  const wss = new WebSocketServer({ server: upstream });
+  upstream = createServer();
+  wss = new WebSocketServer({ server: upstream });
   wss.on("connection", (peer, request) => {
     peers.add(peer);
     handshakes.push(request.headers);
@@ -77,11 +106,29 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate });
+  const resolveDelegatedFrame = shared ? async (actor, principal, options = undefined) => {
+    shared.resolutions?.push(options ?? null);
+    if (!shared.allowed || actor.id !== user.id || JSON.stringify(principal) !== JSON.stringify(delegation)) throw new HttpError(403, 'geo_member_forbidden', 'Membership changed');
+    return { project, principal };
+  } : null;
+  if (shared) { manager.subagentCatalogue = async () => shared.children ?? []; manager.runtimeGeneration = () => 'generation'; }
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, noteFileRead,
+    resolveDelegatedFrame,
+    createDelegatedPolicy: shared ? async identity => new GeoNativeFramePolicy({ ...identity, config, runtimeManager: manager,
+      authority: { withFrame: async (actor, claims, operation) => {
+        const resolved = await resolveDelegatedFrame(actor, claims);
+        shared.locked = true;
+        try { return await operation(resolved); } finally { shared.locked = false; }
+      } },
+      acceptInput: async (actor, owned, _principal, request) => {
+        assert.equal(shared.locked, true, 'shared attribution belongs to admitted operation');
+        shared.inputs.push({ actor: actor.id, owner: owned.userId, sessionId: request.sessionId, requestId: request.requestId });
+      },
+    }) : null,
+  });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
-  const clients = new Set();
   function connect(headers = {}, suffix = "/api/remote.mux", options = {}) {
     const target = suffix.startsWith("/__evimed/") ? `${origin}${suffix}` : `${base}${suffix}`;
     const ws = new WebSocket(target.replace("http", "ws"), {
@@ -108,18 +155,357 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
       send: (frame) => ws.send(JSON.stringify(frame)),
     };
   }
-  t.after(async () => {
-    for (const client of clients) client.terminate();
-    for (const peer of peers) peer.terminate();
-    await ui.close();
-    await new Promise((resolve) => wss.close(resolve));
-    await new Promise((resolve) => upstream.close(resolve));
-    await rm(dataDir, { recursive: true, force: true });
-  });
-  return { config, store, user, session, cookie, loginCookie, frame, origin, received, peers, handshakes, connect, base, dataDir, started, ui, manager, upstream };
+  return { config, store, user, owner, project, session, cookie, loginCookie, frame, origin, received, peers, handshakes, connect, base, dataDir, started, ui, manager, upstream };
 }
 
 const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpoint, payload: { args } });
+
+test('signed shared native HTTP keeps owner workspace and actor admission while projecting unrelated sessions', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const reached = [];
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on('request', (req, res) => {
+    if (req.method === 'GET') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end('private owner event'); return; }
+    const parts = []; req.on('data', part => parts.push(part));
+    req.on('end', () => {
+      const body = JSON.parse(Buffer.concat(parts).toString()); reached.push(body.method);
+      assert.equal(shared.locked, true);
+      const value = body.method === 'session/list' ? { items: [{ sessionId: 'shared-root', agentAvailable: true, updatedAt: 1, running: false, blank: false }, { sessionId: 'private-owner', agentAvailable: true, updatedAt: 1, running: false, blank: false }] } : { accepted: true };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: true, value } }));
+    });
+  });
+  const rpc = (method, args) => fetch(`${f.base}/api/${method}`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: `rpc-${reached.length}`, method, payload: { args } }) });
+  const list = await rpc('session/list', { _request: {} });
+  assert.equal(list.status, 200); assert.deepEqual((await list.json()).result.value.items.map(item => item.sessionId), ['shared-root']);
+  for (const [method, args] of [['session/page', { request: { address: { kind: 'session', sessionId: 'private-owner' } } }], ['session/selectModel', { request: { sessionId: 'shared-root', provider: 'deepseek-official', model: f.config.deepseekModel } }]]) {
+    assert.equal((await rpc(method, args)).status, 403);
+  }
+  assert.equal(reached.length, 1);
+  const prompt = await rpc('session/prompt', { request: { sessionId: 'shared-root', requestId: 'request-shared', mode: 'queue', content: [{ type: 'text', text: 'Revise the project draft.' }] } });
+  assert.equal(prompt.status, 200);
+  assert.deepEqual(shared.inputs, [{ actor: f.user.id, owner: f.owner.id, sessionId: 'shared-root', requestId: 'request-shared' }]);
+  assert.equal(f.project.userId, f.owner.id); assert.notEqual(f.owner.id, f.user.id);
+  const bootstrap = await fetch(`${f.base}/__evimed_bootstrap.js`, { headers: { cookie: f.cookie } });
+  const source = await bootstrap.text(); assert.equal(bootstrap.status, 200);
+  assert.ok(source.includes('"owner":false')); assert.equal(source.includes('"assets":"/__evimed/k/"'), false);
+  const hiddenStream = await fetch(`${f.base}/plugins/events?rev=abcdef12`, { headers: { cookie: f.cookie } });
+  assert.equal(hiddenStream.status, 403); assert.equal((await hiddenStream.text()).includes('private owner event'), false);
+  assert.equal((await fetch(`${f.base}/assets/fixture-abcdefgh.js`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN } })).status, 403);
+  shared.allowed = false;
+  assert.equal((await rpc('session/list', { _request: {} })).status, 403);
+  assert.equal(reached.length, 2);
+});
+
+test('shared native question answers correlate to delivered carrier and stop after cancellation or replacement', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  peer.on('message', raw => {
+    const call = JSON.parse(raw.toString());
+    if (call.type === 'open' && call.endpoint === '$events') peer.send(JSON.stringify({ type: 'item', streamId: call.streamId, value: { type: 'ready', clientId: 'native-client', host: { home: '/private' } } }));
+  });
+  c.send(open('events', '$events')); assert.equal((await c.next()).value.host.home, f.manager.runtimeWorkspaceRoot(f.project));
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  let answered = 0;
+  f.upstream.on('request', (req, res) => { const chunks = []; req.on('data', part => chunks.push(part)); req.on('end', () => {
+    const body = JSON.parse(Buffer.concat(chunks).toString()); answered++;
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: true } }));
+  }); });
+  const answer = id => fetch(`${f.base}/api/$events/result`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: 'answer', method: '$events/result', payload: { args: { clientId: 'native-client', eventId: id, outcome: { kind: 'result', value: { answers: [] } } } } }) });
+  assert.equal((await answer('not-delivered')).status, 403);
+  const question = { type: 'waterfall', event: 'user-questions/request', eventId: 'question', agentId: 'shared-root', request: { questions: [] } };
+  peer.send(JSON.stringify({ type: 'item', streamId: 'events', value: question })); assert.equal((await c.next()).value.eventId, 'question');
+  assert.equal((await answer('question')).status, 200); assert.equal(answered, 1);
+  c.send({ type: 'cancel', streamId: 'events' }); await delay(30);
+  assert.equal((await answer('question')).status, 403);
+  c.send(open('events-again', '$events')); await c.next();
+  peer.send(JSON.stringify({ type: 'item', streamId: 'events-again', value: { ...question, eventId: 'question-two' } })); await c.next();
+  const next = f.connect(); assert.equal(await next.opened, 101);
+  assert.equal((await answer('question-two')).status, 403);
+  assert.equal(answered, 1);
+});
+
+test('successful shared MUX question answers release their correlation slots and a refusal retains the question', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  peer.on('message', raw => {
+    const call = JSON.parse(raw.toString());
+    if (call.type !== 'open') return;
+    if (call.endpoint === '$events') peer.send(JSON.stringify({ type: 'item', streamId: call.streamId, value: { type: 'ready', clientId: 'native-client', host: { home: '/private' } } }));
+    else if (call.streamId === 'refused') peer.send(JSON.stringify({ type: 'error', streamId: call.streamId, error: { code: 'fixture_refused', message: 'Try again', details: {} } }));
+    else {
+      peer.send(JSON.stringify({ type: 'item', streamId: call.streamId }));
+      peer.send(JSON.stringify({ type: 'end', streamId: call.streamId }));
+    }
+  });
+  c.send(open('events', '$events')); await c.next();
+  let lastArgs;
+  for (let index = 0; index < 140; index++) {
+    const eventId = `question-${index}`, callId = `call-${index}`;
+    peer.send(JSON.stringify({ type: 'item', streamId: 'events', value: { type: 'waterfall', event: 'user-questions/request', eventId,
+      agentId: 'shared-root', request: { wait: { callId }, questions: [] } } }));
+    assert.equal((await c.next()).value.eventId, eventId);
+    const method = 'userQuestions/answer';
+    const args = { agentId: 'shared-root', callId, answers: [] };
+    if (index === 0) {
+      c.send(open('refused', method, args)); const refusal = await c.next();
+      assert.equal(refusal.type, 'error'); assert.equal(refusal.error.code, 'fixture_refused');
+    }
+    c.send(open(`answer-${index}`, method, args));
+    assert.equal((await c.next()).type, 'item'); assert.equal((await c.next()).type, 'end');
+    if (index === 0) {
+      c.send(open('duplicate-initial', method, args)); const duplicate = await c.next();
+      assert.equal(duplicate.type, 'error'); assert.equal(duplicate.error.code, 'runtime_ui_method_denied');
+      assert.equal((await c.next()).type, 'end');
+    }
+    lastArgs = args;
+  }
+  c.send(open('duplicate-answer', 'userQuestions/answer', lastArgs));
+  const denied = await c.next(); assert.equal(denied.type, 'error'); assert.equal(denied.error.code, 'runtime_ui_method_denied');
+});
+
+test('a still-valid older HTTP ticket cannot roll a renewed shared carrier expiry backward', { timeout: 5000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, { runtimeUiFrameTtlMs: 1000 }, {}, { shared });
+  const issuedAt = f.frame.claims.issuedAt;
+  let now = issuedAt + 100;
+  t.mock.method(Date, 'now', () => now);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const follow = id => open(id, 'session/follow', { request: { address: { kind: 'session', sessionId: 'shared-root' }, assistantStream: true } });
+  c.send(follow('before-renewal')); assert.equal((await c.next()).value.reached, 'session/follow');
+  now = issuedAt + 500;
+  const renewed = renewRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.cookie } }, user: f.user, session: f.session,
+    frameId: f.frame.frameId, renewalToken: f.frame.renewalToken, now });
+  assert.equal(f.ui.refreshFrameBinding(renewed), 1);
+  now = issuedAt + 600;
+  const oldRequest = await fetch(`${f.base}/__evimed_bootstrap.js`, { headers: { cookie: f.cookie } });
+  assert.equal(oldRequest.status, 200); await oldRequest.text();
+  now = issuedAt + 1100;
+  let closed = false; c.ws.once('close', () => { closed = true; });
+  c.send(follow('after-old-expiry'));
+  const response = await Promise.race([c.next(), once(c.ws, 'close').then(() => null)]);
+  assert.equal(closed, false, 'the renewed carrier must retain its existing policy and interactions');
+  assert.equal(response?.value?.reached, 'session/follow');
+});
+
+test('scoped response projections retain their original stream identity and native error/end ordering', { timeout: 5000 }, async t => {
+  const projected = [], ended = [];
+  const f = await fixture(t, {}, { projectItem: async (endpoint, payload, value) => {
+    projected.push([endpoint, payload]);
+    return value.hide ? { forward: false } : { forward: true, value: { ...value, scoped: payload.args.sessionId } };
+  }, onStreamClosed: endpoint => ended.push(endpoint) });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('one', 'session/page', { sessionId: 'root' }));
+  assert.equal((await c.next()).value.scoped, 'root');
+  const peer = [...f.peers][0];
+  peer.send(JSON.stringify({ type: 'item', streamId: 'one', value: { hide: true } }));
+  peer.send(JSON.stringify({ type: 'item', streamId: 'one', value: { next: true } }));
+  assert.equal((await c.next()).value.next, true);
+  peer.send(JSON.stringify({ type: 'error', streamId: 'one', error: { code: 'fixture', message: 'Expected end', details: {} } }));
+  peer.send(JSON.stringify({ type: 'end', streamId: 'one' }));
+  assert.equal((await c.next()).type, 'error'); assert.equal((await c.next()).type, 'end');
+  assert.deepEqual(ended, ['session/page'], 'native error/end closes the scope only once');
+  assert.ok(projected.every(([endpoint, payload]) => endpoint === 'session/page' && payload.args.sessionId === 'root'));
+  c.send(open('two', 'session/page', { sessionId: 'root' })); await c.next();
+  c.send({ type: 'cancel', streamId: 'two' });
+  assert.equal((await c.next()).type, 'end');
+  assert.deepEqual(ended, ['session/page', 'session/page']);
+  const closed = once(c.ws, 'close');
+  peer.send(JSON.stringify({ type: 'item', streamId: 'never-authorized', value: { private: true } }));
+  assert.equal((await closed)[0], 1008);
+});
+
+test('HTTP scoped response projection is buffered, bounded and refuses unprojected SSE', { timeout: 5000 }, async t => {
+  const f = await fixture(t, { maxJsonBytes: 1024 });
+  let mode = 'normal', calls = 0;
+  f.upstream.on('request', (_req, res) => {
+    res.writeHead(200, { 'content-type': mode === 'sse' ? 'text/event-stream' : 'application/json' });
+    res.end(JSON.stringify({ own: 'visible', foreign: 'private' }));
+  });
+  f.manager.proxy = (req, res, project, suffix, options) => RuntimeManager.prototype.proxy.call(f.manager, req, res, project, suffix, {
+    ...options, transformResponse: async ({ body, contentType, status }) => {
+      calls++;
+      assert.equal(status, 200); assert.match(contentType, /application\/json/);
+      return mode === 'oversized' ? Buffer.alloc(1025) : Buffer.from(JSON.stringify({ own: JSON.parse(body).own }));
+    },
+  });
+  const fetchResult = () => fetch(`${f.base}/api/session/list`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ type: 'client-request', rpcId: 'read', method: 'session/list', payload: { args: { _request: {} } } }) });
+  const normal = await fetchResult();
+  assert.equal(normal.status, 200); const text = await normal.text();
+  assert.equal(text, '{"own":"visible"}'); assert.equal(Number(normal.headers.get('content-length')), Buffer.byteLength(text));
+  mode = 'sse'; const streaming = await fetchResult();
+  assert.equal(streaming.status, 403); assert.equal(calls, 1, 'SSE is never passed to a whole JSON response transform');
+  assert.equal((await streaming.text()).includes('private'), false);
+  mode = 'oversized'; const oversized = await fetchResult();
+  assert.equal(oversized.status, 413); assert.equal(calls, 2);
+  assert.equal((await oversized.text()).includes('private'), false);
+});
+
+test('native cancel without end and failure without end release scoped active capacity', { timeout: 10000 }, async t => {
+  const ended = [];
+  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => ({ forward: true, value }), onStreamClosed: endpoint => ended.push(endpoint) });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  peer.on('message', raw => {
+    const request = JSON.parse(raw.toString());
+    if (request.type === 'open') peer.send(JSON.stringify(request.streamId.startsWith('failed')
+      ? { type: 'error', streamId: request.streamId, error: { code: 'fixture', message: 'Expected failure', details: {} } }
+      : { type: 'item', streamId: request.streamId, value: { id: request.streamId } }));
+    // The pinned gateway emits nothing for a cancellation. A frame already
+    // queued on the transport may still arrive and must not revive its scope.
+    if (request.type === 'cancel') peer.send(JSON.stringify({ type: 'item', streamId: request.streamId, value: { late: true } }));
+  });
+  for (let index = 0; index < 300; index++) {
+    c.send(open(`cancelled-${index}`, 'session/page')); assert.equal((await c.next()).value.id, `cancelled-${index}`);
+    c.send({ type: 'cancel', streamId: `cancelled-${index}` });
+    c.send(open(`failed-${index}`, 'session/page')); assert.equal((await c.next()).type, 'error');
+  }
+  c.send(open('still-available', 'session/page'));
+  assert.equal((await c.next()).value.id, 'still-available');
+  assert.equal(ended.length, 600);
+});
+
+test('a queued normal terminal cannot transfer its stream id to a new endpoint', { timeout: 5000 }, async t => {
+  let enter, release;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => { enter(); await barrier; return { forward: true, value }; } });
+  t.after(() => release());
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('same-id', 'session/page')); await entered;
+  const peer = [...f.peers][0];
+  peer.send(JSON.stringify({ type: 'end', streamId: 'same-id' })); await delay(20);
+  const closed = once(c.ws, 'close'); c.send(open('same-id', 'session/modelCatalog'));
+  assert.equal((await closed)[0], 1008);
+  assert.equal(f.received.filter(item => item.type === 'open').length, 1);
+  release();
+});
+
+test('carrier closure aborts and cleans a pending authorization before it settles', { timeout: 5000 }, async t => {
+  let enter, release, signal, revoked = false;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const ended = [];
+  const f = await fixture(t, {}, { revalidate: async () => { if (revoked) throw new HttpError(403, 'geo_member_forbidden', 'Revoked'); }, authorize: async (_endpoint, _payload, context) => { signal = context.signal; enter(); await barrier; }, onStreamClosed: (_endpoint, id) => ended.push(id) });
+  t.after(() => release());
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('pending', 'session/page')); await entered;
+  const closed = once(c.ws, 'close'); revoked = true; await closed;
+  await eventually(() => signal.aborted);
+  assert.deepEqual(ended, ['pending']);
+  release(); await delay(20);
+  assert.deepEqual(ended, ['pending']); assert.equal(f.received.length, 0);
+});
+
+test('a scoped carrier retires at its lifetime identity budget without evicting old bindings', { timeout: 30000 }, async t => {
+  // The rule is the same at any budget. At the production one (4096) every identity is a full frame revalidation against the
+  // file-backed store double, about 50 s on a loaded host, so the carrier is given a small one.
+  const budget = 64;
+  let wake;
+  const f = await fixture(t, {}, { lifetimeStreams: budget, projectItem: async (_endpoint, _payload, value) => ({ forward: true, value }), onStreamClosed: () => wake?.() });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const peer = [...f.peers][0]; peer.removeAllListeners('message');
+  const sent = [];
+  peer.on('message', raw => sent.push(JSON.parse(raw.toString())));
+  let closeCode = null; c.ws.on('close', code => { closeCode = code; wake?.(); });
+  for (let index = 0; index < budget + 4 && closeCode === null; index++) {
+    const done = new Promise(resolve => { wake = resolve; });
+    c.send(open(`lifetime-${index}`, 'session/page'));
+    c.send({ type: 'cancel', streamId: `lifetime-${index}` });
+    await done; wake = null;
+  }
+  assert.equal(closeCode, 1001, 'a fresh carrier starts before any retired identity can be reused');
+  assert.equal(sent.filter(item => item.type === 'open').length, budget);
+  const next = f.connect(); assert.equal(await next.opened, 101, 'rotation does not disable new native reading');
+});
+
+test('an unavailable standing recheck keeps the carrier and retries; only an authorization verdict revokes it', { timeout: 15000 }, async t => {
+  let mode = 'ok', checks = 0;
+  const f = await fixture(t, {}, { revalidate: async () => {
+    checks += 1;
+    if (mode === 'unavailable') throw new HttpError(503, 'product_state_unavailable', 'The native session inventory is unavailable.');
+    if (mode === 'database') throw new Error('Connection terminated unexpectedly');
+    if (mode === 'revoked') throw new HttpError(403, 'geo_member_forbidden', 'Membership changed.');
+  } });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  let closed = null; c.ws.on('close', (code, reason) => { closed = { code, reason: String(reason) }; });
+  for (const failure of ['unavailable', 'database']) {
+    mode = failure; const before = checks;
+    await within(5000, () => checks >= before + 2 || closed !== null, 'the recheck keeps running');
+    assert.equal(closed, null, `a ${failure} recheck is retried, not a revocation`);
+    c.send(open(`during-${failure}`, 'session/page'));
+    const refused = await c.next();
+    assert.equal(refused.type, 'error'); assert.equal((await c.next()).type, 'end');
+    assert.equal(closed, null, 'one refused operation leaves the carrier open');
+  }
+  mode = 'ok';
+  c.send(open('after', 'session/page')); assert.equal((await c.next()).value.reached, 'session/page');
+  mode = 'revoked';
+  await within(5000, () => closed !== null, 'a revoked carrier closes');
+  assert.deepEqual(closed, { code: 1008, reason: 'runtime_ui_authorization_revoked' });
+});
+
+test('a carrier whose authority stays unreadable closes for a fresh handshake instead of streaming on', { timeout: 15000 }, async t => {
+  let unavailable = false;
+  const f = await fixture(t, {}, { unavailableRechecks: 2, revalidate: async () => {
+    if (unavailable) throw new HttpError(503, 'product_state_unavailable', 'The native session inventory is unavailable.');
+  } });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const closed = once(c.ws, 'close'); unavailable = true;
+  const [code, reason] = await closed;
+  assert.equal(code, 1013); assert.equal(String(reason), 'runtime_ui_authorization_unavailable');
+});
+
+test('a shared carrier repeats its standing check with a memo of its own; the handshake and HTTP reads check in full', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false, resolutions: [] };
+  const f = await fixture(t, {}, {}, { shared });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  await within(5000, () => shared.resolutions.filter(options => options?.recheck).length >= 2, 'the standing recheck carries a memo');
+  const memos = new Set(shared.resolutions.filter(options => options?.recheck).map(options => options.recheck));
+  assert.equal(memos.size, 1, 'every standing recheck of one carrier shares its memo');
+  assert.equal(shared.resolutions[0]?.recheck ?? null, null, 'the upgrade itself resolves the frame in full');
+  const second = f.connect(); assert.equal(await second.opened, 101);
+  await within(5000, () => new Set(shared.resolutions.filter(options => options?.recheck).map(options => options.recheck)).size >= 2, 'another carrier has its own memo');
+  shared.allowed = false;
+  const [code] = await once(c.ws, 'close'); assert.equal(code, 1008, 'membership is still checked on every recheck');
+});
+
+test('a delegated frame re-verifies its runtime context only when the runtime generation or the context policy changes', async () => {
+  let stamp = 'generation-1/policy-1', resolutions = 0, verifications = 0, failing = false, moveDuringVerification = false;
+  const resolve = createGeoFrameResolver({
+    resolve: async () => { resolutions += 1; return { project: { id: 'project' }, principal: { rootSessionId: 'root' } }; },
+    contextStamp: async () => stamp,
+    verifyContext: async () => {
+      verifications += 1;
+      if (moveDuringVerification) { stamp = 'generation-3/policy-2'; moveDuringVerification = false; }
+      if (failing) throw new HttpError(409, 'runtime_context_unverified', 'The runtime has no current shared context launch proof.');
+    },
+  });
+  const scope = { kind: 'geo', geoProjectId: 'geo', sessionId: 'root' }, recheck = {};
+  for (let tick = 0; tick < 5; tick++) await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(resolutions, 5, 'membership and claims are resolved on every recheck');
+  assert.equal(verifications, 1, 'an unchanged generation and policy are not re-verified');
+  await resolve({ id: 'editor' }, scope); await resolve({ id: 'editor' }, scope);
+  assert.equal(verifications, 3, 'a resolution without a memo verifies in full');
+  stamp = 'generation-2/policy-1';
+  await resolve({ id: 'editor' }, scope, null, { recheck }); await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(verifications, 4, 'a new runtime generation is verified once');
+  stamp = 'generation-3/policy-1'; moveDuringVerification = true;
+  for (let tick = 0; tick < 3; tick++) await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(verifications, 6, 'a stamp that moved during verification is verified again, then remembered');
+  stamp = 'generation-4/policy-2'; failing = true;
+  await assert.rejects(resolve({ id: 'editor' }, scope, null, { recheck }), error => error.code === 'runtime_context_unverified');
+  failing = false;
+  await resolve({ id: 'editor' }, scope, null, { recheck });
+  assert.equal(verifications, 8, 'a failed verification is never remembered as a pass');
+});
 
 test("LoopX GoalBar uses the authenticated project, preserves its protocol, and spends only on start", async t => {
   const checked = [], charged = [], forwarded = [];
@@ -764,6 +1150,57 @@ test("a workspace-file read is held to the workspace on both transports, and the
   assert.equal(f.received.filter((frame) => frame.type === "open").length, inside.length);
 });
 
+test("a file opened in the kernel's own file panel is noted as opened, on both transports, with a workspace-relative path; a listing, a stat, an embedded asset and a refused path are not", { timeout: 5000 }, async (t) => {
+  // The use signal of the learning loop (`LearningEvidence.noteFileUse`): the researcher reading a file a run delivered. An observation, never a check.
+  const noted = [];
+  const f = await fixture(t, {}, {}, { noteFileRead: async (project, opened) => { noted.push([project.id, opened.path]); } });
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  f.manager.proxy = async (_req, res) => { res.writeHead(200); res.end("{}"); };
+  const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
+  for (const file of ["deliverables/report.md", "reports/report.html", "images/chart.png"]) {
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), "workspace content");
+  }
+  const call = (endpoint, args) => fetch(`${f.base}/api/${endpoint}`, {
+    method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "r1", method: endpoint, payload: { args } }),
+  });
+  await call("workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md`, range: {} });
+  await call("workspaceFiles/readAll", { workspaceFileScopeId: "s", path: "deliverables/report.md" });
+  await call("workspaceFiles/readBytes", { sessionId: "s", path: `${root}/reports/report.html` });
+  await call("workspaceFiles/list", { workspaceFileScopeId: "s", path: root });
+  await call("workspaceFiles/stat", { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md` });
+  await call("workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/reports/report.html`, relativePath: "../images/chart.png" });
+  await call("workspaceFiles/readBytes", { sessionId: "s", path: "../images/chart.png", options: { baseFile: `${root}/reports/report.html` } });
+  assert.equal((await call("workspaceFiles/read", { workspaceFileScopeId: "s", path: "/etc/passwd" })).status, 403);
+  assert.deepEqual(noted, [["default", "deliverables/report.md"], ["default", "deliverables/report.md"], ["default", "reports/report.html"]],
+    "the files opened, relative to the workspace; not the listing, the stat, the sibling asset, the preview's embedded image or the refused path");
+  noted.length = 0;
+  c.send(open("m1", "workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md`, range: {} }));
+  assert.deepEqual((await c.next()).value, { reached: "workspaceFiles/read" });
+  c.send(open("m2", "workspaceFiles/list", { workspaceFileScopeId: "s", path: root }));
+  assert.deepEqual((await c.next()).value, { reached: "workspaceFiles/list" });
+  c.send(open("m3", "workspaceFiles/read", { workspaceFileScopeId: "s", path: "/etc/passwd" }));
+  assert.equal((await c.next()).error?.code, "runtime_ui_method_denied");
+  assert.deepEqual(noted, [["default", "deliverables/report.md"]]);
+});
+
+test("a file the ledger cannot note as opened is still read: the observation never refuses", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t, {}, {}, { noteFileRead: async () => { throw Object.assign(new Error("down"), { code: "evidence_unavailable" }); } });
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  f.manager.proxy = async (_req, res) => { res.writeHead(200); res.end("{}"); };
+  const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
+  await mkdir(path.join(root, "deliverables"), { recursive: true });
+  await writeFile(path.join(root, "deliverables/report.md"), "x");
+  const response = await fetch(`${f.base}/api/workspaceFiles/read`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "r1", method: "workspaceFiles/read", payload: { args: { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md` } } }) });
+  assert.equal(response.status, 200);
+  c.send(open("m1", "workspaceFiles/read", { workspaceFileScopeId: "s", path: "deliverables/report.md" }));
+  assert.deepEqual((await c.next()).value, { reached: "workspaceFiles/read" });
+});
+
 test("native Markdown media uses authenticated bounded workspace reads with inert content", async (t) => {
   const f = await fixture(t, { maxFileBytes: 16 });
   const project = await f.store.requireProject(f.user, "default");
@@ -810,7 +1247,8 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   // The paperclip (2026-09-22): the raw-byte route the upload Worker posts to,
   // and the Remote fallback the client uses for exact bytes. Both were refused
   // until then, which left the conversation with no way to hand over a file.
-  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const attempts = [];
+  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 }, {}, { recordUploadAttempt: async (project) => { attempts.push(project.id); } });
   const c = f.connect({ Origin: SHELL_ORIGIN });
   assert.equal(await c.opened, 101);
   const arrived = [];
@@ -831,15 +1269,39 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   assert.equal(arrived[1].fileBody, false);
   c.send(open("upload", "fileUploads/upload", { request: { sessionId: "s1" } }));
   assert.deepEqual((await c.next()).value, { reached: "fileUploads/upload" });
+  assert.deepEqual(attempts, ["default"], "mux records the authenticated project before forwarding");
 });
 
 test("an attachment's bytes reach the kernel as they are, and one past the file ceiling reaches nothing", { timeout: 5000 }, async (t) => {
   // Every POST used to be parsed as a JSON RPC before it was forwarded, so the
   // first file anyone attached was refused as invalid_runtime_proxy_payload
   // (production, 2026-09-22). A file is bytes: ceilinged, never parsed.
-  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const requests = [];
+  let kernel, server, manager;
+  let releaseWriters;
+  const writersReleased = new Promise(resolve => { releaseWriters = resolve; });
+  let auditWriters = 0, quotaWriters = 0;
+  const cleanup = async () => {
+    const errors = [];
+    const attempt = async operation => { try { await operation(); } catch (error) { errors.push(error); } };
+    if (server?.listening) await attempt(() => new Promise(resolve => server.close(resolve)));
+    releaseWriters();
+    errors.push(...(await Promise.all(requests)).filter(Boolean));
+    // All handlers have now admitted their POST quota checks; only now take
+    // the snapshot, so response completion cannot race a later admission.
+    if (manager) {
+      const quotas = await Promise.allSettled([...manager.backgroundQuotaChecks.values()]);
+      errors.push(...quotas.filter(row => row.status === "rejected").map(row => row.reason));
+    }
+    if (kernel?.listening) await attempt(() => new Promise(resolve => kernel.close(resolve)));
+    if (manager) await attempt(() => manager.closeAll());
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "Attachment proxy cleanup failed");
+  };
+  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 }, {}, { beforeDataCleanup: cleanup });
   const received = [];
-  const kernel = createServer((req, res) => {
+  const attempts = [];
+  kernel = createServer((req, res) => {
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
@@ -849,17 +1311,28 @@ test("an attachment's bytes reach the kernel as they are, and one past the file 
     });
   });
   await new Promise((resolve) => kernel.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => kernel.close(resolve)));
-  const manager = new RuntimeManager(f.config);
+  manager = new RuntimeManager(f.config);
   const project = await f.store.requireProject(f.user, "default");
   const started = [];
   manager.start = async () => { started.push(true); return { url: `http://127.0.0.1:${kernel.address().port}`, cookie: "k=1" }; };
-  const server = createServer((req, res) => {
-    void manager.proxy(req, res, project, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx", { surface: "ui", fileBody: true })
+  const quotaCheck = manager.stopRuntimeIfProjectQuotaExceeded.bind(manager);
+  manager.stopRuntimeIfProjectQuotaExceeded = async project => {
+    await writersReleased;
+    await quotaCheck(project);
+    await writeFile(path.join(project.metaDir, "held-quota-writer"), "drained");
+    quotaWriters++;
+  };
+  server = createServer((req, res) => {
+    const handled = manager.proxy(req, res, project, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx", { surface: "ui", fileBody: true, beforeForward: async () => { attempts.push({ userId: project.userId, projectId: project.id, state: "attempted" }); } })
       .catch((error) => { res.writeHead(error.status ?? 500, { "content-type": "application/json" }); res.end(JSON.stringify({ code: error.code })); });
+    const writer = handled.then(async () => {
+      await writersReleased;
+      await writeFile(path.join(project.metaDir, "held-audit-writer"), "drained");
+      auditWriters++;
+    });
+    requests.push(writer.then(() => null, error => error));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => server.close(resolve)));
   const { port } = server.address();
   // A .docx is a zip: not JSON, and past the JSON ceiling.
   const docx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(2000, 7)]);
@@ -873,6 +1346,27 @@ test("an attachment's bytes reach the kernel as they are, and one past the file 
   assert.equal((await tooBig.json()).code, "runtime_proxy_body_too_large");
   assert.equal(received.length, 1, "refused before a byte reached the kernel");
   assert.equal(started.length, 1, "and before the runtime was even asked for");
+  assert.deepEqual(attempts, [{ userId: project.userId, projectId: project.id, state: "attempted" }], "only the authorized, size-checked attempt is recorded");
+  assert.equal(auditWriters, 0, "response completion does not drain held metadata writers");
+  assert.equal(quotaWriters, 0, "POST quota checks still own the project after response completion");
+  await cleanup();
+  assert.equal(auditWriters, 2);
+  assert.equal(quotaWriters, 1);
+  assert.equal(manager.backgroundQuotaChecks.size, 0);
+});
+
+test("a failed owned proxy cleanup still closes shared servers and removes its data directory", async t => {
+  let cleanup;
+  const failure = new Error("deliberate attachment handler failure");
+  const f = await fixture({ after: operation => { cleanup = operation; } }, {}, {}, {
+    beforeDataCleanup: async () => { throw failure; },
+  });
+  let attempted = false;
+  t.after(async () => { if (!attempted) await cleanup(); });
+  attempted = true;
+  await assert.rejects(cleanup(), error => error === failure);
+  assert.equal(f.upstream.listening, false);
+  await assert.rejects(stat(f.dataDir), { code: "ENOENT" });
 });
 
 test("HTTP rejects revoked and malformed session cookies without dev-session minting", { timeout: 5000 }, async (t) => {
@@ -1591,6 +2085,39 @@ test("native HTTP and mux freeze context only for admitted prompts without rewri
   assert.deepEqual(frozen[1].request, steer.payload.args.request);
 });
 
+test("native attendance is committed before HTTP or mux forwarding, and a receipt that cannot be written never refuses the prompt", async t => {
+  let unavailable = true;
+  const receipts = [], forwarded = [];
+  const f = await fixture(t, {}, {}, {
+    recordPromptAttendance: async (user, project, request) => {
+      assert.equal(user.id, f.user.id); assert.equal(project.id, 'default');
+      if (unavailable) throw new HttpError(503, 'runtime_prompt_rejected', 'Attendance receipt could not be mirrored.');
+      receipts.push({ requestId: request.requestId, forwardedBefore: forwarded.length + f.received.length });
+    },
+    preparePrompt: async () => { throw new Error('Optional enrichment unavailable'); },
+    recordPromptActor: async () => { throw new Error('Optional extension binding unavailable'); },
+  });
+  f.manager.proxy = async (req, res) => { forwarded.push(req.__openScienceProxyBody.toString('utf8')); res.writeHead(200); res.end('{}'); };
+  const request = { requestId: 'attendance-http', sessionId: 'ordinary', mode: 'queue', content: [{ type: 'text', text: 'Question' }] };
+  const post = (body = request) => fetch(`${f.base}/api/session/prompt`, { method: 'POST', headers: { cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: 'transport', method: 'session/prompt', payload: { args: { request: body } } }) });
+  // A disk or mirror that cannot take the receipt costs the turn its proof of a person, never the person's message (review F5).
+  assert.equal((await post()).status, 200);
+  assert.equal(forwarded.length, 1);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open('attendance-failed', 'session/prompt', { request: { ...request, requestId: 'attendance-mux-failed' } }));
+  assert.equal((await c.next()).type, 'item');
+  assert.equal(f.received.length, 1);
+  unavailable = false;
+  assert.equal((await post({ ...request, requestId: 'attendance-http-ok' })).status, 200);
+  const d = f.connect(); assert.equal(await d.opened, 101);
+  d.send(open('attendance-ok', 'session/prompt', { request: { ...request, requestId: 'attendance-mux' } }));
+  assert.equal((await d.next()).type, 'item');
+  // Written before forwarding whenever it can be written.
+  assert.deepEqual(receipts, [{ requestId: 'attendance-http-ok', forwardedBefore: 2 }, { requestId: 'attendance-mux', forwardedBefore: 3 }]);
+  assert.equal(forwarded.length, 2); assert.equal(f.received.length, 2);
+});
+
 test("failed native supplemental context never refuses an otherwise authorized prompt", async t => {
   const audits = [];
   const f = await fixture(t, {}, {}, { preparePrompt: async () => { throw new HttpError(503, "handbook_context_timeout", "Context timed out"); },
@@ -1691,4 +2218,46 @@ test("runtime UI shutdown joins its sockets and listener even when browser clean
   finally { refuse = false; }
   await closed;
   assert.equal(f.ui.address(), null);
+});
+
+test("a refused native upload cannot record activity for a foreign project", { timeout: 5000 }, async (t) => {
+  const attempts = [];
+  const f = await fixture(t, {}, {}, { recordUploadAttempt: async (project) => { attempts.push(project.id); } });
+  const response = await fetch(`${f.base}/api/session/uploadFileBinary`, {
+    method: "POST", headers: { Origin: UI_ORIGIN, "content-type": "application/octet-stream" }, body: Buffer.from("input"),
+  });
+  assert.equal(response.status, 401);
+  assert.deepEqual(attempts, []);
+});
+
+test("maintenance rejects cold native frame GET and WebSocket starts while warm reads remain available", async t => {
+  const f = await fixture(t);
+  let blocked = true, creations = 0, admissions = 0;
+  f.manager.runtimeCreationMutation = async operation => {
+    admissions += 1;
+    if (blocked) throw new HttpError(503, 'maintenance_active', 'Draining');
+    return operation();
+  };
+  // Exercise the actual shared creation boundary rather than the fixture's start stub.
+  f.manager.start = RuntimeManager.prototype.start.bind(f.manager);
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.manager.startKernel = async project => {
+    creations += 1;
+    return { project, workspaceDir: project.workspaceDir, proxyWorkspaceDir: project.workspaceDir,
+      url: 'http://kernel.local', socketPath: path.join(f.dataDir, 'mux.sock'), cookie: 'kernel_auth=internal-only', close: async () => {} };
+  };
+  f.config.runtimeMode = 'kernel';
+  f.upstream.on('request', (_request, response) => { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<html><body>fixture</body></html>'); });
+  assert.equal((await fetch(`${f.base}/`, { headers: { cookie: f.cookie } })).status, 503);
+  assert.equal(await f.connect().opened, 503);
+  assert.equal(creations, 0);
+  assert.equal(admissions, 2);
+  blocked = false;
+  const project = await f.store.requireProject(f.user, 'default');
+  await f.manager.start(project);
+  blocked = true;
+  assert.equal((await fetch(`${f.base}/`, { headers: { cookie: f.cookie } })).status, 200);
+  assert.equal(await f.connect().opened, 101);
+  assert.equal(creations, 1);
+  assert.equal(admissions, 3, 'warm GET and WebSocket reads do not request creation admission');
 });

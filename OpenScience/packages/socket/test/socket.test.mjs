@@ -76,7 +76,7 @@ test("the composition mounts every agent plugin we own, the kernel's own pieces 
   const patch = await readFile(new URL("../cordis.patch.yml", import.meta.url), "utf8");
   // Counted, not named in the title: it said "five" while there were eight,
   // and a number in a sentence is a number nothing checks.
-  assert.equal(AGENT_PLUGIN_IDS.length, 9, "add the row here when a plugin is added, so the count stays a fact");
+  assert.equal(AGENT_PLUGIN_IDS.length, 10, "add the row here when a plugin is added, so the count stays a fact");
   assert.deepEqual([...HOST_PLUGIN_IDS].sort(), [
     "evimed-runtime-ui", "evimed-skill-catalogue", "evimed-plugin-probe", "evimed-seam-probe",
     "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-loopx-bootstrap", "evimed-memory-bridge",
@@ -1329,18 +1329,17 @@ test("the tool-result pruner's thresholds are the domain constant, not a hand co
   }
 });
 
-test("exactly one compaction engine can be active at a time", async () => {
+test("the compaction row mounts no engine of ours: the kernel's engine is the only one", async () => {
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
-  // Both rows are mounted, which is deliberate — the kernel's engine is the
-  // default and ours is a swap — so the invariant cannot be "only one row".
-  // It is that the swap declines unless the policy asks for it, in the one
-  // place that decides.
+  // Both rows stay mounted: the kernel's engine does the compaction and ours is
+  // only the request-size guard beside it. The invariant is that ours never
+  // brings a second engine, which would be a class plugin of its own.
   assert.match(preset, /- id: compaction-basic/);
   assert.match(preset, /- id: evimed-compaction/);
   const plugin = await readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
-  assert.match(plugin, /derived\.policy === 'basic'\)\s*\{[\s\S]*?return\n?\s*\}/,
-    "the compaction plugin no longer returns early on the default policy, so two engines would register");
-  assert.ok(!/from\s+['"]@deepseek-ai\//.test(plugin), "the base engine must stay lazily resolved; it is not installed here");
+  assert.ok(!/ctx\.plugin\(/.test(plugin), "the compaction row registers a plugin of its own, which is a second engine");
+  assert.ok(!/registerTool|defineTool/.test(plugin), "the compaction row registers a tool nothing would serve");
+  assert.ok(!/from\s+['"]@deepseek-ai\//.test(plugin), "the kernel's engine is never imported here; it is not installed in this workspace");
 });
 
 test("a request about to pass the gateway's byte limit is compacted first, on the kernel's own engine too", async () => {
@@ -1379,9 +1378,9 @@ test("a request about to pass the gateway's byte limit is compacted first, on th
   };
   const big = (/** @type {number} */ size) => ({ role: "tool", content: [{ type: "text", text: "x".repeat(size) }] });
 
-  // On `basic`: the plugin registers no engine and no tool, and still guards.
-  await applyCompaction(/** @type {any} */ (ctx), { policy: "basic", thresholdRatio: 0.8, retainRatio: 0.16, maxTokens: 8192, maxRequestBytes: 10_000 });
-  assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 1, "the guard is registered on the default policy");
+  // The plugin registers no engine and no tool, only the guard.
+  applyCompaction(/** @type {any} */ (ctx), { maxRequestBytes: 10_000 });
+  assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 1, "the guard is registered");
 
   history = [big(2_000)];
   await step();
@@ -1405,88 +1404,22 @@ test("a request about to pass the gateway's byte limit is compacted first, on th
 
   // Off is off.
   listeners.clear();
-  await applyCompaction(/** @type {any} */ (ctx), { policy: "basic", thresholdRatio: 0.8, retainRatio: 0.16, maxTokens: 8192, maxRequestBytes: 0 });
+  applyCompaction(/** @type {any} */ (ctx), { maxRequestBytes: 0 });
   assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 0);
+  applyCompaction(/** @type {any} */ (ctx), { enabled: false, maxRequestBytes: 10_000 });
+  assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 0, "off registers nothing");
   assert.equal(typeof guardRequestBytes, "function");
 });
 
-/* ------------------------------------------- the manager's compaction request tool */
+/* ------------------------------------------- the guard's session key */
 
-test("the compaction request marker is consumed, keyed by session, and never leaks between them", async () => {
-  const { sessionKey, takeRequest } = await import("../plugins/compaction.mjs");
+test("the guard names a session by whichever shape the kernel hands it", async () => {
+  const { sessionKey } = await import("../plugins/compaction.mjs");
   assert.equal(sessionKey({ session: { id: "ses_a" } }), "ses_a");
   assert.equal(sessionKey({ agent: { session: { id: "ses_b" } } }), "ses_b");
   assert.equal(sessionKey({ sessionId: "ses_c" }), "ses_c");
   assert.equal(sessionKey({}), "");
   assert.equal(sessionKey(null), "");
-
-  const requests = new Map([["ses_a", { reason: "context is crowded", at: 1 }]]);
-  assert.deepEqual(takeRequest(requests, { session: { id: "ses_b" } }), null,
-    "one session's request must not compact another's conversation");
-  assert.deepEqual(takeRequest(requests, { session: { id: "ses_a" } }), { reason: "context is crowded" });
-  assert.deepEqual(takeRequest(requests, { session: { id: "ses_a" } }), null,
-    "a marker that survived what it asked for would compact every step until nothing was left");
-  assert.equal(requests.size, 0);
-  assert.equal(takeRequest(requests, {}), null);
-});
-
-test("the request dependency reaches the engine through the factory, not through ctx.plugin", async () => {
-  // cordis constructs a class plugin as `new Plugin(ctx, config)`; anything
-  // after the config is dropped. Handing `takeCompactRequest` that way would
-  // leave the tool registered, the marker written, and nothing reading it —
-  // which is not a wiring error that fails, it is one that looks like the
-  // model never asking.
-  const plugin = await readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
-  const factoryCall = /loadEvimedCompactionEngine\(\{[\s\S]*?\n {2}\}\)/.exec(plugin);
-  assert.ok(factoryCall, "the engine is no longer built through the factory");
-  assert.match(factoryCall[0], /takeCompactRequest:/);
-  const pluginCall = /ctx\.plugin\(Engine, \{[\s\S]*?\n {2}\}\)/.exec(plugin);
-  assert.ok(pluginCall, "the engine is no longer mounted");
-  assert.ok(!/takeCompactRequest/.test(pluginCall[0]), "a third ctx.plugin argument is not passed on");
-});
-
-test("the request tool exists only where its consumer does, and promises the step boundary", async () => {
-  const plugin = await readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
-  // Registered after the early return for the `basic` policy, so a deployment
-  // running the kernel's own engine never sees a tool nothing would serve.
-  const earlyReturn = plugin.indexOf("derived.policy === 'basic'");
-  const registration = plugin.indexOf("registerTool(ctx, compactTool)");
-  assert.ok(earlyReturn > 0 && registration > earlyReturn);
-  assert.match(plugin, /name: SOCKET_TOOL_NAMES\.compactRequest/, "the name comes from the closed vocabulary");
-  // The tool runs inside a step; the compaction happens at the next boundary.
-  // Reporting otherwise would have the model plan around room it does not have.
-  assert.match(plugin, /servedAt: 'next-step'/);
-  assert.ok(!/compactNow/.test(plugin), "compactNow goes through runMaintenance and throws while a turn is in flight");
-});
-
-test("every compaction observation is emitted under a topic the vocabulary defines", async () => {
-  // The plugin emitted `compaction/${observation.kind}`. There is no `kind` on
-  // a `CompactionObservation` — the field is `event`, and it already carries a
-  // whole topic — so every observation went out as the literal string
-  // "compaction/undefined", on the one channel the plugin's own comment calls
-  // the only way this policy can be measured. Nothing failed, nothing logged,
-  // and a subscriber would have seen a stream of identical unnamed events.
-  //
-  // Read from source rather than by driving the engine: the emit sits inside
-  // the `observe` callback the kernel invokes, and asserting on the topic is
-  // asserting on this line.
-  const [{ default: fs }, { COMPACTION_OBSERVATIONS }] = await Promise.all([
-    import("node:fs/promises"),
-    import("@evimed/harness-port"),
-  ]);
-  const plugin = await fs.readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
-  const emit = /ctx\.emit\?\.\(([^,]+),/.exec(plugin);
-  assert.ok(emit, "the observation emit is gone");
-  const topic = emit[1].trim();
-  assert.equal(topic, "observation.event",
-    `the emit topic must be the observation's own event, not ${topic}`);
-  // And the vocabulary it comes from really does hold full topics, so passing
-  // it through unchanged is right and re-prefixing it would be wrong.
-  const topics = Object.values(COMPACTION_OBSERVATIONS);
-  assert.ok(topics.length >= 3);
-  for (const value of topics) {
-    assert.match(value, /^compaction\//, `${value} is not a full topic, so the emit would need a prefix`);
-  }
 });
 
 /* ------------------------------------------------ what the root is shown */
@@ -1546,4 +1479,11 @@ test("a capability built on a module's tools is not offered where the module is 
   assert.deepEqual(offeredCapabilities(manifests, disabledTools("frontier_search")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight", "vcr-protocol"]);
   assert.deepEqual(offeredCapabilities(manifests, disabledTools("web_read, geo_read,geo_write,social_posts_search")).map((item) => item.id), ["clinical-evidence-synthesis", "vcr-protocol"]);
   assert.deepEqual(offeredCapabilities(manifests, disabledTools("vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight"]);
+});
+
+test("the plugin probe injects no loader: a runtime without one keeps its citation and extension proofs", async () => {
+  const { inject } = await import("../plugins/plugin-probe.mjs");
+  assert.equal(inject.includes("loader"), false);
+  // Every service it does inject is one the seam manifest names as required of the kernel.
+  for (const name of inject) assert.ok(SEAMS.services.required.includes(name), `${name} is a required kernel service`);
 });

@@ -28,9 +28,10 @@
 
 import { isKnowledgeMirrorPath, knowledgeGraphToGraph, knowledgeSourceIdOfUri, splitOkfFrontmatter } from "@evimed/domain";
 import { escapeGrepPattern } from "./openVikingResources.mjs";
+import { sourceReadable } from "./sourceService.mjs";
 
 const gatewayPath = "/internal/kb/v1/browse";
-const allowedFields = new Set(["op", "root", "path", "pattern", "offset", "limit"]);
+const allowedFields = new Set(["op", "root", "path", "pattern", "offset", "limit", "sessionId"]);
 const OPS = Object.freeze(["list", "tree", "overview", "read", "grep"]);
 const ROOTS = Object.freeze(["sources", "wiki", "kg", "library"]);
 const defaultRoot = "wiki";
@@ -120,6 +121,7 @@ async function readJsonBody(req, maxBytes) {
 
 /** @param {Record<string, unknown>} body */
 function validatedRequest(body) {
+  if (body.sessionId !== undefined && (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId))) throw gatewayError(400, "kb_browse_request_invalid", "Invalid session identity.");
   if (Object.keys(body).some((key) => !allowedFields.has(key))) {
     throw gatewayError(400, "kb_browse_request_invalid", "The knowledge-base browse request has unsupported fields.");
   }
@@ -208,18 +210,19 @@ export function kbBrowseGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ resources: any, sources?: any, library?: any, titleOf?: (source: any) => unknown, evaluationIsolation?: any, budgetMs?: number }} dependencies
+ * @param {{ resources: any, sources?: any, library?: any, titleOf?: (source: any) => unknown, evaluationIsolation?: any, budgetMs?: number, sourceScope?: any, compiledScope?: any, contextFor?: any }} dependencies
  *   `resources`: the `OpenVikingResources` of this deployment; `sources`: the source service (`get(userId, id)`) and
  *   `titleOf`: the title a source record is shown by; `library`: the account library (`searchScope(userId)`), or null;
  *   `budgetMs`: twenty seconds everywhere but in a test that would otherwise wait them out
  */
-export function createKbBrowseGatewayHandler(config, runtimeManager, { resources, sources = null, library = null, titleOf = () => null, evaluationIsolation = null, budgetMs = answerBudgetMs }) {
+export function createKbBrowseGatewayHandler(config, runtimeManager, { resources: rawResources, sources = null, library = null, titleOf = () => null, evaluationIsolation = null, budgetMs = answerBudgetMs, sourceScope = null, compiledScope = null, contextFor = null }) {
   const windows = new Map();
+  const dependenciesResources = rawResources;
 
   /**
    * Titles of documents by id: this project's own first, then the account library's copy. A document that is gone, or
    * a ledger that does not answer, costs the title and never the listing.
-   * @param {{ userId: string, projectId: string }} identity @param {Iterable<string>} ids @returns {Promise<Map<string, string>>}
+   * @param {{ userId: string, projectId: string, context?: any }} identity @param {Iterable<string>} ids @returns {Promise<Map<string, string>>}
    */
   async function titlesOf(identity, ids) {
     /** @type {Map<string, string>} */
@@ -229,12 +232,13 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
       await eachBounded(wanted, async (id) => {
         try {
           const source = await sources.get(identity.userId, id);
-          const title = source && source.projectId === identity.projectId && !source.deletedAt ? String(titleOf(source) ?? "").trim() : "";
+          const title = source && source.projectId === identity.projectId && !source.deletedAt
+            && (!identity.context || await identity.context.acceptSource(source)) ? String(titleOf(source) ?? "").trim() : "";
           if (title) titles.set(id, title);
         } catch { /* a document that is gone has no title to show */ }
       });
     }
-    if (library && wanted.some((id) => !titles.has(id))) {
+    if (!identity.context && library && wanted.some((id) => !titles.has(id))) {
       try {
         for (const entry of await library.searchScope(identity.userId)) {
           const title = String(entry?.title ?? "").trim();
@@ -250,25 +254,25 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
    * whole: `…/wiki` followed by `/` or nothing, never as the prefix of a longer name.
    * @param {unknown} text @param {Record<string, string>} roots
    */
-  function neutral(text, roots) {
+  function neutralOwned(text, roots) {
     return String(text ?? "").replace(SOURCE_ADDRESS, "source:$1").replace(ANY_ADDRESS, (address) => {
       const name = ROOTS.find((root) => address === roots[root] || address.startsWith(`${roots[root]}/`));
       return name ? `${name}:${address.slice(roots[name].length + 1)}` : OMITTED_ADDRESS;
     });
   }
 
-  /** The documents a text names, with their titles. @param {{ userId: string, projectId: string }} identity @param {string} text */
+  /** The documents a text names, with their titles. @param {{ userId: string, projectId: string, context?: any }} identity @param {string} text */
   async function documentsNamed(identity, text) {
     const ids = [...new Set([...text.matchAll(SOURCE_MENTION)].map((match) => match[1]))].slice(0, maxDocumentsNamed);
     const titles = await titlesOf(identity, ids);
-    return ids.map((sourceId) => ({ sourceId, ...(titles.has(sourceId) ? { title: titles.get(sourceId) } : {}) }));
+    return ids.filter(id => !identity.context || titles.has(id)).map((sourceId) => ({ sourceId, ...(titles.has(sourceId) ? { title: titles.get(sourceId) } : {}) }));
   }
 
   /**
    * What an answer says of each file besides its path. Under `sources` and `library` a file is a document: its id (the
    * file's name says nothing else) and its title. Under `wiki` and `kg` it is a page: the title and type its front
    * matter states, read from the head of the file.
-   * @param {{ userId: string, projectId: string }} identity @param {string} root @param {string} base the root's address
+   * @param {{ userId: string, projectId: string, context?: any }} identity @param {string} root @param {string} base the root's address
    * @param {Array<Record<string, any>>} files `{ path, … }` of files, named in place
    */
   async function nameFiles(identity, root, base, files) {
@@ -283,7 +287,7 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
     }
     await eachBounded(files.filter((file) => /\.md$/i.test(file.path)).slice(0, maxHeadReads), async (file) => {
       try {
-        const head = await resources.read(identity.userId, `${base}/${file.path}`, { limit: headLines });
+        const head = await (identity.context?.resources ?? rawResources).read(identity.userId, `${base}/${file.path}`, { limit: headLines });
         Object.assign(file, pageFacts(String(head ?? "").split("\n").slice(0, headLines).join("\n")));
       } catch { /* a page whose head cannot be read is still listed, by its path */ }
     });
@@ -310,15 +314,69 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
       truncated: offset + kept.length < lines.length || lineCut, ...(lineCut ? { lineCut: true } : {}) };
   }
 
-  /** @param {{ userId: string, projectId: string }} identity @param {ReturnType<typeof validatedRequest>} request */
-  async function answer(identity, { op, root, path, pattern, offset, limit }) {
+  /** @param {{ userId: string, projectId: string, context?: any }} identity @param {ReturnType<typeof validatedRequest>} request @param {readonly string[] | null} [selected] */
+  async function answer(identity, { op, root, path, pattern, offset, limit }, selected = null) {
     const { userId, projectId } = identity;
+    const context = identity.context;
+    const resources = context?.resources ?? dependenciesResources;
+    const neutral = (text, roots) => context ? context.neutral(text) : neutralOwned(text, roots);
     /** @type {Record<string, string>} */
     const roots = resources.roots(userId, projectId);
     const base = roots[root];
+    if (!base && context) {
+      if (root === "library") throw gatewayError(403, "kb_browse_scope_denied", "The account library is outside this project's knowledge context.");
+      if (path) throw gatewayError(404, "kb_browse_not_found", "Nothing is at that path.");
+      return { op, root, path, entries: [], documents: [], matches: [], total: 0, count: 0, truncated: false, note: NOTES.notCompiled };
+    }
     const uri = path ? `${base}/${path}` : base;
     if (!resources.inScope(userId, projectId, uri)) throw gatewayError(400, "kb_browse_path_invalid", "That path is outside this project's knowledge base.");
     const compiled = root === "wiki" || root === "kg";
+    /** The index is a replica, never authority to keep using a withdrawn document. */
+    /** @type {Map<string, boolean>} */ const eligibility = new Map();
+    /** @type {Set<string> | null} */ let libraryIds = null;
+    /** @param {string} file @returns {Promise<boolean>} */
+    const eligibleDocument = async (file) => {
+      const id = knowledgeSourceIdOfUri(file);
+      if (!id || (selected !== null && !selected.includes(id))) return false;
+      if (eligibility.has(id)) return eligibility.get(id) === true;
+      let allowed = false;
+      if (root === "library") {
+        if (!library) return false;
+        if (!libraryIds) {
+          try { libraryIds = new Set((await library.searchScope(userId)).map((/** @type {any} */ entry) => entry.sourceId)); }
+          catch { throw gatewayError(503, "kb_browse_unavailable", UNAVAILABLE); }
+        }
+        allowed = libraryIds.has(id);
+      } else {
+        if (!sources) throw gatewayError(503, "kb_browse_unavailable", UNAVAILABLE);
+        try {
+          const current = await sources.get(userId, id);
+          allowed = Boolean(current && current.projectId === projectId && !current.deletedAt && sourceReadable(current.payload)
+            && (!context || await context.acceptSource(current) === true));
+        } catch (error) {
+          if (![403, 404].includes(Number(/** @type {any} */ (error)?.status))) throw gatewayError(503, "kb_browse_unavailable", UNAVAILABLE);
+        }
+      }
+      eligibility.set(id, allowed);
+      return allowed;
+    };
+    /** Compiled pages remain indexes only when every dependency is currently eligible. */
+    const eligiblePage = async (file) => {
+      if (!compiledScope) return selected === null;
+      const result = await compiledScope(identity, { root, path: path && file !== path && !file.startsWith(`${path}/`) ? `${path}/${file}` : file });
+      return result?.allowed === true && (selected === null || (result.sourceIds?.length > 0 && result.sourceIds.every(id => selected.includes(id))));
+    };
+    /** @param {any[]} rows @param {(row: any) => string} fileOf */
+    const eligibleRows = async (rows, fileOf) => {
+      if (compiled) {
+        const decisions = new Map();
+        await eachBounded(rows, async (row) => { decisions.set(row, await eligiblePage(fileOf(row))); });
+        return rows.filter(row => decisions.get(row) === true);
+      }
+      const decisions = new Map();
+      await eachBounded(rows, async (row) => { decisions.set(row, await eligibleDocument(fileOf(row))); });
+      return rows.filter((row) => decisions.get(row) === true);
+    };
     const note = compiled ? NOTES.compiled : NOTES.documents;
     const emptyNote = compiled ? NOTES.notCompiled : NOTES.noDocuments;
     /** Called where a directory listed nothing: a root not written yet is an empty answer, a path that is not there or is a file is named. */
@@ -332,11 +390,12 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
     if (op === "list" || (op === "overview" && !compiled)) {
       // Directories first, then by name: an order that holds from one page of a long listing to the next.
       // Only children of the directory asked for: whatever the engine answers for a path that is a file is not a listing.
-      const listed = (await resources.listAll(userId, uri))
+      let listed = (await resources.listAll(userId, uri))
         .filter((/** @type {any} */ entry) => relativeTo(String(entry.uri ?? ""), uri)?.split("/").length === 1)
         .map((/** @type {any} */ entry) => ({ name: String(entry.uri).slice(uri.length + 1), kind: entry.isDir === true ? "dir" : "file", size: Number(entry.size) || 0 }))
         .filter((/** @type {{ name: string }} */ entry) => entry.name && !entry.name.startsWith("."))
         .sort((/** @type {{ name: string, kind: string }} */ left, /** @type {{ name: string, kind: string }} */ right) => (left.kind === right.kind ? (left.name < right.name ? -1 : 1) : left.kind === "dir" ? -1 : 1));
+      listed = await eligibleRows(listed, (entry) => entry.name);
       if (!listed.length) await nothingAt();
       // An overview of `sources` or `library` is the documents there, each by its title.
       const wanted = op === "overview" ? listed.filter((/** @type {{ name: string, kind: string }} */ entry) => entry.kind === "file" && knowledgeSourceIdOfUri(entry.name)) : listed;
@@ -350,7 +409,8 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
     }
 
     if (op === "tree") {
-      const found = (await resources.tree(userId, uri, { nodeLimit: TREE_LIMIT + 1 })).filter((/** @type {{ relPath: string }} */ entry) => !isHidden(entry.relPath));
+      let found = (await resources.tree(userId, uri, { nodeLimit: TREE_LIMIT + 1 })).filter((/** @type {{ relPath: string }} */ entry) => !isHidden(entry.relPath));
+      found = await eligibleRows(found, (entry) => entry.relPath);
       if (!found.length) await nothingAt();
       /** @type {Array<Record<string, any>>} */
       const entries = found.slice(0, TREE_LIMIT)
@@ -363,9 +423,13 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
 
     if (op === "overview" && root === "wiki") {
       // The wiki's own table of contents: `index.md` at its root, written by the compile.
-      const index = await resources.read(userId, `${base}/index.md`);
+      const indexUri = `${base}/index.md`;
+      // A selected generation can have useful pages without an index. The
+      // scoped facade must not read a leaf absent from its exact manifest.
+      const index = resources.inScope(userId, projectId, indexUri) && await eligiblePage("index.md") ? await resources.read(userId, indexUri) : null;
       if (index === null) {
-        const pages = (await resources.tree(userId, base, { nodeLimit: TREE_LIMIT + 1 })).filter((/** @type {{ relPath: string, isDir: boolean }} */ entry) => !entry.isDir && !isHidden(entry.relPath));
+        let pages = (await resources.tree(userId, base, { nodeLimit: TREE_LIMIT + 1 })).filter((/** @type {{ relPath: string, isDir: boolean }} */ entry) => !entry.isDir && !isHidden(entry.relPath));
+        pages = await eligibleRows(pages, entry => entry.relPath);
         if (!pages.length) return { op, root, compiled: false, text: "", note: emptyNote };
         /** @type {Array<Record<string, any>>} */
         const entries = pages.slice(0, TREE_LIMIT).map((/** @type {{ relPath: string, size: number }} */ entry) => ({ path: entry.relPath, kind: "file", size: entry.size }));
@@ -378,8 +442,9 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
 
     if (op === "overview") {
       // The graph, counted: read as upstream writes it (`entities/*.md`, `relations.jsonl`) by the domain's own reader.
-      const files = (await resources.tree(userId, base, { nodeLimit: 2000 }))
+      let files = (await resources.tree(userId, base, { nodeLimit: 2000 }))
         .filter((/** @type {{ relPath: string, isDir: boolean }} */ entry) => !entry.isDir && !isHidden(entry.relPath) && (entry.relPath === "relations.jsonl" || /^entities\/[^/]+\.md$/i.test(entry.relPath)));
+      files = await eligibleRows(files, entry => entry.relPath);
       if (!files.length) return { op, root, compiled: false, entities: 0, relations: 0, note: emptyNote };
       const graph = knowledgeGraphToGraph(await eachBounded(files.slice(0, maxGraphFiles),
         async (/** @type {{ relPath: string, uri: string }} */ entry) => ({ path: entry.relPath, content: (await resources.read(userId, entry.uri)) ?? "" })));
@@ -397,6 +462,7 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
     }
 
     if (op === "read") {
+      if (compiled ? !(await eligiblePage(path)) : !(await eligibleDocument(path))) throw gatewayError(404, "kb_browse_not_found", "That document is no longer available in this knowledge scope.");
       const found = await resources.stat(userId, uri);
       if (found?.isDir === true) throw gatewayError(400, "kb_browse_path_invalid", "That path is a directory; list it instead.");
       const text = found ? await resources.read(userId, uri) : null;
@@ -411,14 +477,15 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
 
     // grep: a literal, under the root or one path of it. More is asked of the engine than is returned, so a cut is known.
     const found = await resources.grep(userId, uri, escapeGrepPattern(/** @type {string} */ (pattern)), { limit: GREP_SCAN, caseInsensitive: true });
-    const hits = found.matches
+    let hits = found.matches
       .map((/** @type {{ uri: string, line: number, content: string }} */ match) => ({ path: match.uri === uri || match.uri.startsWith(`${uri}/`) ? relativeTo(match.uri, base) : null, line: match.line, text: match.content }))
       .filter((/** @type {{ path: string | null }} */ hit) => hit.path !== null && !isHidden(hit.path));
+    hits = await eligibleRows(hits, (entry) => entry.path);
     if (!hits.length && !found.filesScanned) await nothingAt();
     /** @type {Array<Record<string, any>>} */
     const matches = hits.slice(0, GREP_LIMIT).map((/** @type {{ path: string, line: number, text: string }} */ hit) => ({ path: hit.path, line: hit.line, text: neutral(hit.text, roots).slice(0, maxMatchChars) }));
     if (!compiled) await nameFiles(identity, root, base, matches);
-    return { op, root, path, pattern, matches, count: matches.length, truncated: hits.length > GREP_LIMIT || found.matches.length >= GREP_SCAN,
+    return { op, root, path, pattern, matches, count: matches.length, truncated: hits.length > GREP_LIMIT, partialScan: true,
       ...(compiled ? { documents: await documentsNamed(identity, matches.map((match) => match.text).join("\n")) } : {}),
       note: matches.length ? note : `${note} No line holds that text as written; a passage worded differently is found by kb_search, not by this.` };
   }
@@ -435,7 +502,7 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
       try { identity = runtimeManager.assertActiveModelGatewayToken(token); } catch {
         throw gatewayError(401, "kb_browse_gateway_token_invalid", "Knowledge-base browse authentication failed.");
       }
-      if (config.ovKnowledgeEnabled !== true || !resources?.configured) {
+      if (config.ovKnowledgeEnabled !== true || !rawResources?.configured) {
         throw gatewayError(503, "kb_browse_disabled", "Knowledge-base browsing is switched off for this deployment; use kb_search, or read and grep the knowledge-base files instead.");
       }
       const now = Date.now();
@@ -444,16 +511,28 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
       const window = windows.get(key) ?? { until: now + 60_000, count: 0 };
       windows.set(key, window);
       if (++window.count > windowLimit) throw gatewayError(429, "kb_browse_rate_limited", "Too many knowledge-base browse requests in a minute.");
-      const request = validatedRequest(await readJsonBody(req, 16 * 1024));
+      const body = await readJsonBody(req, 16 * 1024);
+      const request = validatedRequest(body);
       let timer;
+      const context = contextFor ? await contextFor(identity) : null;
+      if (contextFor && (!context || context.kind !== "owned" && (context.kind !== "geo-project" || context.includeLibrary !== false
+        || typeof context.current !== "function" || !context.resources || typeof context.acceptSource !== "function"))) throw gatewayError(503, "kb_browse_unavailable", UNAVAILABLE);
+      const scoped = context?.kind === "geo-project" ? context : null;
+      // The conversation's document selection. A project's shared context proves the session it is given, as kb_search does; a
+      // call without one asks the project-wide check on both paths (refused while any conversation of the project holds one).
+      const selected = scoped && body.sessionId && typeof scoped.sourceScope === "function"
+        ? await scoped.sourceScope(body.sessionId)
+        : sourceScope ? await sourceScope(identity, body.sessionId) : null;
       const data = await Promise.race([
-        answer({ userId: identity.userId, projectId: identity.projectId }, request),
+        answer({ userId: identity.userId, projectId: identity.projectId, context: scoped }, request, selected),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(gatewayError(504, "kb_browse_timeout", "Knowledge-base browsing timed out; use kb_search, or read and grep the knowledge-base files instead.")), Math.max(1_000, Number(budgetMs) || answerBudgetMs));
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      sendJson(res, 200, { data: evaluationIsolation ? await evaluationIsolation.filter(identity, "knowledge-base", data) : data });
+      const projected = evaluationIsolation ? await evaluationIsolation.filter(identity, "knowledge-base", data) : data;
+      if (scoped) await scoped.current();
+      sendJson(res, 200, { data: projected });
     } catch (error) {
       // An engine that refuses or does not answer (`memory_index_*`) is this deployment's state, never the run's
       // mistake, and its own words — a path, an upstream status — stay here.

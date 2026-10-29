@@ -51,7 +51,7 @@ export function VcrScheduleCard({ schedule }: { schedule: VcrSchedule }) {
       padding="p-3"
       header={(
         <div className="flex items-center gap-2">
-          <h2 className="text-ui font-semibold text-text">访视日程</h2>
+          <h2 className="text-section font-semibold text-text">访视日程</h2>
           {schedule.protocolVersion !== null && <Tag>{`方案 v${schedule.protocolVersion}`}</Tag>}
         </div>
       )}

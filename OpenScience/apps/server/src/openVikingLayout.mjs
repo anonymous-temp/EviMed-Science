@@ -5,7 +5,7 @@ import { createHash, createHmac } from "node:crypto";
  * the `viking://` roots every module of ours addresses.
  *
  * Hidden knowledge: these values are written in four places that cannot import
- * each other — the compose file (mounts, the entrypoint, the health check), the
+ * each other — the compose file (mounts, the health check), the
  * rendered `ov.conf` (`scripts/ops/configure-production-state.mjs`), the control
  * plane's startup self-check and the two modules built on the client (resources
  * and sessions). A path that differed in one of them is the silent kind of
@@ -21,7 +21,7 @@ import { createHash, createHmac } from "node:crypto";
  * @module openVikingLayout
  */
 
-/** `memory.custom_templates_dir`: the eight memory types' templates, mounted read-only. */
+/** `memory.custom_templates_dir`: the ten memory types' templates, mounted read-only. */
 export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
 
 /**
@@ -34,13 +34,14 @@ export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
  */
 export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   "profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts",
+  // 2026-10-25 (owner decision 6): `observations` is a choice the person made in a request and never called a rule, kept until a second
+  // conversation shows it (`nativeMemoryObservations.mjs`) — never a fact, never read back; `recent_work` is what a project was last
+  // worked on, at task level, three lines at most (the project card's 「最近在做」).
+  "observations", "recent_work",
 ]);
-
-/** The identity shim the entrypoint starts beside the server, and the loopback port `compile_api.base_url` names. */
-export const OPENVIKING_SHIM_PATH = "/opt/evimed-shim/identity_shim.py";
-export const OPENVIKING_SHIM_PORT = 18791;
-/** The entrypoint wrapper: the shim, then the image's own entrypoint as PID 1. */
-export const OPENVIKING_ENTRYPOINT_PATH = "/opt/evimed-shim/entrypoint.sh";
+/** Shared project extraction never writes a person's profile or preferences, nor `observations` — a person's own choice noted until a
+ *  second conversation of theirs promotes it to a preference, which a shared project's namespace does not keep. */
+export const OPENVIKING_PROJECT_MEMORY_TYPES = Object.freeze(OPENVIKING_MEMORY_TYPES.filter(type => !['profile', 'preferences', 'observations'].includes(type)));
 
 /** Where the account-shared skills are installed; a compile names one as `<root>/<name>`. */
 export const OPENVIKING_SKILLS_ROOT = "viking://agent/skills";
@@ -72,6 +73,17 @@ export function openVikingPeerId(projectId) {
 /** A capsule's segment (`capsuleSegment` in the client validates its inputs). */
 export function openVikingScopedId(prefix, value, purpose) {
   return scopedId(prefix, value, purpose);
+}
+
+/** Trusted control-plane identities, including exact database incarnations.
+ * Membership, runtime generation and conversation do not change project memory.
+ * @param {{ownerId:string,ownerCreatedAt:string,projectId:string,projectCreatedAt:string}} input */
+export function projectNativeMemoryNamespace(input) {
+  const keys = ['ownerId', 'ownerCreatedAt', 'projectId', 'projectCreatedAt'];
+  if (!input || keys.some(key => typeof input[key] !== 'string' || !input[key] || input[key].length > 200 || /[\r\n\0]/.test(input[key]))) throw new Error('Invalid project memory identity');
+  const { ownerId, ownerCreatedAt, projectId, projectCreatedAt } = input;
+  const id = openVikingScopedId('gp', JSON.stringify(keys.map(key => input[key])), 'project-native-memory');
+  return Object.freeze({ kind: 'project', ownerId, ownerCreatedAt, projectId, projectCreatedAt, id, engineUser: id });
 }
 
 /** Everything one account holds in the engine. */

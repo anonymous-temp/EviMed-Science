@@ -15,6 +15,7 @@ import { claimSourceKindWord, CLAIM_SOURCE_KIND_WORDS } from "./geoTabText";
 import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
 import { ValueAnalysis } from "./ValueSection";
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 
 /** Claims listed before 「显示更多」, and how many each press adds. */
 const CLAIMS_SHOWN = 8;
@@ -25,6 +26,7 @@ type KindFilter = "all" | keyof typeof CLAIM_SOURCE_KIND_WORDS;
 const VIEW_OPTIONS: ReadonlyArray<FilterOption<GeoEvidenceView>> = [
   { value: "claims", label: "结论库" },
   { value: "value", label: "药品价值" },
+  { value: "coverage", label: "证据覆盖" },
 ];
 
 /**
@@ -32,7 +34,7 @@ const VIEW_OPTIONS: ReadonlyArray<FilterOption<GeoEvidenceView>> = [
  * claims library, and the drug-value analysis. It is the one place the value analysis is drawn: it used to be a block in seven tabs,
  * each with a title of its own, and the other tabs link to it from the object it is about.
  *
- * The page has two views, a switch of the toolbar (`?view=claims|value`): the claim library — every fact that may be said about the
+ * The toolbar selects the claim library, value research or selected evidence coverage. The library keeps what may be said about the
  * product, with its source, level, whether it is inside the label and when it was last checked — where a claim opens a drawer with
  * its verbatim quotation and what it stands on; and the analysis. A retired claim is not listed; an expired one is, marked, until it
  * is re-checked.
@@ -71,7 +73,7 @@ export function EvidenceTab({ geoId, project }: { geoId: string; project: GeoPro
     return copy;
   }, { replace: true });
   const switcher = { kind: "chips" as const, label: "视图", options: VIEW_OPTIONS, value: view, onChange: setView };
-  useGeoToolbar(view === "value" || claims.length === 0
+  useGeoToolbar(view !== "claims" || claims.length === 0
     ? { filters: [switcher] }
     : {
       filters: [switcher, { kind: "chips", label: "出处类型", options, value: kind, onChange: (value) => setKind(value as KindFilter) }],
@@ -81,6 +83,7 @@ export function EvidenceTab({ geoId, project }: { geoId: string; project: GeoPro
 
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
+  if (view === "coverage") return <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V16" embedded />;
   const identity = identityRows(evidence);
 
   return (

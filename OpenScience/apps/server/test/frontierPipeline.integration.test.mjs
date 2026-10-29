@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
+import { frontierAuthorityScore } from "@evimed/domain";
 import { FrontierDaily } from "../src/frontierDaily.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -90,11 +91,12 @@ const SOURCES = [
   { id: "c-novo", name: "Novo Nordisk newsroom", lane: "pipeline", source_type: "company", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "Novo", region: "DK" },
   { id: "p-medrxiv", name: "medRxiv", lane: "evidence", source_type: "preprint", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "medRxiv", region: "US" },
   { id: "p-biorxiv", name: "bioRxiv", lane: "evidence", source_type: "preprint", access: "rss", egress: "direct", authority: 2, safety_feed: false, owner_entity: "bioRxiv", region: "US" },
+  { id: "discovered-29e04956f24c862b4024", name: "BD HUB", lane: "mixed", source_type: "media", access: "rss", egress: "direct", authority: 3, safety_feed: false, owner_entity: "BD HUB", region: "CN" },
   { id: "t-ctgov", name: "ClinicalTrials.gov", lane: "pipeline", source_type: "evidence-body", access: "json-api", egress: "api", authority: 4, safety_feed: false, owner_entity: "NLM", region: "US" },
 ];
 
 async function reset() {
-  await database.query(`TRUNCATE evimed_frontier.item_vectors, evimed_frontier.item_texts, evimed_frontier.item_keys, evimed_frontier.item_mentions,
+  await database.query(`TRUNCATE ${capabilities.vector ? "evimed_frontier.item_vectors, " : ""}evimed_frontier.item_texts, evimed_frontier.item_keys, evimed_frontier.item_mentions,
     evimed_frontier.item_links, evimed_frontier.item_changes, evimed_frontier.user_state, evimed_frontier.event_items, evimed_frontier.items,
     evimed_frontier.entries, evimed_frontier.sources, evimed_frontier.glossary, evimed_frontier.dailies RESTART IDENTITY CASCADE`);
   await database.query("UPDATE evimed_frontier.meta SET value='0'::jsonb WHERE key IN ('content_version','hot_version','daily_version')");
@@ -173,8 +175,8 @@ const marker = (title, name) => new RegExp(`\\[${name}:([a-z0-9-]+)\\]`).exec(ti
  * covering several stories).
  */
 function fakeEditor(provider = { balanceSpent: false }) {
-  /** @type {{ screen: string[][], edit: string[] }} */
-  const calls = { screen: [], edit: [] };
+  /** @type {{ screen: string[][], edit: string[], genreFixed: Array<string | null> }} */
+  const calls = { screen: [], edit: [], genreFixed: [] };
   return {
     owner, available: true, calls, provider,
     /** @param {any[]} batch */
@@ -198,24 +200,32 @@ function fakeEditor(provider = { balanceSpent: false }) {
     /** @param {any} item */
     async edit(item) {
       calls.edit.push(item.titleRaw);
+      calls.genreFixed.push(item.genreFixed ?? null);
       if (item.titleRaw.includes("[edit-throws]")) throw Object.assign(new Error("boom"), { code: "frontier_test_boom" });
       const modelInput = buildModelInput(item);
       const base = { modelInput, modelInputSha256: sha256(modelInput), attempts: 1, issues: [], numbers: null, error: null,
-        model: "deepseek-flash", editorVersion: FRONTIER_EDITOR_VERSION };
+        model: "deepseek-flash", editorVersion: FRONTIER_EDITOR_VERSION, fieldDiagnostics: { title_zh: ["passed"], summary_zh: ["passed"] } };
       if (item.titleRaw.includes("[pending]")) return { ...base, verification: "pending", output: null, error: "model_gateway_timeout" };
       if (provider.balanceSpent) return { ...base, verification: "pending", output: null, error: "model_gateway_payment_required" };
-      const share = Number(marker(item.titleRaw, "score") ?? 30);
-      const impact = Math.min(30, share);
-      const novelty = Math.min(20, share - impact);
-      const relevance = Math.min(20, share - impact - novelty);
+      // [score:n]: the model's share of the total, spent on impact first; [parts:i-n-r]: the three parts written out (c3-select: the
+      // pipeline now lowers a part under the ceilings the platform holds, so a test that needs a total says its parts).
+      const written = marker(item.titleRaw, "parts")?.split("-").map(Number);
+      const share = written ? written[0] + written[1] + written[2] : Number(marker(item.titleRaw, "score") ?? 30);
+      const impact = written ? written[0] : Math.min(30, share);
+      const novelty = written ? written[1] : Math.min(20, share - impact);
+      const relevance = written ? written[2] : Math.min(20, share - impact - novelty);
       const lane = marker(item.titleRaw, "lane");
       return { ...base, verification: "passed", output: {
+        genre: marker(item.titleRaw, "genre"),
         titleZh: item.isChinese ? item.titleRaw : `中文：${item.titleRaw.slice(0, 20)}`,
         summaryZh: `导读：${item.abstract ? "有摘要" : "无摘要"}。`, reasonZh: "值得一看。",
         lane: lane && item.allowedLanes.includes(lane) ? lane : item.allowedLanes[0],
         specialties: ["cardiology"], evidenceType: item.evidenceFixed?.type ?? "observational",
         entities: { drugs: ["司美格鲁肽"], trials: [], orgs: [], diseases: [] },
-        scores: { impact, novelty, relevance }, flags: marker(item.titleRaw, "flag") ? [marker(item.titleRaw, "flag")] : [],
+        scores: { impact, novelty, relevance }, practice: marker(item.titleRaw, "practice") ? { changing: true, reasonZh: "首个口服药获批，成人患者多了一线选择。" } : null,
+        flags: marker(item.titleRaw, "flag") ? [marker(item.titleRaw, "flag")] : [],
+        // c2-style S9: the model's own numbers ride beside the scored ones and are kept in the diagnostics only.
+        scoresRaw: written ? { impact, novelty, relevance } : { impact: share, novelty: share - impact, relevance: share - impact - novelty },
       } };
     },
   };
@@ -302,27 +312,20 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   const waiting = await entry(stream.id);
   assert.deepEqual([waiting.state, waiting.state_reason, waiting.item_id], ["received", "in-flight-duplicate", null]);
   assert.ok(new Date(waiting.hold_until) > clock);
-  // NEJM never waits for its abstract: published now, and asked again just
-  // after the plugin's own try — which it schedules the moment it is asked.
+  // NEJM's paper has no text yet and nothing else a reader could use (its feed summary is a fragment): it waits for its text,
+  // unpublished, and is asked again just after the plugin's own try (2026-10-22: an item with nothing to read is not shown).
   const nejmEntry = await entry(nejm.id);
   assert.equal(nejmEntry.state, "held");
   assert.equal(new Date(nejmEntry.hold_until).getTime(), clock.getTime() + FRONTIER_TEXT_AFTER_ATTEMPT_MS);
   const paper = await item(Number(nejmEntry.item_id));
-  assert.equal(paper.state, "published");
-  assert.equal(paper.verification, "passed");
-  assert.deepEqual([paper.evidence_type, paper.evidence_basis, paper.score_authority], ["observational", "model", 24],
-    "the model's evidence type until PubMed's types arrive: 30 × 5/5 × 0.8");
-  assert.deepEqual([paper.selected, paper.selected_rule], [true, "threshold"]);
-  assert.deepEqual(paper.flags, ["no-abstract", "corrected"], "the notice that came first is attached at publication");
-  assert.equal(paper.timeline_at.toISOString(), clock.toISOString(), "published 15 hours after its date: today");
-  assert.deepEqual(await changes(Number(paper.id)), ["published"]);
+  assert.notEqual(paper.state, "published");
+  assert.deepEqual(await changes(Number(paper.id)), [], "nothing a reader sees");
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0].n, 0);
   const link = (await database.query("SELECT * FROM evimed_frontier.item_links")).rows[0];
-  assert.deepEqual([link.kind, link.from_doi, link.to_doi, Number(link.to_item_id), link.asserted_by], ["correction", "10.1056/nejmx2", "10.1056/nejmoa2307563", Number(paper.id), "crossref"]);
+  assert.deepEqual([link.kind, link.from_doi, link.to_doi, link.to_item_id, link.asserted_by], ["correction", "10.1056/nejmx2", "10.1056/nejmoa2307563", null, "crossref"],
+    "the notice is kept, and attached when the paper is published");
   const keys = (await database.query("SELECT key FROM evimed_frontier.item_keys WHERE item_id=$1 ORDER BY key", [paper.id])).rows.map((row) => row.key);
   assert.ok(keys.includes("doi:10.1056/nejmoa2307563") && keys.includes("pmid:37952131") && keys.includes("reg:NCT03574597"));
-  const texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
-  assert.equal(texts.model_input_sha256, createHash("sha256").update(texts.model_input).digest("hex"));
-  assert.match(texts.model_input, /- semaglutide → 司美格鲁肽/, "only the glossary entries the text names");
   // The safety feed is selected whatever its score; the registry's two events are two items.
   const safetyItem = await item(Number((await entry(safety.id)).item_id));
   assert.deepEqual([safetyItem.state, safetyItem.selected, safetyItem.selected_rule, safetyItem.safety_alert, safetyItem.evidence_type],
@@ -342,37 +345,45 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   assert.ok(version >= 6, `content version ${version}`);
   assert.equal(editor.calls.screen.length, 1, "one screening call for the batch");
 
-  // Eleven minutes later the PubMed sighting finds the published paper: another road.
+  // Eleven minutes later the PubMed sighting finds the paper still waiting for its text: it waits with it.
   clock = new Date(clock.getTime() + 11 * 60_000);
   const second = await pipeline.processBatch();
-  assert.equal(second.merged, 1);
-  const merged = await entry(stream.id);
-  assert.deepEqual([merged.state, Number(merged.item_id)], ["merged", Number(paper.id)]);
-  const mentions = (await database.query("SELECT source_id FROM evimed_frontier.item_mentions WHERE item_id=$1", [paper.id])).rows;
-  assert.deepEqual(mentions.map((row) => row.source_id), ["q-pubmed"]);
-  assert.ok(await contentVersion() > version, "「还有谁在说」 is a change a reader sees");
+  assert.equal(second.merged, 0);
+  assert.deepEqual([(await entry(stream.id)).state, (await entry(stream.id)).state_reason], ["received", "in-flight-duplicate"]);
 
-  // Twelve hours on, the abstract and PubMed's types arrive: the evidence type is
-  // corrected by code, the no-abstract flag goes, and the item is edited again once.
+  // Twelve hours on, the abstract and PubMed's types arrive: the paper is published with them — edited once, with the evidence
+  // type code decides, the correction attached, and selected over the line.
   clock = new Date(clock.getTime() + 12 * HOUR);
   plugin.texts.set(nejm.pluginEntryId, { entry_id: nejm.pluginEntryId, revision: 1, status: "available", abstract: "In 17,604 patients, events fell by 20%.",
     body_excerpt: null, enrichment: { publication_types: ["Randomized Controlled Trial", "Journal Article"], journal: "N Engl J Med" } });
   const editsBefore = editor.calls.edit.length;
   const third = await pipeline.processBatch();
-  assert.equal(third.rescored, 1);
+  assert.deepEqual([third.published, third.edited], [1, 1]);
   assert.equal((await entry(nejm.id)).state, "promoted");
   const edited = await item(Number(paper.id));
+  assert.equal(edited.state, "published");
   assert.deepEqual([edited.evidence_type, edited.evidence_basis, edited.score_authority], ["rct", "pubmed-types", 30]);
-  assert.deepEqual(edited.flags, ["corrected"]);
-  assert.ok(edited.rescored_at, "re-scored once");
+  assert.deepEqual(edited.flags, ["corrected"], "the notice that came first is attached at publication");
   assert.equal(edited.editor_version, FRONTIER_EDITOR_VERSION);
   assert.equal(edited.summary_zh, "导读：有摘要。");
-  assert.equal(editor.calls.edit.length, editsBefore + 1);
-  assert.deepEqual(await changes(Number(paper.id)), ["published", "rescored"]);
-  assert.equal(edited.timeline_at.toISOString(), paper.timeline_at.toISOString(), "timeline_at never moves after publication");
-  // The item text the re-edit used is the one stored.
-  const retexts = (await database.query("SELECT model_input FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
-  assert.match(retexts.model_input, /摘要：In 17,604 patients/);
+  assert.equal(editor.calls.edit.length, editsBefore + 1, "one edit, with its abstract");
+  assert.deepEqual([edited.selected, edited.selected_rule], [true, "threshold"]);
+  assert.deepEqual(await changes(Number(paper.id)), ["published", "selected"], "selected by the day's mix at the end of the round that published it");
+  assert.equal(Number((await database.query("SELECT to_item_id FROM evimed_frontier.item_links")).rows[0].to_item_id), Number(paper.id));
+  const texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
+  assert.equal(texts.model_input_sha256, createHash("sha256").update(texts.model_input).digest("hex"));
+  assert.match(texts.model_input, /摘要：In 17,604 patients/);
+  assert.match(texts.model_input, /- semaglutide → 司美格鲁肽/, "only the glossary entries the text names");
+
+  // When its own wait ends, the PubMed sighting finds the published paper: another road.
+  clock = new Date((await entry(stream.id)).hold_until.getTime() + 60_000);
+  const fifth = await pipeline.processBatch();
+  assert.equal(fifth.merged, 1);
+  const merged = await entry(stream.id);
+  assert.deepEqual([merged.state, Number(merged.item_id)], ["merged", Number(paper.id)]);
+  const mentions = (await database.query("SELECT source_id FROM evimed_frontier.item_mentions WHERE item_id=$1", [paper.id])).rows;
+  assert.deepEqual(mentions.map((row) => row.source_id), ["q-pubmed"]);
+  assert.ok(await contentVersion() > version, "「还有谁在说」 is a change a reader sees");
 });
 
 test("a relation is classified by its type: each notice is its own state, and a new version is an item, never a 更正", options, async () => {
@@ -438,7 +449,7 @@ test("an entry of the AI-discovery channel is dropped before any screening, whic
 test("recently generated dailies keep old referenced items eligible for an owed edit without opening all history", options, async () => {
   await reset();
   let clock = new Date("2026-09-22T02:00:00Z");
-  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock });
+  const { pipeline, editor, plugin } = pipelineWith({ config: { frontierOffpeak: true }, now: () => clock });
   const deliveries = [];
   for (const title of DISTINCT_TOPICS.slice(0, 4)) {
     const delivered = await deliver({ source_id: "m-stat", title: `${title} [score:60]`, summary: "S".repeat(200) });
@@ -475,7 +486,7 @@ test("recently generated dailies keep old referenced items eligible for an owed 
 test("old source dates remain eligible for owed edits when recently published here, without scanning old unreferenced history",options,async()=>{
   await reset();
   let clock=new Date("2026-09-22T02:00:00Z");
-  const {pipeline,editor,plugin}=pipelineWith({now:()=>clock});
+  const {pipeline,editor,plugin}=pipelineWith({config:{frontierOffpeak:true},now:()=>clock});
   const sourceDate=new Date("2026-09-01T00:00:00Z"),ids=[];
   for(const title of DISTINCT_TOPICS.slice(0,2)) {
     const delivered=await deliver({source_id:"m-stat",title:`${title} [score:60]`,summary:"S".repeat(200),published_at:sourceDate});
@@ -506,7 +517,7 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   await reset();
   // Tuesday 10:00 in Beijing: the provider's peak.
   let clock = new Date("2026-09-22T02:00:00Z");
-  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock });
+  const { pipeline, editor, plugin } = pipelineWith({ config: { frontierOffpeak: true }, now: () => clock });
   const media = await deliver({ source_id: "m-stat", title: "Semaglutide study in adolescents [score:60]", summary: "S".repeat(200) });
   const regulator = await deliver({ source_id: "r-ema", title: "EMA recommends approval of a new medicine [score:50]", summary: "E".repeat(200) });
   for (const id of [media, regulator]) plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
@@ -515,6 +526,11 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(peak.deferred, 1);
   const titleOnly = await item(Number((await entry(media.id)).item_id));
   assert.deepEqual([titleOnly.verification, titleOnly.editor_version, titleOnly.title_zh, titleOnly.selected], ["pending", null, null, false]);
+  assert.equal(titleOnly.editor_diagnostics.outcome, "deferred");
+  assert.equal(titleOnly.editor_diagnostics.reason, "peak");
+  assert.equal(titleOnly.editor_diagnostics.attempts, 0);
+  assert.equal(titleOnly.editor_diagnostics.editorVersion, null);
+  assert.match(titleOnly.editor_diagnostics.inputSha256, /^[a-f0-9]{64}$/);
   const urgent = await item(Number((await entry(regulator.id)).item_id));
   assert.equal(urgent.verification, "passed", "a regulator is edited at peak");
   assert.deepEqual(editor.calls.edit, ["EMA recommends approval of a new medicine [score:50]"]);
@@ -525,6 +541,16 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(evening.rescored, 1);
   const done = await item(Number(titleOnly.id));
   assert.deepEqual([done.verification, done.selected, done.selected_rule], ["passed", true, "threshold"]);
+  assert.equal(done.editor_diagnostics.outcome, "passed");
+  assert.equal(done.editor_diagnostics.reason, null);
+  assert.equal(done.editor_diagnostics.attempts, 1);
+  assert.equal(done.editor_diagnostics.editorVersion, FRONTIER_EDITOR_VERSION);
+  assert.deepEqual(done.editor_diagnostics.fields, { title_zh: ["passed"], summary_zh: ["passed"] });
+  // c4-title: the edit that wrote the title writes the title rule that wrote it; a title-only wait wrote none.
+  assert.equal(done.editor_diagnostics.titleVersion, FRONTIER_TITLE_VERSION);
+  assert.equal(titleOnly.editor_diagnostics.titleVersion, undefined);
+  assert.equal(done.editor_diagnostics.scoreVersion, FRONTIER_SCORE_VERSION, "beside the score version, which it does not replace");
+  assert.deepEqual(done.editor_diagnostics.scoresRaw, { impact: 60, novelty: 30, relevance: 10 }, "c2-style S9: the model's raw sub-scores, before the scale's end");
   assert.ok(done.rescored_at);
   assert.deepEqual(await changes(Number(done.id)), ["published", "rescored", "selected"]);
   assert.equal(done.timeline_at.toISOString(), titleOnly.timeline_at.toISOString());
@@ -556,7 +582,7 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(new Date(collected.hold_until).toISOString(), "2026-09-22T16:00:00.000Z", "tomorrow in Beijing");
 });
 
-test("selection: three a day per source, the lane floor for a lane with nothing selected", options, async () => {
+test("selection: three a day per source, and a genre group short of its floor takes its best from the medium band (ct-mix)", options, async () => {
   await reset();
   const clock = new Date("2026-09-22T12:00:00Z");
   const { pipeline, plugin } = pipelineWith({ now: () => clock });
@@ -564,17 +590,101 @@ test("selection: three a day per source, the lane floor for a lane with nothing 
   for (let index = 0; index < 4; index += 1) {
     papers.push(await deliver({ source_id: "j-small", doi: `10.1000/small.${index}`, title: `Small journal paper ${index} [score:60]`, summary: "P".repeat(200) }));
   }
-  const floor = await deliver({ source_id: "m-stat", title: "Measles cases rise in two provinces [lane:public-health] [score:55]", summary: "M".repeat(200) });
-  const lower = await deliver({ source_id: "m-fierce", title: "Vaccination campaign expands [lane:public-health] [score:45]", summary: "V".repeat(200) });
-  for (const id of [...papers, floor, lower]) plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
-  await pipeline.processBatch();
-  const selected = (await database.query(`SELECT i.title_raw, i.selected, i.selected_rule, i.score_total, i.lane FROM evimed_frontier.items i ORDER BY i.id`)).rows;
-  const small = selected.filter((row) => row.title_raw.startsWith("Small journal"));
+  // EMA's notices are 政策法规 by code's genre: the group's floor is two places of a day of 20, from 60 up.
+  const policy = await deliver({ source_id: "r-ema", title: "EMA consults on a reflection paper [score:40]", summary: "E".repeat(200) });
+  const weakPolicy = await deliver({ source_id: "r-ema", title: "EMA updates a meeting calendar [score:20]", summary: "C".repeat(200) });
+  // A story under the line: news has no floor of its own, it only fills what the others leave above the line.
+  const story = await deliver({ source_id: "m-stat", title: "Measles cases rise in two provinces [lane:public-health] [score:55]", summary: "M".repeat(200) });
+  for (const id of [...papers, policy, weakPolicy, story]) plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  const summary = await pipeline.processBatch();
+  const read = async (/** @type {{ id: number }} */ delivered) => item(Number((await entry(delivered.id)).item_id));
+  const small = await Promise.all(papers.map(read));
   assert.deepEqual(small.map((row) => row.score_total), [74, 74, 74, 74], "authority 3 × 0.8 = 14, plus the model's 60");
   assert.equal(small.filter((row) => row.selected).length, 3, "the fourth is over the source's cap");
-  const health = selected.filter((row) => row.lane === "public-health");
-  assert.deepEqual(health.map((row) => [row.score_total, row.selected, row.selected_rule]), [[65, true, "lane-floor"], [55, false, null]],
-    "below the threshold, but the lane's best at or above 60");
+  assert.ok(small.filter((row) => row.selected).every((row) => row.selected_rule === "threshold"));
+  const [floor, weak, news] = await Promise.all([read(policy), read(weakPolicy), read(story)]);
+  assert.ok(floor.score_total >= 60 && floor.score_total < 70, `the policy item stands in the band (${floor.score_total})`);
+  assert.deepEqual([floor.selected, floor.selected_rule], [true, "genre-floor"]);
+  assert.ok(weak.score_total < 60, `${weak.score_total}`);
+  assert.deepEqual([weak.selected, news.selected], [false, false], "under the band, and news with no floor, stay out");
+  assert.equal(summary.genreFloor, 1);
+  assert.equal(pipeline.counters.mix["genre-floor"], 1);
+  assert.equal(pipeline.status().mix.groups.policy.after, 1, "the operators see today's mix");
+});
+
+test("c3 review: a total the scoring of 2026-10-25 did not write is not weighed against the line until it is scored again", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const round = async (/** @type {string} */ doi) => {
+    const delivered = await deliver({ source_id: "j-small", doi, title: `A paper of the day ${doi} [score:20]`, summary: "P".repeat(200) });
+    plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+    await pipeline.processBatch();
+    return Number((await entry(delivered.id)).item_id);
+  };
+  const old = await round("10.1000/scale.1");
+  // As production holds an item before the rescore: a total from the old prompts, high on today's line, no scoreVersion.
+  await database.query(`UPDATE evimed_frontier.items SET score_total = 90, selected = false, selected_rule = NULL, selected_at = NULL,
+    editor_diagnostics = editor_diagnostics - 'scoreVersion' WHERE id = $1`, [old]);
+  await round("10.1000/scale.2");
+  assert.equal((await item(old)).selected, false, "an old-scale 90 is no pick: selection is sticky, and the old scale fills the day");
+  await database.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb) || jsonb_build_object('scoreVersion', $2::text)
+    WHERE id = $1`, [old, FRONTIER_SCORE_VERSION]);
+  await round("10.1000/scale.3");
+  assert.deepEqual([(await item(old)).selected, (await item(old)).selected_rule], [true, "threshold"], "scored again, it is weighed like any other");
+});
+
+test("c2-fixes: a floor place under the line asks the genre's own 80th percentile of the last 30 days, read once a round from the published scores", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  // Thirty newsroom releases (行业动态 by code's genre) that the clinical score keeps under the line: totals run 42 to 60 (authority 6, impact 14: a release's ceiling).
+  const releases = [];
+  for (const [index, topic] of DISTINCT_TOPICS.entries()) {
+    const total = 42 + Math.round((index * 18) / 29);
+    const rest = total - 6 - 14;
+    const relevance = Math.min(20, Math.floor(rest / 2));
+    releases.push(await deliver({ source_id: "c-novo", title: `${topic} [parts:14-${rest - relevance}-${relevance}]`, summary: "N".repeat(200) }));
+  }
+  for (const delivered of releases) plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  for (let round = 0; round < 6; round += 1) await pipeline.processBatch();
+  const rows = [];
+  for (const delivered of releases) rows.push(await item(Number((await entry(delivered.id)).item_id)));
+  const scores = rows.map((row) => Number(row.score_total));
+  assert.equal(rows.every((row) => row.state === "published" && [null, "industry"].includes(row.genre)), true, "published, and of the genre code gives a newsroom (the column is the editor's when it names one)");
+  assert.ok(Math.max(...scores) < 68, `the clinical score keeps industry under the line (${Math.max(...scores)})`);
+  const sorted = [...scores].sort((a, b) => a - b);
+  const position = 0.8 * (sorted.length - 1);
+  const p80 = sorted[Math.floor(position)] + (sorted[Math.ceil(position)] - sorted[Math.floor(position)]) * (position - Math.floor(position));
+  assert.ok(p80 >= 56 && p80 < 60, `the genre's 80th percentile is the bar, held between 56 and the absolute floor of 60 (${p80})`);
+  const selected = rows.filter((row) => row.selected);
+  assert.deepEqual(selected.map((row) => row.selected_rule), ["genre-floor"], "industry's floor of one place in a day of 20 is filled");
+  assert.equal(Number(selected[0].score_total), Math.max(...scores), "with the genre's best, which is under the line");
+  assert.ok(Number(selected[0].score_total) >= p80);
+  const mix = pipeline.status().mix;
+  assert.ok(Math.abs(mix.genreFloors.industry - Math.round(p80 * 100) / 100) < 0.011, `the operators see the bar a place asked: ${JSON.stringify(mix.genreFloors)}`);
+  assert.equal(pipeline.counters.mixGenreFloorFailures, 0);
+});
+
+test("c2-fixes: a month of scores that cannot be read leaves the mix at the absolute floor and is counted, never a stopped round", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const release = await deliver({ source_id: "c-novo", title: "Novo announces a trial readout [score:30]", summary: "N".repeat(200) });
+  plugin.texts.set(release.pluginEntryId, { entry_id: release.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  const realQuery = database.query.bind(database);
+  database.query = async (/** @type {string} */ sql, /** @type {any[]} */ params) => {
+    if (typeof sql === "string" && sql.includes("GROUP BY i.genre, i.platform")) throw new Error("the scores are unreadable");
+    return realQuery(sql, params);
+  };
+  try {
+    const summary = await pipeline.processBatch();
+    assert.equal(summary.published, 1, "the round went on");
+  } finally {
+    database.query = realQuery;
+  }
+  assert.equal(pipeline.counters.mixGenreFloorFailures, 1);
+  assert.deepEqual(pipeline.status().mix.genreFloors, {});
 });
 
 /**
@@ -604,9 +714,10 @@ async function selections(named) {
 }
 
 /**
- * The preprint lane's first day (2026-09-22): the lanes of the journal and the registry result have a selected item already, so the
- * lane floor leaves them alone and what is measured is the preprint lane. A preprint's total is the editor's share plus 6 (authority 2,
- * discounted), and so is a newsroom's (a press release): the line is 82, and none of them can reach it.
+ * The preprint lane's first day (2026-09-22), inside the genre mix (ct-mix 2026-10-24): the research group's floor is short of
+ * candidates above the line, but a preprint under it comes in only by the lane's places; the newsroom's release is 行业动态 and
+ * takes the industry group's floor. A preprint's total is the editor's parts plus 6 (authority 2, discounted), a newsroom's plus 6:
+ * the line is 82 here, and none of them can reach it.
  * @param {Record<string, any>} [config]
  */
 async function laneDay(config = {}) {
@@ -615,77 +726,78 @@ async function laneDay(config = {}) {
   const { pipeline, plugin } = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 82, ...config } });
   const named = await deliverNamed(plugin, {
     journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 24 + 60 = 84
-    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 19 + 70 = 89
-    a: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[2]} [score:62]` }, // 68
-    b: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[3]} [score:58]` }, // 64
-    c: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[4]} [score:52]` }, // 58: under the floor
-    d: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[5]} [score:66]` }, // 72
-    e: { source_id: "c-novo", title: `${DISTINCT_TOPICS[6]} [score:60]` }, // 66, a newsroom
+    trial: { source_id: "j-nejm", doi: "10.1000/lane.journal2", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 24 + 70 = 94
+    // A preprint's impact is capped at 18 and its novelty at 14 (frontier-selection.json), authority 2 gives it 6: 58 at the very best.
+    a: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[2]} [parts:18-12-16]` }, // 52
+    b: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[3]} [parts:18-11-15]` }, // 50
+    c: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[4]} [parts:18-8-14]` }, // 46: under the floor
+    d: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[5]} [parts:18-14-17]` }, // 55
+    e: { source_id: "c-novo", title: `${DISTINCT_TOPICS[6]} [parts:14-20-20]` }, // 60, a newsroom (authority 6; a release's impact is capped at 14)
   });
   const summary = await pipeline.processBatch();
   return { pipeline, plugin, named, summary, clock };
 }
 
-test("F12b: the preprint lane selects the day's best two preprints and company items above the floor, by its own rule, and the daily carries them", options, async () => {
+test("F12b: the preprint lane selects the day's best two preprints above the floor, by its own rule, inside the research group, and the daily carries them", options, async () => {
   const { pipeline, plugin, named, summary } = await laneDay();
   assert.deepEqual(await selections(named), {
     journal: [true, "threshold"], trial: [true, "threshold"],
-    d: [true, "preprint-lane"], a: [true, "preprint-lane"], // the two highest totals (72, 68)
-    e: [false, null], b: [false, null], // 66 and 64 clear the floor and find the places taken
-    c: [false, null], // 58 is under it
+    d: [true, "preprint-lane"], a: [true, "preprint-lane"], // the two highest totals (55 and 52)
+    b: [false, null], // 50 clears the floor and finds the places taken; the research floor does not take a preprint under the line
+    c: [false, null], // 47 is under it
+    e: [true, "genre-floor"], // a newsroom's release is 行业动态: the industry group's floor, no longer a preprint-lane place
   });
   assert.equal(summary.preprintLane, 2, "counted in the round's summary...");
-  assert.equal(pipeline.counters.preprintLane, 2, "...and in the pipeline's counters");
+  assert.equal(pipeline.counters.mix["preprint-lane"], 2, "...and in the pipeline's counters");
   // Selected, and still what they are: a preprint with its source class and its unreviewed flag, never an upgraded one.
   const taken = (await database.query(`SELECT source_type, flags, evidence_type, verification, lane, state, score_total FROM evimed_frontier.items
     WHERE selected_rule = 'preprint-lane' ORDER BY score_total DESC`)).rows;
   assert.deepEqual(taken.map((row) => [row.source_type, row.flags.includes("preprint"), row.state, row.verification, row.score_total]),
-    [["preprint", true, "published", "passed", 72], ["preprint", true, "published", "passed", 68]]);
+    [["preprint", true, "published", "passed", 55], ["preprint", true, "published", "passed", 52]]);
   const lanePick = await item(Number((await entry(named.d.id)).item_id));
   assert.deepEqual(await changes(Number(lanePick.id)), ["published", "selected"]);
   assert.equal(lanePick.selected_at.toISOString(), "2026-09-22T12:00:00.000Z");
 
-  // The daily of the next morning carries the lane's two with the other two: 精选 and the daily are one selection.
+  // The daily of the next morning carries the lane's two with the others: 精选 and the daily are one selection.
   const daily = await new FrontierDaily({ database, config: { frontierTimeZone: "Asia/Shanghai", frontierDailyTime: "07:30" } }).compose("2026-09-23");
   const issued = new Set([daily.lead?.itemId, ...daily.sections.flatMap((section) => section.itemIds)]);
   const publicIds = async (/** @type {string[]} */ names) => Promise.all(names.map(async (name) => (await item(Number((await entry(named[name].id)).item_id))).public_id));
-  assert.deepEqual([...issued].sort(), (await publicIds(["journal", "trial", "a", "d"])).sort());
+  for (const id of await publicIds(["journal", "trial", "a", "d"])) assert.ok(issued.has(id), id);
 
   // The same day, a better preprint arrives: the places are taken, and selection is sticky.
-  const later = await deliverNamed(plugin, { f: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[7]} [score:68]` } }); // 74
+  const later = await deliverNamed(plugin, { f: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[7]} [parts:18-14-20]` } }); // 58
   await pipeline.processBatch();
   assert.deepEqual(await selections(later), { f: [false, null] });
   assert.equal((await selections(named)).d[1], "preprint-lane");
 });
 
-test("F12b: a new day has its own places, and what the lane floor took of the lane's classes counts against them", options, async () => {
+test("F12b: a new day has its own places, and yesterday's stand", options, async () => {
   const { plugin, named } = await laneDay();
   assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
-  // 2026-09-23: nothing is selected in the evidence lane yet, so the lane floor takes its best (a preprint, 66) first; that is one of the
-  // day's two places, and the lane fills the other with the next best above the floor (61), leaving 60 out.
+  // 2026-09-23: the lane takes the day's best two above the floor (56, 52) and leaves 44 out.
   const { pipeline: next } = pipelineWith({ now: () => new Date("2026-09-23T12:00:00Z"), plugin, config: { frontierSelectThreshold: 82 } });
   const day = await deliverNamed(plugin, {
-    g: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[8]} [score:54]` }, // 60
-    i: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[9]} [score:60]` }, // 66
-    j: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[10]} [score:55]` }, // 61
+    g: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[8]} [parts:18-8-12]` }, // 44
+    i: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[9]} [parts:18-14-18]` }, // 56
+    j: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[10]} [parts:18-12-16]` }, // 52
   });
   const summary = await next.processBatch();
-  assert.deepEqual(await selections(day), { g: [false, null], i: [true, "lane-floor"], j: [true, "preprint-lane"] });
-  assert.equal(summary.preprintLane, 1);
+  assert.deepEqual(await selections(day), { g: [false, null], i: [true, "preprint-lane"], j: [true, "preprint-lane"] });
+  assert.equal(summary.preprintLane, 2);
   // Yesterday's two stand: a new day takes nothing back.
   assert.equal(Object.values(await selections(named)).filter(([, rule]) => rule === "preprint-lane").length, 2);
 });
 
-test("F12b: the floor and the number are the operator's: a floor of 70 takes the one that reaches it, 0 a day is no lane, 3 a day is three", options, async () => {
+test("F12b: the floor and the number are the operator's: a floor of 55 takes the one that reaches it, 0 a day is no lane, 3 a day is three", options, async () => {
   for (const [config, expected] of /** @type {Array<[Record<string, number>, string[]]>} */ ([
-    [{ frontierPreprintLaneMinScore: 70 }, ["d"]],
+    [{ frontierPreprintLaneMinScore: 55 }, ["d"]],
     [{ frontierPreprintLanePerDay: 0 }, []],
-    [{ frontierPreprintLanePerDay: 3 }, ["a", "d", "e"]],
+    [{ frontierPreprintLanePerDay: 3 }, ["a", "b", "d"]],
   ])) {
     const { named, pipeline } = await laneDay(config);
     const taken = Object.entries(await selections(named)).filter(([, [, rule]]) => rule === "preprint-lane").map(([name]) => name).sort();
     assert.deepEqual(taken, expected, JSON.stringify(config));
-    assert.equal(pipeline.counters.preprintLane, expected.length, JSON.stringify(config));
+    assert.equal(pipeline.counters.mix["preprint-lane"] ?? 0, expected.length, JSON.stringify(config));
   }
 });
 
@@ -695,17 +807,16 @@ test("F12b: only a verified, unretracted, summarised article of an enabled sourc
   // First with the lane off, so the items are published and none is taken...
   const off = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 82, frontierPreprintLanePerDay: 0 } });
   const named = await deliverNamed(off.plugin, {
-    journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 84: the evidence lane has its selection
-    trial: { source_id: "t-ctgov", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 89: and so has the pipeline lane
-    retracted: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[11]} [score:70]` }, // 76
-    letter: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[12]} [score:68]` }, // 74
-    hidden: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[13]} [score:66]` }, // 72
-    silent: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[14]} [score:64]` }, // 70
-    waiting: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[15]} [pending] [score:62]` }, // published as it came, edit still owed
-    good1: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[16]} [score:60]` }, // 66
-    good2: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[17]} [score:59]` }, // 65
-    good3: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[18]} [score:58]` }, // 64
-    newsroom: { source_id: "c-novo", title: `${DISTINCT_TOPICS[19]} [score:57]` }, // 63
+    journal: { source_id: "j-nejm", doi: "10.1000/lane.journal", title: `${DISTINCT_TOPICS[0]} [score:60]` }, // 84
+    trial: { source_id: "j-nejm", doi: "10.1000/lane.journal2", title: `${DISTINCT_TOPICS[1]} [score:70]` }, // 94
+    retracted: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[11]} [parts:18-14-20]` }, // 58
+    letter: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[12]} [parts:18-14-19]` }, // 57
+    hidden: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[13]} [parts:18-14-18]` }, // 56
+    silent: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[14]} [parts:18-14-17]` }, // 55
+    waiting: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[15]} [pending] [parts:18-14-16]` }, // published as it came, edit still owed
+    good1: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[16]} [parts:18-14-16]` }, // 54
+    good2: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[17]} [parts:18-14-15]` }, // 53
+    good3: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[18]} [parts:18-14-13]` }, // 51
   });
   await off.pipeline.processBatch();
   assert.deepEqual(Object.entries(await selections(named)).filter(([, [selected]]) => selected).map(([name]) => name), ["journal", "trial"], "no lane, no place");
@@ -720,8 +831,106 @@ test("F12b: only a verified, unretracted, summarised article of an enabled sourc
   await on.pipeline.processBatch();
   const verdicts = await selections(named);
   assert.deepEqual(Object.entries(verdicts).filter(([, [, rule]]) => rule === "preprint-lane").map(([name]) => name),
-    ["good1", "good2"], "the best two that are eligible: 66 and 65, then the lane is full");
+    ["good1", "good2"], "the best two that are eligible: 54 and 53, then the lane is full");
   assert.deepEqual(verdicts.waiting, [false, null], "a title-only item has no total to be taken by");
+});
+
+test("c3-select: the score a card shows is the model's under the ceilings the platform holds, a republisher's authority is capped, and the model's own numbers stay", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const named = await deliverNamed(plugin, {
+    // A preprint (genre preprint, code's own): its impact is held to 18 and its novelty to 14 whatever the model gave.
+    registry: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[0]} [parts:22-15-15]` },
+    // A feed that rewrites another feed (frontier-selection.json): authority 3 reads as 1.
+    hub: { source_id: "discovered-29e04956f24c862b4024", title: `${DISTINCT_TOPICS[1]} [parts:22-15-15]` },
+    // Nothing the platform holds lowers a paper of a journal of authority 5.
+    paper: { source_id: "j-nejm", doi: "10.1000/c3.paper", title: `${DISTINCT_TOPICS[2]} [parts:22-15-15]` },
+  });
+  await pipeline.processBatch();
+  const rows = {};
+  for (const [name, delivered] of Object.entries(named)) rows[name] = await item(Number((await entry(delivered.id)).item_id));
+  const parts = (/** @type {any} */ row) => [row.score_authority, row.score_impact, row.score_novelty, row.score_relevance, row.score_total];
+  assert.equal(rows.registry.genre, "preprint");
+  assert.deepEqual(parts(rows.registry).slice(1, 4), [18, 14, 15], "impact 22 -> 18, novelty 15 -> 14; the rest is the model's");
+  assert.equal(rows.registry.score_total, rows.registry.score_authority + 18 + 14 + 15);
+  assert.equal(rows.hub.score_authority, frontierAuthorityScore({ authority: 1, evidenceType: "observational" }), "BD HUB at authority 3 is graded 1, the table's cap");
+  assert.equal(rows.hub.score_total, rows.hub.score_authority + 22 + 15 + 15);
+  assert.deepEqual(parts(rows.paper).slice(1, 4), [22, 15, 15], "no ceiling applies");
+  // The model's numbers and what lowered them are kept with the item, for the operator and for fitting a ceiling.
+  assert.deepEqual(rows.registry.editor_diagnostics.scoresRaw, { impact: 22, novelty: 15, relevance: 15 });
+  assert.deepEqual(rows.registry.editor_diagnostics.capped, ["genre:preprint"]);
+  assert.deepEqual(rows.hub.editor_diagnostics.capped, ["republisher"]);
+  assert.equal(rows.paper.editor_diagnostics.capped, undefined, "nothing lowered, nothing named");
+  assert.equal(pipeline.counters.scoreCeilings, 2);
+});
+
+test("c3-select: the practice proposal waits in practice_zh; the day's mix admits the best of the selected ones that may carry it, up to the day's cap", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock, config: { frontierSelectThreshold: 60 } });
+  const regulatory = (/** @type {string} */ id) => ({ source_id: "r-ema", identity_key: `fda:${id}`, canonical_url: `https://example.org/fda/${id}` });
+  const named = await deliverNamed(plugin, {
+    // Three approvals over the line, all proposed: the day has three selected items, so the cap is one (5 % of three, never fewer than one).
+    low: { ...regulatory("a"), title: `${DISTINCT_TOPICS[0]} [practice:1] [score:65]` },
+    best: { ...regulatory("b"), title: `${DISTINCT_TOPICS[1]} [practice:1] [score:75]` },
+    third: { ...regulatory("c"), title: `${DISTINCT_TOPICS[2]} [score:70]` },
+    // Proposed but not a decision or a result: a company's news is never admitted, selected or not.
+    news: { source_id: "c-novo", title: `${DISTINCT_TOPICS[3]} [practice:1] [score:80]` },
+    // Proposed but not selected: under the line, a label is not given.
+    quiet: { source_id: "r-ema", identity_key: "fda:d", canonical_url: "https://example.org/fda/d", title: `${DISTINCT_TOPICS[4]} [practice:1] [score:20]` },
+  });
+  await pipeline.processBatch();
+  const rows = {};
+  for (const [name, delivered] of Object.entries(named)) rows[name] = await item(Number((await entry(delivered.id)).item_id));
+  assert.deepEqual(Object.fromEntries(Object.entries(rows).map(([name, row]) => [name, row.practice_changing])),
+    { low: false, best: true, third: false, news: false, quiet: false });
+  assert.equal(rows.best.practice_zh, "首个口服药获批，成人患者多了一线选择。");
+  assert.equal(rows.third.practice_zh, null, "no proposal, no reason");
+  assert.equal(rows.quiet.practice_zh, "首个口服药获批，成人患者多了一线选择。", "the proposal is held; it is just not admitted");
+  assert.equal(rows.best.selected, true);
+  assert.equal(pipeline.counters.practiceAdmitted, 1);
+  assert.ok((await changes(Number(rows.best.id))).includes("practice"), "a reader's list sees the change");
+  // A later round does not give the cap again: the admitted one stays and counts.
+  await pipeline.processBatch();
+  assert.equal(pipeline.counters.practiceAdmitted, 1);
+});
+
+test("c3-select: a safety alert takes the place of an arithmetic pick of its own event", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const named = await deliverNamed(plugin, {
+    // The recall as an X post of a media account, picked by the line first...
+    post: { source_id: "j-nejm", doi: "10.1000/c3.post", title: `${DISTINCT_TOPICS[0]} [score:60]` },
+    // ...and the regulator's own notice, which the safety bypass selects when it is published.
+    alert: { source_id: "r-medwatch", title: `${DISTINCT_TOPICS[1]} [score:50]`, facts: { recall_class: "Class I" } },
+  });
+  await pipeline.processBatch();
+  const id = async (/** @type {string} */ name) => Number((await entry(named[name].id)).item_id);
+  const [post, alert] = [await item(await id("post")), await item(await id("alert"))];
+  assert.equal(post.selected, true, "the line selected the post");
+  assert.equal(alert.selected_rule, "safety-bypass");
+  // They are one event, clustered after both were published.
+  const event = (await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, report_count)
+    VALUES ($2, '召回', 'safety', $1, $1, 2) RETURNING id`, [clock, `c3ev${randomUUID().slice(0, 8)}`])).rows[0].id;
+  for (const row of [post, alert]) {
+    await database.query("INSERT INTO evimed_frontier.event_items (event_id, item_id, role, joined_by) VALUES ($1, $2, 'report', 'model')", [event, row.id]);
+    await database.query("UPDATE evimed_frontier.items SET event_id = $1 WHERE id = $2", [event, row.id]);
+  }
+  await database.query("UPDATE evimed_frontier.items SET visible_at = visible_at WHERE id = $1", [post.id]);
+  // The next round hands the day to the mix again (an item re-scored, or published).
+  const more = await deliverNamed(plugin, { starter: { source_id: "m-stat", title: `${DISTINCT_TOPICS[5]} [score:20]` } });
+  await pipeline.processBatch();
+  const after = await item(await id("post"));
+  assert.equal(after.selected, false, "the arithmetic pick gave its place to the alert");
+  assert.equal(after.selected_rule, null);
+  assert.equal(String(after.same_event_item_id), String(alert.id), "and points at it");
+  assert.equal((await item(await id("alert"))).selected, true);
+  assert.ok((await changes(Number(post.id))).includes("same-event"));
+  assert.equal(pipeline.counters.supersededBySafety, 1);
+  void more;
+  await database.query("DELETE FROM evimed_frontier.events WHERE id = $1", [event]);
 });
 
 test("F12c: a published Class I recall carries class-i-recall, a safety notice the editor found to add a boxed warning carries boxed-warning, and nothing else does", options, async () => {
@@ -804,6 +1013,10 @@ test("failures are attempts: a third one fails the entry or the item with its re
   assert.deepEqual([failed.state, failed.state_reason, failed.attempts], ["failed", "frontier_screen_invalid", 3]);
   const exploded = await item(Number((await entry(boom.id)).item_id));
   assert.deepEqual([exploded.state, exploded.attempts], ["failed", 3]);
+  assert.equal(exploded.editor_diagnostics.reason, "call_failed");
+  assert.equal(exploded.editor_diagnostics.attempts, null, "throwing adapter has no proven call count");
+  assert.equal(exploded.editor_diagnostics.editorVersion, null);
+  assert.ok(!JSON.stringify(exploded.editor_diagnostics).includes("boom"));
   const status = pipeline.status();
   assert.equal(status.lastError, null, "a failed row is the row's, not the batch's");
   assert.ok(status.counters.failed >= 2);
@@ -826,7 +1039,7 @@ test("a spent provider balance is a wait, never an attempt: no entry or item is 
   await reset();
   let clock = new Date("2026-09-22T12:00:00Z");
   const provider = { balanceSpent: false };
-  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock, editor: fakeEditor(provider) });
+  const { pipeline, editor, plugin } = pipelineWith({ config: { frontierOffpeak: true }, now: () => clock, editor: fakeEditor(provider) });
   // One item already published title-only and owed an edit (published at peak).
   clock = new Date("2026-09-22T02:00:00Z");
   const owed = await deliver({ source_id: "m-stat", title: "Semaglutide study in adolescents [score:60]", summary: "S".repeat(200) });
@@ -889,7 +1102,7 @@ test("the day's budget counts an uncertain call at its recorded bound, not its r
 test("transient owed edits preserve attempts and existing prose across restart; schema failures still exhaust", options, async () => {
   await reset();
   let clock = new Date("2026-09-22T02:00:00Z");
-  const setup = pipelineWith({now:()=>clock});
+  const setup = pipelineWith({config:{frontierOffpeak:true},now:()=>clock});
   const delivered = await deliver({source_id:"m-stat",title:"Kidney therapy trial [score:60]",summary:"S".repeat(200)});
   setup.plugin.texts.set(delivered.pluginEntryId,{entry_id:delivered.pluginEntryId,revision:1,status:"unavailable",enrichment:{}});
   await setup.pipeline.processBatch();
@@ -899,27 +1112,33 @@ test("transient owed edits preserve attempts and existing prose across restart; 
   clock = new Date("2026-09-22T12:00:00Z");
   for (const failure of [
     {error:"frontier_model_timeout"},
+    {error:"frontier_model_timeout",throws:true},
     {error:"model_gateway_upstream_error",upstreamStatus:429},
     {error:"model_gateway_upstream_error",upstreamStatus:503,verification:"title-only"},
     {error:"frontier_model_failed",networkCode:"ECONNRESET"},
     {error:"model_gateway_payment_required",verification:"title-only",waitMinutes:30},
   ]) {
     let calls=0;
-    setup.editor.edit=async()=>{calls++;clock=new Date(clock.getTime()+120_000);return {verification:"pending",...failure};};
-    const {pipeline}=pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin});
+    setup.editor.edit=async()=>{calls++;clock=new Date(clock.getTime()+120_000);
+      if(failure.throws)throw Object.assign(new Error("private provider response"),{code:failure.error});
+      return {verification:"pending",...failure};};
+    const {pipeline}=pipelineWith({config:{frontierOffpeak:true},now:()=>clock,editor:setup.editor,plugin:setup.plugin});
     await pipeline.processBatch();
     const waiting=await item(id);
+    assert.equal(waiting.editor_diagnostics.reason,"provider_unavailable");
+    assert.equal(waiting.editor_diagnostics.checkedAt,clock.toISOString());
+    assert.equal(waiting.editor_diagnostics.attempts,null,"adapter did not report its actual call count");
     assert.deepEqual([waiting.attempts,waiting.editor_version,waiting.summary_zh,waiting.lease_owner],[2,null,"Existing valid prose",null]);
     const waitMs=(failure.waitMinutes??5)*60_000;
     assert.equal(new Date(waiting.lease_until).getTime(),clock.getTime()+waitMs);
     assert.equal((await entry(delivered.id)).state_reason,failure.error);
     // A fresh process must respect the ownerless durable cooldown too.
-    await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+    await pipelineWith({config:{frontierOffpeak:true},now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
     assert.equal(calls,1);
     clock=new Date(clock.getTime()+waitMs+1);
   }
   setup.editor.edit=edit;
-  await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  await pipelineWith({config:{frontierOffpeak:true},now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
   assert.equal((await item(id)).verification,"passed");
   assert.equal((await item(id)).attempts,0);
   // A promoted update whose content repair lost the provider keeps its old
@@ -927,23 +1146,25 @@ test("transient owed edits preserve attempts and existing prose across restart; 
   await database.query("UPDATE evimed_frontier.items SET state='screened',editor_version=NULL,attempts=2 WHERE id=$1",[id]);
   const validProse=(await item(id)).summary_zh;
   setup.editor.edit=async()=>({verification:"title-only",error:"frontier_model_timeout",output:{titleZh:"Partial repair",summaryZh:null}});
-  const deferred=await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  const deferred=await pipelineWith({config:{frontierOffpeak:true},now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
   const promotedWait=await item(id);
   assert.deepEqual([promotedWait.state,promotedWait.attempts,promotedWait.summary_zh,promotedWait.lease_owner],["screened",2,validProse,null]);
   assert.equal(deferred.edited,0);
   clock=new Date(clock.getTime()+5*60_000+1);
   setup.editor.edit=edit;
-  await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  await pipelineWith({config:{frontierOffpeak:true},now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
   assert.equal((await item(id)).state,"published");
   // Invalid content and an explicit HTTP 400 are not provider waits.
   for (const failure of [{error:"frontier_edit_invalid"},{error:"model_gateway_upstream_error",upstreamStatus:400}]) {
     await database.query("UPDATE evimed_frontier.items SET editor_version=NULL,attempts=2 WHERE id=$1",[id]);
     setup.editor.edit=async()=>({verification:"pending",...failure});
-    await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+    await pipelineWith({config:{frontierOffpeak:true},now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
     const exhausted=await item(id);
     assert.equal(exhausted.attempts,3);
     assert.equal(exhausted.editor_version,FRONTIER_EDITOR_VERSION);
     assert.equal(exhausted.lease_until,null);
+    assert.equal(exhausted.editor_diagnostics.outcome,"title-only");
+    assert.equal(exhausted.editor_diagnostics.reason,"retry_exhausted");
   }
 });
 
@@ -978,4 +1199,314 @@ test("vectors come after publication and never block it; two concurrent batches 
     assert.equal(after.count, 30);
     assert.equal(after.model, `fake@${DIMENSION}`);
   }
+});
+
+test("ordinary daytime articles are edited by default and preserve their original source snapshot", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T02:00:00Z");
+  const { pipeline, plugin, editor } = pipelineWith({ now: () => clock });
+  const rawSummary = "Preserved source summary for the daytime editorial regression. ".repeat(4);
+  const delivered = await deliver({ source_id: "m-stat", title: "Clinical trial reports a measured outcome [score:60]", summary: rawSummary });
+  plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "pending", next_attempt_at: clock.toISOString() });
+  await pipeline.processBatch();
+  const stored = await entry(delivered.id);
+  const published = await item(Number(stored.item_id));
+  assert.equal(published.state, "published");
+  assert.equal(published.verification, "passed");
+  assert.ok(published.title_zh && published.summary_zh);
+  assert.equal(editor.calls.edit.length, 1);
+  const snapshot = (await database.query("SELECT model_input, abstract_raw FROM evimed_frontier.item_texts WHERE item_id=$1", [published.id])).rows[0];
+  assert.ok(snapshot.model_input.includes(rawSummary.trim()));
+  assert.equal(snapshot.abstract_raw, null, "the feed summary is not relabeled as a fetched abstract");
+  assert.equal(stored.state, "held", "the original text request still completes later");
+});
+
+
+test("a source revision invalidates previous field diagnoses before a later successful edit", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T12:00:00Z");
+  const setup = pipelineWith({ now: () => clock });
+  const first = await deliver({ source_id: "m-stat", doi: "10.1000/diagnostics", title: "Original kidney trial", summary: "S".repeat(200) });
+  setup.plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  await setup.pipeline.processBatch();
+  const id = Number((await entry(first.id)).item_id);
+  const initial = await item(id);
+  assert.equal(initial.editor_diagnostics.outcome,"passed");
+  clock = new Date(clock.getTime() + HOUR);
+  setup.editor.available = false;
+  await deliver({ source_id: "m-stat", plugin_entry_id: first.pluginEntryId, revision: 2, doi: "10.1000/diagnostics",
+    title: "Corrected kidney trial", summary: "S".repeat(200) });
+  setup.plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 2, status: "unavailable", enrichment: {} });
+  await setup.pipeline.processBatch();
+  assert.deepEqual((await item(id)).editor_diagnostics,{},"old hash and field failures cannot describe revised input");
+  setup.editor.available = true;
+  await setup.pipeline.processBatch();
+  const final = await item(id);
+  assert.equal(final.editor_diagnostics.outcome,"passed");
+  assert.notEqual(final.editor_diagnostics.inputSha256,initial.editor_diagnostics.inputSha256);
+  assert.equal(final.published_at?.toISOString(),initial.published_at?.toISOString());
+});
+
+
+/** A paused adapter lets another transaction change the source/claim before settlement. */
+function pausedEdit(editor, outcome = "passed") {
+  const original = editor.edit.bind(editor);
+  let begin, finish;
+  const started = new Promise((resolve) => { begin = resolve; });
+  const released = new Promise((resolve) => { finish = resolve; });
+  editor.edit = async (input) => {
+    const result = await original(input);
+    begin();
+    await released;
+    if (outcome === "throw") throw Object.assign(new Error("private provider failure"), { code: "frontier_model_timeout" });
+    if (outcome === "pending") return { ...result, verification: "pending", output: null, error: "frontier_model_timeout" };
+    return result;
+  };
+  return { started, release: () => finish() };
+}
+
+test("a source revision arriving during an edit cannot restore stale prose, input or diagnostics", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const first = pipelineWith({ now: () => clock });
+  const delivered = await deliver({ source_id: "m-stat", doi: "10.1000/edit-race", title: "Original kidney source", summary: "S".repeat(200) });
+  first.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  await first.pipeline.processBatch();
+  const id = Number((await entry(delivered.id)).item_id);
+  await database.query("UPDATE evimed_frontier.items SET editor_version=NULL WHERE id=$1", [id]);
+  const paused = pausedEdit(first.editor);
+  const running = first.pipeline.processBatch();
+  await paused.started;
+  const second = pipelineWith({ now: () => clock, plugin: first.plugin });
+  second.editor.available = false;
+  await deliver({ source_id: "m-stat", doi: "10.1000/edit-race", plugin_entry_id: delivered.pluginEntryId, revision: 2,
+    title: "Corrected kidney source", summary: "New source text ".repeat(20) });
+  first.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 2, status: "available", abstract: "Corrected source abstract", enrichment: {} });
+  await second.pipeline.processBatch();
+  const fresh = await item(id);
+  const freshText = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0];
+  paused.release();
+  await running;
+  const settled = await item(id);
+  const settledText = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0];
+  assert.equal(settled.title_raw, fresh.title_raw);
+  assert.equal(settled.title_zh, fresh.title_zh);
+  assert.equal(settled.summary_zh, fresh.summary_zh);
+  assert.deepEqual(settled.editor_diagnostics, fresh.editor_diagnostics);
+  assert.equal(settledText.model_input_sha256, freshText.model_input_sha256);
+  assert.equal(settled.lease_owner, null, "only the obsolete owned claim is released for a fresh edit");
+});
+
+test("expired and replaced claims fence every old editor completion, including same-worker ABA", options, async () => {
+  for (const mode of ["expired", "reassigned", "same-worker"]) for (const outcome of ["passed", "pending", "throw"]) {
+    await reset();
+    let clock = new Date("2026-09-22T12:00:00Z");
+    const setup = pipelineWith({ now: () => clock });
+    const delivered = await deliver({ source_id: "m-stat", title: `Kidney claim ${mode} ${outcome}`, summary: "S".repeat(200) });
+    setup.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+    await setup.pipeline.processBatch();
+    const id = Number((await entry(delivered.id)).item_id);
+    await database.query("UPDATE evimed_frontier.items SET editor_version=NULL,attempts=2 WHERE id=$1", [id]);
+    const paused = pausedEdit(setup.editor, outcome);
+    const running = setup.pipeline.processBatch();
+    await paused.started;
+    const claimed = await item(id);
+    clock = new Date(claimed.lease_until.getTime() + 1_000);
+    if (mode !== "expired") await database.query("UPDATE evimed_frontier.items SET lease_owner=$2,lease_until=$3 WHERE id=$1",
+      [id, mode === "same-worker" ? claimed.lease_owner : "replacement-worker", new Date(clock.getTime() + HOUR)]);
+    const fresh = await item(id);
+    const freshText = (await database.query("SELECT model_input_sha256 FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0];
+    paused.release();
+    await running;
+    const settled = await item(id);
+    assert.deepEqual([settled.title_zh,settled.summary_zh,settled.editor_diagnostics,settled.attempts,settled.lease_owner,settled.lease_until],
+      [fresh.title_zh,fresh.summary_zh,fresh.editor_diagnostics,fresh.attempts,fresh.lease_owner,fresh.lease_until], `${mode}/${outcome}`);
+    assert.equal((await database.query("SELECT model_input_sha256 FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0].model_input_sha256,freshText.model_input_sha256);
+  }
+});
+
+
+test("corrected existing abstract, body and trial facts invalidate diagnostics without unbounded re-edits", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T12:00:00Z");
+  const setup = pipelineWith({ now: () => clock });
+  const delivered = await deliver({ source_id: "m-stat", doi: "10.1000/existing-input", title: "Kidney source correction", summary: "S".repeat(200) });
+  setup.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "available",
+    abstract: "Existing abstract one", body_excerpt: "Existing body one", enrichment: {trial_facts:{enrollment:100}} });
+  await setup.pipeline.processBatch();
+  const id = Number((await entry(delivered.id)).item_id);
+  for (const revision of [2,3]) {
+    clock = new Date(clock.getTime() + HOUR);
+    setup.editor.available = false;
+    await deliver({ source_id: "m-stat", doi: "10.1000/existing-input", plugin_entry_id: delivered.pluginEntryId, revision,
+      title: "Kidney source correction", summary: "S".repeat(200) });
+    setup.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision, status: "available",
+      abstract: "Corrected abstract two", body_excerpt: `Corrected body ${revision}`,
+      enrichment: {trial_facts:{enrollment:100*revision}} });
+    const calls = setup.editor.calls.edit.length;
+    await setup.pipeline.processBatch();
+    const fresh = await item(id);
+    assert.deepEqual(fresh.editor_diagnostics,{},`revision ${revision} invalidates old input diagnostics`);
+    assert.equal(setup.editor.calls.edit.length,calls,"intake does not add an editing call");
+    setup.editor.available = true;
+    await setup.pipeline.processBatch();
+    assert.equal(setup.editor.calls.edit.length,calls + Number(revision === 2),"only the existing one-rescore allowance is used");
+  }
+});
+
+
+test("a same-revision late abstract arriving during an edit fences its old source snapshot", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T12:00:00Z");
+  const first = pipelineWith({ now: () => clock });
+  // A whole feed summary to go on with (an item with nothing to read is not published, 2026-10-22): published, then edited.
+  const delivered = await deliver({ source_id: "j-nejm", title: "Kidney paper awaiting abstract",
+    summary: "A kidney paper whose feed carries a whole summary of the trial, its population and its primary endpoint." });
+  await first.pipeline.processBatch();
+  const storedEntry = await entry(delivered.id);
+  assert.equal(storedEntry.state,"held");
+  const id = Number(storedEntry.item_id);
+  clock = new Date(clock.getTime() + 24 * HOUR);
+  await database.query("UPDATE evimed_frontier.items SET editor_version=NULL WHERE id=$1",[id]);
+  const paused = pausedEdit(first.editor);
+  const running = first.pipeline.processBatch();
+  await paused.started;
+  first.plugin.texts.set(delivered.pluginEntryId,{ entry_id:delivered.pluginEntryId,revision:1,status:"available",
+    abstract:"Newly available original abstract",body_excerpt:"Newly available original body",enrichment:{} });
+  // The plugin now has the text; make this test's pending poll explicitly due without advancing the item's active claim.
+  await database.query("UPDATE evimed_frontier.entries SET state='held',hold_until=$2,lease_owner=NULL,lease_until=NULL WHERE id=$1",
+    [delivered.id,new Date(clock.getTime()-1_000)]);
+  const second = pipelineWith({ now: () => clock, plugin:first.plugin });
+  second.editor.available=false;
+  await second.pipeline.processBatch();
+  const fresh = await item(id);
+  const text = (await database.query("SELECT model_input_sha256,abstract_raw FROM evimed_frontier.item_texts WHERE item_id=$1",[id])).rows[0];
+  assert.equal(text.abstract_raw,"Newly available original abstract");
+  paused.release();
+  await running;
+  const settled=await item(id);
+  assert.deepEqual(settled.editor_diagnostics,fresh.editor_diagnostics);
+  assert.equal(settled.summary_zh,fresh.summary_zh);
+  assert.equal((await database.query("SELECT model_input_sha256 FROM evimed_frontier.item_texts WHERE item_id=$1",[id])).rows[0].model_input_sha256,text.model_input_sha256);
+  assert.equal(settled.lease_owner,null);
+});
+
+// fr-social 2026-10-22: contract 1.5.0 — a post through the same screen → item → text path, nothing social-only.
+test("a social post is screened with its author, counts and quote, and its item carries what the post carries and its full text", options, async () => {
+  await reset();
+  await database.query(`INSERT INTO evimed_frontier.sources (id, name, lane, source_type, access, egress, authority, safety_feed, owner_entity, launch_tier, region)
+    VALUES ('x-us_fda', 'U.S. FDA（X @US_FDA）', 'mixed', 'regulator', 'socialdata', 'api', 5, false, 'FDA', 'P1', 'US')`);
+  const clock = new Date("2026-10-22T12:00:00Z");
+  const editor = fakeEditor();
+  /** @type {any[]} */
+  const screened = [];
+  const screen = editor.screen.bind(editor);
+  editor.screen = async (/** @type {any[]} */ batch) => { screened.push(...batch); return screen(batch); };
+  const { pipeline, plugin } = pipelineWith({ now: () => clock, editor });
+  const photo = { id: "b".repeat(64), kind: "image", width: 800, height: 600, alt: "Approval letter", original_url: "https://pbs.twimg.com/media/a.jpg" };
+  const post = await deliver({ source_id: "x-us_fda", url: "https://x.com/US_FDA/status/1849", title: "FDA approves the first oral GLP-1 for obesity",
+    summary: "FDA approves the first oral GLP-1 for obesity in adults.", published_at: new Date("2026-10-22T10:00:00Z") });
+  const social = { channel: "x", platform: "x", author: { name: "U.S. FDA", handle: "US_FDA", url: "https://x.com/US_FDA", role: "organisation" },
+    media: [photo], quoted: { author: { name: "FDA Drug Info", handle: "FDA_Drug_Info" }, text: "Label and REMS details.", url: "https://x.com/FDA_Drug_Info/status/1" },
+    metrics: { likes: 12345, reposts: 300, replies: 20, views: null, observed_at: "2026-10-22T11:00:00.000Z" } };
+  await database.query("UPDATE evimed_frontier.entries SET channel=$2, platform=$3, author=$4::jsonb, media=$5::jsonb, quoted=$6::jsonb, metrics=$7::jsonb WHERE id=$1",
+    [post.id, social.channel, social.platform, JSON.stringify(social.author), JSON.stringify(social.media), JSON.stringify(social.quoted), JSON.stringify(social.metrics)]);
+  const body = "FDA approves the first oral GLP-1 for obesity in adults.\n\nThe approval follows two phase 3 trials.";
+  plugin.texts.set(post.pluginEntryId, { entry_id: post.pluginEntryId, revision: 1, status: "available", text_kind: "full", abstract: null,
+    body_excerpt: body, body_text: body, fetched_from: "x", enrichment: {} });
+  await pipeline.processBatch();
+  const input = screened.find((row) => row.key === String(post.id));
+  assert.equal(input.sourceName, "U.S. FDA（X @US_FDA）｜X｜U.S. FDA @US_FDA（机构账号）", "the screen knows an organisation's account wrote it");
+  assert.match(input.excerpt, /^【互动】赞 1\.2万 · 转发 300 · 回复 20 FDA approves/);
+  assert.match(input.excerpt, /【引用 @FDA_Drug_Info】Label and REMS details\.$/);
+  assert.ok(input.excerpt.length <= 300);
+  const made = await item(Number((await entry(post.id)).item_id));
+  assert.equal(made.channel, "x");
+  assert.equal(made.platform, "x");
+  assert.deepEqual(made.author, social.author);
+  assert.deepEqual(made.media, [photo]);
+  assert.equal(made.quoted.author.handle, "FDA_Drug_Info");
+  assert.equal(made.metrics.likes, 12345);
+  const texts = (await database.query("SELECT body_text, body_text_complete, body_excerpt FROM evimed_frontier.item_texts WHERE item_id=$1", [made.id])).rows[0];
+  assert.equal(texts.body_text, body);
+  assert.equal(texts.body_text_complete, true, "the plugin delivered the post whole");
+  const journal = await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMoa9999999", title: "A journal article [score:10]", summary: "An abstract of a trial." });
+  plugin.texts.set(journal.pluginEntryId, { entry_id: journal.pluginEntryId, revision: 1, status: "available", text_kind: "abstract",
+    abstract: "A".repeat(300), body_excerpt: null, enrichment: {} });
+  await pipeline.processBatch();
+  const plain = screened.find((row) => row.key === String(journal.id));
+  assert.deepEqual([plain.sourceName, plain.excerpt], ["NEJM", "An abstract of a trial."], "an entry that is not a post is screened exactly as before");
+  const journalItem = await item(Number((await entry(journal.id)).item_id));
+  assert.deepEqual([journalItem.channel, journalItem.author, journalItem.media], [null, null, []]);
+  assert.equal((await database.query("SELECT body_text_complete FROM evimed_frontier.item_texts WHERE item_id=$1", [journalItem.id])).rows[0].body_text_complete, null);
+});
+
+// reader-text 2026-10-22: the plugin reads a text again (`retext`) and delivers the entry as its next revision.
+test("a text that changes is settled again, and the translation made from the old text is cleared; an unchanged one keeps both", options, async () => {
+  await reset();
+  let clock = new Date("2026-10-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const first = await deliver({ source_id: "m-stat", title: "Workers pay 9% more for family coverage", summary: "S".repeat(200) });
+  const fragments = "The amount that workers pay\n\njumped 9%\n\nin 2026.";
+  plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 1, status: "available", text_kind: "excerpt", abstract: null,
+    body_excerpt: fragments, body_text: fragments, fetched_from: "page", enrichment: {} });
+  await pipeline.processBatch();
+  const id = Number((await entry(first.id)).item_id);
+  assert.equal((await item(id)).state, "published");
+  const settled = { source: "body", sha: createHash("sha256").update(fragments).digest("hex"), drop: [], at: clock.toISOString() };
+  await database.query(`UPDATE evimed_frontier.item_texts SET reader_tidy = $2::jsonb, body_zh = '译1\n\n译2\n\n译3', body_zh_kind = 'translation',
+    body_zh_source = 'body', body_zh_at = $3, body_complete = true WHERE item_id = $1`, [id, JSON.stringify(settled), clock]);
+
+  // The same text again: nothing to settle, nothing to translate again.
+  clock = new Date(clock.getTime() + HOUR);
+  await deliver({ source_id: "m-stat", plugin_entry_id: first.pluginEntryId, revision: 2, title: "Workers pay 9% more for family coverage", summary: "S".repeat(200) });
+  plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 2, status: "available", text_kind: "excerpt", abstract: null,
+    body_excerpt: fragments, body_text: fragments, fetched_from: "page", enrichment: {} });
+  await pipeline.processBatch();
+  let texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [id])).rows[0];
+  assert.deepEqual([texts.reader_tidy, texts.body_zh_source], [settled, "body"]);
+
+  // The text read again with its paragraphs: settled again, and the old translation is not this text's.
+  clock = new Date(clock.getTime() + HOUR);
+  const whole = "The amount that workers pay jumped 9% in 2026.";
+  await deliver({ source_id: "m-stat", plugin_entry_id: first.pluginEntryId, revision: 3, title: "Workers pay 9% more for family coverage", summary: "S".repeat(200) });
+  plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 3, status: "available", text_kind: "excerpt", abstract: null,
+    body_excerpt: whole, body_text: whole, fetched_from: "page", enrichment: {} });
+  await pipeline.processBatch();
+  texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [id])).rows[0];
+  assert.equal(texts.body_text, whole);
+  assert.notDeepEqual(texts.reader_tidy, settled, "the old verdict was for the old text");
+  assert.deepEqual([texts.body_zh, texts.body_zh_kind, texts.body_zh_source, texts.body_zh_at, texts.body_complete], [null, null, null, null, null]);
+});
+
+test("ct-write: the edit's genre is stored — the model's where code is not sure of its own, code's otherwise — and told to the edit when code is sure", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock });
+  const approval = await deliver({ source_id: "m-cn", title: "国家药监局批准一款新药上市 [genre:approval]", summary: "国".repeat(120) });
+  const safety = await deliver({ source_id: "r-medwatch", title: "Drug Safety Communication: a recall [genre:news]", summary: "S".repeat(120) });
+  const company = await deliver({ source_id: "c-novo", title: "Novo Nordisk announces a licensing deal", summary: "N".repeat(120) });
+  const preprint = await deliver({ source_id: "p-medrxiv", title: "A cohort of something [genre:paper]", summary: "P".repeat(120) });
+  const digest = await deliver({ source_id: "m-stat", title: "Morning rounds: three stories [digest] [genre:news]", summary: "D".repeat(220) });
+  for (const id of [approval, safety, company, preprint, digest]) {
+    plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} });
+  }
+  await pipeline.processBatch();
+  await pipeline.processBatch();
+  const genreOf = async (/** @type {{ id: number }} */ delivered) => {
+    const row = await item(Number((await entry(delivered.id)).item_id));
+    return [row.genre, row.genre_basis, row.reason_version !== null];
+  };
+  assert.deepEqual(await genreOf(approval), ["approval", "model", true], "a 公众号-like medium's approval is the model's to name");
+  assert.deepEqual(await genreOf(safety), ["safety", "code", true], "a safety feed's notice stays a safety alert whatever the model says");
+  assert.deepEqual(await genreOf(company), ["industry", "code", true], "no genre from the model: code's own answer");
+  assert.deepEqual(await genreOf(preprint), ["preprint", "code", true]);
+  assert.deepEqual(await genreOf(digest), ["roundup", "code", true]);
+  // The edit is told the genres code is sure of before it — a safety feed's notice, a preprint, a digest — and no other.
+  const fixed = Object.fromEntries(editor.calls.edit.map((title, index) => [title.replace(/ \[.*$/, ""), editor.calls.genreFixed[index]]));
+  assert.equal(fixed["Drug Safety Communication: a recall"], "safety");
+  assert.equal(fixed["A cohort of something"], "preprint");
+  assert.equal(fixed["Morning rounds: three stories"], "roundup");
+  assert.equal(fixed["国家药监局批准一款新药上市"], null);
+  assert.equal(fixed["Novo Nordisk announces a licensing deal"], null);
 });

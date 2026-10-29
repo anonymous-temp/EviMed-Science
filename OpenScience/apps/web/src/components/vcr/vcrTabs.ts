@@ -1,18 +1,6 @@
-/**
- * What a study's page is divided into, and where each address lands.
- *
- * The seven tabs and their names are **not** written here: they are
- * `@evimed/domain`'s `VCR_TABS` and `VCR_TAB_LABELS_ZH`, the same list the
- * schema's CHECK, the routes and the runtime gateway read. A second copy in
- * the browser is the one that drifts, and the drift shows up as a tab that
- * answers 404.
- *
- * The seven steps of the programme are a different list (`VCR_STEPS`): they
- * are the rail in the page header, with what each one produced, and never the
- * navigation (appendix E §3.2 — no product surveyed makes its workflow the
- * navigation).
- */
+/** Canonical result destinations and the seven-step workflow share the domain vocabulary. */
 import { VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TAB_LABELS_ZH } from "@evimed/domain";
+import type { StepRailStep } from "@/components/ui/StepRail";
 import type { TabDot } from "@/components/ui/Tabs";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import type { VcrStepKey, VcrStudy, VcrTabKey } from "@/lib/vcrClient";
@@ -39,14 +27,7 @@ export const VCR_RAIL_STEPS: ReadonlyArray<{ key: VcrStepKey; label: string }> =
   })),
 );
 
-/**
- * Which tab holds a step's result. Five steps are a tab of their own; 定义 and
- * 证据 are both read on 定义与证据 — a research definition and the assumption
- * cards it produced are the same page for a reader, which is why there are
- * seven tabs for seven steps and not fourteen for both. The step rail that
- * used to repeat this as a second navigation is gone: each tab carries its
- * own state as a dot (`tabDot`).
- */
+/** Definition and evidence keep separate workflow identities while sharing one evidence workspace. */
 export const VCR_STEP_TABS: Readonly<Record<VcrStepKey, VcrTabKey>> = Object.freeze({
   definition: "data",
   evidence: "data",
@@ -113,3 +94,19 @@ export function vcrTabPath(studyId: string, tab: VcrTabKey): string {
 
 /** The module's home. */
 export const VCR_HOME_PATH = "/app/virtual-research";
+
+/** The canonical steps stay separate even when two results share one addressed view. */
+export function vcrStepPath(studyId: string, step: VcrStepKey): string {
+  return `${vcrTabPath(studyId, VCR_STEP_TABS[step])}?step=${step}`;
+}
+export function vcrWorkflowSteps(study: Pick<VcrStudy, "id" | "steps" | "stepSummaries"> & Partial<Pick<VcrStudy, "conversation">>): StepRailStep[] {
+  return VCR_RAIL_STEPS.map(({ key, label }) => {
+    const record = study.steps[key];
+    const status = record?.status ?? "none";
+    const needsInput = key === "definition" && study.conversation?.awaitingInput === true;
+    const waiting = stepAllowanceWait(record) || needsInput;
+    const state: StepRailStep["state"] = waiting ? "waiting" : status === "done" ? "done" : status === "minimal" ? "partial" : status === "running" || status === "queued" ? "active" : status === "failed" || status === "stale" ? "attention" : "todo";
+    const stateLabel = needsInput ? "待补充信息" : waiting ? "等待额度" : status === "none" ? record?.requested === true ? "待开始" : record?.requested === false ? "未请求" : "未开始" : status === "queued" ? "排队中" : status === "stale" ? "待更新" : status === "failed" ? "未完成" : status === "minimal" ? "已有初步结果" : undefined;
+    return { id: key, label, state, stateLabel, summary: study.stepSummaries[key]?.note, href: vcrStepPath(study.id, key) };
+  });
+}

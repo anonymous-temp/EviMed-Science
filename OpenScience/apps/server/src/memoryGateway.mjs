@@ -1,9 +1,9 @@
 import { carriesPlatformContext, maskIdentifiers, unwrapUserWrappers } from "@evimed/domain";
 import {
   recordGatewayCommit, recordGatewayMasked, recordGatewayMessage, recordGatewayRefusal, recordGatewayRequest,
-  recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure,
+  recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure, recordRecallNote,
 } from "./nativeMemoryMetrics.mjs";
-import { DERIVED_INDEX_SEGMENT, nativeMemoryFile } from "./openVikingSessions.mjs";
+import { CORRECTIONS_UNDER_PREFERENCES, DERIVED_INDEX_SEGMENT, OBSERVATIONS_SEGMENT, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -27,7 +27,8 @@ import { HttpError } from "./security.mjs";
  *  4. **Recall that can find our types.** `purpose` and `quotas` are removed from a search (the plugin hard-codes
  *     `purpose: "coding"`, which retrieves by upstream's buckets and can never return a custom type or the profile),
  *     `query_expansion` is forced off (it is one more model call and about three seconds), and the shared areas, the
- *     derived index subtree (`memories/evimed`: PostgreSQL's copies and the capsule facts) and the files the person marked
+ *     derived index subtree (`memories/evimed`: PostgreSQL's copies and the capsule facts), the observations (`memories/observations`:
+ *     a note kept to see whether a choice comes back, never a fact, never read back) and the files the person marked
  *     sensitive are excluded.
  *  5. **Five tools.** The engine's MCP server advertises twenty, one of which lists every user of the account. `tools/list`
  *     answers `search`, `read`, `list`, `remember` and `forget` with this platform's own short descriptions — `remember`
@@ -40,7 +41,19 @@ import { HttpError } from "./security.mjs";
  *     a failure is a 5xx at once.
  *  8. **The ledger.** Every commit the engine accepts is written to the overlay with its archive and task, and an account
  *     is registered with the engine's admin routes the first time it is seen (settings and deletion answer 404 until then).
- *  9. **Never forwarded at all:** `stats/*` (account-wide counts), `admin/*`, `content/write`, `DELETE fs`, `pack/*`,
+ *  9. **The capsule's half of a search** (2026-10-23). The capsule facts the platform keeps — the notes a project's runs wrote, the
+ *     packs the person enabled, the evidence zones a project follows — are in PostgreSQL, with their index under `memories/evimed/`
+ *     that item 4 keeps out of the engine's own recall. A native account's conversation used to reach none of them: the capsule's
+ *     recall tool is not registered for it. So a `search` that names no narrower directory is also asked of the capsule
+ *     (`capsuleSearch`, the very recall the legacy tool answers with: the index nominates, PostgreSQL decides what is approved, in
+ *     force and in this project), in parallel, and its answer is one more content block of the same tool result. The derived
+ *     index itself stays unreachable on purpose: a file read from it could outlive the forgetting of the fact it was made from.
+ *     Read-only by construction (nothing here writes a capsule), refused by the same admission (a paused account, a trial of someone
+ *     else's capsule and a platform-started turn read nothing), and a capsule half that fails costs the search only itself.
+ * 10b. **What a recall returned is noted** (2026-10-25): the files a search or a read returned get a `last_recalled_at` and a count in
+ *     the overlay, so that a later decision about what to let go of can look at use. Never waited on, never a reason for a recall to
+ *     fail, and nothing acts on it yet (the retention period stays unset).
+ * 10. **Never forwarded at all:** `stats/*` (account-wide counts), `admin/*`, `content/write`, `DELETE fs`, `pack/*`,
  *     `fs/attrs/*` — those are the memory page's, made by the control plane itself.
  *
  * Build to delete: items 3 (tool parts), 4 (`purpose`) and 5 (the descriptions) go when the plugin grows the switches
@@ -88,7 +101,7 @@ export function memoryGatewayRoutePattern(pathname) {
  */
 export const MEMORY_GATEWAY_TOOLS = Object.freeze({
   search: {
-    description: "Search the user's long-term memories (their background, standing preferences, projects, decisions, corrections) by meaning. Use when the question points at something said in an earlier conversation. Returns ranked memory files with their text; read one with `read` for the whole file.",
+    description: "Search the user's long-term memories (their background, standing preferences, projects, decisions, corrections, the notes kept for their projects) by meaning. Use when the question points at something said in an earlier conversation. Returns ranked memory files with their text; read one with `read` for the whole file.",
     inputSchema: {
       type: "object", required: ["query"],
       properties: {
@@ -119,6 +132,12 @@ export const MEMORY_GATEWAY_TOOLS = Object.freeze({
   },
 });
 const TOOL_NAMES = Object.freeze(Object.keys(MEMORY_GATEWAY_TOOLS));
+const PROJECT_MEMORY_TOOLS = Object.freeze({ ...MEMORY_GATEWAY_TOOLS,
+  search: { ...MEMORY_GATEWAY_TOOLS.search, description: 'Search this project\'s shared long-term facts, decisions and corrections. Read a returned URI for the full file.' },
+  list: { ...MEMORY_GATEWAY_TOOLS.list, description: 'List this project\'s shared memories. When hasMore is true, continue with nextOffset and the same URI.',
+    inputSchema: { ...MEMORY_GATEWAY_TOOLS.list.inputSchema, properties: { ...MEMORY_GATEWAY_TOOLS.list.inputSchema.properties,
+      offset: { type: 'integer', minimum: 0, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200, default: 100 } } } },
+});
 /** The tools that read memory, as opposed to the two that change it. */
 const READ_TOOLS = new Set(["search", "read", "list"]);
 /** The JSON-RPC methods of the MCP handshake and of tool use; nothing else is forwarded. */
@@ -143,6 +162,65 @@ const NOT_KEPT = Object.freeze({
 const ok = (/** @type {unknown} */ result) => ({ status: "ok", result, error: null });
 const refusal = (/** @type {string} */ code, /** @type {string} */ message) => ({ status: "error", result: null, error: { code, message } });
 
+/** Only the native memory tree belongs to this gateway; knowledge resources have their own scoped service.
+ * @param {string} uri @param {string} userRoot */
+function insideNativeMemories(uri, userRoot) {
+  const full = absolute(uri, userRoot), root = `${userRoot}/memories`;
+  return insideOwnSpace(uri, userRoot) && (full === root || full.startsWith(`${root}/`));
+}
+
+/** Native list search has no context-only exclusion fields; filter structured rows before returning any bytes.
+ * @param {any} sessions @param {any} ctx @param {any} given */
+async function scopedListSearch(sessions, ctx, given) {
+  const target = absolute(typeof given.target_uri === "string" && given.target_uri ? given.target_uri : `${ctx.userRoot}/memories`, ctx.userRoot);
+  if (!insideNativeMemories(target, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
+  const excluded = [...await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : []), ...await ctx.hiddenSet()].map(uri => absolute(uri, ctx.userRoot));
+  const hidden = uri => excluded.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`));
+  const empty = { memories: [], resources: [], skills: [], total: 0 };
+  if (hidden(target)) return ok(empty);
+  const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
+  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit, target_uri: target, level: 2 });
+  if (!answer || answer.error || !answer.result || typeof answer.result !== "object") throw new HttpError(502, "memory_gateway_upstream_invalid", "Native memory search is unavailable.");
+  const result = { ...empty };
+  let remaining = limit;
+  for (const kind of ["memories", "resources", "skills"]) {
+    result[kind] = (Array.isArray(answer.result[kind]) ? answer.result[kind] : []).filter(hit => {
+      const uri = typeof hit?.uri === "string" ? hit.uri : "";
+      return uri === absolute(uri, ctx.userRoot) && Boolean(nativeMemoryFile(uri, `${ctx.userRoot}/memories`)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
+    }).slice(0, remaining).map(hit => ({ uri: hit.uri,
+      ...(typeof hit.context_type === "string" ? { context_type: hit.context_type } : {}),
+      ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
+      ...(typeof hit.abstract === "string" ? { abstract: hit.abstract } : {}),
+      ...(Array.isArray(hit.tags) ? { tags: hit.tags.filter(tag => typeof tag === "string") } : {}) }));
+    remaining -= result[kind].length;
+  }
+  result.total = result.memories.length + result.resources.length + result.skills.length;
+  return ok(result);
+}
+
+/** Structured native listing, with no parent summaries or raw engine metadata crossing the memory boundary.
+ * @param {any} sessions @param {any} ctx @param {string} requested @param {Record<string,string>} query */
+async function scopedMemoryList(sessions, ctx, requested, query = {}) {
+  const target = absolute(requested, ctx.userRoot), root = `${ctx.userRoot}/memories`;
+  if (!insideNativeMemories(target, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The listing target is outside native memories.");
+  if (await ctx.hidden(target)) return { ...ok([]), has_more: false };
+  let body;
+  try { body = await sessions.client.request({ path: "/api/v1/fs/ls", userId: ctx.user.id, query: { ...query, uri: target }, timeoutMs: sessions.fastTimeoutMs * 2 }); }
+  catch (error) { if (error.code === "memory_index_not_found") return { ...ok([]), has_more: false }; throw error; }
+  if (!Array.isArray(body?.result)) throw new HttpError(502, "memory_gateway_upstream_invalid", "Native listing did not return structured entries.");
+  const hidden = await ctx.hiddenSet();
+  const entries = body.result.filter(entry => {
+    const uri = typeof entry?.uri === "string" ? entry.uri : "";
+    return uri === absolute(uri, ctx.userRoot) && insideNativeMemories(uri, ctx.userRoot) && (uri === target || uri.startsWith(`${target}/`))
+      && !hidden.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`))
+      && Boolean(nativeMemoryFile(entry.isDir === true ? `${uri}/scope-check.md` : uri, root));
+  }).map(entry => ({ uri: entry.uri, isDir: entry.isDir === true,
+    ...(typeof entry.name === "string" ? { name: entry.name } : {}), ...(typeof entry.rel_path === "string" ? { rel_path: entry.rel_path } : {}),
+    ...(entry.isDir !== true && Number.isFinite(entry.size) ? { size: entry.size } : {}), ...(entry.isDir !== true && typeof entry.modTime === "string" ? { modTime: entry.modTime } : {}) }));
+  // A native truncated page says nothing about more visible memories; do not leak hidden continuation counts or claim completion.
+  return { ...ok(entries), ...(body.has_more === false ? { has_more: false } : { pagination: "unknown" }) };
+}
+
 /** Whether a viking:// URI is inside one account's own space (`viking://~` is the engine's alias for it). */
 function insideOwnSpace(uri, userRoot) {
   const text = String(uri ?? "");
@@ -153,6 +231,20 @@ function insideOwnSpace(uri, userRoot) {
 
 /** A URI with the engine's own-space alias written out. */
 const absolute = (/** @type {string} */ uri, /** @type {string} */ userRoot) => (uri === "viking://~" ? userRoot : uri.startsWith("viking://~/") ? `${userRoot}/${uri.slice("viking://~/".length)}` : uri);
+
+/** A shared namespace has six types. Directories are navigation only: their
+ * abstracts can include private or sensitive descendants and are never read.
+ * @param {string} uri @param {string} userRoot @param {readonly string[]} types @param {boolean} [directory]
+ */
+function projectMemoryVisible(uri, userRoot, types, directory = false) {
+  const root = `${userRoot}/memories`;
+  // Session/archive access is proved separately by checkUri. This predicate
+  // narrows memory content without changing that existing source route.
+  if (uri !== root && !uri.startsWith(`${root}/`)) return true;
+  if (directory && (uri === root || uri === `${root}/preferences`)) return true;
+  const file = nativeMemoryFile(directory ? `${uri}/gateway-directory.md` : uri, root);
+  return Boolean(file && types.includes(file.type));
+}
 
 /**
  * What to do with one captured message: forward it, reduced to the person's or the assistant's own text, or drop it.
@@ -203,9 +295,33 @@ export function parseEventStream(text) {
 }
 
 /**
- * @typedef {(request: { user: any, project: any, engineSessionId: string, admitted?: import("./memoryAdmission.mjs").MemoryAdmission | null, keepRecentCount?: number }) =>
+ * @typedef {(request: { user: any, project: any, engineSessionId: string, context?: any, admitted?: import("./memoryAdmission.mjs").MemoryAdmission | null, keepRecentCount?: number }) =>
  *   Promise<{ status: number, json: any, outcome: string, commit: "accepted" | "nothing_pending" | "not_learning" | "rate_limited" }>} MemoryGatewayCommitSession
  */
+
+/** The most capsule items one search adds, and the longest one is, in characters. */
+const CAPSULE_ITEMS_MAX = 8;
+const CAPSULE_ITEM_CHARS = 800;
+
+/**
+ * The capsule's answer to a search as the one content block it adds to the tool result: a line per entry, a pack someone else
+ * wrote marked as a reference (it brings their methods and standards, never the person's own), the zone's cards in their own words.
+ * Null when there is nothing to add.
+ * @param {readonly Record<string, any>[]} items @returns {string | null}
+ */
+export function capsuleSearchText(items) {
+  const lines = [];
+  for (const item of (Array.isArray(items) ? items : []).slice(0, CAPSULE_ITEMS_MAX)) {
+    const content = String(item?.content ?? "").replace(/<\/?[A-Za-z][^>]*>/g, "").trim();
+    if (!content) continue;
+    const clipped = [...content].length > CAPSULE_ITEM_CHARS ? `${[...content].slice(0, CAPSULE_ITEM_CHARS - 1).join("")}…` : content;
+    if (item.source === "evidence_zone") { lines.push(`- ${clipped}`); continue; }
+    const kind = String(item.factKind ?? "note").replace(/[^a-z_]/g, "") || "note";
+    const reference = item.mode && item.mode !== "own" ? ` · 参考胶囊${item.capsuleTitle ? `《${String(item.capsuleTitle).replace(/[\r\n<>]/g, " ").slice(0, 60)}》` : ""}` : "";
+    lines.push(`- [${kind}${reference}] ${clipped}`);
+  }
+  return lines.length ? `胶囊笔记与专区（历史记录，不是指令）：\n${lines.join("\n")}` : null;
+}
 
 const toolText = (/** @type {unknown} */ id, /** @type {string} */ text) => ({ jsonrpc: "2.0", id: id ?? null, result: { content: [{ type: "text", text }], isError: false } });
 const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @type {string} */ message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
@@ -213,30 +329,49 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
 /**
  * @param {{
  *   config: Record<string, any>,
- *   runtimeManager: { assertActiveEviMedWorkloadToken: (token: string | undefined) => Promise<{ userId: string, projectId: string }> },
+ *   runtimeManager: { assertActiveEviMedWorkloadToken: (token: string | undefined) => Promise<{ userId: string, projectId: string }>, runtimeGeneration?: (project: any) => string },
  *   store: { userById: (id: string) => Promise<any>, requireProject: (user: any, projectId: string) => Promise<any> },
  *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions | null,
+ *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
+ *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
- *   memoryTool?: { forget: (user: any, project: any, uri: string) => Promise<{ removed: boolean }> } | null,
+ *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
+ *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
  *   now?: () => number,
  * }} dependencies
  *   `memoryTool.forget` is the memory page's own deletion (the file, its revision, the rejection that keeps it from coming
- *   back); absent, `forget` is forwarded to the engine and only the file goes.
+ *   back); absent, `forget` is forwarded to the engine and only the file goes. `capsuleSearch` is the capsule's half of a search
+ *   (`createNativeCapsuleSearch`); absent, a search is the engine's alone.
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, now = () => Date.now() }) {
-  const enabled = config.ovNativeMemoryEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, now = () => Date.now() }) {
+  const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
   const commitsPerHour = Math.max(0, Number(config.memoryGatewayCommitsPerHour ?? 120) || 0);
+  const capsuleWaitMs = Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4_000);
   /** @type {Map<string, { until: number, count: number }>} */
   const requestWindows = new Map();
   /** @type {Map<string, { until: number, count: number }>} */
   const commitWindows = new Map();
   /** Accounts this process has already registered with the engine's admin routes. @type {Set<string>} */
   const registered = new Set();
+
+  /**
+   * The memory files a search or a read returned, noted in the overlay. Fire and forget: a recall never waits on, or fails by, this.
+   * `ctx` is the request's: its account, and the root of the namespace it read (the account's own, or a shared GEO project's).
+   * @param {{ user: { id: string }, userRoot: string }} ctx @param {readonly unknown[]} uris
+   */
+  function noteRecalled(ctx, uris) {
+    if (!overlay?.configured) return;
+    const userId = ctx.user.id;
+    const root = `${ctx.userRoot}/memories`;
+    const files = /** @type {string[]} */ ([...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(/** @type {string} */ (uri), root))))]);
+    if (!files.length) return;
+    void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
+  }
 
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
   function overLimit(windows, key, span, limit) {
@@ -251,15 +386,22 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   }
 
   /** Tell the engine's admin routes about an account the first time this process sees it. Never a reason a request fails. */
-  async function ensureRegistered(userId) {
-    if (registered.has(userId) || !sessions) return;
+  async function ensureRegistered(userId, view = sessions, context = null) {
+    const key = JSON.stringify([userId, view?.engineUser(userId)]);
+    if (registered.has(key) || !view) return;
+    if (context?.kind === 'geo-project') {
+      await memoryContexts.configure(context);
+      if (registered.size > 5000) registered.clear();
+      registered.add(key);
+      return;
+    }
     try {
       const held = overlay?.configured ? await overlay.account(userId) : null;
       if (!held?.registeredAt) {
-        await sessions.register(userId);
+        await view.register(userId);
         if (overlay?.configured) await overlay.noteRegistered(userId);
       }
-      registered.add(userId);
+      registered.add(key);
     } catch { /* the worker registers what the gateway could not */ }
   }
 
@@ -284,12 +426,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    */
   const droppedSessions = new Set();
   /** @param {string} userId @param {string} sessionId */
-  function dropClinicalSession(userId, sessionId) {
-    const key = `${userId}\u0000${sessionId}`;
-    if (droppedSessions.has(key) || !sessions) return;
+  function dropClinicalSession(userId, sessionId, view = sessions) {
+    const key = JSON.stringify([userId, view?.engineUser(userId), sessionId]);
+    if (droppedSessions.has(key) || !view) return;
     if (droppedSessions.size > 10_000) droppedSessions.clear();
     droppedSessions.add(key);
-    void sessions.deleteSession(userId, sessionId).catch(() => { droppedSessions.delete(key); });
+    void view.deleteSession(userId, sessionId).catch(() => { droppedSessions.delete(key); });
   }
 
   /** @param {any} req @returns {Promise<Buffer>} */
@@ -316,6 +458,100 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     return { status: unavailable ? 503 : 502, json: refusal("memory_gateway_upstream_unavailable", "The memory service is not reachable."), outcome: "failed", failure: code || "memory_gateway_upstream_unavailable" };
   }
 
+  async function resolveContext(user, project, expected = null) {
+    if (expected && (!memoryContexts || expected.ownerId !== user.id || expected.projectId !== project.id || project.userId !== user.id)) {
+      throw new HttpError(403, 'memory_scope_denied', 'The memory context does not match this project.');
+    }
+    if (expected) { await memoryContexts.assertLive(expected); return expected; }
+    return memoryContexts ? memoryContexts.forProject(project) : null;
+  }
+
+  /** `exclude_uris` is prefix based: excluding preferences itself also excludes
+   * corrections in v0.5.1.1. Inventory its immediate children to the end instead,
+   * excluding each private sibling branch without walking correction files.
+   * @param {any} ctx @returns {Promise<string[]>}
+   */
+  async function privatePreferences(ctx) {
+    const root = `${ctx.userRoot}/memories/preferences`;
+    const corrections = `${ctx.userRoot}/memories/${CORRECTIONS_UNDER_PREFERENCES}`;
+    const excluded = new Set([`${root}/.overview.md`, `${root}/.abstract.md`]);
+    const pageSize = 100;
+    for (let offset = 0; ; offset += pageSize) {
+      let body;
+      try {
+        body = await ctx.sessions.client.request({ path: '/api/v1/fs/ls', userId: ctx.user.id,
+          query: { uri: root, recursive: false, show_all_hidden: true, output: 'original', include_abstract: false, include_overview: false,
+            sort_by: 'name', sort_order: 'asc', offset, limit: pageSize }, timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code === 'memory_index_not_found') return [...excluded];
+        throw new HttpError(503, 'memory_scope_denied', 'The memory privacy state is unavailable.');
+      }
+      if (!Array.isArray(body?.result)) throw new HttpError(503, 'memory_scope_denied', 'The memory privacy listing is incomplete.');
+      for (const entry of body.result) {
+        const uri = await ctx.checkUri(String(entry?.uri ?? ''));
+        const relative = uri.startsWith(`${root}/`) ? uri.slice(root.length + 1) : '';
+        if (!relative || relative.includes('/')) throw new HttpError(503, 'memory_scope_denied', 'The memory privacy listing is incomplete.');
+        if (uri !== corrections || entry.isDir !== true) excluded.add(uri);
+      }
+      if (excluded.size > 200) throw new HttpError(503, 'memory_scope_denied', 'The complete memory privacy filter exceeds the engine query limit.');
+      if (body.has_more !== true) return [...excluded];
+      if (body.result.length !== pageSize || offset >= 200) throw new HttpError(503, 'memory_scope_denied', 'The memory privacy listing is incomplete.');
+    }
+  }
+
+  /** Shared search results are leaf files only. Rebuild rendered context from
+   * those entries so a newly created preference or a directory summary cannot
+   * cross the boundary after the exclusion inventory was read.
+   * @param {any} ctx @param {any} body @param {boolean} context
+   */
+  async function sharedSearchResult(ctx, body, context) {
+    const result = body?.result;
+    const candidates = context ? result?.entries : result?.memories;
+    const kept = [];
+    for (const entry of Array.isArray(candidates) ? candidates : []) {
+      let uri;
+      try { uri = await ctx.checkUri(String(entry?.uri ?? '')); } catch { continue; }
+      if (!nativeMemoryFile(uri, `${ctx.userRoot}/memories`) || await ctx.hidden(uri)
+        || entry?.detail === 'overview' || entry?.level === 0 || entry?.level === 1) continue;
+      kept.push(context ? { uri, category: entry.category, score: entry.score, detail: entry.detail, text: String(entry.text ?? ''), origin: entry.origin }
+        : { uri, context_type: 'memory', level: entry.level, score: entry.score, abstract: String(entry.abstract ?? ''), tags: [] });
+    }
+    if (!context) return ok({ memories: kept, resources: [], skills: [], total: kept.length });
+    const rendered = kept.map(entry => `<memory uri="${entry.uri}" type="${nativeMemoryFile(entry.uri, `${ctx.userRoot}/memories`)?.type ?? 'memories'}">\n${entry.text}\n</memory>`).join('\n');
+    return ok({ entries: kept, rendered, digest: '' });
+  }
+
+  /** A project's shared search answer: leaf files only (`sharedSearchResult`), then the capsule's half for a search over the whole
+   * namespace — added to the rendered context, or beside the list-mode hits — at no cost to the answer when it hangs or fails.
+   * @param {any} ctx @param {any} answer @param {boolean} context @param {any} body
+   */
+  async function sharedProjectSearch(ctx, answer, context, body) {
+    const safe = await sharedSearchResult(ctx, answer, context);
+    const target = typeof body?.target_uri === "string" && body.target_uri ? absolute(body.target_uri, ctx.userRoot) : null;
+    if (capsuleSearch && String(body?.query ?? "").trim() && (!target || target === `${ctx.userRoot}/memories`)) {
+      /** @type {ReturnType<typeof setTimeout> | undefined} */
+      let timer;
+      try {
+        const capsule = Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query: String(body.query), limit: Number(body.limit) || 5, contextPolicy: ctx.memoryContext.policy })).catch(() => []);
+        const items = await Promise.race([capsule, new Promise((resolve) => { timer = setTimeout(() => resolve([]), capsuleWaitMs); })]);
+        const text = capsuleSearchText(/** @type {any} */ (items));
+        if (text) {
+          const result = /** @type {any} */ (safe.result);
+          if (context) result.rendered = [result.rendered, text].filter(Boolean).join("\n");
+          else result.capsuleContext = text;
+        }
+      } finally { clearTimeout(timer); }
+    }
+    return safe;
+  }
+
+  async function scopedAdmission(user, project, engineSessionId, at, context, given = null) {
+    const decision = given ?? await admission.admit({ user, project, engineSessionId, at });
+    if (context?.kind !== 'geo-project' || !engineSessionId || !decision.native) return decision;
+    const proof = await memoryContexts.noteCapture(context, engineSessionId);
+    return proof ? decision : { ...decision, learn: false, recall: false, learnReason: 'unproven_session', recallReason: 'unproven_session' };
+  }
+
   /**
    * One commit of one engine session, for whoever asks: the plugin's own (`POST …/commit`, at its token threshold and when
    * its session is disposed) and the control plane's after an attended turn (`commitSession` below). One path, so that the
@@ -325,15 +561,16 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    * progress — a platform-started turn's messages never reached the session it would archive. Each commit is one extraction
    * call. Over the hourly bound it is answered as "nothing pending": the messages stay in the session and the next commit,
    * or the engine's own idle commit, archives them.
-   * @param {{ user: any, project: any, sessionId: string, admitted: import("./memoryAdmission.mjs").MemoryAdmission, keepRecentCount?: number }} request
+   * @param {{ user: any, project: any, sessionId: string, admitted: import("./memoryAdmission.mjs").MemoryAdmission, keepRecentCount?: number, context?: any }} request
    * @returns {Promise<{ status: number, json: any, outcome: string, commit: "accepted" | "nothing_pending" | "not_learning" | "rate_limited" }>}
    */
-  async function commitEngineSession({ user, project, sessionId, admitted, keepRecentCount = 0 }) {
+  async function commitEngineSession({ user, project, sessionId, admitted, keepRecentCount = 0, context = null }) {
+    const view = context?.sessions ?? sessions;
     const nothing = { status: 200, json: ok({ session_id: sessionId, status: "skipped", task_id: null, archive_uri: null, archived: false, reason: "no_messages" }) };
-    if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) {
+    if (!admitted.learn && admitted.learnReason !== "automated_run") {
       recordGatewayCommit("not_learning");
-      recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
-      if (admitted.learnReason === "clinical_context") dropClinicalSession(user.id, sessionId);
+      recordGatewayWithheld(admitted.learnReason ?? "memory_off");
+      if (admitted.learnReason === "clinical_context") dropClinicalSession(user.id, sessionId, view);
       return { ...nothing, outcome: "withheld", commit: "not_learning" };
     }
     if (overLimit(commitWindows, String(user.id), 3_600_000, commitsPerHour)) {
@@ -342,7 +579,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     }
     let answer;
     try {
-      answer = await /** @type {any} */ (sessions).commit(user.id, sessionId, { keepRecentCount });
+      if (context?.kind === 'geo-project') await ensureRegistered(user.id, view, context);
+      answer = await /** @type {any} */ (view).commit(user.id, sessionId, { keepRecentCount });
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_index_not_found") { recordGatewayCommit("nothing_pending"); return { ...nothing, outcome: "local", commit: "nothing_pending" }; }
       recordGatewayCommit("failed");
@@ -350,6 +588,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     }
     const result = answer?.result ?? {};
     if (result.status === "accepted" && typeof result.archive_uri === "string" && result.archive_uri) {
+      if (context?.kind === 'geo-project') {
+        const archive = parseArchiveUri(result.archive_uri);
+        if (!archive || archive.userRoot !== context.userRoot || archive.session !== sessionId || archive.rest || archive.archiveUri !== result.archive_uri) {
+          throw new HttpError(502, 'memory_gateway_upstream_invalid', 'The memory archive does not match the project conversation.');
+        }
+      }
       recordGatewayCommit("accepted");
       try {
         await overlay?.recordCommit({ userId: user.id, archiveUri: result.archive_uri, engineSession: sessionId, projectId: project.id, origin: "gateway", taskId: typeof result.task_id === "string" ? result.task_id : null });
@@ -363,8 +607,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   /** @type {Record<string, (ctx: any) => Promise<{ status: number, json?: unknown, text?: string, contentType?: string, outcome: string }>>} */
   const handlers = {
     // Liveness and version only: the engine's own body also names its auth mode and the identity it saw.
-    async health() {
-      return { status: 200, json: await /** @type {any} */ (sessions).health(), outcome: "forwarded" };
+    async health(ctx) {
+      return { status: 200, json: await ctx.sessions.health(), outcome: "forwarded" };
     },
     // Answered here: the plugin only wants its own user space's name.
     async status(ctx) {
@@ -378,21 +622,22 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // Policy (memory types, auto-commit) is the deployment's, in `ov.conf`: only the id is the caller's to choose. A
       // caller that is not learned from gets no session upstream at all — an empty one would still be scanned for idle commits.
       // A conversation whose turn in progress the platform started may hold the person's turns too: its session is made.
-      if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) {
-        recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+      if (!admitted.learn && admitted.learnReason !== "automated_run") {
+        recordGatewayWithheld(admitted.learnReason ?? "memory_off");
         return { status: 200, json: local, outcome: "withheld" };
       }
-      await ensureRegistered(ctx.user.id);
-      return { status: 200, json: await /** @type {any} */ (sessions).createSession(ctx.user.id, sessionId), outcome: "forwarded" };
+      await ctx.ensureRegistered();
+      return { status: 200, json: await ctx.sessions.createSession(ctx.user.id, sessionId), outcome: "forwarded" };
     },
     async sessionRead(ctx) {
       const sessionId = ctx.match[1];
       const admitted = await ctx.admit(sessionId);
-      if (!admitted.native) {
-        recordGatewayWithheld("legacy_engine");
+      if (admitted.learnReason === "memory_off" || admitted.learnReason === 'unproven_session') {
+        recordGatewayWithheld(admitted.learnReason);
         return { status: 200, json: ok({ session_id: sessionId, message_count: 0, commit_count: 0, pending_tokens: 0 }), outcome: "withheld" };
       }
-      return { status: 200, json: await /** @type {any} */ (sessions).readSession(ctx.user.id, sessionId), outcome: "forwarded" };
+      if (ctx.shared) await ctx.ensureRegistered();
+      return { status: 200, json: await ctx.sessions.readSession(ctx.user.id, sessionId), outcome: "forwarded" };
     },
     async messageWrite(ctx) {
       const sessionId = ctx.match[1];
@@ -403,8 +648,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const admitted = await ctx.admit(sessionId, Number.isFinite(spoken) ? spoken : null);
       if (!admitted.learn) {
         recordGatewayMessage("not_learning");
-        recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
-        if (admitted.learnReason === "clinical_context") dropClinicalSession(ctx.user.id, sessionId);
+        recordGatewayWithheld(admitted.learnReason ?? "memory_off");
+        if (admitted.learnReason === "clinical_context") dropClinicalSession(ctx.user.id, sessionId, ctx.sessions);
         return { ...accepted, outcome: "withheld" };
       }
       const decision = filterCapturedMessage(ctx.json);
@@ -414,25 +659,25 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         return { ...accepted, outcome: "local" };
       }
       if (decision.masked) recordGatewayMasked();
-      await ensureRegistered(ctx.user.id);
+      await ctx.ensureRegistered();
       let answer;
       try {
-        answer = await /** @type {any} */ (sessions).addMessage(ctx.user.id, sessionId, decision.forward);
+        answer = await ctx.sessions.addMessage(ctx.user.id, sessionId, decision.forward);
       } catch (error) {
         // A conversation whose session start the gateway answered itself (it began as a platform turn): made now.
         if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
-        await /** @type {any} */ (sessions).createSession(ctx.user.id, sessionId);
-        answer = await /** @type {any} */ (sessions).addMessage(ctx.user.id, sessionId, decision.forward);
+        await ctx.sessions.createSession(ctx.user.id, sessionId);
+        answer = await ctx.sessions.addMessage(ctx.user.id, sessionId, decision.forward);
       }
       recordGatewayMessage("forwarded");
       // Which project this conversation is held in, noted once: the engine's own idle commits never pass the gateway.
-      await noteSession(ctx.user.id, sessionId, ctx.project.id);
+      if (!ctx.shared) await noteSession(ctx.user.id, sessionId, ctx.project.id);
       return { status: 200, json: answer, outcome: "forwarded" };
     },
     async commit(ctx) {
       const sessionId = ctx.match[1];
       const keep = Number.isInteger(ctx.json?.keep_recent_count) && ctx.json.keep_recent_count >= 0 && ctx.json.keep_recent_count <= 1_000 ? ctx.json.keep_recent_count : 0;
-      const { status, json, outcome } = await commitEngineSession({ user: ctx.user, project: ctx.project, sessionId, admitted: await ctx.admit(sessionId), keepRecentCount: keep });
+      const { status, json, outcome } = await commitEngineSession({ user: ctx.user, project: ctx.project, sessionId, admitted: await ctx.admit(sessionId), keepRecentCount: keep, context: ctx.memoryContext });
       return { status, json, outcome };
     },
     async search(ctx) {
@@ -440,57 +685,95 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const context = given.mode === "context";
       const admitted = await ctx.admit(typeof given.session_id === "string" ? given.session_id : null);
       if (!admitted.recall) {
-        recordGatewayWithheld(admitted.recallReason ?? "legacy_engine");
+        recordGatewayWithheld(admitted.recallReason ?? "memory_off");
         return { status: 200, json: ok(context ? { entries: [], rendered: "", digest: "" } : { memories: [], resources: [], skills: [], total: 0 }), outcome: "withheld" };
       }
-      if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideOwnSpace(given.target_uri, ctx.userRoot))) {
+      if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideNativeMemories(given.target_uri, ctx.userRoot))) {
         throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
       }
+      if (typeof given.target_uri === "string") await ctx.checkUri(given.target_uri);
+      if (!context) {
+        // The engine's list mode takes no context-only field (`exclude_uris`, `query_expansion`), so its rows are filtered here, for
+        // the personal namespace and for a project's shared one alike; the shared one's leaf and type rules are laid on after.
+        if (ctx.shared) await ctx.ensureRegistered();
+        const listed = await scopedListSearch(ctx.sessions, ctx, given);
+        const found = ctx.shared ? await sharedProjectSearch(ctx, listed, false, given) : listed;
+        noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+        return { status: 200, json: found, outcome: "forwarded" };
+      }
+      if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
       const { purpose: _purpose, quotas: _quotas, peer_scope: _peerScope, ...rest } = given;
-      const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : []) };
-      // List mode searches a target; with none it would search every scope the account can see.
-      if (!context && !body.target_uri) body.target_uri = `${ctx.userRoot}/memories`;
-      return { status: 200, json: await /** @type {any} */ (sessions).search(ctx.user.id, body), outcome: "forwarded" };
+      const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : [], true) };
+      /** @type {any} */
+      let answered;
+      if (!ctx.shared) answered = await ctx.sessions.search(ctx.user.id, body);
+      else {
+        // A project's shared namespace (「循证 GEO」): its context hits are rebuilt from leaf files only, and the capsule's half is added.
+        await ctx.ensureRegistered();
+        answered = await sharedProjectSearch(ctx, await ctx.sessions.search(ctx.user.id, body), true, body);
+      }
+      noteRecalled(ctx, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
+      return { status: 200, json: answered, outcome: "forwarded" };
     },
     async read(ctx) {
-      const uri = String(ctx.query.get("uri") ?? "");
-      if (!insideOwnSpace(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside the caller's own space.");
+      const given = String(ctx.query.get("uri") ?? "");
+      if (!insideNativeMemories(given, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
+      const uri = await ctx.checkUri(given);
       const admitted = await ctx.admit(null);
       const missing = { status: 404, json: refusal("NOT_FOUND", "File not found."), outcome: "withheld" };
-      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "legacy_engine"); return missing; }
-      if (await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
-      const text = await /** @type {any} */ (sessions).read(ctx.user.id, uri, { timeoutMs: /** @type {any} */ (sessions).fastTimeoutMs * 2 });
+      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return missing; }
+      if (!nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
+      if (ctx.shared) await ctx.ensureRegistered();
+      const text = await ctx.sessions.read(ctx.user.id, uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
+      noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
       return { status: 200, json: ok(text), outcome: "forwarded" };
     },
     async list(ctx) {
-      const uri = String(ctx.query.get("uri") ?? "");
+      let uri = String(ctx.query.get("uri") ?? "");
       // `viking://user` is how the plugin discovers its user space: the answer is the caller and nobody else.
       if (uri === "viking://user") {
         return { status: 200, json: { ...ok([{ name: ctx.engineUser, size: 0, isDir: true, uri: ctx.userRoot }]), has_more: false }, outcome: "local" };
       }
-      if (!insideOwnSpace(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside the caller's own space.");
+      if (absolute(uri, ctx.userRoot) === ctx.userRoot) return { status: 200, json: { ...ok([{ name: "memories", uri: `${ctx.userRoot}/memories`, isDir: true }]), has_more: false }, outcome: "local" };
+      if (!insideNativeMemories(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
+      uri = await ctx.checkUri(uri);
       const admitted = await ctx.admit(null);
       const empty = { status: 200, json: { ...ok([]), has_more: false } };
-      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "legacy_engine"); return { ...empty, outcome: "withheld" }; }
-      if (await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...empty, outcome: "local" };
+      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return { ...empty, outcome: "withheld" }; }
+      if (await ctx.hidden(absolute(uri, ctx.userRoot), true)) return { ...empty, outcome: "local" };
       /** @type {Record<string, string>} */
       const query = {};
       for (const name of ["uri", "output", "recursive", "abs_limit", "node_limit", "offset", "limit"]) {
         const value = ctx.query.get(name);
         if (value !== null && value.length <= 600) query[name] = value;
       }
+      if (!ctx.shared) return { status: 200, json: await scopedMemoryList(ctx.sessions, ctx, uri, query), outcome: "forwarded" };
+      // A project's shared namespace: navigation metadata only, its own six types, and an explicit continuation.
+      query.uri = uri;
+      Object.assign(query, { output: 'original', include_abstract: 'false', include_overview: 'false' });
       let body;
       try {
-        body = await /** @type {any} */ (sessions).client.request({ path: "/api/v1/fs/ls", userId: ctx.user.id, query, timeoutMs: /** @type {any} */ (sessions).fastTimeoutMs * 2 });
+        await ctx.ensureRegistered();
+        body = await ctx.sessions.client.request({ path: "/api/v1/fs/ls", userId: ctx.user.id, query, timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
       } catch (error) {
         // A directory the engine has not made yet (it makes an account's tree at its first session) is an empty one.
         if (/** @type {any} */ (error)?.code === "memory_index_not_found") return { ...empty, outcome: "forwarded" };
         throw error;
       }
       const hiddenUris = await ctx.hiddenSet();
-      const entries = (Array.isArray(body?.result) ? body.result : []).filter((/** @type {any} */ entry) => !hiddenUris.some((/** @type {string} */ prefix) => String(entry?.uri ?? "") === prefix || String(entry?.uri ?? "").startsWith(`${prefix}/`)));
-      return { status: 200, json: { ...body, result: entries }, outcome: "forwarded" };
+      const entries = [], listed = Array.isArray(body?.result) ? body.result : [];
+      for (const entry of listed) {
+        if (hiddenUris.some((/** @type {string} */ prefix) => String(entry?.uri ?? '') === prefix || String(entry?.uri ?? '').startsWith(`${prefix}/`))) continue;
+        if (!insideNativeMemories(String(entry?.uri ?? ''), ctx.userRoot)) continue;
+        try { await ctx.checkUri(entry?.uri); } catch { continue; }
+        if (!projectMemoryVisible(String(entry?.uri ?? ''), ctx.userRoot, ctx.sessions.memoryTypes, entry?.isDir === true)) continue;
+        // A directory's abstract, overview, tags or extra metadata may describe
+        // a hidden descendant. Listings carry navigation metadata alone.
+        entries.push({ uri: entry.uri, name: String(entry.uri).split('/').at(-1), isDir: entry.isDir === true, size: entry.isDir === true ? 0 : Number(entry.size) || 0 });
+      }
+      return { status: 200, json: { ...ok(entries), has_more: body.has_more === true,
+        next_offset: body.has_more === true ? (Number(query.offset) || 0) + listed.length : null }, outcome: "forwarded" };
     },
     // OpenViking's skill store is not part of this product's memory: the catalogue is empty and nothing is asked upstream.
     async skills() {
@@ -526,39 +809,86 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const admitted = await ctx.admit(null);
         // Every URI a tool names stays inside the caller's own space: `read` takes `uris`, `list` and `forget` `uri`, `search` `target_uri`.
         const named = [args.uri, args.target_uri, ...(Array.isArray(args.uris) ? args.uris : [args.uris])].filter((value) => typeof value === "string" && value);
-        if (named.some((uri) => !insideOwnSpace(uri, ctx.userRoot))) {
+        if (named.some((uri) => !insideNativeMemories(uri, ctx.userRoot))) {
           recordGatewayRefusal("memory_gateway_uri_refused");
           local.push(rpcError(message.id, -32602, "The URI is outside the user's own memories."));
           continue;
         }
+        if (ctx.shared) {
+          let refusedUri = false;
+          for (const uri of named) {
+            try { await ctx.checkUri(uri); } catch { refusedUri = true; break; }
+          }
+          if (refusedUri) { local.push(rpcError(message.id, -32602, 'The URI is outside this project memory context.')); continue; }
+        }
         if (READ_TOOLS.has(name)) {
           if (!admitted.recall) {
-            recordGatewayWithheld(admitted.recallReason ?? "legacy_engine");
+            recordGatewayWithheld(admitted.recallReason ?? "memory_off");
             local.push(toolText(message.id, /** @type {any} */ (NOT_READ)[admitted.recallReason ?? ""] ?? NOT_READ.other));
             continue;
           }
           const hiddenUris = await ctx.hiddenSet();
-          const isHidden = (/** @type {string} */ uri) => { const full = absolute(uri, ctx.userRoot); return hiddenUris.some((/** @type {string} */ prefix) => full === prefix || full.startsWith(`${prefix}/`)); };
+          const isHidden = (/** @type {string} */ uri, directory = false) => {
+            const full = absolute(uri, ctx.userRoot);
+            return hiddenUris.some((/** @type {string} */ prefix) => full === prefix || full.startsWith(`${prefix}/`))
+              || ctx.shared && !projectMemoryVisible(full, ctx.userRoot, ctx.sessions.memoryTypes, directory);
+          };
           if (name === "read") {
-            const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && !isHidden(uri)).slice(0, 10);
+            const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
+            afterCall.set(message.id, async (answer) => { if (!answer?.error) noteRecalled(ctx, uris.map((/** @type {string} */ uri) => absolute(uri, ctx.userRoot))); });
           } else if (name === "list") {
-            const uri = typeof args.uri === "string" && args.uri ? args.uri : `${ctx.userRoot}/memories`;
-            if (isHidden(uri)) { local.push(toolText(message.id, "（空）")); continue; }
-            forward.push({ ...message, params: { ...message.params, arguments: { uri, recursive: args.recursive === true } } });
+            const uri = typeof args.uri === "string" && args.uri ? absolute(args.uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
+            if (isHidden(uri, true)) { local.push(toolText(message.id, "（空）")); continue; }
+            if (ctx.shared) {
+              const offset = args.offset ?? 0, limit = args.limit ?? 100;
+              if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+                local.push(rpcError(message.id, -32602, 'Invalid project memory list page.')); continue;
+              }
+              const listed = await handlers.list({ ...ctx, query: new URLSearchParams({ uri, recursive: String(args.recursive === true), offset: String(offset), limit: String(limit) }) });
+              const value = /** @type {any} */ (listed.json);
+              local.push(toolText(message.id, JSON.stringify({ items: value?.result ?? [], hasMore: value?.has_more === true, nextOffset: value?.next_offset ?? null })));
+              continue;
+            }
+            local.push(toolText(message.id, JSON.stringify(await scopedMemoryList(ctx.sessions, ctx, uri, { recursive: args.recursive === true ? "true" : "false" }))));
           } else {
             const limit = Math.max(1, Math.min(20, Math.trunc(Number(args.limit)) || 5));
-            const target = typeof args.target_uri === "string" && args.target_uri && !isHidden(args.target_uri) ? args.target_uri : `${ctx.userRoot}/memories`;
-            forward.push({ ...message, params: { ...message.params, arguments: {
-              query: String(args.query ?? "").slice(0, 2_000), limit, target_uri: target, query_expansion: "off", exclude_uris: await ctx.excluded([]),
-            } } });
+            const query = String(args.query ?? "").slice(0, 2_000);
+            if (ctx.shared) {
+              const target = typeof args.target_uri === "string" && args.target_uri && !isHidden(args.target_uri, true) ? absolute(args.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
+              // The pinned REST list-mode shape is structured; its native MCP
+              // prose has no safe URI boundary at which to remove a raced hit.
+              const answer = await handlers.search({ ...ctx, json: { query, limit, target_uri: target } });
+              local.push(toolText(message.id, JSON.stringify(/** @type {any} */ (answer.json).result)));
+              continue;
+            }
+            // The engine's list mode is answered from its structured REST rows, filtered here (`scopedListSearch`).
+            const result = await scopedListSearch(ctx.sessions, ctx, args);
+            noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+            const content = [ { type: "text", text: JSON.stringify(result.result) } ];
+            const target = typeof args.target_uri === "string" && args.target_uri ? absolute(args.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
+            // The capsule's half (item 9 above): for a search over the whole of the person's memories and not for one that names a
+            // directory of its own. It is added to the answer, waited for as long as the engine is (`memoryGatewayTimeoutMs`) and no
+            // longer, and costs the answer nothing when it fails.
+            if (capsuleSearch && query.trim() && target === `${ctx.userRoot}/memories`) {
+              /** @type {ReturnType<typeof setTimeout> | undefined} */
+              let timer;
+              const items = await Promise.race([
+                Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query, limit })).catch(() => []),
+                new Promise(resolve => { timer = setTimeout(() => resolve([]), capsuleWaitMs); }),
+              ]);
+              clearTimeout(timer);
+              const text = capsuleSearchText(/** @type {any} */ (items));
+              if (text) content.push({ type: "text", text });
+            }
+            local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
           continue;
         }
         if (name === "remember") {
           if (!admitted.learn) {
-            recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+            recordGatewayWithheld(admitted.learnReason ?? "memory_off");
             local.push(toolText(message.id, /** @type {any} */ (NOT_KEPT)[admitted.learnReason ?? ""] ?? NOT_KEPT.other));
             continue;
           }
@@ -571,7 +901,15 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             kept.push({ role: decision.forward.role, content: decision.forward.parts.map((part) => part.text).join("\n") });
           }
           if (!kept.length) { local.push(toolText(message.id, "没有可以记下的内容。")); continue; }
-          await ensureRegistered(ctx.user.id);
+          await ctx.ensureRegistered();
+          if (ctx.shared) {
+            if (!rememberJournal || !runtimeManager.runtimeGeneration) throw new HttpError(503, 'memory_scope_denied', 'The project memory journal is unavailable.');
+            const result = await rememberJournal.execute(ctx.memoryContext, { messages: kept, clientId: message.id,
+              runtimeGeneration: runtimeManager.runtimeGeneration(ctx.project) });
+            if (result.state === 'accepted') recordGatewayCommit('accepted');
+            local.push(result.reply);
+            continue;
+          }
           forward.push({ ...message, params: { ...message.params, arguments: { messages: kept } } });
           // The engine answers in prose that names the one-shot session and the task: read them into the ledger.
           afterCall.set(message.id, async (answer) => {
@@ -592,15 +930,17 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           local.push(rpcError(message.id, -32602, "Only one memory file of the user can be forgotten at a time."));
           continue;
         }
-        if (!admitted.native || admitted.learnReason === "internal_project" || admitted.learnReason === "trial") {
-          recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
+        if (admitted.learnReason === "memory_off" || admitted.learnReason === "internal_project" || admitted.learnReason === "trial") {
+          recordGatewayWithheld(admitted.learnReason ?? "memory_off");
           local.push(toolText(message.id, NOT_READ.other));
           continue;
         }
+        if (ctx.shared && await ctx.hidden(target)) { local.push(rpcError(message.id, -32602, 'This file is not a project memory.')); continue; }
         if (memoryTool) {
-          const outcome = await memoryTool.forget(ctx.user, ctx.project, target);
+          const outcome = await memoryTool.forget(ctx.user, ctx.project, target, ctx.shared ? { context: ctx.memoryContext } : undefined);
           local.push(toolText(message.id, outcome.removed ? `Deleted: ${target}` : `Not found: ${target}`));
         } else {
+          if (ctx.shared) throw new HttpError(503, 'memory_scope_denied', 'Project memory deletion is unavailable.');
           forward.push({ ...message, params: { ...message.params, arguments: { uri: target } } });
         }
       }
@@ -611,7 +951,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         return { status: 200, json: batch ? local : local[0], outcome: "local" };
       }
       // The handshake of a new kernel waits on this: asked with the short deadline.
-      const answer = await /** @type {any} */ (sessions).mcp(ctx.user.id, batch ? forward : forward[0], handshake ? { timeoutMs: /** @type {any} */ (sessions).fastTimeoutMs } : {});
+      if (ctx.shared) await ctx.ensureRegistered();
+      const answer = await ctx.sessions.mcp(ctx.user.id, batch ? forward : forward[0], handshake ? { timeoutMs: ctx.sessions.fastTimeoutMs } : {});
       const stream = answer.contentType.includes("text/event-stream");
       /** @type {any[]} */
       let messages = [];
@@ -622,7 +963,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       for (const message of messages) {
         if (toolListIds.has(message?.id) && Array.isArray(message?.result?.tools)) {
           message.result.tools = message.result.tools.filter((/** @type {any} */ tool) => TOOL_NAMES.includes(tool?.name))
-            .map((/** @type {any} */ tool) => ({ name: tool.name, ...MEMORY_GATEWAY_TOOLS[/** @type {keyof typeof MEMORY_GATEWAY_TOOLS} */ (tool.name)] }));
+            .map((/** @type {any} */ tool) => ({ name: tool.name, ...(ctx.shared ? PROJECT_MEMORY_TOOLS : MEMORY_GATEWAY_TOOLS)[/** @type {keyof typeof MEMORY_GATEWAY_TOOLS} */ (tool.name)] }));
         }
         const after = afterCall.get(message?.id);
         if (after) await after(message).catch(() => {});
@@ -674,35 +1015,91 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       // Body streaming may outlive a runtime stop, a rotation or an account's removal.
       if (raw.length) await runtimeManager.assertActiveEviMedWorkloadToken(token).catch(() => { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); });
-      const engineUser = /** @type {any} */ (sessions).engineUser(user.id);
-      const userRoot = /** @type {any} */ (sessions).userRoot(user.id);
+      const memoryContext = await resolveContext(user, project);
+      const view = memoryContext?.sessions ?? sessions;
+      const shared = memoryContext?.kind === 'geo-project';
+      const engineUser = /** @type {any} */ (view).engineUser(user.id);
+      const userRoot = /** @type {any} */ (view).userRoot(user.id);
       /** One decision per conversation per request. @type {Map<string, Promise<import("./memoryAdmission.mjs").MemoryAdmission>>} */
       const admissions = new Map();
       /** @type {Promise<string[]> | null} */
       let hiddenList = null;
       const ctx = {
-        user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, account: /** @type {any} */ (sessions).client.account,
+        user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
+        account: /** @type {any} */ (view).client.account,
+        ensureRegistered: () => ensureRegistered(user.id, view, memoryContext),
+        checkUri: async (uri) => {
+          if (!insideOwnSpace(uri, userRoot)) throw new HttpError(403, 'memory_gateway_uri_refused', 'The URI is outside the project memory context.');
+          const full = absolute(uri, userRoot);
+          if (!shared) return full;
+          memoryContexts.assertUri(memoryContext, full);
+          if (full === `${userRoot}/sessions` || full.startsWith(`${userRoot}/sessions/`)) {
+            const sessionId = full.slice(`${userRoot}/sessions/`.length).split('/')[0];
+            const binding = sessionId ? await memoryContexts.session(memoryContext, sessionId) : null;
+            if (!binding) {
+              const archive = parseArchiveUri(full), saved = archive && overlay?.configured ? await overlay.commit(user.id, archive.archiveUri) : null;
+              if (!archive || archive.userRoot !== userRoot || saved?.engineSession !== archive.session || saved?.projectId !== project.id) {
+                throw new HttpError(403, 'memory_gateway_uri_refused', 'This memory session is not associated with the project.');
+              }
+            }
+          }
+          return full;
+        },
         admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
           const key = `${engineSessionId ?? ""}\u0000${at ?? ""}`;
-          if (!admissions.has(key)) admissions.set(key, admission.admit({ user, project, engineSessionId, at }));
+          if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext));
           return /** @type {Promise<import("./memoryAdmission.mjs").MemoryAdmission>} */ (admissions.get(key));
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.
         hiddenSet: () => {
-          hiddenList ??= (async () => [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(overlay?.configured ? await overlay.sensitiveUris(user.id).catch(() => []) : [])])();
+          hiddenList ??= (async () => {
+            // A failed privacy lookup is not evidence that every file is public: the request fails (as an upstream failure on the
+            // personal path, 2026-10-24; by name on a project's shared one), and nothing is searched unfiltered.
+            const sensitive = !overlay?.configured ? [] : shared ? await overlay.sensitiveUris(user.id).catch(() => {
+              throw new HttpError(503, 'memory_scope_denied', 'The memory privacy state is unavailable.');
+            }) : await overlay.sensitiveUris(user.id);
+            if (shared) await ctx.ensureRegistered();
+            // The observations (`memories/observations`) are never read back, in either namespace.
+            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`,
+              ...(shared ? [`${userRoot}/memories/profile.md`, `${userRoot}/memories/.overview.md`, `${userRoot}/memories/.abstract.md`, ...await privatePreferences(ctx)] : []),
+              ...sensitive.filter((/** @type {string} */ uri) => !shared || uri === userRoot || uri.startsWith(`${userRoot}/`))];
+          })();
           return hiddenList;
         },
-        hidden: async (/** @type {string} */ uri) => (await ctx.hiddenSet()).some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`)),
+        hidden: async (/** @type {string} */ uri, directory = false) => (await ctx.hiddenSet()).some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`))
+          || shared && !projectMemoryVisible(uri, userRoot, view.memoryTypes, directory),
         // `exclude_uris` of a search: the account-shared areas hold nothing of this user's and their scaffolding ranks as hits.
-        excluded: async (/** @type {unknown[]} */ given) => [...new Set([
-          ...given.filter((uri) => typeof uri === "string" && uri.length <= 600), "viking://resources", "viking://agent", ...(await ctx.hiddenSet()),
-        ])].slice(0, 200),
+        excluded: async (/** @type {unknown[]} */ given, context = false) => {
+          const mandatory = ["viking://resources", "viking://agent", `${userRoot}/resources`, ...(await ctx.hiddenSet())];
+          // A context search also excludes the summaries of every directory above a protected file: they can describe it.
+          if (context) for (const protectedUri of [...mandatory]) {
+            if (!protectedUri.startsWith(`${userRoot}/`)) continue;
+            let ancestor = protectedUri.endsWith(".md") ? protectedUri.slice(0, protectedUri.lastIndexOf("/")) : protectedUri;
+            while (ancestor === userRoot || ancestor.startsWith(`${userRoot}/`)) {
+              mandatory.push(`${ancestor}/.abstract.md`, `${ancestor}/.overview.md`);
+              ancestor = ancestor.slice(0, ancestor.lastIndexOf("/"));
+            }
+          }
+          const required = [...new Set(mandatory)];
+          // Sent upstream only by a context search, whose required exclusions never truncate: over the engine's bound the search
+          // is refused, not run half-filtered.
+          if (context && required.length > 200) {
+            throw shared ? new HttpError(503, 'memory_scope_denied', 'The complete memory privacy filter exceeds the engine query limit.')
+              : new HttpError(503, "memory_gateway_exclusions_unavailable", "Complete context exclusions exceed the native search limit.");
+          }
+          const exclusions = [...new Set([...required, ...given.filter(uri => typeof uri === "string" && uri.length <= 600)])];
+          // List mode sends none of it (the engine refuses context-only fields there): its rows are filtered against the whole list.
+          if (!context) return exclusions;
+          // The personal path refuses a caller's extras that would not fit; a project's shared one keeps the required ones and drops extras.
+          if (!shared && exclusions.length > 200) throw new HttpError(503, "memory_gateway_exclusions_unavailable", "Complete context exclusions exceed the native search limit.");
+          return exclusions.slice(0, 200);
+        },
       };
       const answer = await handlers[route](ctx);
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {
-      const own = error instanceof HttpError && /^memory_gateway_/.test(error.code);
+      const own = error instanceof HttpError && (/^memory_gateway_/.test(error.code) || error.code === 'memory_scope_denied');
       if (own) {
         recordGatewayRefusal(/** @type {HttpError} */ (error).code);
         recordGatewayRequest(route, "refused");
@@ -734,11 +1131,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    * `admitted` is the decision the caller already has; without it the admission is asked here.
    * @type {MemoryGatewayCommitSession}
    */
-  const commitSession = async ({ user, project, engineSessionId, admitted = null, keepRecentCount = 0 }) => {
+  const commitSession = async ({ user, project, engineSessionId, admitted = null, keepRecentCount = 0, context = null }) => {
     if (!enabled) return { status: 404, json: null, outcome: "refused", commit: /** @type {const} */ ("not_learning") };
     if (!new RegExp(`^${SESSION}$`).test(String(engineSessionId))) throw new HttpError(400, "memory_gateway_body_invalid", "A session id is required.");
-    const decision = admitted ?? await admission.admit({ user, project, engineSessionId });
-    return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount });
+    const resolved = await resolveContext(user, project, context);
+    const decision = await scopedAdmission(user, project, engineSessionId, null, resolved, admitted);
+    return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount, context: resolved });
   };
 
   return Object.assign(handle, { commitSession });

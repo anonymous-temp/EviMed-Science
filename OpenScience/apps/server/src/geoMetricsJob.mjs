@@ -64,7 +64,7 @@ const SOURCE_ROUND_KINDS = new Set(["baseline", "weekly", "single_step"]);
  * @property {import("./geoMeasureStore.mjs").GeoMeasureStore} store
  * @property {() => Date} [now]
  * @property {number} [maxRounds]   rounds per tick (default 3)
- * @property {any} [evolution]
+ * @property {{ tick: () => Promise<any> }} [learning]
  * @property {(round: { id: string, geoProjectId: string, kind: string }) => unknown} [onRoundMeasured]
  */
 
@@ -93,7 +93,7 @@ export async function tickMetrics(deps) {
 }
 
 /**
- * @typedef {{ questionId?: string | null, engine: string, repeatIndex?: number | null, status: string, askedAt?: string | null, facts?: object | null }} BalanceRow
+ * @typedef {{ roundId?: string | null, questionId?: string | null, engine: string, repeatIndex?: number | null, status: string, askedAt?: string | null, facts?: object | null }} BalanceRow
  */
 
 /**
@@ -111,7 +111,8 @@ export async function tickMetrics(deps) {
  */
 export function balanceRows(rows) {
   const answered = (/** @type {T} */ row) => (row.status === "valid" && Boolean(row.facts)) || row.status === "refusal";
-  const key = (/** @type {T} */ row) => `${row.questionId}\u0000${row.engine}\u0000${row.repeatIndex ?? 0}`;
+  const observation = (/** @type {T} */ row) => `${row.roundId ?? ""}\u0000${row.questionId}`;
+  const key = (/** @type {T} */ row) => `${observation(row)}\u0000${row.engine}\u0000${row.repeatIndex ?? 0}`;
   /** @type {Map<string, T>} */
   const latest = new Map();
   for (const row of rows) {
@@ -121,17 +122,32 @@ export function balanceRows(rows) {
   }
   const deduped = rows.filter((row) => !answered(row) || !row.questionId || latest.get(key(row)) === row);
   const engines = [...new Set([...latest.values()].map((row) => row.engine))].sort();
-  const repeats = [...new Set(rows.map((row) => row.repeatIndex ?? 0))];
   const questions = [...new Set(rows.map((row) => row.questionId).filter((id) => typeof id === "string"))];
-  const complete = new Set(questions.filter((questionId) => engines.every((engine) => repeats.every((repeat) =>
-    latest.has(`${questionId}\u0000${engine}\u0000${repeat}`)))));
+  const observations = new Map(rows.filter((row) => row.questionId).map((row) => [observation(row), row]));
+  /** @type {Map<string | null | undefined, { engines: Set<string>, repeats: Set<number> }>} */
+  const roundDimensions = new Map();
+  for (const row of rows) {
+    const dimensions = roundDimensions.get(row.roundId) ?? { engines: new Set(), repeats: new Set() };
+    dimensions.repeats.add(row.repeatIndex ?? 0);
+    if (answered(row) && row.questionId) dimensions.engines.add(row.engine);
+    roundDimensions.set(row.roundId, dimensions);
+  }
+  const complete = new Set([...observations].filter(([id, row]) => {
+    const dimensions = roundDimensions.get(row.roundId);
+    const activeEngines = [...(dimensions?.engines ?? [])];
+    const repeats = [...(dimensions?.repeats ?? [])];
+    return activeEngines.length > 0 && activeEngines.every((engine) => repeats.every((repeat) => latest.has(`${id}\u0000${engine}\u0000${repeat}`)));
+  }).map(([id]) => id));
+  const droppedObservations = [...observations].filter(([id]) => !complete.has(id));
   return {
     deduped,
-    rows: deduped.filter((row) => row.questionId && complete.has(row.questionId)),
+    rows: deduped.filter((row) => row.questionId && complete.has(observation(row))),
     engines,
     questions: questions.length,
+    observations: observations.size,
     kept: complete.size,
-    dropped: questions.filter((questionId) => !complete.has(/** @type {string} */ (questionId))),
+    dropped: [...new Set(droppedObservations.map(([, row]) => row.questionId))],
+    droppedObservations: droppedObservations.map(([id]) => id),
   };
 }
 
@@ -145,10 +161,11 @@ function noiseRow(metricId, band, snapshots) {
 
 /**
  * What `computeGeoMetrics` is told about a project beside the rows.
- * @param {{ engines: string[], competitors: Array<Record<string, any>> }} project @param {{ engines: string[] }} round @param {{ owned?: any } | null} context
+ * @param {{ engines: string[], competitors: Array<Record<string, any>> }} project @param {{ engines: string[], surface?: any }} round @param {{ owned?: any } | null} context
  */
 function metricOptions(project, round, context) {
   return {
+    samplingMode: round.surface?.measurementContract?.samplingMode ?? null,
     engines: round.engines.length ? round.engines : project.engines,
     competitors: project.competitors.map((competitor) => String(competitor?.brandName || competitor?.genericName || "")).filter(Boolean),
     owned: context?.owned ?? {},
@@ -245,18 +262,19 @@ export async function measureRound(deps, roundId) {
   // otherwise give its question fewer valid answers than the rest, and the
   // domain withdraws the whole pool's rates as uneven_denominators.
   const { cells, balance, denominators } = computeRoundCells(kept, options);
-  const communication = deps.evolution?.communication;
-  if (communication && kept.some((row) => row.statements?.some((statement) => statement.verdict === "wrong"))) {
-    try { await communication.offer({ sourceEventId: `geo-round:${round.id}`, userId: project.userId, projectId: project.projectId, entityKeys: project.entityKeys ?? [] }); } catch { /* Module intake must not affect measurement. */ }
-  }
   await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells });
+  // The durable assessment outbox is retried by upkeep if learning is temporarily unavailable.
+  if (deps.learning) try { await deps.learning.tick(); }
+  catch { process.stderr.write("geo assessment learning: reconciliation_pending\n"); }
   await store.noteRoundBalance(roundId, { questions: balance.questions, kept: balance.kept, dropped: balance.dropped.length,
     droppedQuestionIds: balance.dropped.slice(0, 50), engines: balance.engines, arms: options.arms, denominators });
   out.cells = cells.length;
   out.balanceDropped = balance.dropped.length;
   const arms = options.arms;
 
-  if (NET_ROUND_KINDS.has(round.kind)) {
+  // A round no engine answered in is compared with nothing: it writes no net effect, and the last one computed stands. Its rows used
+  // to say 「no follow-up」 (no sample date) or 「engines differ」 (no engine), and the page reads the newest of them (2026-10-25).
+  if (NET_ROUND_KINDS.has(round.kind) && balance.engines.length) {
     const net = await netEffectRows(store, { project, round, controlGroups: arms.control.length, engines: balance.engines, arms });
     await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: net, replace: { metricId: GEO_NET_METRIC_ID } });
     out.net = net.length;

@@ -1,3 +1,4 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import { Fragment, useState } from "react";
 import { Link } from "react-router";
 import { Check } from "lucide-react";
@@ -21,8 +22,8 @@ import { Section } from "@/components/ui/Section";
 import { BulletBar } from "@/components/ui/StatTile";
 import { Tag } from "@/components/ui/Tag";
 import { formatGeoValue, GeoCellText } from "../GeoCellText";
-import { useGeoFrame } from "../geoFrame";
-import { geoDestinationPath, geoSectionId } from "../geoTabs";
+import { geoMayConverse, useGeoFrame } from "../geoFrame";
+import { geoSectionId } from "../geoTabs";
 import {
   engineName,
   GEO_ASSUMPTION_BASIS_WORDS,
@@ -89,6 +90,7 @@ function dueDay(baselineDay: string | null | undefined, weeks: number | null | u
 /* ------------------------------------------------------------------ targets */
 
 export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStrategyView; onChosen: () => void }) {
+  const currentLabel = plan.readingsKind === "frozen_basis" ? "方案时" : plan.readingsKind === "submitted_input" ? "本次依据" : "现在";
   const frame = useGeoFrame();
   const [busy, setBusy] = useState<GeoTierId | null>(null);
   const tiers = plan.tiers.filter((tier) => tier.tier === "1" || tier.tier === "2" || tier.tier === "3");
@@ -137,12 +139,25 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
                     </Button>
                   ) : null}
                 </header>
-                {tier.summary && <p className="mt-2 text-ui text-text-2">{tier.summary}</p>}
+                {tier.summary && <p className="mt-2 whitespace-pre-wrap text-ui text-text-2">{tier.summary}</p>}
                 <ul className="mt-4 flex flex-col gap-4">
                   {head.map((row) => (
-                    <TargetBarRow key={`${row.metricId}|${row.pool}`} row={row} tier={tier.tier} baselineDay={baselineDay} latestDay={plan.targets.latestRound?.sampleDate ?? null} />
+                    <TargetBarRow key={`${row.metricId}|${row.pool}`} row={row} tier={tier.tier} currentLabel={currentLabel} baselineDay={baselineDay} latestDay={plan.targets.latestRound?.sampleDate ?? null} />
                   ))}
                 </ul>
+                {Boolean(tier.targetNotes?.length) && (
+                  <div className="mt-4">
+                    <p className="text-caption font-semibold text-text">指标说明</p>
+                    <ul aria-label="指标说明" className="mt-1.5 flex flex-col gap-3 text-ui text-text-2">
+                      {tier.targetNotes?.map((entry, index) => (
+                        <li key={`${entry.metricId}|${entry.pool ?? ""}|${index}`}>
+                          <span className="block text-caption font-semibold text-text">{entry.name}{entry.pool ? `（${entry.pool}）` : ""}</span>
+                          <span className="block whitespace-pre-wrap break-words">{entry.note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <p className="mt-4 text-caption tabular-nums text-text-3">
                   {[
                     tier.contentUnits != null ? `${tier.contentUnits} 篇稿件` : null,
@@ -169,7 +184,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
               columns={[
                 { key: "name", header: "指标", rowHeader: true, cell: (row) => targetRowName(row) },
                 { key: "baseline", header: "基线", align: "right", cell: (row) => <GeoCellText cell={row.baseline} unit={unitOf(row)} hideSample /> },
-                { key: "latest", header: "现在", align: "right", cell: (row) => <GeoCellText cell={row.latest} unit={unitOf(row)} hideSample /> },
+                { key: "latest", header: currentLabel, align: "right", cell: (row) => <GeoCellText cell={row.latest} unit={unitOf(row)} hideSample /> },
                 ...tiers.map((tier) => ({
                   key: `tier-${tier.tier}`,
                   header: tier.tier === plan.chosenTier ? `${TIER_WORDS[tier.tier]}（已选）` : TIER_WORDS[tier.tier],
@@ -189,7 +204,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
 }
 
 /** One head metric in one tier's column: this tier's target, and where the reading stands against it, from where it began. */
-function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyTargetRow; tier: GeoTierId; baselineDay: string | null; latestDay: string | null }) {
+function TargetBarRow({ row, tier, baselineDay, latestDay, currentLabel }: { row: GeoStrategyTargetRow; tier: GeoTierId; baselineDay: string | null; latestDay: string | null; currentLabel:string }) {
   const unit = unitOf(row);
   const target = row.tiers[tier]?.target ?? null;
   const baseline = row.baseline?.status === "ok" ? row.baseline.value : null;
@@ -226,7 +241,7 @@ function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyT
       <p className="mt-1 text-caption tabular-nums text-text-3">
         {[
           baseline !== null ? `基线 ${formatGeoValue(baseline, unit)}${baselineDay ? ` · ${monthDay(baselineDay)}` : ""}` : "基线 未测",
-          latest !== null ? `现在 ${formatGeoValue(latest, unit)}${latestDay ? ` · ${monthDay(latestDay)}` : ""}` : null,
+          latest !== null ? `${currentLabel} ${formatGeoValue(latest, unit)}${latestDay ? ` · ${monthDay(latestDay)}` : ""}` : null,
         ].filter(Boolean).join(" → ")}
       </p>
     </li>
@@ -237,6 +252,7 @@ function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyT
 
 /** A group by its name, a link to its question group where it is one the plan resolved; plain text where it is not. */
 function GroupLinks({ geoId, groups }: { geoId: string; groups: ReadonlyArray<{ id: string | null; name: string }> }) {
+  const geoDestinationPath = useGeoDestinationPath();
   return (
     <>
       {groups.map((group, index) => (
@@ -445,11 +461,11 @@ export function Assumptions({ project, plan }: { project: GeoProject; plan: GeoS
                 key={`${entry.field}-${index}`}
                 title={<span className="max-w-measure-body">{value && entry.reason ? `${value}：${entry.reason}` : line}</span>}
                 trailing={basis ? <Tag>{basis}</Tag> : undefined}
-                actions={mayChange ? (
+                actions={mayChange && geoMayConverse(project) ? (
                   <Button
                     variant="text"
                     size="sm"
-                    onClick={() => { void open({ projectId: project.projectId, sessionId: project.sessionId }, `方案里有一条假设：“${line}”。我想改成：`); }}
+                    onClick={() => { void open({ projectId: project.projectId }, `方案里有一条假设：“${line}”。我想改成：`); }}
                   >
                     修改
                   </Button>

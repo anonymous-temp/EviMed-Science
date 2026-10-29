@@ -327,7 +327,7 @@ function Segmented({
           key={o}
           onClick={() => onChange(o)}
           className={cn(
-            "px-2 py-1 text-caption font-medium capitalize transition-colors",
+            "px-2 py-1 text-caption capitalize transition-colors",
             value === o ? "bg-white/20 text-white" : "bg-transparent text-white/50 hover:text-white/80",
           )}
         >

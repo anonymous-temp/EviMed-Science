@@ -81,3 +81,56 @@ async def test_concurrent_checks_fetch_robots_once():
     cache = RobotsCache(fetch)
     results = await asyncio.gather(*(cache.check(f"http://slow.example/list{n}") for n in range(3)))
     assert calls == ["http://slow.example"] and all(r[0] is False for r in results)
+
+
+async def test_a_failed_refresh_keeps_the_last_copy_read():
+    """RFC 9309 §2.4: while the file is unreachable the last copy read stands (fr-sources, 2026-10-22: 2,000 of 2,002
+    production refusals "by robots" in 14 days were a robots.txt that could not be read at that moment)."""
+    clock = [0.0]
+    answers = [(200, "User-agent: *\nDisallow: /private\n"), (None, None), (503, None)]
+
+    async def fetch(origin):
+        return answers.pop(0)
+
+    cache = RobotsCache(fetch, monotonic=lambda: clock[0])
+    assert (await cache.check("https://a.example/news"))[0] is True
+    clock[0] += 3601                                   # the hour is over: refreshed, and the refresh fails
+    allowed, _, unreachable = await cache.check("https://a.example/news")
+    assert allowed is True and unreachable is False
+    assert (await cache.check("https://a.example/private/x"))[0] is False   # the copy's own rules still apply
+    clock[0] += 601                                    # asked again after ten minutes: still failing, still the copy
+    assert (await cache.check("https://a.example/news"))[0] is True
+    assert cache.stale_uses == 2
+
+
+async def test_the_last_copy_expires_after_thirty_days():
+    clock = [0.0]
+    answers = [(200, "User-agent: *\nAllow: /\n"), (None, None)]
+
+    async def fetch(origin):
+        return answers.pop(0)
+
+    cache = RobotsCache(fetch, monotonic=lambda: clock[0])
+    assert (await cache.check("https://a.example/news"))[0] is True
+    clock[0] += 31 * 86400
+    allowed, _, unreachable = await cache.check("https://a.example/news")
+    assert allowed is False and unreachable is True
+
+
+async def test_a_refusal_of_our_own_caches_nothing():
+    """The fetcher raising is the plugin declining to send (its budget, a missing exit): no answer about the site."""
+    import pytest
+    from knowledge_plugin.model import FetchError
+    calls = []
+
+    async def fetch(origin):
+        calls.append(origin)
+        if len(calls) == 1:
+            raise FetchError("host-budget", "host_busy", retry_after_s=30)
+        return 200, "User-agent: *\nDisallow: /\n"
+
+    cache = RobotsCache(fetch)
+    with pytest.raises(FetchError):
+        await cache.check("https://a.example/news")
+    assert (await cache.check("https://a.example/news"))[0] is False
+    assert len(calls) == 2

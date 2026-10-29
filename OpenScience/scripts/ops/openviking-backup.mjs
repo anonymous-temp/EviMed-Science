@@ -380,7 +380,7 @@ export async function runOpenVikingBackup(config, { now = () => new Date(), log 
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && fs.existsSync(process.argv[1]) && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, first, second] = process.argv.slice(2);
   try {
     const config = openVikingBackupConfig();

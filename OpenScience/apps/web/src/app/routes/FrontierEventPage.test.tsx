@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import type { FrontierEvent } from "@/lib/frontierClient";
+import { pendingFrontierEvents, resetFrontierTracking } from "@/lib/frontierTracking";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierEventPage } from "./FrontierEventPage";
 import { expectComposed } from "@/test/expectComposed";
@@ -16,7 +17,8 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
 
 const HOUR = 3_600_000;
 const ago = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString();
-const FIRST = new Date(2026, 8, 22, 18, 1).toISOString();
+// 18:01 in Beijing, whatever the machine's zone is.
+const FIRST = "2026-09-22T10:01:00.000Z";
 
 function event(overrides: Partial<FrontierEvent> = {}): FrontierEvent {
   return {
@@ -45,13 +47,13 @@ function event(overrides: Partial<FrontierEvent> = {}): FrontierEvent {
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="location">{location.pathname}{intent?.draft ? `|${intent.draft}` : ""}</div>;
+  const intent = (location.state as { runtimeUiIntent?: { draft?: string; originReference?: { kind: string; id: string } } } | null)?.runtimeUiIntent;
+  return <div data-testid="location" data-origin={intent?.originReference ? `${intent.originReference.kind}:${intent.originReference.id}` : undefined}>{location.pathname}{location.search}{intent?.draft ? `|${intent.draft}` : ""}</div>;
 }
 
-function renderEvent(id = "ev1") {
+function renderEvent(id = "ev1", search = "") {
   return render(
-    <MemoryRouter initialEntries={[`/app/frontier/events/${id}`]}>
+    <MemoryRouter initialEntries={[`/app/frontier/events/${id}${search}`]}>
       <Routes>
         <Route path="/app/frontier/events/:eventId" element={<><FrontierEventPage /><Probe /></>} />
         <Route path="*" element={<Probe />} />
@@ -61,9 +63,11 @@ function renderEvent(id = "ev1") {
 }
 
 beforeEach(() => {
+  resetFrontierTracking();
   client.useFrontierFeature.mockReset().mockReturnValue("on");
   client.fetchFrontierEvent.mockReset().mockResolvedValue(event());
 });
+afterEach(() => resetFrontierTracking());
 
 describe("an event", () => {
   it("heads the page with the way back, the title, one line of facts and 深入研究", async () => {
@@ -155,11 +159,39 @@ describe("an event", () => {
     expect(location).toHaveTextContent("自然-生物医学工程：不饱和磷脂脂质体原文（https://www.nature.com/x）");
   });
 
+  it("offers the questions of the first-hand report under 就此提问: a question opens the conversation with that report as its origin", async () => {
+    const ID = "a1b2c3d4e5f60718";
+    const base = event();
+    client.fetchFrontierEvent.mockResolvedValue(event({
+      items: [{ ...base.items[0], id: ID }, base.items[1]],
+      ask: { itemId: ID, title: "不饱和磷脂脂质体原文", questions: ["脂质体的包封率是怎么测的？", "这在人体里也成立吗？"] },
+    }));
+    renderEvent();
+    const block = await screen.findByRole("region", { name: "就此提问" });
+    expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual(["脂质体的包封率是怎么测的？", "这在人体里也成立吗？", "自己提问…"]);
+    await userEvent.click(within(block).getByRole("button", { name: "这在人体里也成立吗？" }));
+    const location = screen.getByTestId("location");
+    expect(location).toHaveTextContent(/^\/app\/chat\|这在人体里也成立吗？/);
+    expect(location).toHaveTextContent("“不饱和磷脂脂质体原文”（自然-生物医学工程 · ");
+    expect(location).toHaveTextContent(`frontier:${ID}`);
+    expect(location).toHaveTextContent("原文：https://www.nature.com/x");
+    expect(location).toHaveAttribute("data-origin", `frontier-item:${ID}`);
+    expect(pendingFrontierEvents().filter((entry) => entry.type === "ask").map((entry) => [entry.item, entry.surface, entry.detail])).toEqual([[ID, "event", "suggested"]]);
+  });
+
+  it("has no 就此提问 where the event's first-hand report has no questions, and keeps its own 深入研究", async () => {
+    renderEvent();
+    await screen.findByRole("button", { name: "深入研究" });
+    expect(screen.queryByRole("region", { name: "就此提问" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
+    expect(screen.getByTestId("location")).toHaveAttribute("data-origin", expect.stringMatching(/^frontier-event:ev1$/));
+  });
+
   it("moves its own address to the surviving event when the old id was merged", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ id: "ev-survivor" }));
     renderEvent("ev-old");
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier/events/ev-survivor"));
-    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev-old");
+    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev-old", undefined);
     expect(await screen.findByRole("heading", { level: 1, name: /脂质体/ })).toBeInTheDocument();
   });
 });
@@ -252,13 +284,46 @@ describe("an event with many reports", () => {
     renderEvent();
     const filter = await screen.findByRole("button", { name: "全部来源" });
     expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).closest("section")).toContainElement(filter);
-    expect(within(screen.getByRole("group", { name: "筛选来源" })).getByRole("button", { name: "全部来源" })).toBe(filter);
+    expect(within(screen.getByRole("group", { name: "报道的顺序与来源" })).getByRole("button", { name: "全部来源" })).toBe(filter);
   });
   it("offers no menu when all the reports are of one kind", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12).map((item) => ({ ...item, sourceTypeLabel: "媒体" })) }));
     renderEvent();
     await screen.findByRole("heading", { level: 2, name: "其他报道" });
     expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
+  });
+});
+
+describe("the order of the reports", () => {
+  const reportTitles = () => Array.from(document.querySelectorAll("#event-reports > li")).map((row) => row.querySelector("a")?.textContent);
+  it("reads newest first, then oldest first on 最早 — asked of the server and kept in the address — and back", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: [
+      { ...frontierItem({ id: "a", title: "最早的报道", timelineAt: ago(30) }), role: "report" },
+      { ...frontierItem({ id: "b", title: "最新的报道", timelineAt: ago(1) }), role: "report" },
+      { ...frontierItem({ id: "c", title: "中间的报道", timelineAt: ago(10) }), role: "report" },
+    ] }));
+    renderEvent();
+    await screen.findByRole("heading", { level: 2, name: "报道" });
+    expect(reportTitles()).toEqual(["最新的报道", "中间的报道", "最早的报道"]);
+    const order = screen.getByRole("group", { name: "报道顺序" });
+    expect(within(order).getByRole("button", { name: "最新" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(within(order).getByRole("button", { name: "最早" }));
+    expect(reportTitles()).toEqual(["最早的报道", "中间的报道", "最新的报道"]);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier/events/ev1?order=asc");
+    await waitFor(() => expect(client.fetchFrontierEvent).toHaveBeenLastCalledWith("ev1", "asc"));
+    // The event stays on screen while it is read again.
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("group", { name: "报道顺序" })).getByRole("button", { name: "最新" }));
+    expect(reportTitles()).toEqual(["最新的报道", "中间的报道", "最早的报道"]);
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/frontier\/events\/ev1$/);
+  });
+
+  it("opens in the order its address names", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event());
+    renderEvent("ev1", "?order=asc");
+    await screen.findByRole("heading", { level: 1 });
+    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev1", "asc");
+    expect(within(screen.getByRole("group", { name: "报道顺序" })).getByRole("button", { name: "最早" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
@@ -280,5 +345,28 @@ describe("the event page's composition", () => {
     expect(container.querySelector("[data-state-screen]")).not.toBeNull();
     expect(screen.getByRole("link", { name: "看热榜" })).toHaveAttribute("href", "/app/frontier?view=hot");
     expect(screen.getByRole("link", { name: "回到前沿动态" })).toHaveAttribute("href", "/app/frontier");
+  });
+});
+
+describe("tracking (G12, 2026-10-25)", () => {
+  it("registers its reports as a list: an open from a report is an `event` open at its place in the order shown, not a direct arrival", async () => {
+    const user = userEvent.setup();
+    const base = event();
+    // Public ids as the server makes them (the validator refuses any other shape).
+    client.fetchFrontierEvent.mockResolvedValue({ ...base, items: [{ ...base.items[0], id: "a1b2c3d4e5f60718" }, { ...base.items[1], id: "0f1e2d3c4b5a6978" }] });
+    renderEvent();
+    const others = await screen.findByRole("list", { name: "其他报道" });
+    await user.click(within(others).getByRole("link", { name: "缓释脂质体注射剂在大鼠中实现持续神经阻滞" }));
+    const opens = pendingFrontierEvents().filter((entry) => entry.type === "open");
+    // The parties' own text is first on the page, so the other report is the second entry of the list.
+    expect(opens.map((entry) => [entry.item, entry.surface, entry.position, entry.list])).toEqual([["0f1e2d3c4b5a6978", "event", 1, null]]);
+    expect(opens[0].view).toMatch(/^view_/);
+  });
+
+  it("does not count a link to a related event as a report of the list", async () => {
+    const user = userEvent.setup();
+    renderEvent();
+    await user.click(await screen.findByRole("link", { name: "同类缓释制剂的早先报道" }));
+    expect(pendingFrontierEvents().filter((entry) => entry.type === "open" && entry.surface === "event")).toEqual([]);
   });
 });

@@ -9,11 +9,12 @@ data and makes no content-generating model call (plan `docs/superpowers/specs/20
 
 ## The contract
 
-`contract/knowledge-plugin-openapi.yaml` (v1.4.0, normative; a vendored copy of the plan's file,
+`contract/knowledge-plugin-openapi.yaml` (v1.7.0, normative; a vendored copy of the plan's file,
 kept byte-identical by a test while this lives in the monorepo). Paths: `/v1/manifest`,
-`/v1/health` (no token), `/v1/sources[/{id}]`, `/v1/entries?after=<seq>` (the stream, ascending
+`/v1/health` (no token), `/v1/sources[/{id}]`, `POST /v1/leads` (1.6.0), `/v1/hot-lists` (1.7.0), `/v1/entries?after=<seq>` (the stream, ascending
 `seq`), `/v1/entries/{id}`, `/v1/entries/{id}/text` (on-demand abstract and enrichment),
-`POST /v1/entries/{id}/refresh`, `/v1/lookups` (empty in batch 1; `POST` answers 501).
+`POST /v1/entries/{id}/refresh`, `/v1/media/{id}` (1.5.0: a stored image's bytes), `/v1/lookups` (empty in batch 1;
+`POST` answers 501).
 Bearer token from a file; errors are `{code, message, retryable, details?}`.
 
 ## Run it locally
@@ -61,16 +62,202 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_CONTACT_EMAIL_FILE` / `KNOWLEDGE_PLUGIN_CONTACT_EMAIL` | unset | the `mailto:` in the `EviMedBot/1.0` User-Agent (file wins); never logged |
 | `KNOWLEDGE_PLUGIN_NCBI_KEY_FILE`, `KNOWLEDGE_PLUGIN_OPENFDA_KEY_FILE` | unset | optional keys; absent or empty = anonymous rate (NCBI 0.4 s, openFDA 300/day) |
 | `KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE` | unset | the team's EviMed evidence API key, sent as `Authorization: Bearer` on its API path only (the `evimed-api` scans); unset = those sources wait |
+| `KNOWLEDGE_PLUGIN_ELSEVIER_KEY_FILE` | unset | an Elsevier API key, sent as `X-ELS-APIKey` to `api.elsevier.com` only; the paper text chain then asks Elsevier's Article Retrieval API for the abstracts of its DOIs (`enrich/elsevier.py`); unset = never asked |
 | `KNOWLEDGE_PLUGIN_EDGE_PROXY_URL` / `KNOWLEDGE_PLUGIN_EDGE_PROXY_CREDENTIALS_FILE` | unset | the `relay` exit: the Tokyo TLS forward proxy (`https://<node>`) and its `user:password` file; unset = relay sources wait |
 | `KNOWLEDGE_PLUGIN_BROWSER_CDP_URL` / `KNOWLEDGE_PLUGIN_BROWSER_TIMEOUT_S` | unset / `60` | the `browser` exit: `http://frontier-browser:9222` (resolved to an IP: Chromium refuses a non-IP Host); unset = browser sources wait |
 | `EVIMED_EVIDENCE_FEED_URL` | unset (the EviMed compose overlay defaults it to `$OPEN_SCIENCE_PUBLIC_URL` + the evidence base path + `/feed.json`) | the platform's own evidence feed (`https://<platform>/evidence/feed.json`), read as the source `evimed-evidence` (`platform_produced`, contract 1.3.0); unset = the source loads disabled (`feed_url_unset`) and nothing is polled. It must be the address the platform links its cards on, a public one: only the cards on the host the feed was read from are handed on, and the fetcher reaches global addresses only, so a compose-internal service name does not work. A platform whose public evidence pages are off answers the feed 404 `evidence_public_not_enabled`, which reads as an empty feed, not a failure |
 | `EVIMED_SOURCE_REQUESTS_URL` | unset | optional public HTTPS JSON source wish list, pulled daily through protected fetching; only supported AI discovery readers on plugin-approved scholarly hosts are admitted, existing exclusions preserved |
 | `KNOWLEDGE_PLUGIN_CRAWL` | `1` | `0` serves the stored stream without crawling |
+| `KNOWLEDGE_PLUGIN_DISCOVERY` | `1` | `0` stops automatic source discovery and the source lifecycle (`discovery.py`, `lifecycle.py`) |
+| `KNOWLEDGE_PLUGIN_DISCOVERY_CAPS` | unset | the daily validations per candidate line, `line=n,…` over the defaults (`outbound=60,journal=25,directory=30,hot-origin=15,social=20,request=25,readmit=30,lead=20`) |
+| `KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES` | `120` | article pages the outbound line reads a day to find the sites they link to |
+| `KNOWLEDGE_PLUGIN_LEADS` | `1` | `0` reads no leads and answers `POST /v1/leads` 501 (contract 1.6.0, `leads.py`) |
+| `KNOWLEDGE_PLUGIN_LEADS_DAILY` | `600` | addresses `POST /v1/leads` accepts a Shanghai day; past it, `capped` |
+| `KNOWLEDGE_PLUGIN_HOT_LISTS` | `1` | `0` reads no hot lists and answers `GET /v1/hot-lists` 501 (contract 1.7.0, `hotlists.py`) |
+| `KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S` | `1800` | seconds between two rounds of the hot lists (300–86400) |
+| `KNOWLEDGE_PLUGIN_HOT_LISTS_BOARDS` | unset | the boards read, a comma list of `baidu`, `toutiao`, `weibo`, `wikipedia-en`, `google-trends`; unset is every board, an unknown name refuses to start |
 | `KNOWLEDGE_PLUGIN_PORT` / `KNOWLEDGE_PLUGIN_HOST` | `8080` / `0.0.0.0` | listen address |
 | `KNOWLEDGE_PLUGIN_REGISTRY` | `registry/sources.json` | the runtime registry file (watched; re-synced on change) |
 | `KNOWLEDGE_PLUGIN_CONCURRENCY` / `KNOWLEDGE_PLUGIN_TEXT_CONCURRENCY` | `4` / `2` | parallel polls / enrichments |
 | `KNOWLEDGE_PLUGIN_BUILD` | `dev` | shown as `manifest.plugin.build` (the image sets it from `PLUGIN_BUILD`) |
 | `KNOWLEDGE_PLUGIN_LOG_LEVEL` | `INFO` | log lines carry URLs without their query string |
+| `KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE` | unset | X through SocialData (`Authorization: Bearer`, added by the transport); unset or empty = no X |
+| `KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD` | `5` | the day's cap (Asia/Shanghai day) at `objects × US$0.0002`; reached = X waits until the next day |
+| `KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE` | unset | WeChat official accounts through Dajiala (its `key` query parameter, added by the transport); unset = no WeChat |
+| `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `90` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
+| `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL` | unset | the GEO module's six-platform crawler (production: the platform's `OPEN_SCIENCE_GEO_SOCIAL_URL`); unset = no monitoring |
+| `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S` | `120` / `150` | crawler requests a day, spread evenly; one request's deadline |
+| `KNOWLEDGE_PLUGIN_MEDIA_DIR` / `KNOWLEDGE_PLUGIN_MEDIA_CAP_MB` | unset / `3072` | the media store's writable volume and its cap (least recently served evicted first); unset = no images stored |
+| `KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY` | `social-sources.json` beside the registry | the social sources' registry file |
+
+## Daily medical subscription discovery
+
+The existing crawler checks a bounded rotation of enabled medical publishers once per Shanghai calendar day. It reads explicit RSS/Atom links advertised by their own homepages, probes them through the normal protected fetch and robots policy, and validates nonempty feeds through the existing feed adapter. Only the already admitted HTTPS origin and medical category are inherited; mixed/general publishers, browser-only exits and owner-excluded institutions are not silently reclassified. Source discovery does not inherit an API robots exemption.
+
+Validated feeds are stored under the existing `medical_sources_admitted` metadata key and enter the ordinary polling queue. Startup, file reload, AI source-request admission and medical discovery compose both dynamic channels together under one registry transaction lock. Parent removal/disable and current operator exclusions are checked again on composition. The source table owns the first successful fetch and entry count; a successful probe is not a published article.
+
+`medical_source_discovery` retains the cursor, current lease and the last thirty measured runs: attempted publishers, validated candidates, admitted feeds, deferrals and zero-growth days. `newInstitutions` is zero by construction: this mechanism expands subscription coverage within trusted institutions, not the set of trusted institutions — new institutions are the automatic source discovery's (below), whose `parent-feed` line counts these admissions. It never invents a new-source quota or bypasses robots/challenges. The hourly discovery loop skips a day it has already completed; bounded interrupted attempts can resume on a later tick.
+
+## Automatic source discovery and the source lifecycle
+
+The target (owner, 2026-10-22) is at least ten net new working sources a day: admitted minus retired, where working
+means the source produced a new entry during a seven-day trial. `discovery.py` runs hourly and does each step once a
+Shanghai day:
+
+1. **Retire** by rule (`lifecycle.py`), any source: two robots refusals in a row; 401/403 for seven days; silent past its
+   own rhythm (AIHOT's rule: quiet longer than four times its median gap over 90 days; while the rhythm cannot be
+   measured, 14 quiet days for a discovered source, 60 for a row of the registry file); off-topic by the platform's own
+   screen (more than half not medical and fewer than three medical entries in its window). A retired source is left
+   out of the registry composition (`sources.retired_at`), keeps its row and history, and is re-checked (robots 30
+   days, 401/403 7, silence 14; off-topic only by an operator).
+2. **Decide trials** that ended: admitted with a new entry after the first poll and no more than half of what the
+   platform screened judged not medical; with no verdict from the platform, admitted on its own fetch results when its
+   medical basis is in data (a MEDLINE journal, a listed organisation, a request), else it waits up to seven more days.
+3. **Gather** candidates by line — `outbound` (sites linked from recent entries' pages), `journal` (MEDLINE journals
+   from the literature streams, then the NLM catalogue in rotation), `directory` (`registry/discovery.json`),
+   `hot-origin` (the journals and sites of entries several publishers carried), `social` (quoted accounts, and the
+   WeChat accounts our WeChat bodies credit as their origin — 「来源：…」, 「本文转载自…」, a closed marker list —,
+   `social/wechat_discovery.py`: only a name two different accounts credit is proposed, and never a document or a database
+   (「…共识」, 「…数据库」), a department word, the owner-excluded CDE or a general news account such as 新华社 or 人民日报),
+   `request` (the source-request manifest, any lane but `ai`), `parent-feed`
+   (`medical_discovery.py`), `readmit` (retired sources due for a re-check), `lead` (the sites, WeChat accounts and
+   journals of the pages the platform's lead triggers handed over; see Leads below). A WeChat candidate of any line (also a
+   lead's article link, `candidate_from_link`) is validated by one Dajiala call — `post_history` by its nickname (¥0.16)
+   or by the link (¥0.14), at most 20 a Shanghai day across lines: Dajiala names exactly that account, its posts carry one
+   `__biz` we do not read yet, and it posted within 30 days; it then goes on trial as an ordinary WeChat row (priority 4,
+   one read a day). A lead's account is keyed `wechat:biz:<biz>` and validated by its link; candidates an earlier build
+   keyed `wechat:<biz>` (asked for as a nickname: code 107) are moved to that key by each discovery run, once.
+   An X candidate (`x:<handle>`, the author of a quoted post) is validated through SocialData
+   (`social/x_discovery.py`): one user lookup and one page of its recent posts, at most 20 accounts a Shanghai day inside the
+   day's SocialData spend cap (about US$0.004 each): the handle is a closed format, the account exists, is public, is not one
+   we already read (by handle or by user id), and posted something of its own — not a retweet — within 30 days; it then goes on
+   trial as an ordinary X row (`mode: signal`, an hourly read in a shared shard). Whether it is medical is the platform's screen.
+   A candidate that waited only for the day's validations or a paused provider is due again the next day; one that waited for a
+   key is due at once when the key is there.
+4. **Validate** within each line's daily cap: reachable (direct, then the relay), robots allows it, an existing adapter
+   reads it, an item dated within 30 days, MEDLINE for a journal (and at least eight Crossref articles in 30 days). A
+   valid candidate becomes an ordinary registry row on trial (`mixed` lane, every 6–24 hours; journals every 12–24).
+   The journal line waits while Crossref's allowance is past 80 % used.
+
+The plugin makes no content judgement: whether a source is medical is the platform's screen of what the source
+delivered, reported back by the platform after each mirror (`POST /v1/sources/screening`). Counts by line and day are
+in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days, `by_line`, `in_trial`).
+`python -m knowledge_plugin lifecycle` prints what the rules would retire now (writes nothing; `--apply` retires);
+`python -m knowledge_plugin discover [--lines a,b] [--caps line=n,…]` runs one cycle in the foreground.
+
+## Pages that cannot be read, and the six platforms
+
+- **Redirect shells.** A press release whose link is a page with no text of its own and one `<meta http-equiv="refresh">`
+  (the 香港卫生防护中心's, 477 bytes) is followed once, through the same protected fetch, to a host the source's
+  `allowed_hosts` names (`enrich/page.py`); the registry row names `info.gov.hk`. A second shell, or a target outside the hosts, is
+  a note (`page_refresh_host_not_allowed`), not a request.
+- **A page that answers 4xx** is asked three times — after an hour, after six hours — and is then final (`page_4xx_given_up`);
+  a timeout, a 5xx and the host's pacing are still asked again hourly until the entry's 14-day horizon.
+- **A source whose pages never read is `degraded`.** When at least 90 % of the last 20 page reads of a source's entries failed
+  (and at least 10 were made) its health is `degraded` although its feed polls cleanly (`policy.text_failing`, from each poll and
+  the hourly re-check); it clears itself when newer pages read. A page that failed but whose feed text stood in is neither.
+- **One failing platform never holds the other five of the six-platform monitor** (`social/crawl.py`): a crawl that fails
+  records the attempt for that term and platform and parks the platform for three hours (doubled for every failure in a row, at
+  most twelve), so the round robin goes on to the platforms it has not asked; a busy answer from GEO parks nobody, and a
+  recovered platform comes back by itself. A platform that keeps failing reads `degraded`, then `unreadable`, as a source.
+
+## Leads (contract 1.6.0)
+
+The platform decides when to go looking for material — a daily watch, a congress in its window, a genre 精选 is short of, an
+event that turned hot, a story without a Chinese report or without its primary source — searches through its own web-search
+gateway, and posts what it found to `POST /v1/leads` (at most 50 addresses a call). Each address is answered on its own:
+`accepted` (queued), `duplicate` (received before, or the stream holds it), `refused` (not a public address, an owner-excluded
+host, or — reason `host_blocked` — a host whose lead reads robots.txt, a challenge page or a 401/403/451 refused within seven days
+and no page of it was read since) or `capped` (`KNOWLEDGE_PLUGIN_LEADS_DAILY` a Shanghai day). `leads.py`'s loop then reads a few a minute under the plugin's
+own rules — a page through the protected fetch (robots, pacing, the relay) with its main text and metadata, a WeChat article
+bought through Dajiala within the shared daily cap (never read as a page), a DOI through Crossref, a PMID through PubMed's summary,
+a trial number through ClinicalTrials.gov's API — and emits ordinary entries: a page or an article only when it carries a date
+within 30 days. An entry goes under the registered source of its site, account or journal, else under a lead source of its own
+(`evimed_knowledge.lead_sources`, access `lead`, never polled, owned by the site and named by what its page calls itself when that is a
+name — never a copyright line, a host or a headline —, else by its outlet in a small host table, else by the title's last segment; a page's
+title is its og:title or only h1 without the site it ends with), and the site, account or journal
+becomes a discovery candidate of line `lead` unless `registry/discovery.json` excludes it. `/v1/health` `leads` counts today's
+addresses by what came of them. The plugin still never calls the platform and makes no model call.
+
+## Hot lists (contract 1.7.0)
+
+The platform's hot-event trigger looks at what the public is reading — a war, an economic or policy decision, a public figure's
+stated illness, a disaster — for the events that raise a general medical question. `hotlists.py`'s loop reads five public boards
+every `KNOWLEDGE_PLUGIN_HOT_LISTS_INTERVAL_S` (1800 s): Baidu's realtime board (`top.baidu.com/api/board?platform=pc`, which gives
+each entry a one-line description and a heat score), Toutiao's hot board, Weibo's hot search (`weibo.com/ajax/side/hotSearch`
+with a Referer; the owner decided on 2026-10-25 to read it directly), English Wikipedia's most-viewed articles of the last day and
+Google Trends' US trending searches — the last two through the relay egress. Each is read as an API through the protected fetch
+(the host's pacing and budgets; robots.txt is not consulted), and its ranked entries — rank (pinned and sponsored entries left out),
+title, heat, description and the board's link, never a post or an account — are kept 72 hours (`evimed_knowledge.hot_lists`) and
+served at `GET /v1/hot-lists?since=<date-time>`, the oldest first, at most 300 snapshots an answer. A board that fails is
+recorded (`/v1/health` `hot_lists`: each board's last good read and its last error) and the others go on. The plugin judges
+nothing: which entries are events and whether one raises a medical question is the platform's model's call.
+
+## The paper text chain (contract 1.5.1)
+
+`/text` for a journal entry (`knowledge_plugin/enrich/`, rt-papers 2026-10-22): the indexes first — PubMed, Europe PMC,
+Crossref, Elsevier's API (only with a key), Unpaywall, OpenAlex (`enrich/openalex.py`: an abstract rebuilt from its
+inverted index, the PMC id, the open copy's licence) — then the publisher: the journal's own feeds (`config.abstract_feed`
+on its registry row, read at most every two hours, `enrich/feeds.py`) and its landing page (`enrich/landing.py`: the DOI's
+handle record names it, it is asked as `text/html` — doi.org answers the fetcher's JSON-first `Accept` with Crossref's
+record — through the source's exit, then the relay, then the browser; a challenge or a 403 is the answer, remembered per
+host for a day, never got round). An open article's whole text comes from Europe PMC's `fullTextXML` (a PMC id) or from a
+Creative-Commons page, as `body_text` with `## ` section titles and `text_kind` `full` (`enrich/jats.py`,
+`enrich/article_html.py`); else its PDF stays `enrichment.oa_pdf_url`. A journal entry without text is asked again every
+12 hours for 14 days; a feed's teaser or a page's standfirst answers at once and is replaced (the entry delivered again)
+when an index gives the abstract.
+
+**Top journals' research papers** (c3-primary, 2026-10-25; `text_policy.py`): an entry of a journal of authority 4 or 5 that
+PubMed has not typed as an editorial, a letter, news and the like is asked for **21 days**, not 14, on a decaying schedule —
+hourly for the first 12 hours, every 3 hours to the second day, every 8 hours to the end of the week, daily after — and
+its PubMed and Europe PMC lookups are `priority="high"` requests, which may spend the fifth of those hosts' daily caps
+(`HostRule.reserved`) every other request is refused; the text worker also claims these entries first. A PubMed record that
+is final (`MEDLINE` / `PubMed-not-MEDLINE`) with no abstract ends the extension (note `pubmed_record_complete`). The hourly
+maintenance reopens, once, the entries the 14-day rule gave up on that are still inside the 21 days
+(`store.reopen_top_journal_texts`). A feed item counts as text when its last words are reference numbers ("…temporality.5,6")
+or a closing heading in capitals (`feeds.without_tail`). A failed ask (a 5xx, a timeout, the plugin's own budget, a 200 that
+could not be read) is repeated within the hour and is never an answer; another 4xx is the host's answer
+(`Attempt.transient`). Measured on 2026-10-25 on 484 held top-journal items: PubMed gave an abstract for 8, Europe PMC 5,
+Crossref none, OpenAlex 23 of 200 characters or more (a day after the plugin's first try, for NEJM's trials), the publisher
+feeds 9.
+
+`python tools/text_probe.py <doi-file>` runs the chain on DOIs (`doi` or `doi|source_id` a line) and prints which step
+answered each, writing nothing; `python tools/measure_abstract_feeds.py` measures the configured feeds (text share, median
+length, matchability). `python -m knowledge_plugin retext --kinds journal [--apply]` reads the journal entries the
+platform asked for that have no text at all through the chain again.
+
+## Social posts (contract 1.5.0)
+
+X accounts (SocialData), WeChat official accounts (Dajiala) and six Chinese platforms (the GEO module's crawler) are
+sources like any other — rows in `registry/social-sources.json`, entries in the same stream with a `seq`, a revision and
+an identity key, polls in the fetch log, health by the same rule — but the scheduler's per-source loop never claims them:
+`knowledge_plugin/social/` reads them, because their cost and pacing are not a source's.
+
+- **X**: accounts packed two dozen to a search (`(from:a OR …) -filter:replies since_id:…`, ≤ 470 characters), each
+  account's watermark moved only to its own newest post; editorial accounts every 30 minutes, the rest hourly; quoted
+  posts and X Articles kept; photos and video posters re-encoded into the media store (`pbs.twimg.com` through the Tokyo
+  relay when configured).
+- **WeChat**: every account is re-resolved before its first read (a saved id is not trusted) — from an article verified
+  to be its own, or, when the list has no such link (a Sogou temporary link is never kept) or the link answers a code
+  that passes, by its nickname (`post_history`, ¥0.16, whose posts are then its first read) — and kept only when Dajiala
+  names it as expected and, for a lookup by name, every post carries the account's `biz` from the list (anything else
+  parks it for 30 days — and a change of that row reads it again at once, the park having been decided for the old row);
+  then read by its original id at most twice a day,
+  highest priority first; each new post's text bought once. A text that could not be bought with its post (a failure
+  that passes, such as Dajiala's code 20002 while the balance runs low, or the cap) is bought when the platform asks
+  `/text` for it — never read as a page: mp.weixin.qq.com refuses robots — at most six calls per entry with a doubling
+  wait, and five failures in a row pause every body purchase for an hour. `python -m knowledge_plugin wechat-bodies
+  [--days 7]` lists the WeChat entries answered `unavailable` without their text (writes nothing, calls nobody);
+  `--apply` buys them within the day's cap and delivers each recovered entry again as its next revision.
+- **Six platforms**: a standing watch list (`watch_list` in the same file, each term with its reason) searched one
+  platform and one term at a time, 120 requests a day spread over the day, ten minutes' wait whenever GEO's crawler is
+  busy. A post keeps an excerpt and the platform's counts, never its author.
+- **Money**: every paid call is a row of `provider_calls`; a provider's daily cap stops that provider until the next
+  Shanghai day and nothing else; `/v1/health`'s `providers` names calls, spend, cap, balance and the last error.
+
+The lists are built from dated research files: `tools/verify_x_accounts.py --key-file <path>` checks each X candidate
+once (exists, public, posted in the last 90 days; status lines only, never the key) and `tools/build_social_registry.py`
+writes `registry/social-sources.json` (`--check` verifies the committed file).
 
 ## Add or change a source
 

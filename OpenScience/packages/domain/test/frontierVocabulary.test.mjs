@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   FRONTIER_ACCESSES,
   FRONTIER_ACCESS_LABELS_ZH,
+  FRONTIER_CHANNELS,
+  FRONTIER_PLATFORMS,
   FRONTIER_BROAD_SAFETY_FLAGS,
   FRONTIER_DATE_PRECISIONS,
   FRONTIER_EGRESSES,
@@ -39,7 +41,11 @@ import {
   FRONTIER_SOURCE_TYPES,
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   FRONTIER_SPECIALTIES,
+  FRONTIER_SPECIALTY_GROUPS,
   FRONTIER_SPECIALTY_LABELS_ZH,
+  FRONTIER_SPECIALTY_RETIRED,
+  FRONTIER_SPECIALTY_SCOPES_ZH,
+  frontierSpecialtyKey,
   FRONTIER_TEXT_STATUSES,
   FRONTIER_VOCABULARY_FALLBACKS,
   FRONTIER_VOCABULARY_NAMES,
@@ -112,6 +118,8 @@ test("every vocabulary the plugin also speaks equals the contract's enum, value 
     ["SourceType", FRONTIER_SOURCE_TYPES, `${schema("SourceType")}.enum`],
     ["Egress", FRONTIER_EGRESSES, `${schema("Egress")}.enum`],
     ["Access", FRONTIER_ACCESSES, `${schema("Access")}.enum`],
+    ["Channel", FRONTIER_CHANNELS, `${schema("Channel")}.enum`],
+    ["Platform", FRONTIER_PLATFORMS, `${schema("Platform")}.enum`],
     ["LaunchTier", FRONTIER_LAUNCH_TIERS, `${schema("LaunchTier")}.enum`],
     ["Health_State", FRONTIER_HEALTH_STATES, `${schema("Health_State")}.enum`],
     ["DatePrecision", FRONTIER_DATE_PRECISIONS, `${schema("DatePrecision")}.enum`],
@@ -136,10 +144,24 @@ test("the eight reader lanes are the contract's lanes without mixed, and every f
   assert.ok(FRONTIER_SOURCE_LANES.includes(FRONTIER_VOCABULARY_FALLBACKS.lane));
   assert.ok(FRONTIER_SOURCE_TYPES.includes(FRONTIER_VOCABULARY_FALLBACKS.sourceType));
   assert.ok(FRONTIER_HEALTH_STATES.includes(FRONTIER_VOCABULARY_FALLBACKS.health));
-  assert.equal(FRONTIER_SPECIALTIES.length, 21);
+  assert.equal(FRONTIER_SPECIALTIES.length, 30);
   assert.equal(FRONTIER_EVIDENCE_TYPES.length, 10);
   assert.equal(FRONTIER_ITEM_FLAGS.length, 14);
   for (const flag of FRONTIER_MODEL_FLAGS) assert.ok(FRONTIER_ITEM_FLAGS.includes(flag));
+});
+
+test("the thirty specialties (owner, 2026-10-23) are in five groups, each once and in list order; every one says what it takes; a retired key reads as its successor or as nothing", () => {
+  assert.deepEqual(FRONTIER_SPECIALTY_GROUPS.flatMap((group) => group.specialties), [...FRONTIER_SPECIALTIES]);
+  assert.deepEqual(FRONTIER_SPECIALTY_GROUPS.map((group) => group.label), ["内科", "外科", "妇儿", "五官与皮肤", "医技与其他"]);
+  assert.deepEqual(Object.keys(FRONTIER_SPECIALTY_SCOPES_ZH).sort(), [...FRONTIER_SPECIALTIES].sort());
+  assert.equal(new Set(Object.values(FRONTIER_SPECIALTY_LABELS_ZH)).size, FRONTIER_SPECIALTIES.length, "no two specialties read alike");
+  for (const key of Object.keys(FRONTIER_SPECIALTY_RETIRED)) assert.ok(!FRONTIER_SPECIALTIES.includes(key), key);
+  assert.equal(frontierSpecialtyKey("cardiology"), "cardiology");
+  assert.equal(frontierSpecialtyKey("surgery-anesthesia"), "general-surgery");
+  assert.equal(frontierSpecialtyKey("geriatrics"), null);
+  assert.equal(frontierSpecialtyKey("public-health"), null);
+  assert.equal(frontierSpecialtyKey("Cardiology"), null);
+  assert.equal(frontierSpecialtyKey(undefined), null);
 });
 
 test("F12c: the marks that send a safety alert to every reader are two - one the editor may propose, one code reads off the recall's class", () => {
@@ -191,7 +213,7 @@ test("a value this build does not know falls back and is reported as unknown, ne
   assert.equal(isFrontierValue("specialty", "Cardiology"), false);
   assert.equal(isFrontierValue("flag", 7), false);
   assert.throws(() => isFrontierValue(/** @type {any} */ ("colour"), "red"), /Unknown frontier vocabulary/);
-  assert.deepEqual([...FRONTIER_VOCABULARY_NAMES], ["lane", "sourceType", "evidenceType", "specialty", "flag", "health", "egress", "access", "launchTier", "datePrecision", "defect"]);
+  assert.deepEqual([...FRONTIER_VOCABULARY_NAMES], ["lane", "sourceType", "evidenceType", "specialty", "flag", "health", "egress", "access", "channel", "platform", "launchTier", "datePrecision", "defect"]);
 });
 
 test("a label is the Chinese word or null, never the key", () => {

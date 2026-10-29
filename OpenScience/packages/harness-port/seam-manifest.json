@@ -18,6 +18,7 @@
     "optional": [
       "storageDomain",
       "skills",
+      "loader",
       "fs",
       "jobs",
       "web",
@@ -33,6 +34,7 @@
     "sessionStart": "agent/created",
     "preStep": "agent/pre-step",
     "promptAssemble": "system-prompt/assemble",
+    "inputClaimed": "agent/inbox/claimed",
     "turnStopping": "agent/turn-stopping",
     "domainChanged": "domain/changed",
     "sessionFlush": "session/flush",
@@ -131,7 +133,9 @@
     "@deepseek-ai/dsh-mcp-client": "config-row",
     "@deepseek-ai/dsh-agent-preset": "config-row",
     "@deepseek-ai/dsh-skill-filesystem": "provider-base",
-    "@deepseek-ai/dsh-compaction-basic": "provider-base",
+    "@deepseek-ai/dsh-skill": "provider-base",
+    "@deepseek-ai/dsh-host-plugin-inventory": "provider-base",
+    "@deepseek-ai/dsh-compaction-basic": "config-row",
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
     "@deepseek-ai/dsh-tool-bash": "config-row",
     "@deepseek-ai/dsh-tool-fs": "config-row",
@@ -154,21 +158,12 @@
   "providers": {
     "compaction": {
       "package": "@deepseek-ai/dsh-compaction-basic",
-      "export": "BasicCompactionEngine",
-      "hook": "summarize",
-      "hookArity": 3,
       "methods": [
-        "compactIfNeeded",
-        "compactRegion",
-        "compactNow"
+        "compactIfNeeded"
       ],
       "triggers": [
         "pressure",
         "context-overflow"
-      ],
-      "statics": [
-        "inject",
-        "Config"
       ],
       "defaults": {
         "thresholdRatio": 0.8,
@@ -280,6 +275,7 @@
       "skills/list",
       "agentPresets/list",
       "evimedPlugins/status",
+      "evimedPlugins/builtin",
       "evimedPlugins/verify",
       "evimedPlugins/verifyExtensions",
       "evimedPlugins/extensionInvocationFacts",
@@ -451,19 +447,22 @@
       ],
       "agentPresets/list": [],
       "evimedPlugins/status": [],
+      "evimedPlugins/builtin": [],
       "evimedPlugins/verify": [],
       "evimedPlugins/verifyExtensions": [],
       "evimedPlugins/extensionInvocationFacts": [
         "request"
       ],
       "evimedSkills/list": [
-        "request"
+        "sessionId"
       ],
       "evimedSkills/read": [
-        "request"
+        "sessionId",
+        "key"
       ],
       "evimedSkills/snapshotBuiltin": [
-        "request"
+        "sessionId",
+        "key"
       ]
     },
     "mux": "/api/remote.mux",
@@ -551,13 +550,12 @@
     "methodsRenamed": "0.1.2 renamed every method from dotted to slashed and moved arguments into a named descriptor: session.list became session/list taking {_request}. Verified against a running 0.1.2-alpha.3 binary, which 404s the dotted form and names the missing args field itself.",
     "sessionIdNotInFrame": "A session's events arrive on the `session/follow` stream opened for that session and no longer carry a session id. Whatever opens the stream owns the pairing.",
     "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does.",
-    "summarizeWithLlmNotExported": "dsh-compaction-basic declares summarizeWithLlm in lib/types/summarizer.d.ts, but the published bundle exports only { BasicCompactionEngine, default }: the function is module-internal, and `./src/*` is in `exports` while not being in `files`. src/compaction.mjs therefore reaches the upstream summarization call through the base class's own summarize() hook, which appends its checkpoint-structure directive after ours. If a later release exports it, the EviMed directive can replace the upstream one instead of composing with it.",
-    "compactionProviderIsAlsoAComposition": "dsh-compaction-basic is a `provider-base`, not a `config-row`, because harness-port subclasses it. It is still named by a composition row and still installed only inside the runtime image, which is why the composition checker treats both roles alike; the distinct word records that a rename of `summarize` silently disables the override rather than erroring.",
     "sessionV4": "DSH 0.1.7 uses session format 4. A `tool/result` message is role `tool` with `toolCallId` and `isError` on the message and its content directly in `content` (format 3 wrapped it in one `tool-result` block of a user-role message); a message source names its own producer kind and the bare `plugin` kind is refused, so messages we write carry `plugin:<name>` (`pluginSource`), the kind the kernel's own V3->V4 migration gives our older ones. Format-3 logs on a project volume are read through that migration without being rewritten; the first write open publishes a `session.v4.jsonl.zstd` successor beside the untouched `session.v3.jsonl.zstd`, and a 0.1.5 kernel cannot read a session once it has one. Live assistant deltas still use assistant-stream frames; durable assistant/message contains the completed output and attempt stream. Historical v0 chunks and v3 tool-result wrappers remain readable by the EviMed decoders only.",
     "agentScopedRegistration": "Two registrations are made through one agent's own context (`agent.ctx`) at its `agent/created` (0.1.7 folded `agent/session-start` into it), never through the preset's: `tools.restrict` (the root is shown only its own research tools) and `systemPrompt.section` (a delegated child's guidance replaces the orchestration guidance and the answer persona by name). `skills.register` through a child's context is not used: the context does not carry the skills service, and every registration failed on the first live runs (2026-09-19); a child reads a deferred method section from its skill file by line instead. The registries intersect restrictions and let the nearest scope win a section or skill name along a scope chain, and a child joins the preset's standing scope rather than its parent's, so each registration stays with the one agent. A child's session starts inside `ctx.subagents.startActivation` (0.2.1; `start` and the one-shot run are gone): the kernel runs the creation `setup` that joins the child to its preset, then awaits its serial `agent/created` listeners, then submits the first prompt, so a registration made there precedes the child's first request and first skill catalogue. 0.2.1 also took `toolFilter` and `persona` out of the start request, so a delegation's own mask and persona prefix are these same two registrations, keyed by the child id the parent reserves (`installChildComposition`). `agent.steer` wakes an idle agent and is the documented objection at `agent/turn-stopping`; `agent.inject` does neither.",
     "subagentCatalog": "There is no `subagents/list` since 0.1.7. A parent's direct children are its own `subagentCatalog` projection, read without activating an agent through `session/projections` (`values.subagentCatalog`: `{ id, createdAt, mode, label? }`, mode `one-shot`, `continuable`, `unknown` or, from catalog payload v2, `external`; every local child a 0.2.1 kernel starts is `continuable`), and a child is read at `{ kind: 'subagent', parentSessionId, childSessionId, mode }`, where `unknown` is resolved by the kernel from the child's own descriptor.",
     "presetsAreRows": "Presets are host rows since 0.1.7: `@deepseek-ai/dsh-agent-presets` and its directory roots are gone, a preset is one `@deepseek-ai/dsh-agent-preset` row whose `config.plugins` is the agent's entry list, and `agent-preset-registry.config.default` names the one sessions get. The socket ships `evimed-universal` as such a row (`presets/evimed-universal.patch.yml`, generated from the preset directory it edits), and its bundle patch disables the four rows the web bundle declares beside it (`preset-standard`, `preset-ptc`, `preset-minimal`, `preset-cordis`): a session on one of those carries none of our plugins, so `evimed-universal` is the only preset the registry holds and a `session/create` naming another answers `agent-preset/not-found`.",
-    "bundleSeams": "What a pinned third-party bundle reaches in the kernel that no EviMed code calls, so a rename upstream is seen here before it is seen as a behaviour change in someone else's plugin. The official OpenViking memory bundle (the pinned one, booted on the pinned kernel on 2026-10-13) needs three that no row of ours used: the awaited `session/flush` checkpoint (it drains its capture queue there; dispatched by `sessions.flush`), `session.ownEvents()` and `agent.inbox.nextTurn/nextStep` (it reads them to tell whether its startup profile is already in the conversation, so a rename would make it inject the profile on every start or never). Their names are checked in the shipped kernel by scripts/ops/verify-harness-seams.mjs; `sessions.flush` by the startup probe and the other two on the first session a kernel creates (`bundleSeamGaps`, `evimed-seam-probe`), each a degraded notice: the plugin is an enhancement, and a missing seam turns memory off, not the session."
+    "bundleSeams": "What a pinned third-party bundle reaches in the kernel that no EviMed code calls, so a rename upstream is seen here before it is seen as a behaviour change in someone else's plugin. The official OpenViking memory bundle (the pinned one, booted on the pinned kernel on 2026-10-13) needs three that no row of ours used: the awaited `session/flush` checkpoint (it drains its capture queue there; dispatched by `sessions.flush`), `session.ownEvents()` and `agent.inbox.nextTurn/nextStep` (it reads them to tell whether its startup profile is already in the conversation, so a rename would make it inject the profile on every start or never). Their names are checked in the shipped kernel by scripts/ops/verify-harness-seams.mjs; `sessions.flush` by the startup probe and the other two on the first session a kernel creates (`bundleSeamGaps`, `evimed-seam-probe`), each a degraded notice: the plugin is an enhancement, and a missing seam turns memory off, not the session.",
+    "projectSkillsAdapter": "The preset's `skill-filesystem` row is `@evimed/dsh-socket/plugins/project-skills`, an adapter over the native `FileSystemSkillProvider` of `@deepseek-ai/dsh-skill-filesystem` (`registerProjectSkillProvider`): discovery, parsing and precedence stay native, and the adapter only turns both invocation flags off for the skills a project switched off (EVIMED_DISABLED_PLATFORM_SKILLS), keeping the disabled winner in the registry so a lower-precedence duplicate cannot become invocable. It fails open: a policy that cannot be read registers the native provider unrestricted. Delete it, and point the row back at `@deepseek-ai/dsh-skill-filesystem`, when DSH ships a native per-skill disable (adopted 2026-10-25 on 0.2.1-rc.2, which has none)."
   },
   "browser": {
     "transportGlobal": "__DSH_TRANSPORT__",
@@ -602,7 +600,7 @@
       "ownedGlobal": "__EVIMED_RESULT_REVISION__",
       "requestEnvelope": "args.request.evimedResultRevision.referenceId",
       "methods": ["stage", "clear"],
-      "note": "Control-plane-owned reference, staged after the native draft. The official fetch/openStream hooks attach it only to the same session/prompt whose text retains that draft prefix; replacement, navigation, cancellation and disposal clear it. Only an exact same requestId/text retry retains the submitted reference. The control plane reauthorizes the immutable target and removes this envelope before the upstream kernel receives the request. No new upstream service or composer subscription is used."
+      "note": "Control-plane-owned reference. Selected-text revisions retain their native draft prefix; optional whole-file context leaves the existing composer draft intact and attaches to the next actual request in that session. The official fetch/openStream hooks attach a selected-text reference only to the same session/prompt whose text retains that draft prefix; replacement, navigation, cancellation and disposal clear it. Only an exact same requestId/text retry retains the submitted reference. The control plane reauthorizes the immutable target and removes this envelope before the upstream kernel receives the request. No new upstream service or composer subscription is used."
     },
     "generation": "connection.generation",
     "failureMarker": "dshRemoteStreamFailure",

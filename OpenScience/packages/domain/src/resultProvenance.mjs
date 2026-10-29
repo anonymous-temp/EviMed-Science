@@ -67,7 +67,10 @@ export function projectResultVersion(value) {
       matrixText: typeof value.review.matrixText === "string" ? value.review.matrixText : null,
       verification: value.review.verification ?? null,
       matrixVersionId: typeof value.review.matrixVersionId === "string" ? value.review.matrixVersionId : null,
-      matrixDigest: isResultDigest(value.review.matrixDigest) ? value.review.matrixDigest : null } : { status: "unknown" },
+      matrixDigest: isResultDigest(value.review.matrixDigest) ? value.review.matrixDigest : null,
+      ...(isResultDigest(value.review.verificationSnapshot?.digest) && Number.isSafeInteger(value.review.verificationSnapshot?.size)
+        && value.review.verificationSnapshot.size > 0 && value.review.verificationSnapshot.schemaVersion === 1
+        ? { verificationSnapshot: { digest: value.review.verificationSnapshot.digest, size: value.review.verificationSnapshot.size, schemaVersion: 1 } } : {}) } : { status: "unknown" },
     coverage: value.coverage, supersedesVersionId: value.supersedesVersionId ?? null,
     // How the bytes were produced and which calculation each printed number came from (`resultLineage.mjs`).
     // A version captured before either was recorded says so: it is unobserved, and its numbers are not checked.
@@ -83,7 +86,7 @@ export function validateResultAnchor(version, anchor) {
   if (!anchor || anchor.versionId !== version.versionId || anchor.digest !== version.digest) {
     throw new Error("The selected result version changed.");
   }
-  if (!["text", "table-cell", "figure", "claim", "pdf-region", "rendered-element"].includes(anchor.kind ?? "text")
+  if (!["file", "text", "table-cell", "figure", "claim", "pdf-region", "rendered-element"].includes(anchor.kind ?? "text")
     || typeof anchor.elementId !== "string" || !anchor.elementId || anchor.elementId.length > 512
     || typeof anchor.selectedText !== "string" || anchor.selectedText.length > 12000
     || (anchor.instruction != null && (typeof anchor.instruction !== "string" || !anchor.instruction.trim() || anchor.instruction.length > 12000))) {

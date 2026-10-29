@@ -147,6 +147,12 @@ def parse_pubmed_xml(body: bytes) -> list[dict[str, Any]]:
             if node.get("IdType") == "doi" and (node.text or "").strip():
                 doi = normalize_doi(node.text)
                 break
+        pmcid = None
+        id_list = article.find("PubmedData/ArticleIdList")   # the article's own ids, not its references'
+        for node in (id_list if id_list is not None else []):
+            if node.get("IdType") == "pmc" and (node.text or "").strip().upper().startswith("PMC"):
+                pmcid = node.text.strip().upper()
+                break
         if doi is None:
             for node in art.iter("ELocationID"):
                 if node.get("EIdType") == "doi":
@@ -194,8 +200,10 @@ def parse_pubmed_xml(body: bytes) -> list[dict[str, Any]]:
         records.append({
             "pmid": pmid,
             "doi": doi,
+            "pmcid": pmcid,
+            "citation_status": citation.get("Status"),     # c3-primary: "Publisher" / "In-Process" (an abstract may still come) / "MEDLINE" (it will not)
             "title": _text(art.find("ArticleTitle")) or _text(art.find("VernacularTitle")),
-            "abstract": " ".join(parts) or None,
+            "abstract": "\n".join(parts) or None,      # one section a line; the summary folds it, /text keeps it
             "publication_types": [t for t in (_text(n) for n in art.iter("PublicationType")) if t],
             "mesh": [t for t in (_text(n) for n in citation.iter("DescriptorName")) if t],
             "journal": _text(journal.find("Title")) if journal is not None else None,

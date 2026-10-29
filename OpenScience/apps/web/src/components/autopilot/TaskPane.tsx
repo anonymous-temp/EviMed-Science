@@ -5,7 +5,7 @@ import type { WebAgentRun, WebRunDeliverableStatus } from "@/lib/apiClient";
 import { currentPhaseLabel, childrenLine, progressCountsLine, runDeliverables, runProgressOf } from "@/lib/runProgress";
 import { registerTaskPane } from "@/lib/taskPane";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
-import { activeAgenda, inFlight, instant, runState, scheduleOf, zoneName } from "./taskPresentation";
+import { activeAgenda, cancellationPending, inFlight, instant, runState, scheduleOf, zoneName } from "./taskPresentation";
 
 /** The state words of a plan item, in the product's own (appendix B): the ledger's gate words are not the researcher's. */
 const ITEM_STATE: Record<WebRunDeliverableStatus, string> = {
@@ -83,7 +83,7 @@ export function TaskPane({ agenda, execution, lock, ledgerRun, projectId }: {
     const items = own && ledgerRun ? runDeliverables(ledgerRun) : [];
     const lines = [currentPhaseLabel(progress), progressCountsLine(progress), childrenLine(progress)].filter(Boolean);
     return box("progress", <>
-      <p className="flex items-center gap-2 text-ui font-medium text-text"><RunStatusDot state="running" labelled />{own ? runState(lock.payload) : "这个项目里另一项任务正在执行"}</p>
+      <p className="flex items-center gap-2 text-ui font-semibold text-text"><RunStatusDot state="running" labelled />{own ? runState(lock.payload) : "这个项目里另一项任务正在执行"}</p>
       {lines.length > 0 && <ul className="space-y-1 text-ui text-text-2">{lines.map(line => <li key={line}>{line}</li>)}</ul>}
       {items.length > 0 && <ul aria-label="研究计划" className="space-y-1 text-ui text-text">{items.map(item => <li key={item.id} className="flex items-baseline justify-between gap-3"><span className="min-w-0 break-words">{item.title}</span><span className="shrink-0 text-caption text-text-3">{ITEM_STATE[item.status] ?? "待开始"}</span></li>)}</ul>}
       <p className="text-caption text-text-3">执行结束后可以在这里继续</p>
@@ -91,16 +91,16 @@ export function TaskPane({ agenda, execution, lock, ledgerRun, projectId }: {
   }
   if (execution) {
     const waiting = Object.values(execution.payload.resourceDeferrals ?? {}).find(value => value?.status === "waiting");
-    const retry = waiting?.retryAt ? `预计重试 ${instant(waiting.retryAt, zone)}` : "";
+    const retry = !cancellationPending(agenda) && agenda.payload.schedulingAvailable !== false && waiting?.retryAt ? `预计重试 ${instant(waiting.retryAt, zone)}` : "";
     return box(inFlight(execution) ? "waiting" : "no-conversation", <>
-      {(inFlight(execution) || execution.payload.status !== "merged") && <p className="flex items-center gap-2 text-ui font-medium text-text">{inFlight(execution) && <RunStatusDot state="running" labelled />}{runState(execution.payload)}</p>}
+      {(inFlight(execution) || execution.payload.status !== "merged") && <p className="flex items-center gap-2 text-ui font-semibold text-text">{inFlight(execution) && <RunStatusDot state="running" labelled />}{runState(execution.payload)}</p>}
       {retry && <p className="text-ui text-text-2">{retry}</p>}
       {!inFlight(execution) && <p className="text-ui text-text-3">这次执行没有留下对话。</p>}
     </>);
   }
   const instruction = agenda.payload.prompt ?? agenda.payload.topics.join("\n");
   // The time is said with its zone: a time without one is ambiguous.
-  const nextAt = activeAgenda(agenda) && agenda.payload.nextRunAt ? instant(agenda.payload.nextRunAt, zone) : "";
+  const nextAt = !cancellationPending(agenda) && activeAgenda(agenda) && agenda.payload.nextRunAt ? instant(agenda.payload.nextRunAt, zone) : "";
   return box("never-run", <>
     <p className="whitespace-pre-wrap break-words text-ui leading-relaxed text-text">{instruction}</p>
     <p className="text-ui text-text-3">{nextAt ? `还没有执行过，下次 ${nextAt}${zoneName(zone) ? ` ${zoneName(zone)}` : ""}` : "还没有执行过"}</p>

@@ -103,3 +103,24 @@ test("probe limits are refused when they cannot bound anything", () => {
     assert.throws(() => new OpenListSourceConnector(client, options), TypeError, JSON.stringify(options));
   }
 });
+
+test("capture refuses metadata changes and downloaded bytes that disagree with provider SHA", async () => {
+  const { createHash } = await import("node:crypto");
+  const bytes = Buffer.from("historical original");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  let currentHash = `sha256:${sha256}`;
+  let downloaded = bytes;
+  let reads = 0;
+  const connector = new OpenListSourceConnector({
+    stat: async selected => ({ path: selected, size: bytes.length, providerHash: currentHash }),
+    read: async () => { reads++; return downloaded; },
+  });
+  const input = { connector: { id: "/old.txt" }, size: bytes.length, sha256 };
+  assert.deepEqual(await connector.capture("owner", input), bytes);
+  currentHash = `sha256:${"0".repeat(64)}`;
+  await assert.rejects(connector.capture("owner", input), { code: "openlist_source_changed" });
+  assert.equal(reads, 1);
+  currentHash = `sha256:${sha256}`;
+  downloaded = Buffer.from("changed remote file");
+  await assert.rejects(connector.capture("owner", input), { code: "openlist_source_changed" });
+});

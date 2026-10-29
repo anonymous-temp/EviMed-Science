@@ -625,7 +625,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     <div {...dropProps} ref={pageRoot} className="relative h-full">
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-drawer flex items-center justify-center bg-bg">
-          <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
+          <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui text-accent">
             <Upload size={16} aria-hidden="true" />
             松开即可上传
           </div>
@@ -683,7 +683,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       )}
       {deleting && <ConfirmDialog title="删除这份资料？" body="删除后不再用于回答。"
         confirmLabel="删除" onCancel={() => setDeleting(null)}
-        onConfirm={() => void mutate(async () => { await removeSource(deleting.id, deleting.revision); })} />}
+        onConfirm={() => void mutate(async () => { await removeSource(deleting.id, deleting.revision); setSelected((previous) => { const next = new Map(previous); next.delete(deleting.id); return next; }); })} />}
     </div>
   );
 }

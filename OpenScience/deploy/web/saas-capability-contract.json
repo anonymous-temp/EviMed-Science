@@ -134,7 +134,7 @@
       "id": "research-memory",
       "status": "adapted",
       "evidence": [
-        "apps/server/src/researchMemory.mjs",
+        "apps/server/src/memorySettings.mjs",
         "deploy/web/docker-compose.yml"
       ]
     },

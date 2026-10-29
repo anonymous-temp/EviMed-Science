@@ -486,10 +486,13 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
 VCR_TWIN_EVIDENCE <- c("individual_conditioned", "updates_with_new_data",
                        "calibrated_uncertainty", "validation_record")
 
-#' `digital_twin` only with all four; otherwise `baseline_conditioned_prediction`.
+#' A digital twin needs all four; baseline prediction needs individual conditioning.
+#' Without individual conditioning, the model remains a scenario simulation.
 vcr_twin_label <- function(evidence) {
-  if (all(VCR_TWIN_EVIDENCE %in% (evidence %||% character()))) "digital_twin"
-  else "baseline_conditioned_prediction"
+  held <- evidence %||% character()
+  if (all(VCR_TWIN_EVIDENCE %in% held)) "digital_twin"
+  else if ("individual_conditioned" %in% held) "baseline_conditioned_prediction"
+  else "scenario_simulation"
 }
 
 #' Required model-card fields (plan 8.2). Missing items are named, not counted.

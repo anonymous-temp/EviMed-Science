@@ -6,6 +6,7 @@ import { HeatGrid } from "@/components/charts/HeatGrid";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import { engineConclusion, engineMatrix } from "../geoOverviewModel";
+import type { ReadFailure } from "../geoProjectData";
 import { engineName, GEO_POOL_KINDS, GEO_POOLS, zh } from "../geoText";
 import { ClusterLink } from "../spine/ClusterLink";
 import { clusterName, groupTally } from "../spine/clusterModel";
@@ -40,15 +41,21 @@ export function EngineHeatCard({
   loading,
   metric,
   engine,
+  error = null,
 }: {
   project: GeoProject;
   diagnosis: GeoDiagnosis | null;
   loading: boolean;
   metric: string | null;
   engine: string | null;
+  /** The diagnosis did not come: the grid would read every engine as 未测, so the card says the read failed instead. */
+  error?: ReadFailure | null;
 }) {
   const matrix = useMemo(() => engineMatrix(project, diagnosis), [project, diagnosis]);
   if (loading && !diagnosis) return <ChartCard title="各引擎的提及、准确与引用" state="loading" height={160} />;
+  if (error && !diagnosis) {
+    return <ChartCard title="各引擎的提及、准确与引用" state="error" errorMessage={`各引擎的读数没有读到：${error.message}`} onRetry={error.retry} height={160} />;
+  }
   if (matrix.rows.length === 0 || matrix.columns.length === 0) return null;
   return (
     <ChartCard title={engineConclusion(project, diagnosis)} footnote={matrix.note ?? undefined}>
@@ -114,11 +121,14 @@ export function ClusterMatrixCard({
   engines,
   engine,
   onOpen,
+  error = null,
 }: {
   groups: readonly GeoClusterRow[];
   engines: readonly GeoEngine[];
   engine: string | null;
   onOpen: (groupId: string, engine: string) => void;
+  /** The question groups did not come: said, with 重试, instead of a card that is not there. */
+  error?: ReadFailure | null;
 }) {
   const shownEngines = engine ? engines.filter((entry) => entry === engine) : engines;
   const measured = groups.filter((row) => groupTally(row, shownEngines).answered > 0);
@@ -127,10 +137,15 @@ export function ClusterMatrixCard({
   const rows = useMemo(() => visible.map((row) => ({
     key: row.id,
     name: clusterName(row),
-    header: <ClusterLink groupId={row.id}>{clusterName(row)}</ClusterLink>,
+    // The group's name opens the drawer its cells open, at the cells' 28 px: one look for one job in one row (a 12 px inline link was a
+    // kind of control of its own beside them, the eleventh on 可见度 in the fixture walk of b559d4b7e). It still truncates in its column.
+    header: <ClusterLink groupId={row.id} className="block h-sm truncate leading-7">{clusterName(row)}</ClusterLink>,
     note: row.isControl ? <span className="shrink-0 text-meta text-text-3">对照</span> : undefined,
     tallies: row.byEngine,
   })), [visible]);
+  if (error && groups.length === 0) {
+    return <ChartCard title="各问题群在各引擎里的提及" state="error" errorMessage={`问题群没有读到：${error.message}`} onRetry={error.retry} height={160} />;
+  }
   if (groups.length === 0) return null;
   return (
     <ChartCard
@@ -152,6 +167,6 @@ export function ClusterMatrixCard({
 }
 
 /** The pools that have a group, in their order: what the pool choice offers. */
-export function poolsOf(groups: readonly GeoClusterRow[]) {
+export function poolsOf(groups: readonly { pool: GeoClusterRow["pool"] | null }[]) {
   return GEO_POOLS.filter((pool) => groups.some((row) => row.pool === pool)).map((pool) => ({ value: pool, label: GEO_POOL_KINDS[pool] }));
 }

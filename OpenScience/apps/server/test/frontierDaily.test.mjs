@@ -141,6 +141,37 @@ test("the notice: the day and the selected count in the title, the lead's title 
   assert.deepEqual(notice.actions, [{ id: "open", label: "查看日报", style: "primary" }]);
   assert.doesNotMatch(`${notice.title}${notice.body}`, /因为|与你相关/, "nothing personal: a Feishu binding may be a group chat");
   const config = { publicUrl: "https://science.example.com" };
-  assert.equal(noticeLink(config, { source: notice.source }), "https://science.example.com/app/frontier?view=daily&day=2026-09-22");
+  assert.equal(noticeLink(config, { source: notice.source }), "https://science.example.com/app/frontier?view=daily&day=2026-09-22&from=push");
   assert.equal(noticeLink(config, { source: { type: "digest", id: "frontier-daily:not-a-day" } }), "https://science.example.com/app/autopilot?digest=frontier-daily%3Anot-a-day");
+});
+
+test("G3: an issue does not lead with an event the last issues led with — it stays in its section — and prefers an event that began in the window", () => {
+  const window = { start: new Date("2026-09-20T23:00:00Z"), end: new Date("2026-09-21T23:00:00Z") };
+  // The review's case: one 42-report event (FDA's approval of a hepatitis B drug) is on top of the hot list and has a new report every
+  // day; yesterday's, the day before's and the day before that's issues all led with it, each with a different report.
+  const big = { event_id: "7", event_public_id: "03b4fabf39b7b03d", event_first_at: "2026-09-17T08:00:00Z" };
+  const rows = [
+    row(1, { ...big, score_total: 95, title_zh: "FDA批准乙肝新药" }),
+    row(2, { event_id: "8", event_public_id: "e000000000000008", event_first_at: "2026-09-21T02:00:00Z", score_total: 72, title_zh: "一项新试验公布" }),
+    row(3, { event_id: "9", event_public_id: "e000000000000009", event_first_at: "2026-09-19T02:00:00Z", score_total: 88, title_zh: "前天的另一件事" }),
+  ];
+  const hot = ["7", "9", "8"];
+  assert.equal(frontierDailyIssue({ rows, hotEventIds: hot }).lead.id, 1, "without memory the hot event leads, as before");
+  const barredByEvent = frontierDailyIssue({ rows, hotEventIds: hot, recentLeads: { eventIds: ["03b4fabf39b7b03d"] } });
+  assert.notEqual(barredByEvent.lead.id, 1, "the event the last issues led with is not a lead candidate");
+  assert.ok(barredByEvent.sections.some((section) => section.rows.some((entry) => entry.id === 1)), "…and stays in its section");
+  assert.equal(barredByEvent.lead.id, 3, "without a window the hot list decides among the rest");
+  // An event that began inside the window comes before one that began earlier, whatever the hot list says.
+  assert.equal(frontierDailyIssue({ rows, hotEventIds: hot, recentLeads: { eventIds: ["03b4fabf39b7b03d"] }, window }).lead.id, 2,
+    "the event that began in the window leads over a hotter one that began two days ago");
+  // An earlier lead is also remembered by its item: an item with no event of its own, or whose event the issue did not store.
+  const byItem = frontierDailyIssue({ rows, hotEventIds: hot, recentLeads: { itemIds: [rows[0].public_id] }, window });
+  assert.equal(byItem.lead.id, 2);
+  // No fresh event and every other candidate barred: no lead, and nothing is lost — the items are in their sections.
+  const only = frontierDailyIssue({ rows: [rows[0]], hotEventIds: hot, recentLeads: { eventIds: ["03b4fabf39b7b03d"] }, window });
+  assert.equal(only.lead, null);
+  assert.deepEqual(only.sections.flatMap((section) => section.rows.map((entry) => entry.id)), [1]);
+  // An event with no first report on record, or an item with no event, counts as new.
+  const bare = frontierDailyIssue({ rows: [row(4, { score_total: 60 }), row(5, { ...big, score_total: 99 })], hotEventIds: [], recentLeads: {}, window });
+  assert.equal(bare.lead.id, 4, "an item with no event is new in its window; the older event comes after it");
 });

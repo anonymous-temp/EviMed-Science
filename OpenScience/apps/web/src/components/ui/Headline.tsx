@@ -21,7 +21,7 @@ export interface HeadlineProps {
 
 export function Headline({ parts, id, className }: HeadlineProps) {
   return (
-    <p data-headline="" id={id} className={cn("text-section text-text", className)}>
+    <p data-headline="" id={id} className={cn("text-section font-semibold text-text", className)}>
       <NoteParts parts={parts} />
     </p>
   );

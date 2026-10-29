@@ -1,4 +1,5 @@
 import { DISPLAY_TIME_ZONE, FRONTIER_BROAD_SAFETY_FLAGS, agendaLocalDate, frontierNoticeTarget, frontierSourceDisplayName } from '@evimed/domain';
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from './frontierSourceColumns.mjs';
 import { migrateFrontier } from './frontierPersistence.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
 import { migrateNotifications } from './notificationPersistence.mjs';
@@ -56,7 +57,7 @@ function safetyPublicationPredicate(now, param) {
 export function frontierSafetyNotice(row, timeZone = DISPLAY_TIME_ZONE) {
     const key = `frontier-safety:${row.public_id}`;
     return { noticeType: 'notify', title: String(row.title_zh || row.title_raw).slice(0, 200),
-        body: `${frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner })} · ${agendaLocalDate(timeZone, new Date(row.published_at))}`,
+        body: `${frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal })} · ${agendaLocalDate(timeZone, new Date(row.published_at))}`,
         actions: [{ id: 'open', label: '查看安全公告', style: 'primary' }], source: { type: 'system', id: key }, idempotencyKey: key, groupKey: key, severity: 'safety' };
 }
 /**
@@ -256,7 +257,7 @@ export class FrontierNotifications {
                 const values = /** @type {any[]} */ ([change.item_id]);
                 const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
                 const publication = safetyPublicationPredicate(this.now(), param);
-                const row = (await client.query(`SELECT i.*,s.name AS source_name,s.owner_entity AS source_owner
+                const row = (await client.query(`SELECT i.*,s.name AS source_name,s.owner_entity AS source_owner,${FRONTIER_SOURCE_STREAM_COLUMNS}
                 FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id WHERE i.id=$1
                   AND i.state='published' AND s.enabled AND i.safety_alert AND (s.source_type='regulator' OR s.safety_feed)
                   AND i.verification IN ('passed','repaired') AND length(trim(i.summary_zh))>0 AND ${publication}`, values)).rows[0];

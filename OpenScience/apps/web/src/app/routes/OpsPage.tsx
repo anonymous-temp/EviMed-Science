@@ -8,10 +8,11 @@ import { WebErrorsCard } from "@/components/settings/WebErrorsCard";
 import { WebSecurityCard } from "@/components/settings/WebSecurityCard";
 import { WebTasksCard } from "@/components/settings/WebTasksCard";
 import { GeoMarketCard } from "@/components/settings/GeoMarketCard";
+import { FrontierTagsCard } from "@/components/settings/FrontierTagsCard";
 
 /**
  * 「运维」 in 设置: the deployment's console, offered only to an operator
- * account — the runtime's state, the configuration check, the three operations ledgers, and
+ * account — the runtime's state, the configuration check, the three operations ledgers, 前沿动态's tag tree, and
  * 「循证进化」, the evolution engine's tools and plans (it sat under the
  * research-tool grid until 2026-10-07: an operator's panel beneath a
  * researcher's page, and it had no business there). The project plugins that
@@ -53,6 +54,7 @@ export function OpsPage() {
       <WebErrorsCard key={`errors-${projectId}`} />
       <WebSecurityCard key={`security-${projectId}`} />
       <GeoMarketCard />
+      <FrontierTagsCard />
       <EvolutionPanel />
     </div>
   );

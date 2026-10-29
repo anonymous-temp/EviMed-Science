@@ -55,7 +55,7 @@ const SLOW = { timeout: 4000 };
 
 /** What a tab has drawn when it is done: the thing that comes last (a table's rows, a record's list) and not the first heading. */
 const READY: Record<string, () => Promise<unknown>> = {
-  "/data": () => screen.findByRole("heading", { name: "试验先例" }, SLOW),
+  "/data": () => screen.findByRole("heading", { name: "参考试验" }, SLOW),
   "/population": () => screen.findByRole("heading", { name: "逐条筛选" }, SLOW),
   "/patients": async () => {
     await screen.findByRole("table", { name: "患者" }, SLOW);
@@ -131,7 +131,7 @@ describe("a tab in a state that changes what it draws", () => {
 describe("the module's lists of its own", () => {
   it.each([
     ["方法库", "models"],
-    ["试验先例", "precedents"],
+    ["参考试验", "precedents"],
     ["人群定义", "definitions"],
   ])("%s stands nothing outside its rows and its record", async (_name, tab) => {
     drawStudy(`/app/virtual-research?tab=${tab}`);

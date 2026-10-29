@@ -1,5 +1,5 @@
 import { presentVcrReview } from "./vcrViewsKit.mjs";
-import { DOCUMENT_EXPORT_FORMATS, documentExportDigest, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH } from '@evimed/domain';
+import { DOCUMENT_REPORT_EXPORT_FORMATS as DOCUMENT_EXPORT_FORMATS, documentExportDigest, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { exportHash, freezeDocumentAssets } from './documentExport.mjs';
 import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';

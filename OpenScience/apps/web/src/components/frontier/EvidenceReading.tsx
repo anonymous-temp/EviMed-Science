@@ -125,7 +125,7 @@ function EvidenceArticle({
           </header>
           {(evidence.content?.answer || evidence.summary) && (
             <section className="rounded-card bg-accent-soft p-4">
-              <h2 className="mb-2 text-ui font-medium text-text">核心回答</h2>
+              <h2 className="mb-2 text-section font-semibold text-text">核心回答</h2>
               <p className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">
                 {evidence.content?.answer || evidence.summary}
               </p>

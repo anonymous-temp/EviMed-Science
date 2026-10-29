@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 433,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/biomedical-signal-analysis/results.json",
+      "sha256": "62ab6a347f7c294ea250ec79f7e8e89ea4963e87a3b9bc94562cbfd7db8fe812"
+    },
+    {
+      "bytes": 1016,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/biomedical-signal-analysis/biomedical-signal-analysis-report.md",
+      "sha256": "315c7e68c6f68834596470145f8d46e2c46fdde2deb230a61afca0b061a676c4"
+    }
+  ],
+  "finishedAt": "2026-10-19T12:53:04.679348Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "biomedical-signal-analysis",
+  "startedAt": "2026-10-19T12:53:04.669458Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for biomedical-signal-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Linear extrapolation is a baseline; validate stationarity, leakage, autocorrelation, seasonality, and out-of-sample error."
+  ]
+}

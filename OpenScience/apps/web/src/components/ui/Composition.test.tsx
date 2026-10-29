@@ -54,6 +54,14 @@ describe("FactList", () => {
     expect(screen.queryByText(/全部 \d+ 项/)).toBeNull();
   });
 
+  it("rules its rows apart, except inside a framed card, where the card's frame is the one line and the rows are told apart by space", () => {
+    const { container, unmount } = render(<FactList rows={rows.slice(0, 3)} />);
+    expect(container.querySelector("dl > div")).toHaveClass("border-b", "border-faint");
+    unmount();
+    const framed = render(<FactList rows={rows} ruled={false} />);
+    for (const row of framed.container.querySelectorAll("dl > div")) expect(row.className).not.toMatch(/\bborder/);
+  });
+
   it("shows at most eight rows and keeps the rest behind 「全部 N 项」", () => {
     const { container } = render(<FactList rows={rows} />);
     expect(container.querySelectorAll("dl")[0].querySelectorAll("dt")).toHaveLength(8);
@@ -64,6 +72,11 @@ describe("FactList", () => {
 });
 
 describe("Section", () => {
+  it("keeps a compact catalogue group at the section heading level", () => {
+    render(<Section title="第三方" count="14 项" compact><p>扩展</p></Section>);
+    expect(screen.getByRole("heading", { level: 2, name: "第三方" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "第三方" })).toHaveTextContent("14 项");
+  });
   it("is a heading at the section rung with its count and the controls of that block alone", () => {
     render(<Section title="试验先例" count={12} toolbar={<button type="button">下载</button>}><p>表</p></Section>);
     const heading = screen.getByRole("heading", { level: 2, name: "试验先例" });

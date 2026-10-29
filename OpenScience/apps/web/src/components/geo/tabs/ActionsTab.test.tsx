@@ -19,7 +19,7 @@ import {
   G_SAFETY,
 } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
-import { ActionsTab } from "./ActionsTab";
+import { ActionsTab, type GeoActionWorkbench } from "./ActionsTab";
 
 const client = vi.hoisted(() => ({
   getGeoActions: vi.fn(),
@@ -42,6 +42,16 @@ const client = vi.hoisted(() => ({
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   ...client,
+}));
+
+// 行动 embeds the selected-data analysis under its articles and placing; its read is the analysis workbench's own (GeoAnalysisWorkbench.test.tsx),
+// so here it answers an empty view and a failed read of the articles is the only alert on the page.
+vi.mock("@/lib/geoAnalysisClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoAnalysisClient")>()),
+  getGeoAnalysis: vi.fn(async () => ({
+    view: { viewId: "V23", dimension: "project" }, selection: { reference: "gsel_actions" }, digest: "0".repeat(64),
+    columns: [], rows: [], page: { total: 0, shown: 0, nextOffset: null }, availability: { status: "empty" },
+  })),
 }));
 
 const store = vi.hoisted(() => ({
@@ -67,19 +77,42 @@ function Probe() {
 
 const openPanel = vi.fn();
 
-function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/actions") {
+function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/actions", mode: GeoActionWorkbench = "all") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/app/geo/geo_1/actions"
-          element={<><GeoFrameHarness project={project} tab="actions" openPanel={openPanel}><ActionsTab geoId="geo_1" project={project} /></GeoFrameHarness><Probe /></>}
+          element={<><GeoFrameHarness project={project} tab="actions" openPanel={openPanel}><ActionsTab geoId="geo_1" project={project} mode={mode} /></GeoFrameHarness><Probe /></>}
         />
         <Route path="*" element={<Probe />} />
       </Routes>
     </MemoryRouter>,
   );
 }
+
+it("keeps draft work in content and budget work in distribution", async () => {
+  client.getGeoDistribution.mockResolvedValue(distributionFilled);
+  const content = renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  expect(await screen.findByRole("region", { name: "等你放行的稿件" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "投放预算" })).not.toBeInTheDocument();
+  expect(document.getElementById("geo-effect")).toBeNull();
+  content.unmount();
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=distribution", "distribution");
+  expect(await screen.findByRole("region", { name: "投放预算" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "等你放行的稿件" })).not.toBeInTheDocument();
+  expect(document.getElementById("geo-effect")).toBeNull();
+});
+
+it("monitoring presents no action-list filters while its action list is absent", async () => {
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=monitoring", "monitoring");
+  const lead = await screen.findByRole("heading", { name: /已行动的问句群比对照多涨/ });
+  expect(screen.queryByRole("searchbox", { name: "搜索行动" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "进展" })).not.toBeInTheDocument();
+  await userEvent.click(within(lead).getByRole("button", { name: "2" }));
+  expect(screen.getByTestId("search")).toHaveTextContent("step=content");
+  expect(screen.getByTestId("search")).toHaveTextContent("focus=waiting");
+});
 
 function article(id: string, overrides: Partial<GeoArticle> = {}): GeoArticle {
   return {
@@ -426,7 +459,21 @@ describe("行动: what stands apart from the actions", () => {
     expect(within(block).getByText("合并 2 型糖尿病的人能不能用？")).toBeInTheDocument();
     await userEvent.click(within(block).getByRole("button", { name: "放行" }));
     await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "放行" }));
-    await waitFor(() => expect(client.releaseGeoArticle).toHaveBeenCalledWith("geo_1", "art_held"));
+    await waitFor(() => expect(client.releaseGeoArticle).toHaveBeenCalledWith("geo_1", "art_held", { expectedResultVersionId: null, expectedDigest: null }));
+  });
+
+  it("keeps the reviewed version and digest from the opened confirmation while newer article data arrives", async () => {
+    const version0 = `rv_${"a".repeat(64)}`;
+    const held = article("art_held", { title: "Review this version", safety: "open", currentResultVersionId: version0, contentSha256: "a".repeat(64) });
+    client.getGeoArticles.mockResolvedValue({ articles: [held] });
+    renderTab();
+    const block = await screen.findByRole("region", { name: "等你放行的稿件" });
+    await userEvent.click(within(block).getByRole("button", { name: "放行" }));
+    held.currentResultVersionId = `rv_${"b".repeat(64)}`;
+    Object.assign(held, { contentSha256: "b".repeat(64) });
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "放行" }));
+    await waitFor(() => expect(client.releaseGeoArticle).toHaveBeenCalledWith("geo_1", "art_held",
+      { expectedResultVersionId: version0, expectedDigest: "a".repeat(64) }));
   });
 
   it("lists the articles no action holds, so nothing a person wrote is out of sight, and 撤回 asks first", async () => {
@@ -471,6 +518,41 @@ describe("行动: what stands apart from the actions", () => {
     await findRow(ACTION_BRAND.key);
     expect(screen.queryByRole("region", { name: "投放预算" })).not.toBeInTheDocument();
     expect(screen.queryByText(/投放要等媒介集市接通/)).not.toBeInTheDocument();
+  });
+});
+
+describe("行动: a read that failed is not an empty page (owner, 2026-10-19)", () => {
+  it("says the articles were not read, with 重试, where 「需要你」 sends a person — never 「还没有稿件」", async () => {
+    client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [], control: [], counts: { total: 0, byKind: {}, byStatus: {}, gapsWithoutEntry: 0 } });
+    client.getGeoArticles.mockRejectedValue(new Error("offline"));
+    renderTab(geoProject({ content: "done" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/^稿件没有读到：/);
+    expect(alert.closest("section")).toHaveAttribute("id", "geo-review");
+    expect(screen.queryByRole("button", { name: "写第一批稿件" })).not.toBeInTheDocument();
+    client.getGeoArticles.mockResolvedValue({ articles: [ARTICLES[3]] });
+    await userEvent.click(within(alert).getByRole("button", { name: /重试/ }));
+    expect(await screen.findByRole("region", { name: "等你放行的稿件" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("says the placing and the measured effect were not read, each with its own 重试, and keeps the rest of the page", async () => {
+    client.getGeoDistribution.mockRejectedValue(new Error("offline"));
+    client.getGeoMonitoring.mockRejectedValue(new Error("offline"));
+    renderTab();
+    await findRow(ACTION_BRAND.key);
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.map((node) => node.textContent)).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^投放效果的测量没有读到：/), expect.stringMatching(/^投放记录没有读到：/),
+    ]));
+    expect(screen.queryByText("首批稿件上线后，这里会把投放的问题群和对照组放在一起比。")).not.toBeInTheDocument();
+  });
+
+  it("marks the article a 「本周」 line names, where it waits to be released", async () => {
+    renderTab(geoProject(), "/app/geo/geo_1/actions?article=art_held#geo-review");
+    const review = await screen.findByRole("region", { name: "等你放行的稿件" });
+    const title = within(review).getByText("合并 2 型糖尿病的人能不能用？");
+    expect(title.closest("[aria-current]")).not.toBeNull();
   });
 });
 

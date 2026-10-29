@@ -1,6 +1,6 @@
 {
-  "note": "ACCOUNT-WIDE counts, whoever asks: not a per-user number.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.0",
+  "note": "Account-wide counts, whoever asks (the engine's own statement; not a per-user number).",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
   "request": {
     "method": "GET",
     "path": "/api/v1/stats/memories",
@@ -15,12 +15,12 @@
   "response": {
     "status": "ok",
     "result": {
-      "total_memories": 455,
+      "total_memories": 2,
       "by_category": {
         "profile": 0,
-        "preferences": 221,
-        "entities": 33,
-        "events": 201,
+        "preferences": 2,
+        "entities": 0,
+        "events": 0,
         "cases": 0,
         "patterns": 0,
         "tools": 0,
@@ -28,13 +28,13 @@
       },
       "hotness_distribution": {
         "cold": 0,
-        "warm": 455,
+        "warm": 2,
         "hot": 0
       },
       "staleness": {
         "not_accessed_7d": 0,
         "not_accessed_30d": 0,
-        "oldest_memory_age_days": 0.1
+        "oldest_memory_age_days": 0
       }
     },
     "error": null,

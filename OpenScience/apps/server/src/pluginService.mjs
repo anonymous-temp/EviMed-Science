@@ -552,13 +552,20 @@ export class PluginService {
    *  `admissionWaitMs`, and only then refuses with 423 `plugin_apply_in_progress`.
    *  Only the lock is waited for: a refusal the operation itself raises is
    *  returned as it is, and the operation never runs twice.
-   * @param {any} project @param {() => Promise<any>} operation @param {{prompt?:boolean}} options */
-  async withAdmission(project, operation, { prompt = false } = {}) {
+   *  Native transport observers can supply a disposition independently of the
+   *  browser response. An unknown outcome keeps the existing apply fence even
+   *  after a normal return or a response-projection 4xx. Legacy callers retain
+   *  their previous response/error policy.
+   * @param {any} project @param {() => Promise<any>} operation
+   * @param {{prompt?:boolean,promptDisposition?:(() => unknown)|null}} options */
+  async withAdmission(project, operation, options = {}) {
+    const { prompt = false, promptDisposition } = options;
+    const explicitDisposition = Object.hasOwn(options, "promptDisposition");
     const previous = this.admission.getStore();
     if (previous && !previous.open && typeof this.database.withoutTransactionClient === "function") {
       // This is an explicit new admission, not a database-query fallback: all
       // current owner/project checks and the lock are taken again.
-      return this.admission.run(undefined, () => this.database.withoutTransactionClient(() => this.withAdmission(project, operation, { prompt })));
+      return this.admission.run(undefined, () => this.database.withoutTransactionClient(() => this.withAdmission(project, operation, options)));
     }
     await migrateProductStore(this.database);
     const projectKey = `${project.userId}:${project.id}`;
@@ -566,16 +573,23 @@ export class PluginService {
       if (!prompt) return operation();
       const id = randomUUID();
       await client.query("INSERT INTO evimed_product.plugin_prompt_admissions(id,user_id,project_id) VALUES ($1,$2,$3)", [id, project.userId, project.id]);
-      try {
-        const value = await operation();
-        await client.query("DELETE FROM evimed_product.plugin_prompt_admissions WHERE id=$1", [id]);
-        return value;
-      } catch (error) {
-        if (error?.definitivelyRejected || (error?.status >= 400 && error?.status < 500)) {
-          await client.query("DELETE FROM evimed_product.plugin_prompt_admissions WHERE id=$1", [id]);
-        }
-        throw error;
+      let outcome;
+      try { outcome = { ok: true, value: await operation() }; }
+      catch (error) { outcome = { ok: false, error }; }
+      let disposition;
+      if (explicitDisposition) {
+        try { disposition = typeof promptDisposition === "function" ? await promptDisposition() : "unknown"; }
+        catch { disposition = "unknown"; }
+      } else {
+        const error = outcome.error;
+        disposition = outcome.ok || error?.definitivelyRejected || (error?.status >= 400 && error?.status < 500)
+          ? "accepted" : "unknown";
       }
+      if (disposition === "accepted" || disposition === "refused") {
+        await client.query("DELETE FROM evimed_product.plugin_prompt_admissions WHERE id=$1", [id]);
+      }
+      if (!outcome.ok) throw outcome.error;
+      return outcome.value;
     };
     const nested = this.borrowAdmission(projectKey, accept);
     if (nested) return nested;

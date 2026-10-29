@@ -17,8 +17,9 @@ test("actual hosted APIs download, preview, import and revoke a portable snapsho
       assert.equal(response.status,200);const data=await response.json();return{"content-type":"application/json",cookie:response.headers.get("set-cookie").split(";")[0],"x-open-science-csrf":data.data.csrfToken};};
     const owner=await login();const recipient=await login();
     const request=(route,headers,body,method="POST")=>fetch(`${base}/api/capsules${route}`,{method,headers,...(body===undefined?{}:{body:JSON.stringify(body)})});
-    const created=await request("",owner,{title:"Transfer source"});assert.equal(created.status,201);const capsule=(await created.json()).data;
-    assert.equal((await request(`/${capsule.id}/entries`,owner,{factKind:"method_preference",layer:"methods",content:"Retain uncertainty estimates."})).status,201);
+    // The person's one capsule, made on first use; the entry is written through the service (no route adds one by hand any more).
+    const created=await request("/mine",owner,{});assert.equal(created.status,200);const capsule=(await created.json()).data;
+    await app.capsuleService.addEntry(users[0],capsule.id,{factKind:"method_preference",layer:"methods",content:"Retain uncertainty estimates.",origin:"explicit",provenance:[{type:"user",id:users[0]}]});
     const exported=await request(`/${capsule.id}/exports`,owner,{password});assert.equal(exported.status,201);const result=(await exported.json()).data;
     const download=await request(`/${capsule.id}/exports/${result.snapshot.id}`,owner,undefined,"GET");
     assert.equal(download.status,200);assert.match(download.headers.get("content-disposition"),/\.evimedcap/);assert.equal(download.headers.get("cache-control"),"no-store");assert.equal(await download.text(),result.archive);
@@ -26,7 +27,7 @@ test("actual hosted APIs download, preview, import and revoke a portable snapsho
     const preview=await request("/transfers/preview",recipient,{archive:result.archive,password});assert.equal(preview.status,200);const inspection=(await preview.json()).data;
     assert.equal(inspection.issuerTrust,"verified");assert.equal(inspection.entries.length,1);
     const imported=await request("/transfers/import",recipient,{archive:result.archive,password,confirmed:true,expectedDigest:inspection.archiveSha256});assert.equal(imported.status,201);
-    const importedCapsule=(await imported.json()).data;const entries=await request(`/${importedCapsule.id}/entries`,recipient,undefined,"GET");assert.equal((await entries.json()).data.items[0].payload.status,"approved");
+    const importedCapsule=(await imported.json()).data;const entries=await app.capsuleService.entries(users[1],importedCapsule.id,{limit:50});assert.equal(entries.items[0].payload.status,"approved");
     // Imported whole, in force only once enabled; one click each way.
     const shelf=async()=>(await (await request("/received",recipient,undefined,"GET")).json()).data;
     assert.equal((await shelf()).find(item=>item.id===importedCapsule.id).enabled,false);
@@ -42,7 +43,7 @@ test("actual hosted APIs download, preview, import and revoke a portable snapsho
     const deleted=await fetch(`${base}/api/account`,{method:"DELETE",headers:owner,body:JSON.stringify({confirm:users[0],password:"test-only-login-password"})});
     assert.equal(deleted.status,200);
     const deletedPreview=await request("/transfers/preview",recipient,{archive:second.archive,password});assert.equal((await deletedPreview.json()).data.hostedStatus,"revoked");
-    assert.equal((await request(`/${importedCapsule.id}/entries`,recipient,undefined,"GET")).status,200);
+    assert.ok((await shelf()).some(item=>item.id===importedCapsule.id),"a pack the account took in stays on its shelf when its sender's account is gone");
     assert.equal((await request("/transfers/preview",{"content-type":"application/json"},{archive:result.archive,password})).status,401);
     assert.equal((await request("/transfers/preview",{...recipient,"x-open-science-csrf":""},{archive:result.archive,password})).status,403);
   }finally{await app.store.database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])",[users]);await app.close();await rm(dataDir,{recursive:true,force:true});}

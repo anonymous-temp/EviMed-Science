@@ -10,6 +10,8 @@ import { headRows } from "./PlanStrategy";
 
 const client = vi.hoisted(() => ({
   getGeoStrategy: vi.fn(),
+  getGeoProject: vi.fn(),
+  stageGeoPlanContext: vi.fn(),
   getGeoSources: vi.fn(),
   getGeoValue: vi.fn(),
   getGeoEvidence: vi.fn(),
@@ -23,6 +25,8 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...client,
 }));
 
+const moduleSession=vi.hoisted(()=>vi.fn());
+vi.mock("@/lib/geoNativeClient",async original=>({...await original<typeof import("@/lib/geoNativeClient")>(),openGeoConversation:moduleSession}));
 const open = vi.hoisted(() => vi.fn());
 vi.mock("../useOpenGeoConversation", () => ({ useOpenGeoConversation: () => open }));
 
@@ -40,7 +44,10 @@ function renderPlan(reload: () => void = () => undefined) {
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   open.mockReset().mockResolvedValue(true);
+  moduleSession.mockReset().mockImplementation(async(geoId,target)=>({projectId:project.projectId,sessionId:target.sessionId??"created-plan-session",scope:{kind:"geo",geoProjectId:geoId,sessionId:target.sessionId??"created-plan-session"}}));
   client.getGeoStrategy.mockResolvedValue(strategyFilled);
+  client.getGeoProject.mockResolvedValue({...project,sessionId:"current-native-session"});
+  client.stageGeoPlanContext.mockResolvedValue({referenceId:`gpc_${"a".repeat(64)}`,sessionId:"current-native-session",draft:"Selected plan draft"});
 });
 
 /** The headings of the page, by text, in document order. */
@@ -69,10 +76,11 @@ describe("方案: what it is", () => {
     expect(client.getGeoJourney).not.toHaveBeenCalled();
   });
 
-  it("draws no filter, no chip row and no tab list in its body: the tier is chosen in a column's header", async () => {
+  it("keeps plan tier controls separate from its embedded selected-analysis toolbar", async () => {
     const view = renderPlan();
     await screen.findByRole("heading", { name: "目标" });
-    expect(view.container.querySelectorAll("[role=tablist], [data-toolbar], [role=searchbox], input")).toHaveLength(0);
+    expect([...view.container.querySelectorAll("[role=tablist], [data-toolbar], [role=searchbox], input")].filter(node=>!node.closest("[data-geo-analysis]"))).toHaveLength(0);
+    expect(view.container.querySelector("[data-geo-analysis] [data-toolbar]")).toBeInTheDocument();
     // The only controls on the page that can be pressed are 「选这一档」 buttons: none is a chip of a filter group.
     for (const group of view.container.querySelectorAll("[role=group]")) {
       expect(group.querySelectorAll("[aria-pressed]"), group.getAttribute("aria-label") ?? "").toHaveLength(0);
@@ -274,7 +282,8 @@ describe("方案: 假设", () => {
     expect(rows[0]).not.toHaveTextContent("tier");
     expect(rows[1]).toHaveTextContent("豆包没有有效回答，本周期只写“未测”");
     await userEvent.click(within(rows[1]).getByRole("button", { name: "修改" }));
-    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1", sessionId: "ses_geo_1" }, expect.stringContaining("豆包没有有效回答"));
+    // No conversation named: the hook opens the one the page holds (`useOpenGeoConversation`).
+    expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1" }, expect.stringContaining("豆包没有有效回答"));
   });
 });
 
@@ -285,8 +294,8 @@ describe("方案: before there is a plan, and when it cannot be read", () => {
       tiers: [], battlefield: null, noGo: [], engines: [], layout: { layers: null, constraints: [], clientActions: [] }, assumptions: [],
     });
     renderPlan();
-    expect(await screen.findByText("还没有信源分析")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "分析引用的信源" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "生成方案" })).toBeInTheDocument();
+    expect(screen.getByText(/尚无引用信源也可以制定方案/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/档[一二三]/);
   });
 
@@ -304,4 +313,131 @@ describe("headRows", () => {
     const onlyPools: GeoStrategyView["targets"]["rows"] = strategyFilled.targets.rows.filter((row) => row.pool !== "all");
     expect(headRows(onlyPools).map((row) => row.metricId)).toEqual(["M-01"]);
   });
+});
+
+
+it("stages a versioned action as an unsent draft in the current native conversation without changing actual budget", async () => {
+  const action = {key:"fill_gap:g1:missing_evidence",kind:"fill_gap",group:{id:"g1",name:"Selected group"},need:{judgment:"Explain the finding"},what:{title:"Selected content"},sources:[],work:{mode:"new",outputs:["article.md"]}};
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,version:7,implementation:{actions:[action]},freshness:{status:"unknown",reasons:["basis_unavailable"]}});
+  renderPlan();
+  const use = await screen.findByRole("button",{name:"用于内容"});
+  // A module tab's body holds no primary action (DESIGN.md T3: the page's is the header's): the plan's actions are its section's, and
+  // 刷新方案 is the text action of its sentence (the fixture walk of b559d4b7e found 53 primaries under the header's row on 方案).
+  for (const button of [use, screen.getByRole("button",{name:"调整方案"}), screen.getByRole("button",{name:"刷新方案"})]) expect(button).not.toHaveClass("bg-accent");
+  expect(screen.getByRole("button",{name:"刷新方案"}).closest("[data-note]")).not.toBeNull();
+  await userEvent.click(use);
+  await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalled());
+  expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({mode:"content",strategyVersion:7,sessionId:"current-native-session",groupIds:["g1"],actionKeys:[action.key]});
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({sessionId:"current-native-session",geoPlanContext:{referenceId:`gpc_${"a".repeat(64)}`}}),"Selected plan draft");
+  expect(client.setGeoTier).not.toHaveBeenCalled(); expect(client.runGeoStep).not.toHaveBeenCalled();
+  expect(screen.getByRole("link",{name:"查看实际投放预算"}).getAttribute("href")).toContain("/actions#geo-budget");
+  expect(screen.getByText(/金额未估/)).toBeInTheDocument();
+});
+
+
+it("reads the plan's actions a page at a time, each a heading over its facts, its reason and channels rows of them", async () => {
+  const action = (n: number) => ({key:`fill_gap:g${n}:missing_evidence`,kind:"fill_gap",sequence:n,group:{id:`g${n}`,name:`Group ${n}`},need:{judgment:`第 ${n} 项行动的原因写在这里，长过十二个字`},
+    what:{title:`行动 ${n}`},sources:[{domain:`site-${n}.example.com`,channel:"site",why:"官网常被引用"}],work:{mode:"new",outputs:["article.md"]}});
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,version:7,implementation:{actions:Array.from({length:8},(_,i)=>action(i+1))}});
+  renderPlan();
+  // A long plan was 26 windows of sentences standing alone (the fixture walk of b559d4b7e): five actions first, the rest on demand.
+  expect(await screen.findByRole("heading",{level:3,name:"1. 行动 1"})).toBeInTheDocument();
+  expect(screen.getAllByRole("heading",{level:3}).filter(h=>/^\d+\. 行动/.test(h.textContent ?? ""))).toHaveLength(5);
+  const reason = screen.getByText("第 1 项行动的原因写在这里，长过十二个字");
+  expect(reason.closest("dd")).not.toBeNull();
+  expect(reason.closest("dd")!.previousElementSibling).toHaveTextContent("原因");
+  expect(screen.getByText(/site-1\.example\.com · 可选渠道 · 官网常被引用/).closest("dd")!.previousElementSibling).toHaveTextContent("渠道");
+  await userEvent.click(screen.getByRole("button",{name:"显示更多 · 还有 3 项行动"}));
+  expect(screen.getAllByRole("heading",{level:3}).filter(h=>/^\d+\. 行动/.test(h.textContent ?? ""))).toHaveLength(8);
+  expect(screen.getAllByRole("button",{name:"用于内容"})).toHaveLength(8);
+});
+
+it("shows supported time, workload, audience and price basis as estimates",async()=>{
+  const action={key:"fill_gap:g1:missing_evidence",kind:"fill_gap",group:{id:"g1",name:"Selected group"},need:{judgment:"Explain"},what:{title:"Plan content",layer:"popular",channel:"wechat_mp"},sources:[],
+    work:{mode:"new",audience:"patient",outputs:["article.md"]},timing:{durationDays:{low:2,high:4},basis:"Supplied schedule"},effort:{unit:"hours",low:3,high:5,basis:"Editorial workload"},
+    estimate:{currency:"CNY",low:50,high:80,basis:[{kind:"source_price",id:"quote"}],assumption:"One placement",observedAt:"2026-10-24"}};
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,implementation:{actions:[action]},basis:{priceReferences:[{id:"quote",name:"Source quotation"}]}});
+  renderPlan();
+  expect(await screen.findByText(/2–4天/)).toBeInTheDocument();
+  expect(screen.getByText(/Editorial workload/)).toBeInTheDocument();
+  expect(screen.getByText(/患者 · 科普稿件 · 微信公众号/)).toBeInTheDocument();
+  expect(screen.getByText(/Source quotation.*One placement.*2026-10-24/)).toBeInTheDocument();
+});
+
+
+it("labels frozen historical readings as plan-time values instead of current readings",async()=>{
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,readingsKind:"frozen_basis",basis:{capturedAt:"2026-10-01T00:00:00Z"}});
+  renderPlan();
+  await screen.findByText("方案依据日期");
+  expect(screen.getByText("2026-10-01")).toBeInTheDocument();
+  expect(document.body.textContent).toContain("方案时");
+  expect(document.body.textContent).not.toContain("现在 21%");
+});
+
+
+it("resolves the first module primary before staging a plan draft",async()=>{
+  client.getGeoProject.mockResolvedValue({...project,sessionId:null});
+
+  client.stageGeoPlanContext.mockImplementation(async(_geo,input)=>({referenceId:"gpc_first_plan",sessionId:input.sessionId,draft:"Selected unsent plan"}));
+  render(<MemoryRouter><GeoFrameHarness project={{...project,sessionId:null}} tab="plan"><PlanTab geoId="geo_1" project={{...project,sessionId:null}}/></GeoFrameHarness></MemoryRouter>);
+  await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalledWith("geo_1",expect.objectContaining({sessionId:"created-plan-session",mode:"strategy"})));
+  expect(moduleSession).toHaveBeenCalledWith("geo_1",{kind:"primary"});
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({projectId:project.projectId,sessionId:"created-plan-session",geoPlanContext:{referenceId:"gpc_first_plan"}}),"Selected unsent plan");
+});
+
+
+it("shows three narrative-only tiers and their metric qualifications to a reader without inventing numeric targets", async () => {
+  const summaries = [
+    "除平台硬线外不写效果预测：g1 仅 1 条回答且未判定，M-01、M-06 均为 not_measurable（0/0）；位置数与预算也未取得依据。",
+    "平台默认档位。除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+    "除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+  ];
+  const note = "平台准确率硬线 98%，不是本项目基线推算；g1 的 M-06 判定为 0/0（not_adjudicated），基线不可测。";
+  const plan: GeoStrategyView = { ...strategyFilled, targets: { ...strategyFilled.targets, rows: [] },
+    tiers: strategyFilled.tiers.map((tier, index) => ({ ...tier, name: null, summary: summaries[index], buys: null, notPromised: [], contentUnits: null,
+      placements: null, budgetCny: null, targetCount: 0, targetNotes: [{ metricId: "M-06", name: "事实准确率", pool: "P2", note }] })) };
+  client.getGeoStrategy.mockResolvedValue(plan);
+  const viewer = { ...project, access: { roles: ["viewer"], abilities: ["read"], owner: false } };
+  const view = render(<MemoryRouter><GeoFrameHarness project={viewer} tab="plan"><PlanTab geoId="geo_1" project={viewer} /></GeoFrameHarness></MemoryRouter>);
+  await screen.findByRole("heading", { name: "目标" });
+  const cards = [...view.container.querySelectorAll<HTMLElement>("[data-geo-tier]")];
+  expect(cards).toHaveLength(3);
+  cards.forEach((card, index) => {
+    expect(within(card).getByText(summaries[index])).toBeInTheDocument();
+    const notes = within(card).getByRole("list", { name: "指标说明" });
+    expect(notes).toHaveTextContent("事实准确率"); expect(notes).toHaveTextContent("P2"); expect(notes).toHaveTextContent(note);
+    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    expect(card).not.toHaveTextContent(/已达到|月.*日前|预算 [0-9]|0 个投放位|0 篇稿件/);
+  });
+  expect(view.container.querySelectorAll("[data-geo-target], [data-bullet-target], [role=progressbar]")).toHaveLength(0);
+});
+
+it("keeps non-head metric notes and multiline plain text visible without interpreting markup", async () => {
+  const extra = "First\n\n<script>plain text</script>";
+  client.getGeoStrategy.mockResolvedValue({ ...strategyFilled, tiers: strategyFilled.tiers.map(tier => ({ ...tier,
+    targetNotes: [{ metricId: "M-09", name: "Other metric", pool: null, note: extra }] })) });
+  const view = renderPlan(); await screen.findByRole("heading", { name: "目标" });
+  expect(screen.getAllByRole("list", { name: "指标说明" })).toHaveLength(3);
+  expect(screen.getAllByText("Other metric")).toHaveLength(3);
+  expect(screen.getAllByText(/<script>plain text<\/script>/)).toHaveLength(3);
+  expect(view.container.querySelector("script")).toBeNull();
+});
+
+it("opens the exact source-plan primary before staging and keeps the draft unsent",async()=>{
+  client.getGeoProject.mockResolvedValue({...project,sessionId:null});
+  render(<MemoryRouter><GeoFrameHarness project={{...project,sessionId:null}} tab="plan"><PlanTab geoId="geo_1" project={{...project,sessionId:null}} sourceId={`src_${"a".repeat(32)}`} sourceUrl="https://example.org/exact-source" selectionRef="gsel_source"/></GeoFrameHarness></MemoryRouter>);
+  await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalledWith("geo_1",expect.objectContaining({sessionId:"created-plan-session",sourceId:`src_${"a".repeat(32)}`,url:"https://example.org/exact-source"})));
+  expect(moduleSession).toHaveBeenCalledWith("geo_1",{kind:"primary"});
+  expect(moduleSession.mock.invocationCallOrder[0]).toBeLessThan(client.stageGeoPlanContext.mock.invocationCallOrder[0]);
+  expect(client.stageGeoPlanContext.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]);
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:`gpc_${"a".repeat(64)}`}}),"Selected plan draft");
+});
+it("retains the source plan when an exact conversation is unavailable",async()=>{
+  moduleSession.mockRejectedValue(new Error("Selected conversation unavailable"));
+  renderPlan();await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await screen.findByText("方案暂时无法打开，请刷新后重试。");
+  expect(client.stageGeoPlanContext).not.toHaveBeenCalled();expect(open).not.toHaveBeenCalled();
 });

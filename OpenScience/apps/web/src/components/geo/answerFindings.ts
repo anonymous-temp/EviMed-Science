@@ -9,6 +9,7 @@
  *
  * Two sources for one claim are one finding: the correction is the claim's, not the source's.
  */
+import { geoClaimAssessmentIdentity } from "@evimed/domain";
 import type { GeoAnswer, GeoErrorRow, GeoStatementFact } from "@/lib/geoClient";
 import { markAnswer } from "./answerMarks";
 
@@ -33,13 +34,13 @@ const rank = (error: GeoErrorRow) => RANK[error.severity] ?? -1;
 const same = (left: string | null | undefined, right: string | null | undefined) => !!left && !!right && left.trim() === right.trim();
 
 /** The key of a claim: its id, else the sentence it was first seen as. */
-const claimKey = (error: GeoErrorRow) => error.claimId || `sentence:${error.statement.trim()}`;
+const claimKey = (error: GeoErrorRow) => error.fingerprint || error.claimId || `sentence:${error.statement.trim()}`;
 
 export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "errors">): AnswerFindings {
   const text = data.snapshot.answerText ?? "";
   const rows = (Array.isArray(data.errors) ? data.errors : []).filter((row) => row && row.statement);
-  const statements = (Array.isArray(data.facts?.statements) ? data.facts.statements : [])
-    .filter((statement) => statement && statement.verdict === "wrong" && statement.text && statement.text.trim());
+  const current = (Array.isArray(data.facts?.statements) ? data.facts.statements : []).filter(statement => statement && statement.text?.trim());
+  const statements = current.filter(statement => statement.verdict === "wrong");
 
   // The row that speaks for a claim: the one first seen in this very answer, then the gravest.
   const best = (candidates: GeoErrorRow[]) => candidates.slice().sort((left, right) =>
@@ -48,8 +49,12 @@ export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "err
   const findings: AnswerFinding[] = [];
   const spoken = new Set<string>();
   for (const statement of statements) {
-    if (findings.some((finding) => same(finding.sentence, statement.text))) continue;
-    const candidates = rows.filter((row) => (statement.claimId && row.claimId === statement.claimId) || same(row.statement, statement.text));
+    if (findings.some((finding) => same(finding.sentence, statement.text) && geoClaimAssessmentIdentity(finding.statement) === geoClaimAssessmentIdentity(statement))) continue;
+    const exact = rows.filter(row => geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement));
+    // An older transport omitted claim ids. Only one current identity may supply that missing association.
+    const unambiguous = new Set(current.filter(row => same(row.text, statement.text)).map(geoClaimAssessmentIdentity)).size === 1;
+    const candidates = exact.length ? exact : unambiguous ? rows.filter(row => !row.claimId && row.claimVersion == null
+      && row.applicability == null && same(row.statement, statement.text)) : [];
     const error = best(candidates);
     for (const row of candidates) spoken.add(claimKey(row));
     findings.push({ sentence: statement.text.trim(), statement, error });
@@ -66,7 +71,8 @@ export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "err
     const row = best(group);
     if (!row) continue;
     const inText = text !== "" && markAnswer(text, { wrong: [row.statement] }).unplaced.length === 0;
-    if (inText) findings.push({ sentence: row.statement.trim(), statement: null, error: row });
+    const assessed = current.some(statement => same(statement.text, row.statement) || Boolean(statement.claimId && statement.claimId === row.claimId));
+    if (inText && !assessed) findings.push({ sentence: row.statement.trim(), statement: null, error: row });
     else elsewhere.push(row);
   }
   return { findings, elsewhere };

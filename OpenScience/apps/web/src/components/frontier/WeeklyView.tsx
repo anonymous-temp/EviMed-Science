@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchFrontierWeekly, listFrontierWeeklies, frontierErrorMessage } from "@/lib/frontierClient";
-import { DailyIssue, type DailyState } from "./DailyView";
+import { DailyIssue, type DailyState, type DigestExpansion } from "./DailyView";
 
 /** Rows of each lane the weekly shows before 「展开其余 N 条」: a week holds ten times a day's items. */
 const WEEKLY_LANE_ROWS = 5;
@@ -30,6 +30,6 @@ export function useFrontierWeekly(week: string | null, enabled: boolean): DailyS
 }
 
 /** The week on screen: the issue, five rows of each lane. */
-export function WeeklyView({ state, onWeek }: { state: DailyState; onWeek: (week: string) => void }) {
-  return <DailyIssue weekly laneLimit={WEEKLY_LANE_ROWS} state={state} onDay={onWeek} />;
+export function WeeklyView({ state, onWeek, expansion }: { state: DailyState; onWeek: (week: string) => void; expansion?: DigestExpansion }) {
+  return <DailyIssue expansion={expansion} weekly laneLimit={WEEKLY_LANE_ROWS} state={state} onDay={onWeek} />;
 }

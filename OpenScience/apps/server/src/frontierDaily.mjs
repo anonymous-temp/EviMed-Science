@@ -57,6 +57,8 @@
  */
 
 import { DISPLAY_TIME_ZONE, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
+import { followNoticeLines } from "./frontierFollowQuery.mjs";
 import { FrontierJobRearm } from "./frontierJobRearm.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -203,7 +205,15 @@ export async function followedZoneCards(database, { userId, from, to, limit = FR
  * @typedef {{ id: string | number, public_id: string, title_raw: string, title_zh?: string | null, summary_zh?: string | null,
  *             lane: string, selected: boolean, selected_rule?: string | null, safety_alert: boolean, score_total?: number | null, visible_at: string | Date,
  *             canonical_url: string, source_name: string, event_id?: string | number | null, event_public_id?: string | null,
- *             event_title?: string | null, event_reports?: number | null, event_digest?: string | null }} FrontierDailyRow
+ *             event_title?: string | null, event_reports?: number | null, event_digest?: string | null, event_first_at?: string | Date | null }} FrontierDailyRow
+ */
+
+/** How many earlier issues' lead events a new issue does not lead with again (G3, 2026-10-25). */
+export const FRONTIER_DAILY_LEAD_MEMORY = 3;
+
+/**
+ * The events and items the last issues led with, as public ids: a candidate of one is not a lead (it may stay in a section).
+ * @typedef {{ itemIds?: Iterable<string>, eventIds?: Iterable<string> }} FrontierRecentLeads
  */
 
 /**
@@ -226,20 +236,31 @@ function byWeight(left, right) {
 /**
  * What one day's issue holds, from the window's verified items: the lead —
  * the selected item whose event ranks highest on the hot list, else the
- * highest scored — the safety alerts, one section per lane with selected
+ * highest scored; never an item of an event the last issues led with
+ * (`recentLeads`: it may stay in its section — a 42-report event led four of five
+ * days in a row, 2026-10-25), and an event that began inside the window (`window`)
+ * before one that began earlier — the safety alerts, one section per lane with selected
  * items (the best eight each, none empty, and after them the items the
  * preprint lane selected: its places are a ruling of the owner's, and their
  * totals sort below every item that reached the line, so a cap by score would
  * cut them on the days the section is full), and the AI-lane items the AI
  * minute is written from. Null when there is nothing to publish.
- * @param {{ rows: FrontierDailyRow[], hotEventIds?: string[] }} input
+ * @param {{ rows: FrontierDailyRow[], hotEventIds?: string[], recentLeads?: FrontierRecentLeads | null,
+ *           window?: { start: Date | string, end: Date | string } | null }} input
  */
-export function frontierDailyIssue({ rows, hotEventIds = [] }) {
+export function frontierDailyIssue({ rows, hotEventIds = [], recentLeads = null, window = null }) {
   const rank = new Map(hotEventIds.map((id, index) => [String(id), index]));
   const safety = rows.filter((row) => row.safety_alert).sort((left, right) => new Date(right.visible_at).getTime() - new Date(left.visible_at).getTime())
     .slice(0, FRONTIER_DAILY_SAFETY_MAX);
   const selected = rows.filter((row) => row.selected && !row.safety_alert);
-  const lead = [...selected].sort((left, right) => (rank.get(String(left.event_id)) ?? Infinity) - (rank.get(String(right.event_id)) ?? Infinity)
+  const ledItems = new Set([...(recentLeads?.itemIds ?? [])].map(String));
+  const ledEvents = new Set([...(recentLeads?.eventIds ?? [])].map(String));
+  const barred = (/** @type {FrontierDailyRow} */ row) => ledItems.has(String(row.public_id)) || (row.event_public_id != null && ledEvents.has(String(row.event_public_id)));
+  const opened = window ? new Date(window.start).getTime() : Number.NaN;
+  // An event that began before the window is yesterday's story told again; one with no first report on record counts as new.
+  const older = (/** @type {FrontierDailyRow} */ row) => Number.isFinite(opened) && row.event_first_at != null && new Date(row.event_first_at).getTime() < opened;
+  const lead = selected.filter((row) => !barred(row)).sort((left, right) => Number(older(left)) - Number(older(right))
+    || (rank.get(String(left.event_id)) ?? Infinity) - (rank.get(String(right.event_id)) ?? Infinity)
     || byWeight(left, right))[0] ?? null;
   /** @type {Array<{ lane: string, rows: FrontierDailyRow[] }>} */
   const sections = [];
@@ -326,15 +347,21 @@ export function frontierReadingMinutes(texts) {
 /**
  * The inbox item a day's issue is pushed as (plan 2026-09-23 C §1.13): the
  * title with the day and the selected count, the lead's title as the body,
- * and — the one count kept — how many safety alerts the issue holds. Nothing
- * about the reader: the same text reaches a Feishu group chat.
- * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[] }} issue
+ * and — the one count kept — how many safety alerts the issue holds. No
+ * personal reason. One exception (c3-watch 2026-10-25): a line per typed follow
+ * with news since the reader last looked (`follows`, `followNoticeLines`) — the
+ * words the reader typed themselves, and a count; none when nothing is new.
+ * Where it goes: the reader's own inbox, and a Feishu push, which the adapter
+ * addresses to the account owner's own chat with the bot (`open_id`, never a
+ * group; the other channel adapters are stubs), so a reader's words reach nobody else.
+ * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[], follows?: string[] }} issue
  */
-export function frontierDailyNotice({ day, lead, sections, safety }) {
+export function frontierDailyNotice({ day, lead, sections, safety, follows = [] }) {
   const selected = (lead ? 1 : 0) + sections.reduce((sum, section) => sum + section.itemIds.length, 0);
   const body = [
     lead?.title ? String(lead.title).slice(0, 120) : null,
     safety.length ? `安全警示 ${safety.length} 条` : null,
+    ...follows,
   ].filter(Boolean).join("\n");
   const [, month, date] = day.split("-").map(Number);
   return {
@@ -364,13 +391,13 @@ export class FrontierDaily {
   /**
    * @param {{ database: any, jobs?: any, notifications?: any, editor?: any, events?: any, config?: Record<string, any>,
    *           owner?: () => ({ userId: string, projectId: string } | null), budget?: (() => Promise<{ state: string }>) | null,
-   *           now?: () => Date, workerId?: string, dimension?: number }} options
-   *   `jobs` a `ProductJobs`, `notifications` a `NotificationService`, `editor` a
+   *           now?: () => Date, workerId?: string, dimension?: number, watch?: any }} options
+   *   `watch` a `FrontierFollowWatch` (the typed follows' lines of the push); `jobs` a `ProductJobs`, `notifications` a `NotificationService`, `editor` a
    *   `FrontierEditor` (the AI minute), `events` a `FrontierEvents` (the hot
    *   list the lead is chosen by), `owner` the operator's internal project.
    */
   constructor({ database, jobs = null, notifications = null, editor = null, events = null, config = {}, owner = () => null,
-    budget = null, now = () => new Date(), workerId = "frontier-daily", dimension = 1024 }) {
+    budget = null, now = () => new Date(), workerId = "frontier-daily", dimension = 1024, watch = null }) {
     if (!database) throw new TypeError("The frontier daily needs the product database.");
     this.database = database;
     this.jobs = jobs;
@@ -380,13 +407,14 @@ export class FrontierDaily {
     this.config = config ?? {};
     this.owner = owner;
     this.budgetReader = budget;
+    this.watch = watch;
     this.now = now;
     this.workerId = String(workerId).slice(0, 120);
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     this.dailyTime = clockMinutes(this.config.frontierDailyTime) == null ? "07:30" : String(this.config.frontierDailyTime).trim();
     this.dimension = Number(this.config.kbEmbeddingDimension) || dimension;
     /** Observable counters (principle 15). */
-    this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0 };
+    this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0, followLines: 0, followLineFailures: 0 };
     // A day's job that used its attempts is put back once an hour for the rest of that day (D-02), not every minute.
     this.rearm = new FrontierJobRearm({ jobs, kind: JOB_KIND, limit: 3, withinMs: DAY });
     /** @type {{ day: string | null, missing: boolean, lastIssueDay: string | null, lastGeneratedAt: string | null, lastError: string | null }} */
@@ -491,15 +519,16 @@ export class FrontierDaily {
     // 「（openFDA 药品召回（enforcement）API）」 to every recall.
     /** @type {FrontierDailyRow[]} */
     const rows = ((await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.selected_rule, i.safety_alert,
-        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner,
-        e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest
+        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS},
+        e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest,
+        e.first_at AS event_first_at
       FROM evimed_frontier.items i
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       LEFT JOIN evimed_frontier.events e ON e.id = i.event_id AND e.merged_into IS NULL
       WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $1::timestamptz AND i.visible_at < $2::timestamptz
         AND i.verification IN ('passed', 'repaired') AND i.summary_zh IS NOT NULL AND (i.selected OR i.safety_alert OR i.lane = 'ai')
       ORDER BY i.visible_at DESC, i.id DESC LIMIT 500`, [window.start, window.end])).rows ?? [])
-      .map((/** @type {any} */ row) => ({ ...row, source_name: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.source_owner }) }));
+      .map((/** @type {any} */ row) => ({ ...row, source_name: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }) }));
     /** @type {string[]} */
     let hotEventIds = [];
     try {
@@ -509,7 +538,7 @@ export class FrontierDaily {
       // and the reason it was chosen without the hot list is on the status.
       this.state.lastError = codeOf(error);
     }
-    const issue = frontierDailyIssue({ rows, hotEventIds });
+    const issue = frontierDailyIssue({ rows, hotEventIds, recentLeads: await this.#recentLeads(day), window });
     if (!issue) return null;
     const { lead, safety, sections, ai } = issue;
     // An event page is worth linking once it holds more than one report; its
@@ -534,6 +563,37 @@ export class FrontierDaily {
       sections: sections.map((section) => ({ lane: section.lane, itemIds: section.rows.map((row) => row.public_id) })),
       safety: safety.map((row) => row.public_id),
     };
+  }
+
+  /**
+   * What the last `FRONTIER_DAILY_LEAD_MEMORY` issues before `day` led with, as public ids: each lead's item, and the event that
+   * item belongs to now (a survivor, when its event was merged) beside the event the issue stored — an event that had one report
+   * when it led stored none, and has since collected more. A read that fails is no memory: the issue is still written.
+   * @param {string} day @returns {Promise<{ itemIds: string[], eventIds: string[] }>}
+   */
+  async #recentLeads(day) {
+    try {
+      const earlier = (await this.database.query(`SELECT lead FROM evimed_frontier.dailies WHERE day < $1::date ORDER BY day DESC LIMIT $2`,
+        [day, FRONTIER_DAILY_LEAD_MEMORY])).rows ?? [];
+      const leads = earlier.map((/** @type {any} */ row) => row.lead).filter((/** @type {any} */ lead) => lead && typeof lead === "object" && typeof lead.itemId === "string");
+      if (!leads.length) return { itemIds: [], eventIds: [] };
+      const itemIds = [...new Set(leads.map((/** @type {any} */ lead) => String(lead.itemId)))];
+      const eventIds = new Set(leads.map((/** @type {any} */ lead) => lead.eventId).filter((/** @type {unknown} */ id) => typeof id === "string"));
+      const found = (await this.database.query(`SELECT DISTINCT survivor.public_id AS event_public_id
+        FROM evimed_frontier.items i
+        JOIN evimed_frontier.events own ON own.id = i.event_id
+        JOIN evimed_frontier.events survivor ON survivor.id = coalesce(own.merged_into, own.id)
+        WHERE i.public_id = ANY($1::text[])
+        UNION
+        SELECT survivor.public_id FROM evimed_frontier.events named
+        JOIN evimed_frontier.events survivor ON survivor.id = coalesce(named.merged_into, named.id)
+        WHERE named.public_id = ANY($2::text[])`, [itemIds, [...eventIds]])).rows ?? [];
+      for (const row of found) eventIds.add(String(row.event_public_id));
+      return { itemIds, eventIds: [...eventIds] };
+    } catch (error) {
+      this.state.lastError = codeOf(error);
+      return { itemIds: [], eventIds: [] };
+    }
   }
 
   /** The AI minute is a model call like any other: only while the day's budget is not spent. */
@@ -577,18 +637,39 @@ export class FrontierDaily {
         AND ($4::text[] IS NULL OR up.user_id = ANY($4::text[]))
       ORDER BY up.user_id LIMIT $5`, [day, clock, new Date(now.getTime() - FRONTIER_PUSH_ACTIVE_MS), audience, FRONTIER_PUSH_BATCH])).rows ?? [];
     if (!readers.length) return { pushed: 0 };
-    const notice = frontierDailyNotice({ day, lead: issue.lead ?? null, sections: Array.isArray(issue.sections) ? issue.sections : [],
-      safety: Array.isArray(issue.safety) ? issue.safety : [] });
+    const issueNotice = { day, lead: issue.lead ?? null, sections: Array.isArray(issue.sections) ? issue.sections : [],
+      safety: Array.isArray(issue.safety) ? issue.safety : [] };
+    const notice = frontierDailyNotice(issueNotice);
     let pushed = 0;
     for (const reader of readers) {
+      /** The matches this reader's notice names, taken before it is made and given back if it cannot be. @type {string[]} */
+      let claimed = [];
+      // Whether the notice itself was made: a failure after it (the push day's record) must not give its matches back, or the
+      // next attempt would name them again in a body the inbox refuses as a different one (c3 review).
+      let created = false;
       try {
-        await this.notifications.create(reader.user_id, notice, { now });
+        // A line per typed follow with news (c3-watch): the matches are marked as told when taken, so an item is named at most once.
+        // A reader whose lines cannot be read gets the notice without them.
+        let lines = /** @type {string[]} */ ([]);
+        if (this.watch) {
+          try {
+            const taken = await this.watch.claimNotice(reader.user_id);
+            claimed = taken.claimed;
+            lines = followNoticeLines(taken.news);
+            this.counters.followLines += lines.length;
+          } catch {
+            this.counters.followLineFailures += 1;
+          }
+        }
+        await this.notifications.create(reader.user_id, lines.length ? frontierDailyNotice({ ...issueNotice, follows: lines }) : notice, { now });
+        created = true;
         await this.database.query(`INSERT INTO evimed_frontier.user_prefs (user_id, last_push_day) VALUES ($1, $2::date)
           ON CONFLICT (user_id) DO UPDATE SET last_push_day = EXCLUDED.last_push_day`, [reader.user_id, day]);
         pushed += 1;
       } catch (error) {
         // One reader's inbox refusing is that reader's; the next scan tries
         // again (the key makes a second attempt the same item).
+        if (claimed.length && !created) await this.watch?.releaseNotice(claimed).catch(() => undefined);
         this.counters.pushFailures += 1;
         this.state.lastError = codeOf(error);
       }

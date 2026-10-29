@@ -6,13 +6,15 @@
 // platform's record rather than the run's word.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import { GEO_AUDIENCES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { brandRegistry } from "../src/geoParse.mjs";
 import { GeoService } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
-import { GEO_MEASURED_RANGE, geoArticleGateBound, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { GEO_MEASURED_RANGE, GEO_RUN_STEPS, GEO_WRITE_LIMITS, geoArticleGateBound, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -182,18 +184,18 @@ test("the product merges field by field, a competitor is refused alone, and a br
   // is refused leaves the registered rivals alone, and only [] clears them.
   await write(/** @type {any} */ (merged), "product", { data: { competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"] }] } });
   const aliased = await store.getProject(USER, project.id);
-  // One rule on both sides (ruling 2026-09-26): a generic that more than one
-  // holder may market — or one nobody said is single-source — names no brand.
+  // One literal-brand rule on both sides: generic forms stay separate,
+  // whether or not the project records single-source product attribution.
   assert.deepEqual(brandRegistry(aliased?.product, aliased?.competitors).filter((entry) => entry.competitor).map((entry) => entry.aliases),
     [["穆峰达", "mounjaro"]], "folded, as the parser matches them; the generic's short form is not the brand's");
   const single = await write(/** @type {any} */ (aliased), "product", { data: { singleSource: true, misspellings: [], approvalNo: "国药准字H20250037",
     competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"], singleSource: true }] } });
   assert.deepEqual(single.issues, [], "the identity is complete");
   const counted = await store.getProject(USER, project.id);
-  assert.deepEqual(brandRegistry(counted?.product, counted?.competitors).map((entry) => [entry.name, entry.aliases]), [
-    ["玛仕度肽", ["玛仕度肽", "信尔美", "玛仕度肽注射液"]],
-    ["穆峰达", ["穆峰达", "替尔泊肽", "mounjaro", "替尔泊肽注射液"]],
-  ], "a single-source generic counts on both sides");
+  assert.deepEqual(brandRegistry(counted?.product, counted?.competitors).map((entry) => [entry.name, entry.aliases, entry.genericAliases, entry.singleSource]), [
+    ["玛仕度肽", ["玛仕度肽", "信尔美"], ["玛仕度肽注射液"], true],
+    ["穆峰达", ["穆峰达", "mounjaro"], ["替尔泊肽注射液", "替尔泊肽"], true],
+  ], "both products retain separate literal brand aliases, generic forms and single-source attribution");
   const refused = await write(/** @type {any} */ (aliased), "product", { data: { competitors: [{ name: "诺和盈" }] } });
   assert.ok(refused.issues.some((/** @type {any} */ issue) => issue.code === "missing"));
   assert.deepEqual((await store.getProject(USER, project.id))?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["穆峰达"]);
@@ -214,22 +216,97 @@ test("a question map is a new unlocked version; invalid groups and questions are
   assert.equal(result.ids.length, 2);
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.group ?? null, issue.index ?? null, issue.field ?? null, issue.code]), [
     [0, 1, "text", "missing"], [0, 2, "platform", "unknown_value"], [null, 1, "pool", "unknown_value"], [2, 0, "sourceUrl", "invalid"],
-    [null, null, "collectedAt", "notice"],
+    [2, 1, "sourceUrl", "notice"],
   ]);
   const map = await store.questionMap(project.id, 1);
   assert.deepEqual(map.map((group) => [group.name, group.questions.map((question) => question.text)]), [["用法", ["怎么打"]], ["对比", ["哪个好"]]]);
-  // A real phrasing written without its day is dated to the write (G9); one with its day keeps it.
-  const real = map[1].questions[0];
-  assert.equal(real.kind, "real");
-  assert.ok(real.collectedAt && Date.now() - Date.parse(real.collectedAt) < 60_000);
+  // Unknown provenance is never stamped as collected reality; model suggestions stay typical.
+  assert.equal(map[0].questions[0].kind, "typical");
+  assert.equal(map[0].questions[0].collectedAt, null);
   const dated = await write(project, "questions", { data: { groups: [{ pool: "P1", name: "P1-03 与其他减重药怎么选",
-    questions: [{ text: "和替尔泊肽哪个好", kind: "real", platform: "zhihu", collectedAt: "2026-09-25T09:40:00Z" }] }] } });
+    questions: [{ text: "和替尔泊肽哪个好", kind: "real", platform: "zhihu", sourceUrl: "https://www.zhihu.com/question/1", collectedAt: "2026-09-25T09:40:00Z" }] }] } });
   assert.deepEqual(dated.issues, []);
-  const [group] = await store.questionMap(project.id, dated.version);
-  assert.equal(group.name, "与其他减重药怎么选", "the method's internal group number is not part of the name a reader sees");
-  assert.equal(group.questions[0].collectedAt, "2026-09-25T09:40:00.000Z");
+  const group = (await store.questionMap(project.id, dated.version)).find((entry) => entry.id === dated.ids[0]);
+  assert.equal(group?.name, "与其他减重药怎么选", "the method's internal group number is not part of the name a reader sees");
+  assert.equal(group?.questions[0].collectedAt, "2026-09-25T09:40:00.000Z");
   assert.equal(map[1].questions[0].pool, "P2", "a question takes its group's pool");
   assert.equal((await store.questionSets(project.id))[0].lockedAt, null);
+});
+
+// Production, 2026-10-25: a content run told to "create a minimal group" for an article wrote that one group, and the project's
+// locked 24-group map was followed by a 1-group version every page then read; another project had three 1-group versions in a row.
+test("a questions write adds to the latest map: a namesake is replaced, the rest are carried with their measured flags, and replace writes the whole map", options, async () => {
+  const project = await freshProject();
+  const first = await write(project, "questions", { data: { groups: [
+    { pool: "P1", name: "用法", questions: [{ text: "怎么打", kind: "typical", isMeasured: true }, { text: "多久打一次", kind: "typical" }] },
+    { pool: "P2", name: "对比", isControl: true, questions: [{ text: "和司美格鲁肽比", kind: "real", platform: "zhihu", sourceUrl: "https://zhihu.com/q/1",
+      collectedAt: "2026-10-01T00:00:00Z", isMeasured: true }] },
+    { pool: "P3", name: "费用", questions: [{ text: "一针多少钱", kind: "typical", isMeasured: true }] },
+  ] } });
+  assert.equal((await write(project, "lock_questions", { data: {} })).ok, true);
+
+  // One group, as a content run writes it: added to the map, which keeps everything it had.
+  const added = await write(project, "questions", { data: { groups: [{ pool: "P4", name: "副作用", questions: [{ text: "会恶心吗", kind: "typical" }] }] } });
+  assert.equal(added.ok, true);
+  assert.equal(added.version, first.version + 1);
+  assert.equal(added.ids.length, 1, "the ids are the groups this write named");
+  assert.equal(added.carried, 3);
+  const after = await store.questionMap(project.id, added.version);
+  assert.deepEqual(after.map((group) => [group.pool, group.name, group.isControl, group.questions.map((question) => [question.text, question.isMeasured])]), [
+    ["P1", "用法", false, [["怎么打", true], ["多久打一次", false]]],
+    ["P2", "对比", true, [["和司美格鲁肽比", true]]],
+    ["P3", "费用", false, [["一针多少钱", true]]],
+    ["P4", "副作用", false, [["会恶心吗", false]]],
+  ]);
+  assert.equal(after.find((group) => group.name === "副作用")?.id, added.ids[0]);
+  const kept = after.find((group) => group.name === "对比")?.questions[0];
+  assert.deepEqual([kept?.kind, kept?.platform, kept?.sourceUrl, kept?.collectedAt], ["real", "zhihu", "https://zhihu.com/q/1", "2026-10-01T00:00:00.000Z"],
+    "a carried question keeps where it was heard");
+  const sets = await store.questionSets(project.id);
+  assert.equal(sets.find((set) => set.version === first.version)?.lockedAt != null, true, "the locked set the platform measures is untouched");
+
+  // A group of the same name and pool replaces its namesake in its place; the same name in another pool is another group.
+  const replaced = await write(project, "questions", { data: { groups: [
+    { pool: "P2", name: "对比", isControl: true, questions: [{ text: "和替尔泊肽比哪个好", kind: "typical", isMeasured: true }] },
+    { pool: "P3", name: "对比", questions: [{ text: "对比的价格", kind: "typical" }] },
+  ] } });
+  assert.deepEqual([replaced.ids.length, replaced.carried], [2, 3]);
+  const merged = await store.questionMap(project.id, replaced.version);
+  assert.deepEqual(merged.map((group) => [group.pool, group.name, group.questions.map((question) => question.text)]), [
+    ["P1", "用法", ["怎么打", "多久打一次"]],
+    ["P2", "对比", ["和替尔泊肽比哪个好"]],
+    ["P3", "费用", ["一针多少钱"]],
+    ["P3", "对比", ["对比的价格"]],
+    ["P4", "副作用", ["会恶心吗"]],
+  ]);
+
+  // replace: true is the whole map, as written.
+  const whole = await write(project, "questions", { data: { replace: true, groups: [{ pool: "P1", name: "只此一群", questions: [{ text: "问", kind: "typical", isMeasured: true }] }] } });
+  assert.equal(whole.carried, undefined);
+  assert.deepEqual((await store.questionMap(project.id, whole.version)).map((group) => group.name), ["只此一群"]);
+  assert.equal((await write(project, "questions", { data: { replace: "yes", groups: [{ pool: "P1", name: "x" }] } })).ok, false, "replace is true or false");
+});
+
+test("a map a write adds to holds at most the write's own number of groups; the groups past it are refused by index", options, async () => {
+  const project = await freshProject();
+  const groups = (/** @type {number} */ count, /** @type {string} */ prefix) => Array.from({ length: count }, (_unused, index) => ({ pool: "P1", name: `${prefix} ${index}`,
+    questions: [{ text: `${prefix} 问 ${index}`, kind: "typical" }] }));
+  await write(project, "questions", { data: { groups: groups(GEO_WRITE_LIMITS.groups - 1, "旧") } });
+  const result = await write(project, "questions", { data: { groups: groups(3, "新") } });
+  assert.equal(result.ok, true);
+  assert.equal(result.ids.length, 1);
+  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.group, issue.code]), [[1, "too_many"], [2, "too_many"]]);
+  assert.equal((await store.questionMap(project.id, result.version)).length, GEO_WRITE_LIMITS.groups);
+  const none = await write(project, "questions", { data: { groups: groups(1, "再") } });
+  assert.deepEqual([none.ok, none.ids.length, none.version], [false, 0, undefined], "nothing of the write fits: no new version");
+});
+
+test("a question written without a kind is a typical question, never a real phrasing", options, async () => {
+  const project = await freshProject();
+  const result = await write(project, "questions", { data: { groups: [{ pool: "P1", name: "用法", questions: [{ text: "怎么打", isMeasured: true }] }] } });
+  assert.deepEqual(result.issues, [], "nothing is dated to the write: a typical question was heard nowhere");
+  const [group] = await store.questionMap(project.id, result.version);
+  assert.deepEqual([group.questions[0].kind, group.questions[0].collectedAt], ["typical", null]);
 });
 
 test("locking retains small and incomplete sets with coverage notices, and protects resource bounds", options, async () => {
@@ -238,40 +315,40 @@ test("locking retains small and incomplete sets with coverage notices, and prote
   assert.deepEqual((await lock()).issues.map((/** @type {any} */ issue) => issue.code), ["not_found"], "nothing to lock yet");
 
   const questionsStep = async () => (await store.getProject(USER, project.id))?.steps.questions.status;
-  await write(project, "questions", { data: { groups: fullSet({ pools: ["P1", "P2", "P3"] }) } });
+  await write(project, "questions", { data: { replace: true, groups: fullSet({ pools: ["P1", "P2", "P3"] }) } });
   let refused = await lock();
   assert.equal(refused.ok, true);
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
   assert.equal(await questionsStep(), "done", "48 measured questions and control groups: the full programme's set");
 
-  await write(project, "questions", { data: { groups: fullSet({ control: 1 }) } });
+  await write(project, "questions", { data: { replace: true, groups: fullSet({ control: 1 }) } });
   refused = await lock();
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
   assert.equal(await questionsStep(), "done", "one control group is a notice, not a thin set");
 
-  await write(project, "questions", { data: { groups: fullSet({ perGroup: 2 }) } });
+  await write(project, "questions", { data: { replace: true, groups: fullSet({ perGroup: 2 }) } });
   refused = await lock();
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["notice", "notice"], "24 measured is usable with a scope notice, and says it is a minimal set");
   assert.match(refused.issues[1].message, /locked as a minimal set/);
   assert.equal(await questionsStep(), "minimal", "under the suggested low bound: a diagnosis (D-30)");
 
   // A set of 36 with no control groups: the run saying "minimal" does not make it the program's, but the set is a minimal one all the same.
-  await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
+  await write(project, "questions", { data: { replace: true, groups: fullSet({ control: 0, perGroup: 3 }) } });
   refused = await lock({ minimal: true });
   assert.equal(refused.ok, true, "limited measurements remain useful regardless of the program shape");
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code).sort(), ["notice", "notice", "notice"]);
   assert.equal(await questionsStep(), "minimal", "no control group: a diagnosis");
 
   // Enough questions but no control group is thin as well; a full set with its controls is not.
-  await write(project, "questions", { data: { groups: fullSet({ control: 0 }) } });
+  await write(project, "questions", { data: { replace: true, groups: fullSet({ control: 0 }) } });
   assert.equal((await lock()).ok, true);
   assert.equal(await questionsStep(), "minimal", "48 measured questions and no control group");
-  await write(project, "questions", { data: { groups: fullSet() } });
+  await write(project, "questions", { data: { replace: true, groups: fullSet() } });
   assert.equal((await lock()).ok, true);
   assert.equal(await questionsStep(), "done", "and the upgrade is a full set locked after it");
 
   // The set of 36 without controls again, as the rest of the test goes on from it.
-  await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
+  await write(project, "questions", { data: { replace: true, groups: fullSet({ control: 0, perGroup: 3 }) } });
   assert.equal((await lock()).ok, true);
   // A single step asked for downstream (信源), the questions only its upstream: a minimal set —
   // 30 or more measured, four pools, control groups only a notice.
@@ -285,13 +362,24 @@ test("locking retains small and incomplete sets with coverage notices, and prote
   // The full program asked for: the questions step itself is requested.
   await store.setStep(project.id, "questions", { requested: true });
   const program = /** @type {any} */ (await store.getProject(USER, project.id));
-  const fullSetWritten = await write(program, "questions", { data: { groups: fullSet() } });
+  const fullSetWritten = await write(program, "questions", { data: { replace: true, groups: fullSet() } });
   const full = await write(program, "lock_questions", { data: {} });
   assert.equal(full.ok, true, JSON.stringify(full.issues));
   assert.deepEqual([full.version, full.measuredCount], [fullSetWritten.version, 48]);
   assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done");
   const again = await write(program, "lock_questions", { data: { version: fullSetWritten.version } });
   assert.equal(again.alreadyLocked, true, "locking twice is a no-op");
+});
+
+// 2026-10-25: the proposal skill said "geo_write step when the package is done", and no step is a proposal run's to mark — the platform
+// refuses monitoring and distribution, and content or sources would be marked by a run that did neither.
+test("only a capability whose run marks a step is told to write one, and only a step a run may mark", () => {
+  const owns = /** @type {Record<string, string[]>} */ ({ "geo-insight": ["evidence", "journey"], "geo-strategy": ["sources"], "geo-content": ["content"], "geo-proposal": [] });
+  for (const [id, steps] of Object.entries(owns)) {
+    for (const step of steps) assert.ok(GEO_RUN_STEPS.includes(step), `${id}: ${step}`);
+    const skill = readFileSync(fileURLToPath(new URL(`../../../capability-skills/${id}/SKILL.md`, import.meta.url)), "utf8");
+    assert.equal(/geo_write step|`step`/.test(skill), steps.length > 0, `${id} is ${steps.length ? "" : "not "}told to write its step`);
+  }
 });
 
 test("a set is minimal only when the program asked for a later step and not for the questions", () => {
@@ -791,4 +879,16 @@ test("a project holds at most five hundred live owned links; a page already live
   ] });
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]).filter(([, code]) => code !== "notice"), [[0, "limit"]]);
   assert.deepEqual(result.registered, [`gol_cap_${project.id}_7`]);
+});
+
+test('both action writers retain supported planning fields and leave unsupported amounts and foreign revision targets unknown', options, async () => {
+  const project = await measured(await freshProject());
+  const body = {items:[{gapId:'bad',kind:'fill_gap',what:{layer:'popular',title:'Useful supported prose'},work:{mode:'modify_existing',articleId:'foreign-article',resultVersionId:'foreign-result',digest:'a'.repeat(64),outputs:['article.md']},sequence:3,
+    effort:{unit:'hours',low:-1,high:2,basis:'Invalid workload'},timing:{durationDays:{low:4,high:2},basis:'Inverted'},estimate:{currency:'CNY',low:1,high:3,basis:[{kind:'source_price',id:'unpreserved-price',digest:'b'.repeat(64)}]}}]};
+  const result = await write(project,'actions',body);
+  const saved = await store.latestStrategy(project.id);
+  assert.equal(saved.actions[0].sequence,3);assert.equal(saved.actions[0].what.title,'Useful supported prose');
+  assert.equal(saved.actions[0].work,null);assert.equal(saved.actions[0].estimate,null);
+  assert.equal(saved.actions[0].effort,undefined);assert.equal(saved.actions[0].timing,undefined);
+  assert.ok(result.issues.some(issue=>issue.field==='actions.estimate'));
 });

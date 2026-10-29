@@ -165,7 +165,7 @@ export function VcrLongitudinalPanel({ studyId, canRun, data, onReload, switcher
         <VcrTrajectoryChart xLabel="距预测起点（天）" yLabel={selected.summary.endpoint?.unit} series={chartSeries} />
       </ChartCard> : chartSeries[0]?.points.length === 1 && <dl className="flex flex-wrap gap-6">
         {chartSeries.map(series => <div key={series.key}><dt className="text-caption text-text-3">{series.points[0]?.x} 天 · {series.label}</dt>
-          <dd className="text-section font-medium tabular-nums text-text">{number(series.points[0]?.y)} <span className="text-caption text-text-3">{selected.summary.endpoint?.unit}</span></dd></div>)}
+          <dd className="text-section font-semibold tabular-nums text-text">{number(series.points[0]?.y)} <span className="text-caption text-text-3">{selected.summary.endpoint?.unit}</span></dd></div>)}
       </dl>}
 
       {failures.length > 0 && <Section title="没有算完" level="sub" count={failures.length}>

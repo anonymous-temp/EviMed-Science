@@ -21,8 +21,17 @@
     "evimed-citation-bridge",
     "evimed-compaction",
     "evimed-duplicate-lines",
-    "evimed-cowork-bridge"
+    "evimed-cowork-bridge",
+    "skill-filesystem"
   ],
+  "requiredNativeProviders": {
+    "skill-filesystem": {
+      "module": "@evimed/dsh-socket/plugins/project-skills",
+      "scope": "preset",
+      "required": true,
+      "reason": "The native filesystem registry provider stays mounted for required methods and exact project invocation policy. Individual optional skills are controlled by the immutable project generation; the provider is not an optional engine toggle."
+    }
+  },
   "hostExtensions": [
     {
       "name": "dsh-loopx-plugin",
@@ -46,7 +55,7 @@
       "pin": "deps-version.json#openviking.plugin",
       "management": "immutable-release",
       "row": "openviking-memory-runtime",
-      "switch": "OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED and the account's memory engine, which reach the runtime as EVIMED_MEMORY_GATEWAY_URL (empty for every account not on the native engine)",
+      "switch": "the deployment's memory engine (OpenViking configured, `config.memoryEngineEnabled`), which reaches the runtime as EVIMED_MEMORY_GATEWAY_URL (empty in a deployment without the engine)",
       "activation": "The socket's patch enables the row only when that address is set, and points it at the loopback row evimed-memory-bridge, which forwards to the control plane's memory gateway with the workload token of the moment and answers only its own plugin's local key.",
       "components": [
         "startup-profile",

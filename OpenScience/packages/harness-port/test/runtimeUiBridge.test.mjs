@@ -436,6 +436,34 @@ test('a body leaves only through a closed vocabulary, and an artifact path canno
   assert.equal(hub.send('open-artifact', { runId: 'run_abc', path: 'a.md' }), false, 'the channel closes with the bridge');
 });
 
+test('a conversation opened from an event or an item says so, and the chip opens that event or item and nothing else', async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  /** @type {any[]} */
+  const delivered = [];
+  hub.on('source-scope-result', (/** @type {any} */ data) => delivered.push(data));
+  const send = (/** @type {number} */ seq, /** @type {any} */ originReference) => shellSends(f, { type: 'evimed.runtime-ui.source-scope-result', seq,
+    requestId: 'req-1', ok: true, sessionId: 'session-a', sourceScopeMode: 'project', sourceIds: [], originReference });
+  send(1, { kind: 'frontier-item', id: 'k7q2m9x4t1b8', title: 'x'.repeat(400), extra: 'dropped' });
+  send(2, { kind: 'frontier-event', id: 'e0123456789abcde', title: '一个事件' });
+  send(3, { kind: 'frontier-topic', id: 'k7q2m9x4t1b8', title: 'not an origin' });
+  send(4, { kind: 'frontier-item', id: '../../x', title: 'not an id' });
+  assert.deepEqual(delivered.map((data) => data.originReference), [
+    { kind: 'frontier-item', id: 'k7q2m9x4t1b8', title: 'x'.repeat(300) },
+    { kind: 'frontier-event', id: 'e0123456789abcde', title: '一个事件' },
+    null,
+    null,
+  ]);
+  hub.send('open-item', { itemId: 'k7q2m9x4t1b8' });
+  hub.send('open-item', { itemId: '../../x' });
+  hub.send('open-item', { eventId: 'k7q2m9x4t1b8' });
+  hub.send('open-event', { eventId: 'e0123456789abcde' });
+  const opened = f.sent.map((row) => row.message).filter((message) => /open-(item|event)$/.test(message.type));
+  assert.deepEqual(opened.map((message) => [message.type.split('.').pop(), message.itemId ?? message.eventId]),
+    [['open-item', 'k7q2m9x4t1b8'], ['open-event', 'e0123456789abcde']]);
+  f.ctx.dispose();
+});
+
 test('a delivered file is saved into the knowledge base by naming the run and a path that climbs nowhere, and nothing else', async () => {
   const f = fixture(); const hub = createHub(f.target);
   apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
@@ -678,4 +706,16 @@ test('malformed or altered revision references cannot reuse a navigation acknowl
   f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'x', resultRevision: { referenceId: `rr_${'a'.repeat(64)}` } } }); await settle();
   f.navigate({ seq: 2, intent: { kind: 'create', sessionId: 'session-new', draft: 'x', resultRevision: { referenceId: `rr_${'b'.repeat(64)}` } } }); await settle();
   assert.equal(staged.length, 1); f.ctx.dispose();
+});
+
+test('whole-file conversation context leaves the existing native draft intact', async () => {
+  const f = fixture();
+  /** @type {any[]} */ const stages = [];
+  /** @type {any} */ (f.target).__EVIMED_RESULT_REVISION__ = { clear() {}, stage: (/** @type {any} */ value) => stages.push(value) };
+  apply(f.ctx, {}, f.target); await settle();
+  const referenceId = `rr_${'c'.repeat(64)}`;
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', resultRevision: { referenceId } } }); await settle();
+  assert.deepEqual(stages, [{ sessionId: 'session-new', referenceId, draft: '' }]);
+  assert.equal(f.calls.some(call => call[0] === 'draft'), false);
+  f.ctx.dispose();
 });

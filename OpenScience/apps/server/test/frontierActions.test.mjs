@@ -87,7 +87,7 @@ test("the Markdown record carries what a reader needs to cite and find the work 
   const record = frontierLibraryRecord({ item: itemRow(), savedAt: new Date("2026-09-22T04:00:00Z"), day: "2026-09-21" });
   for (const expected of ["# 司美格鲁肽与 2 型糖尿病肾脏结局", "原标题：Semaglutide and Kidney Outcomes in Type 2 Diabetes", "来源：NEJM（期刊）",
     "作者：Perkovic V, et al.", "期刊：N Engl J Med", "发布日期：2026-09-21", "DOI：10.1056/NEJMoa2403347", "PMID：38785209", "注册号：NCT03819153",
-    "原文链接：https://www.nejm.org/doi/full/10.1056/NEJMoa2403347", "开放获取：bronze", "## 导读", "## 为什么值得看", "## 原文摘要",
+    "原文链接：https://www.nejm.org/doi/full/10.1056/NEJMoa2403347", "开放获取：bronze", "## 导读", "## 推荐理由", "## 原文摘要",
     "由 EviMed「前沿动态」于 2026-09-22 存入。"]) {
     assert.ok(record.includes(expected), expected);
   }

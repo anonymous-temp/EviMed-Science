@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useState } from "react";
 import { Download } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -10,7 +11,8 @@ import type { FilterOption } from "@/components/ui/FilterChips";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { useGeoToolbar } from "../geoFrame";
 import { GeoLineChart } from "./GeoCharts";
-import { StepPending, TabError, TabSkeleton, TD, TH, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabError, TabSkeleton, TD, TH } from "./geoTabKit";
+import { useSharedGeoLoad } from "../geoProjectData";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
 
 type View = "journey" | "care" | "people";
@@ -25,7 +27,7 @@ type View = "journey" | "care" | "people";
  * has), so there is one row of controls and the journey's is the end of it.
  */
 export function JourneyTab({ geoId, project, toolbar }: { geoId: string; project: GeoProject; toolbar?: ToolbarProps }) {
-  const { state, reload } = useGeoLoad(`journey:${geoId}`, () => getGeoJourney(geoId));
+  const { state, reload } = useSharedGeoLoad(`journey:${geoId}`, () => getGeoJourney(geoId));
   const [view, setView] = useState<View>("journey");
   const journey = state.kind === "ready" ? normalise(state.data) : null;
   const hasPeople = journey ? journey.subtypes.length > 0 || journey.personas.length > 0 : false;
@@ -58,9 +60,10 @@ export function JourneyTab({ geoId, project, toolbar }: { geoId: string; project
     : toolbar ?? null);
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
-  if (!journey || empty) return <StepPending geoId={geoId} project={project} step="journey" />;
+  if (!journey || empty) return <><StepPending geoId={geoId} project={project} step="journey" /><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V10" embedded /></>;
   return (
     <div data-geo-tab="journey">
+      <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V10" embedded />
       <div>
         {current === "journey" && <Stages stages={journey.stages} />}
         {current === "care" && <CareNodes nodes={journey.careNodes} />}

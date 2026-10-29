@@ -544,3 +544,24 @@ test("without a configured window the default holds, and the default is the conf
   }
   assert.equal(served, GEO_PROBE_CALLS_PER_MINUTE);
 });
+
+test("the probe admits the full original import length and preserves exact whitespace sent upstream", async () => {
+  const question = `  ${"q".repeat(3995)}\n`;
+  let sent = null;
+  const result = await run(configured, async (_url, options) => { sent = JSON.parse(options.body).question; return jsonResponse({ results: [{ provider: "deepseek", ...answered }] }); },
+    { op: "ask", question, providers: ["deepseek"] });
+  assert.equal(result.statusCode, 200);
+  assert.equal(sent, question);
+  const tooLong = await run(configured, async () => { throw new Error("must not call upstream"); }, { op: "ask", question: "q".repeat(4001), providers: ["deepseek"] });
+  assert.equal(tooLong.statusCode, 400);
+});
+
+test("a connection that broke after the ask was sent is an upstream error, never 'unreachable', which says it was never asked", async () => {
+  const broken = (code) => async () => { throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("socket"), { code }) }); };
+  for (const code of ["ECONNRESET", "UND_ERR_SOCKET", "UND_ERR_HEADERS_TIMEOUT"]) {
+    const res = await run(configured, broken(code), { op: "ask", question: "q", providers: ["deepseek"] });
+    assert.deepEqual([res.statusCode, res.json().code], [502, "geo_probe_upstream_error"], code);
+  }
+  const refused = await run(configured, broken("ECONNREFUSED"), { op: "ask", question: "q", providers: ["deepseek"] });
+  assert.deepEqual([refused.statusCode, refused.json().code], [502, "geo_probe_unavailable"]);
+});

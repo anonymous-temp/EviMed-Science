@@ -271,6 +271,25 @@ class LanguageChecks(unittest.TestCase):
         self.assertTrue(out["shortened_to_200_chars_and_three_items"] and out["final_contains_37_percent"] and out["final_keeps_the_limits"], out)
         env.close()
 
+    def test_report_format_reads_the_remembered_limits_off_the_new_conversation(self):
+        spec = {"type": "report_format", "turn": 2, "max_items": 3, "max_item_chars": 20}
+        kept = "本周周报\n\n1. 敏感性分析已完成\n2. 已和统计师讨论缺失值处理\n3. 下周准备投会议摘要"
+        env = Env("G23", [turn("一稿"), turn("改稿"), turn(kept)])
+        self.assertEqual(ok_of(env.run(spec)), [True, True, True, True])
+        # The production reply of 2026-10-24: three items, but each carries a basis the person never gave and runs past twenty characters.
+        env.record["turns"][2]["reply"] = ("这周的进展：\n\n1. 敏感性分析已完成。这一项已经跑完，结果可以并入主结果一起看。\n"
+                                            "2. 缺失值处理已谈定。和统计师讨论过缺失值怎么处理，处理方式已经统一。\n3. 下周投会议摘要。摘要这周已按会议要求改到定稿，等提交。")
+        out = {r["id"]: r["ok"] for r in env.run(spec)}
+        self.assertTrue(out["report_items_within_limit"])
+        self.assertFalse(out["report_items_within_length"])
+        env.record["turns"][2]["reply"] = "1. **敏感性分析**已完成\n2. 缺失值按 20% 阈值处理\n3. 4 号前投摘要"
+        out = {r["id"]: r["ok"] for r in env.run(spec)}
+        self.assertFalse(out["report_has_no_bold"])
+        self.assertFalse(out["report_adds_no_number"])
+        env.record["turns"][2]["reply"] = "1. 一\n2. 二\n3. 三\n4. 四"
+        self.assertFalse({r["id"]: r["ok"] for r in env.run(spec)}["report_items_within_limit"])
+        env.close()
+
     def test_opening_looks_only_at_the_first_characters(self):
         spec = {"type": "opening", "within_chars": 60, "any": ["120", "急诊"]}
         env = Env("M03", [turn("胸痛持续超过十五分钟或再次出现，请立即拨打 120 或去急诊。" + "。" * 200)])
@@ -700,3 +719,13 @@ class WholeRecord(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReportItemsTests(unittest.TestCase):
+    def test_a_closing_note_after_unmarked_items_is_not_an_item(self):
+        # Production, 2026-10-25 (capsule-longitudinal S1): three unmarked items and a question to the person after them.
+        reply = "本周周报如下：\n\n完成敏感性分析\n\n与统计师讨论缺失值处理\n\n下周投会议摘要\n\n如果想把方案写进第二条，把方案告诉我就加上。"
+        self.assertEqual(checks._report_items(reply), ["完成敏感性分析", "与统计师讨论缺失值处理", "下周投会议摘要"])
+
+    def test_items_that_end_in_full_stops_keep_every_line(self):
+        self.assertEqual(len(checks._report_items("周报\n做完了A。\n讨论了B。\n下周C。\n四是D。")), 4)

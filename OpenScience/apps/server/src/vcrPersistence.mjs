@@ -148,6 +148,7 @@ CREATE INDEX IF NOT EXISTS vcr_studies_user_idx ON evimed_vcr.studies (user_id, 
 -- NULL means not tagged yet — the vocabulary could not tag when the study was
 -- written — and a pass over those rows tags them.
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS entity_keys text[];
+ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'programme' CHECK (purpose IN ('programme', 'calculation'));
 -- The conversation the study was opened with (the one bound to its first capability): the page's 「对话」 opens it, not whichever
 -- background run's conversation is newest. NULL for a study made before this column; the route then falls back to the oldest
 -- conversation bound to the study's first capability.
@@ -692,6 +693,9 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.trial_scenarios (
   UNIQUE (study_id, version, label)
 );
 
+ALTER TABLE evimed_vcr.comparator_designs ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.comparator_designs ALTER COLUMN estimand DROP NOT NULL;
+
 -- Design dimensions × truth scenarios. Each cell is one immutable run, and the
 -- comparison target the team wrote down decides the ordering, not the platform
 -- (plan §5.4).
@@ -709,6 +713,8 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.design_grids (
 );
 
 -- ---------------------------------------------------------------------------
+ALTER TABLE evimed_vcr.design_grids ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
+
 -- Disease knowledge packs and the population definition library (plan §3.3, §5.1)
 -- ---------------------------------------------------------------------------
 
@@ -800,7 +806,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.models (
   name           text NOT NULL,
   version        text NOT NULL,
   tier           text NOT NULL CHECK (tier IN ${inList(VCR_MODEL_TIERS)}),
-  risk           text NOT NULL DEFAULT 'none' CHECK (risk IN ${inList(VCR_MODEL_RISKS)}),
+  risk           text CHECK (risk IN ${inList(VCR_MODEL_RISKS)}),
   endpoint_type  text CHECK (endpoint_type IS NULL OR endpoint_type IN ${inList(VCR_ENDPOINT_TYPES)}),
   card           jsonb NOT NULL DEFAULT '{}'::jsonb,
   applicability  jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -809,6 +815,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.models (
   retired_at     timestamptz,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
+
+-- An omitted assessment is unknown, distinct from the explicit reference-simulation risk.
+ALTER TABLE evimed_vcr.models ALTER COLUMN risk DROP NOT NULL;
+ALTER TABLE evimed_vcr.models ALTER COLUMN risk DROP DEFAULT;
 
 -- One model per owner, name and version; the platform's own rows (user_id NULL)
 -- are their own scope. The table used to say UNIQUE (name, version), which made
@@ -1276,6 +1286,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.followup_episodes (
   observations  jsonb NOT NULL DEFAULT '[]'::jsonb,
   restricted    jsonb NOT NULL DEFAULT '{}'::jsonb,
   exit_reason   text,
+  exit_date     text,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -1303,6 +1314,8 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.stale_marks (
   cleared_at  timestamptz,
   PRIMARY KEY (study_id, node)
 );
+
+ALTER TABLE evimed_vcr.followup_episodes ADD COLUMN IF NOT EXISTS exit_date text;
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.reviews (
   id           text PRIMARY KEY,

@@ -1,0 +1,1 @@
+{"accepted":0,"duplicate":1,"refused":1,"capped":0,"results":[{"url":"https://med.example.cn/news/2026-10-24/1","status":"duplicate","reason":"received"},{"url":"https://localhost/not-public","status":"refused","reason":"not_a_public_address"}]}

@@ -35,6 +35,15 @@
  *   second control plane finds the unsettled ones by sweeping the last fortnight of decisions (`sweep`).
  * - **A zone the programme cannot write stays untouched.** An official zone still owned by the operator that imported it, or one
  *   that is not published, is recognised and left; its actions are deferred with the reason, and the day goes on with the others.
+ * - **The day's strongest hot topic goes first, chosen in code** (前沿动态 round 2, 2026-10-25). The hot-event trigger of the frontier
+ *   (`frontierLeads.mjs`) turns a public event that raises a general medical question into a topic (`evimed_frontier.topics`, contract
+ *   §T). Before the model chooses among the zones, the decision reads the active topics accepted within a day that the programme has
+ *   not looked at, takes at most one — a surge first, then the most distinct boards, then the best peak rank (`rankProgrammeTopics`) —
+ *   and gives it the first of the day's actions in the zone 「热点求证」, within the same action cap and budget; the model gets what is
+ *   left. Each topic is its own agenda, so its episode's question is the topic's and its brief carries no other topic's progress; its
+ *   card is titled with the topic's question, and code refuses a card whose title names one of the topic's `subject_names` (read
+ *   here, written nowhere). The programme writes only the topic's `programme_*` columns: `queued` while its action waits for a slot or
+ *   budget, `taken` when its episode exists, then `card` with the card's id or `skipped` with the reason on the day's decision.
  *
  * Build to delete: scaffolding for research that is chosen by a person; it goes when a model can be trusted to keep a topic list
  * from the feed and the cards by itself, and the counters here are the evidence for whether that day has come.
@@ -50,10 +59,12 @@ import { EVIDENCE_PROJECT_ID } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 import {
   EVIDENCE_PROGRAMME_ZONES, PROGRAMME_ACTIVE_EPISODE_MS, PROGRAMME_DECISION_HOUR, PROGRAMME_DEMAND_MAX_PROFILES, PROGRAMME_DEMAND_PHRASE_SOURCES,
-  ORIGINAL_ANALYSIS_ENGINES, PROGRAMME_EPISODE_ESTIMATE_CNY, PROGRAMME_FRONTIER_WINDOW_DAYS, PROGRAMME_MAX_ACTIONS_PER_DAY, PROGRAMME_SETTLE_DAYS, programmeZoneByKey,
+  ORIGINAL_ANALYSIS_ENGINES, PROGRAMME_EPISODE_ESTIMATE_CNY, PROGRAMME_FRONTIER_WINDOW_DAYS, PROGRAMME_MAX_ACTIONS_PER_DAY, PROGRAMME_SETTLE_DAYS,
+  PROGRAMME_TOPIC_CANDIDATES, PROGRAMME_TOPIC_TASK_TYPE, PROGRAMME_TOPIC_WINDOW_MS, SELECTOR_ZONES, TOPIC_ZONE, programmeZoneByKey,
 } from "./evidenceProgrammeData.mjs";
 import { PROGRAMME_CARD_OUTCOMES, PROGRAMME_CLAIM_EXCLUSIONS, buildOriginalAnalysisCard, buildProgrammeCard, evaluateProgrammeClaims, programmeCardProvenance } from "./evidenceProgrammeCard.mjs";
 import { receiptFromResultVersion } from "./evidenceCalculationReceipts.mjs";
+import { migrateProductStore } from "./productPersistence.mjs";
 
 /** Where one day's decision is kept: one document per local day, owned by the publisher in the evidence project. */
 export const PROGRAMME_DECISION_KIND = "programme-decision";
@@ -68,7 +79,10 @@ const DECISION_MAX_TOKENS = 800;
 const DECISION_TIMEOUT_MS = 30_000;
 const MAX_REASON_CHARS = 300;
 /** An outcome that does not change on a later look is final; the others are looked at again by the sweep. */
-const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required", "no_engine_receipt"]);
+const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required", "no_engine_receipt", "card_refused", "superseded",
+  "topic_name_in_title", "topic_unavailable"]);
+/** The outcomes that leave a hot topic with a card: the card that holds its question. */
+const CARD_OUTCOMES = new Set(["published", "revised", "superseded"]);
 /** Looks at an episode whose matrix is not there yet before the absence is final: a capture that has not landed is not a run with no matrix. */
 const MATRIX_ATTEMPTS = 3;
 /** @param {{ outcome?: string, attempts?: number } | null | undefined} recorded @returns {boolean} */
@@ -87,6 +101,8 @@ const DECISION_INSTRUCTIONS = [
 
 /** @param {unknown} error @returns {string} */
 const codeOf = (error) => (typeof (/** @type {any} */ (error))?.code === "string" ? /** @type {any} */ (error).code : "evidence_programme_failed");
+/** Whether a write was refused for the card it carried (a 400 of the zone's validation), not for the moment it came at. @param {unknown} error */
+const isCardRefusal = (error) => /** @type {any} */ (error)?.status === 400 && /** @type {any} */ (error)?.code === "evidence_invalid";
 /** @param {unknown} value @param {number} max */
 const cut = (value, max) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 /** @param {string} key an identifier key in the frontier's spelling @returns {string} the card's spelling */
@@ -143,6 +159,70 @@ export function fallbackProgrammeAction(zones) {
   return { zone: top.key, taskType, reason: `${top.unmatched} 条前沿新证据还没有进入这个专区的卡片，是各专区中最多的。` };
 }
 
+/** The names a rank is recorded under in a topic's board entry, the first that holds a positive number wins. */
+const RANK_FIELDS = Object.freeze(["peakRank", "bestRank", "rank"]);
+
+/**
+ * Where a topic was seen, as two numbers: on how many distinct boards, and the best (lowest) rank it reached on any of them. A
+ * topic's `boards` is its record of sightings (contract §T, written by the hot-event trigger): an entry names its board, as a string
+ * or as `{ board }`, and may carry the best rank seen there. An entry that names no board is not counted; a rank that is not a
+ * positive number is not a rank. Pure.
+ * @param {unknown} boards @returns {{ boards: number, bestRank: number | null }}
+ */
+export function topicBoardStanding(boards) {
+  const names = new Set();
+  let best = Infinity;
+  for (const entry of Array.isArray(boards) ? boards : []) {
+    const name = typeof entry === "string" ? entry : typeof entry?.board === "string" ? entry.board : "";
+    if (!name.trim()) continue;
+    names.add(name.trim());
+    if (typeof entry !== "object" || entry === null) continue;
+    const rank = RANK_FIELDS.map((field) => Number(/** @type {any} */ (entry)[field])).find((value) => Number.isFinite(value) && value > 0);
+    if (rank !== undefined && rank < best) best = rank;
+  }
+  return { boards: names.size, bestRank: Number.isFinite(best) ? best : null };
+}
+
+/**
+ * The topics in the order the day's pick takes them (contract §T): a surge first, then the topic seen on the most distinct boards,
+ * then the best peak rank; ties go to the topic accepted earliest (it is the nearest to leaving the day's window), then to its id, so
+ * the same rows always give the same order. Pure.
+ * @template {{ id: string, surge?: boolean, boards?: unknown, acceptedAt?: string | Date | null }} T
+ * @param {T[]} topics @returns {(T & { standing: { boards: number, bestRank: number | null } })[]}
+ */
+export function rankProgrammeTopics(topics) {
+  const at = (/** @type {any} */ value) => { const parsed = Date.parse(value instanceof Date ? value.toISOString() : String(value ?? "")); return Number.isFinite(parsed) ? parsed : Infinity; };
+  return topics.map((topic) => ({ ...topic, standing: topicBoardStanding(topic.boards) })).sort((left, right) =>
+    Number(right.surge === true) - Number(left.surge === true)
+    || right.standing.boards - left.standing.boards
+    || (left.standing.bestRank ?? Infinity) - (right.standing.bestRank ?? Infinity)
+    || at(left.acceptedAt) - at(right.acceptedAt)
+    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+}
+
+/** @param {unknown} value */
+const foldForNames = (value) => String(value ?? "").normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+
+/**
+ * Which of a topic's `subject_names` appear in any of `texts` — an exact comparison of a closed list, after width, case and space are
+ * folded, never a reading of prose. A name of fewer than two characters names nobody and is not compared. Pure.
+ * @param {unknown[]} texts @param {unknown} names @returns {string[]}
+ */
+export function subjectNamesIn(texts, names) {
+  const folded = texts.map(foldForNames);
+  return (Array.isArray(names) ? names : []).map((name) => String(name ?? "").trim())
+    .filter((name) => foldForNames(name).length >= 2 && folded.some((text) => text.includes(foldForNames(name))));
+}
+
+/**
+ * Why the day's pick took this topic, in the reader's words, from the counts alone (the operator's page reads it as the action's reason).
+ * @param {{ surge?: boolean, standing: { boards: number, bestRank: number | null } }} topic
+ */
+function topicActionReason(topic) {
+  const where = `${topic.standing.boards} 个热榜${topic.standing.bestRank ? `，最高第 ${topic.standing.bestRank} 位` : ""}`;
+  return `今天最强的热点话题（${topic.surge ? "突发，" : ""}${where}），先于各专区回答。`;
+}
+
 /**
  * One zone's signals as a day's decision recorded them, reduced to the numbers the operator reads. A decision made before a signal class
  * existed has no such field, and reads as `null` — "not recorded", which is not the same statement as zero.
@@ -171,6 +251,8 @@ export function summariseProgrammeDecision(document) {
   return {
     id: document.id, day: payload.day ?? null, source: payload.source ?? null, model: payload.model ?? null, fallbackReason: payload.fallbackReason ?? null,
     reason: payload.reason ?? null, decidedAt: payload.decidedAt ?? payload.createdAt ?? null, costCny: Number(payload.costCny) || 0, budget: payload.budget ?? null,
+    // The day's hot-topic pick (absent on a decision made before topics existed): its state, how many topics it read, and the one it took.
+    topicPick: payload.topicPick ?? null,
     signals: {
       readAt: payload.signals?.readAt ?? null, readsRecorded: payload.signals?.readsRecorded ?? false, topicRequestsRecorded: payload.signals?.topicRequestsRecorded ?? false,
       zones: Object.fromEntries(Object.entries(payload.signals?.zones ?? {}).map(([key, zone]) => [key, signalCounts(zone)])),
@@ -182,7 +264,8 @@ export function summariseProgrammeDecision(document) {
       return {
         zone: action.zone, taskType: action.taskType, status: action.status, because: deferred ? null : action.reason ?? null, deferredFor: deferred ? action.reason ?? null : null,
         code: action.code ?? null, agendaId: action.agendaId ?? null, episodeId: action.episodeId ?? null, appliedAt: action.appliedAt ?? null,
-        outcome: outcome?.outcome ?? null, cardId: outcome?.cardId ?? null, claims: outcome?.claims ?? null,
+        outcome: outcome?.outcome ?? null, cardId: outcome?.cardId ?? null, claims: outcome?.claims ?? null, refusal: outcome?.reason ?? null,
+        topicId: action.topicId ?? null, topicState: action.topicState ?? null, topicReason: action.topicReason ?? null,
       };
     }),
   };
@@ -203,12 +286,14 @@ export function evidenceProgrammeMetricFamilies(/** @type {ReturnType<typeof cre
     counter("signal_failures_total", "Signal sources of the topic selector that could not be read, by class; the selector is told that signal is not recorded and decides without it.", by(counters.signalFailures, "class")),
     counter("demand_entities_total", "Entities that reached the reader-count floor and were shown to the selector as a count.", [{ value: counters.demandEntities }]),
     counter("actions_total", "Zone actions of the day's decision, by what became of them: scheduled, failed, or deferred (by reason).", by(counters.actions, "outcome")),
-    counter("cards_total", "Settled programme episodes, by outcome: a card published or revised, none for want of a qualifying claim, waiting for an independent check, deferred by the weekly original-analysis cap, and the refusals.", by(counters.cards, "outcome")),
-    counter("claims_excluded_total", "Matrix claims left out of a card, by why: not verified by the run, refuted or weakened by the independent check, or the card's own re-check.", by(counters.claimsExcluded, "reason")),
+    counter("cards_total", "Settled programme episodes, by outcome: a card published or revised, none for want of a qualifying claim, waiting for an independent check, deferred by the weekly original-analysis cap, superseded by a later episode's card of the same topic, and the refusals.", by(counters.cards, "outcome")),
+    counter("claims_excluded_total", "Matrix claims left out of a card, by why: not verified by the run, refuted or weakened by the independent check, the card's own re-check, or more than one card carries.", by(counters.claimsExcluded, "reason")),
     counter("claims_published_total", "Claims published in programme cards.", [{ value: counters.claimsPublished }]),
     counter("original_analyses_total", "Original-analysis cards, by what became of them: published as a signal still to be replicated, published as a finding, or deferred by the weekly cap.", by(counters.original, "outcome")),
     counter("admissions_total", "Episode admissions asked of the programme (its budget and its slot), by answer.", by(counters.admissions, "outcome")),
     counter("hook_failures_total", "Run-finished hooks of the programme that threw.", [{ value: counters.hookFailures }]),
+    counter("topic_picks_total", "The day's hot-topic pick, by answer: a topic taken, none waiting, the zone not writable, or the topics table not readable.", by(counters.topics?.picks ?? {}, "outcome")),
+    counter("topic_states_total", "Hot topics the programme moved, by the state it wrote: taken (its episode exists), card, skipped (with the reason on the day's decision), expired (queued a day and never started).", by(counters.topics?.states ?? {}, "state")),
   ];
 }
 
@@ -248,7 +333,12 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   const operators = Array.isArray(config?.operatorUsers) ? config.operatorUsers.map(String) : [];
 
   const counters = {
-    decisions: { model: 0, fallback: 0, none: 0 },
+    /** `topic`: the hot topic took the day's only action, and the model was not asked. */
+    decisions: /** @type {Record<string, number>} */ ({ model: 0, fallback: 0, none: 0, topic: 0 }),
+    topics: {
+      picks: /** @type {Record<string, number>} */ ({ picked: 0, none: 0, zone_unavailable: 0, unreadable: 0 }),
+      states: /** @type {Record<string, number>} */ ({ taken: 0, card: 0, skipped: 0, expired: 0 }),
+    },
     signals: { frontier: 0, demand: 0, attention: 0, reads: 0, requests: 0, stale: 0, observed: 0 },
     signalFailures: { reads: 0, requests: 0 },
     demandEntities: 0,
@@ -325,7 +415,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     const since = new Date(at.getTime() - PROGRAMME_FRONTIER_WINDOW_DAYS * 86_400_000);
     /** @type {Map<string, string[]>} */
     const keysByZone = new Map();
-    for (const definition of EVIDENCE_PROGRAMME_ZONES) {
+    for (const definition of SELECTOR_ZONES) {
       keysByZone.set(definition.key, definition.topic.terms.length ? ((await entityVocabulary.keysForText({ texts: [...definition.topic.terms] })) ?? []) : []);
     }
     const demand = await readDemand([...new Set([...keysByZone.values()].flat())]);
@@ -340,7 +430,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     if (observed.length) counters.signals.observed += 1;
     /** @type {Record<string, any>} */
     const perZone = {};
-    for (const definition of EVIDENCE_PROGRAMME_ZONES) {
+    for (const definition of SELECTOR_ZONES) {
       const state = states.find((candidate) => candidate.key === definition.key);
       const keys = keysByZone.get(definition.key) ?? [];
       const feed = state?.id && keys.length ? await readFeed(state.id, keys, since) : { newItems: 0, highScoring: 0, safetyAlerts: 0, unmatched: 0, itemIds: [], truncated: false };
@@ -531,21 +621,96 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     return null;
   }
 
-  /** What each agenda of the programme has done lately, by zone key: the last outcomes the selector reads. */
+  /**
+   * What each agenda of the programme has done lately, by zone key: the last outcomes the selector reads. One read per zone the
+   * selector chooses among, by the zone's own mark: the project also holds one agenda per hot topic answered (a new one most days), and
+   * a single page of the newest hundred would one day hold none of the zones' own.
+   */
   async function readAgendas() {
     /** @type {Map<string, any>} */
     const byZone = new Map();
-    const page = await documents.list(publisher, "agenda", { projectId: EVIDENCE_PROJECT_ID, limit: 100 });
-    for (const agenda of page.items) {
-      const key = agenda.payload?.programme?.zoneKey;
-      if (key && !agenda.payload.archivedAt) byZone.set(key, agenda);
+    for (const definition of SELECTOR_ZONES) {
+      const page = await documents.list(publisher, "agenda", { projectId: EVIDENCE_PROJECT_ID, limit: 10, filter: { programme: { zoneKey: definition.key } } });
+      const agenda = page.items.find((/** @type {any} */ item) => !item.payload.archivedAt);
+      if (agenda) byZone.set(definition.key, agenda);
     }
     return byZone;
   }
 
+  // ── Hot topics ──────────────────────────────────────────────────────────────
+
   /**
-   * One day's topic decision: the signals, the one Flash call under purpose `evidence`, its answer held to the closed schema, and
-   * the recorded fallback when it cannot be had.
+   * One topic as the programme reads it, by its public id; null when there is none. `subjectNames` is read for the code's check of a
+   * card's title and goes nowhere else: no document, no prompt, no log carries it.
+   * @param {string} publicId
+   * @returns {Promise<{ id: string, title: string, question: string, peg: { text: string, source: any } | null, subjectNames: string[] } | null>}
+   */
+  async function readTopic(publicId) {
+    const row = (await database.query(`SELECT public_id, title_zh, question_zh, peg_zh, peg_source, subject_names FROM evimed_frontier.topics WHERE public_id = $1`, [publicId])).rows[0];
+    if (!row) return null;
+    return { id: row.public_id, title: String(row.title_zh), question: String(row.question_zh), peg: row.peg_zh ? { text: String(row.peg_zh), source: row.peg_source ?? null } : null,
+      subjectNames: Array.isArray(row.subject_names) ? row.subject_names.map(String) : [] };
+  }
+
+  /**
+   * Move a topic's programme state, and only forward: `queued` from nothing, `taken` from nothing or `queued`, `skipped` from anything
+   * before an answer, `card` from anything but a card (a card is the topic's last word; a skipped topic still takes the card a repaired
+   * capture earns). No state moves to itself, so a replay neither moves `programme_at` nor counts twice. The other columns of the topic
+   * are the hot-event trigger's and are not touched.
+   * @param {string} publicId @param {"queued" | "taken" | "card" | "skipped"} state @param {{ cardId?: string | null }} [options]
+   * @returns {Promise<boolean>} whether the row moved
+   */
+  async function writeTopicState(publicId, state, { cardId = null } = {}) {
+    const from = { queued: [null], taken: [null, "queued"], card: [null, "queued", "taken", "skipped"], skipped: [null, "queued", "taken"] }[state];
+    const result = await database.query(`UPDATE evimed_frontier.topics SET programme_state = $2, programme_card_id = CASE WHEN $2 = 'card' THEN $3 ELSE programme_card_id END,
+        programme_at = $4::timestamptz, updated_at = clock_timestamp()
+      WHERE public_id = $1 AND ((programme_state IS NULL AND $5::boolean) OR programme_state = ANY($6::text[]))`,
+    [publicId, state, cardId, now().toISOString(), from.includes(null), from.filter(Boolean)]);
+    const moved = (result.rowCount ?? 0) > 0;
+    if (moved && state !== "queued") counters.topics.states[state] = (counters.topics.states[state] ?? 0) + 1;
+    return moved;
+  }
+
+  /**
+   * The day's hot-topic pick, in code: the active topics accepted within a day that the programme has not looked at, ranked
+   * (`rankProgrammeTopics`), and the first taken. A topic queued by an earlier day whose action never started is let go first
+   * (`skipped`, counted as expired). Nothing is taken when the zone that answers topics cannot be written: the topics stay as they
+   * are. A table that cannot be read is a pick that did not happen, never a failed day.
+   * @returns {Promise<{ state: string, candidates?: number, topicId?: string, surge?: boolean, boards?: number, bestRank?: number | null, code?: string,
+   *   action?: { zone: string, taskType: string, topicId: string, reason: string } }>}
+   */
+  async function pickTopic() {
+    if (!TOPIC_ZONE) return { state: "none", candidates: 0 };
+    const at = now();
+    const since = new Date(at.getTime() - PROGRAMME_TOPIC_WINDOW_MS).toISOString();
+    let rows;
+    try {
+      const expired = (await database.query(`UPDATE evimed_frontier.topics SET programme_state = 'skipped', programme_at = $2::timestamptz, updated_at = clock_timestamp()
+        WHERE programme_state = 'queued' AND programme_at < $1::timestamptz RETURNING public_id`, [since, at.toISOString()])).rows;
+      if (expired.length) counters.topics.states.expired += expired.length;
+      rows = (await database.query(`SELECT public_id, surge, boards, accepted_at FROM evimed_frontier.topics
+        WHERE status = 'active' AND programme_state IS NULL AND accepted_at > $1::timestamptz AND accepted_at <= $2::timestamptz
+        ORDER BY accepted_at, public_id LIMIT $3`, [since, at.toISOString(), PROGRAMME_TOPIC_CANDIDATES])).rows;
+    } catch (error) {
+      counters.topics.picks.unreadable += 1;
+      report(`evidence programme topics: ${codeOf(error)}`);
+      return { state: "unreadable", code: codeOf(error) };
+    }
+    if (!rows.length) { counters.topics.picks.none += 1; return { state: "none", candidates: 0 }; }
+    const zone = (await resolveZones()).find((candidate) => candidate.key === TOPIC_ZONE.key);
+    if (!zone?.writable) {
+      counters.topics.picks.zone_unavailable += 1;
+      return { state: zone?.id ? "zone_not_publisher_owned" : "zone_unavailable", candidates: rows.length };
+    }
+    const [top] = rankProgrammeTopics(rows.map((/** @type {any} */ row) => ({ id: String(row.public_id), surge: row.surge === true, boards: row.boards, acceptedAt: row.accepted_at })));
+    counters.topics.picks.picked += 1;
+    return { state: "picked", candidates: rows.length, topicId: top.id, surge: top.surge === true, boards: top.standing.boards, bestRank: top.standing.bestRank,
+      action: { zone: TOPIC_ZONE.key, taskType: PROGRAMME_TOPIC_TASK_TYPE, topicId: top.id, reason: topicActionReason(top) } };
+  }
+
+  /**
+   * One day's topic decision: the day's hot topic first (in code, `pickTopic`), then the signals, the one Flash call under purpose
+   * `evidence` for what the day has left, its answer held to the closed schema, and the recorded fallback when it cannot be had.
    * @param {Awaited<ReturnType<typeof gatherSignals>>} signals @param {string} decisionId
    */
   async function decide(signals, decisionId) {
@@ -559,8 +724,17 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       counters.decisions.none += 1;
       return { ...base, source: "none", actions: [], reason: "budget", costCny: 0 };
     }
+    // A timely question cannot wait for tomorrow: the topic's action is the day's first, and the programme's one slot goes to it first.
+    const { action: topicAction = null, ...topicPick } = await pickTopic();
+    const topicActions = topicAction ? [topicAction] : [];
+    Object.assign(base, { topicPick });
+    const room = maxActions - topicActions.length;
+    if (room < 1) {
+      counters.decisions.topic += 1;
+      return { ...base, source: "topic", actions: topicActions, reason: topicActions[0]?.reason ?? "budget", costCny: 0 };
+    }
     const agendas = await readAgendas();
-    const view = EVIDENCE_PROGRAMME_ZONES.map((definition) => {
+    const view = SELECTOR_ZONES.map((definition) => {
       const zone = signals.zones[definition.key];
       const outcomes = (agendas.get(definition.key)?.payload?.outcomes ?? []).slice(-5);
       return {
@@ -581,7 +755,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     const fallback = (/** @type {string} */ why) => {
       const action = fallbackProgrammeAction(fallbackInput);
       counters.decisions[action ? "fallback" : "none"] += 1;
-      return { ...base, source: action ? "fallback" : "none", fallbackReason: why, actions: action ? [action] : [], reason: action?.reason ?? "no_new_evidence", costCny: 0 };
+      return { ...base, source: action ? "fallback" : "none", fallbackReason: why, actions: [...topicActions, ...(action ? [action] : [])], reason: action?.reason ?? "no_new_evidence", costCny: 0 };
     };
     const available = config?.deepseekProviderEnabled === true && Boolean(config?.deepseekApiKey);
     if (!available) return fallback("evidence_programme_model_unavailable");
@@ -595,16 +769,16 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
           model: defaultDeepSeekModel, thinking: { type: "disabled" }, temperature: 0, max_tokens: DECISION_MAX_TOKENS, response_format: { type: "json_object" },
           messages: [
             { role: "system", content: DECISION_INSTRUCTIONS },
-            { role: "user", content: JSON.stringify({ today: signals.day, maxActions, budget: base.budget, readsRecorded: signals.readsRecorded, zones: view }) },
+            { role: "user", content: JSON.stringify({ today: signals.day, maxActions: room, budget: { ...base.budget, maxActions: room }, readsRecorded: signals.readsRecorded, zones: view }) },
           ],
         },
       });
       const choice = body?.choices?.[0];
       if (choice && Object.hasOwn(choice, "finish_reason") && choice.finish_reason !== "stop") throw Object.assign(new Error("The topic decision was cut off."), { code: "evidence_programme_decision_incomplete" });
-      const answer = parseProgrammeDecision(choice?.message?.content, { zones: closed, maxActions });
+      const answer = parseProgrammeDecision(choice?.message?.content, { zones: closed, maxActions: room });
       counters.decisions[answer.actions.length ? "model" : "none"] += 1;
       const cost = usageLedger ? Number((await usageLedger.summaryRun(publisher, decisionId).catch(() => null))?.actualCost) || 0 : 0;
-      return { ...base, source: answer.actions.length ? "model" : "none", model: defaultDeepSeekModel, actions: answer.actions, reason: answer.reason, costCny: cost };
+      return { ...base, source: answer.actions.length ? "model" : "none", model: defaultDeepSeekModel, actions: [...topicActions, ...answer.actions], reason: answer.reason, costCny: cost };
     } catch (error) {
       const code = /** @type {any} */ (error)?.name === "AbortError" ? "evidence_programme_decision_timeout" : codeOf(error);
       const cost = usageLedger ? Number((await usageLedger.summaryRun(publisher, decisionId).catch(() => null))?.actualCost) || 0 : 0;
@@ -624,10 +798,21 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     return { maxEpisodeCny, dailyBudgetCny, weeklyBudgetCny: Math.round(dailyBudgetCny * 7 * 100) / 100 };
   }
 
-  /** The standing instruction of a zone's agenda: its question and the publication standard its conclusions are held to. */
-  function agendaPrompt(/** @type {import("./evidenceProgrammeData.mjs").EvidenceProgrammeZone} */ definition) {
+  /**
+   * The standing instruction of a zone's agenda: its question and the publication standard its conclusions are held to. A hot topic's
+   * agenda asks the topic's question instead, with the event as context and the rules a public event's question is answered by.
+   * @param {import("./evidenceProgrammeData.mjs").EvidenceProgrammeZone} definition
+   * @param {{ question: string, peg: { text: string, source: any } | null } | null} [topic]
+   */
+  function agendaPrompt(definition, topic = null) {
+    const source = topic?.peg?.source;
+    const attribution = [source?.name, source?.date].filter((part) => typeof part === "string" && part.trim()).join(", ");
     return [
-      `Evidence zone "${definition.title}". Standing question: ${definition.topic.standingQuestion}`,
+      ...(topic ? [
+        `Evidence zone "${definition.title}". Today's question, raised by a public event: ${topic.question}`,
+        ...(topic.peg ? [`The event, as reported${attribution ? ` (${attribution})` : ""}: ${topic.peg.text} This is context only; the event and the people in it are not the subject of the research.`] : []),
+        "Answer the general question for the general population from primary studies, current guidelines and official statistics. Never state, guess or discuss the diagnosis, the cause, a prior condition or the treatment of any person the event concerns, and never name them in a claim or in the report. Give absolute risks (rates or numbers per population, with the population and period) wherever a source reports them, beside any relative effect; say who is at higher risk, how rare a rare outcome is, and when to see a doctor where the sources say so.",
+      ] : [`Evidence zone "${definition.title}". Standing question: ${definition.topic.standingQuestion}`]),
       "This agenda is run by the platform's own evidence programme, and what it concludes may be published as an evidence card, so it is held to the publication standard: a conclusion is published only when its quotation is found verbatim in the source it names and an independent re-check does not overturn it.",
       "When you write clinical-evidence-matrix.json, give each claim in agenda-delta.json, as its id, the claimId of the matrix claim it restates, so that each published statement is checked both ways. State a claim only as strongly as its own source supports; what no source quotation supports belongs in the report's limitations, not in a claim. Never write practical dosing or treatment instructions for an individual.",
     ].join("\n");
@@ -637,27 +822,32 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
    * The zone's agenda, created when there is none and otherwise brought to today's task type and caps, and started: the
    * programme's own continue (a start lifts the pauses automatic rules put on it, which is the programme's authority over
    * its own agenda).
+   * A hot topic has an agenda of its own (`programme.topicId`): its question is the topic's, and its episode's brief carries none of
+   * another topic's progress.
    * @param {import("./evidenceProgrammeData.mjs").EvidenceProgrammeZone} definition @param {string | null} zoneId @param {string} taskType
+   * @param {{ id: string, title: string, question: string, peg: { text: string, source: any } | null } | null} [topic]
    */
-  async function ensureAgenda(definition, zoneId, taskType) {
+  async function ensureAgenda(definition, zoneId, taskType, topic = null) {
     const caps = agendaCaps();
-    const page = await documents.list(publisher, "agenda", { projectId: EVIDENCE_PROJECT_ID, limit: 100, filter: { programme: { zoneKey: definition.key } } });
+    const mark = { zoneKey: definition.key, ...(topic ? { topicId: topic.id } : {}) };
+    const page = await documents.list(publisher, "agenda", { projectId: EVIDENCE_PROJECT_ID, limit: 100, filter: { programme: mark } });
     let agenda = page.items.find((/** @type {any} */ item) => !item.payload.archivedAt) ?? null;
+    const prompt = agendaPrompt(definition, topic);
     if (!agenda) {
       const created = await autopilot.create(publisher, {
-        projectId: EVIDENCE_PROJECT_ID, title: `证据中心 · ${definition.title}`.slice(0, 200), topics: [definition.title, ...definition.topic.terms.slice(0, 6)],
-        prompt: agendaPrompt(definition), taskTypes: [taskType], schedule: NEVER_DUE, ...caps,
+        projectId: EVIDENCE_PROJECT_ID, title: `证据中心 · ${definition.title}${topic ? ` · ${topic.title}` : ""}`.slice(0, 200),
+        topics: topic ? [definition.title, topic.title] : [definition.title, ...definition.topic.terms.slice(0, 6)],
+        prompt, taskTypes: [taskType], schedule: NEVER_DUE, ...caps,
       });
-      agenda = await documents.put(publisher, "agenda", created.id, { ...created.payload, programme: { zoneKey: definition.key, zoneId } },
+      agenda = await documents.put(publisher, "agenda", created.id, { ...created.payload, programme: { ...mark, zoneId } },
         { expectedRevision: created.revision, projectId: EVIDENCE_PROJECT_ID });
     } else {
       const payload = agenda.payload;
-      const prompt = agendaPrompt(definition);
       const same = JSON.stringify(payload.taskTypes) === JSON.stringify([taskType]) && payload.maxEpisodeCny === caps.maxEpisodeCny
         && payload.dailyBudgetCny === caps.dailyBudgetCny && payload.weeklyBudgetCny === caps.weeklyBudgetCny && payload.prompt === prompt;
       if (!same) agenda = await autopilot.update(publisher, agenda.id, { expectedRevision: agenda.revision, taskTypes: [taskType], prompt, ...caps });
       if (payload.programme?.zoneId !== zoneId) {
-        agenda = await documents.put(publisher, "agenda", agenda.id, { ...agenda.payload, programme: { zoneKey: definition.key, zoneId } },
+        agenda = await documents.put(publisher, "agenda", agenda.id, { ...agenda.payload, programme: { ...mark, zoneId } },
           { expectedRevision: agenda.revision, projectId: EVIDENCE_PROJECT_ID });
       }
     }
@@ -697,7 +887,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   /** @param {string | null} excludeEpisodeId @returns {Promise<number>} the programme episodes that hold the slot now */
   async function activeEpisodes(excludeEpisodeId) {
     const row = (await database.query(`SELECT count(*)::integer AS n FROM evimed_product.documents
-      WHERE user_id = $1 AND kind = 'episode' AND project_id = $2 AND deleted_at IS NULL AND payload->>'status' IN ('queued', 'running', 'verifying')
+      WHERE user_id = $1 AND kind = 'episode' AND project_id = $2 AND deleted_at IS NULL AND payload->>'status' IN ('queued', 'retry_pending', 'running', 'verifying')
         AND updated_at > $3::timestamptz AND ($4::text IS NULL OR id <> $4)`,
     [publisher, EVIDENCE_PROJECT_ID, new Date(now().getTime() - PROGRAMME_ACTIVE_EPISODE_MS).toISOString(), excludeEpisodeId])).rows[0];
     return row?.n ?? 0;
@@ -707,20 +897,27 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
    * Apply one action of the day's decision: the zone's agenda, then one episode of the chosen type through `runNow`, under a
    * request id that replays to the same episode. A refusal that frees later (budget, slot) is a recorded deferral and is tried
    * again on a later look the same day; every other refusal is recorded and final.
-   * @param {string} decisionId @param {string} day @param {{ zone: string, taskType: string }} action
+   *
+   * A hot topic's action (`topicId`) runs in its own agenda, and moves the topic's state with it: `taken` once its episode exists,
+   * `queued` while it waits for a budget or a slot, `skipped` when it cannot start at all. The topic is written before the decision
+   * records the action, so a failure between the two leaves the action pending and the next look replays it to the same episode.
+   * @param {string} decisionId @param {string} day @param {{ zone: string, taskType: string, topicId?: string }} action
    */
   async function applyAction(decisionId, day, action) {
     const definition = programmeZoneByKey(action.zone);
+    const topicId = definition?.answersTopics && typeof action.topicId === "string" ? action.topicId : null;
     /** @type {Record<string, any>} */
     let result;
     try {
       const state = (await resolveZones()).find((zone) => zone.key === action.zone);
+      const topic = topicId ? await readTopic(topicId) : null;
       if (!definition || !state?.id) result = { status: "deferred", reason: "zone_unavailable" };
       else if (!state.writable) result = { status: "deferred", reason: "zone_not_publisher_owned" };
+      else if (definition.answersTopics && !topic) result = { status: "deferred", reason: "topic_unavailable" };
       else {
         // Asked before the agenda is touched: a day or a slot that is not there leaves the zone's agenda exactly as it was.
         await checkAdmission({ count: false });
-        const agenda = await ensureAgenda(definition, state.id, action.taskType);
+        const agenda = await ensureAgenda(definition, state.id, action.taskType, topic);
         const scheduled = await autopilot.runNow(publisher, agenda.id, { requestId: `programme-${day}-${action.zone}` });
         result = scheduled?.episode ? { status: "scheduled", agendaId: agenda.id, episodeId: scheduled.episode.id } : { status: "deferred", reason: "not_scheduled" };
       }
@@ -731,6 +928,12 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
           : ["autopilot_daily_budget_spent", "autopilot_weekly_budget_spent"].includes(code) ? { status: "deferred", reason: "agenda_budget", code }
             : { status: "failed", code };
       if (result.status === "failed") report(`evidence programme action ${action.zone}: ${code}`);
+    }
+    if (topicId) {
+      const topicState = result.status === "scheduled" ? "taken" : result.status === "deferred" && RETRIABLE_DEFERRALS.has(result.reason) ? "queued" : "skipped";
+      await writeTopicState(topicId, topicState);
+      result.topicState = topicState;
+      if (topicState === "skipped") result.topicReason = result.status === "deferred" ? result.reason : `action_failed:${result.code}`;
     }
     counters.actions[result.status === "deferred" ? result.reason : result.status] = (counters.actions[result.status === "deferred" ? result.reason : result.status] ?? 0) + 1;
     await mutateDecision(decisionId, (payload) => {
@@ -784,7 +987,30 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     }
     last.day = day; last.source = current?.payload?.source ?? null; last.at = now().toISOString(); last.error = null;
     const applied = await applyDecision(id);
+    await retireTopicAgendas();
     return { state: "decided", id, decision: applied?.payload ?? null };
+  }
+
+  /**
+   * Stop the agendas of hot topics that are answered (`card`) or let go (`skipped`). Each was made for one question and one episode,
+   * and an agenda left active is one more row the autopilot's timer reads at every tick, one more each day. Stopped through the
+   * service's own `stop` and only after the topic's last state is written, when its episode and its re-checks are over, so the stop
+   * cancels nothing the card needed. Once a day; one that fails is reported and stopped the next day.
+   * @returns {Promise<number>} how many were stopped
+   */
+  async function retireTopicAgendas() {
+    if (!TOPIC_ZONE) return 0;
+    const page = await documents.list(publisher, "agenda", { projectId: EVIDENCE_PROJECT_ID, limit: 100, filter: { programme: { zoneKey: TOPIC_ZONE.key }, status: "active" } });
+    const byTopic = new Map(page.items.filter((/** @type {any} */ item) => typeof item.payload.programme?.topicId === "string").map((/** @type {any} */ item) => [item.payload.programme.topicId, item]));
+    if (!byTopic.size) return 0;
+    const settled = (await database.query("SELECT public_id FROM evimed_frontier.topics WHERE public_id = ANY($1::text[]) AND programme_state IN ('card', 'skipped')", [[...byTopic.keys()]])).rows;
+    let retired = 0;
+    for (const row of settled) {
+      const agenda = byTopic.get(row.public_id);
+      try { await autopilot.stop(publisher, agenda.id, { expectedRevision: agenda.revision }); retired += 1; }
+      catch (error) { report(`evidence programme topic agenda ${agenda.id}: ${codeOf(error)}`); }
+    }
+    return retired;
   }
 
   /** The project, the zones; once per process, and again whenever a day runs. */
@@ -810,8 +1036,31 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   async function recordOutcome(id, episodeId, outcome) {
     await mutateDecision(id, (payload) => {
       const previous = payload.outcomes?.[episodeId];
-      payload.outcomes = { ...payload.outcomes, [episodeId]: { ...outcome, attempts: (previous?.attempts ?? 0) + 1, at: now().toISOString() } };
+      const { history: _history, ...prior } = previous ?? {};
+      payload.outcomes = { ...payload.outcomes, [episodeId]: { ...outcome, attempts: (previous?.attempts ?? 0) + 1, at: now().toISOString(),
+        ...(previous?.captureRepair ? { captureRepair: { ...previous.captureRepair, state: "used" },
+          history: [...(previous.history ?? []), ...(previous.captureRepair.state === "pending" ? [prior] : [])].slice(-20) } : {}) } };
     });
+  }
+
+  /** One explicit, server-verified capture generation may reopen an exhausted absence; publication still uses normal checks.
+   * @param {any} receipt */
+  async function settleCaptureRepair(receipt) {
+    if (!enabled) return { state: "off" };
+    if (receipt?.projectId !== EVIDENCE_PROJECT_ID || !results?.captureRepairReceipt) throw new HttpError(409, "result_capture_repair_invalid", "This repair does not belong to the evidence programme.");
+    const verified = await results.captureRepairReceipt(publisher, EVIDENCE_PROJECT_ID, receipt.matrixVersionId, receipt.generation);
+    if (verified.runId !== receipt.runId) throw new HttpError(409, "result_capture_repair_invalid", "The repair run changed.");
+    const episode = await autopilot.episodeForRun(publisher, EVIDENCE_PROJECT_ID, verified.runId);
+    const decision = episode ? await decisionOf(episode.id) : null;
+    if (!decision) throw new HttpError(404, "evidence_programme_decision_missing", "No programme episode owns this repair.");
+    await mutateDecision(decision.id, payload => {
+      const previous = payload.outcomes?.[episode.id];
+      if (previous?.captureRepair?.generation === verified.generation) return;
+      if (previous?.outcome !== "no_evidence_matrix" || Number(previous.attempts) < MATRIX_ATTEMPTS) return;
+      payload.outcomes[episode.id] = { ...previous, captureRepair: { generation: verified.generation, matrixVersionId: verified.matrixVersionId,
+        state: "pending", at: now().toISOString() } };
+    });
+    return settleEpisode(episode.id);
   }
 
   /** @param {string} outcome @param {Record<string, any>} [more] */
@@ -829,11 +1078,25 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
    */
   function settleEpisode(episodeId) {
     if (!enabled) return Promise.resolve({ state: "off" });
-    // One settling of an episode at a time in this process: the hook of a verification and the sweep can meet, and two writers of
-    // one card would be a request conflict at best.
+    // The map coalesces local callers. The existing scoped transaction also fences other processes: reread only after
+    // the episode lock, and commit the card and outcome together. A lost connection rolls both back before another owner enters.
     const running = settling.get(episodeId);
     if (running) return running;
-    const started = settle(episodeId).finally(() => { settling.delete(episodeId); });
+    const started = (async () => {
+      // Resolve lazy schema readiness before holding research rows; a fresh process must not upgrade those tables
+      // while another settlement is waiting on its episode lock.
+      await migrateProductStore(database);
+      await zones.ready();
+      return database.transaction(async client => {
+        // Share the existing migration fences: a new process's lazy DDL cannot queue between this transaction's
+        // reads and writes and deadlock their relation-lock upgrade. Other settled episodes remain concurrent.
+        for (const schema of ["evimed-product-v1", "evimed-evidence-zones-v1"]) {
+          await client.query("SELECT pg_advisory_xact_lock_shared(hashtext($1))", [schema]);
+        }
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evidence-programme-settle:${publisher}:${episodeId}`]);
+        return database.withTransactionClient(client, () => settle(episodeId));
+      });
+    })().finally(() => { settling.delete(episodeId); });
     settling.set(episodeId, started);
     return started;
   }
@@ -841,14 +1104,55 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   /** @type {Map<string, Promise<{ state: string, cardId?: string, revision?: number, reason?: string }>>} */
   const settling = new Map();
 
-  /** @param {string} episodeId @returns {Promise<{ state: string, cardId?: string, revision?: number, reason?: string }>} */
+  /**
+   * Settle one episode under the decision that chose it, then, for a hot topic's episode, move the topic to what the outcome says (a
+   * replay of a final outcome writes the same state again, which writes nothing).
+   * @param {string} episodeId @returns {Promise<{ state: string, cardId?: string, revision?: number, reason?: string }>}
+   */
   async function settle(episodeId) {
     const decision = await decisionOf(episodeId);
     if (!decision) return countOutcome("decision_required");
+    const action = (Array.isArray(decision.payload.actions) ? decision.payload.actions : []).find((/** @type {any} */ entry) => entry.episodeId === episodeId);
+    const topicId = programmeZoneByKey(String(action?.zone))?.answersTopics && typeof action?.topicId === "string" ? action.topicId : null;
+    const result = await settleDecided(decision, episodeId, topicId);
+    if (topicId) await settleTopic(decision.id, episodeId, topicId);
+    return result;
+  }
+
+  /**
+   * What a settled outcome means for its hot topic: a card → `card` with the card's id; a final outcome without one → `skipped`, the
+   * outcome as the reason on the day's decision; anything still waiting → nothing yet.
+   * @param {string} decisionId @param {string} episodeId @param {string} topicId
+   */
+  async function settleTopic(decisionId, episodeId, topicId) {
+    const recorded = (await readDecision(decisionId))?.payload?.outcomes?.[episodeId];
+    if (!recorded) return;
+    const card = CARD_OUTCOMES.has(String(recorded.outcome)) && typeof recorded.cardId === "string";
+    if (!card && !isFinal(recorded)) return;
+    const state = card ? "card" : "skipped";
+    await writeTopicState(topicId, state, { cardId: card ? recorded.cardId : null });
+    await mutateDecision(decisionId, (payload) => {
+      const entry = payload.actions.find((/** @type {any} */ candidate) => candidate.episodeId === episodeId);
+      if (!entry) return;
+      entry.topicState = state;
+      if (card) delete entry.topicReason; else entry.topicReason = String(recorded.outcome);
+    });
+  }
+
+  /**
+   * @param {{ id: string, payload: any }} decision @param {string} episodeId @param {string | null} topicId
+   * @returns {Promise<{ state: string, cardId?: string, revision?: number, reason?: string }>}
+   */
+  async function settleDecided(decision, episodeId, topicId) {
     const decisionId = decision.id;
     const recorded = decision.payload.outcomes?.[episodeId];
-    if (recorded && isFinal(recorded)) return { state: recorded.outcome, cardId: recorded.cardId, revision: recorded.revision };
+    const repairPending = recorded?.outcome === "no_evidence_matrix" && recorded.captureRepair?.state === "pending";
+    if (recorded && isFinal(recorded) && !repairPending) return { state: recorded.outcome, cardId: recorded.cardId, revision: recorded.revision };
     const episode = await autopilot.getEpisode(publisher, episodeId);
+    if (repairPending) {
+      const repair = await results.captureRepairReceipt(publisher, EVIDENCE_PROJECT_ID, recorded.captureRepair.matrixVersionId, recorded.captureRepair.generation);
+      if (repair.runId !== episode.payload.runId) throw new HttpError(409, "result_capture_repair_invalid", "The repaired result belongs to another episode.");
+    }
     const phase = episode.payload.status;
     if (["failed", "canceled"].includes(phase)) { await recordOutcome(decisionId, episodeId, { outcome: "episode_failed" }); return countOutcome("episode_failed"); }
     if (phase !== "merged") return { state: "waiting", reason: phase };
@@ -860,6 +1164,12 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       // Written once: an episode waiting for an operator to re-own its zone is not a write every sweep.
       if (recorded?.outcome !== "zone_unavailable") await recordOutcome(decisionId, episodeId, { outcome: "zone_unavailable" });
       return countOutcome("zone_unavailable");
+    }
+    // A hot topic's card asks the topic's question; a topic that cannot be read has no question to title its card with.
+    const topic = topicId ? await readTopic(topicId) : null;
+    if (topicId && !topic) {
+      await recordOutcome(decisionId, episodeId, { outcome: "topic_unavailable" });
+      return countOutcome("topic_unavailable");
     }
 
     // An analysis engine's run is first-hand work when it left receipts of its calculation; its card is read from them and not from
@@ -881,20 +1191,28 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       captured = await readSources(read.version, evaluation.included.flatMap((/** @type {any} */ entry) => claimPaths(entry.claim)));
     }
     const provenance = programmeCardProvenance(agenda.id, episode.payload.taskType);
-    const existing = (await database.query("SELECT id, revision FROM evimed_frontier.evidence_cards WHERE zone_id = $1 AND user_id = $2 AND provenance = $3 ORDER BY created_at, id LIMIT 1",
+    const existing = (await database.query("SELECT id, revision, lineage FROM evimed_frontier.evidence_cards WHERE zone_id = $1 AND user_id = $2 AND provenance = $3 ORDER BY created_at, id LIMIT 1",
       [zone.id, publisher, provenance])).rows[0] ?? null;
+    // The topic's card stands on the newest episode that reached it. An older episode settled late — its independent check came in
+    // after a later run's card, or an operator reopened it (`scripts/ops/evidence-programme-resettle.mjs`) — does not put its older
+    // evidence back over the newer: its outcome is that a later episode's card holds the topic.
+    const later = existing ? await laterEpisodeOf(existing, episode) : null;
+    if (later) {
+      await recordOutcome(decisionId, episodeId, { outcome: "superseded", cardId: existing.id, revision: existing.revision, supersededBy: later });
+      return countOutcome("superseded", { cardId: existing.id, revision: existing.revision });
+    }
     const weekStart = new Date(now().getTime() - 7 * 86_400_000).toISOString();
     const originalThisWeek = (await database.query(`SELECT count(*)::integer AS n FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
       WHERE c.user_id = $1 AND c.originality = 'original_analysis' AND c.created_at > $2::timestamptz AND (z.kind = 'official' OR z.user_id = $1)`, [publisher, weekStart])).rows[0].n;
     const model = String(config?.deepseekModel || defaultDeepSeekModel);
     const built = receipts.length
       ? buildOriginalAnalysisCard({
-        zone: { id: zone.id, title: definition.title }, question: definition.topic.questionZh, taskType: episode.payload.taskType, capabilityId,
+        zone: { id: zone.id, title: definition.title }, question: topic?.question ?? definition.topic.questionZh, taskType: episode.payload.taskType, capabilityId,
         decisionId, agenda: { id: agenda.id }, episode: { id: episodeId }, runId: episode.payload.runId, receipts,
         model, at: now(), revising: Boolean(existing), originalThisWeek, originalPerWeek,
       })
       : buildProgrammeCard({
-        zone: { id: zone.id, title: definition.title }, question: definition.topic.questionZh, taskType: episode.payload.taskType,
+        zone: { id: zone.id, title: definition.title }, question: topic?.question ?? definition.topic.questionZh, title: topic?.title ?? null, taskType: episode.payload.taskType,
         capabilityId, decisionId, agenda: { id: agenda.id }, episode: { id: episodeId },
         runId: episode.payload.runId, resultVersionId: read.version.versionId, evaluation, captured, machineValues: read.machineValues,
         comparisonCandidates: comparisonCandidates ? await Promise.resolve(comparisonCandidates({ episodeId, versions: read.versions })).catch(() => []) : [],
@@ -911,8 +1229,28 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       await recordOutcome(decisionId, episodeId, { outcome: built.outcome, excluded: summarise(built.excluded) });
       return countOutcome(built.outcome);
     }
+    // A hot topic's card is about the question, never the person: a title (or the question it shows) that names one of the event's
+    // people or bodies is not published. Compared in code against the topic's closed list; the names go into no record or log.
+    if (topic && subjectNamesIn([built.card.title, built.card.content?.question], topic.subjectNames).length) {
+      await recordOutcome(decisionId, episodeId, { outcome: "topic_name_in_title", excluded: summarise(built.excluded) });
+      report(`evidence programme card for ${episodeId}: topic_name_in_title`);
+      return countOutcome("topic_name_in_title");
+    }
     const body = existing ? { ...built.card, expectedRevision: existing.revision } : { ...built.card, requestId: built.requestId };
-    const saved = await zones.saveEditorial(user, body, zone.id, existing?.id ?? null, !existing, "programme");
+    /** @type {any} */ let saved;
+    try {
+      saved = await zones.saveEditorial(user, body, zone.id, existing?.id ?? null, !existing, "programme");
+    } catch (error) {
+      // The zone refused the card as invalid: the same episode builds the same card, so asking again only repeats the refusal —
+      // four episodes did, at every sweep, from 2026-10-09 to 2026-10-19, and the log said `evidence_invalid` and nothing else.
+      // Recorded once and final, with the zone's own sentence, where the operator's page and the log read it. Any other failure
+      // (a revision conflict, the database) is looked at again by the next sweep.
+      if (!isCardRefusal(error)) throw error;
+      const reason = cut(/** @type {any} */ (error).message, 300);
+      await recordOutcome(decisionId, episodeId, { outcome: "card_refused", code: codeOf(error), reason });
+      report(`evidence programme card refused for ${episodeId}: ${codeOf(error)}: ${reason}`);
+      return countOutcome("card_refused", { reason });
+    }
     const cardId = saved.evidence.id;
     const revision = saved.evidence.revision;
     counters.claimsPublished += built.includedCount;
@@ -920,6 +1258,19 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     const outcome = existing ? "revised" : "published";
     await recordOutcome(decisionId, episodeId, { outcome, cardId, revision, claims: built.includedCount, excluded: summarise(built.excluded), headlineClaimId: built.headlineClaimId, originality: built.originality });
     return countOutcome(outcome, { cardId, revision });
+  }
+
+  /**
+   * The episode a card's current revision stands on, when it began after this one; null when it is this episode, an earlier one, or
+   * one that cannot be read (the card is then revised as before).
+   * @param {{ lineage?: any }} card @param {{ id: string, createdAt?: string | null }} episode @returns {Promise<string | null>}
+   */
+  async function laterEpisodeOf(card, episode) {
+    const standing = typeof card.lineage?.episodeId === "string" ? card.lineage.episodeId : null;
+    if (!standing || standing === episode.id) return null;
+    const other = await autopilot.getEpisode(publisher, standing).catch(() => null);
+    const [mine, theirs] = [Date.parse(String(episode.createdAt ?? "")), Date.parse(String(other?.createdAt ?? ""))];
+    return Number.isFinite(mine) && Number.isFinite(theirs) && theirs > mine ? standing : null;
   }
 
   /** @param {{ claimId: string, reason: string }[]} excluded @returns {Record<string, number>} */
@@ -1024,7 +1375,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
         if (action.status !== "scheduled" || !action.episodeId) continue;
         const outcome = decision.payload.outcomes?.[action.episodeId]?.outcome;
         if (outcome && FINAL_OUTCOMES.has(outcome)) continue;
-        try { await settleEpisode(action.episodeId); settled += 1; } catch (error) { counters.hookFailures += 1; report(`evidence programme sweep ${action.episodeId}: ${codeOf(error)}`); }
+        try { await settleEpisode(action.episodeId); settled += 1; } catch (error) { counters.hookFailures += 1; report(`evidence programme sweep ${action.episodeId}: ${codeOf(error)}${cut(/** @type {any} */ (error)?.message, 200) ? `: ${cut(/** @type {any} */ (error).message, 200)}` : ""}`); }
       }
     }
     return { settled, applied };
@@ -1074,9 +1425,9 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     if (comparisons !== undefined) comparisonCandidates = comparisons;
   }
 
-  return { enabled, owns, assertAdmitted, ensureOfficialZones, gatherSignals, runDay, settleEpisode, onRunFinished, sweep, status, overview, worker, ready, useSignals,
+  return { enabled, owns, assertAdmitted, ensureOfficialZones, gatherSignals, runDay, settleEpisode, settleCaptureRepair, onRunFinished, sweep, status, overview, worker, ready, useSignals,
     /** The pieces a test drives directly. */
-    internals: { decide, applyAction, applyDecision, ensureAgenda, resolveZones, localDay, localHour } };
+    internals: { decide, applyAction, applyDecision, ensureAgenda, resolveZones, localDay, localHour, pickTopic, retireTopicAgendas } };
 }
 
 /**

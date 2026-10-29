@@ -15,7 +15,8 @@ import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
@@ -32,7 +33,7 @@ before(async () => {
   if (!url) return;
   root = await fs.realpath(await fs.mkdtemp("/tmp/evimed-capsule-rollback-"));
   db = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
-  await migrateResearchMemory(db);
+  await migrateMemorySettings(db);
   await migrateProductStore(db);
   documents = new ProductDocuments(db);
   capsules = new CapsuleService(documents);
@@ -53,7 +54,7 @@ async function account() {
 }
 /** @param {string} owner */
 async function source(owner) {
-  const capsule = await capsules.create(owner, { title: "Rollback methods" });
+  const capsule = await makeCapsule(capsules, owner, { title: "Rollback methods" });
   await capsules.addEntry(owner, capsule.id, { factKind: "method_preference", layer: "methods", content: "Retain study uncertainty." });
   return capsule;
 }

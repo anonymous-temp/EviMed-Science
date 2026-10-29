@@ -1,3 +1,4 @@
+import { iconButtonClasses } from "@/components/ui/IconButton";
 import { Menu } from "@/components/ui/Menu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { KnowledgeStatus } from "@/lib/sourceClient";
@@ -17,7 +18,10 @@ export function KnowledgeStatusDot({ status, asking, onCompile }: { status: Know
   const line = statusLine(status);
   if (!line || !line.attention) return null;
   const mark = <span aria-hidden="true" data-forced-colors="preserve" className="block h-2 w-2 rounded-full bg-warn" />;
-  const look = "grid h-6 w-6 place-items-center rounded-full outline-none hover:bg-surface-2 focus-visible:outline-focus";
+  // The 28 px icon button of a row (the sidebar's 「新建对话」, a row's 「⋯」), at the interface's type size like every icon button: a
+  // hand-drawn 24 px circle at the meta line's 12 px was a kind of control of its own on every tab of the page (release walk of
+  // evimed-b559d4b7ebd0-1). `grid` keeps it a box of its own in the meta line, as it was.
+  const look = iconButtonClasses({ size: "sm", className: "grid text-ui" });
   if (!line.canCompile) {
     return (
       <Tooltip content={line.text}>

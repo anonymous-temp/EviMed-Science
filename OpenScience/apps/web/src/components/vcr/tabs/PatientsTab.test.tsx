@@ -375,7 +375,7 @@ describe("虚拟患者 · what the people are measured against", () => {
     await userEvent.click(within(band(container)).getByRole("button", { name: /模型：/ }));
     const drawer = await screen.findByRole("dialog", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     expect(within(drawer).getByText("可信度层级 · 文献模型")).toBeInTheDocument();
-    expect(drawer.querySelector("[data-vcr-twin]")).toHaveTextContent("基线条件化预测");
+    expect(drawer.querySelector("[data-vcr-twin]")).toHaveTextContent("情景仿真");
     expect(within(drawer).getByText("研究设计支持", { exact: false })).toBeInTheDocument();
   });
 

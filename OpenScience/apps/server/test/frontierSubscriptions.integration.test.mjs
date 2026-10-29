@@ -337,7 +337,7 @@ for (const kind of ["drug", "topic", "event"])
       );
       const profiles = new FrontierProfiles({
         database: db,
-        researchMemory: {
+        memorySettings: {
           configured: true,
           settings: async () => ({ recallPaused: false, pausedProjects: [] }),
         },

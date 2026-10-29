@@ -1225,6 +1225,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const predictions = createVcrPredictions({ store, registry: predictionRegistry });
   // The generated records as a file (R10): read from the data plane, held to the hash the result recorded, synthetic rows only.
   const records = createVcrRecords({ store, config });
+  service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
     store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,

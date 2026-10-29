@@ -13,6 +13,7 @@ import {
   countText,
   factValueText,
   intervalText,
+  engineIntervalForDisplay,
   isPlaceholder,
   mcseText,
   NO_VALUE,
@@ -199,4 +200,23 @@ describe("a recorded value, read by a person", () => {
     expect(text).not.toContain("[object Object]");
     expect(text).toContain('{"d":1}');
   });
+});
+
+
+it("keeps page percentage units and fractional precision for every interval kind", () => {
+  for (const kind of VCR_INTERVAL_KINDS as readonly VcrIntervalKind[]) {
+    for (const level of [1, 90, 95, 99, 99.5]) expect(intervalText({ kind, low: 1, high: 2, level })).toMatch(new RegExp(`^${level}% `));
+    for (const level of [undefined, null, 0, -1, 101, NaN, Infinity]) expect(intervalText({ kind, low: 1, high: 2, level })).not.toContain("%");
+  }
+});
+
+it("adapts engine levels only at explicit display boundaries and preserves raw results", () => {
+  for (const kind of VCR_INTERVAL_KINDS as readonly VcrIntervalKind[]) {
+    for (const [level, expected] of [[0.95, 95], [0.9, 90], [0.99, 99], [0.995, 99.5], [0.01, 1], [1, 100], [95, 95], [99.5, 99.5], [undefined, null], [null, null], [Infinity, null], [-1, null], [101, null], [NaN, null]]) {
+      const raw = { kind, level, low: 0.123456789, high: 0.987654321 };
+      expect(engineIntervalForDisplay(raw)).toEqual({ ...raw, level: expected });
+      expect(raw.level).toBe(level);
+    }
+  }
+  expect(engineIntervalForDisplay(null)).toBeNull();
 });

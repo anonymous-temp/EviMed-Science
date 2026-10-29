@@ -11,7 +11,8 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -36,7 +37,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-share-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type) VALUES
     ($1,'李主任','development'),($2,'Recipient','development'),($3,'Bystander','development'),($4,'Empty Owner','development')`,
   [sender, recipient, bystander, empty]);
@@ -59,14 +60,14 @@ async function method(capsuleId, content) {
 }
 
 test("an account with nothing to share hears it as a state, and its export is a named refusal", options, async () => {
-  const capsule = await capsules.create(empty, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, empty, { title: "我的记忆胶囊" });
   const preview = await transfers.exportPreview(empty, capsule.id, {});
-  assert.deepEqual(preview, { scopes: ["workstyle"], empty: true, tooMany: false, card: null, entries: [] });
+  assert.deepEqual(preview, { scopes: ["workstyle"], empty: true, tooMany: false, card: null, entries: [], excluded: [] });
   await assert.rejects(transfers.export(empty, capsule.id, { password }), { status: 409, code: "capsule_export_empty" });
 });
 
 test("a pack carries a signed card — title, sender, what it holds — and the preview is what the recipient will read", options, async () => {
-  const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, sender, { title: "我的记忆胶囊" });
   await method(capsule.id, "Meta 分析先报 GRADE 再报效应量。");
   await capsules.addEntry(sender, capsule.id, { factKind: "preference", layer: "profile", content: "报告一律用中文。" });
   const own = await transfers.exportPreview(sender, capsule.id, {});
@@ -93,7 +94,7 @@ test("a pack is never signed with the sender's login name or e-mail address", op
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type,password_hash) VALUES ($1,$1,'local','not-a-real-hash'),($2,'someone@example.invalid','oidc',NULL)`, [login, mailed]);
   try {
     for (const account of [login, mailed]) {
-      const capsule = await capsules.create(account, { title: "我的记忆胶囊" });
+      const capsule = await makeCapsule(capsules, account, { title: "我的记忆胶囊" });
       await capsules.addEntry(account, capsule.id, { factKind: "method_preference", layer: "methods", content: "Meta 分析先报 GRADE 再报效应量。" });
       const own = await transfers.exportPreview(account, capsule.id, {});
       assert.equal(own.card.author, "一位研究者");
@@ -112,7 +113,7 @@ test("a pack is never signed with the sender's login name or e-mail address", op
 });
 
 test("a pack sealed for named accounts opens with each one's own key, and for nobody else", options, async () => {
-  const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, sender, { title: "我的记忆胶囊" });
   await method(capsule.id, "纳入标准先写成表格再检索。");
   await assert.rejects(transfers.export(sender, capsule.id, { recipients: ["no-such-account"] }), { code: "capsule_recipient_unknown" });
   const result = await transfers.export(sender, capsule.id, { recipients: [recipient] });
@@ -126,7 +127,7 @@ test("a pack sealed for named accounts opens with each one's own key, and for no
 });
 
 test("a newer snapshot is taken in place of the one the recipient holds, with what changed", options, async () => {
-  const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, sender, { title: "我的记忆胶囊" });
   await method(capsule.id, "先 PROSPERO 登记。");
   const leaving = await method(capsule.id, "只看 RCT。");
   const first = await transfers.export(sender, capsule.id, { password });
@@ -142,7 +143,7 @@ test("a newer snapshot is taken in place of the one the recipient holds, with wh
   assert.deepEqual(preview.upgrades, { capsuleId: held.id, title: held.payload.title, added: 2, removed: 1, kept: 1 });
   assert.equal(preview.card.changelog, "新增 2 条、移除 1 条、保留 1 条");
 
-  const packsBefore = (await capsules.list(recipient)).items.filter((item) => item.payload.imported).length;
+  const packsBefore = (await capsules.documents.list(recipient, "capsule", {})).items.filter((item) => item.payload.imported).length;
   const upgraded = await transfers.import(recipient, { archive: second.archive, password, expectedDigest: preview.archiveSha256, confirmed: true });
   assert.equal(upgraded.id, held.id, "the same capsule: still enabled, still where it was");
   assert.equal(upgraded.payload.transfer.snapshotId, second.snapshot.id);
@@ -153,6 +154,6 @@ test("a newer snapshot is taken in place of the one the recipient holds, with wh
     ["先 PROSPERO 登记。", "报告先写结论。", "高质量队列研究也纳入。"]);
   assert.ok(facts.filter((fact) => fact.payload.status === "retired").every((fact) => fact.payload.retiredBy?.type === "upgrade"));
   assert.deepEqual((await capsules.active(recipient)).items.map((item) => item.capsuleId), [held.id], "in force as before");
-  assert.equal((await capsules.list(recipient)).items.filter((item) => item.payload.imported).length, packsBefore,
+  assert.equal((await capsules.documents.list(recipient, "capsule", {})).items.filter((item) => item.payload.imported).length, packsBefore,
     "the upgrade made no second pack");
 });

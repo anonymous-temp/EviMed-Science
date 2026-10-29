@@ -10,7 +10,7 @@ export const PRODUCT_KINDS = Object.freeze([
   // project. Its own kind rather than a field on `method`, because it is a
   // property of the project's next run and not of any one method: a method can
   // be on trial in one project and absent from another at the same instant.
-  "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
+  "geo-plan-context", "geo-signal", "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
   // What a project's datasets mean: one document per dataset, the recorded interpretation a repeat analysis starts from.
   "dataset-semantics",
   // What was published about a work after it was published (a retraction, a correction, an expression of concern, a new
@@ -24,8 +24,11 @@ export const PRODUCT_KINDS = Object.freeze([
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
+// `memory-record-index` is a retired kind: the legacy memory engine it indexed is deleted (2026-10-25) and nothing enqueues or claims
+// it. It stays in the vocabulary only because the migrations below rebuild the kind CHECK from this list, and a database that still
+// holds a row of it would refuse the narrowed one; `legacyMemoryRetirement.mjs` deletes those rows, and the word can go once none exists.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
-  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", "result-replay",
+  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-monthly", "frontier-notify", "document-export", "study-review", "result-replay",
   // One finished run joined to the capability, skill and tool versions it used and to the result versions it
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
   "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS,
@@ -34,7 +37,10 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   // The compile of one project's documents into knowledge pages (`knowledgePageService.mjs`).
   "wiki-compile",
   // One document's copy in OpenViking made to agree with PostgreSQL (`openVikingSourceSync.mjs`).
-  "ov-resource-sync"]);
+  "ov-resource-sync", "geo-judgment-recheck",
+  // A finished run's reaction window closing (`learningEvidence.mjs`): thirty minutes after it ended, the run is read for the evidence
+  // the researcher left (a follow-up, a correction) or its silence, and a routine is looked for.
+  "learning-evidence"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -53,10 +59,13 @@ export const FEEDBACK_EVENT_TRIGGERS = Object.freeze([
   "deliverable-edited",
   // A correction made through the anchored revision, with the immutable pair of result versions it produced (N12).
   "result-corrected",
+  // The researcher's reaction to a run — a steer, a follow-up judged on the next turn, a result corrected, silence — as the learning
+  // loop counts it (2026-10-23, `@evimed/domain` `learningEvidence.mjs`). Back-office: no page lists it.
+  "learning-evidence",
 ]);
 
 /** What a feedback event can be about. A `result-version` is an immutable result version, named by its version id. */
-export const FEEDBACK_SUBJECT_TYPES = Object.freeze(["memory-record", "deliverable", "result-version"]);
+export const FEEDBACK_SUBJECT_TYPES = Object.freeze(["memory-record", "deliverable", "result-version", "run"]);
 
 const migrations = new WeakMap();
 
@@ -115,6 +124,13 @@ BEGIN
   END IF;
 END $document_kinds$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-06-product-digest-kind-v1') ON CONFLICT DO NOTHING;
+DO $geo_plan_context_kind$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='evimed_product.documents'::regclass AND conname='product_documents_kind_check' AND position('geo-plan-context' in pg_get_constraintdef(oid)) > 0) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $geo_plan_context_kind$;
 DO $method_trial_kind$
 BEGIN
   -- The same shape as the block above, and it needs its own: that one only
@@ -376,6 +392,15 @@ BEGIN
       CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
   END IF;
 END $programme_job_kind$;
+DO $geo_review_job_kind$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
+    AND c.conname='product_jobs_kind_check' AND position('''geo-judgment-recheck''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $geo_review_job_kind$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-evolution-job-kinds-v1') ON CONFLICT DO NOTHING;
 -- What finished operations say about a capability version, a tool, a skill or an extension on THIS
 -- deployment (the availability projection's evidence). One row per subject and exact version, folded
@@ -573,6 +598,42 @@ CREATE TRIGGER product_documents_memory_index_outbox
 AFTER INSERT OR UPDATE OF payload,revision,deleted_at ON evimed_product.documents
 FOR EACH ROW WHEN (NEW.kind IN ('capsule','fact')) EXECUTE FUNCTION evimed_product.enqueue_memory_index_job();
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-05-memory-index-outbox-v1') ON CONFLICT DO NOTHING;
+-- Business revisions and their replay jobs commit together, including soft deletion and restoration.
+CREATE OR REPLACE FUNCTION evimed_product.enqueue_knowledge_lifecycle_job() RETURNS trigger
+LANGUAGE plpgsql AS $function$
+DECLARE row_data record;
+DECLARE account_generation text;
+DECLARE scope text;
+DECLARE source_id text;
+DECLARE key text;
+BEGIN
+  IF TG_OP='DELETE' THEN row_data := OLD; ELSE row_data := NEW; END IF;
+  IF row_data.kind <> 'source' AND NOT (row_data.kind='preferences' AND row_data.payload->>'recordType'='library-item') THEN RETURN NULL; END IF;
+  scope := CASE WHEN row_data.kind='source' THEN 'source' ELSE 'library' END;
+  IF scope='source' THEN
+    source_id := row_data.id;
+    IF row_data.payload->'connector'->>'type'='wiki' OR coalesce(row_data.payload->>'logicalPath',row_data.payload->'paths'->>0,'') ~ '^knowledge-base/(wiki|kg)/' THEN RETURN NULL; END IF;
+  ELSE source_id := row_data.payload->>'sourceId'; END IF;
+  IF source_id IS NULL THEN RETURN NULL; END IF;
+  IF TG_OP='UPDATE' AND NEW.revision=OLD.revision AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at THEN RETURN NULL; END IF;
+  IF TG_OP='UPDATE' AND scope='source' AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at
+    AND (NEW.payload - ARRAY['progress','usage','lastError']) = (OLD.payload - ARRAY['progress','usage','lastError']) THEN RETURN NULL; END IF;
+  SELECT created_at::text INTO account_generation FROM evimed_control.users WHERE id=row_data.user_id;
+  IF account_generation IS NULL THEN RETURN NULL; END IF;
+  key := 'knowledge-lifecycle:' || md5(row_data.user_id || chr(31) || account_generation || chr(31) || row_data.id || chr(31) || row_data.revision::text || chr(31) || TG_OP);
+  INSERT INTO evimed_product.jobs(id,user_id,kind,payload,idempotency_key,project_id,max_attempts)
+  VALUES ('knowledge-lifecycle-job:' || md5(key),row_data.user_id,'ov-resource-sync',jsonb_build_object(
+    'action','lifecycle','scope',scope,'sourceId',source_id,'documentId',row_data.id,
+    'projectId',row_data.project_id,'mutationRevision',row_data.revision,'mutationId',key,
+    'accountCreatedAt',account_generation,'generation',row_data.payload->'generation','deleted',TG_OP='DELETE' OR row_data.deleted_at IS NOT NULL
+  ),key,NULL,10) ON CONFLICT(user_id,idempotency_key) DO NOTHING;
+  RETURN NULL;
+END $function$;
+DROP TRIGGER IF EXISTS product_documents_knowledge_lifecycle_outbox ON evimed_product.documents;
+CREATE TRIGGER product_documents_knowledge_lifecycle_outbox
+AFTER INSERT OR UPDATE OF payload,revision,deleted_at OR DELETE ON evimed_product.documents
+FOR EACH ROW EXECUTE FUNCTION evimed_product.enqueue_knowledge_lifecycle_job();
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-23-knowledge-lifecycle-outbox-v1') ON CONFLICT DO NOTHING;
 -- A learned method is the account's, not a project's (2026-09-27, audit L-G1).
 -- Filed under the project it was learnt in, it went with that project through
 -- documents(user_id,project_id) -> projects ON DELETE CASCADE, revisions and
@@ -586,7 +647,7 @@ UPDATE evimed_product.documents
            coalesce(payload #>> '{provenance,sourceProjectId}', project_id))),
        project_id = NULL
  WHERE kind='method' AND project_id IS NOT NULL
-   AND payload->>'recordType' IN ('learned-method','handbook-candidate');
+   AND payload->>'recordType' = 'learned-method';
 -- Which body a method is on, counted from its saved revisions: a new text is a
 -- new version, a counter write or a status change of the same text is not
 -- (audit L-G4). Once, for the methods written before the count existed.

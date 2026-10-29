@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { browserSessionCookie } from "../src/dshBrowserAuth.mjs";
 import { DshMux, REMOTE_EVENT_STREAM_ENDPOINT, REMOTE_STREAM_MUX_PATH } from "../src/dshMux.mjs";
 import { startMockDshRuntime } from "../src/mockDshRuntime.mjs";
+import { inspectSessionListReaders } from "./helpers/sessionListReaderGuard.mjs";
 
 const WS_ACCEPT_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -618,21 +619,55 @@ test("the mock kernel answers 0.1.2 and refuses 0.1.1, the way the live binary d
 
 
 test("every session-list caller goes through the one reader", async () => {
-  // Not because the shape was wrong -- alpha.5 sends `{ items: [...] }` and
-  // always did -- but because four copies of the same unwrap is four places to
-  // fix if it ever changes, and this file has already had one wrong answer
-  // about that shape written into it.
   const dir = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../src");
-  const files = (await readdir(dir)).filter((name) => name.endsWith(".mjs") && name !== "dshRuntimeAdapter.mjs");
-  let scanned = 0;
+  const files = (await readdir(dir)).filter(name => name.endsWith(".mjs") && name !== "dshRuntimeAdapter.mjs");
+  const inventory = {};
   for (const name of files) {
     const text = await readFile(path.join(dir, name), "utf8");
     if (!text.includes("session/list")) continue;
-    scanned += 1;
-    assert.ok(
-      !/\.items\b/.test(text.slice(Math.max(0, text.indexOf("session/list") - 2_000))),
-      `${name} calls session/list and reads .items; the kernel sends a bare array — use sessionListItems`,
-    );
+    const result = inspectSessionListReaders(text, name);
+    if (result.calls) inventory[name] = result.calls;
+    assert.deepEqual(result.issues, [], `${name}: session/list sends an { items } envelope; use the canonical sessionListItems reader`);
   }
-  assert.ok(scanned >= 2, `the scan found ${scanned} callers of session/list; it is not reading the sources`);
+  assert.deepEqual(inventory, { "dshEventPump.mjs": 1, "runtimeManager.mjs": 8, "server.mjs": 1 },
+    "keep every actual response caller in the inventory, including new callers");
+});
+
+test("the session-list guard follows response bindings and rejects bypasses without matching unrelated items", () => {
+  const request = 'await kernel.call("session/list", {})';
+  const inspect = text => inspectSessionListReaders('import {sessionListItems} from "./dshRuntimeAdapter.mjs";\n' + text);
+  const accepted = [
+    `async function read() { const raw = ${request}; const sources = await source.list(); return [sessionListItems(raw), sources.items]; }`,
+    `async function a() { const raw = ${request}; return sessionListItems(raw); } function b() { const raw = source.list(); return raw.items; }`,
+    `async function read() { const raw = ${request}; { const alias = raw; const nested = alias.value; sessionListItems(nested); } }`,
+    `async function read() { const reply = ${request}; return sessionListItems(reply?.ok ? reply.value : null); }`,
+    `async function read() { return sessionListItems(${request}); }`,
+    'async function read() { const raw = await this.withRuntimeDeadline(signal => kernel.call("session/list", {}, signal)); return sessionListItems(raw); }',
+    `async function read() { const raw = (${request}).catch(() => null); return sessionListItems(raw); }`,
+    `async function read() { const raw = ${request}; sessionListItems(raw); { const raw = source.list(); raw.items; } }`,
+    `async function read() { const raw = ${request}; const other = ${request}; return [sessionListItems(raw), sessionListItems(other)]; }`,
+  ];
+  for (const text of accepted) assert.deepEqual(inspect(text).issues, [], text);
+  assert.deepEqual(inspectSessionListReaders('import {sessionListItems as readSessions} from "./dshRuntimeAdapter.mjs";\n'
+    + `async function read() { return readSessions(${request}); }`).issues, []);
+  const rejected = [
+    `async function read() { const sessionListItems = value => value.items; const raw = ${request}; return sessionListItems(raw); }`,
+    `async function read() { const raw = ${request}; return raw.items; }`,
+    `async function read() { const raw = ${request}; return raw?.items; }`,
+    `async function read() { const raw = ${request}; return raw["items"]; }`,
+    `async function read() { const {items} = ${request}; return items; }`,
+    `async function read() { const raw = ${request}; const alias = raw; { const nested = alias.value; return nested.items; } }`,
+    `async function read() { return (${request}).items; }`,
+    `async function read() { const raw = ${request}; const alias = raw; sessionListItems(raw); return alias.items; }`,
+    `async function read() { const raw = ${request}; const other = ${request}; sessionListItems(raw); return other.items; }`,
+    `async function read() { const raw = ${request}; const other = ${request}; return sessionListItems(raw); }`,
+    `async function read() { const raw = ${request}; return unknownReader(raw); }`,
+    `async function read() { const raw = ${request}; return sessionListItems(null, raw); }`,
+    `async function read() { const raw = ${request}; return sessionListItems(raw, null); }`,
+    `async function read() { const raw = ${request}; sessionListItems(raw); return raw[key]; }`,
+    `async function read() { const raw = ${request}; const {value: {items}} = raw; return items; }`,
+    `async function read() { const raw = ${request}; const {[key]: alias} = raw; return sessionListItems(alias); }`,
+    `async function a() { const raw = ${request}; } function b() { const raw = source.list(); return sessionListItems(raw); }`,
+  ];
+  for (const text of rejected) assert.ok(inspect(text).issues.length, text);
 });

@@ -10,7 +10,8 @@
 // would have degraded to term matching and said nothing.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { readdir, readFile, writeFile, mkdtemp, realpath, mkdir, rm, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -18,11 +19,11 @@ import YAML from "yaml";
 
 import { MODEL_GATEWAY_PATH } from "../src/modelGateway.mjs";
 import {
-  OPENVIKING_ENTRYPOINT_PATH, OPENVIKING_MEMORY_TEMPLATES_DIR, OPENVIKING_MEMORY_TYPES, OPENVIKING_SHIM_PATH,
-  OPENVIKING_SHIM_PORT, OPENVIKING_SKILL_NAMES, openVikingKnowledgeModelKey,
+  OPENVIKING_MEMORY_TEMPLATES_DIR, OPENVIKING_MEMORY_TYPES, OPENVIKING_SKILL_NAMES, openVikingKnowledgeModelKey,
 } from "../src/openVikingLayout.mjs";
 import { OPENVIKING_MODEL_GATEWAY_URL, expectedOpenVikingConfiguration } from "../../../scripts/ops/openviking-configuration.mjs";
 import { renderMemoryTemplates } from "../../../deploy/web/openviking/memory-templates-src/build.mjs";
+import { readMountedCompileConfigurationDigest } from "../src/openVikingCompileExecution.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const baseFile = path.join(root, "deploy/web/docker-compose.yml");
@@ -109,39 +110,36 @@ test("the image is the pinned one, by tag and by digest", () => {
 test("the bot is on as Compile's runtime, and nothing it can do reaches beyond the task it was given", () => {
   // It was off until v0.5.0 — "a second agent runtime with shell and web tools". It is the runtime of the official
   // Compile skills now, and what made it acceptable is asserted here rather than remembered: command execution in a
-  // compile is off, its ten-minute heartbeat is off, it listens on the container's loopback behind the identity shim,
-  // and the container still publishes nothing and joins no new network.
+  // compile is off, its ten-minute heartbeat is off, the server reaches it through its own local endpoint (no
+  // `compile_api` section: since v0.5.1 the server forwards the caller's identity itself, which the identity shim of the
+  // v0.5.0 pin did), and the container still publishes nothing and joins no new network.
   const service = base.services["evimed-openviking"];
   assert.equal(service.environment.OPENVIKING_WITH_BOT, "1");
   assert.equal(rendered.bot.sandbox.backends.direct.allow_compile_exec, false);
   assert.equal(rendered.bot.heartbeat.enabled, false);
-  assert.equal(rendered.compile_api.base_url, `http://127.0.0.1:${OPENVIKING_SHIM_PORT}`, "Compile does not go through the identity shim");
+  assert.ok(!("compile_api" in rendered), "a `compile_api` section is the wiring of the identity shim, which is gone");
+  assert.ok(!("entrypoint" in service), "the image's own entrypoint is PID 1: nothing wraps it any more");
+  assert.ok(!("SHIM_ACCOUNT" in service.environment));
   assert.ok(!("ports" in service));
   assert.deepEqual(networksOf(service).sort(), ["memory-index-egress", "memory-recall-internal"], "the engine joined a network it did not have");
-  // The account the shim asserts is the one the control plane asserts.
-  assert.match(service.environment.SHIM_ACCOUNT, /^\$\{OPEN_SCIENCE_OPENVIKING_ACCOUNT:-evimed\}$/);
-  assert.equal(base.services["open-science-web"].environment.OPEN_SCIENCE_OPENVIKING_ACCOUNT, service.environment.SHIM_ACCOUNT);
+  // The account the control plane asserts on every request is the one the engine is told it is serving.
+  assert.match(base.services["open-science-web"].environment.OPEN_SCIENCE_OPENVIKING_ACCOUNT, /^\$\{OPEN_SCIENCE_OPENVIKING_ACCOUNT:-evimed\}$/);
 });
 
-test("the shim, its wrapper and the memory templates are release files mounted read-only where the layout says", async () => {
+test("the memory templates are a release directory mounted read-only where the layout says", async () => {
   // Four places name these paths and cannot import each other: this file, the rendered ov.conf, the control plane's
   // self-check and the modules built on the engine. A template directory mounted where the server does not look is
   // silent — it falls back to its built-in types — so the paths are held to the one definition.
   const service = base.services["evimed-openviking"];
   const mounts = new Map(service.volumes.map((entry) => String(entry).split(":")).filter((parts) => parts[0].startsWith("./")).map((parts) => [parts[1], parts]));
-  assert.deepEqual([...mounts.keys()].sort(), [OPENVIKING_MEMORY_TEMPLATES_DIR, OPENVIKING_ENTRYPOINT_PATH, OPENVIKING_SHIM_PATH].sort());
+  assert.deepEqual([...mounts.keys()].sort(), [OPENVIKING_MEMORY_TEMPLATES_DIR], "a release file other than the templates is mounted into the engine");
   for (const [target, [source, , mode]] of mounts) {
     assert.equal(mode, "ro", `${target} is mounted writable`);
     assert.ok(source.startsWith("./openviking/"), `${target} is not bound from the release directory`);
   }
   assert.equal(rendered.memory.custom_templates_dir, OPENVIKING_MEMORY_TEMPLATES_DIR);
-  assert.deepEqual(service.entrypoint, ["sh", OPENVIKING_ENTRYPOINT_PATH], "run through sh, so the wrapper needs no executable bit");
-  const wrapper = await readFile(path.join(root, "deploy/web/openviking/entrypoint.sh"), "utf8");
-  assert.ok(wrapper.includes(`python ${OPENVIKING_SHIM_PATH}`), "the wrapper does not start the shim at the path it is mounted at");
-  assert.match(wrapper, /\nexec openviking-entrypoint "\$@"\n$/, "the image's own entrypoint must end up as PID 1");
-  const shim = await readFile(path.join(root, "deploy/web/openviking/identity_shim.py"), "utf8");
-  assert.ok(shim.includes(`"SHIM_LISTEN_PORT", "${OPENVIKING_SHIM_PORT}"`), "the shim's default port is not the one ov.conf names");
-  assert.ok(shim.includes('"SHIM_LISTEN_HOST", "127.0.0.1"'), "the shim must listen on the loopback only");
+  const release = await readdir(path.join(root, "deploy/web/openviking"));
+  assert.ok(!release.includes("identity_shim.py") && !release.includes("entrypoint.sh"), "the identity shim and its wrapper are deleted, not left beside the release");
 });
 
 test("the memory templates are the eight types, rendered from their one source, and the allowlist names exactly them", async () => {
@@ -281,7 +279,7 @@ test("the one-shot never changes a mode it can no longer change", () => {
   const script = init.command.join("\n");
   assert.ok(!init.cap_add.includes("FOWNER"), "the assertions below are the alternative to holding FOWNER");
   const chmodTargets = [...script.matchAll(/os\.chmod\(([A-Za-z_]+),/g)].map((match) => match[1]);
-  assert.deepEqual(chmodTargets, ["temporary"], "only a freshly created path may be chmod'ed, and only before it is given away");
+  assert.deepEqual(chmodTargets, ["temporary", "digest_temporary"], "only freshly created secret/digest paths may be chmod'ed before ownership changes");
   assert.ok(
     script.indexOf("os.chmod(temporary, 0o600)") < script.indexOf("os.chown(temporary, owner, owner)"),
     "the copied secret is chmod'ed after it is given away, which needs CAP_FOWNER",
@@ -289,6 +287,38 @@ test("the one-shot never changes a mode it can no longer change", () => {
   // The directory carries its mode from `mkdir`, which is the creating call and
   // therefore needs nothing.
   assert.match(script, /data\.mkdir\(parents=True, exist_ok=True, mode=0o700\)/);
+  assert.ok(script.indexOf("os.chmod(digest_temporary, 0o600)") < script.indexOf("os.chown(digest_temporary, 0, 0)"));
+});
+
+test("ordinary init writes only a root-readable configuration digest for offline historical verification", async t => {
+  const directory = await realpath(await mkdtemp("/tmp/ovreceipt-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = path.join(directory, "input"), output = path.join(directory, "output");
+  await mkdir(input);
+  const bytes = Buffer.from(JSON.stringify(rendered));
+  await writeFile(path.join(input, "ov.conf"), bytes);
+  await writeFile(path.join(input, "api-key"), "test-key-stand-in");
+  await writeFile(path.join(input, "model-key"), "test-model-key-stand-in");
+  const script = base.services["evimed-openviking-init"].command.at(-1);
+  const prefix = script.slice(0, script.indexOf("# `storage.workspace`"))
+    .replaceAll("/input/", `${input}/`).replace("pathlib.Path('/output')", `pathlib.Path(${JSON.stringify(output)})`);
+  // Execute the actual copy/digest code. Ownership syscalls are recorded rather
+  // than changing this local machine's users; existing capability assertions
+  // above hold the production UID/mode relationship.
+  const program = `import os,json,pathlib\nowners=[]\nos.chown=lambda p,u,g: owners.append([pathlib.Path(p).name,u,g])\nexec(${JSON.stringify(prefix)})\nprint(json.dumps(owners))`;
+  const run = spawnSync("python3", ["-B", "-c", program], { encoding: "utf8", timeout: 5000 });
+  assert.equal(run.status, 0, run.stderr);
+  const owners = JSON.parse(run.stdout);
+  assert.ok(owners.some(([name, uid, gid]) => name === "ov.conf.sha256.tmp" && uid === 0 && gid === 0));
+  assert.ok(owners.some(([name, uid]) => name === "ov.conf.tmp" && uid === 10001));
+  const receipt = path.join(output, "ov.conf.sha256"), expected = createHash("sha256").update(bytes).digest("hex");
+  assert.equal(await readFile(receipt, "utf8"), `${expected}\n`);
+  assert.equal((await stat(receipt)).mode & 0o777, 0o600);
+  assert.equal(await readMountedCompileConfigurationDigest(receipt), expected);
+  const alias = path.join(output, "alias"); await symlink(receipt, alias);
+  assert.equal(await readMountedCompileConfigurationDigest(alias), null);
+  await writeFile(receipt, "x".repeat(1024));
+  assert.equal(await readMountedCompileConfigurationDigest(receipt), null);
 });
 
 test("every protected file is owned by the uid of the container that reads it", () => {
@@ -323,13 +353,14 @@ test("every protected file is owned by the uid of the container that reads it", 
 });
 
 test("the init refuses to finish when a release file the engine needs cannot be read by it", () => {
-  // The engine runs as 10001 with no capability, and each of these fails quietly when unreadable: the shim becomes a
-  // compile that fails eighteen seconds after it was accepted, the templates become upstream's memory types.
+  // The engine runs as 10001 with no capability, and the templates fail quietly when unreadable: they become upstream's
+  // memory types.
   const init = base.services["evimed-openviking-init"];
   const script = init.command.join("\n");
   assert.ok(init.volumes.some((entry) => String(entry) === "./openviking:/input/openviking:ro"), "the init does not see the release files it verifies");
   for (const type of OPENVIKING_MEMORY_TYPES) assert.ok(script.includes(`'${type}'`), `the init does not verify ${type}.yaml`);
-  assert.match(script, /release \/ 'identity_shim\.py', release \/ 'entrypoint\.sh', templates/);
+  assert.match(script, /needed = \[templates\]/, "the init names a release file other than the template directory");
+  assert.ok(!script.includes("identity_shim"), "the init still names the identity shim");
   assert.match(script, /mode & 0o004/);
   assert.match(script, /raise SystemExit\('the release is missing/);
   assert.match(script, /is not readable by the engine \(uid 10001\)/);
@@ -377,13 +408,11 @@ test("the engine's health says whether its three processes answer, not whether D
   // `openviking-entrypoint --healthcheck` is what this was: a flag no upstream
   // source we read defines, on a script whose other job is starting a server.
   assert.ok(!probe.includes("--healthcheck"), "the probe relies on an unverified entrypoint flag");
-  // The server, the bot and the shim. `GET /compile/capabilities` says a compile can be created from configuration
-  // alone, so only a probe of the shim's own port says it is there; it answers 404 by name to a route it does not
-  // serve, which is what tells it from anything else that might be listening.
+  // The server and the bot. `GET /compile/capabilities` says a compile can be created from configuration alone, so
+  // the bot's own port is probed.
   assert.ok(probe.includes("http://127.0.0.1:1933/health"));
   assert.ok(probe.includes("http://127.0.0.1:18790/health"), "the bot is not probed");
-  assert.ok(probe.includes(`http://127.0.0.1:${OPENVIKING_SHIM_PORT}/`), "the shim's port is not probed");
-  assert.match(probe, /refused\.code == 404/);
+  assert.ok(!probe.includes("18791"), "the identity shim's port is still probed");
 });
 
 test("the provider a deployment gets by default is the one it starts", () => {

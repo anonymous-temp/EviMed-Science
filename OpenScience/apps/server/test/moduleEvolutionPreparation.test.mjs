@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {createModuleEvolutionPreparation,MODULE_TASK_EXTRACTION_INSTRUCTIONS} from '../src/moduleEvolutionPreparation.mjs';
 import {createModuleEvolutionOfflineEvaluators} from '../src/moduleEvolutionOfflineEvaluators.mjs';
 import {calibrateModuleSourceJudge} from '../src/moduleEvolutionCalibration.mjs';
+import {evolutionServiceFixture} from './helpers/evolutionServiceFixture.mjs';
+import {evolutionRecordPin} from '../src/evolutionRecordPins.mjs';
 
 function service(){const rows=new Map();return {rows,now:()=>new Date('2026-10-06'),owner:async()=> 'owner',get:async id=>rows.get(id),list:async()=>[],save:async(type,id,payload)=>{const row={id,payload};rows.set(id,row);return row;}};}
 test('development known-correct marks come only from measured baseline and receipt prevents repeated paid calls',async()=>{
@@ -16,6 +18,22 @@ test('development known-correct marks come only from measured baseline and recei
 test('curation waits without independently configured reviewer',async()=>{
  const prepare=createModuleEvolutionPreparation({service:service(),taskPool:{},policies:{},provenance:{},discovery:null,model:null,dependencies:()=>({}),runners:()=>({geo:async()=>({})})});
  assert.equal((await prepare({moduleId:'geo',phase:'confirmation'})).reason,'independent_curator_review_unavailable');
+});
+
+test('curation pins the real preserved public abstract and overrides model-supplied source references', async () => {
+ const {service:store}=evolutionServiceFixture(),tasks=[];
+ const sourceText='Preserved public abstract with a bounded finding.';
+ const prepare=createModuleEvolutionPreparation({service:store,taskPool:{add:async task=>tasks.push(task)},policies:{},
+  provenance:{resolvePaper:async()=>({provenanceResolved:true,firstPublicAt:'2026-10-03T00:00:00Z',firstPublicEvidenceId:'chronology',sourceRoot:'doi:10.1234/public',aliases:['doi:10.1234/public']})},
+  discovery:{discover:async()=>[{sourceText,doi:'10.1234/public',sourceUrl:'https://doi.org/10.1234/public'}]},model:null,
+  dependencies:()=>({extractTask:async()=>({id:'task',sourceQuotes:[sourceText],sourceAssetRef:{id:'forged',revision:1,payloadHash:'forged'},sourceIdentifiers:['private-project'],reservedHidden:true,baselineKnownCorrect:true,truthVerified:true}),verifyTask:async()=>({passed:true,independent:true,reviewerModel:'qwen-review'})}),runners:()=>({geo:async()=>({})})});
+ await prepare({moduleId:'geo',phase:'confirmation',epoch:'e',candidate:{frozenAt:'2026-10-02T00:00:00Z'},modelReleasedAt:'2026-10-01T00:00:00Z'});
+ assert.equal(tasks.length,1);
+ const asset=(await store.list('resource-asset'))[0];
+ assert.deepEqual(tasks[0].sourceAssetRef,evolutionRecordPin(asset));
+ assert.deepEqual(tasks[0].sourceIdentifiers,['doi:10.1234/public']);
+ assert.equal(asset.payload.text,sourceText);
+ assert.equal(tasks[0].reservedHidden,undefined); assert.equal(tasks[0].baselineKnownCorrect,undefined); assert.equal(tasks[0].truthVerified,undefined);
 });
 test('source evaluator executes existing cell parser and independently rejects incorrect absolute reference',async()=>{
  const runner=createModuleEvolutionOfflineEvaluators().sources;

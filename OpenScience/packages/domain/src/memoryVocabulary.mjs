@@ -49,10 +49,12 @@ import { workspaceLayout } from './workspaceLayout.mjs'
  * @type {readonly { tag: string, role: 'injected' | 'user-wrapper', emitters: readonly string[], legacy?: string, upstream?: string }[]}
  */
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
+  { tag: 'evimed_geo_plan_context', role: 'injected', emitters: ['apps/server/src/geoPlanContext.mjs'] },
   { tag: 'evimed-evolution', role: 'injected', emitters: ['apps/server/src/evolutionRuns.mjs'] },
-  { tag: 'evimed-handbook', role: 'injected', emitters: ['apps/server/src/capabilityHandbooks.mjs'] },
-  // A platform handbook on probation, served to a sampled share of runs so its harm test can observe it (2026-10-10).
-  { tag: 'evimed-platform-handbook', role: 'injected', emitters: ['apps/server/src/capabilityHandbooks.mjs'] },
+  // The capability handbooks of an account and the platform's on probation, deleted with their arm on 2026-10-25: nothing writes either tag now, and the
+  // transcripts of the last ninety days still carry them as machine text.
+  { tag: 'evimed-handbook', role: 'injected', emitters: [], legacy: 'an account\'s capability handbook in a dispatch context, retired 2026-10-25 with the handbook arm; transcripts from before still carry it' },
+  { tag: 'evimed-platform-handbook', role: 'injected', emitters: [], legacy: 'the platform handbook on probation served to a sampled run, retired 2026-10-25 with the handbook arm; transcripts from before still carry it' },
   { tag: 'evimed-brief', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-capsule', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   // A 「试用一次」 conversation's borrowed capsule, in its dispatch context.
@@ -120,6 +122,15 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
     emitters: [],
     legacy: 'the dispatch context block before it moved into context.md; transcripts from that time still carry it',
   },
+  // Not ours either: the kernel's own envelope (`dsh-tool-skill` wraps the skill catalogue in it, and the catalogue arrives in
+  // the user slot as a message of the `skill-catalog` sender). The extraction templates name it as machine text, so the door in
+  // front of the engine has to know it too (2026-10-23: the templates named it and this list did not).
+  {
+    tag: 'system-reminder',
+    role: 'injected',
+    emitters: [],
+    upstream: 'the DSH kernel (dsh-tool-skill: the skill catalogue and the reminders it writes into the user slot), pinned in deps-version.json',
+  },
   // Not ours: the block the official OpenViking memory plugin injects (the profile at a session's start, a recall when
   // auto-recall is on). It is memory read back into the conversation, and learning from it again is how a memory comes to
   // quote itself; the memory gateway holds captured messages to this list (`memoryGateway.mjs`).
@@ -136,6 +147,14 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/**
+ * What OpenViking v0.5.2 puts where it replaced a credential in a session (`{{ov_privacy:session:<id>:<field>}}`, and `{{ov_redacted:…}}`
+ * from the plugin's own redaction, withdrawn upstream): a placeholder is the engine's machinery, never a thing the person said, and a
+ * memory that quotes one is a copy of it. Treated as injected text wherever a platform tag is: the gateway drops a message that carries one,
+ * the checks after a write take out a line that does, and a display strips it.
+ */
+const PLATFORM_PLACEHOLDER = /\{\{\s*ov_(?:privacy|redacted)\s*:[^}]*\}\}/
+
 /** @param {'injected' | 'user-wrapper'} role */
 function tagPattern(role) {
   const names = PLATFORM_CONTEXT_TAGS.filter((entry) => entry.role === role).map((entry) => entry.tag)
@@ -151,7 +170,8 @@ function tagPattern(role) {
  * @param {unknown} text @returns {boolean}
  */
 export function carriesPlatformContext(text) {
-  return tagPattern('injected').test(String(text ?? ''))
+  const value = String(text ?? '')
+  return tagPattern('injected').test(value) || PLATFORM_PLACEHOLDER.test(value)
 }
 
 /**
@@ -169,7 +189,7 @@ export function unwrapUserWrappers(text) {
  * @param {unknown} text @returns {string}
  */
 export function stripPlatformTags(text) {
-  return String(text ?? '').replace(tagPattern('injected'), '').replace(tagPattern('user-wrapper'), '').trim()
+  return String(text ?? '').replace(tagPattern('injected'), '').replace(tagPattern('user-wrapper'), '').replace(new RegExp(PLATFORM_PLACEHOLDER.source, 'g'), '').trim()
 }
 
 /**
@@ -336,7 +356,58 @@ const KEY_ASSIGNMENT = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd
 // The same assignment, for masking: what is blanked is the value alone, and it is the run of printable ASCII after the label — a
 // password typed in a Chinese sentence ends where the sentence goes on, not at the next space (there may be none).
 const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*)[\x21-\x7E]{6,}(?<![,.;:!?)\]}])/gi
-const LONG_TOKEN = /(?<![A-Za-z0-9_-])[A-Fa-f0-9]{32,}(?![A-Za-z0-9_-])|(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{40,}(?![A-Za-z0-9_-])/g
+const KEY_FORMAT_MORE = /\bxox[abeprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{35}\b|\bglpat-[A-Za-z0-9_-]{20,}|\b[rsp]k_(?:live|test)_[A-Za-z0-9]{16,}/g
+// A bare run that may be a secret: the candidates are the long runs of the key alphabet, and `isTokenShaped` decides which of
+// them are. A 40-character slug (`pneumonia-associated-with-…`), a naming convention (`NOAC_AF_cohort_2018_2024_…_cleaned`) and a
+// git commit are runs of the same alphabet and are not credentials: they were refused as one, and a memory file holding only such
+// a line was deleted with no message (2026-10-23 probe, research G §2.1 R6).
+const LONG_TOKEN = /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_-])/g
+
+const VOWELS = new Set('aeiouy')
+
+/**
+ * Whether a run of letters of one case alternates between vowels and consonants the way random letters do and words do not. Written
+ * words alternate: over 11,000 forty-letter runs of English prose, a German compound, chemical names, pinyin sentences and the long
+ * identifiers of this repository, the share of adjacent letter pairs that change between vowel and consonant (y counts as a vowel)
+ * averages 0.68 and the German compound, the lowest of the words one would write, has 0.52. Uniformly random letters change at 0.36 on
+ * average (0.09 apart at forty letters, 0.07 at sixty-four). Below one half is random-looking: 94 % of random forty-letter runs, 98 % of
+ * sixty-four, and under 1 % of ordinary prose run together, which is the price of a check that has no dictionary.
+ * @param {string} letters one-case letters only, forty or more @returns {boolean}
+ */
+function alternatesLikeRandomLetters(letters) {
+  let changes = 0
+  for (let index = 1; index < letters.length; index += 1) {
+    if (VOWELS.has(letters[index].toLowerCase()) !== VOWELS.has(letters[index - 1].toLowerCase())) changes += 1
+  }
+  return changes / (letters.length - 1) < 0.5
+}
+
+/**
+ * Whether a long run of the key alphabet has the shape of a secret rather than of a name. Hex is a token from 32 characters
+ * (a key, an MD5 or SHA-256 digest of something private) except at exactly 40, which is a git commit; anything else is one from 40
+ * characters when it is at most one character in twenty a separator (`-`, `_`) — random strings are dense, names are made of
+ * words — and it either mixes at least two of upper case, lower case and digits, or is letters of a single case that do not alternate
+ * between vowels and consonants as words do (`alternatesLikeRandomLetters`: a secret that is all lower-case letters was let through
+ * until 2026-10-25). A run that is mostly separators, a naming convention, a slug of words and a long compound word are not tokens;
+ * a labelled secret (`password: …`) and a provider's own key format are caught elsewhere.
+ * @param {string} run @returns {boolean}
+ */
+function isTokenShaped(run) {
+  if (run.length < 32) return false
+  if (/^[A-Fa-f0-9]+$/.test(run)) return run.length !== 40
+  if (run.length < 40) return false
+  const separators = (run.match(/[-_]/g) ?? []).length
+  if (separators * 20 > run.length) return false
+  const classes = Number(/[A-Z]/.test(run)) + Number(/[a-z]/.test(run)) + Number(/[0-9]/.test(run))
+  if (classes >= 2) return true
+  const letters = run.replace(/[-_]/g, '')
+  return letters.length >= 40 && /^(?:[a-z]+|[A-Z]+)$/.test(letters) && alternatesLikeRandomLetters(letters)
+}
+
+/** The runs in a text that have the shape of a secret. @param {string} value @returns {string[]} */
+function longTokensIn(value) {
+  return [...value.matchAll(LONG_TOKEN)].map((match) => match[0]).filter(isTokenShaped)
+}
 
 /**
  * The credentials and personal identifiers a text carries, by their shape: a
@@ -360,7 +431,7 @@ export function identifierShapesIn(text) {
   if (new RegExp(MOBILE.source).test(value)) found.push('mobile')
   if ([...value.matchAll(CARD)].some((match) => { const digits = match[0].replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) })) found.push('card')
   if (new RegExp(EMAIL.source).test(value)) found.push('email')
-  if (new RegExp(KEY_FORMAT.source).test(value) || KEY_ASSIGNMENT.test(value) || new RegExp(LONG_TOKEN.source).test(value)) found.push('credential')
+  if (new RegExp(KEY_FORMAT.source).test(value) || new RegExp(KEY_FORMAT_MORE.source).test(value) || KEY_ASSIGNMENT.test(value) || longTokensIn(value).length > 0) found.push('credential')
   return found
 }
 
@@ -378,6 +449,7 @@ export function maskIdentifiers(text) {
     .replace(CARD, (match) => { const digits = match.replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) ? masked : match })
     .replace(EMAIL, masked)
     .replace(KEY_FORMAT, masked)
+    .replace(KEY_FORMAT_MORE, masked)
     .replace(KEY_ASSIGNMENT_VALUE, (_match, label) => `${label}${masked}`)
-    .replace(LONG_TOKEN, masked)
+    .replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
 }

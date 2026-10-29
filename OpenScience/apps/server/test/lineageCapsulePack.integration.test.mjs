@@ -74,7 +74,7 @@ test("a packed card imports through the platform's own importer, and a doctor na
   });
   assert.equal(imported.payload.title, "经方思路", "named by its card, not by whoever imported it");
 
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning: null },
+  const result = await recallForAgent({ capsules, learning: null },
     { user: { id: doctorId }, institution: { id: hospital } }, { query: "桂枝汤", capsuleIds: [imported.id] });
   assert.deepEqual(result.capsules, [{ id: imported.id, title: "经方思路", owner: "institution" }]);
   // The three stages, and the standards a pack's work style carries beside

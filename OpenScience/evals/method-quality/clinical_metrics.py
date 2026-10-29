@@ -1,4 +1,4 @@
-"""Clinical task scorers used by run_paired; no inference, network or model weights.
+"""Clinical task scorers used by `score_native_clinical.py` and the native clinical runners; no inference, network or model weights.
 
 Metrics remain separate. Missing predictions are in the denominator and unknown
 is not a negative label. Span offsets are UTF-16 on the VCR boundary. DrugProt

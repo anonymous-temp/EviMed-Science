@@ -12,7 +12,7 @@ import test from "node:test";
 import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill } from "@evimed/domain";
 
 import {
-  HANDBOOK_CANDIDATE_RECORD_TYPE, LearningService, effectiveStatusReason, learnedMethodId, methodRecordFrom, methodStepsOf,
+  LearningService, effectiveStatusReason, learnedMethodId, methodRecordFrom, methodStepsOf,
 } from "../src/learningService.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -603,30 +603,31 @@ test("the steps in the researcher's language are kept beside the method and show
   assert.equal(amended.payload.bodyVersion, 2);
 });
 
-test("a lesson the platform's reviewer taught is kept for the handbook, never as the researcher's method", async () => {
-  // Both methods production learnt in September came from the reviewer's
-  // findings alone and read as 「我的做法」 (audit 2026-09-26, L-G3).
+test("a write that may have put a method in force tells the composition root which method it was; the receiver reads the method and decides", async () => {
+  // The promotion of a person's general method to the pack of everyone's (`officialPromotion.mjs`) is told, never asked: it reads the method itself.
   const { learning } = realisticService();
-  const kept = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: BODY,
-    provenance: { origin: "inferred", runId: "run_1", signal: "reviewer" }, capabilityId: "meta-analysis" });
-  assert.equal(kept.payload.recordType, HANDBOOK_CANDIDATE_RECORD_TYPE);
-  assert.equal(kept.payload.status, "candidate");
-  assert.equal(kept.payload.provenance.derivedFrom, "reviewer");
-  assert.equal(kept.payload.capabilityId, "meta-analysis");
-  assert.deepEqual((await learning.listMethods("u1")).items, [], "not in the researcher's list");
-  assert.deepEqual(await learning.approvedMethods("u1"), [], "never mounted");
-  // The same lesson again replaces it rather than piling up.
-  const again = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: `${BODY}\n\nRefined.`,
-    provenance: { origin: "inferred", runId: "run_2" }, capabilityId: "meta-analysis" });
-  assert.equal(again.id, kept.id);
-  assert.equal(again.revision, kept.revision + 1);
+  /** @type {string[][]} */ const told = [];
+  learning.onTookEffect = (userId, methodId) => { told.push([userId, methodId]); };
+  const approved = await create(learning, { frontmatter: frontmatter({ name: "approved-method" }) });
+  assert.deepEqual(told, [["u1", approved.id]]);
+  const amended = await learning.amendMethod("u1", approved.id, { expectedRevision: approved.revision, frontmatter: frontmatter({ name: "approved-method" }), body: `${BODY}\n\nRefined.` });
+  assert.deepEqual(told.at(-1), ["u1", approved.id], "an amendment is a new text that took effect");
+  // A stop is told too, with the method's own record carrying the status: what the receiver may promote is only an approved method.
+  const stopped = await learning.retire("u1", approved.id, { expectedRevision: amended.revision, reason: "by hand" });
+  assert.equal(stopped.payload.status, "retired");
+  assert.deepEqual(told.at(-1), ["u1", approved.id]);
+  // A telling that fails is the composition root's own: the write stands.
+  learning.onTookEffect = () => { throw new Error("promotion down"); };
+  const third = await create(learning, { frontmatter: frontmatter({ name: "third-method" }) });
+  assert.equal(third.payload.status, "approved");
+  learning.onTookEffect = async () => { throw new Error("promotion down, later"); };
+  assert.equal((await create(learning, { frontmatter: frontmatter({ name: "fourth-method" }) })).payload.status, "approved");
 });
 
 test("each earlier version of a method can be read, and the runs that taught each body are named newest first", async () => {
   // 「以前的版本 … 查看」: a version is its sentence, its steps in the researcher's language and, with none, its text.
   const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
-  const { fixture } = await import("./helpers/handbookFixture.mjs");
-  const f = fixture();
+  const f = realisticService();
   const base = { frontmatter: { name: "citation-alignment", description: "Align citations.", whenToUse: "When a report needs a reference list.",
     metadata: { role: "functional", applies_when: "A report with references.", not_when: "No citations.", derived_from: "run:run_1", evimed_schema: METHOD_SKILL_SCHEMA } },
   body: "## Purpose\nAlign every citation marker with exactly one reference.\n## When to Use\nWhen a report needs references.\n## Inputs\nThe report.\n## Workflow\n1. Match markers.\n## Verification\n- Every marker has one entry.\n## Constraints\n- Do not invent entries.\n## Output\nA reference list.",
@@ -682,6 +683,67 @@ test("a method whose card rode in enough answered runs and was never opened is s
   // One opening, by a run that answered directly, keeps it.
   await learning.recordRead("u1", created.id, "2026-09-26T00:00:00.000Z");
   assert.deepEqual(await learning.retirementProposals("u1", { nowMs, unusedAfterLoads: 5 }), []);
+});
+
+test("a card that was exposure only is counted apart: what it counts for is carried only when the method was meant for the work", async () => {
+  const { learning } = realisticService();
+  const created = await create(learning);
+  await learning.recordCarried("u1", created.id, "similarity");
+  await learning.recordCarried("u1", created.id, "dependency");
+  await learning.recordCarried("u1", created.id, "explore");
+  await learning.recordCarried("u1", created.id, "recent");
+  await learning.recordCarried("u1", created.id);
+  const counts = (await learning.getMethod("u1", created.id)).payload.learning.counts;
+  assert.deepEqual([counts.carried, counts.explored], [3, 2], "the exposure slot and a mount with no question are never what a method is stopped for");
+});
+
+test("what the researcher did after a run that opened a method is recorded once, against the body the run read, and never for a stopped method", async () => {
+  const { learning, documents } = realisticService();
+  const created = await create(learning);
+  const digest = created.payload.contentDigest;
+  const rows = (await documents.history("u1", "method", created.id)).length;
+  const first = await learning.recordApplied("u1", created.id, { runId: "run_1", outcome: "clean", at: "2026-10-01T00:00:00.000Z" }, digest);
+  assert.equal(first.changed, true);
+  assert.equal((await learning.recordApplied("u1", created.id, { runId: "run_1", outcome: "clean", at: "2026-10-01T00:00:00.000Z" }, digest)).changed, false, "once per run");
+  const corrected = await learning.recordApplied("u1", created.id, { runId: "run_1", outcome: "corrected", at: "2026-10-01T00:05:00.000Z" }, digest);
+  assert.equal(corrected.changed, true, "a correction that arrives after silence is the run's reaction");
+  const held = (await learning.getMethod("u1", created.id)).payload.learning;
+  assert.deepEqual([held.counts.appliedCorrected, held.counts.appliedClean], [1, 0]);
+  assert.equal((await documents.history("u1", "method", created.id)).length, rows, "telemetry: no history row");
+  // A reaction to another body is not about this one.
+  assert.equal((await learning.recordApplied("u1", created.id, { runId: "run_2", outcome: "corrected", at: "2026-10-02T00:00:00.000Z" }, "sha256:another")).changed, false);
+  // Four corrected runs read as harm and stop an inferred method at the next pass.
+  for (const index of [3, 4, 5, 6]) await learning.recordApplied("u1", created.id, { runId: `run_${index}`, outcome: "corrected", at: `2026-10-0${index}T00:00:00.000Z` }, digest);
+  const [entry] = await learning.retirementProposals("u1", { nowMs: Date.parse("2026-10-10T00:00:00.000Z") });
+  assert.deepEqual({ id: entry.document.id, code: entry.proposal.code, immediate: entry.proposal.immediate }, { id: created.id, code: "harm", immediate: true });
+  const live = await learning.getMethod("u1", created.id);
+  const stopped = await learning.retire("u1", created.id, { expectedRevision: live.revision, reason: "by hand" });
+  assert.equal((await learning.recordApplied("u1", created.id, { runId: "run_9", outcome: "clean", at: "2026-10-09T00:00:00.000Z" }, digest)).changed, false, "a stopped method is not counted");
+  assert.equal(stopped.payload.status, "retired");
+});
+
+test("a leftover key of the deleted evaluation is dropped by the next counter write, and a change to what a run is given is told", async () => {
+  const { learning, documents } = realisticService();
+  /** @type {string[]} */
+  const told = [];
+  learning.onMountChange = (/** @type {string} */ userId) => { told.push(userId); };
+  const created = await create(learning);
+  assert.deepEqual(told, ["u1"], "a method that took effect at once changes what runs are given");
+  const row = await documents.get("u1", "method", created.id);
+  await documents.put("u1", "method", created.id, { ...row.payload, learning: { ...row.payload.learning, evaluations: [{ verdict: "better" }] } }, { expectedRevision: row.revision, telemetry: true });
+  assert.equal("evaluations" in (await learning.getMethod("u1", created.id)).payload.learning, true);
+  await learning.recordEligible("u1", created.id);
+  assert.equal("evaluations" in (await learning.getMethod("u1", created.id)).payload.learning, false, "nothing reads it: it goes on the next write");
+  assert.deepEqual(told, ["u1"], "a counter write changes nothing a run is given");
+  const live = await learning.getMethod("u1", created.id);
+  await learning.retire("u1", created.id, { expectedRevision: live.revision, reason: "by hand" });
+  assert.deepEqual(told, ["u1", "u1"]);
+  // Told, never asked: a notifier that throws or rejects costs the write nothing.
+  learning.onMountChange = () => { throw new Error("the runtime manager is down"); };
+  const again = await learning.getMethod("u1", created.id);
+  await learning.rollback("u1", created.id, { expectedRevision: again.revision, targetRevision: again.revision - 1 });
+  learning.onMountChange = async () => { throw new Error("rejected"); };
+  await create(learning, { frontmatter: frontmatter({ name: "second-method" }) });
 });
 
 test("giving back a method that was stopped for never being opened starts its count of loads again, and keeps the rest", async () => {

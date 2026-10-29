@@ -1,4 +1,6 @@
+import { FRONTIER_HIDE_REASONS, FRONTIER_INTERACTION_BATCH } from "@evimed/domain";
 import { recordFrontierExposure } from "./frontierEvolution.mjs";
+import { FRONTIER_EVENTS_PATH } from "./frontierInteractions.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
@@ -30,6 +32,10 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  * - A route of the second wave whose module is not composed answers 404
  *   `not_found`, which the page reads as 「还在准备」 and `/status`
  *   `capabilities` already told it.
+ * - `POST /api/frontier/events` takes a batch of what the reader's page saw and did (`frontierInteractions.mjs`), as
+ *   `application/json` or as the `text/plain` a closing page's `navigator.sendBeacon` sends; a beacon cannot set the CSRF
+ *   header, so its token rides in the body and `frontierEventsBeacon` — called by the dispatch before the one CSRF check —
+ *   moves it into the header that check reads. `GET`/`PUT /api/frontier/prefs` is 与我相关's onboarding answer.
  *
  * @module frontierRoutes
  */
@@ -37,6 +43,8 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 const NOT_ENABLED = () => new HttpError(404, "frontier_not_enabled", "The frontier feed is not enabled.");
 const ITEM_ACTIONS = Object.freeze(["star", "unstar", "hide", "unhide", "read"]);
 const OPERATOR_ITEM_ACTIONS = Object.freeze(["withdraw", "pin", "unpin"]);
+/** The one field a hide may carry. */
+const HIDE_FIELDS = Object.freeze(["reason"]);
 
 /**
  * The bounded metric label of a frontier path: ids are folded so a dashboard
@@ -51,9 +59,14 @@ export function frontierRoutePattern(pathname) {
     if (parts.length === 2) return "/api/frontier/items/:id";
     return "/api/frontier/items/:id/:action";
   }
-  if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : "/api/frontier/follows/:id";
+  if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : parts.length === 2 ? "/api/frontier/follows/:id" : "/api/frontier/follows/:id/seen";
+  if (parts[0] === "track") {
+    if (parts.length === 3 && parts[1] === "congresses") return "/api/frontier/track/congresses/:id";
+    // Only the three lists name themselves: anything else is one label, so a request cannot mint a metric series (before auth, too).
+    return parts.length === 2 && ["approvals", "guidelines", "congresses"].includes(parts[1]) ? `/api/frontier/track/${parts[1]}` : "/api/frontier/track/:route";
+  }
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
-  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
+  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media", "prefs", "topics"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";
 }
 
@@ -64,6 +77,24 @@ async function bodyOf(req, limit, allowed) {
     throw new HttpError(400, "frontier_payload_invalid", "The frontier request has unsupported fields.");
   }
   return body;
+}
+
+/** The fields an events batch may carry: the events, and the CSRF token a beacon brings in its body. */
+const EVENT_BATCH_FIELDS = Object.freeze(["events", "csrf"]);
+
+/**
+ * A closing page's beacon: before the dispatch's CSRF check, read the batch (at most the beacon's 64 KiB) and, when it carries
+ * its token in the body, put it where the one CSRF check reads it. The parsed batch is kept on the request for the route, since
+ * the body can be read once. A request with the header already set is left alone (the page's own `fetch` sends it).
+ * @param {any} req
+ * @returns {Promise<void>}
+ */
+export async function frontierEventsBeacon(req) {
+  const url = new URL(req.url ?? "/", "http://evimed.local");
+  if (url.pathname !== FRONTIER_EVENTS_PATH || (req.method ?? "GET") !== "POST" || req.headers["x-open-science-csrf"]) return;
+  const body = await readJson(req, FRONTIER_INTERACTION_BATCH.maxBytes);
+  req.frontierEventsBody = body;
+  if (typeof body.csrf === "string" && body.csrf.length > 0 && body.csrf.length <= 200) req.headers["x-open-science-csrf"] = body.csrf;
 }
 
 /**
@@ -95,6 +126,20 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       sendJson(res, 200, { data: result.body }, headers);
       return true;
     };
+    // What the reader's page saw and did (frontierInteractions.mjs): a batch of at most 50 events, idempotent on each event's id.
+    if (parts.length === 1 && parts[0] === "events" && method === "POST") {
+      if (!service.interactions) throw new HttpError(404, "not_found", "Frontier route not found.");
+      const body = req.frontierEventsBody ?? await readJson(req, FRONTIER_INTERACTION_BATCH.maxBytes);
+      if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => !EVENT_BATCH_FIELDS.includes(key))) {
+        throw new HttpError(400, "frontier_payload_invalid", "The frontier request has unsupported fields.");
+      }
+      return reply(await service.interactions.record(user, body));
+    }
+    // 与我相关's onboarding answer: the reader's role, specialties and interests, and whether they finished or skipped it.
+    if (parts.length === 1 && parts[0] === "prefs") {
+      if (method === "GET") return reply(await service.prefs(user));
+      if (method === "PUT") return reply(await service.savePrefs(user, await bodyOf(req, maxJsonBytes, ["role", "specialties", "interests", "done", "skipped"])));
+    }
     if (parts[0] === "exposures" && parts.length === 1 && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["token", "items"]);
       await service.ready();
@@ -116,9 +161,26 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     if (parts.length === 2 && parts[0] === "items" && method === "GET") {
       return conditional(await service.getItem(user, parts[1], req.headers["if-none-match"]));
     }
+    // A picture of a published item (contract B): the plugin's bytes, cached a day by the reader's browser under the id they hash to.
+    if (parts.length === 2 && parts[0] === "media" && method === "GET") {
+      const result = await service.media(user, parts[1], req.headers["if-none-match"]);
+      const headers = { ETag: result.etag, "Cache-Control": "private, max-age=86400", Vary: "Cookie", "X-Content-Type-Options": "nosniff" };
+      if (result.status === 304) {
+        res.writeHead(304, headers);
+        res.end();
+        return true;
+      }
+      res.writeHead(200, { ...headers, "Content-Type": result.contentType, "Content-Length": result.bytes.length });
+      res.end(result.bytes);
+      return true;
+    }
     if (parts.length === 3 && parts[0] === "items" && method === "POST" && ITEM_ACTIONS.includes(parts[2])) {
-      await bodyOf(req, maxJsonBytes, []);
-      return reply(await service.setItemState(user, parts[1], parts[2]));
+      // A hide may say why (`reason`, one of `FRONTIER_HIDE_REASONS`; absent or null is no reason); no other action takes a body.
+      const body = await bodyOf(req, maxJsonBytes, parts[2] === "hide" ? HIDE_FIELDS : []);
+      if (body.reason !== undefined && body.reason !== null && !FRONTIER_HIDE_REASONS.includes(body.reason)) {
+        throw new HttpError(400, "frontier_payload_invalid", "The hide reason is not one the feed knows.");
+      }
+      return reply(await service.setItemState(user, parts[1], parts[2], parts[2] === "hide" ? { reason: body.reason ?? null } : undefined));
     }
     if (parts.length === 3 && parts[0] === "items" && method === "POST" && parts[2] === "save-to-library") {
       const body = await bodyOf(req, maxJsonBytes, ["projectId"]);
@@ -137,19 +199,23 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     }
     if (parts.length === 1 && parts[0] === "hot" && method === "GET") {
       // `?window=week|month`: that window's ranking instead of the current list.
-      return reply(await service.hot(url.searchParams));
+      return reply(await service.hot(url.searchParams, user));
     }
+    // Hot-event topics (c2-leads 2026-10-25, contract §T): 热榜's 「热点话题」 (`?status=active|recent&limit=N`) and one topic page.
+    if (parts.length === 1 && parts[0] === "topics" && method === "GET") return reply(await service.topicList(user, url.searchParams));
+    if (parts.length === 2 && parts[0] === "topics" && method === "GET") return reply(await service.topic(user, parts[1]));
     if (parts.length === 3 && parts[0] === "events" && parts[2] === "read" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["mark"]);
       sendJson(res, 200, { data: await service.markEventRead(user, parts[1], body.mark) });
       return true;
     }
     if (parts.length === 2 && parts[0] === "events" && method === "GET") {
-      const answer = await service.event(user, parts[1]);
+      const answer = await service.event(user, parts[1], url.searchParams);
       if (answer.redirect) {
         // A merged event's old id, permanently: relative, so it resolves under
-        // whatever prefix this API is served at, and `fetch` follows it.
-        res.writeHead(308, { Location: encodeURIComponent(answer.redirect), "Cache-Control": "private, no-cache", "Content-Type": "application/json; charset=utf-8" });
+        // whatever prefix this API is served at, and `fetch` follows it — with the order asked for, which the service checked.
+        const order = url.searchParams.get("order");
+        res.writeHead(308, { Location: `${encodeURIComponent(answer.redirect)}${order ? `?order=${encodeURIComponent(order)}` : ""}`, "Cache-Control": "private, no-cache", "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ data: { redirect: answer.redirect } }));
         return true;
       }
@@ -163,8 +229,31 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     }
     if (parts.length === 1 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklies(url.searchParams));
     if (parts.length === 2 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklyIssue(user, parts[1]));
+    if (parts.length === 1 && parts[0] === "monthlies" && method === "GET") return reply(await service.monthlies(url.searchParams));
+    if (parts.length === 2 && parts[0] === "monthlies" && method === "GET") return reply(await service.monthlyIssue(user, parts[1]));
     if (parts.length === 1 && parts[0] === "sources" && method === "GET") {
       return reply(await service.sources(user));
+    }
+    // 追踪 (c3-track 2026-10-25): the approvals, the guideline updates and the congresses, and one congress's hub.
+    if (parts.length === 2 && parts[0] === "track" && method === "GET") {
+      if (parts[1] === "approvals") return reply(await service.trackApprovals(user, url.searchParams));
+      if (parts[1] === "guidelines") return reply(await service.trackGuidelines(user, url.searchParams));
+      if (parts[1] === "congresses") return reply(await service.trackCongresses());
+    }
+    if (parts.length === 3 && parts[0] === "track" && parts[1] === "congresses" && method === "GET") return reply(await service.trackCongress(user, parts[2]));
+    // The tag tree (2026-10-23): a specialty's 热门标签 or the search box's suggestions, one tag, and the operators' view of the tree.
+    if (parts.length === 1 && parts[0] === "tags" && method === "GET") return reply(await service.tagList(url.searchParams));
+    if (parts.length === 2 && parts[0] === "tags" && method === "GET") return reply(await service.tagDetail(parts[1]));
+    if (parts.length === 2 && parts[0] === "ops" && parts[1] === "tags" && method === "GET") {
+      requireOperator();
+      return reply(await service.tagOverview());
+    }
+    if (parts.length === 5 && parts[0] === "ops" && parts[1] === "tags" && parts[2] === "changes" && parts[4] === "undo" && method === "POST") {
+      requireOperator();
+      await bodyOf(req, maxJsonBytes, []);
+      const result = await service.undoTagChange(parts[3]);
+      await audit("frontier.tag.undo", "completed", { userId: user.id, code: parts[3], detail: "" });
+      return reply(result);
     }
     if (parts.length === 1 && parts[0] === "follows") {
       if (method === "GET") return reply(await service.listFollows(user));
@@ -172,6 +261,11 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     }
     if (parts.length === 2 && parts[0] === "follows" && method === "DELETE") {
       return reply(await service.deleteFollow(user, parts[1]));
+    }
+    // The reader opened a follow's feed: what arrived before now is no longer new (c3-watch).
+    if (parts.length === 3 && parts[0] === "follows" && parts[2] === "seen" && method === "POST") {
+      await bodyOf(req, maxJsonBytes, []);
+      return reply(await service.markFollowSeen(user, parts[1]));
     }
     if (parts.length === 4 && parts[0] === "ops" && parts[1] === "items" && method === "POST" && OPERATOR_ITEM_ACTIONS.includes(parts[3])) {
       requireOperator();

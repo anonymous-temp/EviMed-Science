@@ -39,6 +39,8 @@ async function fixtureFiles(name) {
   return files;
 }
 
+const SOURCE_IDS = new Set((await fixtureFiles("mix-sources")).map((file) => file.path.replace(/\.md$/, "")));
+SOURCE_IDS.add(`src_${"e".repeat(32)}`);
 const tokens = {
   "runtime-token": { userId: "user-1", projectId: "project-1" },
   "sibling-project": { userId: "user-1", projectId: "project-2" },
@@ -54,8 +56,8 @@ const runtimeManager = {
 /** The ledger's side of a document: this project's own, by id. */
 const sources = {
   async get(userId, id) {
-    if (userId !== "user-1" || !Object.hasOwn(TITLES, id)) throw Object.assign(new Error("not found"), { status: 404, code: "source_not_found" });
-    return { id, projectId: "project-1", deletedAt: null, payload: { title: TITLES[id] } };
+    if (userId !== "user-1" || !SOURCE_IDS.has(id)) throw Object.assign(new Error("not found"), { status: 404, code: "source_not_found" });
+    return { id, projectId: "project-1", deletedAt: null, payload: { title: TITLES[id], status: "complete", generation: 1 } };
   },
 };
 const library = { async searchScope(userId) { return userId === "user-1" ? [{ sourceId: LIBRARY_DOC, title: "跨项目的抗凝指南" }] : []; } };
@@ -125,7 +127,7 @@ test("a request it cannot take is named, field by field, and never becomes an en
   for (const [body, code] of [
     ["not json", "kb_browse_request_invalid"],
     [{ op: "list", uri: "viking://user/x/resources" }, "kb_browse_request_invalid"],
-    [{ op: "list", sessionId: "s" }, "kb_browse_request_invalid"],
+    [{ op: "list", sessionId: "../s" }, "kb_browse_request_invalid"],
     [{}, "kb_browse_op_invalid"],
     [{ op: "write" }, "kb_browse_op_invalid"],
     [{ op: "list", root: "memories" }, "kb_browse_root_invalid"],
@@ -175,6 +177,26 @@ test("overview of the wiki is its own table of contents, and the default root", 
   const cut = await ok({ op: "overview", root: "wiki", limit: 10 });
   assert.deepEqual(cut.lines, { from: 1, to: 10, total: 34 });
   assert.equal(cut.truncated, true);
+});
+
+test("shared wiki overview lists permitted pages when its exact manifest has no index", async t => {
+  const { resources, roots } = await engine(), indexUri = `${roots.wiki}/index.md`;
+  let forbiddenReads = 0;
+  const scoped = Object.create(resources);
+  scoped.roots = () => ({ ...roots, library: null });
+  scoped.inScope = (userId, projectId, uri) => uri !== indexUri && resources.inScope(userId, projectId, uri);
+  scoped.read = async (userId, uri, options) => {
+    if (uri === indexUri) { forbiddenReads++; throw new Error("Excluded index must not be read"); }
+    return resources.read(userId, uri, options);
+  };
+  scoped.tree = async (...args) => (await resources.tree(...args)).filter(entry => entry.uri !== indexUri);
+  const context = { kind: "geo-project", includeLibrary: false, resources: scoped, current: async () => {}, acceptSource: async () => true, neutral: value => String(value) };
+  const { ok, call } = await withGateway(t, { resources, dependencies: { contextFor: async () => context } });
+  const result = await ok({ op: "overview", root: "wiki" });
+  assert.equal(result.compiled, true); assert.ok(result.entries.length > 0);
+  assert.ok(result.entries.every(entry => entry.path !== "index.md"));
+  assert.equal((await call({ op: "read", root: "wiki", path: "index.md" })).status, 400);
+  assert.equal(forbiddenReads, 0);
 });
 
 test("list names one directory's entries: directories first, pages by their title and type, the sidecars never", async (t) => {
@@ -415,15 +437,40 @@ test("an engine that is down or slow is a named answer, and its own words never 
   assert.deepEqual([timedOut.status, timedOut.body.code], [504, "kb_browse_timeout"]);
 });
 
-test("a title the ledger cannot give costs the title, never the answer", async (t) => {
+test("a ledger outage stops document browsing; historical compiled links may remain untitled", async (t) => {
   const { resources } = await engine();
-  const { ok } = await withGateway(t, { resources, dependencies: {
+  const { ok, call } = await withGateway(t, { resources, dependencies: {
     sources: { async get() { throw new Error("database down"); } }, library: { async searchScope() { throw new Error("database down"); } } } });
-  const documents = await ok({ op: "overview", root: "sources" });
-  assert.equal(documents.total, 8);
-  assert.ok(documents.documents.every((document) => document.sourceId && document.title === undefined));
+  assert.equal((await call({ op: "overview", root: "sources" })).status, 503);
   const page = await ok({ op: "read", path: "concept/盘点差异率.md" });
   assert.deepEqual(page.documents.find((document) => document.sourceId === KICKOFF), { sourceId: KICKOFF });
+});
+
+test("a removed source is excluded immediately even while its engine copy remains", async (t) => {
+  const { resources } = await engine();
+  const { call, ok } = await withGateway(t, { resources, dependencies: {
+    sources: { async get(userId, id) {
+      if (id === KICKOFF) throw Object.assign(new Error("removed"), { status: 404, code: "source_not_found" });
+      return sources.get(userId, id);
+    } },
+  } });
+  assert.equal((await call({ op: "read", root: "sources", path: `${KICKOFF}.md` })).status, 404);
+  const listing = await ok({ op: "list", root: "sources" });
+  assert.ok(!listing.entries.some((entry) => entry.sourceId === KICKOFF));
+  const matches = await ok({ op: "grep", root: "sources", pattern: "1.5%" });
+  assert.ok(!matches.matches.some((entry) => entry.sourceId === KICKOFF));
+});
+
+test("a withdrawn personal-library copy is not readable through a stale engine path", async (t) => {
+  const { resources } = await engine();
+  const { call } = await withGateway(t, { resources, dependencies: { library: { async searchScope() { return []; } } } });
+  assert.equal((await call({ op: "read", root: "library", path: `${LIBRARY_DOC}.md` })).status, 404);
+});
+
+test("document authorization fails closed when the source ledger is unavailable", async (t) => {
+  const { resources } = await engine();
+  const { call } = await withGateway(t, { resources, dependencies: { sources: { async get() { throw new Error("database down"); } } } });
+  assert.equal((await call({ op: "read", root: "sources", path: `${KICKOFF}.md` })).status, 503);
 });
 
 test("what it returns passes through the evaluation isolation, as a knowledge-base answer", async (t) => {
@@ -464,4 +511,62 @@ test("the runtime's tool offers exactly the operations and roots this gateway ta
   assert.deepEqual(tuple("OPS"), [...KB_BROWSE_OPS]);
   assert.deepEqual(tuple("ROOTS"), [...KB_BROWSE_ROOTS]);
   assert.match(tool, /EVIMED_KB_BROWSE_GATEWAY_URL/);
+});
+
+test("native selected-empty excludes every document and compiled page without broadening", async t => {
+  const { resources } = await engine();
+  const { call } = await withGateway(t, { resources, dependencies: { sourceScope: async (_identity, sessionId) => { assert.equal(sessionId, "ses_selected"); return []; }, compiledScope: async () => ({ allowed: true, sourceIds: [KICKOFF] }) } });
+  const invoke = body => call({ ...body, sessionId: "ses_selected" });
+  assert.equal((await invoke({ op: "read", root: "sources", path: `${KICKOFF}.md` })).status, 404);
+  assert.equal((await invoke({ op: "read", root: "wiki", path: "index.md" })).status, 404);
+  assert.deepEqual((await invoke({ op: "list", root: "sources" })).body.data.entries, []);
+  assert.deepEqual((await invoke({ op: "tree", root: "wiki" })).body.data.entries, []);
+  assert.deepEqual((await invoke({ op: "grep", root: "wiki", pattern: "1.5%" })).body.data.matches, []);
+});
+
+test("compiled dependencies revoked in the ledger hide index text, listings and matches", async t => {
+  const { resources } = await engine();
+  const { call } = await withGateway(t, { resources, dependencies: { compiledScope: async () => ({ allowed: false, sourceIds: [KICKOFF] }) } });
+  assert.equal((await call({ op: "read", root: "wiki", path: "index.md" })).status, 404);
+  assert.deepEqual((await call({ op: "list", root: "wiki" })).body.data.entries, []);
+  assert.equal((await call({ op: "overview", root: "wiki" })).body.data.compiled, false);
+  assert.equal((await call({ op: "overview", root: "kg" })).body.data.entities, 0);
+  assert.deepEqual((await call({ op: "grep", root: "wiki", pattern: "1.5%" })).body.data.matches, []);
+});
+
+test("directory grep uses root-relative compiled paths and hides unauthorized truncation thresholds", async t => {
+  const { resources, stub, roots } = await engine();
+  stub.put(`${roots.wiki}/topics/a.md`, "selected needle");
+  const seen = [];
+  const { call } = await withGateway(t, { resources, dependencies: { compiledScope: async (_identity, target) => { seen.push(target.path); return { allowed: target.path === "topics/a.md", sourceIds: [KICKOFF] }; } } });
+  const result = await call({ op: "grep", root: "wiki", path: "topics", pattern: "needle" });
+  assert.equal(result.body.data.count, 1);
+  assert.ok(seen.includes("topics/a.md"));
+  assert.equal(result.body.data.truncated, false);
+  assert.equal(result.body.data.partialScan, true);
+  resources.grep = async () => ({ filesScanned: 200, matches: Array.from({ length: 200 }, (_, index) => ({ uri: `${roots.wiki}/topics/${index === 0 ? "a" : "hidden"}.md`, line: index + 1, content: "needle" })) });
+  const bounded = await call({ op: "grep", root: "wiki", path: "topics", pattern: "needle" });
+  assert.equal(bounded.body.data.count, 1);
+  assert.equal(bounded.body.data.truncated, false, "hidden engine hits cannot expose their threshold");
+  assert.equal(bounded.body.data.partialScan, true);
+});
+
+test("a sessionless shared-context browse is refused while a conversation of the project holds a selection", async t => {
+  const { resources, roots } = await engine();
+  const scoped = Object.create(resources);
+  scoped.roots = () => ({ ...roots, library: null });
+  let held = true, proved = 0;
+  const context = { kind: "geo-project", includeLibrary: false, resources: scoped, current: async () => {}, acceptSource: async () => true,
+    neutral: value => String(value), sourceScope: async () => { proved += 1; return []; } };
+  const { call } = await withGateway(t, { resources, dependencies: { contextFor: async () => context,
+    sourceScope: async (_identity, sessionId) => {
+      if (sessionId) throw new Error("A session is the shared context's to prove");
+      if (held) throw new Error("Knowledge tools require native session context.");
+      return null;
+    } } });
+  assert.equal((await call({ op: "list", root: "sources" })).status, 503, "leaving the session out never broadens a selection");
+  const selected = await call({ op: "list", root: "sources", sessionId: "ses_selected" });
+  assert.equal(selected.status, 200); assert.deepEqual(selected.body.data.entries, []); assert.equal(proved, 1);
+  held = false;
+  assert.equal((await call({ op: "list", root: "sources" })).status, 200);
 });

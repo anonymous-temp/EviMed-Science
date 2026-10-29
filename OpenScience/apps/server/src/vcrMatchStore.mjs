@@ -181,6 +181,8 @@ const episodeOf = (row) => (row ? {
   observations: row.observations ?? [],
   restricted: row.restricted ?? {},
   exitReason: row.exit_reason ?? null,
+  exitDate: row.exit_date ?? null,
+  legacyExitDate: row.legacy_exit_date ?? null,
   createdAt: row.created_at,
 } : null);
 
@@ -1230,18 +1232,29 @@ export class VcrMatchStore extends VcrStoreBase {
       const id = episode?.id ?? vcrId("episode");
       const result = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.followup_episodes
-           (id, study_id, user_id, subject_key, kind, window_start, window_end, observations, restricted, exit_reason)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10) RETURNING *`,
+           (id, study_id, user_id, subject_key, kind, window_start, window_end, observations, restricted, exit_reason, exit_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11) RETURNING *`,
         [id, episode.studyId, userId, episode.subjectKey, episode.kind,
-          episode.windowStart ?? null, episode.windowEnd ?? null,
+          episode.windowStart ? new Date(episode.windowStart).toISOString() : null, episode.windowEnd ? new Date(episode.windowEnd).toISOString() : null,
           JSON.stringify(episode.observations ?? []), JSON.stringify(episode.restricted ?? {}),
-          episode.exitReason ?? null]);
+          episode.exitReason ?? null, episode.exitDate ?? null]);
       await this.audit({
         client, studyId: episode.studyId, userId, actor: "control-plane", action: "vcr.followup.save",
         object: id, detail: { subjectKey: episode.subjectKey, kind: episode.kind },
       });
       return episodeOf(result.rows[0]);
     });
+  }
+
+  /** The first reported exit is independent of the later observation timeline.
+   * Legacy rows retain their calendar date in the database's recording timezone;
+   * new rows also keep the verbatim source date and normalize window instants.
+   * @param {{ studyId: string, subjectKey: string }} input
+   */
+  async firstTrialExit({ studyId, subjectKey }) {
+    return episodeOf(await this.one(`SELECT *, window_end::date::text AS legacy_exit_date
+      FROM ${VCR_SCHEMA}.followup_episodes WHERE study_id = $1 AND subject_key = $2 AND kind = 'study_specific'
+      ORDER BY created_at, id LIMIT 1`, [studyId, subjectKey]));
   }
 
   /** @param {{ studyId: string, subjectKey?: string|null }} input */

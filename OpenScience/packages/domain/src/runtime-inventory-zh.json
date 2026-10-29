@@ -8,6 +8,10 @@
   ],
   "items": {
     "loopx": {
+      "publisher": "loopx-project",
+      "repository": "https://github.com/loopx-project/loopx",
+      "kind": "upstream",
+      "system": true,
       "group": "conversation",
       "title": "长任务",
       "icon": "Repeat",
@@ -36,6 +40,10 @@
       "toolSets": []
     },
     "memory": {
+      "publisher": "OpenViking",
+      "repository": "https://github.com/volcengine/OpenViking",
+      "kind": "upstream",
+      "system": true,
       "group": "conversation",
       "title": "记忆",
       "icon": "Brain",
@@ -67,6 +75,10 @@
       ]
     },
     "citations": {
+      "publisher": "STARDUSTLC666",
+      "repository": "https://github.com/STARDUSTLC666/dsh-cite",
+      "kind": "upstream",
+      "system": false,
       "group": "conversation",
       "title": "文献引用核对",
       "icon": "Quote",
@@ -100,6 +112,10 @@
       "toolSets": []
     },
     "annotation": {
+      "publisher": "changfenhuang",
+      "repository": "https://github.com/omdsh-dev/dsh-annotation",
+      "kind": "upstream",
+      "system": false,
       "group": "conversation",
       "title": "划词批注",
       "icon": "PenLine",
@@ -107,13 +123,15 @@
       "does": "在回答里选中一段话，可以直接就这一段追问，或留下批注，对话会带着你选中的原文继续。",
       "how": "在回答里用鼠标选中一段话，点出现的“批注”，写下想说的话再发送。",
       "control": {
-        "kind": "none"
+        "kind": "switch",
+        "setting": "annotation"
       },
       "opens": {
         "kind": "drawer"
       },
       "gate": {
-        "config": "runtimeAnnotationEnabled"
+        "config": "runtimeAnnotationEnabled",
+        "project": "annotation"
       },
       "bundles": [
         "@changfenhuang/dsh-annotation"
@@ -124,6 +142,10 @@
       "toolSets": []
     },
     "diagrams": {
+      "publisher": "MrmoLabs",
+      "repository": "https://github.com/MrmoLabs/dsh-mermaid",
+      "kind": "upstream",
+      "system": false,
       "group": "conversation",
       "title": "Mermaid 图表",
       "icon": "Network",
@@ -131,13 +153,15 @@
       "does": "回答里的流程图代码会画成图，可以在图和代码之间切换，适合流程图、架构图、路线图和分类图，医学研究里也可以画 PRISMA 流程图。",
       "how": "直接让它画图，例如“把这个流程画成流程图”；图出现在回答里，可以切换到代码、全屏或下载。",
       "control": {
-        "kind": "none"
+        "kind": "switch",
+        "setting": "mermaid"
       },
       "opens": {
         "kind": "drawer"
       },
       "gate": {
-        "config": "runtimeMermaidEnabled"
+        "config": "runtimeMermaidEnabled",
+        "project": "mermaid"
       },
       "bundles": [
         "dsh-mermaid"
@@ -148,6 +172,9 @@
       "toolSets": []
     },
     "web": {
+      "publisher": "EviMed Science",
+      "kind": "platform",
+      "system": true,
       "group": "conversation",
       "title": "网页阅读",
       "icon": "Globe",
@@ -172,6 +199,9 @@
       "toolSets": []
     },
     "basics": {
+      "publisher": "DeepSeek AI / EviMed Science",
+      "kind": "platform",
+      "system": true,
       "group": "conversation",
       "title": "基础能力",
       "icon": "Layers",
@@ -240,6 +270,9 @@
       ]
     },
     "research-tools": {
+      "publisher": "EviMed Science",
+      "kind": "platform",
+      "system": true,
       "group": "conversation",
       "title": "内置工具集",
       "icon": "Wrench",
@@ -538,7 +571,7 @@
     },
     "platform-learned": {
       "listed": false,
-      "reason": "Handbooks the platform learned from the account's work; they have their own home, the 做法 of the memory page."
+      "reason": "What the platform itself built and tested (循证进化's tools and methods): the platform's, not the account's own, whose home is the 做法 of the memory page."
     }
   }
 }

@@ -7,6 +7,7 @@ import { ProductDocuments } from "./productStore.mjs";
 import { migrateProductStore, productId, productInteger, productPayload } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
 import { nativeSkillSnapshotArchive } from "./nativeSkillCatalogue.mjs";
+import { currentDisabledPlatformSkills, normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins } from '@evimed/domain/platform-skill-policy';
 
 /** @param {string} value */
 const sha256 = value => createHash("sha256").update(value).digest("hex");
@@ -50,17 +51,21 @@ const contentDigests = value => skillContentDigests({
 /** The one-line label of a catalogue item's package: state, words, and where it came from. @param {any} view */
 const catalogueLabel = view => view && ({ state: view.state, label: view.label, text: view.text, reason: view.reason, notes: view.notes,
   version: view.package?.version ?? null, sourceText: view.package?.sourceText ?? null, licenceText: view.package?.licenceText ?? null });
+/** What a generation state records when the saved choices could not be prepared at all, and a later start tries again. */
+const UNPREPARED_ERRORS = new Set(["runtime_image_unavailable", "runtime_composition_unavailable"]);
 /** Where a repository preview recorded what it fetched, keyed by the upload it made: an account document, not a path. @param {string} resourceId */
 const sourceDocumentId = resourceId => `skill-source:${sha256(resourceId)}`;
 
 /** Personal instructions are account records, never executable authority or a copy of a learned method. */
 export class SkillLibraryService {
-  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,invoke?:any,learnedMethods?:any,nativeCatalogue?:any,platformCatalogue?:ReturnType<typeof import("./platformSkillCatalogue.mjs").createPlatformSkillCatalogue>|null,repositoryPreview?:any,onRemoved?:any,supply?:import("./skillSupplyService.mjs").SkillSupply|null}} [options] */
-  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, invoke = null, learnedMethods = null, nativeCatalogue = null, platformCatalogue = null, repositoryPreview = null, onRemoved = null, supply = null } = {}) {
+  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,projectActivation?:any,builtinAvailability?:Record<string,boolean>,invoke?:any,learnedMethods?:any,nativeCatalogue?:any,platformCatalogue?:ReturnType<typeof import("./platformSkillCatalogue.mjs").createPlatformSkillCatalogue>|null,repositoryPreview?:any,onRemoved?:any,supply?:import("./skillSupplyService.mjs").SkillSupply|null}} [options] */
+  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, projectActivation = null, builtinAvailability = {}, invoke = null, learnedMethods = null, nativeCatalogue = null, platformCatalogue = null, repositoryPreview = null, onRemoved = null, supply = null } = {}) {
     this.database = database;
     this.documents = documents;
     this.artifacts = artifacts;
     this.projectAccess = projectAccess;
+    this.projectActivation = projectActivation;
+    this.builtinAvailability = builtinAvailability;
     this.dispatchInvocation = invoke;
     this.learnedMethods = learnedMethods;
     this.nativeCatalogue = nativeCatalogue;
@@ -559,11 +564,125 @@ export class SkillLibraryService {
       });
     });
   }
-  /** @param {any} user @param {any} project */
-  async projectSelections(user, project) {
+  /** The project's saved selection, and (for a reader) whether it is in effect. A caller that needs only what was saved — the
+   * generation's publication, the apply worker's guard, a save's own read — passes `{ activation: false }` and is spared the
+   * generation-state, runtime and context-policy reads behind the activation.
+   * @param {any} user @param {any} project @param {{activation?:boolean}} [options] */
+  async projectSelections(user, project, { activation = true } = {}) {
     await this.requireProject(user, project);
-    return await this.documents.get(user.id, "extension-defaults", `skills:project:${project.id}`)
+    const selection = await this.documents.get(user.id, "extension-defaults", `skills:project:${project.id}`)
       ?? { id: `skills:project:${project.id}`, revision: 0, payload: { skills: [] } };
+    return activation ? { ...selection, activation: await this.activation(user, project, selection) } : selection;
+  }
+  /**
+   * Saved choices and worker readback are distinct facts, and so are the two readbacks: proven on the live runtime, and
+   * applied in the last proven generation. Runtimes are reaped when idle, so most projects rest with no runtime; the
+   * generation the worker last proved (`effective`, persisted) is what the next start mounts again
+   * (`personalGenerationForStart`), and a stopped runtime does not un-apply it.
+   *
+   * - `effective` — the live runtime was proven to mount the saved choices.
+   * - `ready` — no runtime runs; the last proven generation carries the saved choices (or nothing was ever chosen).
+   * - `pending` — no runtime runs; the saved choices are applied when the next conversation starts it.
+   * - `waiting` — a runtime runs and the saved choices are applied once its current work ends.
+   * - `deferred` — the saved choices could not be prepared (no runtime image identity, a composition that could not be
+   *   published or verified); the project runs on the ordinary baseline and a later start tries again.
+   * - `failed` / `rolled-back` — the apply was tried and its proof failed.
+   * - `not-applicable` — a 循证 GEO project whose runtime mounts the shared context generation, which carries none of the
+   *   project's own skill and integration choices; they are kept, and apply if the project becomes its owner's again.
+   * @param {any} user @param {any} project @param {any} selection
+   */
+  async activation(user, project, selection) {
+    const observation = this.projectActivation ? await this.projectActivation(user, project) : null;
+    const state = observation?.state;
+    const historical = state?.payload.effective;
+    const live = typeof observation?.runtimeGeneration === 'string' && observation.runtimeGeneration.length > 0;
+    const provenLive = live && observation.runtimeGeneration === state?.payload.runtimeGeneration
+      && observation.captured?.reference?.generationHash === historical?.reference?.generationHash ? historical : null;
+    const provenLast = !live && historical && ['effective', 'rolled-back'].includes(state?.payload.phase) ? historical : null;
+    const effective = provenLive ?? provenLast;
+    const effectiveRevision = effective?.selectionRevision ?? null;
+    const desiredHere = state?.payload.desired?.selectionRevision === selection.revision;
+    const phase = observation?.sharedContext === true ? 'not-applicable'
+      : effectiveRevision === selection.revision && state?.payload.phase === 'effective' ? (live ? 'effective' : 'ready')
+      : desiredHere && ['failed', 'rolled-back'].includes(state.payload.phase) ? state.payload.phase
+      : desiredHere && UNPREPARED_ERRORS.has(state.payload.error) ? 'deferred'
+      : !state && !selection.revision ? 'ready'
+      : live ? 'waiting' : 'pending';
+    return { phase, live, savedRevision: selection.revision, effectiveRevision, error: state?.payload.error ?? null,
+      lastEffectiveRevision: historical?.selectionRevision ?? null,
+      effectiveDisabled: effective ? effective.platformSkills?.disabled ?? [] : null,
+      effectiveBuiltins: effective ? (provenLive ? observation.builtins : null) ?? Object.fromEntries(['annotation', 'mermaid'].map(id => [id, this.builtinAvailability[id] !== false && !(effective.platformSkills?.disabledPlugins ?? []).includes(id)])) : null };
+  }
+  /** The ids of the platform skills this account is offered now, or null when the list cannot be read. @param {any} user */
+  async platformSkillIds(user) {
+    if (!this.platformCatalogue) return null;
+    try { return new Set((await this.platformCatalogue.list(user)).items.map((/** @type {any} */ item) => item.id)); }
+    catch { return null; }
+  }
+  /** @param {any} user @param {any} project */
+  async projectPlatform(user, project) {
+    const selected = await this.projectSelections(user, project), catalogue = await this.listPlatform(user);
+    const { disabled, stale } = currentDisabledPlatformSkills(selected.payload.disabledPlatformSkills ?? [], new Set(catalogue.items.map((/** @type {any} */ item) => item.id)));
+    const { effectiveDisabled, effectiveBuiltins: _builtins, ...activation } = selected.activation;
+    return { id: selected.id, revision: selected.revision, payload: { disabled }, staleDisabled: stale, activation,
+      items: catalogue.items.map(item => ({ ...item, enabled: !disabled.includes(item.id),
+        effective: effectiveDisabled === null ? null : !effectiveDisabled.includes(item.id) })) };
+  }
+  /** Persist alongside personal selections, so a single immutable generation captures both. A stale id the project already
+   * held (`currentDisabledPlatformSkills`) is dropped rather than refused, so it never makes the project's switches unsaveable; only a
+   * newly named unknown or required id is refused.
+   * @param {any} user @param {any} project @param {any} body */
+  async saveProjectPlatform(user, project, body) {
+    await this.requireProject(user, project);
+    const input = exact(body, ['expectedRevision', 'disabled']);
+    let disabled;
+    try { disabled = normalizeDisabledPlatformSkills(input.disabled); }
+    catch { throw new HttpError(400, 'extension_contract_invalid', 'Invalid optional skill selection.'); }
+    const catalogue = await this.listPlatform(user);
+    await this.withLibraryAccount(user, async () => {
+      await this.requireProject(user, project);
+      const selection = await this.projectSelections(user, project, { activation: false });
+      const stored = selection.payload.disabledPlatformSkills ?? [];
+      const kept = [];
+      for (const id of disabled) {
+        const row = catalogue.items.find(item => item.id === id);
+        if (!row || row.requirement.required) {
+          if (stored.includes(id)) continue;
+          if (!row) throw new HttpError(404, 'skill_platform_not_found', 'This platform skill is unavailable.');
+          throw new HttpError(409, 'extension_contract_invalid', 'This method is required by the platform.');
+        }
+        kept.push(id);
+      }
+      await this.documents.put(user.id, 'extension-defaults', selection.id, { ...selection.payload, disabledPlatformSkills: kept }, {
+        expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
+      });
+    });
+    return this.projectPlatform(user, project);
+  }
+  /** @param {any} user @param {any} project */
+  async projectBuiltins(user, project) {
+    const selected = await this.projectSelections(user, project), disabled = selected.payload.disabledBuiltinPlugins ?? [];
+    const { effectiveDisabled: _disabled, effectiveBuiltins, ...activation } = selected.activation;
+    return { revision: selected.revision, payload: { disabled: [...disabled] }, activation, items: ['annotation', 'mermaid'].map(id => ({ id,
+      enabled: this.builtinAvailability[id] !== false && !disabled.includes(id),
+      available: this.builtinAvailability[id] !== false, reason: this.builtinAvailability[id] === false ? 'deployment_disabled' : null,
+      effective: effectiveBuiltins ? effectiveBuiltins[id] === true : null })) };
+  }
+  /** @param {any} user @param {any} project @param {any} body */
+  async saveProjectBuiltins(user, project, body) {
+    await this.requireProject(user, project);
+    const input = exact(body, ['expectedRevision', 'disabled']);
+    let disabled;
+    try { disabled = normalizeDisabledBuiltinPlugins(input.disabled); }
+    catch { throw new HttpError(400, 'extension_contract_invalid', 'Invalid optional integration selection.'); }
+    await this.withLibraryAccount(user, async () => {
+      await this.requireProject(user, project);
+      const selection = await this.projectSelections(user, project, { activation: false });
+      await this.documents.put(user.id, 'extension-defaults', selection.id, { ...selection.payload, disabledBuiltinPlugins: disabled }, {
+        expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
+      });
+    });
+    return this.projectBuiltins(user, project);
   }
   /** @param {any} user @param {any} project @param {any} body */
   async saveProjectSelections(user, project, body) {
@@ -572,7 +691,8 @@ export class SkillLibraryService {
     return this.withLibraryAccount(user, async () => {
       await this.requireProject(user, project);
       const skills = await this.selections(user, input.skills);
-      return this.documents.put(user.id, "extension-defaults", `skills:project:${project.id}`, { skills }, {
+      const previous = await this.projectSelections(user, project, { activation: false });
+      return this.documents.put(user.id, "extension-defaults", `skills:project:${project.id}`, { ...previous.payload, skills }, {
         expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
       });
     });
@@ -611,7 +731,7 @@ export class SkillLibraryService {
     productId(input.sessionId); productId(input.idempotencyKey);
     const row = await this.atRevision(user, skillId, input.revision);
     if (row.payload.invocation?.userInvocable !== true) throw new HttpError(403, "extension_access_denied", "This skill does not permit user invocation.");
-    const desired = await this.projectSelections(user, project);
+    const desired = await this.projectSelections(user, project, { activation: false });
     if (!desired.payload.skills.some(item => item.skillId === skillId && item.revision === input.revision && item.digest === row.payload.digest)) {
       throw new HttpError(409, "extension_contract_invalid", "Enable this skill revision in the project before using it.");
     }

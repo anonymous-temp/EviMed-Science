@@ -14,8 +14,9 @@ import {
  *  - A memory-template directory that is not mounted where `memory.custom_templates_dir` points makes the server fall
  *    back to its built-in types without a word; the type allowlist then names types that do not exist, and what it
  *    extracts is upstream's policy — which copies quoted messages into memory files — not ours.
- *  - `GET /compile/capabilities` says `can_create: true` from configuration alone. With the identity shim down a
- *    submission is accepted and fails eighteen seconds later.
+ *  - `GET /compile/capabilities` says `can_create: true` from configuration alone. A Compile runtime that does not
+ *    receive the caller's identity accepts a submission and fails it afterwards (v0.5.0 behind no shim: 401 from the
+ *    bot), so the one proof is a real submission.
  *  - A skill that was never installed is a compile that fails at `loading_skill`; one whose bytes differ from the pin
  *    is a compile that follows instructions nobody reviewed.
  *
@@ -29,21 +30,22 @@ import {
  * (`openVikingSkills/`), as the engine's install identity. A skill that is present with other bytes is reported and
  * left alone — replacing it is an operator's decision, because somebody put it there.
  *
- * Build to delete: the shim fact goes with the shim, on the first pin whose Compile forwards identity itself
- * (upstream PR #5750); the template fact goes if upstream ever reports the loaded template directory in `/health`.
+ * Build to delete: the template fact goes if upstream ever reports the loaded template directory in `/health`. (The
+ * shim fact that stood beside it went with the identity shim, on the pin that moved to v0.5.1.1, whose Compile
+ * forwards identity itself.)
  *
  * @module openVikingEngine
  */
 
 /** The facts, in the order they are read. Their names are the keys of `memoryIndex.engine.facts` in `/api/ready`. */
-export const OPENVIKING_ENGINE_FACTS = Object.freeze(["version", "modelKey", "memoryTemplates", "skills", "compileShim"]);
+export const OPENVIKING_ENGINE_FACTS = Object.freeze(["version", "modelKey", "memoryTemplates", "skills", "compileIdentity"]);
 
 /** Which facts each feature built on the engine needs. `ready(feature)` answers from these. */
 export const OPENVIKING_ENGINE_FEATURES = Object.freeze({
-  /** Sessions, the engine's own extraction, the memory plugin (`OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED`). */
+  /** Sessions, the engine's own extraction, the memory plugin (on exactly when OpenViking is configured: `config.memoryEngineEnabled`). */
   nativeMemory: Object.freeze(["version", "modelKey", "memoryTemplates"]),
   /** Resources, Compile, the wiki and the graph (`OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED`). */
-  knowledge: Object.freeze(["version", "modelKey", "skills", "compileShim"]),
+  knowledge: Object.freeze(["version", "modelKey", "skills", "compileIdentity"]),
 });
 
 /**
@@ -52,12 +54,16 @@ export const OPENVIKING_ENGINE_FEATURES = Object.freeze({
  */
 export const OPENVIKING_ENGINE_USER = "evimed-engine";
 
-/** Where the Compile probe's target points: a shared root the identity shim refuses by rule, so nothing is written. */
-const SHIM_PROBE_TARGET = "viking://resources/evimed-shim-probe";
-/** How long the probe waits for its submission to fail. The shim answers in a third of a second; without it the
- *  engine gives up after about eighteen. */
-const SHIM_PROBE_WAIT_MS = 25_000;
-const SHIM_PROBE_POLL_MS = 500;
+/**
+ * The Compile probe's whole footprint: an empty directory to read from and a directory it would write to, both under
+ * the engine identity's own root. The compile fails on "no files" before any model is called, so nothing is written
+ * to the second and no money is spent.
+ */
+const COMPILE_PROBE_ROOT = `viking://user/${OPENVIKING_ENGINE_USER}/resources/evimed-compile-probe`;
+/** How long the probe waits for its submission to end. The server looks at its Compile runtime every 30 s, so an
+ *  empty compile that the bot fails at once is still seen as failed up to about 31 s after it was submitted. */
+const COMPILE_PROBE_WAIT_MS = 75_000;
+const COMPILE_PROBE_POLL_MS = 1_000;
 
 const sha256 = (/** @type {Buffer | string} */ bytes) => createHash("sha256").update(bytes).digest("hex");
 const codeOf = (/** @type {any} */ error) => (typeof error?.code === "string" && error.code ? error.code : "memory_index_unavailable");
@@ -94,7 +100,7 @@ export class OpenVikingEngine {
     /** @type {{ checkedAt: string, facts: Record<string, EngineFact> } | null} */
     this.last = null;
     /** Observable counters (principle 15). */
-    this.counters = { checks: 0, failedChecks: 0, skillInstalls: 0, shimProbes: 0 };
+    this.counters = { checks: 0, failedChecks: 0, skillInstalls: 0, compileProbes: 0 };
     /** @type {ReturnType<typeof setInterval> | null} */
     this.timer = null;
     /** @type {Promise<unknown> | null} */
@@ -127,13 +133,13 @@ export class OpenVikingEngine {
     await read("modelKey", async () => this.#modelKey());
     // With no answer on /health nothing below can be read; say that once per fact rather than time out four times.
     if (facts.version.code && /^memory_index_(?:unavailable|timeout|url_|auth)|_api_key_/.test(facts.version.code)) {
-      for (const name of ["memoryTemplates", "skills", "compileShim"]) facts[name] = { ok: false, code: facts.version.code };
+      for (const name of ["memoryTemplates", "skills", "compileIdentity"]) facts[name] = { ok: false, code: facts.version.code };
     } else {
       await read("memoryTemplates", () => this.#memoryTemplates());
       await read("skills", () => this.#skills());
       // The probe names an installed skill as its source, so it is only meaningful once the skills are there.
-      if (facts.skills.ok) await read("compileShim", () => this.#compileShim());
-      else facts.compileShim = { ok: false, code: "openviking_shim_unprobed" };
+      if (facts.skills.ok) await read("compileIdentity", () => this.#compileIdentity());
+      else facts.compileIdentity = { ok: false, code: "openviking_compile_unprobed" };
     }
     this.last = { checkedAt: this.now().toISOString(), facts };
     this.counters.checks += 1;
@@ -262,48 +268,60 @@ export class OpenVikingEngine {
   }
 
   /**
-   * The identity shim answers, asked through the path a real compile takes.
+   * Compile is configured and runs as the caller, asked through the path a real compile takes.
    *
-   * A submission whose target is outside every user's root is refused by the shim by rule (`identity_shim.py`), in a
-   * third of a second, before the bot is involved: nothing is written and no model is called. The task's error text
-   * is the shim's own sentence, which is the proof it was the shim that answered. With the shim down the same
-   * submission fails with `UNAVAILABLE` instead. Each probe leaves one failed task record, which the engine keeps for
-   * seven days — the reason this is read on a slow cadence and not on every readiness request.
+   * Two readings, because they fail apart. `GET /compile/capabilities` says whether the server has a Compile runtime
+   * at all (`configured`, `can_create`). It says so from configuration alone, so it proves nothing about what the
+   * runtime does with a request: the second reading is one real submission whose source is an empty directory. The
+   * server forwards the caller's account and user to the bot, which lists the directory as that user and ends the
+   * task with "Compile sources contain no files" before any model is called — measured on v0.5.1.1, in about 31 s
+   * because the server looks at the bot every 30 s. A runtime that did not receive the identity ends it with a
+   * refusal of its own instead (what v0.5.0 did without the shim). Each probe leaves one failed task record, which the
+   * engine keeps for seven days — the reason this is read on a slow cadence and not on every readiness request.
    */
-  async #compileShim() {
-    this.counters.shimProbes += 1;
+  async #compileIdentity() {
+    this.counters.compileProbes += 1;
+    const capabilities = (await this.client.request({ path: "/api/v1/compile/capabilities", openVikingUser: OPENVIKING_ENGINE_USER }))?.result ?? {};
+    if (capabilities.configured !== true || capabilities.can_create !== true) {
+      return { ok: false, code: "openviking_compile_unconfigured", reason: String(capabilities.reason_code ?? "").slice(0, 120) };
+    }
+    const sources = `${COMPILE_PROBE_ROOT}/sources`;
+    try {
+      await this.client.request({ method: "POST", path: "/api/v1/fs/mkdir", openVikingUser: OPENVIKING_ENGINE_USER, body: { uri: sources } });
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code !== "memory_index_conflict") throw error;
+    }
     let submitted;
     try {
       submitted = await this.client.request({
         method: "POST", path: "/api/v1/compile", openVikingUser: OPENVIKING_ENGINE_USER,
-        idempotencyKey: `evimed-shim-probe-${randomBytes(12).toString("hex")}`,
-        body: { from: [skillUri(OPENVIKING_SKILL_NAMES[0])], to: SHIM_PROBE_TARGET, skill: skillUri(OPENVIKING_SKILL_NAMES[0]) },
+        idempotencyKey: `evimed-compile-probe-${randomBytes(12).toString("hex")}`,
+        body: { from: [sources], to: `${COMPILE_PROBE_ROOT}/wiki`, skill: skillUri(OPENVIKING_SKILL_NAMES[0]) },
       });
     } catch (error) {
-      // 503 UNAVAILABLE at submission is the server saying it has no Compile runtime at all ("compile_api.base_url is not
-      // configured"): the bot was not started or the rendered configuration is not the one it reads.
+      // 503 UNAVAILABLE at submission is the server saying it has no Compile runtime at all.
       if (/** @type {any} */ (error)?.upstreamStatus === 503 && /** @type {any} */ (error)?.upstreamCode === "UNAVAILABLE") {
-        return { ok: false, code: "openviking_shim_absent" };
+        return { ok: false, code: "openviking_compile_unconfigured", reason: "UNAVAILABLE" };
       }
       throw error;
     }
     const taskId = String(submitted?.result?.task_id ?? "");
-    if (!taskId) return { ok: false, code: "openviking_shim_probe_unreadable" };
-    for (let waited = 0; waited <= SHIM_PROBE_WAIT_MS; waited += SHIM_PROBE_POLL_MS) {
+    if (!taskId) return { ok: false, code: "openviking_compile_probe_unreadable" };
+    for (let waited = 0; waited <= COMPILE_PROBE_WAIT_MS; waited += COMPILE_PROBE_POLL_MS) {
       const task = (await this.client.request({ path: `/api/v1/tasks/${taskId}`, openVikingUser: OPENVIKING_ENGINE_USER }))?.result ?? {};
       if (task.status === "failed") {
-        return /identity shim/.test(String(task.error ?? ""))
+        return /no files/i.test(String(task.error ?? ""))
           ? { ok: true }
-          : { ok: false, code: "openviking_shim_unreachable", reason: String(task.error ?? "").slice(0, 200) };
+          : { ok: false, code: "openviking_compile_probe_unexpected", reason: String(task.error ?? "").slice(0, 200) };
       }
-      // A probe that was accepted and is running means the target rule no longer refuses: stop it, and say so.
+      // An empty source that is accepted and runs on means the runtime no longer ends it at once: stop it, and say so.
       if (task.status === "completed" || /^compile: (?:agent|writing)/.test(String(task.stage ?? ""))) {
         await this.client.request({ method: "POST", path: `/api/v1/tasks/${taskId}/cancel`, openVikingUser: OPENVIKING_ENGINE_USER }).catch(() => {});
-        return { ok: false, code: "openviking_shim_absent" };
+        return { ok: false, code: "openviking_compile_probe_unexpected", reason: `the probe ${task.status === "completed" ? "completed" : "ran"} on an empty source` };
       }
-      await this.wait(SHIM_PROBE_POLL_MS);
+      await this.wait(COMPILE_PROBE_POLL_MS);
     }
-    return { ok: false, code: "openviking_shim_unreachable", reason: "the probe did not end" };
+    return { ok: false, code: "openviking_compile_probe_unexpected", reason: "the probe did not end" };
   }
 
   /**

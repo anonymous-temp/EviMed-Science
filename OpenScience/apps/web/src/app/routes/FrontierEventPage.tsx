@@ -1,6 +1,8 @@
+import { rememberFrontierPosition, useFrontierOrigin } from "@/components/frontier/frontierReadingState";
 import { markFrontierEventRead } from "@/lib/frontierClient";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { serveFrontierList, trackFrontierItemAction, useFrontierListTracking } from "@/lib/frontierTracking";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock, ChevronLeft, SearchX } from "lucide-react";
 import { WebApiError } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
@@ -10,6 +12,7 @@ import {
   frontierErrorMessage,
   useFrontierFeature,
   type FrontierEvent,
+  type FrontierEventOrder,
   type FrontierEventRole,
   type FrontierItem,
 } from "@/lib/frontierClient";
@@ -23,6 +26,8 @@ import { StateScreen } from "@/components/ui/StateScreen";
 import { Tag } from "@/components/ui/Tag";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
+import { openItemConversation } from "@/components/frontier/frontierAsk";
+import { AskRows } from "@/components/frontier/FrontierReader";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { Sparkline } from "@/components/frontier/Sparkline";
 import {
@@ -59,7 +64,8 @@ const RELATION_WORDS: Readonly<Record<string, string>> = Object.freeze({
  * many institutions reported it, when it last moved, its specialty — with
  * 「深入研究」; what is known so far and the latest turn; the reports, the
  * parties' own texts first under 「一手材料」 (a paper, a notice, a label) and the
- * rest as 「其他报道」, newest first — or, where nobody's own text is among them,
+ * rest as 「其他报道」, newest first or, on 最早 (`?order=asc`, asked of the
+ * server too), oldest first — or, where nobody's own text is among them,
  * one line that says so; from ten reports on a menu narrows them to one kind
  * of source; and on the right the heat, its 72-hour trend, the institutions
  * by kind, the first report and whether first-hand material is among the
@@ -79,22 +85,30 @@ export function FrontierEventPage() {
   return <EventView key={eventId} eventId={eventId} ready={feature !== "loading"} />;
 }
 
+/** The order a link names (`?order=asc`, 最早 first); newest first otherwise. */
+function readOrder(value: string | null): FrontierEventOrder {
+  return value === "asc" ? "asc" : "desc";
+}
+
 function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const order = readOrder(params.get("order"));
   const [state, setState] = useState<EventState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!ready) return;
     let active = true;
-    setState({ kind: "loading" });
-    fetchFrontierEvent(eventId).then(
+    // A new order keeps the event on screen while it is read again in that order; only a first read shows the skeleton.
+    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
+    fetchFrontierEvent(eventId, order === "asc" ? "asc" : undefined).then(
       (event) => {
         if (!active) return;
         setState({ kind: "ready", event });
         if (event.readingMark) void markFrontierEventRead(event.id, event.readingMark).catch(() => {});
-        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}`, { replace: true, state: location.state });
+        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}${location.search}`, { replace: true, state: location.state });
       },
       (error: unknown) => {
         if (!active) return;
@@ -106,7 +120,9 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
       },
     );
     return () => { active = false; };
-  }, [eventId, ready, attempt, navigate, location.state]);
+    // `location.search` is read for the redirect only; the order is its own dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, ready, attempt, navigate, location.state, order]);
 
   if (state.kind === "off") return <FrontierOffPage />;
   // A page that is not there is a screen of its own — an icon, one sentence, the way on and the way back — not an empty box in the
@@ -134,7 +150,12 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
       </EventFrame>
     );
   }
-  return <EventBody event={state.event} />;
+  const setOrder = (next: FrontierEventOrder) => setParams((current) => {
+    const updated = new URLSearchParams(current);
+    if (next === "asc") updated.set("order", "asc"); else updated.delete("order");
+    return updated;
+  }, { replace: true, state: location.state });
+  return <EventBody event={state.event} order={order} onOrder={setOrder} />;
 }
 
 /**
@@ -150,7 +171,6 @@ function EventFrame({ title, actions, facts, children }: { title: string; action
   return (
     <PageShell
       title={title}
-      className="frontier-theme"
       documentTitle={`${title} · 前沿动态`}
       titleVariant="document"
       width="read"
@@ -170,26 +190,46 @@ function EventFrame({ title, actions, facts, children }: { title: string; action
   );
 }
 
-function EventBody({ event }: { event: FrontierEvent }) {
+function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: FrontierEventOrder; onOrder: (order: FrontierEventOrder) => void }) {
   const navigate = useNavigate();
   const location = useLocation();
+  // The server reads the event in the order asked; the page sorts it too, so a server that does not know the order reads the same.
   const timeline = useMemo(() => [...event.items]
-    .sort((a, b) => Date.parse(b.timelineAt) - Date.parse(a.timelineAt)), [event.items]);
+    .sort((a, b) => (order === "asc" ? 1 : -1) * (Date.parse(a.timelineAt) - Date.parse(b.timelineAt))), [event.items, order]);
   const research = () => navigate("/app/chat", { state: { runtimeUiIntent: { ...newRuntimeUiIntent(eventResearchDraft(event)), originReference: { kind: "frontier-event", id: event.id, title: event.title } } } });
+  // 就此提问: the questions of the event's first-hand report open the conversation with that report as its origin (c3-ask).
+  const askEntry = event.ask ?? null;
+  const askReport = askEntry ? event.items.find((item) => item.id === askEntry.itemId) : undefined;
+  const ask = (question: string | null) => {
+    if (!askEntry) return;
+    trackFrontierItemAction("ask", askEntry.itemId, { surface: "event", detail: question ? "suggested" : "own" });
+    openItemConversation(navigate, { id: askEntry.itemId, title: askEntry.title, source: askReport?.source, publishedAt: askReport?.publishedAt, url: askReport?.url }, question);
+  };
   // From ten reports on, a kind of source narrows the list: the kinds the rows already name, in the order they first appear.
   const [sourceType, setSourceType] = useState<string | null>(null);
   const sourceTypes = useMemo(() => [...new Set(timeline.flatMap((item) => (item.sourceTypeLabel ? [item.sourceTypeLabel] : [])))], [timeline]);
   const visible = sourceType ? timeline.filter((item) => item.sourceTypeLabel === sourceType) : timeline;
   const firstHand = timeline.some((item) => item.role === "primary");
+  // The reports are a list a reader opens an article from, registered like the other lists (G12, 2026-10-25): an open from here is
+  // `event`, with its position in the order shown — the parties' own texts first — not a `direct` arrival.
+  const root = useRef<HTMLDivElement>(null);
+  const shown = useMemo(() => (firstHand ? [...visible.filter((item) => item.role === "primary"), ...visible.filter((item) => item.role !== "primary")] : visible), [firstHand, visible]);
+  useEffect(() => { serveFrontierList("event", null, shown.map((item) => ({ id: item.id }))); }, [shown]);
+  useFrontierListTracking(root, [event.id, shown]);
   const institutions = institutionsLine(event);
   const specialty = event.specialties[0] ?? null;
   const updated = ago(event.lastAt);
   const heat = event.heat ?? null;
-  // From ten reports on, a kind of source narrows the list: the filter is the toolbar of the first group, at its heading, over the rows
-  // it narrows (it was a menu on a row of its own between two sections, with no word for what it filters).
-  const sourceFilter = timeline.length >= 10 && sourceTypes.length > 1 ? (
-    <Toolbar label="筛选来源" filters={[{ kind: "select", label: "全部来源", allLabel: "全部来源", value: sourceType, options: sourceTypes.map((label) => ({ value: label, label })), onChange: setSourceType }]} />
-  ) : null;
+  // The reports' controls are the toolbar of the first group, at its heading, over the rows they order and narrow (the source filter was a
+  // menu on a row of its own between two sections, with no word for what it filters): 最新 · 最早 from two reports on, and from ten
+  // reports on a kind of source.
+  const reportControls = [
+    ...(timeline.length > 1 ? [{ kind: "chips" as const, label: "报道顺序", pinned: true, value: order,
+      options: [{ value: "desc", label: "最新" }, { value: "asc", label: "最早" }], onChange: (next: string) => onOrder(next === "asc" ? "asc" : "desc") }] : []),
+    ...(timeline.length >= 10 && sourceTypes.length > 1 ? [{ kind: "select" as const, label: "全部来源", allLabel: "全部来源", value: sourceType,
+      options: sourceTypes.map((label) => ({ value: label, label })), onChange: setSourceType }] : []),
+  ];
+  const sourceFilter = reportControls.length > 0 ? <Toolbar label="报道的顺序与来源" filters={reportControls} /> : null;
 
   return (
     <EventFrame
@@ -210,14 +250,14 @@ function EventBody({ event }: { event: FrontierEvent }) {
           <div className="space-y-2">
             {event.changes?.map(change => <div key={change.id} className="text-ui">
               <p className="text-text"><span className="text-accent">{change.kind === "added" ? "新增报道" : "内容更新"} · </span>{change.title}</p>
-              {change.summary && <p className="mt-1 text-text-2">{change.summary}</p>}
+              {change.summary && <p data-prose="" className="mt-1 text-text-2">{change.summary}</p>}
             </div>)}
           </div>
         </Section>
       )}
       {/* One column: 720 holds a timeline or a side column, not both. The heat and where the reports come from are a strip above
         * the summary, where a reader weighing the event looks first. */}
-      <div className="mt-6 flex flex-col gap-8">
+      <div ref={root} className="mt-6 flex flex-col gap-8">
         <aside aria-label="热度与来源" className="flex flex-wrap items-start gap-x-10 gap-y-4">
           {heat !== null && (
             <div>
@@ -240,19 +280,25 @@ function EventBody({ event }: { event: FrontierEvent }) {
             <p className={cn("max-w-measure whitespace-pre-line text-ui", event.digest ? "text-text" : "text-text-3")}>{event.digest ?? "暂无综述"}</p>
             {event.latest && (
               <p className="mt-3 max-w-measure text-ui text-text-2">
-                <span className="mr-1.5 font-medium text-accent">最新</span>
+                <span className="mr-1.5 text-accent">最新</span>
                 {event.latest.text}
                 {event.latest.at && <span className="text-text-3"> · {ago(event.latest.at)}</span>}
               </p>
             )}
           </Section>
 
-          {firstHand ? (
-            <>
-              <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} toolbar={sourceFilter} />
-              <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
-            </>
-          ) : <ReportGroup id="event-reports" title="报道" rows={visible} toolbar={sourceFilter} />}
+          {askEntry && <Section title="就此提问" className="mt-0"><AskRows questions={askEntry.questions} onAsk={ask} /></Section>}
+
+          {timeline.length > 0 && (
+            <div data-frontier-list="event" className="space-y-8">
+              {firstHand ? (
+                <>
+                  <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} toolbar={sourceFilter} />
+                  <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
+                </>
+              ) : <ReportGroup id="event-reports" title="报道" rows={visible} toolbar={sourceFilter} />}
+            </div>
+          )}
 
           {event.related.length > 0 && (
             <Section title="相关事件" className="mt-0">
@@ -295,10 +341,12 @@ function ReportGroup({ id, title, rows, toolbar }: { id: string; title: string; 
  */
 function TimelineRow({ item }: { item: FrontierItem & { role: FrontierEventRole } }) {
   const primary = item.role === "primary";
+  const origin = useFrontierOrigin();
+  const location = useLocation();
   return (
     <li className="relative py-2 pl-5">
       <span aria-hidden="true" className={cn("absolute -left-[5px] top-3.5 h-2.5 w-2.5 rounded-full", primary ? "bg-accent" : "bg-bg ring-1 ring-inset ring-border-control")} />
-      <p className="text-ui font-medium text-text">{primary && <span className="sr-only">一手来源：</span>}<a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
+      <p className="text-ui text-text">{primary && <span className="sr-only">一手来源：</span>}<Link to={`/app/frontier/items/${encodeURIComponent(item.id)}`} state={{ ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: "事件报道" } }} onClick={rememberFrontierPosition} className="hover:text-accent hover:underline">{item.title}</Link></p>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-caption text-text-3">
         <span>{item.source.name}</span>
         {item.sourceTypeLabel && <><span aria-hidden="true">·</span><span>{item.sourceTypeLabel}</span></>}

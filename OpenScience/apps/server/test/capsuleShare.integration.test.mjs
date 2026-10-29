@@ -7,20 +7,22 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { packCapsule } from "../src/capsuleContainer.mjs";
-import { CapsuleService } from "../src/capsuleService.mjs";
+import { ACTIVATION_KEY, CapsuleService } from "../src/capsuleService.mjs";
+import { selectCapsuleMethods } from "../src/capsuleMethods.mjs";
+import { createReceivedPackOutcomes } from "../src/capsuleShareOutcomes.mjs";
 import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
 import { sharedFrom } from "../src/capsuleShareLabel.mjs";
 import { capsuleShareMetricFamilies, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
 import { CapsuleSharing } from "../src/capsuleSharing.mjs";
-import { createGuestInfluence, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
+import { createGuestInfluence, guestMarkedRuns, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
 import { CapsuleTransferService, renderCapsuleTransferFiles } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { createEvolutionLearningCoupling } from "../src/evolutionLearningCoupling.mjs";
 import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -47,7 +49,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-share-int-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type) VALUES
     ($1,'李主任','development'),($2,'Alice Reader','development'),($3,'Bob Reader','development'),($4,'Carol Reader','development'),($5,'Dave Reader','development')`,
   [author, alice, bob, carol, dave]);
@@ -71,7 +73,7 @@ after(async () => {
 
 /** A capsule of the author's own with `contents` as approved methods. @param {string[]} contents */
 async function authored(...contents) {
-  const capsule = await capsules.create(author, { title: "我的记忆胶囊" });
+  const capsule = await makeCapsule(capsules, author, { title: "我的记忆胶囊" });
   const entries = [];
   for (const content of contents) entries.push(await capsules.addEntry(author, capsule.id, { factKind: "method_preference", layer: "methods", content }));
   return { capsule, entries };
@@ -155,7 +157,7 @@ test("a recipient is never told a sender's login id or e-mail address, in the li
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$1,'development'),($2,'someone@example.invalid','development')", [plain, mailed]);
   try {
     for (const sender of [plain, mailed]) {
-      const capsule = await capsules.create(sender, { title: "我的记忆胶囊" });
+      const capsule = await makeCapsule(capsules, sender, { title: "我的记忆胶囊" });
       await capsules.addEntry(sender, capsule.id, { factKind: "method_preference", layer: "methods", content: `Meta 分析先报 GRADE（${sender === plain ? "甲" : "乙"}）。` });
       const made = await sharing.deliver(sender, capsule.id, { recipients: [dave] });
       assert.equal(made.delivered, 1);
@@ -291,6 +293,74 @@ test("a share link is redeemed by an account until its expiry, its cap or its re
   assert.equal((await links.list(alice)).length, 0, "an account lists only its own links");
 });
 
+/** The funnel's rows that moved, as `stage/channel: count`. */
+const funnel = () => Object.fromEntries(capsuleShareMetricFamilies().find((family) => family.name === "open_science_capsule_share_funnel_total").series
+  .filter((row) => row.value > 0).map((row) => [`${row.labels.stage}/${row.labels.channel}`, row.value]));
+
+test("the funnel moves where each thing happens: a delivery is sent per recipient and opened once, a link is opened by an account's first look, a file is sent when it is made, and a new pack is imported per channel", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("先看数据再下结论。");
+  assert.deepEqual(funnel(), {}, "nothing yet");
+
+  // Delivery: one sent per recipient actually delivered (an unreachable name is none), one opened per recipient however often they look.
+  const delivered = await sharing.deliver(author, capsule.id, { recipients: [alice, bob, "no-such-account-xyz"] });
+  assert.equal(delivered.delivered, 2);
+  assert.deepEqual(funnel(), { "sent/delivery": 2 });
+  const aliceDelivery = (await shareNotices(alice))[0].source.id.split("/")[1];
+  const first = await sharing.open(alice, aliceDelivery);
+  await sharing.open(alice, aliceDelivery);
+  assert.deepEqual(funnel(), { "sent/delivery": 2, "opened/delivery": 1 }, "a delivery is opened the first time only");
+  await sharing.import(alice, aliceDelivery, { expectedDigest: first.preview.archiveSha256, title: "d" });
+  assert.equal(funnel()["imported/delivery"], 1);
+
+  // Link: sent when the link is made; opened by each account's first look (the owner's own look counts none, a repeat counts none).
+  const made = await sharing.createLink(author, capsule.id, { maxUses: 5 });
+  assert.equal(funnel()["sent/link"], 1);
+  await sharing.openLink(carol, made.token);
+  await sharing.openLink(carol, made.token);
+  await sharing.openLink(author, made.token);
+  assert.equal(funnel()["opened/link"], 1, "an account's first look is one open; its second and the owner's own are not");
+  const looked = await sharing.openLink(dave, made.token);
+  assert.equal(funnel()["opened/link"], 2);
+  await sharing.importLink(dave, made.token, { expectedDigest: looked.preview.archiveSha256, title: "l" });
+  assert.equal(funnel()["imported/link"], 1);
+
+  // File: sent when it is exported, imported when taken in as a file; the method pack for other tools is no step of any of it.
+  const file = await transfers.export(author, capsule.id, { password: "test-only-funnel-password", scopes: ["workstyle"] });
+  assert.equal(funnel()["sent/file"], 1);
+  const read = await transfers.preview(bob, { archive: file.archive, password: "test-only-funnel-password" });
+  await transfers.import(bob, { archive: file.archive, password: "test-only-funnel-password", expectedDigest: read.archiveSha256, confirmed: true, title: "f" });
+  assert.equal(funnel()["imported/file"], 1);
+  assert.deepEqual(funnel(), { "sent/delivery": 2, "opened/delivery": 1, "imported/delivery": 1, "sent/link": 1, "opened/link": 2, "imported/link": 1,
+    "sent/file": 1, "imported/file": 1 }, "nothing reached enabled, applied or corrected by itself");
+  resetCapsuleShareMetrics();
+});
+
+test("a run that opened the mounted file of an enabled received pack's method is that pack applied by the channel it came by, and the researcher's correction of it is corrected", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("先看数据再下结论。", "每个结论都附区间。");
+  await sharing.deliver(author, capsule.id, { recipients: [alice] });
+  const deliveryId = (await shareNotices(alice))[0].source.id.split("/")[1];
+  const opened = await sharing.open(alice, deliveryId);
+  const pack = await keep(alice, await sharing.import(alice, deliveryId, { expectedDigest: opened.preview.archiveSha256, title: "收到的做法" }));
+  resetCapsuleShareMetrics(); // the first stages are another test's; this one is about what a run did with the pack
+  // What the runtime really mounts for this account: the directories the model is told to open.
+  const mounted = await selectCapsuleMethods(capsules, { userId: alice, projectId: null });
+  const received = mounted.filter((method) => method.capsuleId === pack.id);
+  assert.equal(received.length, 2, "both methods of the pack are mounted");
+  const read = (/** @type {string} */ directoryName) => ({ sessionId: "ses_run", transcript: { messages: [{ parts: [{ type: "tool", status: "completed", tool: "read", input: { path: `/runtime/capsule-methods/${directoryName}/SKILL.md` } }] }] } });
+
+  const packs = createReceivedPackOutcomes({ capsules });
+  const run = { id: "run_applied" };
+  assert.equal(await packs.afterRun({ project: { userId: alice }, run, sessions: [read(received[0].directoryName), read(received[1].directoryName)] }), 1);
+  assert.equal(await packs.afterRun({ project: { userId: alice }, run: { id: "run_untouched" }, sessions: [] }), 0);
+  assert.equal(await packs.afterRun({ project: { userId: bob }, run: { id: "run_not_theirs" }, sessions: [read(received[0].directoryName)] }), 0, "another account holds no such pack");
+  assert.deepEqual(funnel(), { "applied/delivery": 1 });
+  packs.onEvidence({ trigger: "learning-evidence", runId: "run_applied", detail: { evidence: "follow-up", verdict: "correction" } });
+  assert.deepEqual(funnel(), { "applied/delivery": 1, "corrected/delivery": 1 });
+  resetCapsuleShareMetrics();
+});
+
 test("an archive that carries anything but the declared text entries is refused by name, before any key is derived", options, async () => {
   const { entries } = await authored("一条做法。");
   const identity = await new CapsuleIdentityStore(directory).forUser(author);
@@ -309,15 +379,25 @@ test("an archive that carries anything but the declared text entries is refused 
       passwordWrap: container.passwordWrap.toString("base64"), payload: Object.fromEntries(Object.entries(container.payload).map(([name, bytes]) => [name, bytes.toString("base64")])) });
   };
   const preview = (extra) => archive(extra).then((text) => transfers.preview(alice, { archive: text, password: "test-only-share-passphrase" }));
-  // Entries the container's own share scope would let through, and the share still refuses: an executable under a method, a file
-  // that is not one of the five a pack is made of, a method's extra file, a tool definition kept as JSON.
+  // Entries the container's own share scope would let through, and the share still refuses: an executable under a method and a
+  // method's extra file.
   const method = randomUUID();
   for (const extra of [
     [{ path: `methods/${method}/scripts/a.py`, mime: "text/x-python", content: "print(1)", layer: "methods" }],
     [{ path: `methods/${method}/notes.md`, mime: "text/markdown", content: "a second file in a method", layer: "methods" }],
-    [{ path: "exemplars/attachment.md", mime: "text/markdown", content: "an attachment named like text", layer: "methods" }],
-    [{ path: "lessons.jsonl", mime: "application/x-ndjson", content: "{\"tool\":\"search\"}\n", layer: "methods" }],
   ]) await assert.rejects(preview(extra), { code: "capsule_share_not_text_only" }, extra[0].path);
+  // A file that is not one of the five a pack is made of, and a tool definition kept as JSON. The container no longer lets a sender
+  // declare these paths at all (its table holds exactly the files a share is made of), so they are declared in a hand-made manifest:
+  // the share's own check reads the manifest and the payload's names first, and still refuses them by name before any key is derived.
+  for (const [path, mime, content] of [["exemplars/attachment.md", "text/markdown", "an attachment named like text"], ["lessons.jsonl", "application/x-ndjson", "{\"tool\":\"search\"}\n"]]) {
+    const envelope = JSON.parse(await archive([]));
+    envelope.manifest.entries.push({ path, mime, layer: "methods", bytes: content.length, sha256: "0".repeat(64) });
+    envelope.payload[path] = Buffer.from(content).toString("base64");
+    await assert.rejects(transfers.preview(alice, { archive: JSON.stringify(envelope), password: "test-only-share-passphrase" }), { code: "capsule_share_not_text_only" }, path);
+    await assert.rejects(packCapsule({ capsuleId: snapshotId, version: 1, createdAt: new Date().toISOString(),
+      issuer: { userId: identity.issuerId, signingKeyId: identity.signing.keyId, signingPrivateKey: identity.signing.privateKey },
+      scope: ["workstyle"], layers: ["methods"], password: "test-only-share-passphrase", entries: [{ path, mime, content, layer: "methods" }] }), { code: "capsule_scope_violation" }, `${path} cannot be packed`);
+  }
   const clean = await archive([]);
   // Not hosted by anyone here, so nothing could be imported from it — but it is read, which is the point: no refusal by name.
   const read = await transfers.preview(alice, { archive: clean, password: "test-only-share-passphrase" });
@@ -381,7 +461,8 @@ test("an author's take-down of one snapshot disables every recipient's copy and 
     assert.ok(!(await capsules.active(userId)).items.some((item) => item.capsuleId === copy.id), "out of every list");
     await assert.rejects(capsules.enableReceived(userId, copy.id), { code: "capsule_pack_taken_down" });
     await assert.rejects(capsules.prepareTrial(userId, copy.id, {}), { code: "capsule_pack_taken_down" });
-    const told = (await shareNotices(userId)).find((item) => /下架/.test(item.title));
+    const told = (await shareNotices(userId)).find((item) => /撤回了「撤稿做法」/.test(item.title));
+    assert.match(told.title, /已停用/, "the author's word for it is 撤回, and the notice says the copy is stopped");
     assert.match(told.body, /这条做法有误/, "one sentence saying why");
     assert.equal((await capsules.recall(userId, { query: "撤稿", projectId: null })).items.length, 0, "nothing of it is recalled");
   }
@@ -395,7 +476,70 @@ test("an author's take-down of one snapshot disables every recipient's copy and 
   assert.ok(wide.snapshots >= 2);
   const operatorNotice = (await shareNotices(carol)).find((item) => /平台/.test(item.title));
   assert.ok(operatorNotice, "a delivery nobody opened is withdrawn with a notice naming who took it down");
+  assert.match(operatorNotice.title, /下架/, "what the platform does is 下架, and says who");
   await assert.rejects(transfers.snapshotArchive(author, one.snapshot.id), { code: "capsule_snapshot_revoked" });
+});
+
+// Takedown reaches the recipient (platform brief P4): whichever way a pack arrived, once its author takes it down the runtimes that are up
+// drop its methods, a conversation that begins afterwards mounts none of it, the shelf says it was withdrawn, and nothing more is imported.
+test("a take-down stops a pack mounting at the recipients' next dispatch, whichever channel it came by, and the shelf says it was withdrawn", options, async () => {
+  resetCapsuleShareMetrics();
+  const { capsule } = await authored("先看撤稿再引用。", "区间和样本量写在同一句里。");
+  const refreshed = [];
+  capsules.onActivationChanged = async ({ userId, capsuleId, change }) => { refreshed.push({ userId, capsuleId, change }); };
+  try {
+    // One snapshot of the capsule reaches three accounts by three channels: a delivery, a link and a file made for one of them.
+    const toAlice = await sharing.deliver(author, capsule.id, { recipients: [alice] });
+    const aliceDelivery = (await sharing.sent(author, { snapshotId: toAlice.snapshot.id }))[0].id;
+    const aliceOpened = await sharing.open(alice, aliceDelivery);
+    const aliceCopy = await keep(alice, await sharing.import(alice, aliceDelivery, { expectedDigest: aliceOpened.preview.archiveSha256, title: "撤稿做法" }));
+    const link = await sharing.createLink(author, capsule.id, { maxUses: 5 });
+    const bobLook = await sharing.openLink(bob, link.token);
+    const bobCopy = await keep(bob, await sharing.importLink(bob, link.token, { expectedDigest: bobLook.preview.archiveSha256, title: "撤稿做法" }));
+    const waiting = await sharing.openLink(carol, link.token);
+    const file = await transfers.export(author, capsule.id, { password: "test-only-takedown-password", scopes: ["workstyle"] });
+    const read = await transfers.preview(dave, { archive: file.archive, password: "test-only-takedown-password" });
+    const daveCopy = await keep(dave, await transfers.import(dave, { archive: file.archive, password: "test-only-takedown-password", expectedDigest: read.archiveSha256, confirmed: true, title: "撤稿做法" }));
+    assert.deepEqual([aliceCopy, bobCopy, daveCopy].map((copy) => copy.payload.transfer.channel), ["delivery", "link", "file"]);
+    // A snapshot of the same capsule made for each channel is a different snapshot: take every one of them down, as 撤回 of each version does.
+    const snapshots = (await transfers.history(author, capsule.id)).items.map((item) => item.id);
+    assert.ok(snapshots.length >= 3);
+
+    // How many of a copy's methods a conversation beginning now would mount (the account may hold other packs from other tests).
+    const mountedOf = async (userId, copy) => (await selectCapsuleMethods(capsules, { userId, projectId: null })).filter((method) => method.capsuleId === copy.id).length;
+    for (const [userId, copy] of [[alice, aliceCopy], [bob, bobCopy], [dave, daveCopy]]) {
+      assert.equal(await mountedOf(userId, copy), 2, "both methods are mounted before the take-down");
+    }
+    refreshed.length = 0;
+    const done = [];
+    for (const id of snapshots) done.push(await sharing.takeDown({ authorId: author, snapshotId: id, by: "author", reason: "这条做法有误" }));
+    assert.equal(done.reduce((sum, item) => sum + item.copies, 0), 3, "every copy, whichever way it came");
+    assert.deepEqual(refreshed.map((item) => [item.userId, item.change]).sort(), [[alice, "disabled"], [bob, "disabled"], [dave, "disabled"]],
+      "each recipient's running runtimes were asked to drop the pack now, not at their next restart");
+
+    for (const [userId, copy] of [[alice, aliceCopy], [bob, bobCopy], [dave, daveCopy]]) {
+      assert.equal(await mountedOf(userId, copy), 0, "a conversation that begins now mounts nothing of it");
+      // Even if a stale list still named it: the mount reads the copy, not only the list.
+      const listed = await capsules.active(userId);
+      await capsules.documents.put(userId, "preferences", ACTIVATION_KEY, { items: [...listed.items, { capsuleId: copy.id, mode: "guest" }] },
+        { expectedRevision: listed.record?.revision ?? 0 });
+      assert.equal(await mountedOf(userId, copy), 0, "and a list that still names it mounts nothing of it either");
+      const shelf = (await capsules.received(userId)).find((pack) => pack.id === copy.id);
+      assert.equal(shelf.takenDown.by, "author", "the shelf reads it as withdrawn by its author");
+      assert.equal(shelf.takenDown.reason, "这条做法有误");
+      await assert.rejects(capsules.enableReceived(userId, copy.id), { code: "capsule_pack_taken_down" });
+    }
+
+    // Nothing more is imported from it: a link that was opened and not taken in, a delivery, and a file made before.
+    await assert.rejects(sharing.importLink(carol, link.token, { expectedDigest: waiting.preview.archiveSha256 }), { code: "capsule_share_link_revoked" });
+    await assert.rejects(sharing.openLink(carol, link.token), { code: "capsule_share_link_revoked" });
+    await assert.rejects(transfers.import(carol, { archive: file.archive, password: "test-only-takedown-password", expectedDigest: read.archiveSha256, confirmed: true }),
+      { code: "capsule_snapshot_revoked" }, "a file made here and not yet taken in is refused where the platform can tell");
+    assert.equal((await sharing.sent(author, { capsuleId: capsule.id })).find((row) => row.snapshotId === toAlice.snapshot.id)?.state, "imported", "the sender still sees what happened to the delivery");
+  } finally {
+    capsules.onActivationChanged = null;
+    resetCapsuleShareMetrics();
+  }
 });
 
 test("a share is corroborated only by other accounts that kept it enabled for the period without disabling it", options, async () => {
@@ -522,30 +666,25 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   const triggersAt = (offset) => new LearningTriggers({ jobs: { enqueue: async (_user, _kind, payload) => queued.push(payload) }, agentRuns: { list: async () => [], runWorkflowProjection: async () => null },
     audit: async (event, detail) => audited.push([event, detail.code]),
     guestInfluence: createGuestInfluence({ database, documents, minAccounts: 1, keptDays: 14, minAccountAgeDays: 0, minFinishedRuns: 0, now: () => Date.now() + offset * DAY }) });
-  const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled }));
+  // A correction typed into the run is what queues a lesson since 2026-10-23 (the sampled `delivered` lesson is gone); the guest mark rides on it.
+  const [guestA, guestB, vouchedA, vouchedB] = ["g1", "g2", "v1", "v2"].map((name) => finished(`run_${name}_${tag}`, { recalledMemories: recalled, corrections: 1 }));
   const early = await triggersAt(0).afterRun(project, { ...guestA });
   await triggersAt(0).afterRun(project, { ...guestB });
-  assert.deepEqual(early.queued, ["delivered"], "the run still learns for its own account");
+  assert.deepEqual(early.queued, ["correction"], "the run still learns for its own account");
   assert.equal(early.guestInfluence, "uncorroborated", JSON.stringify(audited));
   assert.equal(queued[0].guestInfluence.uncorroborated, true);
   assert.ok(await documents.get(alice, "preferences", `guest-run:${guestA.id}`), "the run is marked");
   const late = await triggersAt(15).afterRun(project, { ...vouchedA });
   await triggersAt(15).afterRun(project, { ...vouchedB });
-  assert.deepEqual(late.queued, ["delivered"]);
+  assert.deepEqual(late.queued, ["correction"]);
   assert.equal(late.guestInfluence, undefined, "another account has kept this snapshot for the period: the run is as any run");
   assert.equal(await documents.get(alice, "preferences", `guest-run:${vouchedA.id}`), null);
   assert.equal(queued.at(-1).guestInfluence, undefined);
   assert.equal((await triggersAt(0).afterRun(project, finished(`run_n1_${tag}`, { recalledMemories: [] }))).guestInfluence, undefined, "a run that used no guest capsule is as it always was");
   assert.equal(made.snapshot.channel, "delivery");
 
-  // Observations of marked runs do not count towards a platform lead; the same observations of runs that were not marked do.
-  const book = (name, runIds) => documents.put(alice, "method", `book-${name}-${tag}`, { recordType: "capability-handbook", status: "active", capabilityId: name, contentDigest: "d",
-    observations: runIds.map((runId) => ({ runId, used: true, gapCodes: ["method-missing"] })) }, { expectedRevision: 0 });
-  await book("guestgap", [guestA.id, guestB.id]);
-  await book("vouchedgap", [vouchedA.id, vouchedB.id]);
-  const events = [];
-  await createEvolutionLearningCoupling({ service: { ingestEvent: async (event) => events.push(event) }, database }).scan();
-  const mine = events.filter((event) => event.userId === alice);
-  assert.ok(mine.some((event) => event.id.includes(`book-vouchedgap-${tag}`)), "runs that used a corroborated pack make a lead");
-  assert.ok(!mine.some((event) => event.id.includes(`book-guestgap-${tag}`)), "runs that used an uncorroborated one make none");
+  // What reaches the platform from a run is read through the same mark: the promotion of a person's method to the pack of everyone's refuses a method
+  // learned in a marked run, and takes one learned in a run whose pack another account had vouched for.
+  const marked = await guestMarkedRuns(database, alice, [guestA.id, guestB.id, vouchedA.id, vouchedB.id]);
+  assert.deepEqual([...marked].sort(), [guestA.id, guestB.id].sort(), "only the runs that used an uncorroborated pack are marked");
 });

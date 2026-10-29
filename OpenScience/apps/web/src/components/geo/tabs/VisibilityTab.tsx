@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useMemo, useState } from "react";
 import {
   readGeoCell,
@@ -15,12 +16,14 @@ import type { FilterOption } from "@/components/ui/FilterChips";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
+import { GeoComparison } from "../GeoComparison";
 import { useGeoToolbar } from "../geoFrame";
-import { useGeoDiagnosis, useGeoMonitoring } from "../geoProjectData";
+import { nextMeasurement } from "../geoBand";
+import { readFailure, useGeoDiagnosis, useGeoMonitoring, type ReadFailure } from "../geoProjectData";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { clusterName } from "../spine/clusterModel";
 import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_POOL_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
-import { useGeoClusters } from "../spine/spineData";
+import { useGeoClusters, useGeoQuestionCatalog } from "../spine/spineData";
 import { formatGeoValue, GeoCellText, geoCellWord } from "../GeoCellText";
 import {
   actionMarkers,
@@ -35,7 +38,7 @@ import {
   trendConclusion,
   withCoverageMarker,
 } from "../geoOverviewModel";
-import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, type GeoUnit } from "../geoText";
+import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, poolName, type GeoUnit } from "../geoText";
 import { geoSectionId } from "../geoTabs";
 import { metricName, metricUnit, roundKindWord } from "./geoTabText";
 import { CellLink, TabError, TabSkeleton } from "./geoTabKit";
@@ -56,6 +59,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   const monitoring = useGeoMonitoring(geoId);
   const diagnosis = useGeoDiagnosis(geoId);
   const clusters = useGeoClusters(geoId);
+  const catalog = useGeoQuestionCatalog(geoId);
   const drawer = useGeoDrawerAddress();
   const [engineParam, setEngineParam] = useGeoSearchParam(GEO_ENGINE_PARAM);
   const [poolParam] = useGeoSearchParam(GEO_POOL_PARAM);
@@ -71,19 +75,23 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   const groups = useMemo(() => orderedGroups(clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.groups) ? clusters.state.data.groups : []), [clusters.state]);
   const groupEngines = (clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.engines) && clusters.state.data.engines.length > 0 ? clusters.state.data.engines : project.engines) as GeoEngine[];
   const engines = useMemo(() => {
-    const seen = [...(Array.isArray(diag?.byEngine) ? diag.byEngine.map((row) => row.engine) : []), ...groupEngines];
+    const seen = [...project.engines, ...(Array.isArray(diag?.byEngine) ? diag.byEngine.map((row) => row.engine) : []), ...groupEngines];
     return seen.filter((engine, at) => engine && seen.indexOf(engine) === at);
-  }, [diag, groupEngines]);
+  }, [project.engines, diag, groupEngines]);
   const engine = engineParam && engines.includes(engineParam as GeoEngine) ? engineParam : null;
-  const pools = useMemo(() => poolsOf(groups), [groups]);
+  const catalogGroups = useMemo(() => [...new Map([
+    ...(catalog.state.kind === "ready" ? catalog.state.data.groups : []), ...groups,
+  ].map(group => [group.id, group])).values()], [catalog.state, groups]);
+  const pools = useMemo(() => poolsOf(catalogGroups), [catalogGroups]);
   const pool = poolParam && pools.some((entry) => entry.value === poolParam) ? (poolParam as GeoPool) : null;
   const inPool = useMemo(() => (pool ? groups.filter((row) => row.pool === pool) : groups), [groups, pool]);
-  const cluster = clusterParam && inPool.some((row) => row.id === clusterParam) ? clusterParam : null;
+  const groupOptions = useMemo(() => pool ? catalogGroups.filter(row => row.pool === pool) : catalogGroups, [catalogGroups, pool]);
+  const cluster = clusterParam && groupOptions.some(row => row.id === clusterParam) ? clusterParam : null;
   const shownGroups = useMemo(() => (cluster ? inPool.filter((row) => row.id === cluster) : inPool), [inPool, cluster]);
   const narrowed = engine !== null || pool !== null || cluster !== null;
   const metric = line ? line.key : null;
 
-  useGeoToolbar(options.length > 1 || engines.length > 1 || pools.length > 1 || groups.length > 1 ? {
+  useGeoToolbar(options.length > 1 || engines.length > 1 || pools.length > 1 || groupOptions.length > 1 ? {
     filters: [
       ...(options.length > 1 ? [{ kind: "chips" as const, label: "指标", options, value: metric ?? options[0].value, onChange: setKey }] : []),
       ...(engines.length > 1 ? [{
@@ -94,7 +102,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         value: engine,
         onChange: setEngineParam,
       }] : []),
-      ...(pools.length > 1 ? [{
+      ...(pools.length > 1 || pool ? [{
         kind: "select" as const,
         label: "问句池",
         allLabel: "全部问句池",
@@ -103,11 +111,11 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         // a pool takes the group it holds with it, in one step
         onChange: (value: string | null) => change({ [GEO_POOL_PARAM]: value, [GEO_CLUSTER_FILTER_PARAM]: null }),
       }] : []),
-      ...(inPool.length > 1 ? [{
+      ...(groupOptions.length > 1 || cluster ? [{
         kind: "select" as const,
         label: "问题群",
         allLabel: "全部问题群",
-        options: inPool.map((row) => ({ value: row.id, label: clusterName(row) })),
+        options: groupOptions.map((row) => ({ value: row.id, label: clusterName(row) })),
         value: cluster,
         onChange: setClusterParam,
       }] : []),
@@ -122,9 +130,14 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
 
   const denominator = denominatorLine(project, diag);
   const ranking = rivalRanking(project, diag);
+  // One read failing leaves the others on the page; each block that reads it says so, with 重试, instead of its empty sentence.
+  const monitoringFailed = readFailure(monitoring);
+  const diagnosisFailed = readFailure(diagnosis);
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
+      <GeoComparison geoId={geoId} view={project} />
+      <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V02" />
       <MetricTrend
         project={project}
         watch={watch}
@@ -133,8 +146,10 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         // The fluctuation band was measured on the mention rate and belongs to it alone.
         noise={line?.key === "mention" && typeof diag?.noise?.band === "number" ? diag.noise.band : null}
         loading={monitoring.state.kind === "loading"}
+        error={monitoringFailed}
       />
-      <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} />
+      <PoolRivalTrends project={project} rivals={watch?.rivals} />
+      <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} error={diagnosisFailed} />
       {isEngineBarMetric(metric)
         ? <EngineMetricCard diagnosis={diag} metric={metric} selected={engine} onSelect={setEngineParam} />
         : <ByEngine rows={watch?.byEngine} diagnosis={diag} engine={engine} />}
@@ -143,9 +158,10 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         engines={groupEngines}
         engine={engine}
         onOpen={(groupId, on) => drawer.open({ group: groupId, engine: on })}
+        error={readFailure(clusters)}
       />
-      <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} pool={pool} />
-      <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} />
+      <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} pool={pool} error={diagnosisFailed} />
+      <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} error={diagnosisFailed} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
@@ -161,6 +177,7 @@ function MetricTrend({
   denominator,
   noise,
   loading,
+  error,
 }: {
   project: GeoProject;
   watch: GeoMonitoring | null;
@@ -168,24 +185,27 @@ function MetricTrend({
   denominator: string | null;
   noise: number | null;
   loading: boolean;
+  /** The monitoring did not come: the card says so, never 「还没有开始持续监测」. */
+  error: ReadFailure | null;
 }) {
   const points = line?.points ?? [];
   const unit: GeoUnit = metricUnit(line?.key);
   const name = metricName(line?.key) ?? GEO_METRIC_NAMES.gvi;
   const target = project.overview.metrics.find((metric) => metric.key === line?.key || GEO_METRIC_NAMES[metric.key] === name)?.target ?? null;
   const format = (value: number) => formatGeoValue(value, unit);
+  const next = nextMeasurement(project, watch);
   const input = useMemo(() => ({
     labels: points.map((point) => monthDay(point.date) ?? ""),
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
     // Rivals are measured on our mention rate's own questions (M-16 beside
     // M-01S), so they are drawn on that chart and on no other.
-    rivals: line?.key === "mention" ? rivalLines(watch?.rivals, points.map((point) => point.date)) : [],
+    rivals: line?.key === "mention" ? rivalLines(watch?.rivals?.filter(rival => !rival.pool), points.map((point) => point.date)) : [],
     target,
     targetLabel: target === null ? null : `目标 ${format(target)}`,
     markers: withCoverageMarker(actionMarkers(points.map((point) => point.date), watch), points),
-    nextLabel: watch?.next?.date ? `${monthDay(watch.next.date)} ${roundKindWord(watch.next.kind) ?? "复测"}` : null,
+    nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [line, watch, target, project.name]);
+  }), [line, watch, next, target, project.name]);
   const latest = pointCell(points[points.length - 1]);
   // The same rule as 总览 states the same change by.
   const change = readingChange(points, { noise });
@@ -201,8 +221,10 @@ function MetricTrend({
             {target !== null && <LegendMark series="target" shape="dash" color={TARGET_COLOR}>目标</LegendMark>}
           </>
         )}
-        meta={chartDates(change, watch?.next?.date)}
-        state={loading ? "loading" : points.length === 0 ? "empty" : "content"}
+        meta={chartDates(change, next?.date)}
+        state={loading ? "loading" : error && points.length === 0 ? "error" : points.length === 0 ? "empty" : "content"}
+        errorMessage={error ? `测量趋势没有读到：${error.message}` : undefined}
+        onRetry={error?.retry}
         emptyText="还没有开始持续监测，第一次复测后这里会画出趋势。"
         footnote={denominator}
         height={260}
@@ -270,7 +292,7 @@ function ByEngine({ rows, diagnosis, engine }: { rows: GeoMonitoring["byEngine"]
             : earlier && !reading ? `上次 ${formatGeoValue(statedValue(earlier) as number, unit)} · ${monthDay(earlier.date)}` : null;
           return (
             <li key={row.engine} data-geo-engine-trend={row.engine} className="flex min-w-0 flex-col gap-1">
-              <span className="truncate text-compact text-text-2">{engineName(row.engine)}</span>
+              <span className="truncate text-ui text-text-2">{engineName(row.engine)}</span>
               <GeoCellText cell={current ? pointCell(last) : pointCell(undefined)} unit={unit} layout="stack" />
               {reading
                 ? <GeoSparkline values={comparableRun(row.points).map(statedValue)} width={140} height={28} className="mt-1 w-full" />
@@ -292,7 +314,7 @@ function ByEngine({ rows, diagnosis, engine }: { rows: GeoMonitoring["byEngine"]
  * that is the same on every row is said once, under it, rather than repeated
  * in a column.
  */
-function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis: GeoDiagnosis | null; loading: boolean; pool: GeoPool | null }) {
+function ByPool({ geoId, diagnosis, loading, pool, error }: { geoId: string; diagnosis: GeoDiagnosis | null; loading: boolean; pool: GeoPool | null; error: ReadFailure | null }) {
   const rows = (Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []).filter((row) => row && row.pool && row.pool !== "P4" && (!pool || row.pool === pool));
   const top = rows.reduce((max, row) => Math.max(max, readGeoCell(row.mention).value ?? 0), 0);
   const issues = rows.map((row) => row.mainIssue || null);
@@ -301,10 +323,10 @@ function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis:
   const footnote = risk || sameIssue ? (
     <span className="flex flex-col gap-1">
       {risk && (
-        <span data-geo-risk-line="" className="inline-flex flex-wrap items-baseline gap-x-1.5">
-          {`${GEO_POOL_KINDS.P4}问题里，${metricName("M-15") ?? risk.name}`}
+        <span data-geo-risk-line="">
+          {`${GEO_POOL_KINDS.P4}问题里，${metricName("M-15") ?? risk.name} `}
           <CellLink geoId={geoId} cell={readGeoCell(risk.cell)} layout="inline" label={metricName("M-15") ?? risk.name} />
-          （越低越好）
+          {" （越低越好）"}
         </span>
       )}
       {sameIssue && <span>{`各类问题的主要问题都是“${sameIssue}”`}</span>}
@@ -313,7 +335,9 @@ function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis:
   return (
     <ChartCard
       title="哪一类问题里最容易被提到"
-      state={loading ? "loading" : rows.length === 0 ? "empty" : "content"}
+      state={loading ? "loading" : error && !diagnosis ? "error" : rows.length === 0 ? "empty" : "content"}
+      errorMessage={error ? `按问句池的提及率没有读到：${error.message}` : undefined}
+      onRetry={error?.retry}
       emptyText="还没有按问句池测过提及率。"
       footnote={footnote}
       height={200}
@@ -363,7 +387,16 @@ function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis:
  * `compact`, in the third of a row it has, the scope under the name instead of a column of its own — so the two pages cannot
  * disagree about who is ahead or on what.
  */
-export function Ranking({ ranking, loading, compact = false }: { ranking: ReturnType<typeof rivalRanking>; loading: boolean; compact?: boolean }) {
+export function Ranking({ ranking, loading, compact = false, error = null }: {
+  ranking: ReturnType<typeof rivalRanking>;
+  loading: boolean;
+  compact?: boolean;
+  /** The diagnosis did not come: a ranking nobody could read is said as such, not left out as if nobody measured a rival. */
+  error?: ReadFailure | null;
+}) {
+  if (error && ranking.length === 0) {
+    return <ChartCard title="同类药提及率" state="error" errorMessage={`同类药的提及率没有读到：${error.message}`} onRetry={error.retry} height={180} />;
+  }
   // Nobody measured a rival: no empty card to say so.
   if (ranking.length === 0 && !loading) return null;
   const top = ranking.reduce((max, row) => Math.max(max, row.value ?? 0), 0);
@@ -443,4 +476,27 @@ function MoreMetrics({ geoId, diagnosis }: { geoId: string; diagnosis: GeoDiagno
       </ul>
     </Disclosure>
   );
+}
+
+/** A pool-qualified competitor's name with its pool in words: the read names it "name · P2", and a pool id is not a word. */
+function rivalTitle(rival: NonNullable<GeoMonitoring["rivals"]>[number]): string {
+  const suffix = ` · ${rival.pool}`;
+  const base = rival.label ? (rival.label.endsWith(suffix) ? rival.label.slice(0, -suffix.length) : rival.label) : rival.name;
+  return `${base} · ${poolName(rival.pool)}`;
+}
+
+/** Pool-qualified competitors use their own paired denominator, never the global mention curve. */
+function PoolRivalTrends({project,rivals}:{project:GeoProject;rivals:GeoMonitoring["rivals"]}) {
+ return <>{(rivals??[]).filter(rival=>rival.pool&&rival.ownPoints).map(rival=>{
+  const points=rival.points,own=rival.ownPoints??[],labels=points.map(point=>monthDay(point.date)??point.date),known=points.some(point=>point.value!==null)||own.some(point=>point.value!==null);
+  return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rivalTitle(rival)} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。">
+   <TrendChart label={`${rivalTitle(rival)} 同口径趋势`} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
+   <DataTable label={`${rivalTitle(rival)} 同口径读数`} rows={points} rowKey={point=>point.date} columns={[
+    {key:"date",header:"实测日期",rowHeader:true,cell:point=>point.date},
+    {key:"own",header:"本品提及率",cell:point=>{const ownPoint=own.find(item=>item.date===point.date);return ownPoint?.value==null?"未知或样本不足":`${ownPoint.value}%`; }},
+    {key:"rival",header:"竞品提及率",cell:point=>point.value==null?"未知或样本不足":`${point.value}%`},
+    {key:"n",header:"共同合资格回答",cell:point=>point.n??"未知"},
+   ]}/>
+  </ChartCard>;
+ })}</>;
 }

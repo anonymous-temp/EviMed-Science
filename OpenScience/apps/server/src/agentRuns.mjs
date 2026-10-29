@@ -1,10 +1,12 @@
+import { mergeInputAttribution } from "./geoNativeInputs.mjs";
 import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
+import { normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins } from '@evimed/domain/platform-skill-policy';
 import { createPlatformSkillTelemetry } from './platformSkillTelemetry.mjs';
 import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, runIsStalled } from "@evimed/domain";
+import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, identifierShapesIn, runIsStalled } from "@evimed/domain";
 import {
   HttpError,
   assertNoSymlinkPath,
@@ -12,6 +14,7 @@ import {
   openScopedFileNoFollow,
   randomId,
   readTextFileNoFollow,
+  readStableFileHandle,
   safeId,
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
@@ -23,7 +26,8 @@ import {
   clinicalEvidencePackageErrorCode,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
-import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
+import { delegatedChildrenOf, socketToolResult, transcriptToLedgerMessages } from "./dshRuntimeAdapter.mjs";
+import { readVerifiedRunTranscript } from "./runTranscripts.mjs";
 import {
   clinicalSafetyCautionNotice,
   describedQualityNotices,
@@ -87,7 +91,7 @@ import {
 // Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
-import { clinicalSafetyCautionHits, isResearcherOwnedWork, isVerificationRun, usagePurposeOfRun } from "@evimed/domain";
+import { METHOD_MOUNT_REASONS, clinicalSafetyCautionHits, isResearcherOwnedWork, isVerificationRun, usagePurposeOfRun } from "@evimed/domain";
 // The evidence type stamped beside each preserved capture (C8), which a
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
@@ -142,6 +146,7 @@ const startFields = new Set(["sessionId"]);
 const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
+  "dispatchFingerprint",
   "agendaId",
   "automated",
   // A person is waiting on this dispatch (an interactive route, a messaging channel): waking the
@@ -400,6 +405,21 @@ function deliveryProducts(run) {
   return normalizeEffectiveProducts(declared);
 }
 
+/** @param {unknown} value */
+function normalizeDispatchFingerprint(value) {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw invalid("Dispatch fingerprint must be a SHA-256 digest.");
+  return value;
+}
+
+/** Fingerprinted callers cannot reuse a request key for another payload or conversation.
+ * @param {any} run @param {string} sessionId @param {string | null} fingerprint */
+function assertDispatchIdentity(run, sessionId, fingerprint) {
+  if ((fingerprint != null || run.dispatchFingerprint != null)
+    && (run.sessionId !== sessionId || run.dispatchFingerprint !== fingerprint)) {
+    throw new HttpError(409, "agent_run_dispatch_conflict", "This request id already belongs to another research request.");
+  }
+}
+
 function normalizeDispatchInput(input) {
   assertObject(input, "Agent run dispatch payload must be an object.");
   assertOnlyFields(input, dispatchFields);
@@ -430,6 +450,7 @@ function normalizeDispatchInput(input) {
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
+    dispatchFingerprint: input.dispatchFingerprint == null ? null : normalizeDispatchFingerprint(input.dispatchFingerprint),
     agendaId: input.agendaId == null ? null : safeId(input.agendaId, "research agenda id"),
     // Started by a harness rather than a person; read by the inbox, which
     // records such a run's completion without notifying anyone (C1).
@@ -585,6 +606,7 @@ function foldEvents(events) {
       runs.set(id, Object.freeze({
         id,
         dispatchId,
+        ...(event.dispatchFingerprint != null ? { dispatchFingerprint: normalizeDispatchFingerprint(event.dispatchFingerprint) } : {}),
         dispatchStatus,
         ...(event.agendaId ? { agendaId: safeStoredId(event.agendaId, "agendaId") } : {}),
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
@@ -646,6 +668,10 @@ function foldEvents(events) {
         // ledger an older control plane cannot read at all; an unknown *field*
         // is simply not folded, which costs the count and nothing else.
         ...(event.kind === "steer" ? { corrections: (current.corrections ?? 0) + 1 } : {}),
+        // What the researcher typed, with the request it arrived by and when: the learning loop's evidence (`learningEvidence.mjs`).
+        // Bounded here, where the ledger meets its ceiling; the transcript keeps the words whole for as long as it is kept.
+        ...(event.kind === "steer" && typeof event.steerText === "string" && event.steerText.trim()
+          ? { steers: [...(current.steers ?? []), normalizeSteer(event)].slice(0, MAX_RUN_CORRECTIONS) } : {}),
         kernelRequestIds: [...new Set([...(current.kernelRequestIds ?? []), ...(event.requestIds ?? []).map(storedKernelRequestId)])],
       }));
       continue;
@@ -699,6 +725,21 @@ function foldEvents(events) {
         lastProgressAt: storedTimestamp(event.at, "at"),
         ...(event.trustedProgressAt ? { lastTrustedProgressAt: storedTimestamp(event.trustedProgressAt, "trustedProgressAt") } : {}),
       }));
+      continue;
+    }
+    if (event.event === "artifacts-refreshed") {
+      const current = runs.get(event.id);
+      if (!current || current.status === "running") throw corrupt("Artifact refresh has no finished run.");
+      const artifacts = normalizeStoredArtifacts(event.artifacts);
+      const presentedFiles = normalizeStoredArtifacts(event.presentedFiles ?? []);
+      const unverifiedArtifacts = normalizeStoredArtifacts(event.unverifiedArtifacts ?? current.unverifiedArtifacts);
+      const outputFiles = event.outputFiles ? normalizeStoredArtifacts(event.outputFiles) : null;
+      if (!/^[a-f0-9]{64}$/.test(event.transcriptSha256 ?? "") || !/^[a-f0-9]{64}$/.test(event.inventorySha256 ?? "")
+        || current.artifacts.some(file => !artifacts.includes(file)) || current.unverifiedArtifacts.some(file => !unverifiedArtifacts.includes(file))
+        || (current.presentedFiles ?? []).some(file => !presentedFiles.includes(file))
+        || (current.outputFiles ?? []).some(file => !outputFiles?.includes(file))) throw corrupt("Artifact refresh evidence is invalid.");
+      runs.set(event.id, Object.freeze({ ...current, artifacts, unverifiedArtifacts, ...(outputFiles ? { outputFiles } : {}), ...(presentedFiles.length ? { presentedFiles } : {}),
+        artifactRefresh: { transcriptSha256: event.transcriptSha256, inventorySha256: event.inventorySha256, at: event.at } }));
       continue;
     }
     if (event.event === "finished") {
@@ -801,8 +842,8 @@ function foldEvents(events) {
       runs.set(id, Object.freeze({
         ...current,
         ...(!current.promptDispatchStartedAt&&typeof event.promptDispatchStartedAt==='string'&&Number.isFinite(Date.parse(event.promptDispatchStartedAt))?{promptDispatchStartedAt:event.promptDispatchStartedAt}:{}),
+        ...(event.inputAttribution ? { inputAttribution: mergeInputAttribution(current.inputAttribution,event.inputAttribution) } : {}),
         ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
-        ...(event.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(event.capabilityHandbooks) } : {}),
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
@@ -997,7 +1038,13 @@ function normalizePersonalSkillGeneration(value) {
     seen.add(pin.skillId);
     pins.push({ skillId: pin.skillId, revision: pin.revision, digest: pin.digest, nativeName: pin.nativeName, source: "personal" });
   }
-  return { generationId: value.generationId, pins };
+  let platformSkills;
+  if (value.platformSkills) {
+    try { platformSkills = { disabled: normalizeDisabledPlatformSkills(value.platformSkills.disabled),
+      ...(value.platformSkills.disabledPlugins !== undefined ? { disabledPlugins: normalizeDisabledBuiltinPlugins(value.platformSkills.disabledPlugins) } : {}) }; }
+    catch { /* Optional observational metadata cannot break an existing run. */ }
+  }
+  return { generationId: value.generationId, pins, ...(platformSkills ? { platformSkills } : {}) };
 }
 
 /**
@@ -1027,23 +1074,9 @@ function normalizeRecalledMemories(value) {
   return rows.length > 0 ? rows.slice(0, 40) : undefined;
 }
 
-/** The supplementary body never belongs in the run ledger, only its exact receipt. */
-function normalizeCapabilityHandbooks(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => typeof item?.id === "string" && item.id.startsWith("method:capability-handbook:") && item.id.length <= 256
-    && typeof item.ownerId === "string" && /^[A-Za-z0-9_.:@-]{1,128}$/.test(item.ownerId)
-    && typeof item.capabilityId === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(item.capabilityId)
-    && /^sha256:[a-f0-9]{64}$/.test(item.contentDigest)
-    && /^\.evimed-handbooks\/[a-f0-9]{64}\/SKILL\.md$/.test(item.path)
-    && Number.isSafeInteger(item.version) && item.version > 0)
-    .slice(0, 24).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version, requestId }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version,
-      ...(typeof requestId === "string" && requestId.length > 0 && requestId.length <= 512 && ![...requestId].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ? { requestId } : {}),
-    }));
-}
-
 function normalizeMethodDigests(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{name: string, digest: string, seq?: number, trial?: boolean}[]} */
+  /** @type {{name: string, digest: string, seq?: number, trial?: boolean, reason?: string}[]} */
   const entries = [];
   for (const item of value.slice(0, maxLearningMethods)) {
     if (!item || typeof item.name !== "string" || !item.name) continue;
@@ -1056,6 +1089,8 @@ function normalizeMethodDigests(value) {
       // once, and the ledger could no longer tell a measured arm from an
       // ordinary run -- so every later comparison would quietly mix the two.
       ...(item.trial === true ? { trial: true } : {}),
+      // Why a loaded method's card was in front of the run (`METHOD_MOUNT_REASONS`), so a later count can be split by it.
+      ...(typeof item.reason === "string" && METHOD_MOUNT_REASONS.includes(item.reason) ? { reason: item.reason } : {}),
     });
   }
   return entries;
@@ -1108,10 +1143,10 @@ function normalizeRepairRounds(value) {
   return { content, structural };
 }
 
-/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number, policy: string}[] | undefined} */
+/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number}[] | undefined} */
 function normalizeCompactionRecords(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{at: string, seq: number, replaced: number, tokens: number, policy: string}[]} */
+  /** @type {{at: string, seq: number, replaced: number, tokens: number}[]} */
   const entries = [];
   for (const item of value.slice(-maxCompactionRecords)) {
     if (!item || typeof item !== "object") continue;
@@ -1121,7 +1156,6 @@ function normalizeCompactionRecords(value) {
       seq: item.seq,
       replaced: Number.isSafeInteger(item.replaced) && item.replaced >= 0 ? item.replaced : 0,
       tokens: Number.isSafeInteger(item.tokens) && item.tokens >= 0 ? item.tokens : 0,
-      policy: typeof item.policy === "string" ? item.policy.slice(0, 32) : "",
     });
   }
   return entries;
@@ -1268,6 +1302,38 @@ function validateNativeTurn(value) {
     throw corrupt("Native run input has no valid log boundary.");
   }
   return { startSeq: value.startSeq, userSeq: value.userSeq };
+}
+
+/** The longest steer kept on a run: the ledger carries a run for as long as it lives and holds at most a megabyte of every project's. */
+const STEER_TEXT_CHARS = 1500;
+
+/**
+ * The words of a steer as the ledger may hold them: trimmed and cut, and none at all when they carry a credential or an identifier by
+ * shape (`identifierShapesIn`, the check the memory path keeps by; not a word list) — the count and the request id still say it happened.
+ * @param {unknown} text @returns {string}
+ */
+function steerTextOf(text) {
+  const value = typeof text === "string" ? text.trim().slice(0, STEER_TEXT_CHARS) : "";
+  return value && !identifierShapesIn(value).length ? value : "";
+}
+
+/**
+ * One steer as the run keeps it: the words (cut, never reworded), the request id they arrived by and the moment they were seen.
+ * @param {any} event a `kernel-request` event of kind `steer`
+ * @returns {{ requestId: string, text: string, at: string }}
+ */
+function normalizeSteer(event) {
+  const requestId = typeof event.steerRequestId === "string" && event.steerRequestId ? event.steerRequestId
+    : Array.isArray(event.requestIds) && typeof event.requestIds[0] === "string" ? event.requestIds[0] : "";
+  const at = Number.isFinite(Date.parse(String(event.steerAt ?? ""))) ? new Date(event.steerAt).toISOString() : new Date(0).toISOString();
+  const input = event.inputReceipt;
+  const receipt = input && /^gni_[a-f0-9]{64}$/u.test(input.referenceId ?? '') && input.actor?.kind === "human"
+    && typeof input.actor.id === "string" && typeof input.actor.createdAt === "string" && Number.isSafeInteger(input.inputSeq)
+    && Number.isSafeInteger(input.turnStartSeq) && /^[a-f0-9]{64}$/u.test(input.originalTextDigest ?? "")
+    ? { referenceId: input.referenceId, actor: {kind:"human",id:input.actor.id,createdAt:input.actor.createdAt},
+      inputSeq:input.inputSeq,turnStartSeq:input.turnStartSeq,originalTextDigest:input.originalTextDigest } : null;
+  return { requestId: requestId.slice(0, 512), text: event.steerText.trim().slice(0, STEER_TEXT_CHARS), at,
+    ...(receipt ? {inputReceipt:receipt} : {}) };
 }
 
 /** Native request identities are opaque strings, not our short resource ids. */
@@ -2251,7 +2317,8 @@ function artifactCandidates(message, runtimeWorkspaceRoot) {
 function presentedCandidates(message, runtimeWorkspaceRoot) {
   const candidates = [];
   for (const part of message?.parts ?? []) {
-    if (part?.type !== "tool" || part.tool !== "present" || part?.state?.status !== "completed") continue;
+    if (part?.type !== "tool" || part.tool !== "present" || toolPartOutcome(part, false) !== "succeeded" || part.state?.error
+      || socketToolResult(part.state?.output)?.ok === false || parsedToolResult(part)?.ok === false) continue;
     const files = part.state?.input?.files;
     for (const file of Array.isArray(files) ? files : []) {
       const candidate = workspaceRelativeCandidate(typeof file === "string" ? file : file?.path, runtimeWorkspaceRoot);
@@ -2281,13 +2348,13 @@ function workspaceRelativeCandidate(value, runtimeWorkspaceRoot) {
   }
 }
 
-async function existingArtifacts(project, candidates, run = null, endTime = null) {
+async function existingArtifacts(project, candidates, run = null, endTime = null, strictWindow = false) {
   const result = [];
   for (const relative of candidates) {
     let opened;
     try {
       opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
-      if (opened.stat.isFile() && (!run?.nativeTurn || (opened.stat.mtimeMs >= Date.parse(run.startedAt)
+      if (opened.stat.isFile() && ((!run?.nativeTurn && !strictWindow) || (opened.stat.mtimeMs >= Date.parse(run.startedAt)
         && (endTime == null || opened.stat.mtimeMs <= endTime + 1)))) result.push(relative);
     } catch { /* missing, escaped, or linked artifacts are not recorded */ }
     finally { await opened?.handle.close().catch(() => {}); }
@@ -3422,6 +3489,29 @@ export async function readDeliveryReceipt(project, run = null) {
   return receipt ? (await verifiedReceiptArtifacts(project, receipt)).receipt : null;
 }
 
+/** Exact receipt for an explicit capture repair. Unlike delivery's partial recovery, no changed file is omitted.
+ * @param {any} project @param {any} run */
+export async function readCaptureRepairReceipt(project, run) {
+  for (const relativePath of receiptFilesFor(receiptRunIds(run))) {
+    let opened;
+    try {
+      opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relativePath));
+      if (opened.stat.size > 2 * 1024 * 1024) throw new HttpError(413, "result_capture_receipt_invalid", "The delivery receipt is too large.");
+      const bytes = await readStableFileHandle(opened.handle, opened.stat);
+      let parsed;
+      try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
+      catch { throw new HttpError(409, "result_capture_receipt_invalid", "The delivery receipt is unreadable."); }
+      const validated = validateDeliveryReceipt(parsed);
+      if (!validated.ok || (!run.nativeTurn && validated.receipt.runId !== run.id)) throw new HttpError(409, "result_capture_receipt_invalid", "The delivery receipt does not belong to this run.");
+      const receipt = run.nativeTurn ? scopeNativeReceipt(validated.receipt, run) : validated.receipt;
+      if (!receipt?.entries?.length) throw new HttpError(409, "result_capture_receipt_invalid", "The run has no scoped receipt entries.");
+      return { receipt, relativePath, sha256: createHash("sha256").update(bytes).digest("hex") };
+    } catch (error) { if (!["ENOENT", "file_not_found"].includes(error?.code)) throw error; }
+    finally { await opened?.handle.close(); }
+  }
+  throw new HttpError(404, "result_capture_receipt_unavailable", "The original delivery receipt is unavailable.");
+}
+
 /**
  * The ids a run's receipt may be filed under. A dispatched run is filed under
  * its own id, the one the run side was told in the brief index; a conversation
@@ -4290,6 +4380,7 @@ export function isResearcherRun(run) {
 export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
+    this.nativeInputs = options.nativeInputs ?? null;
     this.agentRegistry = Promise.resolve(options.agentRegistry);
     // The same registry, once it has loaded, for the one synchronous reader:
     // a pushed `run/state` describes its artifacts like the list does.
@@ -4657,7 +4748,7 @@ export class AgentRunStore {
 
   /**
    * Every conversation of a project with its runs, newest first: one read of the ledger for what `conversationRuns` answers one
-   * conversation at a time. What reading older memories against the conversations they came from asks (`memoryEvidenceProvenance.mjs`).
+   * conversation at a time. What naming the conversations a native memory file came from asks of the ledger (`nativeConversationTitles` in `server.mjs`).
    * @param {any} project @returns {Promise<Map<string, Record<string, any>[]>>}
    */
   async conversationIndex(project) {
@@ -4731,6 +4822,83 @@ export class AgentRunStore {
         };
       })
       .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  }
+
+  /** Refresh an owned finished run's inventory from its frozen transcript and bounded deliverable directory.
+   * No completion hook is invoked: status, verification, notices, usage and completion time are historical facts.
+   * @param {any} project @param {string} rawRunId
+   * @param {{expectedTranscriptSha256:string,dryRun?:boolean,expectedInventorySha256?:string}} options */
+  async refreshArtifacts(project, rawRunId, options) {
+    const runId = safeId(rawRunId, "agent run id");
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const run = foldEvents(events).get(runId);
+      if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
+      if (run.status === "running") throw new HttpError(409, "agent_run_not_finished", "The run is still working.");
+      const stored = await readVerifiedRunTranscript(project, run, options.expectedTranscriptSha256);
+      const end = Date.parse(run.finishedAt);
+      const start = Date.parse(run.startedAt);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) throw new HttpError(409, "run_transcript_scope_invalid", "The run has no complete time boundary.");
+      // Root messages are scoped by kernel turn identity; child messages are admitted only through that root's delegation.
+      const asLedger = (sessionId) => transcriptToLedgerMessages({ sessionId, turnEnd: null, subagents: [], lastSeq: 0,
+        messages: stored.messages.filter(message => message.sessionId === sessionId) });
+      const rootMessages = runHistory(run, asLedger(run.sessionId));
+      const bounded = rootMessages.filter(message => {
+        const at = message.info?.time?.created;
+        return Number.isFinite(at) && at >= start && at <= end;
+      });
+      const ownSessions = new Set([run.sessionId]);
+      for (const message of bounded) for (const part of message.parts ?? []) {
+        if (part.type === "tool" && part.state?.status === "completed") {
+          for (const child of delegatedChildrenOf(part.tool, part.state.output)) ownSessions.add(child.childSessionId);
+        }
+      }
+      for (const session of stored.header.sessions) {
+        if (session.sessionId === run.sessionId || !ownSessions.has(session.sessionId)) continue;
+        bounded.push(...asLedger(session.sessionId)
+          .filter(message => message.info?.time?.created >= start && message.info.time.created <= end));
+      }
+      const runtimeRoot = await this.runtimeWorkspaceRoot(project).catch(() => project.workspaceDir);
+      const written = bounded.flatMap(message => artifactCandidates(message, runtimeRoot));
+      const handedOver = bounded.flatMap(message => presentedCandidates(message, runtimeRoot));
+      const disk = await writtenDeliverableFiles(project, start, end);
+      const previousFiles = [...run.artifacts, ...run.unverifiedArtifacts];
+      const candidates = [...new Set([...previousFiles, ...written, ...disk, ...handedOver])].slice(0, maxArtifacts).sort();
+      const evidence = [];
+      let totalBytes = 0;
+      for (const relative of candidates) {
+        let opened;
+        try {
+          opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
+          if (!opened.stat.isFile() || opened.stat.mtimeMs > end + 1 || opened.stat.size > 64 * 1024 * 1024 || totalBytes + opened.stat.size > 256 * 1024 * 1024) continue;
+          if (!handedOver.includes(relative) && !previousFiles.includes(relative) && opened.stat.mtimeMs < start) continue;
+          const bytes = await readStableFileHandle(opened.handle, opened.stat);
+          totalBytes += bytes.length;
+          evidence.push({ path: relative, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.length,
+            witness: handedOver.includes(relative) ? "present" : written.includes(relative) ? "write" : disk.includes(relative) ? "deliverable-directory" : "existing-inventory" });
+        } finally { await opened?.handle.close(); }
+      }
+      const discovered = evidence.map(file => file.path);
+      // History keeps its places; only additions compete for the remaining capacity.
+      const append = (previous, additions) => {
+        const held = new Set(previous);
+        return [...held, ...[...new Set(additions)].filter(file => !held.has(file)).slice(0, Math.max(0, maxArtifacts - held.size))].sort();
+      };
+      const artifacts = append(run.artifacts, run.status === "succeeded" ? discovered : []);
+      const unverifiedArtifacts = append(run.unverifiedArtifacts, run.status !== "succeeded" ? discovered : []);
+      const outputFiles = run.outputFiles ? append(run.outputFiles, discovered) : null;
+      const presentedFiles = append(run.presentedFiles ?? [], evidence.filter(file => handedOver.includes(file.path)).map(file => file.path));
+      const inventorySha256 = createHash("sha256").update(JSON.stringify({ runId, transcriptSha256: options.expectedTranscriptSha256, artifacts, unverifiedArtifacts, outputFiles, presentedFiles, evidence })).digest("hex");
+      const plan = { runId, transcriptSha256: options.expectedTranscriptSha256, inventorySha256, artifacts, unverifiedArtifacts, ...(outputFiles ? { outputFiles } : {}), presentedFiles, evidence };
+      if (options.expectedInventorySha256 && options.expectedInventorySha256 !== inventorySha256) throw new HttpError(409, "run_artifact_inventory_changed", "The artifact inventory changed after planning.");
+      if (options.dryRun) return plan;
+      if (run.artifactRefresh?.inventorySha256 === inventorySha256) return run;
+      const event = { event: "artifacts-refreshed", id: runId, at: this.now().toISOString(), ...plan };
+      const refreshed = foldEvents([...events, event]).get(runId);
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      this.notifyState(project, refreshed);
+      return refreshed;
+    });
   }
 
   /**
@@ -4831,6 +4999,7 @@ export class AgentRunStore {
   async reserveRun(project, session, {
     baselineCursor,
     dispatchId = null,
+    dispatchFingerprint = null,
     agendaId = null,
     automated = false,
     estimatedMinutes = null,
@@ -4870,7 +5039,10 @@ export class AgentRunStore {
       const duplicate = dispatchId == null
         ? null
         : [...runs.values()].find((run) => run.dispatchId === dispatchId);
-      if (duplicate) return { run: duplicate, owner: false };
+      if (duplicate) {
+        assertDispatchIdentity(duplicate, session.sessionId, dispatchFingerprint);
+        return { run: duplicate, owner: false };
+      }
       const active = [...runs.values()].find((run) => run.sessionId === session.sessionId && run.status === "running");
       // An adopted run is a placeholder for a session nobody had claimed. A
       // dispatch is somebody claiming it, so it takes the session over instead
@@ -4922,6 +5094,7 @@ export class AgentRunStore {
         event: "started",
         id,
         dispatchId,
+        ...(dispatchFingerprint != null ? { dispatchFingerprint } : {}),
         dispatchStatus: dispatchId ? "dispatching" : "accepted",
         ...(agendaId ? { agendaId } : {}),
         ...(nativeTurn ? { nativeTurn } : {}),
@@ -4995,6 +5168,7 @@ export class AgentRunStore {
     const {
       sessionId,
       dispatchId,
+      dispatchFingerprint,
       automated,
       agendaId,
       estimatedMinutes,
@@ -5009,7 +5183,10 @@ export class AgentRunStore {
     } = normalizeDispatchInput(input);
     if (typeof sendPrompt !== "function") throw new TypeError("Agent run dispatch requires a prompt sender.");
     const existing = (await this.list(project)).find((run) => run.dispatchId === dispatchId);
-    if (existing) return this.existingDispatch(project, existing);
+    if (existing) {
+      assertDispatchIdentity(existing, sessionId, dispatchFingerprint);
+      return this.existingDispatch(project, existing);
+    }
     const session = await this.researchSessions.get(project, sessionId);
     if (!session) throw new HttpError(404, "research_session_not_found", "Research session not found.");
     await this.reconcileSession(project, sessionId);
@@ -5034,7 +5211,7 @@ export class AgentRunStore {
     const pinned = routedOverBinding && session.mode === "specialist"
       ? { ...session, agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent }
       : session;
-    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
+    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -5243,7 +5420,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], appendCapabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   /** Recorded by the trusted manager immediately before its first native prompt; never retroactive. @param {any} project @param {string} runId @param {string} at */
   async recordRuntimeEgressDispatch(project,runId,at){
@@ -5280,11 +5457,8 @@ export class AgentRunStore {
         id: runId,
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
+        ...(patch.inputAttribution ? { inputAttribution: mergeInputAttribution(current.inputAttribution,patch.inputAttribution) } : current.inputAttribution ? { inputAttribution: current.inputAttribution } : {}),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
-        ...(patch.appendCapabilityHandbooks || patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(
-          (patch.appendCapabilityHandbooks ? [...(current.capabilityHandbooks ?? []), ...patch.appendCapabilityHandbooks] : patch.capabilityHandbooks)
-            .filter((item, index, all) => item?.ownerId === project.userId && all.findIndex(other => other?.id === item.id && other?.contentDigest === item.contentDigest) === index)) }
-          : current.capabilityHandbooks ? { capabilityHandbooks: current.capabilityHandbooks } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),
@@ -6494,10 +6668,12 @@ export class AgentRunStore {
        * exist.
        */
       const filesOnDisk = async () => {
-        if (artifacts.length > 0) return;
         const startedAt = Date.parse(String(run.startedAt ?? ""));
-        artifacts = await writtenDeliverableFiles(project, Number.isFinite(startedAt) ? startedAt : null,
+        const written = await writtenDeliverableFiles(project, Number.isFinite(startedAt) ? startedAt : null,
           typeof ownEnd?.time === "number" ? ownEnd.time : null).catch(() => []);
+        const presented = allRunAssistants.flatMap(message => presentedCandidates(message, runtimeWorkspaceRoot));
+        const present = await existingArtifacts(project, presented);
+        artifacts = [...new Set([...artifacts, ...await existingArtifacts(project, written, run, ownEnd?.time, true), ...present])].slice(0, maxArtifacts).sort();
       };
       /** @param {(string | StoredNotice)[]} notices */
       const unaccepted = async (notices) => {
@@ -6704,6 +6880,11 @@ export class AgentRunStore {
     // untouched. Held back until here so no verdict above reads a file this only adds.
     let outputs = { files: /** @type {string[]} */ ([]), presented: /** @type {string[]} */ ([]), notices: /** @type {any[]} */ ([]) };
     if (terminal.status === "succeeded") {
+      const presented = await existingArtifacts(project, allRunAssistants.flatMap(message => presentedCandidates(message, runtimeWorkspaceRoot)));
+      const outputStartedAt = Date.parse(run.startedAt);
+      const written = await writtenDeliverableFiles(project, Number.isFinite(outputStartedAt) ? outputStartedAt : null, ownEnd?.time ?? null).catch(() => []);
+      artifacts = [...new Set([...artifacts, ...await existingArtifacts(project, written, run, ownEnd?.time, true), ...presented])].slice(0, maxArtifacts).sort();
+      if (presented.length) terminal.presentedFiles = presented;
       try {
         outputs = await ordinaryConversationOutputs({ project, run, registry: await this.agentRegistry, assistants: allRunAssistants, runtimeWorkspaceRoot, endTime: ownEnd?.time, answered: answeredTurn });
       } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
@@ -7585,9 +7766,12 @@ export class AgentRunStore {
    * Written before the prompt is sent, like the repair path: a request id the
    * ledger has not seen cannot be matched to the run it belongs to.
    *
-   * @param {any} project @param {string} runId @param {string} requestId
+   * `text` is what the researcher typed, kept on the run with the request it went by (`steers`): the loop learns from their words, and
+   * a count says only that there were some.
+   *
+   * @param {any} project @param {string} runId @param {string} requestId @param {string} [text]
    */
-  async recordCorrection(project, runId, requestId) {
+  async recordCorrection(project, runId, requestId, text = "") {
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const run = foldEvents(events).get(runId);
@@ -7597,7 +7781,8 @@ export class AgentRunStore {
       if ((run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) {
         throw new HttpError(409, "agent_run_correction_limit", `A run accepts at most ${MAX_RUN_CORRECTIONS} corrections.`);
       }
-      const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)] };
+      const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)],
+        ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
@@ -7634,10 +7819,13 @@ export class AgentRunStore {
    *  - Saturates at `MAX_RUN_CORRECTIONS`. The trigger needs one; the ledger has
    *    a hard ceiling, and a keyboard must not be able to fill it.
    *
-   * @param {any} project @param {string} sessionId @param {string} requestId
+   *  - Keeps the words (`text`, as typed, cut at `STEER_TEXT_CHARS`) beside the count: a steer is the researcher's own correction of
+   *    the run, and the loop needs what it said, not how often (`learningEvidence.mjs`, 2026-10-23).
+   *
+   * @param {any} project @param {string} sessionId @param {string} requestId @param {string} [text]
    * @returns {Promise<any | null>}
    */
-  async recordSteeredInput(project, sessionId, requestId) {
+  async recordSteeredInput(project, sessionId, requestId, text = "") {
     if (typeof sessionId !== "string" || !sessionId || typeof requestId !== "string" || !requestId) return null;
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -7649,7 +7837,8 @@ export class AgentRunStore {
       const counted = events.some((event) => event.event === "kernel-request" && event.id === run.id && event.kind === "steer"
         && (event.steerRequestId === requestId || (Array.isArray(event.requestIds) && event.requestIds.includes(requestId))));
       if (counted || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
-      const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId) };
+      const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId),
+        ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
       const updated = foldEvents([...events, event]).get(run.id);
       this.notifyState(project, updated);
@@ -7657,6 +7846,22 @@ export class AgentRunStore {
     });
   }
 
+  async recordConsumedInput(project, runId, input, parts) {
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const run = foldEvents(events).get(runId);
+      if (!run || run.automated || !run.inputAttribution?.inputs?.some(item => item.referenceId === input.referenceId && item.inputSeq === input.inputSeq)
+        || events.some(event => event.event === "kernel-request" && event.id === runId && event.steerRequestId === input.sourceRequestId)
+        || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
+      const text = parts.slice(0, input.originalParts).filter(part => part.type === "text").map(part => part.text).join("\n");
+      if (!text || createHash("sha256").update(JSON.stringify(text)).digest("hex") !== input.originalTextDigest) return run;
+      const event = { event: "kernel-request", id: runId, kind: "steer", source: "native-consumed", steerRequestId: storedKernelRequestId(input.sourceRequestId),
+        inputReceipt: {referenceId:input.referenceId,actor:input.actor,inputSeq:input.inputSeq,turnStartSeq:run.nativeTurn.startSeq,originalTextDigest:input.originalTextDigest},
+        ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      return foldEvents([...events, event]).get(runId);
+    });
+  }
   /** Persist a repair's native request identity before sending it. */
   async recordKernelRequest(project, runId, requestId) {
     return withProjectStorageMutation(project, async () => {
@@ -7811,7 +8016,19 @@ export class AgentRunStore {
         const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
           : reply ? { ...previous, effectiveRouteReason: "ask-user-reply" }
           : await routeTurn(question, { requestIds });
-        const reservation = await this.reserveRun(project, binding ?? {
+        // Like a module step dispatched over a conversation's binding, an authenticated request-local
+        // route pins this run to its actual capability. The persistent research-session record is unchanged.
+        // The server sets routedOverBinding only after reading the immutable selected-input route.
+        const requestLocal = routed.routedOverBinding === true || Boolean((continuation || reply) && previous);
+        const selected = binding?.mode === "specialist" && !requestLocal ? {
+          ...routed,
+          effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
+          effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: continuation || reply ? routed.effectiveRouteReason : "session-binding",
+        } : routed;
+        const pinned = requestLocal && binding?.mode === "specialist" ? { ...binding,
+          agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent,
+        } : binding;
+        const reservation = await this.reserveRun(project, pinned ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
         }, {
           baselineCursor: `seq_${first.seq}`,
@@ -7822,12 +8039,12 @@ export class AgentRunStore {
           question: (continuation || reply) && previous?.question ? previous.question : questionPreview(reply ? replyAnswerText(question) : question),
           automated: continuation,
           ...(goalId ? { goal: { id: goalId, runId: previous?.id ?? null } } : {}),
-          estimatedMinutes: routed.estimatedMinutes ?? null,
+          estimatedMinutes: selected.estimatedMinutes ?? null,
           forkedFrom: source,
-          effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,
-          effectiveAgentVersion: routed.effectiveAgentVersion ?? binding?.agentVersion ?? null,
-          effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
-          effectiveRouteReason: `${adoptedRouteReason}${routed.effectiveRouteReason ? `:${routed.effectiveRouteReason}` : ""}`.slice(0, 64),
+          effectiveAgentId: selected.effectiveAgentId ?? binding?.agentId ?? null,
+          effectiveAgentVersion: selected.effectiveAgentVersion ?? binding?.agentVersion ?? null,
+          effectiveRuntimeAgent: selected.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
+          effectiveRouteReason: `${adoptedRouteReason}${selected.effectiveRouteReason ? `:${selected.effectiveRouteReason}` : ""}`.slice(0, 64),
         });
         run = reservation.run;
         // The first run of a fork is named after the line it branched from,
@@ -7863,6 +8080,22 @@ export class AgentRunStore {
           await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
           return foldEvents([...events, event]).get(current.id);
         });
+      }
+      if (this.nativeInputs) {
+        try {
+          const attribution = await this.nativeInputs.reconcileTurn(project, transcript, turn, run);
+          if (attribution) {
+            run = await this.recordLearning(project, run.id, { inputAttribution: attribution }) ?? run;
+            // Only consumed, proved human inputs after the initiator contribute correction words.
+            for (const input of attribution.inputs.filter(item => item.actor.kind === "human" && item.inputSeq !== first.seq)) {
+              const message = turn.inputs.find(item => item.seq === input.inputSeq && item.sourceRequestId === input.sourceRequestId);
+              if (message) await this.recordConsumedInput(project, run.id, input, message.parts);
+            }
+          }
+        } catch {
+          // Attribution is optional evidence. Ordinary finished work remains deliverable.
+          await this.appendQualityNotices(project, run.id, [runNotice("run_input_attribution_incomplete", "Some native inputs could not be attributed.")], { unchecked: true });
+        }
       }
       if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {
         const runProject = await this.resolveRunProject(project, run);

@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from ..adapters.common import clean_markup, normalize_doi
+from ..adapters.common import clean_markup, structured_abstract, normalize_doi
 from ..adapters.europepmc import europepmc_journal, europepmc_results
 from ..adapters.eutils import affiliation_country, authors_short
 from ..model import FetchError
@@ -39,8 +39,8 @@ def id_query(source: str, record_id: str) -> str:
 
 
 async def _search(fetcher: Any, endpoints: Endpoints, query: str, page_size: int, trace: Trace,
-                  step: str) -> list[dict] | None:
-    attempt = await get(fetcher, search_url(endpoints, query, page_size))
+                  step: str, priority: str = "normal") -> list[dict] | None:
+    attempt = await get(fetcher, search_url(endpoints, query, page_size), priority=priority)
     if attempt.result is None:
         trace.record(attempt, step)
         return None
@@ -55,13 +55,13 @@ async def _search(fetcher: Any, endpoints: Endpoints, query: str, page_size: int
     return found
 
 
-async def by_dois(fetcher: Any, endpoints: Endpoints, dois: list[str], trace: Trace) -> dict[str, dict]:
+async def by_dois(fetcher: Any, endpoints: Endpoints, dois: list[str], trace: Trace, priority: str = "normal") -> dict[str, dict]:
     """Core results keyed by lower-cased DOI, for the DOIs Europe PMC knows."""
     found: dict[str, dict] = {}
     wanted = sorted({d.lower() for d in dois if d})
     for start in range(0, len(wanted), DOIS_PER_QUERY):
         batch = wanted[start:start + DOIS_PER_QUERY]
-        results = await _search(fetcher, endpoints, doi_query(batch), 25, trace, "europepmc_doi")
+        results = await _search(fetcher, endpoints, doi_query(batch), 25, trace, "europepmc_doi", priority)
         for result in results or []:
             doi = normalize_doi(result.get("doi"))
             if doi in batch and doi not in found:
@@ -78,6 +78,12 @@ async def resolve_doi(fetcher: Any, endpoints: Endpoints, source: str, record_id
     return None
 
 
+def result_pmcid(result: dict) -> str | None:
+    """The PMC id of a core result (``PMC1234567``), when Europe PMC holds the article in PMC."""
+    value = str(result.get("pmcid") or "").strip().upper()
+    return value if value.startswith("PMC") and value[3:].isdigit() else None
+
+
 def preprint_links(result: dict) -> list[tuple[str, str, str]]:
     """``(type, source, id)`` of the preprint relations in a core result (``Preprint of`` / ``Preprint in`` …)."""
     corrections = (result.get("commentCorrectionList") or {}).get("commentCorrection") or []
@@ -91,7 +97,7 @@ def preprint_links(result: dict) -> list[tuple[str, str, str]]:
 
 def result_enrichment(result: dict) -> tuple[str | None, dict[str, Any]]:
     """``(abstract, enrichment)`` from one core result."""
-    abstract = clean_markup(result.get("abstractText")) or None
+    abstract = structured_abstract(result.get("abstractText")) or None
     types = (result.get("pubTypeList") or {}).get("pubType") or []
     mesh = [clean_markup(h.get("descriptorName")) for h in ((result.get("meshHeadingList") or {}).get("meshHeading") or [])
             if isinstance(h, dict) and h.get("descriptorName")]

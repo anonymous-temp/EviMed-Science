@@ -20,7 +20,7 @@ const manifest = await readFile(new URL("../../../capabilities/method-distillati
 
 const project = { id: "project_1", userId: "user_1" };
 
-test("each trigger scenario comes out as the case says: what the turn left, or what the researcher corrected, queues a lesson in an ordinary conversation", async () => {
+test("each trigger scenario comes out as the case says: what the researcher corrected queues a lesson in an ordinary conversation, and what the turn left is read when the run is settled", async () => {
   assert.ok(incident.scenarios.triggers.length >= 5);
   for (const [index, scenario] of incident.scenarios.triggers.entries()) {
     const run = {
@@ -42,7 +42,7 @@ test("the distillation scenarios are well formed and cover what the capability i
   const scenarios = incident.scenarios.distillation;
   assert.equal(new Set(scenarios.map((/** @type {any} */ item) => item.name)).size, scenarios.length);
   for (const item of scenarios) {
-    assert.ok(["repair_accepted", "correction", "delivered", "routine"].includes(item.trigger), item.name);
+    assert.ok(["repair_accepted", "correction", "routine"].includes(item.trigger), item.name);
     assert.ok(["researcher", "reviewer", "run"].includes(item.signal), item.name);
     assert.ok(item.lesson.length > 40, item.name);
     assert.ok(item.expect && typeof item.expect === "object", item.name);
@@ -60,6 +60,6 @@ test("the skill says what the case says it must, in the capability and in its co
   assert.match(skill, /a one-off wish/);
   assert.match(skill, /EviMed's own delivery bookkeeping/, "the 2026-10-12 ruling stands");
   assert.match(String(incident.liveCheck), /method-distillation 1\.3\.0/);
-  assert.match(manifest, /^version: 1\.3\.0$/m);
-  assert.equal(DISTILLATION_EXTRACTOR_VERSION, "7");
+  assert.match(manifest, /^version: 1\.\d+\.\d+$/m, "the capability carries a version; its number is the manifest's, never written here");
+  assert.ok(Number(DISTILLATION_EXTRACTOR_VERSION) >= 7, "a lesson read under the old definition is a new dispatch");
 });

@@ -129,7 +129,11 @@ test('paired design uses the common subjects and keeps predictive variance; evid
 });
 
 test('a heldout prognostic correlation reaches the existing PROCOVA design with its provenance',options,async()=>{
-  const header = {schema:1,historyId:history.id,origin:history.summary.origin,subjectKeyMode:'source_identifier',endpoint:{code:'HbA1c',type:'continuous',unit:'%'},horizonsDays:[30],model:{name:'noisy-synthetic',version:'1'}};
+  // All subjects are deliberately held out; patient hashing also includes the random study id.
+  const heldout = await vcr.longitudinal.freezeHistory(target,{snapshotId:snapshot.id,asOf:'2026-01-01',mappings,
+    split:{mode:'temporal',calibrationFrom:'2025-11-01',testFrom:'2025-12-01'}},'owner');
+  assert.equal(heldout.summary.split.counts.test,40);
+  const header = {schema:1,historyId:heldout.id,origin:heldout.summary.origin,subjectKeyMode:'source_identifier',endpoint:{code:'HbA1c',type:'continuous',unit:'%'},horizonsDays:[30],model:{name:'noisy-synthetic',version:'1'}};
   const rows = Array.from({length:40},(_,i)=>({subjectKey:`CANARY-${i}`,horizonDays:30,point:6+i/20+.3+.1*Math.sin(i),sd:.5,uncertainty:'predictive'}));
   const predicted = await vcr.longitudinal.importPrediction(target,{...header,rows},'owner');
   const control = await vcr.longitudinal.importPrediction(target,{...header,rows:rows.map(r=>({...r,point:r.point+.3}))},'owner');
@@ -138,12 +142,26 @@ test('a heldout prognostic correlation reaches the existing PROCOVA design with 
   // An earlier design is intentionally waiting for an external statistical engine.
   await vcr.jobs.advance(claims.find(job=>job.id===queued.job.id));
   const result = await vcr.jobs.resultOf(target.id,queued.job.id);
+  assert.equal(result.diagnostics.longitudinal.summary.groups[0].subjects,40);
   const design = await vcr.longitudinal.enqueueDesign(target,{predictionId:predicted.id,controlPredictionId:control.id,horizonDays:30,
     prognosticEvaluationId:result.diagnostics.longitudinal.id,randomizationAt:'2026-03-01',lambda:.8},'owner');
-  assert.equal(design.available,true);
+  assert.equal(design.available,true,JSON.stringify(design));
   const job = await vcr.store.one('SELECT * FROM evimed_vcr.jobs WHERE id=$1',[design.jobId]);
   assert.equal(job.kind,'procova');assert.ok(job.scenario.prognostic.rho>0 && job.scenario.prognostic.rho<1);
   assert.equal(job.checkpoint.validation.dataClass,'synthetic');assert.equal(job.scenario.prognostic.lambda,.8);
+  await vcr.jobs.cancel(target.id,design.jobId,{actor:'owner'});
+  // Two heldout observations have perfect correlation and cannot qualify PROCOVA.
+  const sparse = await vcr.longitudinal.importPrediction(target,{...header,rows:[
+    {...rows[0],point:6},{...rows[20],point:7},
+  ]},'owner');
+  const sparseQueue = await vcr.longitudinal.prepare(target,{kind:'evaluate_forecast',scenario:{predictionId:sparse.id,outcomeHistoryId:outcomes.id,bootstrap:0}},'owner');
+  const sparseClaims = await vcr.jobs.claim({limit:10});
+  await vcr.jobs.advance(sparseClaims.find(candidate=>candidate.id===sparseQueue.job.id));
+  const sparseResult = await vcr.jobs.resultOf(target.id,sparseQueue.job.id);
+  assert.equal(sparseResult.diagnostics.longitudinal.summary.groups[0].subjects,2);
+  const declined = await vcr.longitudinal.enqueueDesign(target,{predictionId:sparse.id,controlPredictionId:control.id,horizonDays:30,
+    prognosticEvaluationId:sparseResult.diagnostics.longitudinal.id,randomizationAt:'2026-03-01'},'owner');
+  assert.deepEqual(declined,{available:false,code:'prognostic_correlation_not_estimable'});
 });
 
 test('history updates preserve splits and perturbations are new reproducible versions',options,async()=>{

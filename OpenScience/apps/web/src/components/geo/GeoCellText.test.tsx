@@ -13,6 +13,17 @@ describe("a GEO number", () => {
     expect(geoCellPhrase(cell(18, 56, 310))).toBe("18%，310 次里 56 次");
   });
 
+  it("keeps assessment coverage through normalization and in the explanation sent to the native conversation", () => {
+    const assessment = { methodVersion: "geo-measurement-2", completeAnswers: 40, partialAnswers: 2, unknownAnswers: 3, decidableAnswers: 41 };
+    const measured = readGeoCell({ ...cell(80, 32, 40), assessment });
+    expect(measured.assessment).toEqual(assessment);
+    expect(geoCellPhrase(measured)).toContain("2 次回答仅核查了部分内容");
+    expect(geoCellPhrase(measured)).toContain("3 次回答的核查范围未确定");
+    expect(readGeoCell({ ...measured, assessment: { ...assessment, partialAnswers: -1 } }).assessment).toBeUndefined();
+    expect(geoCellWord({ ...cell(null, 1, 1, "not_measurable"), reason: "entity_extraction_incomplete" })).toBe("识别未完成");
+    expect(geoCellWord({ ...cell(null, 0, 0, "not_measurable"), reason: "not_adjudicated" })).toBe("尚无法判定");
+  });
+
   it("never shows a rate under 30 answers: “样本不足” and how few there were", () => {
     const thin = cell(44, 12, 27, "insufficient");
     render(<GeoCellText cell={thin} />);

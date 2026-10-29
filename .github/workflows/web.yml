@@ -39,10 +39,11 @@ jobs:
 
       - name: Install test system dependencies
         run: |
-          sudo apt-get update
+          source scripts/ops/ci-apt.sh
+          attempt apt-get "${apt_fetch[@]}" update
           # Jammy keeps the math faces in fonts-texgyre; the runtime's newer
           # Debian/Ubuntu bases split them into fonts-texgyre-math.
-          sudo apt-get install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography r-base-core libgmp10 zlib1g fonts-noto-cjk fonts-texgyre ripgrep
+          attempt apt-get "${apt_fetch[@]}" install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography r-base-core libgmp10 zlib1g fonts-noto-cjk fonts-texgyre ripgrep
           # Match the scientific imports exercised by deployment-smoke with
           # the reviewed versions shipped in deploy/runtime-dsh/Dockerfile.
           python3 -m pip install numpy==2.2.6 pandas==2.2.3 scipy==1.15.3 statsmodels==0.14.6
@@ -80,8 +81,24 @@ jobs:
         shell: bash
         run: bash scripts/dev/fetch-skills.sh
 
+      # The index built from the pinned SIDER inputs is kept between runs: the builder reuses a cached index whose record names
+      # exactly those inputs (`reusable`) and builds it only when there is none, so a day the publisher is unreachable
+      # (2026-10-25) no longer stops every run. The key names the two input digests the builder pins.
+      - name: Restore the pinned SIDER index
+        uses: actions/cache/restore@v4
+        with:
+          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
+          key: sider-4.1-6427a3e3-119b2f53
+
       - name: Build and smoke the pinned public dataset
         run: python3 runtime/mcp/evimed-research/build_sider_cache.py
+
+      - name: Keep the pinned SIDER index
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
+          key: sider-4.1-6427a3e3-119b2f53
 
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages
@@ -102,10 +119,12 @@ jobs:
           pnpm test:judge-sites
           pnpm test:general-tasks
           pnpm test:memory-policy
+          pnpm test:memory-evals
+          pnpm test:knowledge-product
           pnpm test:phi-masking
 
       # The host scripts under `scripts/ops/` (the Postgres backup, the recovery
-      # volume, the image archive inventory, the usememos retirement) carry
+      # volume, the image archive inventory, the extension acceptance archive) carry
       # their own Python suites, and until this step nothing ran them: a
       # regression in the backup script would first be seen on the host.
       # `deploy.test.mjs` fails if a `test_*.py` lands there that `test:ops`

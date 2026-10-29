@@ -79,7 +79,7 @@ function TrialRow({ trial, current, onPick }: { trial: VcrPatientTrial; current:
         )}
       </div>
       <button type="button" aria-current={current ? "true" : undefined} onClick={onPick} className="mt-1 block w-full rounded text-left">
-        <span className="block text-ui font-medium text-text">{trial.title}</span>
+        <span className="block text-ui font-semibold text-text">{trial.title}</span>
         {line && <span className="block text-caption text-text-2">{line}</span>}
         <span className="block text-caption text-text-3">{trial.summary}</span>
       </button>
@@ -183,7 +183,7 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
             <Card
               header={(
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <h3 className="min-w-0 text-ui font-medium text-text">{shownTrial.title}</h3>
+                  <h3 className="min-w-0 text-ui font-semibold text-text">{shownTrial.title}</h3>
                   <RegistryLink trial={shownTrial} />
                   {selected.assessedAt && <span className="ml-auto text-caption text-text-3">{`评估于 ${selected.assessedAt}`}</span>}
                 </div>
@@ -205,7 +205,7 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
                   {eligible
                     ? <CircleCheck size={16} aria-hidden="true" className="shrink-0" />
                     : <TriangleAlert size={16} aria-hidden="true" className="shrink-0" />}
-                  <span className="font-medium">{selected.verdict.text}</span>
+                  <span>{selected.verdict.text}</span>
                   {selected.verdict.note && <span className="text-text-3">{selected.verdict.note}</span>}
                 </p>
               )}

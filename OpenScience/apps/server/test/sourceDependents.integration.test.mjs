@@ -1,6 +1,6 @@
 // What rests on a knowledge-base document, read against the real stores (knowledge base P0, 「相关记忆与做法」).
 //
-// What the unit tests cannot say: the memories are found by their `record_sources` row, the results by jsonb containment on
+// What the unit tests cannot say: the memories are found by the sources the overlay recorded for their files, the results by jsonb containment on
 // the result ledger, the methods by the version their record names — all under the account that holds the document and in
 // its project, and a sentence from another account or another project never appears.
 import assert from "node:assert/strict";
@@ -12,7 +12,7 @@ import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { nativeSourceLinks } from "./helpers/nativeSourceLinks.mjs";
 import { createSourceDependents } from "../src/sourceDependents.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -23,7 +23,7 @@ const hex = (character, length = 64) => character.repeat(length);
 const rv = (n) => `rv_${String(n).padStart(64, "0")}`;
 const SOURCE = `src_${hex("a", 32)}`;
 const BYTES = hex("c");
-/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let memory; /** @type {any} */ let learning;
+/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let native; /** @type {any} */ let learning;
 const owners = [];
 
 before(async () => {
@@ -31,7 +31,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
   await migrateProductStore(database);
   documents = new ProductDocuments(database);
-  memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+  native = nativeSourceLinks();
   learning = new LearningService({ documents });
 });
 after(async () => {
@@ -79,8 +79,8 @@ test("Postgres: a document's page lists the memories, results and methods that n
   await result(rv(6), elsewhere, { path: "deliverables/d/other-project.md", producer: { kind: "tool", runId: "run-9" }, inputs: [read] });
   await result(rv(7), project, { path: "deliverables/e/unrelated.md", producer: { kind: "tool", runId: "run-3" }, inputs: [{ kind: "data", id: "knowledge-base/else.pdf", digest: hex("d"), availability: "captured" }] });
 
-  const fact = (userId, scope, scopeId, key, links, extra = {}) => memory.upsertRecord(userId, { scope, scopeId, kind: scope === "user" ? "preference" : "project_fact", key, value: `${key} 说明`, summary: `${key} 说明`,
-    origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false, ...extra }, null, { sourceLinks: links });
+  const fact = async (userId, scope, scopeId, key, links, extra = {}) => ({ id: native.file(userId, { scope, scopeId, kind: scope === "user" ? "preference" : "project_fact",
+    summary: `${key} 说明`, sensitive: extra.sensitive === true, links }) });
   const link = [{ type: "knowledge_source", id: SOURCE }];
   const here = await fact(owner.id, "project", project, "project.population", link);
   const mine = await fact(owner.id, "user", "", "user.reading", link);
@@ -94,11 +94,11 @@ test("Postgres: a document's page lists the memories, results and methods that n
     provenance: { origin: "inferred", runId: "run-1", results: [{ role: "original", versionId: rv(2), digest: hex("9") }] } });
 
   // The fixture holds four memories of this account that name the document, so the three filters below are tested against rows.
-  assert.equal((await memory.dependentsOfSource(owner.id, link[0])).length, 4);
+  assert.equal((await native.dependentsOfSource(owner.id, link[0])).length, 4);
 
   const reported = [];
   const dependents = createSourceDependents({
-    knowledge: new KnowledgeChangeService({ memory, methods: learning }), documents, memory,
+    knowledge: new KnowledgeChangeService({ native, methods: learning }), documents, memory: native,
     runs: async (_project, runIds) => new Map(runIds.map((id) => [id, id === "run-gone" ? { title: null, deleted: true } : { title: id === "run-1" ? "房颤抗凝综述" : null, deleted: false }])),
     report: (code) => reported.push(code),
   });
@@ -131,9 +131,9 @@ test("Postgres: a store that cannot be read costs its class and nothing else", o
     bindingSources: [], capturedAt: "2026-10-04T00:00:00Z" }, { expectedRevision: 0, projectId: project });
   const reported = [];
   const dependents = createSourceDependents({
-    knowledge: new KnowledgeChangeService({ memory: { configured: true, async dependentsOfSource() { throw new Error("memory store down"); } }, methods: learning,
+    knowledge: new KnowledgeChangeService({ native: { async labelSource() { return 0; }, async dependentsOfSource() { throw new Error("memory store down"); } }, methods: learning,
       report: (code) => reported.push(code) }),
-    documents, memory, runs: async () => { throw new Error("ledger unreadable"); }, report: (code) => reported.push(code),
+    documents, memory: native, runs: async () => { throw new Error("ledger unreadable"); }, report: (code) => reported.push(code),
   });
   const listed = await dependents({ user: { id: owner.id }, project: { id: project }, source: { id: SOURCE, payload: { fingerprint: { sha256: BYTES } } } });
   assert.deepEqual(listed.memories, []);

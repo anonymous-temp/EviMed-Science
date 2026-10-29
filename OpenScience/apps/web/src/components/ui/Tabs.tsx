@@ -158,7 +158,7 @@ export function Tabs<V extends string>({
             className={cn(
               // One weight for every tab: the selected one is told by its
               // colour and its rule, so a tab list is one kind of control.
-              "-mb-px inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-none border-b-2 text-ui font-medium outline-none transition-colors duration-fast focus-visible:outline-focus",
+              "-mb-px inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-none border-b-2 text-ui font-normal outline-none transition-colors duration-fast focus-visible:outline-focus",
               selected ? "border-text text-text" : "border-transparent text-text-3 hover:text-text",
             )}
           >

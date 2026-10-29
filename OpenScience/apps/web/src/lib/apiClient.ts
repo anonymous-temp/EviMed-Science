@@ -549,21 +549,6 @@ export interface WebResearchSession {
 }
 
 /**
- * The research-memory store is part of the control plane, not a service with
- * its own account: there is no identity to show and the only codes it reports
- * are `memory_unconfigured`, `memory_schema_unavailable`, `memory_unavailable`
- * and `memory_timeout`. `structured` is absent on a status the page fabricates
- * for itself (no backend, or a failed load), so the capability is optional here
- * while the store always states it.
- */
-export interface WebMemoryStatus {
-  configured: boolean;
-  connected: boolean;
-  code: string | null;
-  structured?: boolean;
-}
-
-/**
  * The researcher's own switches over their memory. Pausing deletes nothing;
  * `resetMemory` is the separate, explicit act that does.
  */
@@ -575,8 +560,6 @@ export interface WebMemorySettings {
   /** Projects where memory is neither written nor used. */
   pausedProjects: string[];
   updatedAt: string | null;
-  /** Which kind of account this is. The page behaves the same for both; it reads this only to leave out what one kind cannot do. */
-  engine?: "legacy" | "native";
 }
 
 export type WebStructuredMemoryKind =
@@ -610,7 +593,7 @@ export interface WebStructuredMemory {
   lastConfirmedAt: string | null;
   expiresAt: string | null;
   /** Who it came from and how established it is, counted from its evidence
-   *  (`recordProvenance` in researchMemory.mjs). Absent from a control plane
+   *  (`recordProvenance` in memorySettings.mjs). Absent from a control plane
    *  older than it. */
   provenance?: WebMemoryProvenance;
   /** The record that replaced this one, and since when it stopped holding —
@@ -627,6 +610,14 @@ export interface WebStructuredMemory {
     observedAt: string | null;
     weight: number;
     fingerprint: string;
+    /** The project the conversation was held in, when the control plane knows it (a memory of the native engine names the
+     *  conversation it came out of this way; it keeps no quotation, so `quote` is empty there). */
+    projectId?: string | null;
+    /** Exact title correlation for native provenance; absent on older records. */
+    conversationTitleKey?: string;
+    /** What a memory the platform itself wrote was written from, in the person's words (「从其他 AI 导入」, 「你在两次对话里都这样做」): the
+     *  control plane names it for an import and for a choice two conversations made, where there is no conversation to link to. */
+    label?: string;
   }>;
   revisions: Array<{
     version: number;
@@ -640,11 +631,10 @@ export interface WebStructuredMemory {
     runId?: string;
   }>;
   /**
-   * Set on a memory the engine of an account keeps as a file (`memoryNative.ts` reads it). Such a memory has a topic as its
-   * `summary` and the file's text as its `value`; a line of the profile document has the line as its `value`. The server also
-   * sends the file's address and hash; the page has no use for them and the type leaves them out so nothing can show them.
+   * A memory is a file of the engine (`memoryNative.ts` reads it): a topic as its `summary` and the file's text as its `value`;
+   * a line of the profile document has the line as its `value`. The server also sends the file's address and hash; the page has
+   * no use for them and the type leaves them out so nothing can show them.
    */
-  engine?: "native";
   nativeType?: string;
   /** Present on a line of the profile document: the document the line belongs to. */
   document?: { id: string };
@@ -701,8 +691,6 @@ export interface WebMemoryProfile {
   conversations?: Record<string, string>;
   /** Per record id. A record with no entry has never been used. */
   usage?: Record<string, WebMemoryUsage>;
-  /** Kind of account; absent from a control plane older than the second engine. */
-  engine?: "legacy" | "native";
   /** What 「记住这一条」 asked and the engine has not written yet. */
   pending?: WebPendingMemory[];
 }
@@ -716,7 +704,7 @@ export interface WebPendingMemory {
 }
 
 /** The memory page's search: keyword over everything stored, unioned with the
- *  recall index's semantic hits, each resolved back to the stored record. */
+ *  engine's semantic hits, each read back from its file. */
 export interface WebMemorySearch {
   items: WebStructuredMemory[];
   query: string;
@@ -1427,9 +1415,9 @@ export interface WebRuntimeUiFrame {
 }
 
 /** Create one immutable native frame through the authenticated control plane. */
-export async function createWebRuntimeUiFrame(projectId: string): Promise<WebRuntimeUiFrame> {
+export async function createWebRuntimeUiFrame(projectId: string, scope?: {kind:"geo";geoProjectId:string;sessionId:string}): Promise<WebRuntimeUiFrame> {
   const res = await fetchWithWebAuth(apiUrl("/runtime-ui/frames"), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, ...(scope ? {scope} : {}) }),
   });
   return parseApiResponse<WebRuntimeUiFrame>(res);
 }
@@ -1650,12 +1638,6 @@ export async function listWebResearchAgents(): Promise<WebResearchAgent[]> {
   return parseApiResponse<WebResearchAgent[]>(res);
 }
 
-export async function fetchMemoryStatus(): Promise<WebMemoryStatus> {
-  if (!hasWebApi) throw new BackendUnavailableError("memory.status");
-  const res = await fetchWithWebAuth(apiUrl("/memory/status"));
-  return parseApiResponse<WebMemoryStatus>(res);
-}
-
 export async function fetchMemorySettings(): Promise<WebMemorySettings> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.settings");
   const res = await fetchWithWebAuth(apiUrl("/memory/settings"));
@@ -1675,14 +1657,14 @@ export async function updateMemorySettings(
 }
 
 /** Deletes every memory this account holds; the switches stay. */
-export async function resetMemory(): Promise<{ structured: number }> {
+export async function resetMemory(): Promise<{ methods: number; entries: number }> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.reset");
   const res = await fetchWithWebAuth(apiUrl("/memory/reset"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: "reset" }),
   });
-  return parseApiResponse<{ structured: number }>(res);
+  return parseApiResponse<{ methods: number; entries: number }>(res);
 }
 
 /**
@@ -1709,7 +1691,8 @@ export async function updateStructuredMemory(
   if (!hasWebApi) throw new BackendUnavailableError("memory.record.update");
   // A memory kept as a file has no summary and no importance of its own: the control plane refuses them by name, so they are not sent.
   const fields = { ...update };
-  if (record.engine === "native") { delete fields.summary; delete fields.importance; }
+  delete fields.summary;
+  delete fields.importance;
   const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(record.id)}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -1744,10 +1727,11 @@ export async function putWebResearchSession(
 }
 
 /** Persist the native composer's document selection before it submits its message. */
-export async function putWebSessionSourceScope(sessionId: string, sourceIds: string[], projectId: string): Promise<WebResearchSession> {
+export async function putWebSessionSourceScope(sessionId: string, sourceIds: string[], projectId: string, sourceScopeMode?: "project" | "selected"): Promise<WebResearchSession> {
+  if (sourceScopeMode !== undefined && sourceScopeMode !== "project" && sourceScopeMode !== "selected") throw new TypeError("Invalid source scope mode");
   const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/source-scope`), {
     method: "PUT", headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
-    body: JSON.stringify({ sourceIds }),
+    body: JSON.stringify({ sourceIds, ...(sourceScopeMode === undefined ? {} : { sourceScopeMode }) }),
   });
   return parseApiResponse<WebResearchSession>(res);
 }
@@ -1763,8 +1747,8 @@ export interface PreservedConversationHistory {
   sessionId: string; capturedAt: string | null; partial: boolean;
   messages: Array<{ seq: number; role: "user" | "assistant"; text: string }>;
 }
-export async function getWebConversationHistory(sessionId: string, projectId: string): Promise<PreservedConversationHistory> {
-  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/history`), {
+export async function getWebConversationHistory(sessionId: string, projectId: string, runId?: string): Promise<PreservedConversationHistory> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/history${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`), {
     headers: { "X-Open-Science-Project": projectId },
   });
   return parseApiResponse<PreservedConversationHistory>(res);
@@ -2474,11 +2458,11 @@ export async function restartWebRuntime(): Promise<string> {
  * retired pass-through cost us: with a proxied kernel the page had to know the
  * kernel's protocol, so every kernel change was a frontend change.
  */
-export async function createWebRuntimeSession(): Promise<{ id: string; kernel: string }> {
+export async function createWebRuntimeSession(projectId = getWebProjectId()): Promise<{ id: string; kernel: string }> {
   if (!hasWebApi) throw new BackendUnavailableError("runtime.session.create");
   const res = await fetchWithWebAuth(apiUrl("/runtime/sessions"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
     body: "{}",
   });
   return parseApiResponse<{ id: string; kernel: string }>(res);

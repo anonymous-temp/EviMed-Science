@@ -8,8 +8,7 @@ import {
   postPublicationCheckpoints, sentinelEngines, sentinelSlot, strategyBrief, topQuestions, wantedSteps, weeklySlot, zonedInstant,
 } from "../src/geoOrchestrator.mjs";
 import { GEO_NOTICE_KINDS, createGeoNotifier, geoNoticeHref, operatorBody, wrongOursTitle } from "../src/geoNotify.mjs";
-import { memorySourceRejection } from "../src/memoryIntelligence.mjs";
-import { carriesPlatformContext } from "@evimed/domain";
+import { carriesPlatformContext, unwrapUserWrappers } from "@evimed/domain";
 import { geoRoutePattern } from "../src/geoRoutes.mjs";
 
 const SHANGHAI = "Asia/Shanghai";
@@ -207,6 +206,17 @@ test("a long 讲错我方 statement is shortened in the title and whole in the b
   assert.equal(sent[1].body, "点开看这条回答和依据。", "a statement the title kept whole is not repeated");
 });
 
+test('versioned signals share inbox identity, recipient abilities and exact object links', async () => {
+  const sent = [];
+  const notifier = createGeoNotifier({ notifications: { create: async (userId, input) => { sent.push({ userId, input }); return { id: 'notice' }; } }, store: { query: async () => ({ rows: [] }) } });
+  const id = `gs_${'b'.repeat(64)}`;
+  await notifier.signal(project, { id, payload: { kind: 'source_changed', title: 'Source changed', basis: {}, detectedAt: '2026-10-24T00:00:00Z' } });
+  assert.equal(sent.length, 1); assert.equal(sent[0].input.idempotencyKey, `geo:${project.id}:signal:${id}`);
+  assert.equal(geoNoticeHref(sent[0].input.source.id), `/app/geo/${project.id}?signal=${id}`);
+  await notifier.signal(project, { id, payload: { kind: 'citation_observed', title: 'Page sighting', basis: {} } });
+  assert.equal(sent.length, 1, 'ordinary page sightings do not duplicate the established first-cited milestone');
+});
+
 test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severities folded per day; operators apart", async () => {
   /** @type {Array<{ userId: string, input: Record<string, any> }>} */
   const sent = [];
@@ -245,7 +255,7 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
     "machinery goes to operators only");
   // G21: an engine down on the probe host is handled there, never in the placement account.
   assert.equal(operator[0].input.body, "引擎 Kimi。在探测机上重新登录这家 AI，或重开它的标签页；恢复后会自动续测。");
-  assert.deepEqual(GEO_NOTICE_KINDS, ["diagnosis_done", "targets_ready", "first_publishable", "first_cited", "wrong_or_safety"]);
+  assert.deepEqual(GEO_NOTICE_KINDS, ["diagnosis_done", "targets_ready", "first_publishable", "first_cited", "wrong_or_safety", "signal_discovered"]);
   // The measurement's event reads the error row and keeps the event's own key.
   const rowStore = { async query(/** @type {string} */ sql) {
     if (sql.includes("FROM evimed_geo.errors")) return { rows: [{ id: "e9", geo_project_id: "geo_1", user_id: "u1", engine: "deepseek", severity: "S4",
@@ -261,6 +271,29 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
   const replay = createGeoNotifier({ notifications: { async create() { throw Object.assign(new Error("x"), { code: "notification_idempotency_conflict" }); } }, store });
   assert.equal(await replay.diagnosisDone(project, { roundId: "r1", engines: 5, answers: 310, wrongOurs: 0 }), true);
   assert.equal(replay.counts.failed, 0);
+});
+
+test("a 讲错我方 the owner's inbox refused answers false, so it is tried again; nothing to deliver is final (2026-10-25)", async () => {
+  const errorRow = { id: "e9", geo_project_id: "geo_1", user_id: "u1", engine: "deepseek", severity: "S4", statement: "把玛仕度肽说成可以口服", last_snapshot_id: "s9" };
+  const projectRow = { id: "geo_1", user_id: "u1", project_id: "mashidu", product: project.product, tier: "2" };
+  /** @param {{ error?: any, project?: any }} world */
+  const rowStore = ({ error = errorRow, project: geo = projectRow }) => ({ async query(/** @type {string} */ sql) {
+    if (sql.includes("FROM evimed_geo.errors WHERE id")) return { rows: error ? [error] : [] };
+    if (sql.includes("FROM evimed_geo.projects")) return { rows: geo ? [geo] : [] };
+    return { rows: [] };
+  } });
+  const event = { kind: "wrong_ours", errorId: "e9", idempotencyKey: "geo:wrong_ours:e9:first" };
+  const down = { async create() { throw Object.assign(new Error("inbox down"), { code: "notification_unavailable" }); } };
+  assert.equal(await createGeoNotifier({ notifications: down, store: rowStore({}) }).measurement(event), false, "refused: try again");
+  const up = { async create() { return { id: "n1" }; } };
+  assert.deepEqual(await createGeoNotifier({ notifications: up, store: rowStore({}) }).measurement(event), { id: "n1" });
+  for (const [why, notifier] of /** @type {const} */ ([
+    ["no inbox on this deployment", createGeoNotifier({ notifications: null, store: rowStore({}) })],
+    ["the error is gone", createGeoNotifier({ notifications: down, store: rowStore({ error: null }) })],
+    ["the project is deleted", createGeoNotifier({ notifications: down, store: rowStore({ project: null }) })],
+  ])) {
+    assert.notEqual(await notifier.measurement(event), false, why);
+  }
 });
 
 test("a notice reaches the owner and the members whose roles need it, one inbox item to a person (D-29)", async () => {
@@ -357,9 +390,8 @@ test("every GEO dispatch's prompt carries the platform's mark, and memory takes 
     const prompt = geoRunPrompt(brief, "geo-content-1-a1");
     assert.ok(prompt.startsWith(brief), "the brief first: the kernel names a session after its first message");
     assert.ok(prompt.endsWith("<evimed-geo-run>geo-content-1-a1</evimed-geo-run>"));
-    // Sent as the prompt itself, it arrives with the user's source; the tag is what marks it ours.
-    const message = { info: { role: "user", source: "user" }, parts: [{ type: "text", text: prompt }] };
-    assert.equal(memorySourceRejection(message), "injected", "a brief is never stored as what the researcher said");
+    // Sent as the prompt itself, it arrives with the user's source; the tag is what marks it ours, and what the memory gateway drops.
+    assert.equal(carriesPlatformContext(unwrapUserWrappers(prompt)), true, "a brief is never stored as what the researcher said");
   }
   assert.equal(geoRunPrompt("x", "geo-a b<c>").endsWith("<evimed-geo-run>geo-a-b-c-</evimed-geo-run>"), true, "the id is one token");
 });
@@ -372,8 +404,8 @@ test("the instruction of a GEO run rides in the run's context as one platform bl
   // It is platform text to every reader that tells the person's words from ours (the closed list of platform tags names it).
   assert.equal(carriesPlatformContext(block), true);
   assert.equal(carriesPlatformContext("整理产品证据"), false, "the sentence alone is the person's kind of text");
-  // The sentence the person reads, with the mark, is machine text to the memory extractor all the same: it is not what they said.
+  // The sentence the person reads, with the mark, is machine text to the memory gateway all the same: it is not what they said.
   const sentence = geoRunPrompt("整理产品证据", "geo-insight-a1");
   assert.equal(sentence, "整理产品证据\n\n<evimed-geo-run>geo-insight-a1</evimed-geo-run>");
-  assert.equal(memorySourceRejection({ info: { role: "user", source: "user" }, parts: [{ type: "text", text: sentence }] }), "injected");
+  assert.equal(carriesPlatformContext(unwrapUserWrappers(sentence)), true);
 });

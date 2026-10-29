@@ -1,4 +1,6 @@
-import { OPENVIKING_MEMORY_TYPES, nativeMemoryRoot, openVikingUserId, userRootUri } from "./openVikingLayout.mjs";
+import { createHash } from "node:crypto";
+import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES, nativeMemoryRoot, openVikingUserId, userRootUri, projectNativeMemoryNamespace } from "./openVikingLayout.mjs";
+import { recordPrivacyDelete } from "./nativeMemoryMetrics.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -15,7 +17,10 @@ import { HttpError } from "./security.mjs";
  *    module has no call for it on purpose.
  *  - **A type is the first path segment**, not the `memory_type=` tag: a pack restore loses every tag and a reindex
  *    cannot put that one back. The project template writes into `projects/`, which is the one segment that is not
- *    its type's name (`MEMORY_TYPE_OF_SEGMENT`).
+ *    its type's name (`MEMORY_TYPE_OF_SEGMENT`), and the corrections template writes into `preferences/corrections/`
+ *    (since 2026-10-23: the unmodified plugin lists `preferences/` recursively at a session's start, and nothing else of
+ *    ours, so that is the one way a correction gets in front of the model) — `CORRECTIONS_UNDER_PREFERENCES`. A file under
+ *    the older `corrections/` is still a correction and is still read; the engine no longer updates it.
  *  - **`content/write mode=create` makes a file the engine does not own**: no type, no tags, and a later extraction
  *    reads it and never updates it. A new memory goes in as a session with one message and a commit (`remember`).
  *  - **A settings PATCH replaces the type allowlist it does not restate**: `{ self: { enabled: false } }` alone
@@ -26,6 +31,12 @@ import { HttpError } from "./security.mjs";
  *    request as that user stops answering 412.
  *  - **A failed commit is never retried** and its archive is not reachable through the session routes again; the
  *    messages stay readable as a file (`history/archive_NNN/messages.jsonl`) beside a `.failed.json`.
+ *  - **v0.5.2 keeps a session's privacy configuration after the session** (read from its source and docs, not yet measured on a running
+ *    engine): it replaces the credentials it finds in a session's messages with `{{ov_privacy:…}}` placeholders and stores the real values
+ *    in `viking://user/<id>/privacy/session/<target>/`, and deleting the session retains them. So a session's deletion is followed by
+ *    `DELETE /api/v1/privacy-configs/session/<target>`, the target being the session id when it is an engine identifier and
+ *    `_<sha256(id)[:24]>` when it is not (`session_privacy_target`). A 404 is the answer of a v0.5.1.1 engine (no such route) and of a
+ *    session with none, and is fine; any other failure is counted and never fails the deletion.
  *
  * Every call names the acting account by the platform's own user id; `OpenVikingClient.request` hashes it, writes
  * the three identity headers and owns the deadline and the error names (`OPENVIKING_REQUEST_ERROR_CODES`).
@@ -43,14 +54,27 @@ export const MEMORY_SEGMENT_OF_TYPE = Object.freeze({
   decisions: "decisions",
   follow_ups: "follow_ups",
   project_facts: "project_facts",
+  recent_work: "recent_work",
 });
+
+/**
+ * Where the `observations` template writes (2026-10-25): a choice the person made in a request and never called a rule, noted until a
+ * second conversation shows it too. It is deliberately NOT in `MEMORY_SEGMENT_OF_TYPE`, so `nativeMemoryFile` answers null for it and
+ * every reader of native memory — the page's list, search, the map, the resident block, recall through the gateway, the export, 「与你相关」 —
+ * leaves it out by construction, as it leaves out `memories/evimed`: an observation is never a fact, never read back and never
+ * a premise. The only code that reads it is `nativeMemoryObservations.mjs`, through `observationFile`.
+ */
+export const OBSERVATIONS_SEGMENT = "observations";
+
+/** Where the corrections template writes since 2026-10-23, beneath the preferences' own directory. */
+export const CORRECTIONS_UNDER_PREFERENCES = "preferences/corrections";
 
 /** The reverse: which type a file under `memories/` is, by its first path segment. */
 export const MEMORY_TYPE_OF_SEGMENT = Object.freeze(Object.fromEntries(
   Object.entries(MEMORY_SEGMENT_OF_TYPE).map(([type, segment]) => [segment, type])));
 
 /** The types whose files belong to one piece of work, and carry the `project=<id>` tag of the conversation that wrote them. */
-export const PROJECT_MEMORY_TYPES = Object.freeze(["project_context", "decisions", "follow_ups", "project_facts"]);
+export const PROJECT_MEMORY_TYPES = Object.freeze(["project_context", "decisions", "follow_ups", "project_facts", "recent_work"]);
 
 /** The subtree of `memories/` that is not native memory: the derived recall index of PostgreSQL's records and the
  *  capsule facts (`userMemoryRoot`). Native recall and the memory page never read it. */
@@ -71,11 +95,48 @@ export function nativeMemoryFile(uri, root) {
   if (!relPath.endsWith(".md") || SCAFFOLD_FILE.test(relPath) || relPath.split("/").some((segment) => segment.startsWith("."))) return null;
   const segment = relPath.split("/")[0];
   if (segment === DERIVED_INDEX_SEGMENT) return null;
-  const type = MEMORY_TYPE_OF_SEGMENT[segment];
+  // The one type that is not its first segment's: a correction lives under the preferences directory.
+  const type = relPath.startsWith(`${CORRECTIONS_UNDER_PREFERENCES}/`) ? "corrections" : MEMORY_TYPE_OF_SEGMENT[segment];
   if (!type) return null;
   // The profile is one file at the root; every other type is a directory of files.
   if (type === "profile" ? relPath !== "profile.md" : !relPath.includes("/")) return null;
   return { type, relPath };
+}
+
+/**
+ * Whether one `viking://` URI is an observation file of the account whose root is given (`OBSERVATIONS_SEGMENT`): a file directly
+ * under `memories/observations/`.
+ * @param {string} uri @param {string} root `nativeMemoryRoot(userId)`
+ * @returns {{ type: "observations", relPath: string } | null}
+ */
+export function observationFile(uri, root) {
+  const text = String(uri ?? "");
+  const prefix = `${root}/${OBSERVATIONS_SEGMENT}/`;
+  if (!text.startsWith(prefix)) return null;
+  const relPath = text.slice(root.length + 1);
+  const name = relPath.slice(OBSERVATIONS_SEGMENT.length + 1);
+  if (!name.endsWith(".md") || name.includes("/") || name.startsWith(".")) return null;
+  return { type: "observations", relPath };
+}
+
+/**
+ * The archives in a listing of an account's `sessions/` tree that nothing has finished yet: no `memory_diff.json` and no `.failed.json`
+ * beside them (the extraction of the commit that made them may still be running). Read by a reset, which must not lose sight of them
+ * when it deletes their sessions.
+ * @param {readonly { uri: string }[]} nodes the listing, hidden files included
+ * @returns {{ archiveUri: string, session: string }[]}
+ */
+export function unfinishedArchives(nodes) {
+  /** @type {Map<string, { session: string, finished: boolean }>} */
+  const archives = new Map();
+  for (const node of nodes) {
+    const parsed = parseArchiveUri(node.uri);
+    if (!parsed) continue;
+    const entry = archives.get(parsed.archiveUri) ?? { session: parsed.session, finished: false };
+    if (parsed.rest === "memory_diff.json" || parsed.rest === ".failed.json" || parsed.rest === ".done") entry.finished = true;
+    archives.set(parsed.archiveUri, entry);
+  }
+  return [...archives].filter(([, entry]) => !entry.finished).map(([archiveUri, entry]) => ({ archiveUri, session: entry.session }));
 }
 
 /** The archive a URI names, or null: `…/sessions/<session>/history/archive_NNN[/…]`. @param {string} uri */
@@ -97,6 +158,19 @@ export function platformSessionOf(engineSessionId) {
 }
 
 const SESSION_ID = /^[A-Za-z0-9_.@-]{1,200}$/;
+/** The engine's own identifier rule (`OPENVIKING_IDENTIFIER` of the client): what a privacy target may be as it stands. */
+const ENGINE_IDENTIFIER = /^(?!\.{1,2}$)(?!.*@.*@)[A-Za-z0-9_.@-]{1,128}$/;
+
+/**
+ * Where v0.5.2 keeps a session's privacy configuration: the session id itself when it is a valid engine identifier, else `_` and the first
+ * 24 hex characters of its sha-256 (`session_privacy_target` upstream, read from the source at the tag; the lab probe in the contract README
+ * checks it on a running engine).
+ * @param {string} sessionId
+ */
+export function privacySessionTarget(sessionId) {
+  const id = sessionSegment(sessionId);
+  return ENGINE_IDENTIFIER.test(id) ? id : `_${createHash("sha256").update(id).digest("hex").slice(0, 24)}`;
+}
 
 /** @param {unknown} value */
 function sessionSegment(value) {
@@ -106,32 +180,75 @@ function sessionSegment(value) {
 }
 
 /** The full policy a settings PATCH carries, whatever it is changing. @param {boolean} learning */
-export function memoryPolicy(learning) {
-  return { self: { enabled: Boolean(learning) }, memory_types: [...OPENVIKING_MEMORY_TYPES] };
+export function memoryPolicy(learning, memoryTypes = OPENVIKING_MEMORY_TYPES) {
+  return { self: { enabled: Boolean(learning) }, memory_types: [...memoryTypes] };
+}
+
+/** Bind the existing request primitive even for gateway calls through .client.
+ * The real platform owner remains the accounting/overlay identity; only the
+ * native engine's trusted user changes. No bearer or second engine is created.
+ */
+function namespaceClient(client, namespace) {
+  const assertOwner = userId => {
+    if (userId !== namespace.ownerId) throw new HttpError(403, 'memory_scope_denied', 'The project memory owner does not match.');
+  };
+  return {
+    get configured() { return client.configured; },
+    get account() { return client.account; },
+    async request(input) {
+      if (input.authenticated !== undefined && typeof input.authenticated !== 'boolean') throw new HttpError(403, 'memory_scope_denied', 'Authentication must be explicit and boolean.');
+      if (input.authenticated === false) {
+        if (input.path !== '/health') throw new HttpError(403, 'memory_scope_denied', 'Only engine health is unauthenticated.');
+        return client.request(input);
+      }
+      assertOwner(input.userId);
+      if (input.openVikingUser != null && input.openVikingUser !== namespace.engineUser) throw new HttpError(403, 'memory_scope_denied', 'The project memory identity cannot be replaced.');
+      return client.request({ ...input, openVikingUser: namespace.engineUser });
+    },
+    async remove(userId, uri, options = {}) {
+      assertOwner(userId);
+      if (options.openVikingUser != null && options.openVikingUser !== namespace.engineUser) throw new HttpError(403, 'memory_scope_denied', 'The project memory identity cannot be replaced.');
+      return client.remove(userId, uri, { ...options, openVikingUser: namespace.engineUser });
+    },
+  };
 }
 
 export class OpenVikingSessions {
   /**
    * @param {any} client an `OpenVikingClient`
-   * @param {{ timeoutMs?: number, fastTimeoutMs?: number }} [options] `fastTimeoutMs` is the deadline of the calls a
+   * @param {{ timeoutMs?: number, fastTimeoutMs?: number, namespace?: any }} [options] `fastTimeoutMs` is the deadline of the calls a
    *   new kernel waits on (health, the MCP handshake, session start): a memory service that hangs delays the first
    *   prompt of a conversation by eighteen seconds, one that refuses costs nothing.
    */
-  constructor(client, { timeoutMs = 4_000, fastTimeoutMs = 1_500 } = {}) {
-    this.client = client;
+  constructor(client, { timeoutMs = 4_000, fastTimeoutMs = 1_500, namespace = null } = {}) {
+    if (namespace) {
+      const expected = projectNativeMemoryNamespace(namespace);
+      if (Object.keys(namespace).length !== Object.keys(expected).length || Object.entries(expected).some(([key, value]) => namespace[key] !== value)) throw new HttpError(403, 'memory_scope_denied', 'Invalid project memory namespace.');
+      namespace = expected;
+    }
+    this.rootClient = client; this.namespace = namespace;
+    this.client = namespace ? namespaceClient(client, namespace) : client;
+    this.memoryTypes = namespace ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES;
     this.timeoutMs = Math.max(250, Number(timeoutMs) || 4_000);
     this.fastTimeoutMs = Math.max(250, Math.min(this.timeoutMs, Number(fastTimeoutMs) || 1_500));
   }
 
   get configured() { return Boolean(this.client?.configured); }
+  forNamespace(namespace) {
+    if (!namespace || this.namespace && this.namespace.id !== namespace.id) throw new HttpError(403, 'memory_scope_denied', 'The project memory namespace cannot be removed or replaced.');
+    return new OpenVikingSessions(this.rootClient, { timeoutMs: this.timeoutMs, fastTimeoutMs: this.fastTimeoutMs, namespace });
+  }
   /** @param {string} userId */
-  engineUser(userId) { return openVikingUserId(userId); }
+  engineUser(userId) {
+    if (this.namespace && userId !== this.namespace.ownerId) throw new HttpError(403, 'memory_scope_denied', 'The project memory owner does not match.');
+    return this.namespace?.engineUser ?? openVikingUserId(userId);
+  }
   /** @param {string} userId */
-  memoryRoot(userId) { return nativeMemoryRoot(userId); }
+  memoryRoot(userId) { return this.namespace ? `${this.userRoot(userId)}/memories` : nativeMemoryRoot(userId); }
   /** @param {string} userId */
-  userRoot(userId) { return userRootUri(userId); }
+  userRoot(userId) { return this.namespace ? `viking://user/${this.engineUser(userId)}` : userRootUri(userId); }
   /** @param {string} userId @param {string} sessionId the engine's */
-  sessionUri(userId, sessionId) { return `${userRootUri(userId)}/sessions/${sessionSegment(sessionId)}`; }
+  sessionUri(userId, sessionId) { return `${this.userRoot(userId)}/sessions/${sessionSegment(sessionId)}`; }
 
   /** Liveness and version, with no identity (a request that names a user registers it). */
   async health() {
@@ -177,10 +294,25 @@ export class OpenVikingSessions {
   async deleteSession(userId, sessionId) {
     try {
       await this.client.request({ method: "DELETE", path: `/api/v1/sessions/${sessionSegment(sessionId)}`, userId, timeoutMs: this.timeoutMs });
+      await this.#deletePrivacyConfig(userId, sessionId);
       return true;
     } catch (error) {
-      if (/** @type {any} */ (error)?.code === "memory_index_not_found") return false;
+      if (/** @type {any} */ (error)?.code === "memory_index_not_found") { await this.#deletePrivacyConfig(userId, sessionId); return false; }
       throw error;
+    }
+  }
+
+  /**
+   * The privacy configuration v0.5.2 keeps beside a session, deleted with it. Best effort by design (it is an engine that may not have the
+   * route): the outcome is counted, and nothing here ever fails a deletion.
+   * @param {string} userId @param {string} sessionId
+   */
+  async #deletePrivacyConfig(userId, sessionId) {
+    try {
+      await this.client.request({ method: "DELETE", path: `/api/v1/privacy-configs/session/${privacySessionTarget(sessionId)}`, userId, timeoutMs: this.timeoutMs });
+      recordPrivacyDelete("deleted");
+    } catch (error) {
+      recordPrivacyDelete(/** @type {any} */ (error)?.code === "memory_index_not_found" ? "absent" : "failed");
     }
   }
 
@@ -320,7 +452,7 @@ export class OpenVikingSessions {
     try {
       await this.client.request({
         method: "POST", path: `/api/v1/admin/accounts/${this.client.account}/users`, userId,
-        body: { user_id: openVikingUserId(userId), role: "user" }, timeoutMs: this.timeoutMs,
+        body: { user_id: this.engineUser(userId), role: "user" }, timeoutMs: this.timeoutMs,
       });
       return true;
     } catch (error) {
@@ -332,7 +464,7 @@ export class OpenVikingSessions {
   /** The account's own policy as the engine holds it, or null before it is registered. */
   async settings(userId) {
     try {
-      const body = await this.client.request({ path: `/api/v1/admin/accounts/${this.client.account}/users/${openVikingUserId(userId)}/settings`, userId, timeoutMs: this.timeoutMs });
+      const body = await this.client.request({ path: `/api/v1/admin/accounts/${this.client.account}/users/${this.engineUser(userId)}/settings`, userId, timeoutMs: this.timeoutMs });
       const policy = body?.result?.memory_policy ?? {};
       return { learning: policy?.self?.enabled !== false, memoryTypes: Array.isArray(policy?.memory_types) ? policy.memory_types.map(String).sort() : [] };
     } catch (error) {
@@ -345,8 +477,8 @@ export class OpenVikingSessions {
   async setLearning(userId, learning) {
     await this.register(userId);
     const body = await this.client.request({
-      method: "PATCH", path: `/api/v1/admin/accounts/${this.client.account}/users/${openVikingUserId(userId)}/settings`, userId,
-      body: { memory_policy: memoryPolicy(learning) }, timeoutMs: this.timeoutMs,
+      method: "PATCH", path: `/api/v1/admin/accounts/${this.client.account}/users/${this.engineUser(userId)}/settings`, userId,
+      body: { memory_policy: memoryPolicy(learning, this.memoryTypes) }, timeoutMs: this.timeoutMs,
     });
     const policy = body?.result?.memory_policy ?? {};
     return { learning: policy?.self?.enabled !== false, memoryTypes: Array.isArray(policy?.memory_types) ? policy.memory_types.map(String).sort() : [] };
@@ -366,7 +498,7 @@ export class OpenVikingSessions {
       if (/** @type {any} */ (error)?.code !== "memory_index_precondition_failed") throw error;
     });
     try {
-      await this.client.request({ method: "DELETE", path: `/api/v1/admin/accounts/${this.client.account}/users/${openVikingUserId(userId)}`, userId, timeoutMs: this.timeoutMs });
+      await this.client.request({ method: "DELETE", path: `/api/v1/admin/accounts/${this.client.account}/users/${this.engineUser(userId)}`, userId, timeoutMs: this.timeoutMs });
     } catch (error) {
       const code = /** @type {any} */ (error)?.code;
       if (code === "memory_index_not_found") return { deleted: false, pending: false };
@@ -375,10 +507,12 @@ export class OpenVikingSessions {
     const deadline = Date.now() + Math.max(0, Number(waitMs) || 0);
     for (;;) {
       try {
-        await this.client.request({ path: "/api/v1/fs/ls", userId, query: { uri: nativeMemoryRoot(userId) }, timeoutMs: this.timeoutMs });
+        await this.client.request({ path: "/api/v1/fs/ls", userId, query: { uri: this.memoryRoot(userId) }, timeoutMs: this.timeoutMs });
         return { deleted: true, pending: false };
       } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "memory_index_precondition_failed") return { deleted: true, pending: false };
+        const code = /** @type {any} */ (error)?.code;
+        if (code === "memory_index_not_found") return { deleted: true, pending: false };
+        if (code !== "memory_index_precondition_failed") throw error;
       }
       if (Date.now() >= deadline) return { deleted: true, pending: true };
       await sleep(pollMs);
@@ -389,7 +523,7 @@ export class OpenVikingSessions {
   async exportPack(userId) {
     const answer = await this.client.request({
       method: "POST", path: "/api/v1/pack/export", userId, responseType: "bytes", timeoutMs: Math.max(this.timeoutMs, 30_000),
-      body: { uri: nativeMemoryRoot(userId), include_vectors: false },
+      body: { uri: this.memoryRoot(userId), include_vectors: false },
     });
     return /** @type {Buffer} */ (answer.bytes);
   }

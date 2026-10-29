@@ -225,3 +225,17 @@ test("a deployment without the data plane says so by name instead of a missing f
   const records = createVcrRecords({ store, config: {} });
   await assert.rejects(records.csv(study, "res_pop"), { code: "vcr_records_unavailable", status: 503 });
 });
+
+
+test("a later population quality attachment never changes the original generated CSV or quality sidecar", async () => {
+  const { store } = world();
+  const records = createVcrRecords({ store, config: { vcrDataPlaneDir: plane } });
+  const csvBefore = await records.csv(study, "res_syn");
+  const qualityBefore = await records.quality(study, "res_syn");
+  const one = store.one.bind(store);
+  store.one = async (sql, values) => /FROM evimed_vcr\.populations/.test(sql)
+    ? { allowed_uses: ["design", "feasibility"], quality: { sourceResultId: "res_syn", assessmentResultId: "res_later_quality",
+      syntheticInputHash: sha(COPIES_CSV), disclosure: { replicationRatio: .8, membershipAuc: .9 } } } : one(sql, values);
+  assert.deepEqual(await records.csv(study, "res_syn"), csvBefore);
+  assert.deepEqual(await records.quality(study, "res_syn"), qualityBefore);
+});

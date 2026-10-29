@@ -110,12 +110,12 @@ export function ProgressRail({
 function Body({ step }: { step: RailStep }) {
   const body = (
     <>
-      <span className={cn("block truncate text-ui font-medium", step.state === "todo" ? "text-text-3" : "text-text")}>
+      <span className={cn("block truncate text-ui", step.state === "todo" ? "text-text-3" : "text-text")}>
         {step.name}
         <span className="sr-only">{`，${RAIL_STATE_WORDS[step.state]}`}</span>
       </span>
       {step.note && (
-        <span className={cn("mt-0.5 block truncate text-caption", step.state === "waiting" ? "font-medium text-accent" : "text-text-3")}>
+        <span className={cn("mt-0.5 block truncate text-caption", step.state === "waiting" ? "text-accent" : "text-text-3")}>
           {step.note}
         </span>
       )}

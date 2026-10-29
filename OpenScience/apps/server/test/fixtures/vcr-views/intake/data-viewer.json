@@ -344,6 +344,7 @@
           "OS_MONTHS"
         ],
         "sealedUntil": null,
+        "qualityInputs": [],
         "findings": 11,
         "quality": [
           {
@@ -372,49 +373,7 @@
             "passed": true
           }
         ],
-        "tables": [
-          {
-            "shape": "events",
-            "label": "事件表",
-            "rows": 40,
-            "columns": [
-              "USUBJID",
-              "PARAMCD",
-              "AVAL",
-              "CNSR",
-              "STARTDT"
-            ],
-            "issues": 0,
-            "outcomeBearing": true
-          },
-          {
-            "shape": "longitudinal",
-            "label": "长表",
-            "rows": 80,
-            "columns": [
-              "USUBJID",
-              "PARAMCD",
-              "AVAL",
-              "ADT"
-            ],
-            "issues": 0,
-            "outcomeBearing": false
-          },
-          {
-            "shape": "subject",
-            "label": "受试者级表",
-            "rows": 40,
-            "columns": [
-              "USUBJID",
-              "age",
-              "arm",
-              "ecog",
-              "sex"
-            ],
-            "issues": 0,
-            "outcomeBearing": false
-          }
-        ]
+        "tables": []
       }
     ]
   },

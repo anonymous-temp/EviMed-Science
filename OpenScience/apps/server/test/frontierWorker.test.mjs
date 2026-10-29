@@ -38,16 +38,21 @@ test("a tick starts every due loop; the periodic ones wait for their interval", 
   assert.deepEqual(calls.filter((call) => call !== "process").sort(), ["manifest", "pull", "sources"]);
   assert.equal(owners, 1);
   assert.equal(pipeline.batches, 0, "the first tick made the owner; processing starts on the next");
-  assert.equal(database.statements.length, 5, "the retention pass runs at start, one statement per table, and the sources' 30-day recount with it");
+  assert.equal(database.statements.length, 7, "the retention pass runs at start, one statement per table, and the sources' 30-day recount with it");
   assert.match(database.statements[3], /DELETE FROM evimed_frontier\.exposures/);
-  assert.match(database.statements[4], /SET selected_30d/);
+  // What readers were served and did (ct-track 2026-10-24), kept 180 days.
+  assert.match(database.statements[4], /DELETE FROM evimed_frontier\.interactions/);
+  assert.match(database.statements[5], /DELETE FROM evimed_frontier\.list_serves/);
+  assert.match(database.statements[6], /SET selected_30d/);
 
   calls.length = 0;
   time.advance(5_000);
   await worker.tick();
   assert.deepEqual(calls, ["process", "process"], "two batches side by side, nothing periodic yet");
   assert.deepEqual(worker.status().pipeline, { batches: 2, claimed: 6, promoted: 2, published: 2, merged: 2, screenedOut: 2, held: 0, failed: 0,
-    dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0 });
+    dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
+    translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0, studyFacts: 0, faithChecked: 0, faithMismatched: 0,
+    faithRepaired: 0, faithTrimmed: 0, faithUnchecked: 0 });
   assert.equal(owners, 1, "the owner is ensured once");
 
   calls.length = 0;
@@ -160,4 +165,56 @@ test("the owner's project is made when missing, found when present, and refused 
   assert.equal(created.length, 1, "an existing project is found, not made again");
   await assert.rejects(ensureFrontierProject({ store, config: { operatorUsers: [] } }), { code: "frontier_operator_unconfigured" });
   await assert.rejects(ensureFrontierProject({ store, config: { operatorUsers: ["ghost"] } }), { code: "frontier_operator_unavailable" });
+});
+
+test("the tag tree's upkeep runs on the owner's money only, at most every fifteen minutes, and fails alone", async () => {
+  const { ingest, database } = stubs();
+  const time = clock();
+  let ticks = 0;
+  const tags = { tick: async () => { ticks += 1; if (ticks === 2) throw Object.assign(new Error("no"), { code: "frontier_tag_judge_failed" }); return { daily: true, weekly: false }; } };
+  /** @type {string[]} */
+  const reported = [];
+  const worker = new FrontierWorker({ ingest, database, tags, now: time.now, pollMs: 5_000, pluginPollMs: 60_000,
+    ensureOwner: async () => ({ userId: "ops", projectId: "evimed-frontier" }), report: (loop, code) => reported.push(`${loop}:${code}`) });
+  await worker.tick();
+  assert.equal(ticks, 0, "no owner yet on the first tick");
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 1);
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 1, "not again within fifteen minutes");
+  time.advance(15 * 60_000);
+  await worker.tick();
+  assert.equal(ticks, 2);
+  assert.deepEqual(reported, ["tags:frontier_tag_judge_failed"]);
+  assert.equal(worker.status().loops.tags.failures, 1);
+});
+
+test("ct-mix: the lead triggers run on the owner's money only, at most every fifteen minutes, fail alone, and show in the status", async () => {
+  const { ingest, database } = stubs();
+  const time = clock();
+  let ticks = 0;
+  const leads = {
+    tick: async () => { ticks += 1; if (ticks === 2) throw Object.assign(new Error("no"), { code: "frontier_lead_search_failed" }); return { searched: 3, sent: 2 }; },
+    status: () => ({ configured: true, ticks }),
+  };
+  /** @type {string[]} */
+  const reported = [];
+  const worker = new FrontierWorker({ ingest, database, leads, now: time.now, pollMs: 5_000, pluginPollMs: 60_000,
+    ensureOwner: async () => ({ userId: "ops", projectId: "evimed-frontier" }), report: (loop, code) => reported.push(`${loop}:${code}`) });
+  await worker.tick();
+  assert.equal(ticks, 0, "no owner yet on the first tick");
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 1);
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 1, "not again within fifteen minutes");
+  time.advance(15 * 60_000);
+  await worker.tick();
+  assert.equal(ticks, 2);
+  assert.deepEqual(reported, ["leads:frontier_lead_search_failed"]);
+  assert.equal(worker.status().loops.leads.failures, 1);
+  assert.deepEqual(worker.status().leads, { configured: true, ticks: 2 });
 });

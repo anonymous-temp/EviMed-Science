@@ -153,6 +153,7 @@ export interface SourceDisplay {
 /** How many documents fall under each chip, over the whole scope and the search — not over the page. */
 export type SourceCounts = Record<"all" | SourceKind, number>;
 export interface SourcePayload {
+  publication?: { current: boolean; legacyAmbiguous?: boolean; bindings?: Record<string, { logicalPath: string; current: boolean; publicationRevision: number }> };
   paths: string[];
   /** The title a note or a saved page was filed under. */
   title?: string;
@@ -346,8 +347,11 @@ export function refetchSource(id: string) {
  * 「存入知识库」 on a file a conversation produced: a copy in this project's knowledge base, read like an upload. The
  * path is the file's, relative to the project's workspace; the destination is the control plane's.
  */
-export function saveToKnowledgeBase(path: string) {
-  return invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path });
+export function saveToKnowledgeBase(path: string, options?: { projectId?: string }) {
+  // A save names a project only when the caller holds one (a module conversation saves into its project's knowledge base).
+  return options
+    ? invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path }, options)
+    : invokeCommand<{ path: string; duplicate: boolean; sourceId: string | null }>("save_to_knowledge_base", { path });
 }
 export function retrySource(id: string, expectedRevision: number) {
   return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}/retry`, "POST", { expectedRevision });
@@ -426,8 +430,8 @@ export interface DuplicateGroup {
   decision: { decision: "linked" | "dismissed"; note: string; at: string } | null;
 }
 
-export function getSourceFamily(id: string) {
-  return productRequest<SourceFamily>(`/sources/${encodeURIComponent(id)}/family`);
+export function getSourceFamily(id: string, familyId?: string) {
+  return productRequest<SourceFamily>(`/sources/${encodeURIComponent(id)}/family${familyId ? `?familyId=${encodeURIComponent(familyId)}` : ""}`);
 }
 export function listSourceFolders(projectId: string) {
   const query = new URLSearchParams({ projectId });
@@ -481,7 +485,7 @@ export function removeFromLibrary(sourceId: string) {
  * (`/api/knowledge-pages/*`). The shapes are the routes' own; the words they are shown in are the page's.
  */
 export type KnowledgeTreeName = "wiki" | "kg";
-export type KnowledgeState = "disabled" | "idle" | "below_threshold" | "queued" | "compiling" | "compiled" | "page_limit" | "engine_unavailable" | "failed";
+export type KnowledgeState = "disabled" | "idle" | "below_threshold" | "queued" | "compiling" | "compiled" | "engine_unavailable" | "failed";
 export type KnowledgeStaleReason = "changed" | "retracted" | "removed";
 export interface KnowledgeQuotationCounts { present: number; absent: number; none: number; sourceMissing?: number }
 export interface KnowledgeRoundTree { status: string; seconds: number; tokens: number; cost: number; files: number; typed: number; created: number; updated: number; unchanged: number; retired: number; restored: number }
@@ -495,9 +499,6 @@ export interface KnowledgeStatus {
   pages: number;
   graphFiles: number;
   typedPages: { wiki: number; kg: number };
-  pageLimit: number;
-  engineLimit: number;
-  limited: { wiki: boolean; kg: boolean };
   stale: number;
   userEdited: number;
   quotations: KnowledgeQuotationCounts;
@@ -542,9 +543,16 @@ export interface KnowledgeTree {
 export type KnowledgePageLink =
   | { kind: "page"; text: string; path: string; sourceId: string | null; title: string | null; exists: boolean; index: number; end: number }
   | { kind: "source"; text: string; sourceId: string; title: string | null; available: boolean; quote: string | null;
+      checkedAt?: string | null; sourceVersion?: number | null;
       status: "present" | "absent" | "no_quotation" | "source_missing"; inSourceList: boolean; index: number; end: number }
   | { kind: "external"; text: string; href: string; index: number; end: number };
+export interface KnowledgePageAddress {
+  projectId: string; tree: KnowledgeTreeName; path: string;
+  generationId: string | null; pageId: string; pageRevision: number;
+}
 export interface KnowledgePage {
+  /** Exact logical output and revision; equal bytes at another path remain a different page. */
+  address?: KnowledgePageAddress;
   sourceId: string;
   tree: KnowledgeTreeName;
   path: string;
@@ -568,7 +576,15 @@ export interface KnowledgePage {
   basis: "compiler" | "user";
   stale: Array<{ sourceId: string; reason: KnowledgeStaleReason }>;
 }
-export interface KnowledgeGraphSource { sourceId: string; title: string | null }
+export interface KnowledgeGraphSource {
+  sourceId: string;
+  title: string | null;
+  sourceVersion?: number | null;
+  available?: boolean;
+  checkedAt?: string | null;
+  quote?: string | null;
+  locator?: { page?: number | null; sheet?: string | null; cell?: string | null; start?: number | null; end?: number | null } | null;
+}
 /** One mark of either graph. A wiki node has a `type`, a graph node an `entityType` (open, snake_case upstream). */
 export interface KnowledgeGraphNode {
   id: string;
@@ -612,14 +628,16 @@ export function getKnowledgePage(sourceId: string) {
   return productRequest<KnowledgePage>(`/knowledge-pages/page?${new URLSearchParams({ sourceId })}`);
 }
 /** A page by its place in the tree: how an address from outside (a map's mark, a link inside a page) names it. */
-export function getKnowledgePageAt(projectId: string, tree: KnowledgeTreeName, path: string) {
-  return productRequest<KnowledgePage>(`/knowledge-pages/page?${new URLSearchParams({ projectId, tree, path })}`);
+export function getKnowledgePageAt(projectId: string, tree: KnowledgeTreeName, path: string, address?: KnowledgePageAddress) {
+  const params = new URLSearchParams({ projectId, tree, path });
+  if (address) { params.set("generationId", address.generationId ?? ""); params.set("pageId", address.pageId); params.set("pageRevision", String(address.pageRevision)); }
+  return productRequest<KnowledgePage>(`/knowledge-pages/page?${params}`);
 }
 export function getKnowledgeGraph(projectId: string, kind: KnowledgeTreeName) {
   return productRequest<KnowledgeGraph>(`/knowledge-pages/graph?${new URLSearchParams({ projectId, kind })}`);
 }
 /** 「保存」 on a page: the whole text, against the version the reader loaded. The saved page is a new document, so its `sourceId` is new. */
-export function saveKnowledgePage(input: { sourceId: string; markdown: string; baseSha256: string }) {
+export function saveKnowledgePage(input: { sourceId: string; markdown: string; baseSha256: string; address?: KnowledgePageAddress }) {
   return productRequest<{ changed: boolean; writeBack: "written" | "queued" | string; userBlocks: number; page: KnowledgePage }>("/knowledge-pages/page", "PUT", input);
 }
 /** Whether the deployment compiles knowledge pages (`features.knowledgePages`); the pages that exist are readable either way. */

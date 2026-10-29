@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Star } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Toolbar, type ToolbarFilter } from "./Toolbar";
+import { Toolbar, type ToolbarFilter, type ToolbarToken } from "./Toolbar";
 
 /** A viewport that matches the narrow query and nothing else (jsdom has no layout). */
 function narrow() {
@@ -78,21 +78,33 @@ describe("Toolbar", () => {
     expect(screen.getByRole("searchbox", { name: "搜索动态" })).toHaveValue("");
   });
 
-  it("folds the filters into one 「筛选」 chip on a phone, with the number that are on, and the same choices in a menu", async () => {
+  it("folds the filters into one 「筛选」 chip on a phone, which opens a sheet of labelled groups — never a menu that stacks them", async () => {
     narrow();
     const selected = vi.fn();
     render(<Page onSelect={selected} />);
     // No row of chips: the one chip stands for the three filters; the views and the search stay.
     expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
     expect(screen.getByRole("tablist")).toBeInTheDocument();
-    const chip = screen.getByRole("button", { name: "筛选" });
-    await userEvent.click(chip);
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "临床证据" }));
+    await userEvent.click(screen.getByRole("button", { name: "筛选" }));
+    const sheet = screen.getByRole("dialog", { name: "筛选" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    // Each dimension is a group under its own name: the select's chips with its 「全部」 first, the chip row as it is, the toggle a switch.
+    const lanes = within(sheet).getByRole("group", { name: "全部栏目" });
+    expect(within(lanes).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "临床证据", "药物安全"]);
+    expect(within(within(sheet).getByRole("group", { name: "时间范围" })).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["当前", "本周", "本月"]);
+    await userEvent.click(within(lanes).getByRole("button", { name: "临床证据" }));
     expect(selected).toHaveBeenCalledWith("evidence");
-    expect(screen.getByRole("button", { name: "筛选，已选 1 项" })).toHaveTextContent("筛选 · 1");
-    await userEvent.click(screen.getByRole("button", { name: "筛选，已选 1 项" }));
-    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "收藏" }));
-    expect(screen.getByRole("button", { name: "筛选，已选 2 项" })).toBeInTheDocument();
+    expect(within(lanes).getByRole("button", { name: "临床证据" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(within(sheet).getByRole("switch", { name: "收藏" }));
+    expect(within(sheet).getByRole("switch", { name: "收藏" })).toHaveAttribute("aria-checked", "true");
+    // 「查看结果」 closes the sheet: the choices applied as they were made.
+    await userEvent.click(within(sheet).getByRole("button", { name: "查看结果" }));
+    expect(screen.queryByRole("dialog", { name: "筛选" })).toBeNull();
+    expect(screen.getByRole("button", { name: "筛选，已选 2 项" })).toHaveTextContent("筛选 · 2");
+    // 「重置」 lets go of every filter at once.
+    await userEvent.click(screen.getByRole("button", { name: "筛选，已选 2 项" }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "筛选" })).getByRole("button", { name: "重置" }));
+    expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
   });
 
   it("keeps the search in the row on a phone, taking what is left, so a band with a search is as tall as one without", () => {
@@ -155,7 +167,12 @@ describe("Toolbar", () => {
         return this.classList.contains("flex-wrap") ? widths.current : 0;
       });
       const observers: Array<() => void> = [];
-      vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { observers.push(callback); } observe() {} disconnect() {} });
+      vi.stubGlobal("ResizeObserver", class {
+        constructor(private callback: () => void) {}
+        observe(element: HTMLElement) { if (element.classList.contains("-ml-3")) observers.push(this.callback); }
+        unobserve() {}
+        disconnect() {}
+      });
       return observers;
     }
     const filters: ToolbarFilter[] = [
@@ -191,6 +208,34 @@ describe("Toolbar", () => {
       expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
     });
 
+    it("folds the filters beside the page's views when the views no longer all show, and keeps every view on the row", () => {
+      const widths = { current: 1000 };
+      vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
+        // The tab list holds 600 px of tabs; it is given what the row leaves beside the filters (500 px of them) or the folded chip (300).
+        return this.getAttribute("role") === "tablist" ? 600 : 0;
+      });
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+        if (this.getAttribute("role") === "tablist") return widths.current - (this.closest("[data-toolbar]")?.querySelector("[aria-label='时间范围']") ? 500 : 300);
+        return this.hasAttribute("data-toolbar") ? widths.current : 0;
+      });
+      const observers: Array<() => void> = [];
+      vi.stubGlobal("ResizeObserver", class {
+        constructor(private callback: () => void) {}
+        observe() { observers.push(this.callback); }
+        unobserve() {}
+        disconnect() {}
+      });
+      const views = { label: "动态视图", items: [{ value: "a", label: "精选" }, { value: "b", label: "简报" }], value: "a", onChange: () => {} };
+      render(<Toolbar inBand views={views} filters={filters} />);
+      expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
+      expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "简报" })).toBeInTheDocument();
+      // Wider than where they did not fit: they are tried on the row again.
+      widths.current = 1400;
+      act(() => observers.forEach((notify) => notify()));
+      expect(screen.getByRole("button", { name: "本周" })).toBeInTheDocument();
+    });
+
     it("leaves a toolbar outside the band alone, wrapping or not", () => {
       layout({ current: 900 });
       render(<Toolbar filters={filters} />);
@@ -203,5 +248,400 @@ describe("Toolbar", () => {
       render(<Toolbar inBand filters={filters} />);
       expect(screen.getByRole("button", { name: "本周" })).toBeInTheDocument();
     });
+
+    it("keeps an open pinned menu and its focus when late filters fold the row, then when it unfolds", async () => {
+      const widths = { current: 900 };
+      const observers = layout(widths);
+      const selected = vi.fn();
+      const declared: ToolbarFilter[] = [
+        { kind: "toggle", label: "收藏", pressed: false, onChange: () => {} },
+        { kind: "select", label: "查看", pinned: true, value: "accuracy", options: [{ value: "accuracy", label: "准确与安全" }, { value: "questions", label: "问题与回答" }], onChange: selected },
+      ];
+      const { rerender } = render(<Toolbar inBand filters={declared} />);
+      const trigger = screen.getByRole("button", { name: "查看：准确与安全" });
+      const order = [...trigger.parentElement!.querySelectorAll("button")].map(button => button.getAttribute("aria-label") ?? button.textContent);
+      expect(order).toEqual(["收藏", "查看：准确与安全"]);
+      await userEvent.click(trigger);
+      const menu = screen.getByRole("menu", { name: "查看" });
+      const focused = document.activeElement;
+      rerender(<Toolbar inBand filters={[...declared, filters[1]]} />);
+      act(() => observers.forEach(notify => notify()));
+      expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "查看：准确与安全" })).toBe(trigger);
+      expect(screen.getByRole("menu", { name: "查看" })).toBe(menu);
+      expect(document.activeElement).toBe(focused);
+      await userEvent.click(within(menu).getByRole("menuitemradio", { name: "问题与回答" }));
+      expect(selected).toHaveBeenLastCalledWith("questions");
+      await userEvent.click(trigger);
+      const reopened = screen.getByRole("menu", { name: "查看" });
+      const refocused = document.activeElement;
+      widths.current = 1100;
+      act(() => observers.forEach(notify => notify()));
+      expect(screen.queryByRole("button", { name: "筛选" })).toBeNull();
+      expect(screen.getByRole("button", { name: "查看：准确与安全" })).toBe(trigger);
+      expect(screen.getByRole("menu", { name: "查看" })).toBe(reopened);
+      expect(document.activeElement).toBe(refocused);
+      expect([...trigger.parentElement!.querySelectorAll("button")].map(button => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "查看：准确与安全", "当前", "本周", "本月"]);
+      await userEvent.click(within(reopened).getByRole("menuitemradio", { name: "问题与回答" }));
+      expect(selected).toHaveBeenCalledTimes(2);
+    });
+
+    it("lets a band summary give room to mobile actions while keeping its complete text accessible", () => {
+      narrow();
+      const summary = "合作方：研究协作中心 · 候选 6 名 · 数据快照 2026-10-20";
+      const { rerender } = render(<Toolbar inBand filters={[{ kind: "select", label: "查看", pinned: true, value: "matching", options: [{ value: "matching", label: "匹配与招募" }], onChange: () => {} }]} summary={summary} actions={<button>选择方法</button>} />);
+      const text = screen.getByText(summary);
+      expect(text).not.toHaveAttribute("title");
+      expect(text).toHaveClass("min-w-0", "truncate", "max-sm:flex-1");
+      expect(text.parentElement).toHaveClass("max-sm:flex-1");
+      expect(screen.getByRole("button", { name: "选择方法" })).toBeInTheDocument();
+      rerender(<Toolbar summary={summary} actions={<button>选择方法</button>} />);
+      expect(screen.getByText(summary)).not.toHaveClass("max-sm:flex-1");
+      rerender(<Toolbar inBand actions={<button>选择方法</button>} />);
+      expect(screen.getByRole("button", { name: "选择方法" }).parentElement).not.toHaveClass("max-sm:flex-1");
+    });
+  });
+});
+
+it("keeps an opted-in View select explicit on a phone while ordinary filters fold", () => {
+  narrow();
+  render(<Toolbar filters={[{ kind: "select", label: "查看", value: "chat", options: [{ value: "chat", label: "对话" }], onChange: () => undefined, pinned: true }, { kind: "select", label: "状态", value: "running", options: [{ value: "running", label: "进行中" }], onChange: () => undefined }]} />);
+  expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "筛选，已选 1 项" })).toBeInTheDocument();
+});
+
+it("uses the shared tooltip for a clipped band summary and lets touch readers open its full text without a second row", async () => {
+  narrow();
+  const summary = "合作方：研究协作中心 · 候选 6 名 · 数据快照 2026-10-20";
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) { return this.textContent === summary ? 400 : 0; });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) { return this.textContent === summary ? 40 : 0; });
+  render(<Toolbar inBand summary={summary} actions={<button>选择方法</button>} />);
+  const trigger = screen.getByRole("button", { name: summary });
+  expect(trigger).not.toHaveAttribute("title");
+  await userEvent.tab();
+  expect(trigger).toHaveFocus(); expect(screen.getByRole("tooltip")).toHaveTextContent(summary);
+  await userEvent.click(trigger);
+  expect(screen.getByRole("dialog", { name: "完整摘要" })).toHaveTextContent(summary);
+  expect(screen.getByRole("button", { name: "选择方法" })).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}"); expect(screen.queryByRole("dialog", { name: "完整摘要" })).toBeNull();
+});
+
+describe("a panel of filters (前沿动态's 「专科 ▾」 and 「更多筛选 ▾」, 2026-10-23)", () => {
+  const GROUPS = [{ label: "内科", values: ["cardiology", "oncology"] }, { label: "外科", values: ["general-surgery"] }];
+  const SPECIALTIES = [{ value: "cardiology", label: "心血管" }, { value: "oncology", label: "肿瘤" }, { value: "general-surgery", label: "普通外科" }];
+
+  function Panels({ onClear = vi.fn() }: { onClear?: () => void }) {
+    const [specialties, setSpecialties] = useState<string[]>([]);
+    const [source, setSource] = useState("");
+    const [unread, setUnread] = useState(false);
+    const filters: ToolbarFilter[] = [
+      {
+        kind: "panel", label: "专科", chosen: specialties.length ? `${specialties.length} 个专科` : undefined,
+        groups: [{ kind: "chips", multi: true, label: "专科", options: SPECIALTIES, sections: GROUPS, value: specialties, onChange: setSpecialties }],
+        onClear: () => { setSpecialties([]); onClear(); },
+      },
+      {
+        kind: "panel", label: "更多筛选",
+        groups: [
+          { kind: "chips", label: "来源", options: [{ value: "", label: "全部" }, { value: "news", label: "资讯" }], value: source, neutral: "", onChange: (next: string) => setSource(next) },
+          { kind: "toggle", label: "只看未读", pressed: unread, onChange: (next: boolean) => setUnread(next) },
+        ],
+      },
+    ];
+    return <Toolbar filters={filters} onClear={() => { setSpecialties([]); setSource(""); setUnread(false); }} />;
+  }
+
+  it("opens its groups under the chip, several at once where it says so, and reads what is chosen", async () => {
+    render(<Panels />);
+    await userEvent.click(screen.getByRole("button", { name: "专科" }));
+    const panel = screen.getByRole("dialog", { name: "专科" });
+    // The specialties under their group's name, each a chip that is pressed or not.
+    expect(within(panel).getByRole("group", { name: "内科" })).toHaveTextContent("心血管肿瘤");
+    await userEvent.click(within(panel).getByRole("button", { name: "心血管" }));
+    await userEvent.click(within(panel).getByRole("button", { name: "普通外科" }));
+    expect(within(panel).getByRole("button", { name: "心血管" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(panel).getByRole("button", { name: "普通外科" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "专科：2 个专科" })).toHaveTextContent("2 个专科");
+    // A second press lets one go; 「清除」 lets go of the rest.
+    await userEvent.click(within(panel).getByRole("button", { name: "心血管" }));
+    expect(within(panel).getByRole("button", { name: "心血管" })).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(within(panel).getByRole("button", { name: "清除" }));
+    expect(screen.getByRole("button", { name: "专科" })).toBeInTheDocument();
+  });
+
+  it("counts the groups that are on in its chip, and switches its toggles", async () => {
+    render(<Panels />);
+    await userEvent.click(screen.getByRole("button", { name: "更多筛选" }));
+    const panel = screen.getByRole("dialog", { name: "更多筛选" });
+    await userEvent.click(within(within(panel).getByRole("group", { name: "来源" })).getByRole("button", { name: "资讯" }));
+    await userEvent.click(within(panel).getByRole("switch", { name: "只看未读" }));
+    expect(screen.getByRole("button", { name: "更多筛选：更多筛选 · 2" })).toHaveTextContent("更多筛选 · 2");
+    expect(screen.getByRole("button", { name: "清除筛选" })).toBeInTheDocument();
+  });
+
+  it("puts a panel's own groups into the phone's one sheet, not the panel's chip", async () => {
+    narrow();
+    render(<Panels />);
+    expect(screen.queryByRole("button", { name: "专科" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "筛选" }));
+    const sheet = screen.getByRole("dialog", { name: "筛选" });
+    expect(within(sheet).getByRole("group", { name: "外科" })).toBeInTheDocument();
+    expect(within(sheet).getByRole("group", { name: "来源" })).toBeInTheDocument();
+    expect(within(sheet).getByRole("switch", { name: "只看未读" })).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole("button", { name: "肿瘤" }));
+    expect(screen.getByRole("button", { name: "筛选，已选 1 项" })).toBeInTheDocument();
+  });
+
+  it("opens the same groups under 「筛选」 where a wide band's row ran out of room", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("flex-wrap") && this.querySelector("[aria-haspopup='dialog']") ? 64 : 28;
+    });
+    render(<Toolbar inBand filters={[
+      { kind: "chips", label: "视图", pinned: true, options: [{ value: "a", label: "甲" }, { value: "b", label: "乙" }], value: "a", onChange: () => {} },
+      { kind: "panel", label: "更多筛选", groups: [{ kind: "toggle", label: "只看未读", pressed: false, onChange: () => {} }] },
+    ]} />);
+    expect(screen.queryByRole("button", { name: "更多筛选" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "筛选" }));
+    expect(screen.getByRole("dialog", { name: "筛选" })).toContainElement(screen.getByRole("switch", { name: "只看未读" }));
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("one row with a filter button (`oneRow`, 前沿动态 2026-10-25)", () => {
+  const views = { label: "动态视图", items: [{ value: "a", label: "精选" }, { value: "b", label: "关注" }], value: "a", onChange: () => {}, panelId: "feed" };
+  const SPECIALTIES = [{ value: "onc", label: "肿瘤" }, { value: "cardio", label: "心血管" }, { value: "neuro", label: "神经" }];
+
+  function Feed({ tokens = [], extra = [], reset = vi.fn(), search = true, sheetLead }: {
+    tokens?: ToolbarToken[]; extra?: ToolbarFilter[]; reset?: () => void; search?: boolean; sheetLead?: (close: () => void) => ReactNode;
+  }) {
+    const [lane, setLane] = useState("");
+    const [specialties, setSpecialties] = useState<string[]>([]);
+    const [starred, setStarred] = useState(false);
+    const [hot, setHot] = useState("");
+    const [query, setQuery] = useState("");
+    const filters: ToolbarFilter[] = [
+      ...extra,
+      { kind: "chips", label: "栏目", folded: true, options: [{ value: "", label: "全部" }, ...LANES], value: lane, neutral: "", onChange: setLane },
+      // Several at once is a group of a panel: the panel is folded, and its groups are the sheet's.
+      { kind: "panel", label: "专科", folded: true, groups: [
+        { kind: "chips", multi: true, label: "专科", options: SPECIALTIES, value: specialties, onChange: setSpecialties,
+          chosenAction: (value: string) => ({ label: value === "cardio" ? "已关注" : "关注", disabled: value === "cardio", onClick: () => {} }) },
+        { kind: "chips", label: "热门标签", quiet: true, options: [{ value: "hcc", label: "#肝细胞癌" }], value: hot, neutral: "", onChange: setHot },
+      ] },
+      { kind: "toggle", label: "只看收藏", folded: true, pressed: starred, onChange: setStarred },
+    ];
+    return (
+      <Toolbar oneRow searchShortcut views={views} filters={filters} tokens={tokens} sheetLead={sheetLead}
+        onReset={() => { reset(); setLane(""); setSpecialties([]); setStarred(false); }}
+        search={search ? { label: "搜索", value: query, onChange: setQuery, onClear: () => setQuery("") } : undefined}
+        summary="3 个" actions={<button type="button">新建</button>} />
+    );
+  }
+
+  async function choose(...names: string[]) {
+    await userEvent.click(screen.getByRole("button", { name: /^筛选/ }));
+    for (const name of names) await userEvent.click(within(screen.getByRole("dialog", { name: "筛选" })).getByRole("button", { name }));
+  }
+
+  it("keeps the folded filters inside 「筛选」 at every width, on the views' own row, with the search last", () => {
+    const { container } = render(<Feed />);
+    const toolbar = container.querySelector("[data-toolbar]") as HTMLElement;
+    expect(within(toolbar).getAllByRole("tablist")).toHaveLength(1);
+    expect(within(toolbar).queryByRole("group", { name: "栏目" })).toBeNull();
+    expect(container.querySelector("[data-toolbar-row]")).toBeNull();
+    const order = [...toolbar.querySelectorAll("button, input")].map((node) => node.getAttribute("aria-label") ?? node.textContent);
+    expect(order).toEqual(["精选", "关注", "筛选", "新建", "搜索"]);
+    expect(within(toolbar).getByText("3 个")).toBeInTheDocument();
+  });
+
+  it("opens the panel with its groups in order, a choice applying at once, and counts what is on — not a quiet group — with the accent mark", async () => {
+    const { container } = render(<Feed />);
+    expect(container.querySelector("[data-filter-mark]")).toBeNull();
+    await choose("临床证据", "肿瘤", "#肝细胞癌");
+    const panel = screen.getByRole("dialog", { name: "筛选" });
+    expect(within(panel).getAllByRole("group").map((group) => group.getAttribute("aria-label") ?? group.textContent?.slice(0, 2))).toEqual(
+      expect.arrayContaining(["栏目", "专科"]),
+    );
+    expect(screen.getByRole("button", { name: "筛选，已选 2 项" })).toHaveTextContent("筛选 · 2");
+    expect(container.querySelector("[data-filter-mark]")).not.toBeNull();
+  });
+
+  it("offers each chosen value's own button under a group of several", async () => {
+    render(<Feed />);
+    await choose("肿瘤", "心血管");
+    const panel = screen.getByRole("dialog", { name: "筛选" });
+    expect(within(panel).getByRole("button", { name: "关注：肿瘤" })).toBeEnabled();
+    expect(within(panel).getByRole("button", { name: "已关注：心血管" })).toBeDisabled();
+  });
+
+  it("says what is on as tokens before 「筛选」 — at most two, then 「+N」 that opens the panel — and each press lets go of its own", async () => {
+    render(<Feed />);
+    await choose("临床证据", "肿瘤", "神经");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "筛选" })).toBeNull();
+    expect(screen.getByRole("button", { name: "移除筛选：临床证据" })).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByRole("button", { name: "移除筛选：肿瘤 等 2 个" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^筛选/ }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "筛选" })).getByRole("switch", { name: "只看收藏" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("button", { name: "移除筛选：只看收藏" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "另有 1 项筛选，打开筛选" }));
+    expect(screen.getByRole("dialog", { name: "筛选" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("button", { name: "移除筛选：临床证据" }));
+    expect(screen.queryByRole("button", { name: "移除筛选：临床证据" })).toBeNull();
+    expect(screen.getByRole("button", { name: "筛选，已选 2 项" })).toBeInTheDocument();
+  });
+
+  it("draws the page's own tokens first, with their button, and 「清除」 lets go of the filters among them", async () => {
+    const follow = vi.fn();
+    const reset = vi.fn();
+    render(<Feed reset={reset} tokens={[{ label: "#肝细胞癌", filter: true, onRemove: () => {}, action: { label: "关注", onClick: follow } }]} />);
+    await userEvent.click(screen.getByRole("button", { name: "关注：#肝细胞癌" }));
+    expect(follow).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "筛选，已选 1 项" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "清除" })).toBeNull();
+    await choose("药物安全");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("button", { name: "清除" }));
+    expect(reset).toHaveBeenCalled();
+  });
+
+  it("returns the focus to 「筛选」 when Escape closes the panel", async () => {
+    render(<Feed />);
+    const trigger = screen.getByRole("button", { name: "筛选" });
+    trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByRole("dialog", { name: "筛选" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "筛选" })).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("puts the cursor in the search on 「/」, and leaves a 「/」 typed in a field alone", async () => {
+    render(<><Feed /><input aria-label="别处" /></>);
+    await userEvent.keyboard("/");
+    expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveFocus();
+    expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveValue("");
+    await userEvent.click(screen.getByRole("textbox", { name: "别处" }));
+    await userEvent.keyboard("/");
+    expect(screen.getByRole("textbox", { name: "别处" })).toHaveValue("/");
+  });
+
+  it("keeps another page's row as it was: no folded filter, no filter button, no tokens", () => {
+    render(<Toolbar oneRow views={views} filters={[{ kind: "chips", label: "时间范围", options: WINDOWS, value: "now", onChange: () => {} }]} />);
+    expect(screen.getByRole("group", { name: "时间范围" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^筛选/ })).toBeNull();
+  });
+
+  describe("on a phone", () => {
+    it("is the scrolling views with 「筛选」 and the search as icons, and no second line while nothing narrows the list", () => {
+      narrow();
+      const { container } = render(<Feed />);
+      expect(screen.getByRole("tablist")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "筛选" })).not.toHaveTextContent("筛选");
+      expect(screen.getByRole("button", { name: "搜索" })).toBeInTheDocument();
+      expect(screen.queryByRole("searchbox")).toBeNull();
+      expect(container.querySelector("[data-toolbar-row]")).toBeNull();
+    });
+
+    it("opens the search over the row with the cursor in it, and 「取消」 gives the views back with the words said as a token", async () => {
+      narrow();
+      render(<Feed />);
+      await userEvent.click(screen.getByRole("button", { name: "搜索" }));
+      const box = screen.getByRole("searchbox", { name: "搜索" });
+      expect(box).toHaveFocus();
+      await userEvent.type(box, "司美格鲁肽");
+      await userEvent.click(screen.getByRole("button", { name: "取消" }));
+      expect(screen.queryByRole("searchbox")).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "移除筛选：搜索：司美格鲁肽" }));
+      expect(screen.queryByRole("button", { name: /移除筛选/ })).toBeNull();
+    });
+
+    it("opens the search on 「/」 too", async () => {
+      narrow();
+      render(<Feed />);
+      await userEvent.keyboard("/");
+      expect(screen.getByRole("searchbox", { name: "搜索" })).toHaveFocus();
+    });
+
+    it("draws one more line while something narrows the list, with a pinned control there, and the view's buttons in the sheet", async () => {
+      narrow();
+      const { container } = render(<Feed extra={[{ kind: "chips", label: "简报周期", pinned: true, options: WINDOWS, value: "now", onChange: () => {} }]} />);
+      const line = container.querySelector("[data-toolbar-row]") as HTMLElement;
+      expect(line).toContainElement(screen.getByRole("group", { name: "简报周期" }));
+      await userEvent.click(screen.getByRole("button", { name: "筛选" }));
+      const sheet = screen.getByRole("dialog", { name: "筛选" });
+      expect(within(sheet).getByRole("button", { name: "新建" })).toBeInTheDocument();
+      await userEvent.click(within(sheet).getByRole("button", { name: "临床证据" }));
+      await userEvent.click(within(sheet).getByRole("button", { name: "查看结果" }));
+      expect(line).toContainElement(screen.getByRole("button", { name: "移除筛选：临床证据" }));
+      expect(screen.getByRole("button", { name: "筛选，已选 1 项" }).querySelector("[data-filter-mark]")).not.toBeNull();
+    });
+
+    it("counts a page's token that is not a filter on 「筛选」, and offers no 「重置」 that would leave it standing", async () => {
+      narrow();
+      const { container } = render(<Feed tokens={[{ label: "只看：肿瘤", onRemove: () => {} }]} />);
+      expect(container.querySelector("[data-toolbar-row]")).toContainElement(screen.getByRole("button", { name: "移除筛选：只看：肿瘤" }));
+      await userEvent.click(screen.getByRole("button", { name: "筛选，已选 1 项" }));
+      expect(within(screen.getByRole("dialog", { name: "筛选" })).getByRole("button", { name: "重置" })).toBeDisabled();
+    });
+
+    it("begins the sheet with the page's own section, which can close it", async () => {
+      narrow();
+      render(<Feed sheetLead={(close) => <nav aria-label="我的关注"><button type="button" onClick={close}>与我相关</button></nav>} />);
+      await userEvent.click(screen.getByRole("button", { name: "筛选" }));
+      const sheet = screen.getByRole("dialog", { name: "筛选" });
+      const lead = within(sheet).getByRole("navigation", { name: "我的关注" });
+      expect(lead.compareDocumentPosition(within(sheet).getByRole("group", { name: "栏目" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      await userEvent.click(within(lead).getByRole("button", { name: "与我相关" }));
+      expect(screen.queryByRole("dialog", { name: "筛选" })).toBeNull();
+    });
+  });
+});
+
+describe("a search box's suggestions", () => {
+  function Suggesting({ onPick = vi.fn(), onSubmit = vi.fn() }: { onPick?: (value: string) => void; onSubmit?: () => void }) {
+    const [value, setValue] = useState("");
+    return <Toolbar search={{ label: "搜索", value, onChange: setValue, onSubmit, suggestions: {
+      label: "标签建议", onPick, items: value ? [{ value: "hcc", label: "#肝细胞癌" }, { value: "liver", label: "#肝病" }] : [],
+    } }} />;
+  }
+
+  it("lists them under the box while it holds words, and takes one with a press", async () => {
+    const pick = vi.fn();
+    render(<Suggesting onPick={pick} />);
+    expect(screen.queryByRole("listbox")).toBeNull();
+    await userEvent.type(screen.getByRole("combobox", { name: "搜索" }), "肝");
+    const list = screen.getByRole("listbox", { name: "标签建议" });
+    expect(within(list).getAllByRole("option").map((option) => option.textContent)).toEqual(["#肝细胞癌", "#肝病"]);
+    await userEvent.click(within(list).getByRole("option", { name: "#肝病" }));
+    expect(pick).toHaveBeenCalledWith("liver");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("moves through them with the arrow keys, takes the marked one on Enter, and searches the words on Enter with none marked", async () => {
+    const pick = vi.fn();
+    const submit = vi.fn();
+    render(<Suggesting onPick={pick} onSubmit={submit} />);
+    const box = screen.getByRole("combobox", { name: "搜索" });
+    await userEvent.type(box, "肝{Enter}");
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(pick).not.toHaveBeenCalled();
+    await userEvent.type(box, "细");
+    await userEvent.keyboard("{ArrowDown}");
+    expect(box).toHaveAttribute("aria-activedescendant", screen.getAllByRole("option")[0].id);
+    await userEvent.keyboard("{Enter}");
+    expect(pick).toHaveBeenCalledWith("hcc");
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the list on the first Escape and keeps the words", async () => {
+    render(<Suggesting />);
+    const box = screen.getByRole("combobox", { name: "搜索" });
+    await userEvent.type(box, "肝");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(box).toHaveValue("肝");
   });
 });

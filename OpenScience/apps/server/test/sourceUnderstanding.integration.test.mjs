@@ -410,7 +410,7 @@ test("reconciliation preserves finite retries then settles a crashed exhausted s
   assert.equal(settled.payload.error.code, "product_job_attempts_exhausted");
   for (let i = 0; i < 4; i++) await f.sources.reconcileJobs();
   assert.equal((await f.sources.get(f.userId, f.source.id)).revision, settled.revision);
-  assert.equal((await f.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1", [f.userId])).rowCount, 1);
+  assert.equal((await f.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' AND payload->>'sourceId'=$2", [f.userId, f.source.id])).rowCount, 1);
 });
 
 test("missing initial enqueue is recovered once with the original generation key", options, async t => {
@@ -444,7 +444,11 @@ test("queued exhausted sources settle by CAS without overwriting a concurrent co
     assert.equal(current.payload.status, correction ? "queued" : "failed");
     assert.equal(current.payload.generation, correction ? 2 : 1);
     assert.equal(corrected, correction);
-    assert.equal((await f.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1", [f.userId])).rowCount, correction ? 2 : 1);
+    assert.equal((await f.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' AND payload->>'sourceId'=$2", [f.userId, f.source.id])).rowCount, correction ? 2 : 1);
+    const before = await f.database.query("SELECT id,status,attempts,payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' ORDER BY id", [f.userId]);
+    for (let repeat = 0; repeat < 3; repeat++) await f.sources.reconcileJobs();
+    assert.deepEqual((await f.database.query("SELECT id,status,attempts,payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest' ORDER BY id", [f.userId])).rows, before.rows,
+      "reconciliation cannot recreate or retry an exhausted generation");
     await f.database.query("DELETE FROM evimed_control.users WHERE id=$1", [f.userId]);
   }
 });

@@ -10,6 +10,7 @@ import { EXTENSION_CUSTOMER_KINDS, exportExtensionAccountRow, exportPersonalSkil
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { migrateFrontierEventReading } from "./frontierEventReading.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
+import { migrateScriptUses } from "./scriptLessons.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
 import { receivedPackForExport, sentSnapshotForExport } from "./capsuleSharerAccount.mjs";
 
@@ -42,6 +43,8 @@ const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "kn
  * and a kind nothing here decided is no longer an outage: the export carries
  * what it has a contract for and states the rest in its own `omissions`. */
 export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
+  "geo-plan-context": "deployment-bound GEO conversation records: project context policies, native session identities, accepted-request bindings and staging receipts are runtime authority, not portable content; selected analysis pages and source-input snapshots share this kind and require their parent context to interpret, so they leave through the existing selected-analysis export rather than this account archive",
+  "geo-signal": "GEO observation and handling records tied to this deployment's question selections, source versions, run requests and paged event materials; this account archive does not export the related GEO schema, so these records would be incomplete outside it; the existing selected-history analysis exports their preserved observations and handling state, without transferring request authority",
   "price-list": "declared in PRODUCT_KINDS but read and written by no product code, so nothing user-scoped is known to live under it; prices are platform data in the price-list registry, and the archive carries the lists its own usage rows name as priceLists",
   "method-trial": "an evaluation identity's time-limited instruction to mount named methods in one project's next launches, expired on read; it steers this deployment's runtime and means nothing outside it, and the methods it names are exported under method",
   "extension-generation": "which prepared package and skill generation a project's runtime was built from and which one is live; the platform derives it from the installations, defaults and skills that are themselves exported, and it is runtime authority an archive must never carry",
@@ -114,6 +117,10 @@ const queries = [
   ["feedbackEvents", `SELECT id,project_id AS "projectId",run_id AS "runId",trigger_kind AS "trigger",
     subject_type AS "subjectType",subject_id AS "subjectId",detail,occurred_at AS "occurredAt",recorded_at AS "recordedAt"
     FROM evimed_product.feedback_events WHERE user_id=$1 ORDER BY occurred_at,id`],
+  // The programs the account's own runs carried that the learning loop counted toward a script lesson (`scriptLessons.mjs`): the program's text, the run and
+  // conversation it was in and when, for the last ninety days.
+  ["scriptUses", `SELECT script_hash AS "scriptHash",run_id AS "runId",session_id AS "sessionId",project_id AS "projectId",scope,occurred_at AS "occurredAt",source
+    FROM evimed_learning.script_uses WHERE user_id=$1 ORDER BY occurred_at,run_id,script_hash`],
 ];
 
 /** Every table the exported state is read from, as `schema.table`.
@@ -152,14 +159,27 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_product.plugin_application_state": "the runtime's view of a plugin document that is itself exported, and stale the moment it leaves this deployment",
   "evimed_product.source_uses": "a pointer from a document to the conversations that consulted it (a search hit or a read of its parsed text), derived from run transcripts the archive does not carry and rebuilt by use; the documents and the conversations themselves are what the archive holds",
   "evimed_product.memory_index_state": "publication bookkeeping for the ranking index over capsules that are themselves exported; derived from them and from nothing else",
-  "evimed_memory.records": "carried by the archive as memory/memory.json, written from the store's own exportUserMemory so that the evidence and revision history travel in the shape the product reads them in",
-  "evimed_memory.settings": "carried by the archive as memory/memory.json, beside the records: the researcher's own pause switches, read through the same store",
+  "evimed_memory.settings": "carried by the archive as memory/memory.json, beside the memories: the researcher's own pause switches, read through the same store (`MemorySettingsStore.exportUserMemory`)",
   "evimed_memory.sessions": "the capsule a conversation is trying, for conversations that live in this deployment's runtime; it means nothing outside it, and the capsule itself is exported",
-  "evimed_memory.record_conflicts": "carried by the archive as memory/memory.json under `links`, beside the records they relate: which statements disagree, and whether it was settled",
-  "evimed_memory.record_sources": "carried by the archive as memory/memory.json under `links`, beside the records: the sources each memory rests on, by recorded identifier, with what a later check found",
-  "evimed_memory.record_usage": "how often each memory was recalled: derived from the records that are themselves exported, rebuilt by use, and meaningless in another deployment",
-  "evimed_memory.record_reviews": "which version of the memory rules each memory was last read again under: derived, holds no text, and meaningless in another deployment, whose rules are its own",
-  "evimed_memory.topic_sets": "how the exported memories were last grouped into topics for the memory map, with the names the researcher gave those groups: derived from the records, regrouped on demand, and keyed by group ids that mean nothing in another deployment",
+  "evimed_memory.topic_sets": "how the exported memories were last grouped into topics for the memory map, with the names the researcher gave those groups: derived from the memories, regrouped on demand, and keyed by group ids that mean nothing in another deployment",
+});
+
+/** The account-scoped tables no migration creates any more, and what the archive does about them.
+ *
+ * The structured-record tables of the legacy memory engine were deleted with it (2026-10-25). `legacyMemoryRetirement.mjs` drops them
+ * at start when they hold nothing and no account says it is on that engine, and keeps them when they do, so a database that started
+ * life under an earlier release can still hold rows the person has never seen as a file. No DDL creates them, so
+ * `accountExport.test.mjs` cannot find them in the migration scan; this is the counterpart of `UNEXPORTED_ACCOUNT_TABLES` for tables
+ * that only an old database has, and the test holds it both ways: an entry here that a migration creates again must be declared (or
+ * exported) like any other table, and every entry says what the archive carries of it.
+ *
+ * Build to delete: when `legacyMemoryRetirement.mjs` is, with `MemorySettingsStore.exportUserMemory`'s `legacyRecords`. */
+export const RETIRED_ACCOUNT_TABLES = Object.freeze({
+  "evimed_memory.records": "carried by the archive as memory/memory.json under `legacyRecords` (the person's own rows, text and status), by `MemorySettingsStore.exportUserMemory`, for a database that kept them",
+  "evimed_memory.record_conflicts": "not carried: which two of the legacy records disagreed and whether it was settled; relation bookkeeping between records that are themselves in the archive",
+  "evimed_memory.record_sources": "not carried: the recorded identifiers of the sources each legacy record rested on and what a later check found; the documents themselves are in the archive",
+  "evimed_memory.record_usage": "not carried: how often each legacy record was recalled; derived by use and meaningless in another deployment",
+  "evimed_memory.record_reviews": "not carried: which version of the retired memory rules each legacy record was last read again under; derived, holds no text, and meaningless in another deployment",
 });
 
 function tooLarge() { return new HttpError(413, "archive_too_large", "Account export exceeds its complete customer-state row or byte limit."); }
@@ -237,9 +257,9 @@ const producerKeys = ["kind", "sessionId", "runId", "callId", "eventId", "parent
  * `path` and `sha256`. The export embeds no file of its own accord: the base64
  * route `personalSkillResources` takes exists for bytes outside the account's
  * data root and is bounded at 32 MiB, and one result snapshot may be 64 MiB.
- * What a record itself holds leaves with it, which for a delivered report
- * includes the text of the evidence matrix it was checked against
- * (`review.matrixText`), exactly as the result routes serve it.
+ * A delivered report's compact review is hydrated through the result reader before projection, so its matrix text and
+ * frozen verdict leave in the same portable inline shape as historical records. An unreadable or restricted review is
+ * stated as unavailable and counted in omissions; its result record and the account's other usable records still leave.
  *
  * What stays behind. Another user's id (`requestedBy`, on a shared project a
  * collaborator's), queue and process bookkeeping (`jobId`, `execution`,
@@ -252,7 +272,7 @@ const producerKeys = ["kind", "sessionId", "runId", "callId", "eventId", "parent
  * files are written to in the workspace and the call its output version names
  * as producer, so it leaves in those two places and not as a queue pointer.
  *
- * What is as recorded rather than as served. A reference's `availability` is
+ * What is as recorded rather than as served. Apart from the hydrated review, a reference's `availability` is
  * the one captured with the result, not re-derived against today's sources:
  * the archive is the owner's across all their projects, and the per-project
  * re-authorization the result routes do answers a question it does not ask. A
@@ -375,7 +395,8 @@ export function exportedPriceLists(usageRows) {
  * user row stays shared-locked: account deletion locks it before removing files.
  * @param {any} database @param {any} user @param {Record<string,any>} config
  * @param {(snapshot:any) => Promise<any>} operation
- * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void}} limits */
+ * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void,
+ * readResultReview?:(user:any,row:any)=>Promise<any>}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
   // The platform's publishing account is nobody's to take a copy of (evidence-flywheel B2).
   assertNotPlatformAccount(user);
@@ -394,6 +415,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateEvidenceZones(database);
   await migrateFrontierEventReading(database);
   await migrateCapsuleShare(database);
+  await migrateScriptUses(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '15s'");
@@ -417,6 +439,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     const omissions = undecided.rows.map((/** @type {any} */ row) => ({ kind: String(row.kind), reason: "no_export_contract", documents: Number(row.documents) }));
     /** @type {Map<string, {kind:string,reason:string,documents:number,revisions:number}>} */
     const unreadable = new Map();
+    const unavailableReviews = { kind: "result-version", reason: "review_unavailable", documents: 0, revisions: 0 };
     const tables = {};
     let rows = 0;
     let bytes = 0;
@@ -432,22 +455,45 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       if (key === "shareDeliveriesReceived") {
         tables[key] = tables[key].map((/** @type {any} */ { ownerId, ...delivery }) => ({ ...delivery, senderName: senderDisplayName(delivery.senderName, ownerId) }));
       }
-      if (key === "documents" || key === "revisions") tables[key] = tables[key].flatMap((/** @type {any} */ row) => {
-        const exported = exportDocumentRow(row);
-        if (exported) return [exported];
-        const entry = unreadable.get(row.kind) ?? { kind: String(row.kind), reason: "unreadable_record", documents: 0, revisions: 0 };
-        if (key === "documents") entry.documents += 1; else entry.revisions += 1;
-        unreadable.set(row.kind, entry);
-        return [];
-      });
+      if (key === "documents" || key === "revisions") {
+        const projected = [];
+        for (const row of tables[key]) {
+          const exported = exportDocumentRow(row);
+          if (!exported) {
+            const entry = unreadable.get(row.kind) ?? { kind: String(row.kind), reason: "unreadable_record", documents: 0, revisions: 0 };
+            if (key === "documents") entry.documents += 1; else entry.revisions += 1;
+            unreadable.set(row.kind, entry);
+            continue;
+          }
+          if (row.kind === "result-version" && row.payload?.review && (limits.readResultReview || row.payload.review.verificationSnapshot)) {
+            let review;
+            try { review = await limits.readResultReview?.(user, row); }
+            catch { review = { status: "unavailable", matrixText: null, verification: null }; }
+            review ??= { status: "unknown", matrixText: null, verification: null };
+            // The archive does not carry the snapshot store: references cannot replace the review content here.
+            const { verificationSnapshot: _snapshot, ...portable } = { ...exported.payload.review, ...review };
+            exported.payload.review = portable;
+            if (portable.status !== "available") {
+              if (key === "documents") unavailableReviews.documents += 1; else unavailableReviews.revisions += 1;
+            }
+            // Hydration may expand a compact row substantially. Keep the original complete-export budget and stop
+            // incrementally, rather than accumulating unbounded matrices before the final buffer check.
+            bytes += Math.max(0, Buffer.byteLength(JSON.stringify(exported)) - Buffer.byteLength(JSON.stringify(row)));
+            if (bytes > maxBytes) throw tooLarge();
+          }
+          projected.push(exported);
+        }
+        tables[key] = projected;
+      }
     }
     omissions.push(...unreadable.values());
+    if (unavailableReviews.documents || unavailableReviews.revisions) omissions.push(unavailableReviews);
     // The archive says it; this line is so whoever runs the deployment hears
     // it too. Kinds and counts only: neither is the customer's data.
     for (const entry of omissions) {
       report(`account export left out ${entry.kind}: ${entry.reason}, ${entry.documents} documents${entry.revisions === undefined ? "" : `, ${entry.revisions} revisions`}\n`);
     }
-    // `version` stays 1 with `priceLists`, `feedbackEvents` and `omissions`
+    // `version` stays 1 with `priceLists`, `feedbackEvents`, `scriptUses` and `omissions`
     // added, and with new kinds among `documents`: v1 is an additive contract,
     // so a new top-level key, or a kind a reader does not know, is not a break
     // for a reader that keeps parsing what it knows, and a bump would tell
@@ -465,7 +511,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       version: 1, snapshotAt: owner.snapshotAt, account: { id: owner.id, name: owner.name, accountCreatedAt: owner.accountCreatedAt },
       projects: tables.projects, researchSessions: tables.researchSessions, documents: tables.documents, revisions: tables.revisions,
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
-      priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, omissions,
+      priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, scriptUses: tables.scriptUses, omissions,
       frontierEventReads: tables.frontierEventReads,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
       evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,
@@ -476,7 +522,16 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     if (skillResources.resources.length) state.personalSkillResources = skillResources.resources;
     const data = Buffer.from(`${JSON.stringify(state)}\n`, "utf8");
     if (data.length > maxBytes) throw tooLarge();
-    return operation({ projects: tables.projects, data });
+    // Native pack collection may need the namespace registry from this exact
+    // snapshot. Borrow only this held client, not another pool connection or a
+    // transaction that happens to reuse the client after this callback ends.
+    let collecting = true;
+    const withDatabaseSnapshot = async work => {
+      if (!collecting) throw new HttpError(409, 'account_export_snapshot_closed', 'The account export snapshot has ended.');
+      return database.withTransactionClient(client, work);
+    };
+    try { return await operation({ projects: tables.projects, data, withDatabaseSnapshot }); }
+    finally { collecting = false; }
   });
 }
 

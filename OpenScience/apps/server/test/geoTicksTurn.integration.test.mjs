@@ -50,7 +50,7 @@ function scheduleSpy(ids, served, fail = null) {
     get(target, key) {
       if (key === "query") {
         return async (/** @type {string} */ sql, /** @type {any[]} */ values) => {
-          if (/FROM evimed_geo\.rounds WHERE geo_project_id = \$1\s+AND kind IN \('baseline', 'single_step'\)/.test(sql) && ids.includes(values[0])) {
+          if (/FROM evimed_geo\.rounds(?: r)? WHERE (?:r\.)?geo_project_id = \$1\s+AND (?:r\.)?kind IN \('baseline', 'single_step'\)/.test(sql) && ids.includes(values[0])) {
             served.push(values[0]);
             if (values[0] === fail) throw new Error("one project's failure");
           }
