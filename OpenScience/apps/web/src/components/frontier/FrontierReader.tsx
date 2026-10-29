@@ -28,6 +28,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { cardFacts } from "./frontierFacts";
 import { FrontierLightbox } from "./FrontierLightbox";
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
+import { zonePath } from "./zoneLinks";
 import {
   CARD_FLAG_KEYS,
   EXTERNAL,
@@ -762,7 +763,8 @@ const feedBy = (name: "specialty" | "tag", value: string) => `/app/frontier?view
 
 /**
  * The reader's notes, in the right column on a wide screen and under the text on a narrower one: 推荐理由 — 「精选」, the 「AI 评分」 pill,
- * its four parts as bars and the sentence of what a clinician or a researcher can do with it — then 出处, then 专科 and 标签, each a
+ * its four parts as bars and the sentence of what a clinician or a researcher can do with it — then 出处, 所属专区 (the zones the item
+ * is in, at most three, each opening its page), then 专科 and 标签, each a
  * link to the feed narrowed to it, and 本文目录 while the text is open and has three sections or more. An item whose occurrence was
  * selected through another report has no 推荐理由: the line over its text sends the reader to that one.
  */
@@ -786,6 +788,13 @@ export function ReaderNotes({ item, reports, outline }: { item: FrontierItemDeta
         </RailBlock>
       )}
       <ReaderProvenance item={item} reports={reports} />
+      {item.zones && item.zones.length > 0 && (
+        <RailBlock label="所属专区">
+          <ul className="flex flex-wrap gap-1.5">
+            {item.zones.map((zone) => <li key={zone.id}><Link to={zonePath(zone)} onClick={rememberFrontierPosition} className={RAIL_CHIP}>{zone.title}</Link></li>)}
+          </ul>
+        </RailBlock>
+      )}
       {item.specialties.length > 0 && (
         <RailBlock label="专科">
           <ul className="flex flex-wrap gap-1.5">

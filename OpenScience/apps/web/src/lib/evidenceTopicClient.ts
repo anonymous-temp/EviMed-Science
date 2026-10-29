@@ -47,6 +47,12 @@ export interface ZoneDefinition {
 export interface ZoneCounts { week: number; month: number; all: number }
 export interface ZoneSummary {
   id: string;
+  /** The zone's revision, where the directory sends it: following needs it, and the web reads the zone first where it is absent. */
+  revision?: number;
+  /** How many readers follow the zone, where the server says so (大家建的 lists it). */
+  followers?: number;
+  /** Whether the reader made this zone, where the server says so (`mine` lists the reader's own zones before the ones they follow). */
+  owned?: boolean;
   slug: string | null;
   title: string;
   type: ZoneType | null;
@@ -183,6 +189,9 @@ export function parseZoneSummary(value: unknown): ZoneSummary | null {
   const latest = record(raw.latest);
   return {
     id: text(raw.id),
+    ...(typeof raw.revision === "number" ? { revision: raw.revision } : {}),
+    ...(typeof raw.owned === "boolean" ? { owned: raw.owned } : {}),
+    ...(typeof raw.followers === "number" && raw.followers >= 0 ? { followers: raw.followers } : {}),
     slug: optionalText(raw.slug),
     title: text(raw.title),
     type: (optionalText(raw.type) as ZoneType | null),
@@ -431,6 +440,15 @@ export async function updateZone(zone: Pick<ZoneDetail, "id" | "revision">, chan
   const updated = parseZoneDetail(record(await productRequest<unknown>(`/frontier/zones/${path(zone.id)}`, "PATCH", { ...change, expectedRevision: zone.revision }))?.zone);
   if (!updated) throw new WebApiError("The zone was malformed.", { status: 502 });
   return updated;
+}
+
+/**
+ * Follows or unfollows a zone a list shows: the directory's rows carry no revision unless the server sends one, so the zone is read
+ * first where it is missing (the follow route is checked against it).
+ */
+export async function followZoneSummary(zone: Pick<ZoneSummary, "id" | "revision">, follow: boolean): Promise<ZoneDetail> {
+  const revision = zone.revision ?? (await fetchZone(zone.id)).revision;
+  return followZone({ id: zone.id, revision }, follow);
 }
 
 export async function deleteZone(zoneId: string): Promise<void> {

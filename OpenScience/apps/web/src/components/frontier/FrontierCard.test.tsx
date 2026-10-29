@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +19,12 @@ function Probe() {
   return <div data-testid="probe">{location.pathname}{location.search}|{intent?.kind}|{intent?.draft}{intent?.originReference ? `|origin:${intent.originReference.kind}:${intent.originReference.id}` : ""}</div>;
 }
 
+/** Where the router is, for a menu entry that stays on the page's own route (the directory is the same route with another query). */
+function Here() {
+  const location = useLocation();
+  return <span data-testid="here">{location.pathname}{location.search}</span>;
+}
+
 function renderCard(item = frontierItem(), props: Partial<Parameters<typeof FrontierCard>[0]> = {}) {
   const handlers = { onStar: vi.fn(), onHide: vi.fn(), onSave: vi.fn(), onOpened: vi.fn(), onTag: vi.fn() };
   render(
@@ -27,6 +33,7 @@ function renderCard(item = frontierItem(), props: Partial<Parameters<typeof Fron
         <Route path="/app/frontier" element={<ul><FrontierCard item={item} {...handlers} {...props} /></ul>} />
         <Route path="*" element={<Probe />} />
       </Routes>
+      <Here />
       <Toaster />
     </MemoryRouter>,
   );
@@ -401,11 +408,12 @@ it("follows a card's structured source identity without invoking hide or externa
   expect(await screen.findByText("已关注")).toBeInTheDocument();
 });
 
-it("offers an explicit draft bridge from the feed to an evidence zone", async () => {
+it("offers 「以此新建专区」 in ⋯, which opens the directory with the editor on that item — and no card for the platform to write", async () => {
   renderCard(frontierItem({ id: "source/item" }));
   await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
-  await userEvent.click(await screen.findByRole("menuitem", { name: "整理为证据卡片" }));
-  expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/zones?fromItem=source%2Fitem");
+  expect(screen.queryByRole("menuitem", { name: "整理为证据卡片" })).not.toBeInTheDocument();
+  await userEvent.click(await screen.findByRole("menuitem", { name: "以此新建专区" }));
+  await waitFor(() => expect(screen.getByTestId("here")).toHaveTextContent("/app/frontier?view=zones&new=1&fromItem=source%2Fitem"));
 });
 
 it("opens an event from more actions even when it has only one report", async () => {

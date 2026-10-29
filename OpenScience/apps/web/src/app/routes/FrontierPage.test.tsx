@@ -15,6 +15,7 @@ import type {
 import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
+import { topicDirectory, topicZone } from "@/components/frontier/__fixtures__/zoneDirectory";
 import { FrontierPage } from "./FrontierPage";
 import { expectComposed } from "@/test/expectComposed";
 
@@ -51,11 +52,16 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/frontierClient")>()),
   ...client,
 }));
-// The followed zones the 关注 view reads (the page itself needs only their number).
-const zones = vi.hoisted(() => ({ listEvidenceZones: vi.fn(), listFollowedEvidence: vi.fn() }));
+// The reader's own and followed zones the 关注 view reads, and the directory of 证据专区 (the page itself needs only their number).
+const zones = vi.hoisted(() => ({ listFollowedEvidence: vi.fn() }));
 vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()),
   ...zones,
+}));
+const topics = vi.hoisted(() => ({ fetchZoneDirectory: vi.fn() }));
+vi.mock("@/lib/evidenceTopicClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/evidenceTopicClient")>()),
+  ...topics,
 }));
 // The onboarding answer 关注 reads: answered unless a test says otherwise.
 const prefs = vi.hoisted(() => ({ fetchFrontierPrefs: vi.fn(), saveFrontierPrefs: vi.fn() }));
@@ -104,7 +110,7 @@ function board(events: FrontierHotEvent[], overrides: Partial<FrontierHotBoard> 
   return { window: "current", takenAt: ago(0.2), since: ago(72.2), events, ...overrides };
 }
 
-const followedZone = { id: "ez_1", title: "房颤抗凝", evidenceCount: 4 };
+const followedZone = topicZone({ id: "ez_1", title: "房颤抗凝", following: true, counts: { week: 4, month: 9, all: 30 } });
 const today = frontierItem({ id: "today-1", title: "今天的一条 RCT", timelineAt: new Date(Date.now() - 1000).toISOString(), visibleAt: new Date(Date.now() - 1000).toISOString(), score: 86, scoreBand: "high" });
 const yesterday = frontierItem({ id: "yesterday-1", title: "昨天的一条指南", timelineAt: beforeMidnight(6) });
 const alert = frontierItem({ id: "alert-1", title: "I 级召回：葡萄糖注射液含不锈钢颗粒", safetyAlert: true, lane: "safety", laneLabel: "药物安全",
@@ -146,7 +152,7 @@ beforeEach(() => {
   client.useFrontierFeature.mockReturnValue("on");
   client.listFrontierFollows.mockResolvedValue([{ id: "7", kind: "topic", key: "obesity", label: "肥胖研究", muted: false }]);
   Object.values(zones).forEach((mock) => mock.mockReset());
-  zones.listEvidenceZones.mockResolvedValue({ items: [followedZone], nextCursor: null });
+  topics.fetchZoneDirectory.mockImplementation(async (view: "recommended" | "mine" | "community") => topicDirectory(view, [followedZone]));
   zones.listFollowedEvidence.mockResolvedValue({ items: [], nextCursor: null });
   client.fetchFrontierStatus.mockResolvedValue(status());
   feed = async () => page([today, yesterday]);
@@ -1420,12 +1426,12 @@ describe("关注, the reader's own place (owner, 2026-10-25)", () => {
 
   it("lists the followed evidence zones as the first group of 全部关注, and one zone's cards from its entry", async () => {
     renderPage("/app/frontier?view=following&follow=all");
-    const group = await screen.findByRole("region", { name: "关注的证据专区" });
+    const group = await screen.findByRole("region", { name: "我的专区与关注的专区" });
     expect(within(group).getByRole("link", { name: "房颤抗凝" })).toHaveAttribute("href", "/app/frontier/zones/ez_1");
     expect(within(controlRow()).queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
     await userEvent.click(followList().getByRole("link", { name: "房颤抗凝" }));
     expect(location()).toBe("/app/frontier?view=following&follow=zone%3Aez_1");
-    expect(await screen.findByRole("region", { name: "关注的证据专区" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "我的专区与关注的专区" })).toBeInTheDocument();
   });
 
   it("selects a saved follow from 管理关注 into the address, and a removed one leaves 全部关注", async () => {
@@ -1478,7 +1484,7 @@ describe("关注, the reader's own place (owner, 2026-10-25)", () => {
   it("with only zones followed shows the zones and no feed block, no 「没有结果」, no filters", async () => {
     client.listFrontierFollows.mockResolvedValue([]);
     renderPage("/app/frontier?view=following&follow=all");
-    await screen.findByRole("region", { name: "关注的证据专区" });
+    await screen.findByRole("region", { name: "我的专区与关注的专区" });
     expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
     expect(feedQueries()).toEqual([]);
     expect(within(controlRow()).queryByRole("button", { name: /^筛选/ })).not.toBeInTheDocument();
@@ -1487,7 +1493,7 @@ describe("关注, the reader's own place (owner, 2026-10-25)", () => {
   describe("with nothing followed yet", () => {
     beforeEach(() => {
       client.listFrontierFollows.mockResolvedValue([]);
-      zones.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null });
+      topics.fetchZoneDirectory.mockImplementation(async (view: "recommended" | "mine" | "community") => topicDirectory(view, []));
     });
 
     it("is one sentence and the way to start once the card was answered — no 「没有结果」, no filters, and no read of the feed", async () => {

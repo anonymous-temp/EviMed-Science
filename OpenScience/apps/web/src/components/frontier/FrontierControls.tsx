@@ -47,8 +47,9 @@ export type FollowChoice = { kind: "foryou" } | { kind: "all" } | { kind: "follo
  *  - 热榜: 当前 · 本周 · 本月 and when the ranking was taken;
  *  - 简报: 日报 · 周报, and the issue's own 分类, 往期 and 复制 (`issue`);
  *  - 追踪 (c3-track): 审批 · 指南 · 会议 and, where it fits, one filter (the agency, the specialty) — `trackControls`;
- *  - 证据专区: the scope menu (全部专区 · 我创建的 · 我关注的) and the count of a search's matches (`zones`); 「新建专区」, for a reader
- *    who may make one, is the page's action in its header (`frontierHeaderActions`), at every width.
+ *  - 证据专区: the directory's view as the first control (推荐 · 我的 · 大家建的, pinned on a phone), the 专科 menu and the count of the
+ *    zones listed (`zones`); 「新建专区」, for a reader who may make one, is the page's action in its header (`frontierHeaderActions`),
+ *    at every width.
  *
  * The followed things are 关注's own column on a wide screen; on a phone they are the first section of the 「筛选」 sheet
  * (`followList`), and the one follow the list is narrowed to is a token (「只看：肿瘤」). On a phone the views scroll beside the
@@ -141,7 +142,11 @@ export function frontierToolbar({
       } else controls = track.filters;
       break;
     case "zones":
-      controls = zones.filters;
+      // The directory's view is a place, as 追踪's segment: first on the row, and kept in sight on a phone.
+      if (zones.filters[0]?.kind === "chips") {
+        navigation = [zones.filters[0]];
+        controls = zones.filters.slice(1);
+      } else controls = zones.filters;
       summary = zones.summary;
       break;
     default:

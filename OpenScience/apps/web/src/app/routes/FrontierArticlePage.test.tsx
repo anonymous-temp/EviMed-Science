@@ -258,6 +258,28 @@ describe("an X post with every block", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("/app/chat");
   });
 
+  it("lists the zones the item belongs to after 出处, at most three, each a link to its page — and no block where there are none", async () => {
+    wide();
+    client.fetchFrontierItem.mockResolvedValue({
+      ...frontierItemDetail({ id: "item-1" }),
+      zones: [{ id: "zone_glp1", title: "GLP-1 受体激动剂减重" }, { id: "zone_ckd", title: "SGLT2 抑制剂心肾保护" }],
+    });
+    const { unmount } = show("/app/frontier/items/item-1");
+    const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
+    const block = within(rail).getByRole("region", { name: "所属专区" });
+    expect(within(block).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["GLP-1 受体激动剂减重", "/app/frontier/zones/zone_glp1"], ["SGLT2 抑制剂心肾保护", "/app/frontier/zones/zone_ckd"],
+    ]);
+    const blocks = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
+      ?? (region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent));
+    expect(blocks.indexOf("所属专区")).toBe(blocks.indexOf("出处") + 1);
+    unmount();
+    client.fetchFrontierItem.mockResolvedValue(frontierItemDetail({ id: "item-1" }));
+    show("/app/frontier/items/item-1");
+    await screen.findByRole("complementary", { name: "文章操作与推荐" });
+    expect(screen.queryByRole("region", { name: "所属专区" })).not.toBeInTheDocument();
+  });
+
   it("says 「可能改变实践」 in the meta row and, with its reason, in the notes where a touch screen reads it", async () => {
     wide();
     client.fetchFrontierItem.mockResolvedValue(detail(rawXPost({ practice: { reason: "国内首个获批，改变一线用药选择。" } })));
@@ -354,7 +376,7 @@ describe("an X post with every block", () => {
     await waitFor(() => expect(star).toHaveAttribute("aria-pressed", "true"));
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
     const entries = (await screen.findAllByRole("menuitem")).map((entry) => entry.textContent);
-    expect(entries).toEqual(expect.arrayContaining(["整理为证据卡片", "复制为 Markdown", "不感兴趣", "关注 Arena.ai"]));
+    expect(entries).toEqual(expect.arrayContaining(["以此新建专区", "复制为 Markdown", "不感兴趣", "关注 Arena.ai"]));
     expect(entries).not.toContain("深入研究");
     await userEvent.click(screen.getByRole("menuitem", { name: "关注 Arena.ai" }));
     expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: "x-arena", label: "Arena.ai", muted: false });

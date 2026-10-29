@@ -7,7 +7,6 @@ import { Select } from "@/components/ui/Input";
 import { DataTable } from "@/components/ui/DataTable";
 import { Tag } from "@/components/ui/Tag";
 import { FrontierPrefsRow } from "./FrontierOnboarding";
-import { TypedFollowInput } from "./TypedFollowInput";
 
 /** The kinds a follow can be, in the reader's words; the card's menu makes the source and event ones, the feed's tag chip the tag ones. */
 const KIND_WORDS: Record<FrontierFollow["kind"], string> = { topic: "主题", drug: "药物", specialty: "专科", source: "来源", event: "事件", tag: "标签", query: "关注词" };
@@ -20,8 +19,10 @@ export function followReadingText(follow: FrontierFollow): string | null {
   return follow.query.concepts.map((names) => names.join("、")).join(" ＋ ");
 }
 
-export function FrontierFollows({ selected, onSelect, onChanged }: {
+export function FrontierFollows({ selected, onSelect, onChanged, onCreateZone }: {
   selected: string | null; onSelect: (id: string | null) => void; onChanged: () => void;
+  /** 「新建专区」, where a typed follow used to be added (2026-10-29): what a reader wants to keep reading is a zone of their own. */
+  onCreateZone?: () => void;
 }) {
   const [specialty, setSpecialty] = useState(FRONTIER_SPECIALTIES[0]?.key ?? "");
   const [rows, setRows] = useState<FrontierFollow[]>([]);
@@ -73,8 +74,8 @@ export function FrontierFollows({ selected, onSelect, onChanged }: {
   };
   return <div className="space-y-4">
     <FrontierPrefsRow />
-    {/* One input for what a reader wants to hear about, in their own words (c3-watch): its feed is what opens. */}
-    <TypedFollowInput held={rows} onAdded={(follow) => { onChanged(); void load(); onSelect(follow.id); }} />
+    {/* What a reader wants to hear about, in their own words, is a zone of their own now (2026-10-29); the typed follows already made stay below. */}
+    {onCreateZone && <Button variant="secondary" onClick={onCreateZone}>新建专区</Button>}
     <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); submitSpecialty(); }}>
       <Select label="按专科关注" value={specialty} onChange={(event) => { setSpecialty(event.target.value); setDuplicate(null); }}>
         {FRONTIER_SPECIALTIES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
@@ -99,6 +100,6 @@ export function FrontierFollows({ selected, onSelect, onChanged }: {
             onClick={() => void act(() => removeFrontierFollow(row.id), row.id)}>移除</Button>
         </div> },
       ]} />
-    <p><Link to="/app/frontier?view=zones&scope=following" className="text-caption text-text-3 hover:text-accent">已关注的证据专区在“证据专区”里管理 ›</Link></p>
+    <p><Link to="/app/frontier?view=zones&scope=mine" className="text-caption text-text-3 hover:text-accent">我的专区和关注的专区在“证据专区”里管理 ›</Link></p>
   </div>;
 }

@@ -46,16 +46,16 @@ import {
   type ZoneTab,
 } from "@/components/frontier/zone/zoneText";
 import { useZoneFrom } from "@/components/frontier/zone/useZoneFrom";
+import { ZoneEditorDrawer } from "@/components/frontier/ZoneEditorDrawer";
 
 /** The directory this page is one step down from. */
 const DIRECTORY = "/app/frontier?view=zones";
 
 /**
- * The drawer that creates and edits 我的专区 (`ZoneEditorDrawer`, ez-web-dir). The page is written against its props
- * (`ZoneEditorProps`) and takes it as `editor`; until it is wired here the page offers neither 「编辑」 nor 「以此新建我的专区」.
- * Wire it with: `import { ZoneEditorDrawer } from "@/components/frontier/ZoneEditorDrawer"; const ZONE_EDITOR = ZoneEditorDrawer;`.
+ * The drawer that creates and edits 我的专区 (`ZoneEditorDrawer`). The page is written against its props (`ZoneEditorProps`) and
+ * takes it as `editor`, so a test can render the page without it.
  */
-const ZONE_EDITOR: ComponentType<ZoneEditorProps> | null = null;
+const ZONE_EDITOR: ComponentType<ZoneEditorProps> | null = ZoneEditorDrawer;
 
 /** One Chinese sentence for a refused zone request. */
 function zoneErrorMessage(error: unknown): string {
