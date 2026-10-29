@@ -12,7 +12,7 @@ import { useProjectStore } from "@/lib/projects";
  * removes it at once, and a zone that is later unpublished or deleted says so here. It is a different thing from 「关注」, which is the
  * account's (new evidence reaches 前沿动态 › 关注), and the words say so.
  *
- * Mount it in `EvidenceZonePage.tsx` as the quiet row under the zone's description, with the zone's id: `<ZoneSubscription zoneId={zone.id} />`.
+ * Mounted by the zone page (`FrontierZonePage.tsx`) at the head of its 证据卡片 tab, with the zone's id: `<ZoneSubscription zoneId={zone.id} />`.
  * It reads the project the shell is in, and asks `/api/me` whether the module is on (`features.zoneSubscription`) before it asks the
  * module anything: where it is off the control renders nothing and makes no request (a named 404 from the module is still read as off).
  */

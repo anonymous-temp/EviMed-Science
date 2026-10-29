@@ -4,9 +4,9 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FrontierStatus } from "@/lib/frontierClient";
 import { expectComposed } from "@/test/expectComposed";
-import { zone as zoneRecord } from "@/components/frontier/__fixtures__/evidenceCards";
+import { zone as topicZone } from "@/components/frontier/zone/__fixtures__/zones";
 import { FrontierPage } from "./FrontierPage";
-import { EvidenceZonePage } from "./EvidenceZonePage";
+import { FrontierZonePage } from "./FrontierZonePage";
 
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(), fetchFrontierStatus: vi.fn(), listFrontierItems: vi.fn(), listFrontierFollows: vi.fn(),
@@ -15,9 +15,11 @@ const client = vi.hoisted(() => ({
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/frontierClient")>()), ...client }));
 const zones = vi.hoisted(() => ({
   listEvidenceZones: vi.fn(), followEvidenceZone: vi.fn(), listFollowedEvidence: vi.fn(),
-  fetchEvidenceZoneDetail: vi.fn(), listZoneEvidence: vi.fn(),
 }));
 vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()), ...zones }));
+// A zone's own page reads the topic zones' client.
+const topic = vi.hoisted(() => ({ fetchZone: vi.fn(), fetchZoneOverview: vi.fn() }));
+vi.mock("@/lib/evidenceTopicClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceTopicClient")>()), ...topic }));
 const features = vi.hoisted(() => ({ fetchEvidenceFeatures: vi.fn() }));
 vi.mock("@/lib/evidenceUpkeepClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceUpkeepClient")>()), ...features }));
 const topics = vi.hoisted(() => ({ listTopicRequests: vi.fn() }));
@@ -38,7 +40,7 @@ function mount(path = "/app/frontier?view=zones") {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/app/frontier" element={<><FrontierPage /><Where /></>} />
-        <Route path="/app/frontier/zones/:zoneId" element={<><EvidenceZonePage /><Where /></>} />
+        <Route path="/app/frontier/zones/:zoneId" element={<><FrontierZonePage /><Where /></>} />
         <Route path="*" element={<Where />} />
       </Routes>
     </MemoryRouter>,
@@ -47,6 +49,7 @@ function mount(path = "/app/frontier?view=zones") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  topic.fetchZoneOverview.mockResolvedValue({ zoneId: "zone-one", type: null, modules: [], side: { related: [], entities: { drugs: [], diseases: [], orgs: [] }, weekly: [], topics: [], congresses: [] } });
   client.useFrontierFeature.mockReturnValue("on");
   client.fetchFrontierStatus.mockResolvedValue(status());
   client.listFrontierItems.mockResolvedValue({ items: [], nextCursor: null, version: "1", mode: "list", related: false, restarted: false });
@@ -177,8 +180,7 @@ describe("证据专区 opens in place", () => {
 
 describe("a zone opened from the view", () => {
   it("goes back to the view as the reader left it — its scope and its search — by the history entry it came from", async () => {
-    zones.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...zoneRecord, ...zone, kind: "official" }, feedback: [] });
-    zones.listZoneEvidence.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
+    topic.fetchZone.mockResolvedValue(topicZone({ id: "zone-one", title: "急诊医学" }));
     mount("/app/frontier?view=zones&scope=following");
     await userEvent.click(await screen.findByRole("link", { name: "急诊医学" }));
     expect(where()).toBe("/app/frontier/zones/zone-one");
@@ -189,12 +191,10 @@ describe("a zone opened from the view", () => {
     expect(await screen.findByRole("link", { name: "急诊医学" })).toBeInTheDocument();
   });
 
-  it("goes up to the view by its trail when it was opened from anywhere else", async () => {
-    zones.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...zoneRecord, ...zone, kind: "official" }, feedback: [] });
-    zones.listZoneEvidence.mockResolvedValue({ items: [], nextCursor: null, total: 0 });
+  it("goes up to the view when it was opened from anywhere else", async () => {
+    topic.fetchZone.mockResolvedValue(topicZone({ id: "zone-one", title: "急诊医学" }));
     mount("/app/frontier/zones/zone-one");
     const nav = await screen.findByRole("navigation", { name: "返回" });
-    expect(within(nav).getByRole("link", { name: "证据专区" })).toHaveAttribute("href", "/app/frontier?view=zones");
-    expect(within(nav).getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier");
+    expect(within(nav).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["证据专区", "/app/frontier?view=zones"]]);
   });
 });

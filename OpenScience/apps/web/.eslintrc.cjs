@@ -329,7 +329,7 @@ module.exports = {
     // Adopted text-submit surfaces only: Enter activation on buttons and
     // roving-focus controls remains native and is intentionally outside this rule.
     {
-      files: ["src/app/routes/EvidenceZonesPage.tsx", "src/app/routes/EvidenceZonePage.tsx"],
+      files: ["src/app/routes/EvidenceZonesPage.tsx", "src/app/routes/FrontierZonePage.tsx", "src/components/frontier/zone/ZoneItemsTab.tsx"],
       rules: { "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ENTER_SUBMIT] },
     },
     ...layoutOverrides,
