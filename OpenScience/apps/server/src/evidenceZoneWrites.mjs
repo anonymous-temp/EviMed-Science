@@ -17,7 +17,7 @@
  *   a deployment without it saves the definition and the zone simply collects nothing yet, and says so as a status where it must
  *   (`feedback`), never as a fake success.
  * - **Identity is replay-safe.** A zone made with a `requestId` has the id every other writer of this module's family derives from
- *   the account and the request (`stableId`); the same body again is the same zone and a different body under the same request is a
+ *   the account and the request (`zoneIdFor`); the same body again is the same zone and a different body under the same request is a
  *   409 — the thirty-zone limit is checked after the replay, so retrying the thirtieth zone's request succeeds.
  * - **Typed follows are zones now.** `POST /follows kind:'query'` is a zone made from the words (`createFromWords`: draft, then
  *   create, unpublished); the same words again are the same zone. The follows that existed when this shipped were turned into
@@ -37,7 +37,6 @@ import {
   normalizeEvidenceZoneDefinition,
 } from "@evimed/domain";
 import { publicZoneDefinition } from "./evidenceZoneDraft.mjs";
-import { stableId } from "./evidenceReown.mjs";
 import { migrateFrontier } from "./frontierPersistence.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -47,6 +46,13 @@ const PUBLIC_ITEM_ID = /^[a-z0-9]{12,32}$/;
 /** The `meta` key of the one-time conversion of typed follows into zones. */
 export const TYPED_FOLLOWS_MARKER = "typed_follows_to_zones";
 const FEEDBACK_KINDS = Object.freeze(["not-in", "more-like"]);
+
+/**
+ * The id a zone gets from its owner and a request identity: the derivation `EvidenceZoneService#save` has always used for `ez_…`
+ * (a test holds the two equal), so a request made twice is one zone whichever writer made it.
+ * @param {string} userId @param {string} requestId
+ */
+export const zoneIdFor = (userId, requestId) => `ez_${createHash("sha256").update(`${userId}:${requestId}`).digest("hex").slice(0, 32)}`;
 
 /** @param {unknown} value */
 const isRecord = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -319,7 +325,7 @@ export function createEvidenceZoneWrites({ database, zones, membership = null, d
     if (input.requestId != null && (typeof input.requestId !== "string" || !REQUEST_ID.test(input.requestId))) throw error(400, "invalid", "Invalid request identity.");
     await ready();
     const definition = await definitionOf(input.definition, await readableSeeds(input.seeds));
-    const id = input.requestId ? stableId("ez", user.id, input.requestId) : `ez_${randomUUID().replaceAll("-", "")}`;
+    const id = input.requestId ? zoneIdFor(user.id, input.requestId) : `ez_${randomUUID().replaceAll("-", "")}`;
     const state = input.published === true ? "published" : "draft";
     const result = await database.transaction(async (/** @type {any} */ client) => {
       // One reader's creations are taken in turn, so two requests at twenty-nine zones cannot both make the thirtieth.
@@ -454,7 +460,7 @@ export function createEvidenceZoneWrites({ database, zones, membership = null, d
     if (!draft) throw error(503, "draft_unavailable", "Drafting a zone is not available here.");
     await ready();
     const requestId = `typed-${createHash("sha256").update(label.toLowerCase()).digest("hex").slice(0, 40)}`;
-    const id = stableId("ez", user.id, requestId);
+    const id = zoneIdFor(user.id, requestId);
     const held = (await database.query("SELECT 1 FROM evimed_frontier.evidence_zones WHERE id = $1 AND user_id = $2", [id, user.id])).rowCount;
     if (held) return { zone: await detailOf(user, id) };
     counters.fromWords += 1;
@@ -486,7 +492,7 @@ export function createEvidenceZoneWrites({ database, zones, membership = null, d
         readers.add(follow.user_id);
         const definition = definitionFromTypedFollow(String(follow.label), follow.query);
         if (!definition) continue;
-        const id = stableId("ez", follow.user_id, `typed-follow-${createHash("sha256").update(String(follow.key)).digest("hex").slice(0, 32)}`);
+        const id = zoneIdFor(follow.user_id, `typed-follow-${createHash("sha256").update(String(follow.key)).digest("hex").slice(0, 32)}`);
         const title = clean(follow.label, EVIDENCE_ZONE_LIMITS.titleChars) || definition.keywords[0].label;
         if (await insertTopicZone(client, { id, userId: follow.user_id, kind: "user", state: "draft", visibility: "platform", title, definition })) {
           await recordZoneChange(client, id, "created", "migration", { from: "typed-follow", title });

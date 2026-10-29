@@ -6,7 +6,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { createEvidenceZoneDraft } from "../src/evidenceZoneDraft.mjs";
-import { TYPED_FOLLOWS_MARKER, createEvidenceZoneWrites, definitionFromTypedFollow } from "../src/evidenceZoneWrites.mjs";
+import { TYPED_FOLLOWS_MARKER, createEvidenceZoneWrites, definitionFromTypedFollow, zoneIdFor } from "../src/evidenceZoneWrites.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { TEST_VOCABULARY, insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
@@ -98,6 +98,12 @@ test("a reader's zone is live when made: the row, the resolved definition, the c
   assert.deepEqual(plane.told.afterSave, [zone.id]);
   assert.equal(await writes.isTopicZone(alice, zone.id), true);
   assert.equal(await writes.isTopicZone(bob, zone.id), false, "a private zone does not exist for another reader");
+});
+
+test("a zone's id from a request identity is the one the older writer derives, so a request is one zone whichever writer made it", options, async () => {
+  const { zone } = await zones.save(alice, { title: "Old writer", requestId: "same-request-id-1" });
+  assert.equal(zone.id, zoneIdFor("alice", "same-request-id-1"));
+  assert.notEqual(zoneIdFor("bob", "same-request-id-1"), zone.id);
 });
 
 test("a zone made published is in the directory's reach and never on the internet", options, async () => {
