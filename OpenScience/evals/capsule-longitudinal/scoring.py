@@ -221,6 +221,8 @@ def deliverable_cjk_share(judge: Judge, ask: str, reply: str) -> tuple[float | N
     own, and those are not the deliverable. A reply in one script needs no reading (its deliverable is in that script); a mixed one is
     read by the judge, which names the passages, and code counts their characters. None when it cannot be decided."""
     whole = cjk_ratio(reply)
+    if not CJK.search(reply or "") and not LETTER.search(reply or ""):
+        return None, "the reply holds no text to measure (nothing was read back)"
     if not CJK.search(reply or "") or not LETTER.search(reply or ""):
         return whole, f"CJK share {whole:.2f} (the reply is in one script)"
     verdict = judge.deliverable(ask, reply)
