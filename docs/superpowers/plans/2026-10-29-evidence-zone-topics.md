@@ -579,7 +579,7 @@ GLP-1 受体激动剂减重                                          [ 关注 ] 
 - 卡片；
 - 最近 30 天动态的标题列表：中文标题、一句导读、原文链接，不放正文。
 
-结构化数据、日期、内容门槛和 AI 引擎的做法见 6.9。收录仍等正式域名（现状不变）。
+结构化数据、日期、内容门槛和 AI 引擎的做法见 6.9。生产环境的公开页和收录目前都已打开（2026-10-29 核对），专区公开页上线后即可被收录。
 
 ### 4.8 我的专区（读者自建）
 
@@ -1037,7 +1037,7 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.zone_changes (
   - 不做 ClaimReview：Google 2025 年 6 月起已逐步停止展示这一类，而且证据卡也不是"事实核查"。
 - **日期**：页面上写「更新于」，与 `dateModified` 和站点地图的 `lastmod` 同源。只有最新进展重写、新增卡片或重要更新时才变；每进一条普通动态不变，因为 Google 只采用"持续准确"的 `lastmod`。
 - **站点地图**：按专区分组。每个专区页链向它的卡片页，卡片页、条目阅读页链回它所属的全部专区，链接文字用专区名。
-- **收录**：仍由 `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE` 控制（现为关），等域名；公开页本身由 `OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED` 开关。
+- **收录**：由 `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE` 控制，生产环境现为开（2026-10-29 核对）；公开页本身由 `OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED` 开关，生产也为开。
 - **AI 引擎**：
   - Google 写明 AI 概览不需要任何特殊标记，页面被收录、可以摘要即可。
   - 要被 ChatGPT 搜索引用，`robots.txt` 必须放行 `OAI-SearchBot`；它与训练用的 `GPTBot` 是两件事，可以分开决定（见第 10 节）。
