@@ -26,7 +26,7 @@ import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
 import { HttpError } from "./security.mjs";
 import { FrontierSubscriptions, frontierFollowPredicate, frontierTagPredicate } from "./frontierSubscriptions.mjs";
-import { FRONTIER_FOLLOW_QUERY_MAX, followQueryView, typedFollowKey, typedFollowLabel, typedFollowQuery } from "./frontierFollowQuery.mjs";
+import { followQueryView } from "./frontierFollowQuery.mjs";
 import { FRONTIER_ITEM_TAG_LIMIT, FrontierTagStore } from "./frontierTags.mjs";
 import { frontierTopicSummary } from "./frontierTopics.mjs";
 import { FrontierTrack } from "./frontierTrack.mjs";
@@ -579,6 +579,12 @@ export class FrontierService {
     this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai"), readCacheMs: 10 * 60_000 });
     /** Typed follows (`FrontierFollowWatch`, c3-watch): their reading, matches and counts; null stores a typed follow by its words and counts none. */
     this.watch = watch;
+    /**
+     * Makes the zone a typed follow becomes (`EvidenceZoneWrites#createFromWords`): set where the zones are composed; null refuses a
+     * typed follow by name.
+     * @type {((user: any, words: unknown) => Promise<{ zone: any }>) | null}
+     */
+    this.zoneFromWords = null;
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
@@ -1596,7 +1602,7 @@ export class FrontierService {
   async createFollow(user, body) {
     const kind = String(body.kind ?? "");
     if (!FOLLOW_KINDS.includes(kind)) throw failure(400, "frontier_follow_invalid", "The follow kind is invalid.");
-    if (kind === "query") return this.#createQueryFollow(user, body);
+    if (kind === "query") return this.#createQueryZone(user, body);
     if (body.muted != null && typeof body.muted !== "boolean") throw failure(400, "frontier_follow_invalid", "muted must be a boolean.");
     let key;
     if (kind === "specialty") {
@@ -1649,42 +1655,18 @@ export class FrontierService {
   }
 
   /**
-   * Follow something the reader typed (c3-watch): its words read once into a query (`FrontierFollowWatch#parse` — a model call that
-   * can fail without refusing anyone: the words themselves are the fallback), stored with the follow, and the last seven days
-   * matched at once. The same words again are the same follow.
+   * Following something the reader typed is making a zone of it (owner 2026-10-29: 「用自己的话关注」 became 我的专区): the words are
+   * drafted into a definition and kept as an unpublished zone of the reader's (`EvidenceZoneWrites#createFromWords`, set on
+   * `zoneFromWords` where the zones are composed), and the answer is the zone, with no follow. The same words are the same zone; the
+   * thirty-zone limit and the other refusals are the zones'.
    * @param {{ id: string }} user @param {{ key?: unknown, label?: unknown, muted?: unknown }} body
    */
-  async #createQueryFollow(user, body) {
+  async #createQueryZone(user, body) {
     if (body.muted != null && body.muted !== false) throw failure(400, "frontier_follow_invalid", "A typed follow cannot be muted.");
-    const label = typedFollowLabel(body.label ?? body.key);
-    if (!label) throw failure(400, "frontier_follow_invalid", "The words to follow are empty or too long.");
-    const key = typedFollowKey(label);
-    await this.ready();
-    const columns = "id, kind, key, label, muted, created_at, query, seen_at";
-    const held = (await this.database.query(`SELECT ${columns} FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query' AND key=$2`, [user.id, key])).rows[0];
-    if (held) return { follow: this.#follow(held, 0) };
-    const typed = Number((await this.database.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='query'", [user.id])).rows[0].n);
-    if (typed >= FRONTIER_FOLLOW_QUERY_MAX) throw failure(409, "frontier_follow_limit", `At most ${FRONTIER_FOLLOW_QUERY_MAX} typed follows per account.`);
-    // Read outside the transaction: a model call must not hold a connection. It does not throw.
-    const parsed = this.watch ? await this.watch.parse(user.id, label) : { query: typedFollowQuery(label, null) };
-    const row = await this.#transaction(async (client) => {
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`frontier-follows:${user.id}`]);
-      const count = Number((await client.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1", [user.id])).rows[0].n);
-      if (count >= MAX_FOLLOWS) throw failure(409, "frontier_follow_limit", `At most ${MAX_FOLLOWS} follows per account.`);
-      // The typed cap again under the lock: two requests read the count above at once (c3 review). A follow of the same words is one.
-      const again = (await client.query(`SELECT count(*) FILTER (WHERE kind='query')::integer AS n, bool_or(kind='query' AND key=$2) AS held
-        FROM evimed_frontier.user_follows WHERE user_id=$1`, [user.id, key])).rows[0];
-      if (!again.held && Number(again.n) >= FRONTIER_FOLLOW_QUERY_MAX) throw failure(409, "frontier_follow_limit", `At most ${FRONTIER_FOLLOW_QUERY_MAX} typed follows per account.`);
-      const saved = (await client.query(`INSERT INTO evimed_frontier.user_follows AS f (user_id, kind, key, label, muted, query, created_at) VALUES ($1,'query',$2,$3,false,$4::jsonb,$5::timestamptz)
-        ON CONFLICT (user_id, kind, key) DO UPDATE SET label = EXCLUDED.label RETURNING ${columns}`, [user.id, key, label, JSON.stringify(parsed.query), this.now().toISOString()])).rows[0];
-      await this.#bumpState(client, user.id);
-      await client.query("UPDATE evimed_frontier.user_profiles SET for_you_at=NULL WHERE user_id=$1", [user.id]);
-      return saved;
-    });
-    // The seven days, after the commit: a failure leaves the follow without its scan and the sweep does it.
-    await this.watch?.backfill({ id: row.id, userId: user.id, query: parsed.query });
+    if (!this.zoneFromWords) throw failure(404, "frontier_zones_unavailable", "Zones of your own are not available here.");
+    const made = await this.zoneFromWords(user, body.label ?? body.key);
     this.counters.writes += 1;
-    return { follow: this.#follow(row, 0) };
+    return { follow: null, zone: made.zone };
   }
 
   /** @param {{ id: string }} user @param {string} followId */

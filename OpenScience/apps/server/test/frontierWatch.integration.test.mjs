@@ -4,10 +4,10 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { FrontierFollowWatch, FRONTIER_FOLLOW_SCAN_LIMIT } from "../src/frontierFollowMatches.mjs";
-import { FRONTIER_FOLLOW_QUERY_MAX } from "../src/frontierFollowQuery.mjs";
 import { encodeVector } from "../src/frontierProfiles.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { TEST_VOCABULARY, insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
+import { createTypedFollow } from "./helpers/typedFollows.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -73,7 +73,8 @@ async function publish(minutes, title, { keys = [], titleZh = null, summaryZh = 
   return item;
 }
 const feed = async (user, followId) => (await service.listItems(user, new URLSearchParams({ view: "all", follow: followId }))).body.items.map((/** @type {any} */ row) => row.id);
-const typed = (user, label) => service.createFollow(user, { kind: "query", label });
+// Typed follows became zones (2026-10-29); the matching below still serves the follows that are left until the notices are replaced.
+const typed = (user, label) => createTypedFollow({ db, watch, service, now: () => clock }, user, label);
 
 test("a typed follow is stored with how its words were read, and lists the items that are about every thing it names", options, async () => {
   const both = await publish(-60, "Semaglutide and acute pancreatitis: a cohort", { keys: ["drug:semaglutide", "disease:pancreatitis"] });
@@ -175,19 +176,6 @@ test("a model that fails still stores the follow, and it matches by the typed wo
   answer = { concepts: [] };
   const { follow: second } = await typed(alice, "长新冠");
   assert.deepEqual(await feed(alice, second.id), [found.publicId]);
-});
-
-test("the same words are one follow; a cap holds; a typed follow is never muted", options, async () => {
-  const first = await typed(alice, "GLP-1 和胰腺炎");
-  const again = await typed(alice, "  glp-1   和胰腺炎 ");
-  assert.equal(again.follow.id, first.follow.id);
-  assert.equal(parsed.length, 1, "the words are read once");
-  assert.equal((await typed(bob, "GLP-1 和胰腺炎")).follow.id === first.follow.id, false, "another reader's follow is another");
-  await assert.rejects(service.createFollow(alice, { kind: "query", label: "x", muted: true }), { code: "frontier_follow_invalid" });
-  await assert.rejects(service.createFollow(alice, { kind: "query", label: "" }), { code: "frontier_follow_invalid" });
-  await assert.rejects(service.createFollow(alice, { kind: "query", label: "y".repeat(61) }), { code: "frontier_follow_invalid" });
-  for (let index = 0; index < FRONTIER_FOLLOW_QUERY_MAX - 1; index += 1) await typed(alice, `研究问题${index}`);
-  await assert.rejects(typed(alice, "one more"), { code: "frontier_follow_limit" });
 });
 
 test("a follow of someone else's, and one that does not exist, is not opened", options, async () => {

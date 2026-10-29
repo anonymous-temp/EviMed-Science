@@ -2,8 +2,9 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
  * `reads` is the topic zones' read side (`evidenceZoneReads.mjs`): the directory views, a topic zone's detail, overview, 「动态」 and
- * cards. Without it every route answers as it did before topic zones. A zone is addressed by its id or its slug.
- * @param {{store:any,service:any,editorial?:any,frontier:any,config:any,maxJsonBytes:number,reads?:any}} options
+ * cards. `writes` is the write side (`evidenceZoneWrites.mjs`): drafting, previewing, creating, editing, deleting a reader's zone and a
+ * reader's word on an item. Without them every route answers as it did before topic zones. A zone is addressed by its id or its slug.
+ * @param {{store:any,service:any,editorial?:any,frontier:any,config:any,maxJsonBytes:number,reads?:any,writes?:any}} options
  */
 export function createEvidenceZoneRoutes({
   store,
@@ -13,6 +14,7 @@ export function createEvidenceZoneRoutes({
   config,
   maxJsonBytes,
   reads=null,
+  writes=null,
 }) {
   return async (/** @type {any} */ req, /** @type {any} */ res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -64,6 +66,15 @@ export function createEvidenceZoneRoutes({
     const body = async () => readJson(req, maxJsonBytes);
     if (parts[0] === "evidence" && parts.length === 1 && method === "GET")
       return reply(await service.list(user, url.searchParams, "*"));
+    // The topic zones' writes (owner 2026-10-29): a sentence drafted into a definition, its preview, a reader's zone made, edited and
+    // deleted, a reader's word on an item. A body with a `definition` is a topic zone; the old body (a name, a description) still is the
+    // old zone. A PATCH on a topic zone is the topic write, whatever it changes; on any other zone it is the old one.
+    if (writes && parts[0] === "zones" && parts.length === 2 && method === "POST" && ["draft", "preview"].includes(parts[1]))
+      return reply(await writes[parts[1]](user, await body()));
+    if (writes && parts[0] === "zones" && parts.length === 5 && parts[2] === "items" && parts[4] === "feedback" && method === "POST")
+      return reply(await writes.feedback(user, parts[1], parts[3], await body()));
+    if (writes && parts[0] === "zones" && parts.length === 2 && method === "DELETE")
+      return reply(await writes.remove(user, parts[1]));
     if (parts[0] === "zones" && parts.length === 1) {
       if (method === "GET")
         return reply(
@@ -71,8 +82,11 @@ export function createEvidenceZoneRoutes({
             ? await reads.directory(user, url.searchParams)
             : await service.list(user, url.searchParams),
         );
-      if (method === "POST")
-        return reply(await service.save(user, await body()));
+      if (method === "POST") {
+        const value = await body();
+        if (writes && value && typeof value === "object" && "definition" in value) return reply(await writes.create(user, value));
+        return reply(await service.save(user, value));
+      }
     }
     // `draft` and `preview` are the writer's words, not zones; any other second part is a zone's id or its slug.
     const zoneId =
@@ -85,8 +99,11 @@ export function createEvidenceZoneRoutes({
         const topic = reads ? await reads.detail(user, zoneId) : null;
         return reply(topic ?? (await service.detail(user, zoneId)));
       }
-      if (method === "PATCH")
-        return reply(await service.save(user, await body(), zoneId));
+      if (method === "PATCH") {
+        const value = await body();
+        if (writes && await writes.isTopicZone(user, zoneId)) return reply(await writes.update(user, zoneId, value));
+        return reply(await service.save(user, value, zoneId));
+      }
     }
     if(parts.length===3 && parts[2]==="automation" && editorial && ["GET","PUT","POST"].includes(method))
       return reply(await editorial.automation(user,zoneId,method==="GET"?{}:await body(),method));

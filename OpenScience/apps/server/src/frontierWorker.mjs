@@ -52,13 +52,15 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 /** Rows one retention statement removes at most. */
 const RETENTION_BATCH = 5_000;
-const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "tags", "leads", "topics", "zones", "cleanup"]);
+const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "tags", "leads", "topics", "zones", "zone-planner", "cleanup"]);
 /** How often the tag tree's upkeep looks whether its daily or weekly part is due (frontierTagUpkeep.mjs). */
 const TAGS_CHECK_MS = 15 * 60_000;
 /** How often the lead triggers look whether a search is due (frontierLeads.mjs `FRONTIER_LEADS_CHECK_MS`). */
 const LEADS_CHECK_MS = 15 * 60_000;
 /** How often the hot-event topics read the hot lists and look for new events (frontierTopics.mjs, c2-leads 2026-10-25). */
 const TOPICS_CHECK_MS = 15 * 60_000;
+/** How often the zone planner looks whether its seeding or its weekly pass is due (evidenceZonePlanner.mjs). */
+const ZONE_PLANNER_CHECK_MS = 10 * 60_000;
 /** What one `processBatch()` reports (package E's pipeline), summed per worker
  *  for the status and the metrics. A key it does not report stays 0. */
 export const PIPELINE_OUTCOMES = Object.freeze(["claimed", "promoted", "published", "merged", "screenedOut", "held", "failed",
@@ -97,11 +99,11 @@ const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" 
 
 export class FrontierWorker {
   /**
-   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, tags?: any, leads?: any, topics?: any, zones?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
+   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, tags?: any, leads?: any, topics?: any, zones?: any, zonePlanner?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
    *   pollMs?: number, leaseMs?: number, pluginPollMs?: number, mirrorMs?: number, cleanupMs?: number, concurrency?: number,
    *   canRun?: () => boolean, now?: () => Date, report?: (loop: string, code: string) => void }} dependencies
    */
-  constructor({ ingest, pipeline = null, composer = null, evidence = null, tags = null, leads = null, topics = null, zones = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
+  constructor({ ingest, pipeline = null, composer = null, evidence = null, tags = null, leads = null, topics = null, zones = null, zonePlanner = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
     pluginPollMs = 60_000, mirrorMs = HOUR_MS, cleanupMs = HOUR_MS, concurrency = 2, canRun = () => true,
     now = () => new Date(), report = () => {} }) {
     if (!ingest || !database) throw new TypeError("The frontier worker needs the ingest and the product database.");
@@ -129,6 +131,8 @@ export class FrontierWorker {
     this.topics = topics && typeof topics.tick === "function" ? topics : null;
     /** The topic zones' data plane (`EvidenceZoneMembership`, 2026-10-29): recall, judge, backfill, stats, 「最新进展」; null runs none. */
     this.zones = zones && typeof zones.tick === "function" ? zones : null;
+    /** The platform zones' planner (`evidenceZonePlanner.mjs`, 2026-10-29): seeds the first zones and keeps them weekly; composed after the worker, so settable. */
+    this.zonePlanner = zonePlanner && typeof zonePlanner.tick === "function" ? zonePlanner : null;
     this.database = database;
     this.ensureOwner = ensureOwner;
     this.pollMs = pollMs;
@@ -150,7 +154,7 @@ export class FrontierWorker {
     /** @type {Record<string, { startedAt: number | null, lastRunAt: string | null, lastOkAt: string | null, lastError: string | null, runs: number, failures: number }>} */
     this.loops = Object.fromEntries(loopNames.map((loop) => [loop, { startedAt: null, lastRunAt: null, lastOkAt: null, lastError: null, runs: 0, failures: 0 }]));
     /** When each periodic loop last started (epoch ms); 0 = due now. */
-    this.lastStarted = { mirror: 0, pull: 0, cleanup: 0, tags: 0, leads: 0, topics: 0 };
+    this.lastStarted = { mirror: 0, pull: 0, cleanup: 0, tags: 0, leads: 0, topics: 0, "zone-planner": 0 };
     /** What the pipeline's batches have done since start (plan §10.3.1's outcomes). */
     this.pipelineTotals = Object.fromEntries([["batches", 0], ...PIPELINE_OUTCOMES.map((key) => [key, 0])]);
     this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0, interactions: 0, listServes: 0 };
@@ -200,7 +204,7 @@ export class FrontierWorker {
     return running;
   }
 
-  /** @param {"mirror" | "pull" | "cleanup" | "tags" | "leads" | "topics"} loop @param {number} interval */
+  /** @param {"mirror" | "pull" | "cleanup" | "tags" | "leads" | "topics" | "zone-planner"} loop @param {number} interval */
   #due(loop, interval) {
     const at = this.now().getTime();
     if (this.lastStarted[loop] && at - this.lastStarted[loop] < interval) return false;
@@ -258,6 +262,10 @@ export class FrontierWorker {
     // it runs every tick; it stands down when the zones' switch is off.
     if (this.zones && this.zones.enabled !== false && (this.owner || !this.ensureOwner) && !this.running.zones) {
       started.push(this.#run("zones", () => /** @type {any} */ (this.zones).tick(this.now())));
+    }
+    // The zone planner spends model money under the owner's project, like processing; its own look decides what is due.
+    if (this.zonePlanner && (this.owner || !this.ensureOwner) && !this.running["zone-planner"] && this.#due("zone-planner", ZONE_PLANNER_CHECK_MS)) {
+      started.push(this.#run("zone-planner", () => /** @type {any} */ (this.zonePlanner).tick(this.now())));
     }
     if (!this.running.cleanup && this.#due("cleanup", this.cleanupMs)) {
       started.push(this.#run("cleanup", async () => ({ ...(await this.cleanup()), recounted: await this.recountSelected() })));
@@ -363,6 +371,7 @@ export class FrontierWorker {
       leads: this.leads?.status?.() ?? null,
       topics: this.topics?.status?.() ?? null,
       zones: this.zones?.status?.() ?? null,
+      zonePlanner: this.zonePlanner?.status?.() ?? null,
       // 追踪 (c3-track 2026-10-25): the approval and guideline records and the congress recaps the pipeline writes.
       track: this.pipeline?.track?.status?.() ?? null,
     };

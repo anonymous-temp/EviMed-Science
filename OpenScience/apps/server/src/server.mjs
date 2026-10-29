@@ -367,6 +367,9 @@ import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mj
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { createEvidenceZoneReads } from "./evidenceZoneReads.mjs";
 import { createEvidenceZoneCards } from "./evidenceZoneCards.mjs";
+import { createEvidenceZoneDraft } from "./evidenceZoneDraft.mjs";
+import { createEvidenceZonePlanner } from "./evidenceZonePlanner.mjs";
+import { createEvidenceZoneWrites } from "./evidenceZoneWrites.mjs";
 import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
 import { EvidenceAuthors } from "./evidenceAuthors.mjs";
 import { createCitationGift } from "./evidenceCitationGift.mjs";
@@ -2431,7 +2434,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
    *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage>, interactions: FrontierInteractions,
-   *   reading?: ReturnType<typeof createFrontierReadingMetrics>, topics?: FrontierTopics, zoneMembership?: EvidenceZoneMembership } | null} */
+   *   reading?: ReturnType<typeof createFrontierReadingMetrics>, topics?: FrontierTopics, zoneMembership?: EvidenceZoneMembership,
+   *   tagStore?: FrontierTagStore, budget?: (() => Promise<{ state: string }>) | null,
+   *   zoneDraft?: ReturnType<typeof createEvidenceZoneDraft>, zoneWrites?: ReturnType<typeof createEvidenceZoneWrites>, zonePlanner?: ReturnType<typeof createEvidenceZonePlanner> } | null} */
   let frontier = null;
   // The gateway's search (composed with the gateways below), which the feed's lead triggers call in-process.
   /** @type {{ service: ReturnType<typeof createWebSearch> | null }} */
@@ -2545,7 +2550,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
     frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications,
-      interactions, topics, zoneMembership };
+      interactions, topics, zoneMembership, tagStore, budget };
   }
   // The operators' figures for the feed (frontierUsage.mjs): readers, reads, notices, sources, discovery, providers and the model's spend per day.
   // They ride the module's switch and read tables it already has; the plugin's own blocks come from the ingest's last health read.
@@ -2578,8 +2583,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (frontier && evidenceZoneReads && zoneMembership?.zonesForItem) {
     frontier.service.zonesForItem = (/** @type {string} */ rowId, /** @type {string} */ userId) => zoneMembership.zonesForItem(rowId, userId);
   }
+  // The topic zones' write side (owner 2026-10-29): a sentence drafted into a zone, a reader's zone made, edited and deleted, a reader's
+  // word on an item, and the planner that keeps the platform's zones. It answers with the read side's zone detail.
+  /** @type {ReturnType<typeof createEvidenceZoneWrites> | null} */
+  let zoneWrites = null;
+  if (frontier) {
+    const zoneDraft = createEvidenceZoneDraft({ editor: frontier.editor, tags: frontier.tagStore, membership: zoneMembership, database: productDatabase,
+      hydrate: (user, ids) => frontier.service.hydrate(user, ids), summaries: (user, ids) => evidenceZoneReads?.summaries?.(user, ids) ?? Promise.resolve([]),
+      budget: frontier.budget, config });
+    zoneWrites = createEvidenceZoneWrites({ database: productDatabase, zones: frontier.evidenceZones, membership: zoneMembership, draft: zoneDraft,
+      detail: async (user, zoneId) => (await evidenceZoneReads?.detail?.(user, zoneId))?.zone ?? null, config });
+    // A typed follow ("用自己的话关注") is a zone of the reader's now.
+    frontier.service.zoneFromWords = (user, words) => /** @type {any} */ (zoneWrites).createFromWords(user, words);
+    frontier.zoneDraft = zoneDraft;
+    frontier.zoneWrites = zoneWrites;
+    frontier.zonePlanner = createEvidenceZonePlanner({ database: productDatabase, editor: frontier.editor, membership: zoneMembership, zones: frontier.evidenceZones,
+      budget: frontier.budget, config, publisherUserId: PLATFORM_PUBLISHER_USER_ID });
+    frontier.worker.zonePlanner = frontier.zonePlanner;
+    // The typed follows of before become zones once, at start (a marker keeps it once); a failure is said and the next write does it.
+    void zoneWrites.ready().catch((/** @type {any} */ failure) => process.stderr.write(`evidence zones ready: ${typeof failure?.code === "string" ? failure.code : failure?.name ?? "error"}\n`));
+  }
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
-    frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes,reads:evidenceZoneReads});
+    frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes,reads:evidenceZoneReads,writes:zoneWrites});
   // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
   // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
   const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
