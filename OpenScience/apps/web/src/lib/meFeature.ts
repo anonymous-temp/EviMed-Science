@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { fetchWebMe, type WebMe } from "./apiClient";
 
 /** The names `/api/me` answers under `features` (server.mjs, `GET /api/me`). */
-export type MeFeatureName = "frontier" | "review" | "knowledgePages" | "capsuleShare" | "zoneSubscription" | "evidenceCommunity" | "geo" | "vcr" | "memoryMap" | "openList";
+export type MeFeatureName = "frontier" | "review" | "knowledgePages" | "capsuleShare" | "zoneSubscription" | "geo" | "vcr" | "memoryMap" | "openList";
 
 /** Whether `/api/me` offers the module. A missing `features` is off. */
 export function featureOffered(me: WebMe | null, name: MeFeatureName): boolean {
