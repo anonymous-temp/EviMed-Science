@@ -88,3 +88,5 @@ export {
   toolPolicy,
   unmetDependencies,
 } from './src/runPolicy.mjs'
+
+// r20-cachebuild layer-reuse probe (run B): a comment-only change, reverted in the next commit.
