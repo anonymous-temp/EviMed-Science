@@ -10,7 +10,7 @@ export const RSI_DEPENDENCY_PROFILES = Object.freeze({
   'frontier-selection': { roots: ['apps/server/src/frontierPipeline.mjs', 'packages/domain/src/frontierMix.mjs'], resources: ['apps/server/src/frontierTagSeed.json', 'apps/server/package.json', 'packages/domain/package.json', 'pnpm-lock.yaml'], requiredSettings: ['model', 'provider'], requiredPins: [], runtimeFileDependencies: {
     // Only frontierTagSeed is deployment data; security's filesystem helpers operate on caller-owned workspace state, not executable/configuration inputs to selection.
     // Source-bound declarations must be re-audited after either module changes.
-    'apps/server/src/frontierPersistence.mjs': { sourceDigest: 'cd0f52932126d06e23dec829c031a29c181815ce6014fc7c03f2a2f1279a4178', resources: ['apps/server/src/frontierTagSeed.json'] },
+    'apps/server/src/frontierPersistence.mjs': { sourceDigest: '68683a7dc9e8175266e2c545388a7c4c5b58d6542394b61190a4045b90f56030', resources: ['apps/server/src/frontierTagSeed.json'] },
     'apps/server/src/security.mjs': { sourceDigest: 'c433c369f8dd1d0d778fab7686498872808ca68b0dec78c3c0f6f25af15b97fb', resources: [] },
   } },
 })
