@@ -111,10 +111,10 @@ const changes = async (id) => (await db.query("SELECT kind, actor, detail FROM e
 const officialCount = async () => Number((await db.query("SELECT count(*) AS n FROM evimed_frontier.evidence_zones WHERE kind = 'official' AND lifecycle <> 'none'")).rows[0].n);
 const markSeeded = () => db.query("INSERT INTO evimed_frontier.meta(key, value) VALUES ('zone_planner_seed', '{}'::jsonb) ON CONFLICT (key) DO NOTHING");
 
-function compose({ model, planePlane = recordingPlane(), config = {}, budget = null, now = () => MONDAY } = {}) {
+function compose({ model, planePlane = recordingPlane(), config = {}, budget = null, now = () => MONDAY, seedPerCall } = {}) {
   plane = planePlane;
   editor = model;
-  planner = createEvidenceZonePlanner({ database: db, editor, membership: plane, zones, budget, now, publisherUserId: PLATFORM_PUBLISHER_USER_ID,
+  planner = createEvidenceZonePlanner({ database: db, editor, membership: plane, zones, budget, now, publisherUserId: PLATFORM_PUBLISHER_USER_ID, ...(seedPerCall ? { seedPerCall } : {}),
     config: { evidenceZonePlannerEnabled: true, evidenceZoneSeedCount: 4, kbEmbeddingDimension: 1024, ...config } });
   return planner;
 }
@@ -175,7 +175,7 @@ test("the statistics are the feed's own: pairs of an intervention and a disease 
   assert.ok(stats.hot.some((row) => row.spec === "oncology" && row.name === "PD-1 抑制剂"), "each specialty's most active tags");
 });
 
-test("with no platform zone the planner asks twice, makes what is usable up to the seed count, and does not seed again", options, async () => {
+test("with no platform zone the planner asks in rounds, makes what is usable up to the seed count, and does not seed again", options, async () => {
   await items(20, 5, ["ezt-sema", "ezt-obesity"]);
   await items(20, 6, ["ezt-pd1", "ezt-nsclc"]);
   await items(20, 7, ["ezt-glp1", "ezt-t2dm"]);
@@ -196,10 +196,10 @@ test("with no platform zone the planner asks twice, makes what is usable up to t
       ] },
     ],
   });
-  compose({ model, planePlane: recordingPlane(["冷门主题"]) });
+  compose({ model, planePlane: recordingPlane(["冷门主题"]), seedPerCall: 2 });
   const first = await planner.tick();
   assert.equal(model.calls.length, 2, "two calls");
-  assert.deepEqual(model.calls.map((call) => call.input.want), [2, 2], "half of the seed count at a time, the second for what is still missing");
+  assert.deepEqual(model.calls.map((call) => call.input.want), [2, 2], "a few at a time, the second for what is still missing");
   const zonesNow = (await db.query("SELECT * FROM evimed_frontier.evidence_zones WHERE kind = 'official' ORDER BY created_at, id")).rows;
   assert.equal(zonesNow.length, 4, "capped at the seed count: the fifth is not made");
   assert.deepEqual(zonesNow.map((row) => row.title).sort(), ["GLP-1 受体激动剂治疗糖尿病", "GLP-1 受体激动剂减重", "PD-1 抑制剂治疗非小细胞肺癌", "国家医保谈判"].sort());
