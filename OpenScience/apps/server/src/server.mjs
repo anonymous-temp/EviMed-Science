@@ -2600,8 +2600,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     frontier.zonePlanner = createEvidenceZonePlanner({ database: productDatabase, editor: frontier.editor, membership: zoneMembership, zones: frontier.evidenceZones,
       budget: frontier.budget, config, publisherUserId: PLATFORM_PUBLISHER_USER_ID });
     frontier.worker.zonePlanner = frontier.zonePlanner;
-    // The typed follows of before become zones once, at start (a marker keeps it once); a failure is said and the next write does it.
-    void zoneWrites.ready().catch((/** @type {any} */ failure) => process.stderr.write(`evidence zones ready: ${typeof failure?.code === "string" ? failure.code : failure?.name ?? "error"}\n`));
   }
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes,reads:evidenceZoneReads,writes:zoneWrites});
@@ -9347,6 +9345,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       rsiOnline?.worker.start();
       im.worker?.start();
       frontier?.worker.start();
+      // The typed follows of before become zones once, when the server starts serving (a marker keeps it once; not at composition,
+      // where its migrations would race whatever the process does first); a failure is said and the next write does it.
+      if (frontier?.zoneWrites) {
+        void frontier.zoneWrites.ready().catch((/** @type {any} */ failure) => process.stderr.write(`evidence zones ready: ${typeof failure?.code === "string" ? failure.code : failure?.name ?? "error"}\n`));
+      }
       // The official zones an earlier release left in an operator's name become the platform's, once at start (idempotent; evidenceReown.mjs):
       // until they do, their AI upkeep is booked to an operator's wallet. Said on stderr; a failure is said too and costs the start nothing.
       if (frontier && productDatabase && !evidenceReownRun) {
