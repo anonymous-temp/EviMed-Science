@@ -20,7 +20,7 @@ const MONDAY = new Date("2026-10-25T19:30:00Z");
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-let isolated, db, zones, plane, editor, planner, asked;
+let isolated, db, zones, plane, editor, planner;
 
 /** A model that answers from a script: the first matching answer for the kind of call (seed or weekly), recorded. */
 function scriptedModel({ seed = [], weekly = [] } = {}) {
@@ -60,8 +60,8 @@ const draftOf = (title, labels = [title, "治疗"], extra = {}) => ({
 
 async function addTag(slug, name, nameEn, kind, specialties = [], broader = null) {
   const broaderId = broader ? (await db.query("SELECT id FROM evimed_frontier.tags WHERE slug = $1", [broader])).rows[0].id : null;
-  return (await db.query(`INSERT INTO evimed_frontier.tags(slug, name, name_en, kind, specialties, broader_id, state, origin)
-    VALUES ($1, $2, $3, $4, $5::text[], $6, 'active', 'seed') RETURNING id`, [slug, name, nameEn, kind, specialties, broaderId])).rows[0].id;
+  return Number((await db.query(`INSERT INTO evimed_frontier.tags(slug, name, name_en, kind, specialties, broader_id, state, origin)
+    VALUES ($1, $2, $3, $4, $5::text[], $6, 'active', 'seed') RETURNING id`, [slug, name, nameEn, kind, specialties, broaderId])).rows[0].id);
 }
 const TAG_IDS = {};
 
@@ -498,7 +498,8 @@ test("a new zone is made from an uncovered pair or a reader's zone, only if the 
   assert.deepEqual(run.outcomes.map((entry) => entry.refused), [null, "nothing_collected", "duplicate", "draft_unreadable"]);
   const input = model.calls[0].input;
   assert.deepEqual(input.community.map((entry) => [entry.id, entry.follows]), [[community, 1]], "a reader's zone someone else follows is a signal");
-  assert.ok(input.uncovered.some((pair) => pair.a === "司美格鲁肽" && pair.b === "肥胖") === false || input.uncovered.every((pair) => !(pair.a === "GLP-1 受体激动剂" && pair.b === "肥胖")), "a pair a zone already covers is not offered");
+  assert.ok(input.uncovered.some((pair) => pair.a === "司美格鲁肽" && pair.b === "肥胖"), "a pair no zone covers is offered");
+  assert.ok(!input.uncovered.some((pair) => pair.a === "GLP-1 受体激动剂" && pair.b === "肥胖"), "a pair a zone already covers is not");
   const made = (await db.query("SELECT * FROM evimed_frontier.evidence_zones WHERE title = '新建的专区'")).rows[0];
   assert.equal(made.kind, "official");
   assert.equal((await changes(made.id))[0].detail.fromZone, community);

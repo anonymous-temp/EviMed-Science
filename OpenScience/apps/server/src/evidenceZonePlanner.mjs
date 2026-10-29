@@ -215,7 +215,9 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
       ) ranked WHERE rank <= ${TAGS_PER_SPECIALTY} ORDER BY spec, events DESC`, [since])).rows ?? [];
     const policy = (await database.query(`${TAGGED}
       SELECT tag_id, name, count(DISTINCT ev)::integer AS events FROM tagged WHERE kind = 'policy' GROUP BY tag_id, name ORDER BY events DESC LIMIT ${POLICY_TAGS}`, [since])).rows ?? [];
-    return { pairs: shown, hot, policy };
+    // Ids come back from PostgreSQL as text; a zone's definition holds them as numbers.
+    const numbered = (/** @type {any} */ row) => ({ ...row, ...(row.a_id != null ? { a_id: Number(row.a_id), b_id: Number(row.b_id) } : {}), ...(row.tag_id != null ? { tag_id: Number(row.tag_id) } : {}) });
+    return { pairs: shown.map(numbered), hot: hot.map(numbered), policy: policy.map(numbered) };
   }
 
   /** @param {any} row */

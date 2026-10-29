@@ -104,7 +104,7 @@ test("the fallback is built from the sentence: tag candidates as keywords, a cla
   assert.equal(draft.definition.type, "drug-indication");
   assert.deepEqual(draft.definition.specialties, ["endocrinology"]);
   const none = fallbackZoneDraft("冷门词汇", []);
-  assert.deepEqual(none.definition.keywords, [{ label: "冷门词汇", terms: [], tagIds: [], entityKeys: [] }].map(({ label, terms, tagIds, entityKeys }) => ({ label, terms: ["冷门词汇"], tagIds, entityKeys })));
+  assert.deepEqual(none.definition.keywords, [{ label: "冷门词汇", terms: ["冷门词汇"], tagIds: [], entityKeys: [] }]);
   assert.equal(none.definition.type, "disease-strategy");
   assert.equal(none.title, "冷门词汇");
   assert.equal(none.definition.scope, "冷门词汇");
