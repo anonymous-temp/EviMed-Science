@@ -529,7 +529,8 @@ async function startRun(item, projectId, result) {
     if (bound.status !== 200) throw new Refused(`session ${sessionId} was not made (${said(bound)})`, bound.code);
     const body = { sessionId, dispatchId, text: item.prompt, automated: true, ...(item.line ? { line: item.line } : {}) };
     const asked = Date.now();
-    const answer = await api("POST", "/api/agent-runs/dispatch", { project: projectId, body, timeoutMs: 10 * 60_000 });
+    // `automated: true` again in the call itself: the repository-wide check reads the dispatch statement, not the line above it.
+    const answer = await api("POST", "/api/agent-runs/dispatch", { project: projectId, body: { ...body, automated: true }, timeoutMs: 10 * 60_000 });
     if (answer.status === 202 && answer.body?.data?.id) {
       const run = answer.body.data;
       Object.assign(result, { sessionId, dispatchId, runId: run.id, dispatchedAt: new Date().toISOString(), dispatchMs: Date.now() - asked });
@@ -719,11 +720,14 @@ async function collectFiles(projectId, run, dir, captured) {
     if (read.status !== 200 || !data) { index.push({ path: name, saved: false, reason: `read ${said(read)}` }); continue; }
     // Office and PDF deliverables are the product's answer as often as the reply is (a long report arrives as a .docx):
     // they are kept as bytes, up to 10 MB; other binaries (images, archives) are listed, not kept.
-    const document = /\.(docx|pdf|xlsx|pptx)$/i.test(name);
+    // Figures a report links to are part of it (ResearchClawBench scores image items), so images under a report or
+    // figures directory are kept too, up to 5 MB each.
+    const figure = /\.(png|jpe?g|svg|gif|webp)$/i.test(name) && /(^|\/)(report|figures|images|figs?)\//i.test(name);
+    const document = /\.(docx|pdf|xlsx|pptx)$/i.test(name) || figure;
     if (data.encoding !== "utf8" && !document) { index.push({ path: name, saved: false, reason: "binary", size: data.size ?? null, mime: data.mime ?? null }); continue; }
     const bytes = data.encoding === "utf8" ? Buffer.from(String(data.data), "utf8") : Buffer.from(String(data.data), "base64");
     const target = safeUnder(filesRoot, name);
-    const cap = document ? 10 * 1024 * 1024 : ARTIFACT_MAX_BYTES;
+    const cap = figure ? 5 * 1024 * 1024 : document ? 10 * 1024 * 1024 : ARTIFACT_MAX_BYTES;
     if (bytes.length > cap || !target) { index.push({ path: name, saved: false, reason: target ? `over ${cap} bytes` : "unsafe path", size: bytes.length }); continue; }
     await writeAtomic(target, bytes);
     index.push({ path: name, saved: true, size: bytes.length });
