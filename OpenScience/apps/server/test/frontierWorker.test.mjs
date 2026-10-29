@@ -218,3 +218,36 @@ test("ct-mix: the lead triggers run on the owner's money only, at most every fif
   assert.equal(worker.status().loops.leads.failures, 1);
   assert.deepEqual(worker.status().leads, { configured: true, ticks: 2 });
 });
+
+test("the topic zones' membership runs every tick on the owner's money, stands down with its switch, fails alone, and shows in the status", async () => {
+  const { ingest, database } = stubs();
+  const time = clock();
+  let ticks = 0;
+  const zones = {
+    enabled: true,
+    tick: async (/** @type {Date} */ at) => { ticks += 1; assert.ok(at instanceof Date); if (ticks === 3) throw Object.assign(new Error("no"), { code: "evidence_zone_judge_failed" }); return { ticks }; },
+    status: () => ({ enabled: zones.enabled, counters: { ticks } }),
+  };
+  /** @type {string[]} */
+  const reported = [];
+  const worker = new FrontierWorker({ ingest, database, zones, now: time.now, pollMs: 5_000, pluginPollMs: 60_000,
+    ensureOwner: async () => ({ userId: "ops", projectId: "evimed-frontier" }), report: (loop, code) => reported.push(`${loop}:${code}`) });
+  await worker.tick();
+  assert.equal(ticks, 0, "no owner yet on the first tick");
+  time.advance(5_000);
+  await worker.tick();
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 2, "every tick, not every fifteen minutes");
+  time.advance(5_000);
+  await worker.tick();
+  assert.deepEqual(reported, ["zones:evidence_zone_judge_failed"]);
+  assert.equal(worker.status().loops.zones.failures, 1);
+  zones.enabled = false;
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 3, "the zones' switch off: the loop does not start");
+  assert.deepEqual(worker.status().zones, { enabled: false, counters: { ticks: 3 } });
+  const bare = new FrontierWorker({ ingest, database, now: time.now });
+  assert.equal(bare.status().zones, null);
+});

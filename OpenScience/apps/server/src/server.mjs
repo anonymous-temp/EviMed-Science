@@ -392,6 +392,7 @@ import { createFrontierUsage } from "./frontierUsage.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierLeads } from "./frontierLeads.mjs";
 import { FrontierTopics } from "./frontierTopics.mjs";
+import { EvidenceZoneMembership } from "./evidenceZoneMembership.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
 // 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
@@ -2428,7 +2429,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
    *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage>, interactions: FrontierInteractions,
-   *   reading?: ReturnType<typeof createFrontierReadingMetrics>, topics?: FrontierTopics } | null} */
+   *   reading?: ReturnType<typeof createFrontierReadingMetrics>, topics?: FrontierTopics, zoneMembership?: EvidenceZoneMembership } | null} */
   let frontier = null;
   // The gateway's search (composed with the gateways below), which the feed's lead triggers call in-process.
   /** @type {{ service: ReturnType<typeof createWebSearch> | null }} */
@@ -2501,6 +2502,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // Hot-event topics (c2-leads 2026-10-25, frontierTopics.mjs): the plugin's hot lists, the editor's two calls under the feed's
     // budget, the shared vocabulary's keys; their searches ride the lead triggers below, their reading the service.
     const topics = new FrontierTopics({ database: productDatabase, plugin: client, editor, entityVocabulary, budget, config });
+    // The topic zones' data plane (evidenceZoneMembership.mjs, 2026-10-29): recall by tags, entity keys, words and vectors, the judge
+    // model's membership, backfill, counts and 「最新进展」, on the feed's editor and budget; its worker loop is `zones`.
+    const zoneMembership = new EvidenceZoneMembership({ database: productDatabase, editor, embedder, tags: tagStore, entities: entityVocabulary, budget, config });
     const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder, policies:evolutionModulePolicies, topics,
       dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions, tags: tagStore, tagUpkeep, interactions, watch: followWatch });
     const composer = new FrontierComposer({ events, daily, weekly, monthly, profiles, notifications: frontierNotifications, follows: followWatch,
@@ -2527,7 +2531,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return webSearchRef.service.search(body, searchContext);
       } } });
     const worker = new FrontierWorker({
-      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, leads, topics, database: productDatabase,
+      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, leads, topics, zones: zoneMembership, database: productDatabase,
       ensureOwner: async () => {
         const owner = await ensureFrontierProject({ store, config });
         editor.owner = owner;
@@ -2539,7 +2543,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
     frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications,
-      interactions, topics };
+      interactions, topics, zoneMembership };
   }
   // The operators' figures for the feed (frontierUsage.mjs): readers, reads, notices, sources, discovery, providers and the model's spend per day.
   // They ride the module's switch and read tables it already has; the plugin's own blocks come from the ingest's last health read.

@@ -2581,6 +2581,28 @@ export function frontierMetricFamilies(enabled, snapshot) {
     add("topics_overviews_total", "Topic overviews by outcome (written, empty, dropped, failed).", "counter",
       Object.entries(topics.counters.overviews ?? {}).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
+  // 2026-10-29 (evidenceZoneMembership.mjs): the topic zones' data plane. Named `open_science_zone_*`, not `open_science_frontier_*`.
+  const zones = worker.zones;
+  if (zones?.counters) {
+    /** @param {string} name @param {string} help @param {"gauge" | "counter"} type @param {{ value: number, labels?: Record<string, string> }[]} series */
+    const addZone = (name, help, type, series) => families.push({ name: `open_science_zone_${name}`, help, type, series });
+    addZone("items_total", "Zone-item rows written since this process started, by the recall leg that offered the item and the state (pending, in, out).", "counter",
+      Object.entries(zones.counters.items ?? {}).map(([key, value]) => { const [via, state] = key.split(":"); return { labels: { via, state: state ?? "" }, value: Number(value) }; }));
+    addZone("judge_total", "Zone judge outcomes: verdicts (core, related, out), batches dropped as unreadable, calls failed, pairs left undecided, answers ignored, rounds skipped.", "counter",
+      Object.entries(zones.counters.judge ?? {}).filter(([outcome]) => outcome !== "calls").map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+    addZone("judge_calls_total", "Judge calls made.", "counter", [{ value: Number(zones.counters.judge?.calls ?? 0) }]);
+    addZone("overview_total", "Zone 最新进展 by outcome (written, empty, dropped, failed, cleared, skipped).", "counter",
+      Object.entries(zones.counters.overview ?? {}).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+    addZone("scans_total", "Zone recall passes: incremental scans, backfills, and the stats recomputed.", "counter", [
+      { labels: { kind: "scan" }, value: Number(zones.counters.scans ?? 0) },
+      { labels: { kind: "backfill" }, value: Number(zones.counters.backfills ?? 0) },
+      { labels: { kind: "stats" }, value: Number(zones.counters.stats ?? 0) },
+    ]);
+    addZone("feedback_total", "Readers' feedback on a zone's items, by kind and outcome.", "counter",
+      Object.entries(zones.counters.feedback ?? {}).map(([key, value]) => { const [kind, outcome] = key.split(":"); return { labels: { kind, outcome: outcome ?? "" }, value: Number(value) }; }));
+    addZone("failures_total", "Zone membership failures, by code.", "counter",
+      Object.entries(zones.counters.failures ?? {}).map(([code, value]) => ({ labels: { code }, value: Number(value) })));
+  }
   add("worker_loop_failures_total", "Worker loop runs that ended in an error, by loop.", "counter",
     Object.entries(worker.loops).map(([loop, state]) => ({ labels: { loop }, value: Number(/** @type {any} */ (state).failures) })));
   add("worker_loop_stalled", "Worker loops still running past the lease (1 = stalled).", "gauge",

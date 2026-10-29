@@ -25,6 +25,8 @@ import { HttpError } from "./security.mjs";
  *   before it claims or writes anything, like every other worker of this
  *   control plane; a maintenance window waits for the loops already running
  *   (`inspectActivity` reads `status().running`).
+ * - The topic zones' loop (`zones`, 2026-10-29: `evidenceZoneMembership.mjs`) runs every tick on the owner's money and stands down
+ *   with its own switch. It bounds itself (three judge calls and one 「最新进展」 a tick), so it never holds the other loops back.
  * - The queue is the module's own tables (plan §10.4.4), not the platform's
  *   job ledger: seven thousand fetches and a thousand entries a day would drown
  *   a ledger that holds a few thousand rows. The pipeline claims entries and
@@ -50,7 +52,7 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 /** Rows one retention statement removes at most. */
 const RETENTION_BATCH = 5_000;
-const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "tags", "leads", "topics", "cleanup"]);
+const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "tags", "leads", "topics", "zones", "cleanup"]);
 /** How often the tag tree's upkeep looks whether its daily or weekly part is due (frontierTagUpkeep.mjs). */
 const TAGS_CHECK_MS = 15 * 60_000;
 /** How often the lead triggers look whether a search is due (frontierLeads.mjs `FRONTIER_LEADS_CHECK_MS`). */
@@ -95,11 +97,11 @@ const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" 
 
 export class FrontierWorker {
   /**
-   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, tags?: any, leads?: any, topics?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
+   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, tags?: any, leads?: any, topics?: any, zones?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
    *   pollMs?: number, leaseMs?: number, pluginPollMs?: number, mirrorMs?: number, cleanupMs?: number, concurrency?: number,
    *   canRun?: () => boolean, now?: () => Date, report?: (loop: string, code: string) => void }} dependencies
    */
-  constructor({ ingest, pipeline = null, composer = null, evidence = null, tags = null, leads = null, topics = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
+  constructor({ ingest, pipeline = null, composer = null, evidence = null, tags = null, leads = null, topics = null, zones = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
     pluginPollMs = 60_000, mirrorMs = HOUR_MS, cleanupMs = HOUR_MS, concurrency = 2, canRun = () => true,
     now = () => new Date(), report = () => {} }) {
     if (!ingest || !database) throw new TypeError("The frontier worker needs the ingest and the product database.");
@@ -125,6 +127,8 @@ export class FrontierWorker {
     this.leads = leads && typeof leads.tick === "function" ? leads : null;
     /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): the hot lists read, new events judged, items joined, overviews; null runs none. */
     this.topics = topics && typeof topics.tick === "function" ? topics : null;
+    /** The topic zones' data plane (`EvidenceZoneMembership`, 2026-10-29): recall, judge, backfill, stats, 「最新进展」; null runs none. */
+    this.zones = zones && typeof zones.tick === "function" ? zones : null;
     this.database = database;
     this.ensureOwner = ensureOwner;
     this.pollMs = pollMs;
@@ -250,6 +254,11 @@ export class FrontierWorker {
     if (this.topics && (this.owner || !this.ensureOwner) && !this.running.topics && this.#due("topics", TOPICS_CHECK_MS)) {
       started.push(this.#run("topics", () => /** @type {any} */ (this.topics).tick()));
     }
+    // The topic zones' membership judges with the model under the owner's project and is bounded per tick (its own constants), so
+    // it runs every tick; it stands down when the zones' switch is off.
+    if (this.zones && this.zones.enabled !== false && (this.owner || !this.ensureOwner) && !this.running.zones) {
+      started.push(this.#run("zones", () => /** @type {any} */ (this.zones).tick(this.now())));
+    }
     if (!this.running.cleanup && this.#due("cleanup", this.cleanupMs)) {
       started.push(this.#run("cleanup", async () => ({ ...(await this.cleanup()), recounted: await this.recountSelected() })));
     }
@@ -353,6 +362,7 @@ export class FrontierWorker {
       evidence: this.evidence?.status?.() ?? null,
       leads: this.leads?.status?.() ?? null,
       topics: this.topics?.status?.() ?? null,
+      zones: this.zones?.status?.() ?? null,
       // 追踪 (c3-track 2026-10-25): the approval and guideline records and the congress recaps the pipeline writes.
       track: this.pipeline?.track?.status?.() ?? null,
     };
