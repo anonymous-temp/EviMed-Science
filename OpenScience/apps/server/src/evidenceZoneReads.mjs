@@ -8,8 +8,8 @@
  * - **A topic zone is a zone with `lifecycle <> 'none'`.** The product zones of 循证 GEO and a reader's container of research-result
  *   cards keep `none` and are the old `EvidenceZoneService`'s: `detail` answers `null` for them so the route falls back to the old
  *   answer, and the other reads answer 404 `evidence_not_found`. Visibility is the old service's rule: a zone is seen when it is
- *   published or the reader's own, and a reader's unpublished zone is nobody else's — in every view, in a detail, in `related`,
- *   in the item→zones list. A zone is addressed by its id or its slug in every read (`resolveId`).
+ *   published or the reader's own, and a reader's unpublished zone is nobody else's — in every view, in a detail, in `related`
+ *   and in `summaries`. A zone is addressed by its id or its slug in every read (`resolveId`).
  * - **Code composes the page; the model wrote one block of it.** Which modules an overview has, in which order, how many rows and
  *   how far back is `evidenceZoneModuleOrder` and `EVIDENCE_ZONE_MODULE_RULES` from the domain; a module below its minimum is left
  *   out, and `latest` is the one that always stays. The only model-written text is 「最新进展」, stored by the membership module
@@ -105,6 +105,8 @@ const ZONE_COLUMNS = `z.id, z.slug, z.title, z.zone_type, z.specialties, z.group
 const ZONE_FROM = `evimed_frontier.evidence_zones z JOIN evimed_control.users u ON u.id = z.user_id`;
 
 /**
+ * `zones` and `membership` are in the composition's contract (the writes and the item→zones hook use them); the reads need
+ * neither, and take them only so one options object serves both.
  * @typedef {{
  *   database: { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[], rowCount?: number | null }> },
  *   service: { hydrate: (user: { id: string }, ids: { publicIds?: string[], rowIds?: string[] }) => Promise<Map<string, any>> },
@@ -361,10 +363,10 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
    * @param {any} row
    */
   async function progressModule(row) {
-    const overview = record(row.overview);
-    const text = typeof overview.text === "string" ? overview.text.trim() : "";
+    const written = record(row.overview);
+    const text = typeof written.text === "string" ? written.text.trim() : "";
     if (!text) return null;
-    const marks = list(overview.refs).map(record).filter((mark) => typeof mark.itemId === "string" && mark.itemId);
+    const marks = list(written.refs).map(record).filter((mark) => typeof mark.itemId === "string" && mark.itemId);
     const found = marks.length ? new Map((await plain(`SELECT i.public_id, coalesce(nullif(i.title_zh, ''), i.title_raw) AS title, s.name AS source_name
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
       WHERE i.public_id = ANY($1::text[]) AND i.state = 'published'`, [marks.map((mark) => mark.itemId)])).map((item) => [item.public_id, item])) : new Map();
@@ -731,7 +733,20 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     return row ? { id: String(row.id), slug: row.slug ?? null, title: String(row.title) } : null;
   }
 
-  return { directory, detail, overview, items, cards: cardsOf, resolveId, resolveZone, summary };
+  /**
+   * The summaries of the topic zones among these ids that the reader may see, in the order asked (a draft's 「相近的专区」).
+   * @param {{ id: string }} user @param {string[]} ids
+   */
+  async function summaries(user, ids) {
+    const wanted = [...new Set(list(ids).filter((id) => typeof id === "string" && REF_PATTERN.test(id)))].slice(0, 50);
+    if (!wanted.length) return [];
+    const rows = await query(user, `SELECT ${ZONE_COLUMNS} FROM ${ZONE_FROM}
+      WHERE z.id = ANY($2::text[]) AND z.lifecycle <> 'none' AND (z.state = 'published' OR z.user_id = $1)`, [wanted]);
+    const found = new Map(rows.map((row) => [String(row.id), summary(row)]));
+    return wanted.flatMap((id) => (found.has(id) ? [found.get(id)] : []));
+  }
+
+  return { directory, detail, overview, items, cards: cardsOf, summaries, resolveId, resolveZone };
 }
 
 /** @typedef {"key-updates" | "guidelines" | "key-studies" | "safety" | "trials" | "policy" | "industry" | "congress" | "latest"} EvidenceZoneItemModule */

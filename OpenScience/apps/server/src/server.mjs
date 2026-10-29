@@ -2567,11 +2567,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The topic zones' read side (ez-api-read): the directory, a zone's detail, overview, 「动态」 and cards; the cards come through the card
   // port (none until the team's interface exists). The membership module (ez-membership) tells an item's page which zones it stands in.
   const evidenceZoneCards = createEvidenceZoneCards({ config });
+  const zoneMembership = /** @type {any} */ (frontier)?.zoneMembership ?? null;
   const evidenceZoneReads = frontier && productDatabase && config.evidenceZoneTopicsEnabled !== false
-    ? createEvidenceZoneReads({ database: productDatabase, service: frontier.service, zones: frontier.evidenceZones, membership: frontier.zoneMembership ?? null,
+    ? createEvidenceZoneReads({ database: productDatabase, service: frontier.service, zones: frontier.evidenceZones, membership: zoneMembership,
       cards: evidenceZoneCards, config }) : null;
-  if (frontier && evidenceZoneReads && frontier.zoneMembership?.zonesForItem) {
-    frontier.service.zonesForItem = (rowId, userId) => frontier.zoneMembership.zonesForItem(rowId, userId);
+  if (frontier && evidenceZoneReads && zoneMembership?.zonesForItem) {
+    frontier.service.zonesForItem = (/** @type {string} */ rowId, /** @type {string} */ userId) => zoneMembership.zonesForItem(rowId, userId);
   }
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes,reads:evidenceZoneReads});

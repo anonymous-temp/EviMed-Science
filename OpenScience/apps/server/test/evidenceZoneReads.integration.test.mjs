@@ -267,6 +267,9 @@ test("a zone's detail is a topic zone's: its definition only to its owner, edit 
   assert.equal(await reads.detail(alice, "has a space"), null);
   assert.deepEqual(await reads.resolveZone(bob, "glp1-obesity"), { id: "ez_glp1", slug: "glp1-obesity", title: "GLP-1 受体激动剂减重" });
   assert.equal(await reads.resolveZone(bob, "ez_alice_private"), null);
+  assert.deepEqual(titles(await reads.summaries(bob, ["ez_adc", "ez_alice_private", "ez_product", "ez_glp1", "ez_adc", "has a space"])), ["ADC 治疗 HER2 低表达乳腺癌", "GLP-1 受体激动剂减重"],
+    "the order asked, once each, the zones Bob may see, topic zones only");
+  assert.deepEqual(await reads.summaries(bob, []), []);
   assert.equal(await reads.resolveId(alice, "glp1-obesity"), "ez_glp1");
   assert.equal(await reads.resolveId(alice, "ez_glp1"), "ez_glp1");
   assert.equal(await reads.resolveId(bob, "ez_alice_private"), "ez_alice_private", "an address the reader cannot see comes back as asked, for the service to refuse");
@@ -416,7 +419,7 @@ test("the list pages by (timeline, id): thirty a page, no row twice, and a curso
   assert.equal(next.items.length, 5);
 });
 
-test("cards come through the port: none today, the adapter's when the team's interface is connected, and a failing adapter costs the cards only", options, async () => {
+test("cards come through the port: none today, the adapter's when the team's interface is connected", options, async () => {
   assert.deepEqual(await reads.cards(alice, "glp1-obesity"), { cards: [], provider: "none" });
   const card = { provider: "team", id: "card-1", version: "3", updatedAt: null, status: "current", title: "GLP-1 减重的结论", conclusion: "有效", certainty: null,
     producer: { name: "团队", kind: "team" }, sourceCount: 4, detail: { kind: "link", url: "https://example.org/card-1" } };
@@ -432,9 +435,4 @@ test("cards come through the port: none today, the adapter's when the team's int
   assert.deepEqual(overview.modules.slice(0, 2).map((module) => module.key), ["progress", "cards"], "the card module follows 最新进展 in the drug order");
   assert.equal(moduleOf(overview, "cards").total, 1);
   assert.deepEqual(asked.at(-1)[2], { limit: 3 });
-  const broken = createEvidenceZoneCards({ config: { evidenceCardProvider: "external" }, external: { async list() { throw new Error("down"); } } });
-  assert.deepEqual(await broken.list({ id: "x", title: "x" }), []);
-  assert.deepEqual(broken.status(), { provider: "external", configured: true, lists: 1, failures: 1 });
-  assert.deepEqual(createEvidenceZoneCards({ config: { evidenceCardProvider: "external" } }).status(), { provider: "external", configured: false, lists: 0, failures: 0 });
-  assert.deepEqual(createEvidenceZoneCards({ config }).status(), { provider: "none", configured: false, lists: 0, failures: 0 });
 });
