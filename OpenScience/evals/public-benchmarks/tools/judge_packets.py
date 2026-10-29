@@ -7,13 +7,12 @@
 
 The judge sees the system's answer only as "the assistant's answer"; no model, route or cost is in a packet.
 """
-import os
 import json
 import pathlib
 import shutil
 import sys
 
-ROOT = pathlib.Path(os.environ.get('BENCH_ROOT', '.')).resolve()
+ROOT = pathlib.Path('/home/coder/evimed-wt/bench')
 
 
 def items(name):
@@ -37,8 +36,28 @@ def main():
             shutil.copy(gold['criteria'].replace('/bench/data', str(ROOT / 'data')), d / 'criteria.json')
             shutil.copy(gold['reference'].replace('/bench/data', str(ROOT / 'data')), d / 'reference.md')
             a = ans.get(it['key'])
-            (d / 'target.md').write_text(a['text'] if a and a['status'] == 'succeeded' else '')
-            (d / 'meta.json').write_text(json.dumps({'key': it['key'], 'language': it['meta']['language'], 'status': a['status'] if a else 'missing'}))
+            # The product delivers a long report as a file (report.md beside a .docx) and a short summary in the reply;
+            # the judge reads the delivered Markdown report when there is one, the reply otherwise.
+            text, source = '', 'none'
+            if a and a['status'] == 'succeeded':
+                run_dir = pathlib.Path(a['dir'])
+                result = json.loads((run_dir / 'result.json').read_text())
+                delivered = result.get('presentedFiles') or result.get('outputFiles') or []
+                md = [run_dir / 'files' / f for f in delivered if f.endswith('.md') and (run_dir / 'files' / f).exists()]
+                docs = [run_dir / 'files' / f for f in delivered if f.endswith('.docx') and (run_dir / 'files' / f).exists()]
+                if md:
+                    best = max(md, key=lambda f: f.stat().st_size)
+                    text, source = best.read_text(), f'file:{best.name}'
+                elif docs:
+                    # A report delivered only as Word: the judge reads its text (pandoc to Markdown, tables kept).
+                    best = max(docs, key=lambda f: f.stat().st_size)
+                    import subprocess
+                    text = subprocess.run(['pandoc', '-t', 'gfm', '--wrap=none', str(best)], capture_output=True, text=True, check=True).stdout
+                    text, source = text, f'docx:{best.name}'
+                else:
+                    text, source = a['text'], 'reply'
+            (d / 'target.md').write_text(text)
+            (d / 'meta.json').write_text(json.dumps({'key': it['key'], 'language': it['meta']['language'], 'status': a['status'] if a else 'missing', 'target_source': source, 'target_chars': len(text)}))
     elif bench == 'bixbench':
         ans = answers('v1-bixbench')
         for it in items('bixbench'):
