@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:9d916805fe6825d3801430733e39517fc447f57b834b4ea754e5d152d571ad40",
+  "version": "sha256:100ec7e01e833447ed4985c4237d894b57761c78ade7dd909cb752999fbb2f4d",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -984,7 +984,7 @@
     {
       "name": "mcp__evimed__frontier_search",
       "source": "mcp",
-      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query EviMed's own evidence cards. Use it when a question asks what is new or recent, or to read an item named frontier:<id>; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card.",
+      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days. Use it when a question asks what is new or recent, or to read an item named frontier:<id>; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1066,6 +1066,11 @@
             "minimum": 1,
             "maximum": 20,
             "default": 8
+          },
+          "zone": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,100}$",
+            "description": "An evidence topic zone's id or slug: restrict the search to that topic's items."
           },
           "id": {
             "type": "string",
