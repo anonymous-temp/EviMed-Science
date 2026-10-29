@@ -263,10 +263,15 @@ CREATE INDEX IF NOT EXISTS zone_changes_zone_idx ON evimed_frontier.zone_changes
 -- The owner (2026-10-29): the zones that existed before topic zones are deleted and the platform starts again (they were whole
 -- diseases or kinds of card, and the platform no longer writes cards). Once per database: the platform's and readers' zones with no
 -- topic definition go, with their cards (the foreign keys cascade); 循证 GEO's product zones stay. The marker makes it run once, so a
--- zone made later is never touched.
+-- zone made later is never touched. The marker and the content version move in the one UPDATE of the singleton row: a second
+-- UPDATE of the same row in the same statement (a CTE's, then the outer one) is skipped by PostgreSQL, which once left the version
+-- unmoved after the reset and every version-keyed ETag answering 304 with deleted content. The version moves only when zones go.
 ALTER TABLE evimed_frontier.evidence_zone_meta ADD COLUMN IF NOT EXISTS topics_reset_at timestamptz(3);
 WITH reset AS (
-  UPDATE evimed_frontier.evidence_zone_meta SET topics_reset_at=clock_timestamp() WHERE singleton AND topics_reset_at IS NULL RETURNING 1
+  UPDATE evimed_frontier.evidence_zone_meta
+     SET topics_reset_at=clock_timestamp(),
+         version=version + CASE WHEN EXISTS (SELECT 1 FROM evimed_frontier.evidence_zones o WHERE o.kind IN ('official','user') AND o.lifecycle='none') THEN 1 ELSE 0 END
+   WHERE singleton AND topics_reset_at IS NULL RETURNING 1
 ), gone AS (
   DELETE FROM evimed_frontier.evidence_zones z
    WHERE EXISTS (SELECT 1 FROM reset) AND z.kind IN ('official','user') AND z.lifecycle='none'
@@ -275,7 +280,7 @@ WITH reset AS (
   INSERT INTO evimed_frontier.zone_changes(zone_id, kind, actor, detail)
   SELECT id, 'reset', 'migration', '{"reason":"topic zones replace the zones before 2026-10-29"}'::jsonb FROM gone RETURNING 1
 )
-UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE EXISTS (SELECT 1 FROM noted);
+SELECT count(*) FROM noted;
 `;
 
 /**
