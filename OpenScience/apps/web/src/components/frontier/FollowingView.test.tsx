@@ -4,25 +4,28 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
+import { topicDirectory, topicZone } from "./__fixtures__/zoneDirectory";
 import { FollowList, FollowingView, followAnswers, followChoiceParam, readFollowChoice, useFollowing, type FollowingState } from "./FollowingView";
 import type { FollowChoice } from "./FrontierControls";
 
 const client = vi.hoisted(() => ({ listFrontierFollows: vi.fn(), addFrontierFollow: vi.fn() }));
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/frontierClient")>()), ...client }));
-const zones = vi.hoisted(() => ({ listEvidenceZones: vi.fn(), listFollowedEvidence: vi.fn() }));
+const zones = vi.hoisted(() => ({ listFollowedEvidence: vi.fn() }));
 vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()), ...zones }));
+const directory = vi.hoisted(() => ({ fetchZoneDirectory: vi.fn() }));
+vi.mock("@/lib/evidenceTopicClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceTopicClient")>()), ...directory }));
 const prefs = vi.hoisted(() => ({ fetchFrontierPrefs: vi.fn(), saveFrontierPrefs: vi.fn() }));
 vi.mock("@/lib/frontierPrefs", () => prefs);
 
 const topic = { id: "7", kind: "topic", key: "obesity", label: "肥胖研究", muted: false } as const;
-const state = (overrides: Partial<FollowingState> = {}): FollowingState => ({ loading: false, error: null, topics: [], zones: [], cards: [], answered: true, retry: () => {}, ...overrides });
-const zone = { id: "ez_1", title: "房颤抗凝", evidenceCount: 4 } as FollowingState["zones"][number];
+const state = (overrides: Partial<FollowingState> = {}): FollowingState => ({ loading: false, error: null, topics: [], zones: [], canCreateZone: true, cards: [], answered: true, retry: () => {}, ...overrides });
+const zone = topicZone({ id: "ez_1", title: "房颤抗凝", counts: { week: 4, month: 9, all: 30 } });
 const answer = { role: "physician", specialties: ["oncology"], interests: ["hcc"], interestTags: [{ slug: "hcc", name: "肝细胞癌" }], onboardedAt: "2026-10-25T00:00:00Z", skippedAt: null };
 
 beforeEach(() => {
   client.listFrontierFollows.mockReset().mockResolvedValue([topic, { ...topic, id: "8", key: "x", label: "已屏蔽的", muted: true }]);
   client.addFrontierFollow.mockReset().mockImplementation(async (input: Record<string, unknown>) => ({ id: "new", muted: false, ...input }));
-  zones.listEvidenceZones.mockReset().mockResolvedValue({ items: [zone], nextCursor: null });
+  directory.fetchZoneDirectory.mockReset().mockResolvedValue(topicDirectory("mine", [zone]));
   zones.listFollowedEvidence.mockReset().mockResolvedValue({ items: [], nextCursor: null });
   prefs.fetchFrontierPrefs.mockReset().mockResolvedValue({ ...answer });
   prefs.saveFrontierPrefs.mockReset().mockResolvedValue({ ...answer });
@@ -54,7 +57,7 @@ describe("the list of follows", () => {
     expect(within(nav).getByRole("link", { name: "#肝细胞癌" })).toHaveAttribute("href", "/app/frontier?view=following&follow=9");
     expect(within(nav).getByRole("link", { name: "房颤抗凝" })).toHaveAttribute("href", "/app/frontier?view=following&follow=zone:ez_1");
     expect(within(nav).getByLabelText("12 条新动态")).toBeInTheDocument();
-    expect(within(nav).getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["专科", "标签", "主题", "证据专区"]);
+    expect(within(nav).getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["专科", "标签", "主题", "我的专区与关注的专区"]);
   });
 
   it("shows no number for a follow the server does not count, and opens 管理关注 from its foot", async () => {
@@ -70,7 +73,7 @@ describe("the list of follows", () => {
   });
 });
 
-describe("the typed follows in the list (c3-watch)", () => {
+describe("the typed follows in the list (c3-watch; a new one is a zone of one's own since 2026-10-29)", () => {
   const href = (choice: FollowChoice) => `/app/frontier?view=following&follow=${followChoiceParam(choice)}`;
   const typed = { id: "21", kind: "query", key: "glp-1 和胰腺炎", label: "GLP-1 和胰腺炎", muted: false, newItems: 4 } as const;
 
@@ -84,21 +87,23 @@ describe("the typed follows in the list (c3-watch)", () => {
     expect(within(nav).getByRole("link", { name: /GLP-1 和胰腺炎/ })).toHaveAttribute("href", "/app/frontier?view=following&follow=21");
   });
 
-  it("puts the one input under the two fixed entries when the page can open what is added, adds the words as a typed follow, and opens it", async () => {
-    const onAdded = vi.fn();
-    client.addFrontierFollow.mockResolvedValue({ id: "30", kind: "query", key: "long covid", label: "long covid", muted: false });
-    render(<MemoryRouter><FollowList state={state({ topics: [topic] })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} onAdded={onAdded} /></MemoryRouter>);
-    const input = screen.getByRole("textbox", { name: "关注一个药物、试验或问题" });
-    await userEvent.type(input, "Long  COVID{Enter}");
-    await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "query", key: "Long COVID", label: "Long COVID" }));
-    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(expect.objectContaining({ id: "30" })));
-    expect(input).toHaveValue("");
+  it("puts 「新建专区」 under the two fixed entries, where the typed input was, and hands the press on", async () => {
+    const onCreateZone = vi.fn();
+    render(<MemoryRouter><FollowList state={state({ topics: [topic] })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} onCreateZone={onCreateZone} /></MemoryRouter>);
+    expect(screen.queryByRole("textbox", { name: "关注一个药物、试验或问题" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "新建专区" }));
+    expect(onCreateZone).toHaveBeenCalledTimes(1);
+    expect(client.addFrontierFollow).not.toHaveBeenCalled();
   });
 
-  it("has no input where the page opens nothing", () => {
+  it("has no 「新建专区」 for a reader who may not make one, or where the page opens nothing", () => {
+    const { unmount } = render(<MemoryRouter><FollowList state={state({ topics: [topic], canCreateZone: false })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} onCreateZone={vi.fn()} /></MemoryRouter>);
+    expect(screen.queryByRole("button", { name: "新建专区" })).not.toBeInTheDocument();
+    unmount();
     render(<MemoryRouter><FollowList state={state({ topics: [topic] })} choice={{ kind: "foryou" }} hrefFor={href} onManage={vi.fn()} /></MemoryRouter>);
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "新建专区" })).not.toBeInTheDocument();
   });
+
 });
 
 describe("the view", () => {
@@ -129,11 +134,11 @@ describe("the view", () => {
 
   it("draws the zones group only when a zone is followed, and the feed only when a topic is", () => {
     const { unmount } = show(state({ zones: [zone] }));
-    expect(screen.getByRole("region", { name: "关注的证据专区" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "我的专区与关注的专区" })).toBeInTheDocument();
     expect(screen.queryByText("关注的动态")).not.toBeInTheDocument();
     unmount();
     show(state({ topics: [topic] }));
-    expect(screen.queryByRole("region", { name: "关注的证据专区" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "我的专区与关注的专区" })).not.toBeInTheDocument();
     expect(screen.getByText("关注的动态")).toBeInTheDocument();
   });
 
@@ -145,7 +150,7 @@ describe("the view", () => {
     expect(screen.getByText("关注的动态")).toBeInTheDocument();
     second.unmount();
     const third = show(state({ zones: [zone] }), { kind: "zone", id: "ez_1" });
-    expect(screen.getByRole("region", { name: "关注的证据专区" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "我的专区与关注的专区" })).toBeInTheDocument();
     third.unmount();
     show(state({ zones: [zone] }), { kind: "zone", id: "gone" });
     expect(screen.getByText("这个专区已不在关注里")).toBeInTheDocument();
@@ -186,12 +191,14 @@ describe("the onboarding answer as the first follows", () => {
 });
 
 describe("reading what the reader follows", () => {
-  it("counts only the follows that bring items in, and the zones, once", async () => {
+  it("counts only the follows that bring items in, and the reader's own and followed zones, once", async () => {
     const { result } = renderHook(() => useFollowing(true));
     expect(result.current.loading).toBe(true);
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.topics.map((follow) => follow.label)).toEqual(["肥胖研究"]);
     expect(result.current.zones).toEqual([zone]);
+    expect(result.current.canCreateZone).toBe(true);
+    expect(directory.fetchZoneDirectory).toHaveBeenCalledWith("mine");
     expect(result.current.answered).toBe(true);
   });
 

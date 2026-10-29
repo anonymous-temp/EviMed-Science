@@ -252,7 +252,7 @@ export function FollowingView({ state, choice, list, forYou, feed, onAdd, onAnsw
           return (
             <EmptyState
               icon={BookmarkPlus}
-              title="关注药物、主题、专科，或建一个自己的专区，它们的新动态会汇总在这里。"
+              title="关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。"
               action={(
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Button onClick={onAdd}>添加关注</Button>

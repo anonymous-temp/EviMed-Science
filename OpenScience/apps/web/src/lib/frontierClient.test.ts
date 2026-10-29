@@ -335,6 +335,13 @@ describe("the routes of the second wave", () => {
     expect(await fetchFrontierEvent("ev2")).toMatchObject({ heat: null, hasPrimary: false, primary: null, institutions72h: { total: 0, byType: [] }, trend: null });
   });
 
+  it("reads the zones an item belongs to: an id and a name each, once, three at most; none is an empty list", () => {
+    const zones = [{ id: "z1", title: "GLP-1 受体激动剂减重" }, { id: "z1", title: "重复" }, { id: "z2", title: " 心血管结局 " }, { id: "", title: "无编号" }, { id: "z3" }, 7, { id: "z4", title: "第三个" }, { id: "z5", title: "第四个" }];
+    expect(parseFrontierItemDetail(rawItem({ zones }))!.zones).toEqual([{ id: "z1", title: "GLP-1 受体激动剂减重" }, { id: "z2", title: "心血管结局" }, { id: "z4", title: "第三个" }]);
+    expect(parseFrontierItemDetail(rawItem({}))!.zones).toEqual([]);
+    expect(parseFrontierItemDetail(rawItem({ zones: "z1" }))!.zones).toEqual([]);
+  });
+
   it("reads the questions of an item and of an event's first-hand report: three at most, short, each once; none is an empty list", async () => {
     const item = parseFrontierItemDetail(rawItem({ ask: ["这个结果适用于中国患者吗？", " 和标准治疗比差别在哪？ ", "这个结果适用于中国患者吗？", 7, "", "安全性数据有哪些？", "第四个问题？", "字".repeat(61)] }))!;
     expect(item.ask).toEqual(["这个结果适用于中国患者吗？", "和标准治疗比差别在哪？", "安全性数据有哪些？"]);
