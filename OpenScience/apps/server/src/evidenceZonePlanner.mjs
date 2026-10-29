@@ -479,16 +479,37 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
   const citedMatches = (cited, actual) => cited == null || (typeof cited === "number" && Math.abs(cited - actual) <= Math.max(2, actual * 0.2));
 
   /**
-   * One lifecycle change of a standing zone, re-checked under the row's lock against what it is now.
+   * Move the followers of a zone that is being archived to the zones that took over (a merge's survivor, a split's pieces), each
+   * following every successor. A follow keeps the day it began, so what a follower is told of a successor is judged from the day they
+   * began to follow, not from the day of the move. Runs inside the archiving transaction.
+   * @param {any} client @param {string} fromId @param {string[]} toIds @returns {Promise<string[]>} the readers moved
+   */
+  async function moveFollowers(client, fromId, toIds) {
+    const followers = (await client.query("SELECT user_id FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1 ORDER BY user_id", [fromId])).rows.map((/** @type {any} */ row) => String(row.user_id));
+    if (!followers.length) return followers;
+    if (toIds.length) {
+      await client.query(`INSERT INTO evimed_frontier.evidence_zone_follows(user_id, zone_id, created_at)
+        SELECT f.user_id, t.zone_id, f.created_at FROM evimed_frontier.evidence_zone_follows f CROSS JOIN unnest($2::text[]) AS t(zone_id)
+        WHERE f.zone_id = $1 ON CONFLICT DO NOTHING`, [fromId, toIds]);
+    }
+    await client.query("DELETE FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1", [fromId]);
+    return followers;
+  }
+
+  /**
+   * One lifecycle change of a standing zone, re-checked under the row's lock against what it is now. `during` runs in the same
+   * transaction after the change and may add to what the change record says.
    * @param {string} zoneId @param {"active" | "quiet" | "archived"} to @param {string} kind
    * @param {(row: any) => boolean} allowed @param {(row: any) => Record<string, unknown>} detail
+   * @param {(client: any, row: any) => Promise<Record<string, unknown>>} [during]
    */
-  async function changeLifecycle(zoneId, to, kind, allowed, detail) {
+  async function changeLifecycle(zoneId, to, kind, allowed, detail, during) {
     return database.transaction(async (/** @type {any} */ client) => {
       const row = (await client.query("SELECT id, lifecycle, kind FROM evimed_frontier.evidence_zones WHERE id = $1 FOR UPDATE", [zoneId])).rows[0];
       if (!row || row.kind !== "official" || !allowed(row)) return false;
       await client.query("UPDATE evimed_frontier.evidence_zones SET lifecycle = $2, revision = revision + 1, updated_at = clock_timestamp() WHERE id = $1", [zoneId, to]);
-      await recordZoneChange(client, zoneId, kind, "planner", { fromLifecycle: row.lifecycle, ...detail(row) });
+      const more = during ? await during(client, row) : {};
+      await recordZoneChange(client, zoneId, kind, "planner", { fromLifecycle: row.lifecycle, ...detail(row), ...more });
       await zones.bump(client);
       return true;
     });
@@ -537,7 +558,10 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
         });
         return "split_incomplete";
       }
-      const archived = await changeLifecycle(zone.row.id, "archived", "split", (row) => row.lifecycle === "active", () => ({ ...evidence, into: result.made }));
+      // The wide zone's followers follow every piece of it: the page of the archived zone points at them (`successors`) and nobody is left
+      // following a zone that collects no more.
+      const archived = await changeLifecycle(zone.row.id, "archived", "split", (row) => row.lifecycle === "active", () => ({ ...evidence, into: result.made }),
+        async (client) => ({ movedFollowers: await moveFollowers(client, zone.row.id, result.made) }));
       return archived ? null : "changed_meanwhile";
     }
     if (action.action === "merge") {
@@ -552,11 +576,7 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [LOCK]);
         const rows = (await client.query("SELECT id, lifecycle, kind FROM evimed_frontier.evidence_zones WHERE id = ANY($1::text[]) ORDER BY id FOR UPDATE", [[zone.row.id, other.row.id]])).rows;
         if (rows.length !== 2 || rows.some((/** @type {any} */ row) => row.kind !== "official" || !["active", "quiet"].includes(row.lifecycle))) return null;
-        const followers = (await client.query("SELECT user_id FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1 ORDER BY user_id", [other.row.id])).rows.map((/** @type {any} */ row) => row.user_id);
-        if (followers.length) {
-          await client.query(`INSERT INTO evimed_frontier.evidence_zone_follows(user_id, zone_id) SELECT user_id, $2 FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1 ON CONFLICT DO NOTHING`, [other.row.id, zone.row.id]);
-          await client.query("DELETE FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1", [other.row.id]);
-        }
+        const followers = await moveFollowers(client, other.row.id, [zone.row.id]);
         if (merged?.definition) {
           const definition = merged.definition;
           await client.query(`UPDATE evimed_frontier.evidence_zones SET title = $2, description = $3, scope_zh = $3, zone_type = $4, specialties = $5::text[], group_label = $6, definition = $7::jsonb,

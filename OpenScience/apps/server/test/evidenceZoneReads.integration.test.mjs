@@ -244,6 +244,28 @@ test("mine is the reader's own zones in any state, then the zones followed; comm
   assert.deepEqual(bobMine.userZones, { count: 2, max: 30 });
 });
 
+test("a zone's detail names the zones that took over from an archived one, and when its newest item came out", options, async () => {
+  // An archived zone points at what replaced it: a merge's survivor, a split's pieces, and through a zone that was archived in its turn.
+  await addZone({ id: "ez_split_old", title: "拆开的专区", lifecycle: "archived", specialties: ["endocrinology"], definition: definition("drug-indication", [{ label: "拆开" }, { label: "拆开主题" }]) });
+  await addZone({ id: "ez_merged_old", title: "并入拆开专区的专区", lifecycle: "archived", definition: definition("drug-indication", [{ label: "并入" }, { label: "并入主题" }]) });
+  await addZone({ id: "ez_bob_gone", title: "鲍勃私有的已归档专区", owner: "bob", kind: "user", state: "draft", lifecycle: "archived", definition: definition("drug-indication", [{ label: "鲍勃归档" }, { label: "鲍勃归档主题" }]) });
+  await db.query(`INSERT INTO evimed_frontier.zone_changes(zone_id, kind, actor, detail) VALUES
+    ('ez_split_old', 'split', 'planner', '{"into":["ez_t2d","ez_adc","ez_bob_gone","ez_missing"]}'),
+    ('ez_merged_old', 'merged', 'planner', '{"into":"ez_split_old"}'),
+    ('ez_gone', 'merged', 'planner', '{"into":"ez_glp1"}')`);
+  const successorsOf = async (ref, user = alice) => (await reads.detail(user, ref)).zone.successors;
+  assert.deepEqual(await successorsOf("ez_gone"), [{ id: "ez_glp1", slug: "glp1-obesity", title: "GLP-1 受体激动剂减重" }], "a merge's survivor");
+  assert.deepEqual((await successorsOf("ez_split_old")).map((zone) => zone.id).sort(), ["ez_adc", "ez_t2d"], "a split's pieces; one that is another reader's private zone or gone is left out");
+  assert.deepEqual((await successorsOf("ez_merged_old")).map((zone) => zone.id).sort(), ["ez_adc", "ez_t2d"], "a successor archived in its turn is replaced by its own");
+  assert.deepEqual(await successorsOf("ez_glp1"), [], "a zone that is still collecting has none");
+  assert.deepEqual(await successorsOf("ez_quiet"), [], "nor has a quiet one");
+  assert.deepEqual(await successorsOf("ez_bob_gone", bob), [], "an archived zone nothing took over from names none");
+  // The newest item of a zone, in or pinned, by the date the page dates it at (the related one of an hour ago is the newest here).
+  assert.equal((await reads.detail(alice, "ez_glp1")).zone.lastItemAt, ago(0, 1));
+  assert.equal((await reads.detail(alice, "ez_gone")).zone.lastItemAt, null, "a zone with no items has no date");
+  assert.deepEqual(Object.keys((await reads.detail(alice, "ez_quiet")).zone).filter((key) => ["successors", "lastItemAt"].includes(key)).sort(), ["lastItemAt", "successors"], "always present");
+});
+
 test("a zone's detail is a topic zone's: its definition only to its owner, edit rights by kind, a band, the related zones the reader may see", options, async () => {
   const platform = (await reads.detail(alice, "glp1-obesity")).zone;
   assert.equal(platform.id, "ez_glp1");
@@ -351,6 +373,23 @@ test("the side panel: related zones, the month's most named entities, twelve Mon
   assert.equal((await reads.overview(bob, "ez_glp1")).side.weekly[11].count, 3);
   assert.deepEqual(side.topics, [{ id: "topicglp1abcdefgh", title: "某公众人物使用司美格鲁肽" }], "only the topic about the zone's entity");
   assert.deepEqual(side.congresses.map((congress) => congress.id), ["cds-2026"], "the endocrinology congress that opens within 30 days");
+});
+
+test("a weekly bar counts an item in the week it was published, the instant the list dates it at, not the week the zone collected it", options, async () => {
+  await addZone({ id: "ez_weekly", title: "按发表时间计周的专区", definition: definition("drug-indication", [{ label: "周" }, { label: "发表" }]) });
+  // Collected this week (visible_at today), published nine weeks ago and five days ago: the bars of those weeks, not this one's.
+  await addItem("w1 collected now, published long ago", { age: 0, hours: 2, patch: {} });
+  await addItem("w2 collected now, published last week", { age: 0, hours: 3, patch: {} });
+  await addItem("w3 published this week", { age: 0, hours: 4, patch: {} });
+  await db.query("UPDATE evimed_frontier.items SET timeline_at = $2 WHERE id = $1", [items["w1 collected now, published long ago"].id, ago(63)]);
+  await db.query("UPDATE evimed_frontier.items SET timeline_at = $2 WHERE id = $1", [items["w2 collected now, published last week"].id, ago(5)]);
+  for (const name of ["w1 collected now, published long ago", "w2 collected now, published last week", "w3 published this week"]) await addMember("ez_weekly", name);
+  const weekly = (await reads.overview(alice, "ez_weekly")).side.weekly;
+  const countOf = (/** @type {string} */ weekStart) => weekly.find((week) => week.weekStart === weekStart)?.count;
+  assert.equal(countOf("2026-10-26"), 1, "this week holds only what was published this week");
+  assert.equal(countOf("2026-10-19"), 1, "an item published five days ago is last week's");
+  assert.equal(countOf("2026-08-24"), 1, "an item published nine weeks ago is that week's, though it arrived today");
+  assert.equal(weekly.reduce((sum, week) => sum + week.count, 0), 3);
 });
 
 test("a disease zone has its own order, and a congress module appears only while a congress of its specialty is on", options, async () => {

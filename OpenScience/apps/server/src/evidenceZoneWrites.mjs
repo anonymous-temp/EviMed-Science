@@ -263,7 +263,7 @@ export function createEvidenceZoneWrites({ database, zones, membership = null, d
       perWeek: typeof stats.perWeek === "number" ? stats.perWeek : null, cards: 0, latest: stats.latest ?? null,
       lifecycle: row.lifecycle === "none" ? "active" : row.lifecycle, updatedAt: iso(row.updated_at),
       revision: row.revision, definition: owner ? publicZoneDefinition(/** @type {any} */ (definition)) : null, canEdit: owner, canDelete: owner,
-      band: evidenceZoneBand(typeof stats.perWeek === "number" ? stats.perWeek : null), overviewAt: iso(row.overview_at), related: [],
+      band: evidenceZoneBand(typeof stats.perWeek === "number" ? stats.perWeek : null), overviewAt: iso(row.overview_at), successors: [], lastItemAt: null, related: [],
     };
   }
 

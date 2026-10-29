@@ -414,6 +414,7 @@ test("a zone above the band for four weeks is split into narrower zones and arch
   await series(wide, [61, 62, 61, 63, 0, 0, 0, 0]);
   const narrow = await platformZone("narrow", "正好的", { ageDays: 200 });
   await series(narrow, [10, 10, 10, 10, 0, 0, 0, 0]);
+  await db.query("INSERT INTO evimed_frontier.evidence_zone_follows(user_id, zone_id, created_at) VALUES ('alice', $1, '2026-09-01T00:00:00Z'), ('bob', $1, '2026-10-01T00:00:00Z'), ('bob', $2, '2026-10-02T00:00:00Z')", [wide, narrow]);
   const model = scriptedModel({ weekly: [{ actions: [
     { action: "split", zone: narrow, perWeek: 10, into: [{ slug: "n1", draft: draftOf("窄一") }, { slug: "n2", draft: draftOf("窄二") }], reason: "不宽" },
     { action: "split", zone: wide, perWeek: 62, into: [{ slug: "w1", draft: draftOf("加一个限定甲") }], reason: "只给了一个" },
@@ -430,6 +431,15 @@ test("a zone above the band for four weeks is split into narrower zones and arch
   const made = (await db.query("SELECT id, title FROM evimed_frontier.evidence_zones WHERE id = ANY($1::text[]) ORDER BY title", [record.detail.into])).rows;
   assert.deepEqual(made.map((row) => row.title), ["加一个限定乙", "加一个限定甲"].sort());
   assert.equal((await changes(made[0].id))[0].detail.from, wide, "each new zone says what it came from");
+  // The wide zone's followers follow every piece of it, from the day they began to follow; nobody is left on a zone that collects no more.
+  assert.deepEqual(record.detail.movedFollowers, ["alice", "bob"]);
+  const follows = (await db.query("SELECT user_id, zone_id, created_at FROM evimed_frontier.evidence_zone_follows ORDER BY zone_id, user_id")).rows;
+  assert.equal(follows.some((row) => row.zone_id === wide), false);
+  for (const piece of made) {
+    assert.deepEqual(follows.filter((row) => row.zone_id === piece.id).map((row) => [row.user_id, row.created_at.toISOString()]),
+      [["alice", "2026-09-01T00:00:00.000Z"], ["bob", "2026-10-01T00:00:00.000Z"]], "each piece has both followers, with the day they began");
+  }
+  assert.equal(follows.filter((row) => row.zone_id === narrow).length, 1, "a zone that was not split keeps its own follower");
 });
 
 test("a split whose second zone cannot be made takes back the first and leaves the wide zone as it was", options, async () => {
@@ -455,7 +465,7 @@ test("overlapping zones merge: the partner is archived, its followers move, a ne
   await fill(keep, shared);
   await fill(gone, shared.slice(0, 8));
   await fill(other, (await items(10, 6, ["ezt-pd1"])));
-  await db.query("INSERT INTO evimed_frontier.evidence_zone_follows(user_id, zone_id) VALUES ('alice', $1), ('bob', $1), ('bob', $2)", [gone, keep]);
+  await db.query("INSERT INTO evimed_frontier.evidence_zone_follows(user_id, zone_id, created_at) VALUES ('alice', $1, '2026-09-05T00:00:00Z'), ('bob', $1, '2026-09-06T00:00:00Z'), ('bob', $2, '2026-09-07T00:00:00Z')", [gone, keep]);
   const model = scriptedModel({ weekly: [{ actions: [
     { action: "merge", zone: keep, with: other, reason: "不重叠" },
     { action: "merge", zone: keep, with: "ez_missing", reason: "不存在" },
@@ -473,6 +483,7 @@ test("overlapping zones merge: the partner is archived, its followers move, a ne
   const record = (await changes(gone)).at(-1);
   assert.deepEqual([record.kind, record.detail.into, record.detail.fromLifecycle, record.detail.movedFollowers], ["merged", keep, "active", ["alice", "bob"]]);
   assert.deepEqual((await db.query("SELECT user_id FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1 ORDER BY user_id", [keep])).rows.map((row) => row.user_id), ["alice", "bob"]);
+  assert.equal((await db.query("SELECT created_at FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1 AND user_id = 'alice'", [keep])).rows[0].created_at.toISOString(), "2026-09-05T00:00:00.000Z", "a moved follow keeps the day it began");
   assert.equal((await db.query("SELECT count(*)::int AS n FROM evimed_frontier.evidence_zone_follows WHERE zone_id = $1", [gone])).rows[0].n, 0);
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(plane.told.afterSave.includes(keep), "a redefined zone is collected again");
