@@ -24,6 +24,8 @@
  * @module evidenceZoneTopics
  */
 
+import { frontierItemGenre } from './frontierGenres.mjs'
+
 /**
  * @template {string} T
  * @param {readonly T[]} list
@@ -106,13 +108,14 @@ const ROLE_BY_GENRE = Object.freeze({
 })
 
 /**
- * An item's role on a zone page. A safety alert is 药物安全 whatever its genre; an unknown or missing genre is 资讯观点.
- * @param {{ genre?: string | null, safetyAlert?: boolean | null }} item
+ * An item's role on a zone page, from the one reading rule for its genre (`frontierItemGenre`: the stored genre, code's fallback
+ * from the item's columns when none was written). A safety alert is 药物安全 whatever its genre.
+ * @param {Parameters<typeof frontierItemGenre>[0] & { safetyAlert?: boolean | null }} item
  * @returns {EvidenceZoneRole}
  */
 export function evidenceZoneRole(item) {
-  if (item?.safetyAlert === true) return 'safety'
-  return ROLE_BY_GENRE[String(item?.genre ?? '')] ?? 'news'
+  if (item?.safetyAlert === true || item?.safety_alert === true) return 'safety'
+  return ROLE_BY_GENRE[frontierItemGenre(item)] ?? 'news'
 }
 
 /** How strongly the model judged an item to belong: `core` stands in every module, `related` only in the full list. */
