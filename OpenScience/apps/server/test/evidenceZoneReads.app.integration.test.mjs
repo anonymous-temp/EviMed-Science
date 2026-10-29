@@ -72,12 +72,14 @@ test("the directory, a zone by its slug, its overview, its list and its cards ar
     assert.equal(directory.body.data.canCreate, true);
     const mine = await call("author", "/api/frontier/zones?view=mine");
     assert.deepEqual(mine.body.data.zones.map((zone) => zone.id), ["ez_app_private"]);
+    assert.deepEqual(mine.body.data.zones.map((zone) => [zone.owned, zone.revision, zone.followers]), [[true, 1, 0]]);
     assert.deepEqual((await call("reader", "/api/frontier/zones?view=mine")).body.data.zones, []);
 
     const bySlug = await call("reader", "/api/frontier/zones/glp1-app");
     assert.equal(bySlug.status, 200);
     assert.equal(bySlug.body.data.zone.id, "ez_app_public");
     assert.equal(bySlug.body.data.zone.creator, "EviMed 证据中心");
+    assert.deepEqual([bySlug.body.data.zone.owned, bySlug.body.data.zone.revision, bySlug.body.data.zone.followers], [false, 1, 0]);
     assert.equal(bySlug.body.data.zone.definition, null);
     const overview = await call("reader", "/api/frontier/zones/glp1-app/overview");
     assert.equal(overview.status, 200);

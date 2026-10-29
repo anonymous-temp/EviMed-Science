@@ -201,6 +201,7 @@ test("the recommended view groups the platform's active zones by specialty and g
   assert.equal(directory.canCreate, true);
   assert.deepEqual(directory.userZones, { count: 2, max: 30 });
   const glp1 = endocrinology.sections[1].zones[0];
+  assert.deepEqual({ revision: glp1.revision, owned: glp1.owned, followers: glp1.followers }, { revision: 1, owned: false, followers: 2 }, "what a follow sends back, whether it is the reader's own, who follows it");
   assert.deepEqual({ slug: glp1.slug, type: glp1.type, keywords: glp1.keywords, kind: glp1.kind, published: glp1.published, creator: glp1.creator, following: glp1.following,
     counts: glp1.counts, perWeek: glp1.perWeek, cards: glp1.cards, lifecycle: glp1.lifecycle, specialties: glp1.specialties, group: glp1.group }, {
     slug: "glp1-obesity", type: "drug-indication", keywords: ["GLP-1 受体激动剂", "减重"], kind: "official", published: true, creator: EVIDENCE_PLATFORM_PRODUCER_NAME, following: true,
@@ -228,9 +229,13 @@ test("mine is the reader's own zones in any state, then the zones followed; comm
   const mine = await reads.directory(alice, params({ view: "mine" }));
   assert.deepEqual(titles(mine.zones), ["我的私有专区", "我公开的专区", "GLP-1 受体激动剂减重", "鲍勃公开的专区"], "own first (newest edit first), then followed by activity");
   assert.deepEqual(mine.zones.map((zone) => zone.published), [false, true, true, true]);
+  assert.deepEqual(mine.zones.map((zone) => zone.owned), [true, true, false, false], "owned is the reader's own user zone: not a followed platform zone, not another reader's");
+  assert.deepEqual(mine.zones.map((zone) => zone.followers), [0, 1, 2, 2]);
+  assert.ok(mine.zones.every((zone) => zone.revision === 1));
   assert.deepEqual(mine.groups, []);
   const community = await reads.directory(alice, params({ view: "community" }));
   assert.deepEqual(titles(community.zones), ["鲍勃公开的专区"], "not her own, not Bob's private one, not the platform's");
+  assert.deepEqual(community.zones.map((zone) => [zone.owned, zone.followers]), [[false, 2]]);
   const bobs = await reads.directory(bob, params({ view: "community" }));
   assert.deepEqual(titles(bobs.zones), ["我公开的专区"], "Alice's private zone never appears to Bob, and Bob's own is not his community's");
   const bobMine = await reads.directory(bob, params({ view: "mine" }));
@@ -251,9 +256,12 @@ test("a zone's detail is a topic zone's: its definition only to its owner, edit 
   assert.deepEqual((await reads.detail(alice, "ez_glp1")).feedback, []);
   // Related: a shared keyword label (the diabetes zone), a shared tag (the readers' zones), seen through the reader's own eyes.
   assert.deepEqual(titles(platform.related).sort(), ["GLP-1 受体激动剂治疗 2 型糖尿病", "我公开的专区"].sort(), "Alice sees her own public zone; the platform's other zones with no common keyword stay out");
+  assert.deepEqual(platform.related.map((zone) => [zone.title, zone.owned]).sort(), [["GLP-1 受体激动剂治疗 2 型糖尿病", false], ["我公开的专区", true]], "a related zone of her own says so");
+  assert.deepEqual([platform.revision, platform.owned, platform.followers], [1, false, 2]);
   const forBob = (await reads.detail(bob, "ez_glp1")).zone;
   assert.deepEqual(titles(forBob.related).sort(), ["GLP-1 受体激动剂治疗 2 型糖尿病", "我公开的专区"].sort());
   const own = (await reads.detail(alice, "ez_alice_public")).zone;
+  assert.equal(own.owned, true);
   assert.equal(own.canEdit, true);
   assert.equal(own.canDelete, true);
   assert.deepEqual(own.definition.keywords.map((keyword) => keyword.label), ["GLP-1 受体激动剂", "公开"]);
@@ -269,6 +277,8 @@ test("a zone's detail is a topic zone's: its definition only to its owner, edit 
   assert.equal(await reads.resolveZone(bob, "ez_alice_private"), null);
   assert.deepEqual(titles(await reads.summaries(bob, ["ez_adc", "ez_alice_private", "ez_product", "ez_glp1", "ez_adc", "has a space"])), ["ADC 治疗 HER2 低表达乳腺癌", "GLP-1 受体激动剂减重"],
     "the order asked, once each, the zones Bob may see, topic zones only");
+  assert.deepEqual((await reads.summaries(bob, ["ez_alice_public", "ez_bob_public"])).map((zone) => [zone.id, zone.owned, zone.followers, zone.revision]), [["ez_alice_public", false, 1, 1], ["ez_bob_public", true, 2, 1]],
+    "owned is relative to the reader asking");
   assert.deepEqual(await reads.summaries(bob, []), []);
   assert.equal(await reads.resolveId(alice, "glp1-obesity"), "ez_glp1");
   assert.equal(await reads.resolveId(alice, "ez_glp1"), "ez_glp1");

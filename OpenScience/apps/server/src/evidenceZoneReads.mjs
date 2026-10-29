@@ -146,8 +146,12 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     return rows[0] ?? null;
   }
 
-  /** @param {any} row */
-  function summary(row) {
+  /**
+   * A zone as a list line shows it. `owned` is the reader's own user zone (what the page offers to edit or delete); `revision` is what a
+   * follow or an edit sends back; `followers` is the number of readers following it.
+   * @param {any} row @param {{ id: string }} user
+   */
+  function summary(row, user) {
     const stats = record(row.stats);
     const definition = record(row.definition);
     const latest = record(stats.keyLatest ?? stats.latest);
@@ -156,6 +160,8 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     return {
       id: String(row.id),
       slug: row.slug ?? null,
+      revision: count(row.revision),
+      owned: row.kind === "user" && row.user_id === user.id,
       title: String(row.title),
       type: row.zone_type ?? null,
       keywords: list(definition.keywords).map((keyword) => String(record(keyword).label ?? "")).filter(Boolean),
@@ -207,7 +213,7 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
         (SELECT string_agg(k->>'label', ' ') FROM jsonb_array_elements(${KEYWORDS_SQL("z")}) k))), lower(${param(q)})) > 0`);
     }
     const rows = await query(user, `SELECT ${ZONE_COLUMNS} FROM ${ZONE_FROM} WHERE ${where.join(" AND ")} ORDER BY z.updated_at DESC, z.id LIMIT ${DIRECTORY_MAX}`, values);
-    const zones = rows.map((row) => ({ zone: summary(row), own: row.user_id === user.id }));
+    const zones = rows.map((row) => ({ zone: summary(row, user), own: row.user_id === user.id }));
     const owned = (await query(user, `SELECT count(*)::integer AS n FROM evimed_frontier.evidence_zones z WHERE z.user_id = $1 AND z.kind = 'user' AND z.lifecycle <> 'none'`))[0]?.n ?? 0;
     const base = {
       view,
@@ -278,7 +284,7 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
       const theirs = list(record(other.definition).keywords).map(record);
       const sharedLabels = theirs.filter((keyword) => labels.includes(foldKey(keyword.label))).length;
       const sharedTags = new Set(theirs.flatMap((keyword) => list(keyword.tagIds)).map(String).filter((id) => tagIds.includes(id))).size;
-      return { zone: summary(other), closeness: sharedLabels * 4 + sharedTags * 2 + (group && other.group_label === group ? 1 : 0) };
+      return { zone: summary(other, user), closeness: sharedLabels * 4 + sharedTags * 2 + (group && other.group_label === group ? 1 : 0) };
     }).sort((left, right) => right.closeness - left.closeness || byActivity(left.zone, right.zone)).slice(0, RELATED_MAX).map((entry) => entry.zone);
   }
 
@@ -309,7 +315,7 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     const row = await zoneRow(user, ref);
     if (!row) return null;
     const owner = row.user_id === user.id;
-    const base = summary(row);
+    const base = summary(row, user);
     const feedback = owner
       ? await plain(`SELECT f.id, f.text, f.created_at AS "createdAt", u.name AS author FROM evimed_frontier.evidence_zone_feedback f
           JOIN evimed_control.users u ON u.id = f.user_id WHERE f.zone_id = $1 ORDER BY f.created_at DESC, f.id`, [row.id])
@@ -317,7 +323,6 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     return {
       zone: {
         ...base,
-        revision: count(row.revision),
         definition: (owner && row.kind === "user") || isOperator(user) ? servedDefinition(row.definition) : null,
         canEdit: owner && row.kind === "user",
         canDelete: owner && row.kind === "user",
@@ -742,7 +747,7 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     if (!wanted.length) return [];
     const rows = await query(user, `SELECT ${ZONE_COLUMNS} FROM ${ZONE_FROM}
       WHERE z.id = ANY($2::text[]) AND z.lifecycle <> 'none' AND (z.state = 'published' OR z.user_id = $1)`, [wanted]);
-    const found = new Map(rows.map((row) => [String(row.id), summary(row)]));
+    const found = new Map(rows.map((row) => [String(row.id), summary(row, user)]));
     return wanted.flatMap((id) => (found.has(id) ? [found.get(id)] : []));
   }
 
