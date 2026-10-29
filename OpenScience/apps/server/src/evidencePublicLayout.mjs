@@ -43,7 +43,6 @@ export const appZonePath = (/** @type {string} */ zoneId) => `/app/frontier/zone
 /** The header's navigation, under the base the deployment serves the pages at. */
 const navigation = () => [
   ["zones", evidencePublicPath("/"), "证据专区"],
-  ["requests", evidencePublicPath("/requests"), "选题申请"],
   ["simulations", evidencePublicPath("/simulations"), "模拟研究"],
   ["metrics", evidencePublicPath("/metrics"), "按月公开的数"],
   ["about", evidencePublicPath("/about"), "编辑说明"],

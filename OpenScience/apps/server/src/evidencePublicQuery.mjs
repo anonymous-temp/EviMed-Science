@@ -20,7 +20,7 @@
 //   nothing here has any text to show for it.
 // - **Authors are new until three of their published cards each carry a ✓.** The lift is a count taken at read time, so it is
 //   automatic (`authorQualifies`); official zones are exempt (the platform is not a new author). The count is the one rule
-//   (`evidenceAuthorStanding.mjs`), the same the feed and the community column ask; this module keeps only a memory of its verdicts,
+//   (`evidenceAuthorStanding.mjs`), the same the feed asks; this module keeps only a memory of its verdicts,
 //   made again when the author's published cards or their revisions change.
 // - **No account id leaves.** An author or a zone's owner is named by the public handle (`evidenceAuthorHandles.mjs`), made for every
 //   account a result mentions in one statement before the result is built; `author(handle)` and `authorQualifies(handle)` take a

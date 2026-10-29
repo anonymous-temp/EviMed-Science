@@ -1899,25 +1899,19 @@ export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
   'evidence_public_not_enabled',
   'evidence_feed_cursor_invalid',
   'evidence_feed_query_invalid',
-  // The pages and the read-only API (F08, F27) and the public topic requests (2026-10-06).
+  // The pages and the read-only API (F08, F27).
   'evidence_public_not_found',
   'evidence_public_card_withdrawn',
   'evidence_public_rate_limited',
   'evidence_public_query_invalid',
-  'evidence_topic_request_invalid',
-  'evidence_topic_request_limit',
-  'evidence_topic_request_not_found',
 ])
 
 /**
- * What the flywheel's operator figures and the community column of an official zone answer with when their switch is off or
- * what they were asked for is not there (evidence-flywheel plan §5.2, §11, 2026-10-06). Each is about the module, never a
- * verdict on a run.
+ * What the flywheel's operator figures answer with when their switch is off (evidence-flywheel plan §11, 2026-10-06). It is about the
+ * module, never a verdict on a run.
  */
 export const EVIDENCE_FLYWHEEL_ERROR_CODES = Object.freeze([
   'evidence_flywheel_not_enabled',
-  'evidence_community_not_enabled',
-  'evidence_community_not_found',
 ])
 
 /**
@@ -2616,9 +2610,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_public_card_withdrawn: '这张证据卡已被撤回，不再作为证据；撤回的原因和日期保留在它的说明页上。',
   evidence_public_rate_limited: '访问太频繁了，请稍等一分钟再试。',
   evidence_public_query_invalid: '公开接口的参数不对：请检查 kind、view、limit 和 cursor。',
-  evidence_topic_request_invalid: '选题申请要写 4 到 200 个字，不能含控制字符；指定的专区必须是已公开的专区。',
-  evidence_topic_request_limit: '你今天申请和附议的选题已经到上限了，明天再来。',
-  evidence_topic_request_not_found: '没有找到这条选题申请。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -2866,8 +2857,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_zone_subscription_not_found: '这个证据专区不存在，或还没有发布。',
   evidence_zone_subscription_limit: '这个项目订阅的证据专区已经够多了，先取消不用的再订阅。',
   evidence_flywheel_not_enabled: '这个部署没有开启证据飞轮的运营指标。',
-  evidence_community_not_enabled: '这个部署没有开放官方专区的社区卡片。',
-  evidence_community_not_found: '这个官方专区不存在，或还没有发布。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
@@ -3194,14 +3183,11 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   evidence_public_not_enabled: 'upstream',
   evidence_feed_cursor_invalid: 'upstream',
   evidence_feed_query_invalid: 'upstream',
-  // The pages and the read-only API: a missing or withdrawn page is about the page; a rate limit and the daily topic-request cap free by themselves.
+  // The pages and the read-only API: a missing or withdrawn page is about the page; a rate limit frees by itself.
   evidence_public_not_found: 'upstream',
   evidence_public_card_withdrawn: 'upstream',
   evidence_public_rate_limited: 'capped',
   evidence_public_query_invalid: 'upstream',
-  evidence_topic_request_invalid: 'upstream',
-  evidence_topic_request_limit: 'capped',
-  evidence_topic_request_not_found: 'upstream',
 })
 
 /**
@@ -3246,7 +3232,7 @@ export function errorCodeOutcome(code) {
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
   // Sharing memory inside the platform refuses one share, link or subscription, never a run.
   if (CAPSULE_SHARE_ERROR_CODES.includes(text)) return 'upstream'
-  // The flywheel's figures and the community column refuse about the module, never about a run.
+  // The flywheel's figures refuse about the module, never about a run.
   if (EVIDENCE_FLYWHEEL_ERROR_CODES.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'

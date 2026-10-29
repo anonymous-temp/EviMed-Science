@@ -560,9 +560,6 @@ function evidenceSettings(overrides) {
     // What one address may fetch of the public pages and the read-only API in a minute (the pages are outside `/api/`, so the API's own
     // limiter never sees them). A crawler that behaves is far under it; a scraper that does not is answered 429 with Retry-After.
     evidencePublicRatePerMinute: whole("evidencePublicRatePerMinute", "OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE", 120, 10, 100_000),
-    // How many topic requests (filed or seconded) one signed-in account may make in a day: a public list anyone may add to needs a
-    // ceiling on what one account can put on it.
-    evidenceTopicRequestsPerDay: whole("evidenceTopicRequestsPerDay", "OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY", 5, 1, 1000),
   };
 }
 
@@ -649,9 +646,6 @@ function countSetting(overrides, key, name, fallback) {
  *
  * - `OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED` (off): the operator's `GET /api/ops/evidence-flywheel` and the `open_science_evidence_flywheel_*`
  *   families. It reads existing tables only; it is a switch because a scrape that verifies cards is database work an operator chooses to ask for.
- * - `OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED` (off): the community column of an official zone, `GET /api/frontier/zones/:id/community`, which lists
- *   other users' public cards on the zone's subjects (established authors only). `OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS` (20, at most 50) bounds one
- *   column; a longer list is a resource cost, not an opinion about the cards.
  * - `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED` (off): what becomes of a published card — a correction, a withdrawal — goes back into learning: an incident
  *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
  *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
@@ -688,13 +682,8 @@ function evidenceFlywheelSettings(overrides) {
   const batchRaw = overrides.learningEvidenceOutcomesBatch !== undefined ? overrides.learningEvidenceOutcomesBatch : process.env.OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH;
   const outcomesBatch = batchRaw == null || batchRaw === "" ? 25 : Number(batchRaw);
   if (!Number.isSafeInteger(outcomesBatch) || outcomesBatch < 1 || outcomesBatch > 200) throw new Error(`OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH must be a whole number from 1 to 200, got ${JSON.stringify(batchRaw)}.`);
-  const raw = overrides.evidenceCommunityMaxCards !== undefined ? overrides.evidenceCommunityMaxCards : process.env.OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS;
-  const maxCards = raw == null || raw === "" ? 20 : Number(raw);
-  if (!Number.isSafeInteger(maxCards) || maxCards < 1 || maxCards > 50) throw new Error(`OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS must be a whole number from 1 to 50, got ${JSON.stringify(raw)}.`);
   return {
     evidenceFlywheelMetricsEnabled: overrides.evidenceFlywheelMetricsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED", false),
-    evidenceCommunityCardsEnabled: overrides.evidenceCommunityCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED", false),
-    evidenceCommunityMaxCards: maxCards,
     learningEvidenceOutcomesEnabled: overrides.learningEvidenceOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED", false),
     learningEvidenceOutcomesBatch: outcomesBatch,
     evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),

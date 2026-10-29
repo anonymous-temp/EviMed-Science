@@ -8,7 +8,7 @@ import { evidenceFeedJsonPath, evidenceFeedRssPath } from "../src/evidenceFeedRo
 import { evidencePublicApiPrefix } from "../src/evidencePublicApi.mjs";
 import { createEvidencePublicIndexing, evidenceSitemapXml } from "../src/evidencePublicIndexing.mjs";
 import { authorPath, cardPath, changesPath, renderPage, zonePath } from "../src/evidencePublicLayout.mjs";
-import { aboutPage, indexPage, metricsPage, notFoundPage, requestsPage, simulationsPage } from "../src/evidencePublicPages.mjs";
+import { aboutPage, indexPage, metricsPage, notFoundPage, simulationsPage } from "../src/evidencePublicPages.mjs";
 import { evidencePublicBase, evidencePublicPath, evidencePublicSuffix, setEvidencePublicBase } from "../src/evidencePublicPaths.mjs";
 import { createEvidencePublicRoutes } from "../src/evidencePublicRoutes.mjs";
 import { evidencePublicStylesheetPath } from "../src/evidencePublicStyle.mjs";
@@ -64,7 +64,6 @@ test("with the base at /evimed-evidence every address the pages, the API, the si
     ["index", indexPage({ official: [], product: [], user: [] }), "/evimed-evidence/"],
     ["about", aboutPage(), "/evimed-evidence/about"],
     ["metrics", metricsPage({ months: [] }), "/evimed-evidence/metrics"],
-    ["requests", requestsPage({ items: [] }), "/evimed-evidence/requests"],
     ["simulations", simulationsPage({ reader: true, items: [{ id: "sim-1", title: "Trial", summary: "s" }], next: "cursor" }), "/evimed-evidence/simulations"],
     ["not found", notFoundPage(), "/evimed-evidence/"],
   ];
@@ -77,8 +76,8 @@ test("with the base at /evimed-evidence every address the pages, the API, the si
       assert.ok(href.startsWith("/evimed-evidence") || href === "/login" || href.startsWith("/app/"), `${name}: ${href} is under the base`);
     }
   }
-  assert.ok(String(pages[4][1].body).includes('href="/evimed-evidence/simulations/sim-1"'), "a simulation links under the base");
-  assert.ok(String(pages[4][1].body).includes("/evimed-evidence/simulations?cursor="), "and so does its pager");
+  assert.ok(String(pages[3][1].body).includes('href="/evimed-evidence/simulations/sim-1"'), "a simulation links under the base");
+  assert.ok(String(pages[3][1].body).includes("/evimed-evidence/simulations?cursor="), "and so does its pager");
   assert.ok(renderPage({ ...(/** @type {any} */ (pages[0][1])), path: "/evimed-evidence/", noindex: false, alternates: true }).includes('href="/evimed-evidence/feed.xml"'), "the feed links");
 
   // The sitemap lists the static pages, the zones, the cards and the authors under the base.

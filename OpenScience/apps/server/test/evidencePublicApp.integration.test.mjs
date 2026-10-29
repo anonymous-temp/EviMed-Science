@@ -1,7 +1,7 @@
 // The public evidence pages in the real hosted app over HTTP, against a real PostgreSQL, composed exactly as a deployment composes them
 // (flywheel F08, F27): every page kind is fetched with no session, the pages' own security headers win over the app's, the server's
-// per-address limiter answers 429, the feed still answers beside them, the signed-in topic-request routes work through a real session
-// with the CSRF check, and the operator's scrape carries the pages' counters.
+// per-address limiter answers 429, the feed still answers beside them, the retired topic-request routes are gone, and the operator's scrape
+// carries the pages' counters.
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -34,7 +34,7 @@ before(async () => {
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres",
     requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
     frontierEnabled: true, frontierAudience: "all", evidencePublicWebEnabled: true, evidencePublicIndexable: true, publicUrl: PUBLIC_URL, evidencePublicRatePerMinute: 25,
-    evidenceTopicRequestsPerDay: 2, evidenceSimulations: { list: async () => ({ items: SIMULATIONS, next: null }), get: async (/** @type {string} */ id) => SIMULATIONS.find((entry) => entry.id === id) ?? null },
+    evidenceSimulations: { list: async () => ({ items: SIMULATIONS, next: null }), get: async (/** @type {string} */ id) => SIMULATIONS.find((entry) => entry.id === id) ?? null },
     knowledgePluginUrl: "http://plugin.test:8080", knowledgePluginTokenFile: tokenFile, knowledgePluginFetch: memoryPlugin({ sources: [pluginSource("nejm")] }).fetchImpl,
     frontierEmbedder: { configured: false, modelKey: "none@1024", counters: {} },
   });
@@ -93,7 +93,7 @@ test("every page kind is fetched with no session through the real app, the pages
   for (const [pathname, needle] of [
     [`/evidence/z/${open.id}`, "阿哌沙班和卒中"], [`/evidence/z/${open.id}/changes`, "已重新检索，结论未变"], [`/evidence/c/${card.id}`, "结果总结（临床版）"], [`/evidence/c/${card.id}?view=public`, "事实框"],
     [`/evidence/a/${ownerHandle}`, "房颤抗凝"], ["/evidence/about", "钱买得到发布和分发，买不到排名和结论"], ["/evidence/metrics", "引文核对通过率"], ["/evidence/simulations", "Simulated trial"],
-    ["/evidence/simulations/sim-1", "预测"], ["/evidence/requests", "选题申请"],
+    ["/evidence/simulations/sim-1", "预测"],
   ]) {
     const answer = await page(pathname);
     assert.equal(answer.status, 200, pathname);
@@ -140,41 +140,19 @@ test("every page kind is fetched with no session through the real app, the pages
   assert.match(scrape, /^open_science_evidence_public_requests_total\{kind="api"\} \d+$/m);
   assert.match(scrape, /^open_science_evidence_public_page_reads_total\{outcome="counted"\} \d+$/m);
   assert.match(scrape, /^open_science_evidence_public_noindex_total\{reason="new_author"\} [1-9]\d*$/m);
-  assert.match(scrape, /^open_science_evidence_topic_requests_total\{outcome="filed"\} 0$/m);
 });
 
-test("the topic requests need a session, the CSRF token and the frontier audience; filing and seconding count once per account and show on the public page", options, async () => {
-  const route = "/api/frontier/evidence/topic-requests";
-  assert.equal((await fetch(`${context.base}${route}`, { method: "POST", body: JSON.stringify({ title: "Anticoagulation after stroke" }), headers: { "content-type": "application/json" } })).status, 401);
-  assert.equal((await fetch(`${context.base}${route}`)).status, 401);
-  const { "x-open-science-csrf": _csrf, ...withoutCsrf } = context.sessions.owner;
-  assert.equal((await fetch(`${context.base}${route}`, { method: "POST", headers: withoutCsrf, body: JSON.stringify({ title: "Anticoagulation after stroke" }) })).status, 403);
-  const filed = await call("owner", "POST", route, { title: "Anticoagulation after stroke" });
-  assert.equal(filed.status, 200);
-  assert.equal(filed.body.data.filed, true);
-  assert.equal(filed.body.data.request.requesters, 1);
-  const id = filed.body.data.request.id;
-  const seconded = await call("reader", "POST", `${route}/${id}/second`);
-  assert.equal(seconded.status, 200);
-  assert.equal(seconded.body.data.request.requesters, 2);
-  assert.equal((await call("reader", "POST", `${route}/${id}/second`)).body.data.alreadySeconded, true, "one vote per account");
-  assert.equal((await call("reader", "POST", route, { title: "x" })).body.code, "evidence_topic_request_invalid");
-  assert.equal((await call("reader", "POST", `${route}/tr_${"0".repeat(32)}/second`)).body.code, "evidence_topic_request_not_found");
-  const list = await call("reader", "GET", route);
-  assert.deepEqual(list.body.data.items.map((item) => [item.title, item.requesters]), [["Anticoagulation after stroke", 2]]);
-  assert.deepEqual(list.body.data.seconded, [id]);
-  // The daily limit is the lever's: this app allows two new votes a day, the reader has used one.
-  assert.equal((await call("reader", "POST", route, { title: "A second topic" })).status, 200);
-  const over = await call("reader", "POST", route, { title: "A third topic" });
-  assert.equal(over.status, 429);
-  assert.equal(over.body.code, "evidence_topic_request_limit");
-  const publicPage = await page("/evidence/requests");
-  assert.ok(publicPage.body.includes("Anticoagulation after stroke") && publicPage.body.includes("2 人申请"));
-  assert.ok(publicPage.body.indexOf("Anticoagulation after stroke") < publicPage.body.indexOf("A second topic"), "ordered by requesters");
-  assert.equal(publicPage.headers.get("x-robots-tag"), "noindex");
+test("the retired topic requests leave no page, no navigation entry and no API route: an address that was theirs is one that does not exist", options, async () => {
+  assert.equal((await page("/evidence/requests")).status, 404);
+  const home = await page("/evidence/", { headers: {} });
+  assert.equal(home.body.includes("选题申请"), false, "no link to it in the header");
+  assert.equal((await page("/evidence/about", { headers: {} })).body.includes("选题申请"), false, "nor in the editorial note");
+  for (const [method, route] of [["GET", "/api/frontier/evidence/topic-requests"], ["POST", "/api/frontier/evidence/topic-requests"], ["POST", `/api/frontier/evidence/topic-requests/tr_${"0".repeat(32)}/second`]]) {
+    const answer = await call("owner", method, route, method === "POST" ? { title: "Anticoagulation after stroke" } : undefined);
+    assert.equal(answer.status, 404, `${method} ${route}`);
+  }
   const scrape = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
-  assert.match(scrape, /^open_science_evidence_topic_requests_total\{outcome="filed"\} 2$/m);
-  assert.match(scrape, /^open_science_evidence_topic_requests_total\{outcome="refused_limit"\} 1$/m);
+  assert.doesNotMatch(scrape, /open_science_evidence_topic_requests_total/);
 });
 
 test("the server's own limiter keeps an address to its minute and answers 429 with Retry-After, apart from the API's limiter", options, async () => {

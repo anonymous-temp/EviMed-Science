@@ -8,7 +8,7 @@ import { escapeHtml, externalLink, html, raw, safeHref, timeTag } from "../src/e
 import { aigcMetadata, renderPage } from "../src/evidencePublicLayout.mjs";
 import { createEvidencePublicIndexing, evidenceAbsoluteUrl, evidenceRobotsTxt, evidenceSitemapXml } from "../src/evidencePublicIndexing.mjs";
 import { setEvidencePublicBase } from "../src/evidencePublicPaths.mjs";
-import { aboutPage, cardPage, changesPage, claimCountsText, indexPage, metricsPage, requestsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage } from "../src/evidencePublicPages.mjs";
+import { aboutPage, cardPage, changesPage, claimCountsText, indexPage, metricsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage } from "../src/evidencePublicPages.mjs";
 import { evidenceFeedRss } from "../src/evidenceFeed.mjs";
 import { createEvidencePublicRoutes } from "../src/evidencePublicRoutes.mjs";
 import { evidencePublicStylesheet } from "../src/evidencePublicStyle.mjs";
@@ -103,7 +103,6 @@ test("no public page repeats that a card is only an index, or explains how the p
     withdrawn: withdrawnCardPage({ card: card({ withdrawn: { at: "2026-10-04T00:00:00Z", reason: "wrong", changeLogId: "7" } }) }),
     changes: changesPage({ zone, items: [], nextBefore: null }),
     metrics: metricsPage({ months: [{ month: "2026-10", data: true, figures: full }] }),
-    requests: requestsPage({ items: [] }),
   };
   const forbidden = /只是索引|请引用它列出的原始来源|不要引用这张卡|排序只看|没有付费字段|撤回的卡片保留这一页|每条说明由程序按事实写成|记录只追加|重新算出来的|平台没有审核过/;
   for (const [name, page] of Object.entries(pages)) {
@@ -115,7 +114,6 @@ test("no public page repeats that a card is only an index, or explains how the p
   assert.match(String(pages.index.body), /每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。/);
   assert.match(String(pages.changes.body), /更正、更新和撤回都记在这里：日期、改了什么、为什么改、由什么触发。/);
   assert.match(String(pages.metrics.body), /月份按北京时间的日历月算。没有数据的月份写明没有数据，不写 0。/);
-  assert.match(String(pages.requests.body), /申请和附议需要登录 EviMed 账号/);
   // The AI label and the disclosure are the labelling of published content, and stay.
   assert.match(String(pages.card.body), /<span class="badge ai">AI 生成<\/span>/);
   assert.match(String(pages.card.body), /AI 做了哪几步/);
@@ -160,15 +158,14 @@ test("renderPage writes noindex, the canonical address, lang, the AI-content met
   assert.doesNotMatch(legacy, /未披露/);
 });
 
-test("the zone, index, simulations, requests and withdrawn pages escape every value they are given", () => {
+test("the zone, index, simulations and withdrawn pages escape every value they are given", () => {
   const zone = { id: "ez_0123456789ab", title: `<b>Zone</b> & "co"`, description: "<i>d</i>", background: "<u>b</u>", kind: "user", kindLabel: "用户专区", producer: null, owner: { id: "alice", name: "<Alice>" }, follows: 3, cards: 1, withdrawnCards: 0, currencyCounts: { current: 1 }, lastCheckedAt: null };
   const cards = { items: [card({ aiGenerated: false })], next: "abc" };
   const zoneBody = String(zonePage({ zone, cards }).body);
   const indexBody = String(indexPage({ official: [], product: [{ ...zone, kind: "product", producer }], user: [{ ...zone }] }).body);
-  const requests = String(requestsPage({ items: [{ id: "tr_x", title: "<script>x</script>", requesters: 3, zoneId: null, zoneTitle: null, createdAt: "2026-10-01T00:00:00Z" }] }).body);
   const simulations = String(simulationsPage({ reader: true, items: [{ id: "s<1>", title: "<s>sim</s>", summary: "<p>" }], next: null }).body);
   const withdrawn = String(withdrawnCardPage({ card: card({ withdrawn: { at: "2026-10-04T00:00:00Z", reason: "<b>wrong</b>", changeLogId: "7" } }) }).body);
-  for (const [name, body] of Object.entries({ zoneBody, indexBody, requests, simulations, withdrawn })) {
+  for (const [name, body] of Object.entries({ zoneBody, indexBody, simulations, withdrawn })) {
     assert.equal(/<(script|b|i|u|s|p)>/.test(body.replace(/<p[ >]/g, "")), false, `${name} has no markup from a value`);
   }
   assert.match(zoneBody, /href="\/evidence\/z\/ez_0123456789ab\?cursor=abc"/, "a next page is a cursor link");
@@ -212,7 +209,8 @@ test("《编辑说明》 states the five principles of the plan and that money b
   assert.ok(principles);
   assert.equal(principles[1].match(/<li>/g)?.length, 5);
   for (const sentence of ["出品方如实标注", "同一把尺子", "每句可溯源", "官方内容只由平台出品，研究只认原始来源", "钱买得到发布和分发，买不到排名和结论"]) assert.ok(body.includes(sentence), sentence);
-  for (const sentence of ["引文没有核对上（⚠）的结论不发布", "每周最多发两张", "记录只追加，发布后不能改", "撤回的卡片保留一个说明页", "任何人都能申请选题"]) assert.ok(body.includes(sentence), sentence);
+  for (const sentence of ["引文没有核对上（⚠）的结论不发布", "每周最多发两张", "记录只追加，发布后不能改", "撤回的卡片保留一个说明页"]) assert.ok(body.includes(sentence), sentence);
+  assert.equal(body.includes("选题申请"), false, "the retired topic-request entry is no part of the note");
 });
 
 test("the stylesheet is generated from the design tokens: every colour in it is a token's, nothing is requested, and a phone gets one column", () => {
@@ -242,7 +240,6 @@ test("the indexing decision: off is noindex everywhere, a new author is noindex,
   assert.deepEqual(asked, [], "with the switch off no author is even asked about");
   const on = createEvidencePublicIndexing({ config: { evidencePublicIndexable: true }, reads });
   assert.equal((await on.decide({ kind: "site" })).index, true);
-  assert.equal((await on.decide({ kind: "never" })).index, false);
   assert.equal((await on.decide({ kind: "zone", zoneKind: "official", ownerHandle: "newcomer" })).index, true, "official zones are exempt");
   assert.deepEqual(await on.decide({ kind: "zone", zoneKind: "user", ownerHandle: "newcomer" }), { index: false, reason: "new_author" });
   assert.equal((await on.decide({ kind: "zone", zoneKind: "user", ownerHandle: "veteran" })).index, true);
@@ -377,7 +374,7 @@ function countingDatabase() {
 test("with the switch off (or no database) the router handles nothing, issues no query and has no counters", async () => {
   for (const [config, database] of [[{ evidencePublicWebEnabled: false, evidencePublicIndexable: true }, countingDatabase()], [{ evidencePublicWebEnabled: true }, null]]) {
     const routes = createEvidencePublicRoutes({ config, database, limiter: () => { throw new Error("the limiter must not run"); } });
-    for (const path of ["/evidence/", "/evidence", "/evidence/z/ez_0123456789ab", "/evidence/c/ec_0123456789ab", "/evidence/a/alice", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/requests", "/evidence/sitemap.xml",
+    for (const path of ["/evidence/", "/evidence", "/evidence/z/ez_0123456789ab", "/evidence/c/ec_0123456789ab", "/evidence/a/alice", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/sitemap.xml",
       "/evidence/assets/site.css", "/evidence/api/v1/zones", "/evidence/api/v1/metrics", "/robots.txt"]) {
       let wrote = false;
       const res = { writeHead: () => { wrote = true; }, end: () => { wrote = true; } };

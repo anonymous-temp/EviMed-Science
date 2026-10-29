@@ -18,10 +18,9 @@ import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
  * count, then the domain's own comparison for each until the minimum is reached.
  *
  * **This is the only statement of the rule.** The feed, the public pages' indexing (`evidencePublicQuery.authorQualifies`) and the
- * community column (`evidenceCommunity`, through `evidenceEstablishedAuthors`) each used to hold a copy, and the copies looked at
- * different numbers of cards (50, 50 and 150). Each caller now asks this one, and keeps its own extra condition beside the call: an
- * official zone is exempt on the pages and in the feed (the platform is not a new author); the community column may list a card
- * whose author is not established when something independent corroborates it (plan §7). The ✓ counted is the platform-read ✓ —
+ * community column (retired 2026-10-29) each used to hold a copy, and the copies looked at different numbers of cards (50, 50 and 150).
+ * Each caller now asks this one, and keeps its own extra condition beside the call: an official zone is exempt on the pages and in the
+ * feed (the platform is not a new author). The ✓ counted is the platform-read ✓ —
  * `verified` in `verifyEvidenceCardClaims`, never `author_excerpt_only`.
  *
  * @module evidenceAuthorStanding
@@ -85,7 +84,7 @@ export async function evidenceAuthorIsEstablished(database, userId, { minCards =
 
 /**
  * The accounts, of those asked about, that are established authors: the one rule above, asked once for each. An account that is not established is
- * simply absent from the answer. This is the form a caller that sees many authors at a time uses (the community column, the learning loop).
+ * simply absent from the answer. This is the form a caller that sees many authors at a time uses (the learning loop, the official promotion).
  * @param {{ query: (sql: string, values?: any[]) => Promise<{ rows: any[] }> }} database @param {Iterable<string>} userIds
  * @param {{ minCards?: number, cache?: EvidenceStandingCache | null }} [options]
  * @returns {Promise<Set<string>>}

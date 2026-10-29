@@ -128,14 +128,6 @@ export const EVIDENCE_ABOUT_SECTIONS = Object.freeze([
     ],
   },
   {
-    id: "requests",
-    title: "任何人都能申请选题",
-    plan: "§8",
-    blocks: [
-      { type: "p", text: "官方专区有一个公开的选题申请入口，按申请人数排序，谁申请都一样。申请和附议需要登录；同一个账号对同一个选题只算一票。" },
-    ],
-  },
-  {
     id: "search",
     title: "搜索引擎收录",
     plan: "§5.2",

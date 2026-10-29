@@ -520,7 +520,10 @@ export async function setEvidenceZoneVisibility(zone: EvidenceZone, visibility: 
   ).zone;
 }
 
-/** The zones a research result may be published to: the caller's own user zones (an older server's zones have no kind and are user zones). */
+/**
+ * The zones a research result may be published to: the caller's own user zones that hold cards (an older server's zones have no kind and
+ * are user zones). The server's `scope=owned` list leaves out the reader's topic zones (the 我的专区 of the directory), which hold no card of theirs.
+ */
 export async function listOwnUserZones(): Promise<EvidenceZone[]> {
   const zones: EvidenceZone[] = [];
   let cursor: string | null = null;

@@ -58,7 +58,7 @@ export const FRONTIER_PROJECT_NAME = "EviMed 前沿动态";
 
 /**
  * Where the platform's evidence work bills (evidence-flywheel plan §5.1, B7, 2026-10-05): the judging of readers' challenges
- * on the publisher's cards, the learning loop's harm and promotion judgements, the topic requests' judge — so the usage ledger has a
+ * on the publisher's cards, the learning loop's harm and promotion judgements — so the usage ledger has a
  * real account and project to book each model call to (its project reference is a foreign key). The platform's own copy belongs to
  * the publisher account (`ensureEvidenceProject`), never to a person; a researcher's copy (`ensureEvidenceProject(store, userId)`) is where
  * a judgement made for that reader is booked. (The programme and the AI zone editor that also worked here were deleted on 2026-10-29.)
@@ -249,7 +249,7 @@ export function isEvolutionProject(projectId) {
 
 /**
  * The evidence project of one account, made when missing: the publisher account's by default, or the account of a researcher
- * a judgement is made for (a topic request's judge). The same name in both, because it is the same kind of work, billed to whoever owns it.
+ * a judgement is made for. The same name in both, because it is the same kind of work, billed to whoever owns it.
  * @param {{ userById: (id: string) => Promise<any>, requireProject: (user: any, id: string) => Promise<any>,
  *   createProject: (user: any, id: string, name: string) => Promise<any> }} store
  * @param {string} [userId]
