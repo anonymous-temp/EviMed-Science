@@ -25,13 +25,13 @@ const leg = (/** @type {Partial<{tag: boolean, entity: boolean, words: boolean}>
 
 test("a candidate hits every keyword; all but one is enough only with the vector near and two keywords at least", () => {
   assert.deepEqual(zoneRecallVerdict([leg({ tag: true }), leg({ words: true })], null),
-    { candidate: true, via: "tag", partial: false, wordsOnly: true }, "the strongest leg that offered it, and a keyword that hit by words alone");
+    { candidate: true, via: "tag", partial: false, wordsOnly: true, weak: 1 }, "the strongest leg that offered it, and a keyword that hit by words alone");
   assert.equal(zoneRecallVerdict([leg({ entity: true }), leg({ entity: true })], null).via, "entity");
   assert.equal(zoneRecallVerdict([leg({ words: true }), leg({ words: true })], null).via, "words");
   assert.equal(zoneRecallVerdict([leg({ tag: true }), leg()], null).candidate, false, "one keyword missing and no vector");
   assert.equal(zoneRecallVerdict([leg({ tag: true }), leg()], ZONE_RECALL.nearCosine - 0.01).candidate, false, "the vector is not near enough");
   assert.deepEqual(zoneRecallVerdict([leg({ tag: true }), leg()], ZONE_RECALL.nearCosine),
-    { candidate: true, via: "tag", partial: true, wordsOnly: false }, "the vector completes it; the keyword leg is still the strongest");
+    { candidate: true, via: "tag", partial: true, wordsOnly: false, weak: 0 }, "the vector completes it; the keyword leg is still the strongest");
   assert.equal(zoneRecallVerdict([leg({ words: true }), leg()], 0.9).via, "words");
   assert.equal(zoneRecallVerdict([leg(), leg(), leg({ tag: true })], 0.99).candidate, false, "two keywords missing is not rescued by any cosine");
   assert.equal(zoneRecallVerdict([leg()], 0.99).candidate, false, "a one-keyword zone is not widened by the all-but-one rule");
@@ -83,6 +83,10 @@ test("the instructions carry the owner's guidance and name the block 「最新�
   assert.ok(!EVIDENCE_ZONE_PROGRESS_INSTRUCTIONS.includes("AI 近况"));
   assert.ok(EVIDENCE_ZONE_PROGRESS_INSTRUCTIONS.includes("不写证据强、弱、确定、不确定"), "no wording about the strength of evidence");
   assert.ok(!/\bAI\b/.test(EVIDENCE_ZONE_PROGRESS_INSTRUCTIONS.split("\n")[0]), "no AI in the block's voice");
+  // Found by the live check (2026-10-29): the date a model is shown is the platform's, and it wrote it as the approval's; it joined two
+  // items with 「同期」; it opened with a sentence that had no mark.
+  assert.ok(EVIDENCE_ZONE_PROGRESS_INSTRUCTIONS.includes("平台收录的日期") && EVIDENCE_ZONE_PROGRESS_INSTRUCTIONS.includes("同期") && EVIDENCE_ZONE_PROGRESS_INSTRUCTIONS.includes("没有编号的开场白"));
+  assert.ok(EVIDENCE_ZONE_JUDGE_INSTRUCTIONS.includes("研究人群或背景"), "a keyword that is only the population does not make an item core");
 });
 
 const BATCH = [

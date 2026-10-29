@@ -123,6 +123,8 @@ export const ZONE_PROGRESS = Object.freeze({
 /** Stats are recomputed for a zone whose rows changed at most this often, and at least this often otherwise (windows drift). */
 const STATS_MIN_AGE_MS = 10 * MINUTE;
 const STATS_MAX_AGE_MS = 6 * HOUR;
+/** ...except a zone that has counted nothing yet. */
+const EMPTY_STATS_MIN_AGE_MS = 30_000;
 /** The withdrawn-citation check runs this often. */
 const RETRACT_CHECK_MS = 2 * MINUTE;
 /** Zone vectors are kept in memory for this many zones (id + definition version). */
@@ -150,7 +152,7 @@ export const EVIDENCE_ZONE_JUDGE_INSTRUCTIONS = [
   "- out：条目与这个专区的主题无关，或者只是名称碰巧相同（例如「乳腺癌耐药蛋白」不是乳腺癌，磁共振的表观扩散系数 ADC 不是抗体偶联药物），或者属于排除标准写明的情形。",
   "",
   "判断要点：",
-  "1. 关键词之间是「且」：专区的主题是它们的交集。条目只讲其中一个关键词，通常是 related 或 out，不是 core。同义词、中英文名、下位词都算那个关键词。",
+  "1. 关键词之间是「且」：专区的主题是它们的交集。条目只讲其中一个关键词，通常是 related 或 out，不是 core。同义词、中英文名、下位词都算那个关键词。关键词只是研究人群或背景（例如「肥胖患者的膝关节疼痛」里的肥胖），而主要结果讲的是另一个问题时，选 related。",
   "2. 有视角时，看条目的重点是不是这个视角（例如「安全性」指条目主要讲不良反应或安全信号），不是只要出现相关字眼。",
   "3. 纳入与排除标准优先于你对主题的一般理解；「算」的例子是 core 或 related 的样子，「不算」的例子是 out 的样子。读者给的反馈（有的条目附「读者提示」）是要认真对待的线索，但最后仍由你根据材料判断。",
   "4. 只根据给出的标题、导读、实体和标签判断，不凭记忆补充条目里没有的内容。拿不准时，在 core 和 related 之间选 related，在 related 和 out 之间选 out。",
@@ -169,7 +171,8 @@ export const EVIDENCE_ZONE_PROGRESS_INSTRUCTIONS = [
   "规则：",
   `1. 每个事实在句末标注它来自的材料编号，如 [2]；只能用给出的编号，至少标一个，最多用 ${FRONTIER_TOPIC_LIMITS.overviewRefs} 个不同的编号。`,
   "2. 只写「新出了什么」这一事实层：谁在什么时候发布了什么，研究是怎么做的，结果的数字是什么（材料里有才写）。不写证据强、弱、确定、不确定这类对证据强度或确定性的评价，不写结论是否改变，不比较研究的好坏。",
-  "3. 不给任何治疗、用药或购买建议；不推荐产品；不写「值得关注」「引发热议」这类空话；不写材料没有说的。",
+  "3. 不给任何治疗、用药或购买建议；不推荐产品；不写「值得关注」「引发热议」这类空话；不写材料没有说的。不写没有编号的开场白或总结句。",
+  "   材料里的日期是平台收录的日期，不一定是事件发生的日期：不要把它写成批准、发表或研究完成的日期，除非导读里写明。不推断事件之间的先后和因果，不写「同期」「随后」「此前」「因此」，除非材料自己这样写。",
   "4. 一切数量用阿拉伯数字，与材料完全一致，不计算、不换算。",
   "5. 一段话，不分点，不换行，不出现链接或网址。",
   "6. 材料不足以写出三句有内容的话时，输出 {\"overview_zh\":\"\"}。",
@@ -208,13 +211,14 @@ const LEG_ORDER = Object.freeze(["tag", "entity", "words", "vector"]);
 /**
  * Whether an item is a candidate of a zone, from what each keyword's legs found (plan §4.2.4, §6.2): every keyword hit, or — for a
  * zone of two keywords or more — all but one and the item within `ZONE_RECALL.nearCosine` of the zone's vector. `via` is the
- * strongest leg involved; `partial` marks an item the vector completed; `wordsOnly` an item for which some keyword hit by words alone.
+ * strongest leg involved; `partial` marks an item the vector completed; `wordsOnly` an item for which some keyword hit by words alone
+ * (`weak` of them).
  * @param {Array<{ tag: boolean, entity: boolean, words: boolean }>} legs one entry per keyword
  * @param {number | null} cosine the item's cosine to the zone's vector, null without one
- * @returns {{ candidate: boolean, via: "tag" | "entity" | "words" | "vector" | null, partial: boolean, wordsOnly: boolean }}
+ * @returns {{ candidate: boolean, via: "tag" | "entity" | "words" | "vector" | null, partial: boolean, wordsOnly: boolean, weak: number }}
  */
 export function zoneRecallVerdict(legs, cosine) {
-  const none = { candidate: false, via: null, partial: false, wordsOnly: false };
+  const none = { candidate: false, via: null, partial: false, wordsOnly: false, weak: 0 };
   const k = legs.length;
   if (!k) return none;
   const hit = legs.map((leg) => leg.tag || leg.entity || leg.words);
@@ -231,8 +235,8 @@ export function zoneRecallVerdict(legs, cosine) {
   }
   if (partial) used.add("vector");
   const via = /** @type {"tag" | "entity" | "words" | "vector"} */ (LEG_ORDER.find((leg) => used.has(leg)) ?? "vector");
-  const wordsOnly = legs.some((leg) => leg.words && !leg.tag && !leg.entity);
-  return { candidate: true, via, partial, wordsOnly };
+  const weak = legs.filter((leg) => leg.words && !leg.tag && !leg.entity).length;
+  return { candidate: true, via, partial, wordsOnly: weak > 0, weak };
 }
 
 /**
@@ -420,7 +424,7 @@ export function shapeZoneStats(row) {
  *   version: number, backfilledVersion: number, matchedThrough: Date | null, overview: any, overviewAt: Date | null }} MembershipZone
  * @typedef {{ vector: boolean, halfvec: boolean }} MembershipCapabilities
  * @typedef {{ id: string, publicId: string, visibleAt: Date, eventId: string | null, genre: string | null, safetyAlert: boolean,
- *   via: "tag" | "entity" | "words" | "vector", partial: boolean, wordsOnly: boolean, cosine: number | null }} ZoneCandidate
+ *   via: "tag" | "entity" | "words" | "vector", partial: boolean, wordsOnly: boolean, weak: number, cosine: number | null }} ZoneCandidate
  */
 
 export class EvidenceZoneMembership {
@@ -643,7 +647,7 @@ export class EvidenceZoneMembership {
       const verdict = zoneRecallVerdict(perKeyword, cos);
       if (!verdict.candidate || !verdict.via) continue;
       found.set(String(row.id), { id: String(row.id), publicId: String(row.public_id), visibleAt: new Date(row.visible_at), eventId: row.event_id == null ? null : String(row.event_id),
-        genre: row.genre ?? null, safetyAlert: row.safety_alert === true, via: verdict.via, partial: verdict.partial, wordsOnly: verdict.wordsOnly, cosine: cos });
+        genre: row.genre ?? null, safetyAlert: row.safety_alert === true, via: verdict.via, partial: verdict.partial, wordsOnly: verdict.wordsOnly, weak: verdict.weak, cosine: cos });
     }
     // A zone the vocabularies hold at most one keyword of: its nearest items are the other way in.
     const resolved = keywords.filter((keyword) => keyword.tagIds.length || keyword.entityKeys.length).length;
@@ -660,7 +664,7 @@ export class EvidenceZoneMembership {
       for (const row of nearest) {
         if (found.has(String(row.id))) continue;
         found.set(String(row.id), { id: String(row.id), publicId: String(row.public_id), visibleAt: new Date(row.visible_at), eventId: row.event_id == null ? null : String(row.event_id),
-          genre: row.genre ?? null, safetyAlert: row.safety_alert === true, via: "vector", partial: false, wordsOnly: false, cosine: Number(row.cos) });
+          genre: row.genre ?? null, safetyAlert: row.safety_alert === true, via: "vector", partial: false, wordsOnly: false, weak: 0, cosine: Number(row.cos) });
       }
     }
     return [...found.values()].sort((left, right) => (order === "ASC" ? 1 : -1) * (left.visibleAt.getTime() - right.visibleAt.getTime() || Number(left.id) - Number(right.id))).slice(0, limit);
@@ -742,6 +746,8 @@ export class EvidenceZoneMembership {
         await this.#offer(zone, candidates, { refresh: true });
         await this.database.query(`UPDATE evimed_frontier.evidence_zones SET backfilled_version = GREATEST(backfilled_version, $2::integer), matched_through = $3::timestamptz
           WHERE id = $1`, [zone.id, zone.version, now.toISOString()]);
+        // A new definition version unparks the pairs that ran out of attempts under the old one.
+        await this.database.query(`UPDATE evimed_frontier.zone_items SET attempts = 0 WHERE zone_id = $1 AND state IN ('pending', 'in') AND attempts > 0`, [zone.id]);
         this.counters.backfills += 1;
         done.push(zone.id);
         this.changed = true;
@@ -979,16 +985,20 @@ export class EvidenceZoneMembership {
 
   /**
    * Recompute the stats of the zones that need it: never computed, or rows changed since and ten minutes passed, or six hours passed
-   * (the windows move).
+   * (the windows move). A zone whose last count was empty (a new one, still being judged) is counted again after half a minute once
+   * rows changed, so its page does not read zero for ten minutes after its first items arrive.
    * @param {Date} now
    */
   async #refreshStats(now) {
     const due = (await this.database.query(`SELECT z.id FROM evimed_frontier.evidence_zones z
-      WHERE z.lifecycle IN ('active', 'quiet', 'archived') AND z.definition IS NOT NULL
-        AND (z.stats_at IS NULL OR (z.stats_at <= $1::timestamptz AND (z.stats_at <= $2::timestamptz OR EXISTS (
-          SELECT 1 FROM evimed_frontier.zone_items zi WHERE zi.zone_id = z.id AND (zi.judged_at > z.stats_at OR zi.matched_at > z.stats_at)))))
+      WHERE z.lifecycle IN ('active', 'quiet', 'archived') AND z.definition IS NOT NULL AND z.backfilled_version >= z.definition_version
+        AND (z.stats_at IS NULL OR (
+          EXISTS (SELECT 1 FROM evimed_frontier.zone_items zi WHERE zi.zone_id = z.id AND (zi.judged_at > z.stats_at OR zi.matched_at > z.stats_at))
+          AND (z.stats_at <= $1::timestamptz OR (z.stats_at <= $4::timestamptz AND coalesce((z.stats->>'all')::integer, 0) = 0)))
+          OR z.stats_at <= $2::timestamptz)
       ORDER BY z.stats_at NULLS FIRST, z.id LIMIT $3`,
-    [new Date(now.getTime() - STATS_MIN_AGE_MS).toISOString(), new Date(now.getTime() - STATS_MAX_AGE_MS).toISOString(), ZONE_TICK.statsZones])).rows ?? [];
+    [new Date(now.getTime() - STATS_MIN_AGE_MS).toISOString(), new Date(now.getTime() - STATS_MAX_AGE_MS).toISOString(), ZONE_TICK.statsZones,
+      new Date(now.getTime() - EMPTY_STATS_MIN_AGE_MS).toISOString()])).rows ?? [];
     let refreshed = 0;
     for (const { id } of due) {
       try {
@@ -1224,7 +1234,8 @@ export class EvidenceZoneMembership {
   /**
    * What a definition would bring, from the recall alone (no model; the vector leg only if the embedder answers in time): the events
    * of the last `days` days, the weekly rate and its band, the newest five and up to three borderline ones — an item the vector
-   * completed or found alone, then one a keyword hit by its words only — for the reader to mark 算 / 不算.
+   * completed or found alone, then one a keyword hit by its words only (the most keywords by words alone first) — for the reader to
+   * mark 算 / 不算.
    * @param {ZoneDefinition} definition @param {{ days?: number }} [options]
    * @returns {Promise<{ count30: number, perWeek: number, band: "narrow" | "normal" | "broad" | null, recentRowIds: string[], borderlineRowIds: string[] }>}
    */
@@ -1249,7 +1260,8 @@ export class EvidenceZoneMembership {
     }
     const perWeek = Math.round(((events.size * 7) / span) * 10) / 10;
     const weakest = firsts.filter((candidate) => candidate.partial || candidate.via === "vector");
-    const wordsOnly = firsts.filter((candidate) => !(candidate.partial || candidate.via === "vector") && candidate.wordsOnly);
+    const wordsOnly = firsts.filter((candidate) => !(candidate.partial || candidate.via === "vector") && candidate.wordsOnly)
+      .sort((left, right) => right.weak - left.weak);
     return { count30: events.size, perWeek, band: evidenceZoneBand(perWeek),
       recentRowIds: firsts.slice(0, 5).map((candidate) => candidate.id),
       borderlineRowIds: [...weakest, ...wordsOnly].slice(0, 3).map((candidate) => candidate.id) };

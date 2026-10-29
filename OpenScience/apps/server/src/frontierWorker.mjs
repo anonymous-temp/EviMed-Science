@@ -25,6 +25,8 @@ import { HttpError } from "./security.mjs";
  *   before it claims or writes anything, like every other worker of this
  *   control plane; a maintenance window waits for the loops already running
  *   (`inspectActivity` reads `status().running`).
+ * - The topic zones' loop (`zones`, 2026-10-29: `evidenceZoneMembership.mjs`) runs every tick on the owner's money and stands down
+ *   with its own switch. It bounds itself (three judge calls and one 「最新进展」 a tick), so it never holds the other loops back.
  * - The queue is the module's own tables (plan §10.4.4), not the platform's
  *   job ledger: seven thousand fetches and a thousand entries a day would drown
  *   a ledger that holds a few thousand rows. The pipeline claims entries and

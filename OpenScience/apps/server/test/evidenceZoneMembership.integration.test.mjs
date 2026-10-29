@@ -275,11 +275,14 @@ test("a definition change keeps the old rows until the new judgement replaces th
   clock = new Date(clock.getTime() + minutes(2));
   await membership.tick(clock);
   assert.equal(calls.judge.length, spent, "no fourth attempt");
-  // The definition is saved again; the judge answers. The stale rows are judged under version 2, the old out is offered again.
+  // The definition is saved again (version 3, nobody calls afterSave) and the judge answers: the next tick backfills, which gives the
+  // pairs their attempts back; the stale rows are judged under the new version, the old out is offered again.
   judgeFailure = null;
   await db.query("UPDATE evimed_frontier.evidence_zones SET definition_version = 3 WHERE id = 'ez_g'");
-  await membership.afterSave("ez_g");
-  await membership.settled();
+  for (let round = 0; round < 3; round += 1) {
+    clock = new Date(clock.getTime() + minutes(2));
+    await membership.tick(clock);
+  }
   stored = await rows();
   assert.deepEqual([stored.get("CORE stays").state, stored.get("CORE stays").relevance, stored.get("CORE stays").definition_version], ["in", "core", 3]);
   assert.deepEqual([stored.get("REL becomes out").state, stored.get("REL becomes out").definition_version], ["out", 3], "replaced by the new judgement");
@@ -531,6 +534,24 @@ test("stats count events by window, the roles of the month, the latest and the l
   clock = new Date(clock.getTime() + minutes(11));
   await membership.tick(clock);
   assert.equal((await zoneRow()).stats.all, 6);
+});
+
+test("a new zone is counted once it has been backfilled, and again soon after its first items are judged", options, async () => {
+  for (const id of ["ez_1", "ez_2", "ez_3"]) await createZone({ id, title: `专区 ${id}` });
+  await item("CORE one", { summaryZh: "semaglutide obesity" });
+  budgetState = "exhausted";
+  const membership = makeMembership();
+  await membership.tick(clock); // two zones are backfilled; the model has no budget
+  const counted = async () => Object.fromEntries((await db.query("SELECT id, stats FROM evimed_frontier.evidence_zones")).rows.map((/** @type {any} */ row) => [row.id, row.stats?.all ?? null]));
+  const first = Object.values(await counted());
+  assert.deepEqual([first.filter((value) => value === 0).length, first.filter((value) => value === null).length], [2, 1], "the third has not been backfilled: nothing is counted for it yet");
+  budgetState = "ok";
+  clock = new Date(clock.getTime() + 40_000);
+  await membership.tick(clock);
+  await membership.tick(new Date(clock.getTime() + 1));
+  clock = new Date(clock.getTime() + 40_000);
+  await membership.tick(clock);
+  assert.deepEqual(await counted(), { ez_1: 1, ez_2: 1, ez_3: 1 }, "a count of nothing is looked at again after half a minute, not ten");
 });
 
 /** Four core items in the last two weeks, the first with the numbers the paragraph states. */
