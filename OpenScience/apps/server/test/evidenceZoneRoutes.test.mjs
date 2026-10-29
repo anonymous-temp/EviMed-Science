@@ -87,7 +87,10 @@ test("without the read side the routes are what they were; off, the module's own
   for (const url of ["/api/frontier/zones/glp1-obesity/overview", "/api/frontier/zones/ez_x/items", "/api/frontier/zones/ez_x/cards"]) {
     await assert.rejects(routes(request("GET", url), response()), (error) => /** @type {any} */ (error).status === 404 && /** @type {any} */ (error).code === "not_found", url);
   }
-  assert.deepEqual(await get(routes, "/api/frontier/zones?view=mine"), { items: [], total: 0 }, "a view parameter is the old list's to ignore");
+  assert.deepEqual(await get(routes, "/api/frontier/zones?view=mine"), { view: "mine", total: 0, canCreate: false, userZones: { count: 0, max: 0 }, groups: [], zones: [] },
+    "a directory asked of a deployment without topic zones is empty and cannot create (the old list's shape would read as one that can)");
+  assert.deepEqual(await get(routes, "/api/frontier/zones?scope=owned"), { items: [], total: 0 }, "the old list is still the list of the zones cards live in");
+  await assert.rejects(routes(request("GET", "/api/frontier/zones?view=elsewhere"), response()), (error) => /** @type {any} */ (error).code === "evidence_query_invalid");
   assert.deepEqual(await get(routes, "/api/frontier/zones/glp1-obesity"), { zone: { id: "glp1-obesity", old: true }, feedback: [] });
   assert.ok(calls.every((call) => String(call[0]).startsWith("service.")));
   const off = fixture({ enabled: false });

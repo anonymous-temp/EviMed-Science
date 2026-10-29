@@ -2556,7 +2556,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // port (none until the team's interface exists). The membership module (ez-membership) tells an item's page which zones it stands in.
   const evidenceZoneCards = createEvidenceZoneCards({ config });
   const zoneMembership = /** @type {any} */ (frontier)?.zoneMembership ?? null;
-  const evidenceZoneReads = frontier && productDatabase && config.evidenceZoneTopicsEnabled !== false
+  // One switch composes the whole of the topic zones: the reads below, the write side and the planner after them. With it off no route
+  // writes a zone, the planner makes none (and spends nothing), the membership stands down (it reads the same switch) and a typed follow is
+  // refused by name; the directory answers empty and says it cannot create.
+  const zoneTopicsOn = Boolean(frontier && productDatabase && config.evidenceZoneTopicsEnabled !== false);
+  const evidenceZoneReads = zoneTopicsOn && frontier && productDatabase
     ? createEvidenceZoneReads({ database: productDatabase, service: frontier.service, zones: frontier.evidenceZones, membership: zoneMembership,
       cards: evidenceZoneCards, config }) : null;
   if (frontier && evidenceZoneReads && zoneMembership?.zonesForItem) {
@@ -2566,7 +2570,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // word on an item, and the planner that keeps the platform's zones. It answers with the read side's zone detail.
   /** @type {ReturnType<typeof createEvidenceZoneWrites> | null} */
   let zoneWrites = null;
-  if (frontier) {
+  if (frontier && zoneTopicsOn) {
     const zoneDraft = createEvidenceZoneDraft({ editor: frontier.editor, tags: frontier.tagStore, membership: zoneMembership, database: productDatabase,
       hydrate: (user, ids) => frontier.service.hydrate(user, ids), summaries: (user, ids) => evidenceZoneReads?.summaries?.(user, ids) ?? Promise.resolve([]),
       budget: frontier.budget, config });

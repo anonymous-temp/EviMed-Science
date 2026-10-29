@@ -1,6 +1,15 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
+ * The directory of a deployment without topic zones: no zone in it and no way to make one.
+ * @param {string | null} view @param {any} config
+ */
+function unavailableDirectory(view, config) {
+  if (!["recommended", "mine", "community"].includes(view ?? "")) throw new HttpError(400, "evidence_query_invalid", "Invalid evidence query.");
+  return { view, total: 0, canCreate: false, userZones: { count: 0, max: Number.isSafeInteger(config?.evidenceUserZonesMax) ? config.evidenceUserZonesMax : 0 }, groups: [], zones: [] };
+}
+
+/**
  * `reads` is the topic zones' read side (`evidenceZoneReads.mjs`): the directory views, a topic zone's detail, overview, 「动态」 and
  * cards. `writes` is the write side (`evidenceZoneWrites.mjs`): drafting, previewing, creating, editing, deleting a reader's zone and a
  * reader's word on an item. Without them every route answers as it did before topic zones. A zone is addressed by its id or its slug.
@@ -75,12 +84,14 @@ export function createEvidenceZoneRoutes({
     if (writes && parts[0] === "zones" && parts.length === 2 && method === "DELETE")
       return reply(await writes.remove(user, parts[1]));
     if (parts[0] === "zones" && parts.length === 1) {
-      if (method === "GET")
-        return reply(
-          reads && url.searchParams.has("view")
-            ? await reads.directory(user, url.searchParams)
-            : await service.list(user, url.searchParams),
-        );
+      if (method === "GET") {
+        if (url.searchParams.has("view")) {
+          // With the topic zones switched off there is no read side, and the directory says so as an empty one that cannot create: the
+          // older list below answers a different shape, which the page would read as a directory that may be built on.
+          return reply(reads ? await reads.directory(user, url.searchParams) : unavailableDirectory(url.searchParams.get("view"), config));
+        }
+        return reply(await service.list(user, url.searchParams));
+      }
       if (method === "POST") {
         const value = await body();
         if (writes && value && typeof value === "object" && "definition" in value) return reply(await writes.create(user, value));
