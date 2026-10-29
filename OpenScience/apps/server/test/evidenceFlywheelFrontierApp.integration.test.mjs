@@ -1,7 +1,7 @@
 // The frontier's links to the evidence cards in the real hosted app, against a real PostgreSQL, composed exactly as a
-// deployment composes them (flywheel F09, F10): a card published in a followed zone reaches the follower's inbox through
-// the hook the server wires, and the public feed answers over HTTP to a request that carries no session, lists what the
-// plugin may read, answers 304 to its ETag, and shows in the operator's scrape.
+// deployment composes them (flywheel F09): the public feed answers over HTTP to a request that carries no session, lists what the
+// plugin may read, answers 304 to its ETag, and shows in the operator's scrape. (A card published in a followed zone no longer
+// reaches the follower's inbox: the platform writes no cards, 2026-10-29, and the daily notice names zones' key updates instead.)
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +14,7 @@ import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 const PASSWORD = "test-only-flywheel-password";
-const accounts = { owner: "fw-owner", follower: "fw-follower" };
+const accounts = { owner: "fw-owner" };
 let context = null;
 let isolated = null;
 
@@ -44,15 +44,13 @@ after(async () => {
   await isolated?.drop();
 });
 
-test("a card published in a followed zone reaches the follower's inbox through the server's own hook, and the public feed lists it", options, async () => {
+test("the public feed lists a researcher's original research in an open zone, answers 304 to its ETag and shows in the operator's scrape", options, async () => {
   const { app, base } = context;
   const zones = app.frontier.evidenceZones;
   const owner = { id: accounts.owner };
-  const follower = { id: accounts.follower };
   const { zone } = await zones.save(owner, { title: "房颤抗凝", description: "d", background: "b" });
   const live = (await zones.save(owner, { expectedRevision: zone.revision, state: "published" }, zone.id)).zone;
   const open = (await zones.setVisibility(owner, live.id, { visibility: "internet", expectedRevision: live.revision })).zone;
-  await zones.act(follower, open.id, "follow", { expectedRevision: open.revision });
   // The feed carries a researcher's card only from an established author: three published cards with a quotation the platform verified.
   const standing = (await zones.save(owner, { title: "已核验", description: "d", background: "b" })).zone;
   await zones.save(owner, { expectedRevision: standing.revision, state: "published" }, standing.id);
@@ -66,15 +64,6 @@ test("a card published in a followed zone reaches the follower's inbox through t
     sources: [{ title: "Registry", url: "https://example.org/registry", excerpt: "x" }], content: { question: "q", answer: "单中心结果。" }, originality: "original_research",
     lineage: { resultVersionId: `rv_${"5".repeat(64)}` },
   }, open.id, null, true, "result")).evidence;
-
-  // The hook the server composed told the notifier; its worker delivers.
-  assert.equal(Number((await app.store.database.query("SELECT count(*) AS n FROM evimed_product.jobs WHERE kind='frontier-notify' AND user_id=$1", [follower.id])).rows[0].n), 1);
-  await app.frontier.notifications.deliverDue();
-  const inbox = (await app.store.database.query("SELECT title, body, source FROM evimed_inbox.notifications WHERE user_id=$1", [follower.id])).rows;
-  assert.equal(inbox.length, 1);
-  assert.equal(inbox[0].title, "单中心房颤抗凝出血");
-  assert.deepEqual(inbox[0].source, { type: "system", id: `frontier-zone:${open.id}:${card.id}` });
-  assert.deepEqual((await app.store.database.query("SELECT 1 FROM evimed_inbox.notifications WHERE user_id=$1", [owner.id])).rows, [], "the author is not told of their own card");
 
   // The feed: no cookie, no CSRF header, and the researcher's original research in an open zone is in it.
   const feed = await fetch(`${base}/evidence/feed.json`);
@@ -90,5 +79,4 @@ test("a card published in a followed zone reaches the follower's inbox through t
   const scrape = await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
   assert.match(scrape, /^open_science_evidence_feed_requests_total\{outcome="served"\} 2$/m);
   assert.match(scrape, /^open_science_evidence_feed_requests_total\{outcome="not_modified"\} 1$/m);
-  assert.match(scrape, /^open_science_frontier_notifications_total\{outcome="zoneQueued"\} 1$/m);
 });

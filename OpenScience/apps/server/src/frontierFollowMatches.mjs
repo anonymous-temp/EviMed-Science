@@ -17,10 +17,6 @@
  * - **New is the item's own publication time against the follow's `seen_at` (its `created_at` until it is first opened).** It does
  *   not depend on when a scan found the item. Every kind of follow is counted the same way, through the same predicate its feed is
  *   listed by, so the number is what the feed will show.
- * - **A notice claims what it tells, then tells it.** `claimNotice` marks the matches a daily notice will name (`notified_at`) in
- *   one statement and `releaseNotice` gives them back if the notice could not be made: an item is named at most once, and a notice
- *   that failed does not use it up. Only matches published since the reader last opened that follow, and within three days, are
- *   named.
  *
  * @module frontierFollowMatches
  */
@@ -47,8 +43,6 @@ export const FRONTIER_FOLLOW_SCAN_LIMIT = 300;
 export const FRONTIER_FOLLOW_PARSE_PER_HOUR = 20;
 /** The count shown for a follow stops here (「99+」). */
 export const FRONTIER_FOLLOW_COUNT_CAP = 99;
-/** A notice names matches published in the last three days. */
-export const FRONTIER_FOLLOW_NOTICE_WINDOW_MS = 3 * DAY;
 /**
  * The starting cosine for the embedding leg. Not measured on the production embedder (the box that built it holds no embedding
  * key); it sits above the 与我相关 floor (`FRONTIER_FOR_YOU_MIN_COSINE`, 0.4) because a watch is read for what is new and a wrong
@@ -118,7 +112,7 @@ export class FrontierFollowWatch {
     /** Parses by the model an account made lately. @type {Map<string, number[]>} */
     this.parses = new Map();
     this.counters = { parsed: 0, parsedByModel: 0, parseFallbacks: 0, parseRateLimited: 0, scans: 0, matched: 0, vectorMatched: 0, failures: 0,
-      claimed: 0, released: 0, embedFailures: 0 };
+      embedFailures: 0 };
     /** @type {string | null} */
     this.lastError = null;
   }
@@ -292,40 +286,6 @@ export class FrontierFollowWatch {
       return /** @type {const} */ ([follow.id, Number(result.rows?.[0]?.n ?? 0)]);
     }));
     return new Map(entries);
-  }
-
-  /**
-   * Take the matches a notice for this reader will name: each typed follow's matches that were published since the reader last
-   * opened it, in the last three days, not named before and not hidden by the reader, marked as named in the same statement.
-   * @param {string} userId
-   * @returns {Promise<{ news: Array<{ followId: string, label: string, count: number }>, claimed: string[] }>}
-   */
-  async claimNotice(userId) {
-    await this.ready();
-    const now = this.now();
-    const rows = (await this.database.query(`WITH taken AS (
-        UPDATE evimed_frontier.follow_matches m SET notified_at = $2::timestamptz
-        FROM evimed_frontier.user_follows f, evimed_frontier.items i, evimed_frontier.sources s
-        WHERE f.id = m.follow_id AND f.user_id = $1 AND f.kind = 'query' AND NOT f.muted AND m.notified_at IS NULL
-          AND i.id = m.item_id AND i.state = 'published' AND s.id = i.primary_source_id AND s.enabled
-          AND i.visible_at > coalesce(f.seen_at, f.created_at) AND i.visible_at > $3::timestamptz
-          AND NOT EXISTS (SELECT 1 FROM evimed_frontier.user_state us WHERE us.user_id = f.user_id AND us.item_id = i.id AND us.hidden_at IS NOT NULL)
-        RETURNING m.follow_id, m.item_id)
-      SELECT t.follow_id::text AS follow_id, f.label, count(*)::integer AS n, array_agg(t.item_id::text) AS items
-      FROM taken t JOIN evimed_frontier.user_follows f ON f.id = t.follow_id GROUP BY t.follow_id, f.label ORDER BY n DESC, t.follow_id`,
-    [userId, now.toISOString(), new Date(now.getTime() - FRONTIER_FOLLOW_NOTICE_WINDOW_MS).toISOString()])).rows ?? [];
-    const claimed = rows.flatMap((/** @type {any} */ row) => (row.items ?? []).map((/** @type {string} */ item) => `${row.follow_id}:${item}`));
-    this.counters.claimed += claimed.length;
-    return { news: rows.map((/** @type {any} */ row) => ({ followId: String(row.follow_id), label: String(row.label), count: Number(row.n) })), claimed };
-  }
-
-  /** A notice that could not be made gives its matches back. @param {string[]} claimed `<follow>:<item>` pairs from `claimNotice` */
-  async releaseNotice(claimed) {
-    if (!claimed.length) return;
-    const pairs = claimed.map((entry) => entry.split(":"));
-    await this.database.query(`UPDATE evimed_frontier.follow_matches m SET notified_at = NULL FROM unnest($1::bigint[], $2::bigint[]) AS p(follow_id, item_id)
-      WHERE m.follow_id = p.follow_id AND m.item_id = p.item_id`, [pairs.map((pair) => pair[0]), pairs.map((pair) => pair[1])]);
-    this.counters.released += claimed.length;
   }
 
   status() {

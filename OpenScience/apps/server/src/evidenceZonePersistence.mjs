@@ -315,6 +315,18 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.zone_items (
 CREATE INDEX IF NOT EXISTS zone_items_list_idx ON evimed_frontier.zone_items(zone_id, state, item_id DESC);
 CREATE INDEX IF NOT EXISTS zone_items_item_idx ON evimed_frontier.zone_items(item_id) WHERE state IN ('in','pinned');
 CREATE INDEX IF NOT EXISTS zone_items_pending_idx ON evimed_frontier.zone_items(matched_at, zone_id) WHERE state = 'pending';
+-- What a reader's daily notice already named of the zones they own or follow (frontierZoneUpdates.mjs): an item, and the event it
+-- reports, is named to a reader once whichever zone it sits in. A row is written when the notice is taken and deleted when the notice
+-- could not be made; rows older than a fortnight are cleared by the next notice, as no item that old is a candidate any more.
+CREATE TABLE IF NOT EXISTS evimed_frontier.zone_notice_claims (
+ user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+ item_id bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+ zone_id text NOT NULL,
+ event_key bigint NOT NULL,
+ notified_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(user_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS zone_notice_claims_event_idx ON evimed_frontier.zone_notice_claims(user_id, event_key);
 `;
 const migrations = new WeakMap();
 /** @param {any} database */

@@ -1,9 +1,10 @@
 import { frontierSourceDisplayName } from '@evimed/domain';
 import { FRONTIER_SOURCE_STREAM_COLUMNS } from './frontierSourceColumns.mjs';
-import { clockMinutes, zonedClock, zonedInstant, frontierDailyIssue, frontierDailyMarkdown, dayLabel, followedZoneCards } from './frontierDaily.mjs';
+import { clockMinutes, zonedClock, zonedInstant, frontierDailyIssue, frontierDailyMarkdown, dayLabel } from './frontierDaily.mjs';
 import { frontierEventRole } from './frontierEvents.mjs';
 import { FrontierJobRearm } from './frontierJobRearm.mjs';
 import { migrateFrontier } from './frontierPersistence.mjs';
+import { followedZoneUpdates } from './frontierZoneUpdates.mjs';
 /** @param {string} day @param {number} offset */
 export function frontierCalendarDay(day, offset) {
     const date = new Date(`${day}T00:00:00Z`);
@@ -127,8 +128,9 @@ export class FrontierWeekly {
         return row ? { weekStart: row.week, weekEnd: frontierCalendarDay(row.week, 6), day: row.week, windowStart: new Date(row.window_start).toISOString(), windowEnd: new Date(row.window_end).toISOString(),
             lead: row.lead, sections: row.sections, safety: row.safety, aiMinute: null, markdown: row.markdown, itemCount: row.item_ids.length, generatedAt: new Date(row.generated_at).toISOString(), previousDay: row.previous_week, nextDay: row.next_week } : null;
     }
-    /** 「你关注的专区」 of an issue for one reader, over the week's own window (`followedZoneCards`).
+    /** 「你关注的专区」 of an issue for one reader, over the week's own window: the key updates of the zones they own or follow, at most three a
+     * zone, each with its category of the week (`followedZoneUpdates`).
      * @param {string} userId @param {{windowStart:string,windowEnd:string}} issue */
-    followedZones(userId, issue) { return followedZoneCards(this.database, { userId, from: issue.windowStart, to: issue.windowEnd }); }
+    followedZones(userId, issue) { return followedZoneUpdates(this.database, { userId, from: issue.windowStart, to: issue.windowEnd, weekly: true }); }
     status() { return { available: Boolean(this.jobs && this.owner()), counters: { ...this.counters } }; }
 }

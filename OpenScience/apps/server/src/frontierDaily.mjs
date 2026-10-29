@@ -51,17 +51,23 @@
  *   (`user_prefs.last_push_day`), and only to accounts the module's audience
  *   admits. Its body is the lead's title and, when there are any, the count
  *   of safety alerts — no lane counts, no instructions — and no personal
- *   reason: a Feishu binding may be a group chat.
+ *   reason: a Feishu binding may be a group chat. One exception, the zones
+ *   (2026-10-29): a line per zone the reader owns or follows that had a key
+ *   update, and one for the rest (`frontierZoneUpdates.mjs`) — the zone's own
+ *   title and the updates' titles, both public; the updates are claimed when
+ *   the notice is taken and given back if it cannot be made, so an item is named
+ *   to a reader once.
  *
  * @module frontierDaily
  */
 
 import { DISPLAY_TIME_ZONE, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
 import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
-import { followNoticeLines } from "./frontierFollowQuery.mjs";
 import { FrontierJobRearm } from "./frontierJobRearm.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
+import { claimZoneNotice, followedZoneUpdates, releaseZoneNotice, zoneNoticeLines } from "./frontierZoneUpdates.mjs";
+import { notificationEventId } from "./notificationService.mjs";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -146,57 +152,6 @@ export function previousDay(day) {
 export function frontierDailyWindow(day, { timeZone, dailyTime }) {
   const cut = Math.min(/** @type {number} */ (clockMinutes(FRONTIER_DAILY_CUT)), clockMinutes(dailyTime) ?? Infinity);
   return { start: zonedInstant(previousDay(day), cut, timeZone), end: zonedInstant(day, cut, timeZone) };
-}
-
-// ───────────────────────── 你关注的专区: per reader, at read time ─────────────────────────
-
-/** Cards of followed zones an issue lists for one reader, at most. */
-export const FRONTIER_FOLLOWED_ZONE_CARDS_MAX = 12;
-/**
- * What a reader can see of a card's words, as one comparable value: the card as stored and as a revision snapshot
- * recorded of it are fingerprinted over the same fields, so a card whose only change is a check date (a refresh of
- * its sources' status) is not 「更新」. A JSON `null` and a missing value are the same nothing on both sides.
- * @param {(column: string) => string} field the SQL text of one column of the row being fingerprinted
- */
-const cardWordsFingerprint = (field) => `md5(concat_ws(chr(31), ${["title", "summary", "body", "limitations"].map(field).join(", ")}, ${
-  ["content", "claims", "public_view"].map((column) => `NULLIF(${field(column)}, 'null')`).join(", ")}))`;
-
-/**
- * The cards that were published, or published in a new form, in the zones this reader follows during an issue's
- * window (flywheel F10; plan §5.3 「你关注的专区」). Computed for the reader who asks and never written into the
- * issue, whose text is the same for everyone: the same issue lists different cards to different readers, and none
- * to one who follows nothing.
- *
- * 「新」 is a card with no published form recorded before the window opened; 「更新」 is one that had a published
- * form then and whose words differ now. The page's own rule for a card's visibility holds: published, in a published
- * zone.
- * @param {any} database @param {{ userId: string, from: Date | string, to: Date | string, limit?: number }} window
- * @returns {Promise<Array<{ zoneId: string, zoneTitle: string, cards: Array<{ id: string, title: string, summary: string, change: "new" | "updated", revision: number, updatedAt: string }> }>>}
- */
-export async function followedZoneCards(database, { userId, from, to, limit = FRONTIER_FOLLOWED_ZONE_CARDS_MAX }) {
-  const rows = (await database.query(`SELECT * FROM (
-      SELECT c.id, c.zone_id, c.title, c.summary, c.revision, c.updated_at, z.title AS zone_title,
-        ${cardWordsFingerprint((column) => `c.${column}::text`)} AS words_now,
-        before.snapshot IS NULL AS is_new,
-        ${cardWordsFingerprint((column) => (["content", "claims", "public_view"].includes(column) ? `(before.snapshot->'${column}')::text` : `(before.snapshot->>'${column}')`))} AS words_before
-      FROM evimed_frontier.evidence_zone_follows f
-      JOIN evimed_frontier.evidence_zones z ON z.id = f.zone_id AND z.state = 'published'
-      JOIN evimed_frontier.evidence_cards c ON c.zone_id = z.id AND c.state = 'published' AND c.withdrawn IS NULL
-      LEFT JOIN LATERAL (SELECT r.snapshot FROM evimed_frontier.evidence_card_revisions r
-        WHERE r.card_id = c.id AND r.recorded_at < $2::timestamptz AND r.snapshot->>'state' = 'published'
-        ORDER BY r.revision DESC LIMIT 1) before ON true
-      WHERE f.user_id = $1 AND c.updated_at >= $2::timestamptz AND c.updated_at < $3::timestamptz) listed
-    WHERE is_new OR words_now IS DISTINCT FROM words_before
-    ORDER BY zone_title, updated_at DESC, id LIMIT $4`, [userId, from, to, Math.min(FRONTIER_FOLLOWED_ZONE_CARDS_MAX, Math.max(1, Math.trunc(limit)))])).rows ?? [];
-  /** @type {Map<string, { zoneId: string, zoneTitle: string, cards: any[] }>} */
-  const zones = new Map();
-  for (const row of rows) {
-    const zone = zones.get(row.zone_id) ?? { zoneId: String(row.zone_id), zoneTitle: String(row.zone_title), cards: [] };
-    zones.set(row.zone_id, zone);
-    zone.cards.push({ id: String(row.id), title: String(row.title), summary: String(row.summary ?? "").slice(0, 200),
-      change: row.is_new ? "new" : "updated", revision: Number(row.revision), updatedAt: iso(row.updated_at) });
-  }
-  return [...zones.values()];
 }
 
 // ───────────────────────── the issue (unit-tested) ─────────────────────────
@@ -348,20 +303,20 @@ export function frontierReadingMinutes(texts) {
  * The inbox item a day's issue is pushed as (plan 2026-09-23 C §1.13): the
  * title with the day and the selected count, the lead's title as the body,
  * and — the one count kept — how many safety alerts the issue holds. No
- * personal reason. One exception (c3-watch 2026-10-25): a line per typed follow
- * with news since the reader last looked (`follows`, `followNoticeLines`) — the
- * words the reader typed themselves, and a count; none when nothing is new.
+ * personal reason. One exception (2026-10-29): the lines about the reader's
+ * zones (`zones`, `zoneNoticeLines`) — each a zone's title and the titles of its
+ * key updates, and a line for the rest; none when no zone had one.
  * Where it goes: the reader's own inbox, and a Feishu push, which the adapter
  * addresses to the account owner's own chat with the bot (`open_id`, never a
- * group; the other channel adapters are stubs), so a reader's words reach nobody else.
- * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[], follows?: string[] }} issue
+ * group; the other channel adapters are stubs), so a reader's zones reach nobody else.
+ * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[], zones?: string[] }} issue
  */
-export function frontierDailyNotice({ day, lead, sections, safety, follows = [] }) {
+export function frontierDailyNotice({ day, lead, sections, safety, zones = [] }) {
   const selected = (lead ? 1 : 0) + sections.reduce((sum, section) => sum + section.itemIds.length, 0);
   const body = [
     lead?.title ? String(lead.title).slice(0, 120) : null,
     safety.length ? `安全警示 ${safety.length} 条` : null,
-    ...follows,
+    ...zones,
   ].filter(Boolean).join("\n");
   const [, month, date] = day.split("-").map(Number);
   return {
@@ -391,13 +346,13 @@ export class FrontierDaily {
   /**
    * @param {{ database: any, jobs?: any, notifications?: any, editor?: any, events?: any, config?: Record<string, any>,
    *           owner?: () => ({ userId: string, projectId: string } | null), budget?: (() => Promise<{ state: string }>) | null,
-   *           now?: () => Date, workerId?: string, dimension?: number, watch?: any }} options
-   *   `watch` a `FrontierFollowWatch` (the typed follows' lines of the push); `jobs` a `ProductJobs`, `notifications` a `NotificationService`, `editor` a
+   *           now?: () => Date, workerId?: string, dimension?: number }} options
+   *   `jobs` a `ProductJobs`, `notifications` a `NotificationService`, `editor` a
    *   `FrontierEditor` (the AI minute), `events` a `FrontierEvents` (the hot
    *   list the lead is chosen by), `owner` the operator's internal project.
    */
   constructor({ database, jobs = null, notifications = null, editor = null, events = null, config = {}, owner = () => null,
-    budget = null, now = () => new Date(), workerId = "frontier-daily", dimension = 1024, watch = null }) {
+    budget = null, now = () => new Date(), workerId = "frontier-daily", dimension = 1024 }) {
     if (!database) throw new TypeError("The frontier daily needs the product database.");
     this.database = database;
     this.jobs = jobs;
@@ -407,14 +362,13 @@ export class FrontierDaily {
     this.config = config ?? {};
     this.owner = owner;
     this.budgetReader = budget;
-    this.watch = watch;
     this.now = now;
     this.workerId = String(workerId).slice(0, 120);
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     this.dailyTime = clockMinutes(this.config.frontierDailyTime) == null ? "07:30" : String(this.config.frontierDailyTime).trim();
     this.dimension = Number(this.config.kbEmbeddingDimension) || dimension;
     /** Observable counters (principle 15). */
-    this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0, followLines: 0, followLineFailures: 0 };
+    this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0, zoneLines: 0, zoneLineFailures: 0 };
     // A day's job that used its attempts is put back once an hour for the rest of that day (D-02), not every minute.
     this.rearm = new FrontierJobRearm({ jobs, kind: JOB_KIND, limit: 3, withinMs: DAY });
     /** @type {{ day: string | null, missing: boolean, lastIssueDay: string | null, lastGeneratedAt: string | null, lastError: string | null }} */
@@ -611,8 +565,9 @@ export class FrontierDaily {
   /**
    * Called every minute (plan §10.5.5): today's issue, when there is one, to
    * every reader whose digest time has passed, whose `frontier` switch is on,
-   * who opened the page in the last 14 days or follows something, and who has
-   * not been pushed today. One inbox item each, idempotent on the day.
+   * who opened the page in the last 14 days or follows something (a drug, a
+   * specialty, an event, a zone — or owns one), and who has not been pushed
+   * today. One inbox item each, idempotent on the day.
    */
   async pushDue() {
     if (!this.notifications) return { pushed: 0 };
@@ -633,7 +588,9 @@ export class FrontierDaily {
         AND coalesce((p.switches->>'frontier')::boolean, true)
         AND coalesce((p.switches->>'notify')::boolean, true)
         AND coalesce(p.digest_time, '08:00') <= $2
-        AND (up.last_seen_at >= $3::timestamptz OR EXISTS (SELECT 1 FROM evimed_frontier.user_follows f WHERE f.user_id = up.user_id AND NOT f.muted))
+        AND (up.last_seen_at >= $3::timestamptz OR EXISTS (SELECT 1 FROM evimed_frontier.user_follows f WHERE f.user_id = up.user_id AND NOT f.muted)
+          OR EXISTS (SELECT 1 FROM evimed_frontier.evidence_zone_follows zf WHERE zf.user_id = up.user_id)
+          OR EXISTS (SELECT 1 FROM evimed_frontier.evidence_zones oz WHERE oz.user_id = up.user_id AND oz.kind = 'user' AND oz.lifecycle <> 'none'))
         AND ($4::text[] IS NULL OR up.user_id = ANY($4::text[]))
       ORDER BY up.user_id LIMIT $5`, [day, clock, new Date(now.getTime() - FRONTIER_PUSH_ACTIVE_MS), audience, FRONTIER_PUSH_BATCH])).rows ?? [];
     if (!readers.length) return { pushed: 0 };
@@ -642,34 +599,32 @@ export class FrontierDaily {
     const notice = frontierDailyNotice(issueNotice);
     let pushed = 0;
     for (const reader of readers) {
-      /** The matches this reader's notice names, taken before it is made and given back if it cannot be. @type {string[]} */
+      /** The zone updates this reader's notice names, taken before it is made and given back if it cannot be. @type {string[]} */
       let claimed = [];
-      // Whether the notice itself was made: a failure after it (the push day's record) must not give its matches back, or the
-      // next attempt would name them again in a body the inbox refuses as a different one (c3 review).
-      let created = false;
       try {
-        // A line per typed follow with news (c3-watch): the matches are marked as told when taken, so an item is named at most once.
-        // A reader whose lines cannot be read gets the notice without them.
-        let lines = /** @type {string[]} */ ([]);
-        if (this.watch) {
+        // A notice already in the inbox for the day (a failure after it, in the push day's record below) is not made again: a second
+        // attempt would claim other updates, word a body the inbox refuses as a different one, and fail every scan after.
+        if (!(await this.#noticeMade(reader.user_id, notice.idempotencyKey))) {
+          // A line per zone the reader owns or follows that had a key update. A reader whose lines cannot be read gets the notice without them.
+          let lines = /** @type {string[]} */ ([]);
           try {
-            const taken = await this.watch.claimNotice(reader.user_id);
+            const taken = await claimZoneNotice(this.database, reader.user_id, now);
             claimed = taken.claimed;
-            lines = followNoticeLines(taken.news);
-            this.counters.followLines += lines.length;
+            lines = zoneNoticeLines(taken);
+            this.counters.zoneLines += lines.length;
           } catch {
-            this.counters.followLineFailures += 1;
+            this.counters.zoneLineFailures += 1;
           }
+          await this.notifications.create(reader.user_id, lines.length ? frontierDailyNotice({ ...issueNotice, zones: lines }) : notice, { now });
+          claimed = [];
         }
-        await this.notifications.create(reader.user_id, lines.length ? frontierDailyNotice({ ...issueNotice, follows: lines }) : notice, { now });
-        created = true;
         await this.database.query(`INSERT INTO evimed_frontier.user_prefs (user_id, last_push_day) VALUES ($1, $2::date)
           ON CONFLICT (user_id) DO UPDATE SET last_push_day = EXCLUDED.last_push_day`, [reader.user_id, day]);
         pushed += 1;
       } catch (error) {
         // One reader's inbox refusing is that reader's; the next scan tries
         // again (the key makes a second attempt the same item).
-        if (claimed.length && !created) await this.watch?.releaseNotice(claimed).catch(() => undefined);
+        if (claimed.length) await releaseZoneNotice(this.database, reader.user_id, claimed).catch(() => undefined);
         this.counters.pushFailures += 1;
         this.state.lastError = codeOf(error);
       }
@@ -734,10 +689,18 @@ export class FrontierDaily {
   }
 
   /**
-   * 「你关注的专区」 of an issue for one reader, over the issue's own window (`followedZoneCards`).
+   * 「你关注的专区」 of an issue for one reader, over the issue's own window: the key updates of the zones they own or follow
+   * (`followedZoneUpdates`), read only — nothing is claimed.
    * @param {string} userId @param {{ windowStart: string, windowEnd: string }} issue
    */
-  followedZones(userId, issue) { return followedZoneCards(this.database, { userId, from: issue.windowStart, to: issue.windowEnd }); }
+  followedZones(userId, issue) { return followedZoneUpdates(this.database, { userId, from: issue.windowStart, to: issue.windowEnd }); }
+
+  /** Whether the reader's notice for the day is in the inbox already, made or folded into a group. @param {string} userId @param {string} key */
+  async #noticeMade(userId, key) {
+    const id = notificationEventId(userId, key);
+    return ((await this.database.query(`SELECT 1 FROM evimed_inbox.notifications WHERE id = $1 AND user_id = $2
+      UNION ALL SELECT 1 FROM evimed_inbox.merged_events WHERE id = $1 LIMIT 1`, [id, userId])).rows ?? []).length > 0;
+  }
 
   status() {
     return { ...this.state, counters: { ...this.counters } };
