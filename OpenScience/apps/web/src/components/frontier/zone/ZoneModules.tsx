@@ -110,7 +110,7 @@ function ItemRows({ label, items, dated, from }: { label: string; items: readonl
     <List label={label}>
       {items.map((item) => (
         <ListRow key={item.id} to={articlePath(item.id)} state={{ evidenceFrom: from }} title={<span data-prose="">{item.title}</span>}
-          leading={dated ? <span className="w-14 pt-0.5 text-caption tabular-nums text-text-3">{feedDay(item.timelineAt)}</span> : undefined}
+          leading={dated ? <span className="w-16 whitespace-nowrap pt-0.5 text-caption tabular-nums text-text-3">{feedDay(item.timelineAt)}</span> : undefined}
           meta={dated ? [item.source.name, item.genreLabel].filter(Boolean).join(" · ") : itemMeta(item)} />
       ))}
     </List>
@@ -127,7 +127,7 @@ function ApprovedDrugs({ rows, path, from }: { rows: readonly ZoneDrugRow[]; pat
   return (
     <DataTable<ZoneDrugRow>
       label="已获批药物"
-      minWidth="min-w-[26rem]"
+      minWidth="min-w-[20rem]"
       rows={rows}
       rowKey={(row) => row.key ?? row.label}
       columns={[
@@ -143,7 +143,7 @@ function ApprovedDrugs({ rows, path, from }: { rows: readonly ZoneDrugRow[]; pat
           },
         },
         {
-          key: "count30", header: "近 30 天", align: "right", width: "w-24",
+          key: "count30", header: "近 30 天", align: "right", width: "w-20",
           cell: (row) => row.count30 > 0
             ? <Link to={itemsHref(path, { q: row.label, window: "30d" })} className="rounded text-link hover:underline">{row.count30} 条</Link>
             : <span className="text-text-3">0</span>,

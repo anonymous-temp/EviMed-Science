@@ -269,19 +269,20 @@ export function useItemsToolbar({ view, set, items, count }: {
         value: view.picked ? "picked" : "all",
         onChange: (value) => set({ picked: value === "picked" }),
       },
-      {
-        kind: "chips", label: "时间", neutral: DEFAULT_WINDOW,
+      // A week chosen on the chart carries its own window, so there is no window to choose beside it.
+      ...(view.week ? [] : [{
+        kind: "chips" as const, label: "时间", neutral: DEFAULT_WINDOW,
         options: WINDOW_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
         value: items.window,
-        onChange: (value) => set({ window: value as ZoneItemsWindow }),
-      },
+        onChange: (value: string) => set({ window: value as ZoneItemsWindow }),
+      }]),
       ...(view.week ? [{
         kind: "toggle" as const, label: weekLabel(view.week), pressed: true, icon: X, iconEnd: true, pinned: true,
         onChange: () => set({ week: null }),
       }] : []),
     ],
     search: {
-      label: "搜索当前专区的动态",
+      label: "搜索专区动态",
       value: text,
       maxLength: 200,
       onChange: setText,

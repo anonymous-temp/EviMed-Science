@@ -456,7 +456,7 @@ describe("the 动态 tab", () => {
     await userEvent.click(within(within(toolbar).getByRole("group", { name: "时间" })).getByRole("button", { name: "7 天" }));
     await waitFor(() => expect(topic.fetchZoneItems).toHaveBeenLastCalledWith("zone-glp1", expect.objectContaining({ picked: true, window: "7d" })));
     expect(where()).toBe("/app/frontier/zones/zone-glp1?tab=items&picked=1&window=7d");
-    await userEvent.type(within(toolbar).getByRole("searchbox", { name: "搜索当前专区的动态" }), "司美");
+    await userEvent.type(within(toolbar).getByRole("searchbox", { name: "搜索专区动态" }), "司美");
     await waitFor(() => expect(topic.fetchZoneItems).toHaveBeenLastCalledWith("zone-glp1", expect.objectContaining({ q: "司美" })));
     expect(where()).toContain("q=%E5%8F%B8%E7%BE%8E");
     // A search is not cut into days.
@@ -467,7 +467,7 @@ describe("the 动态 tab", () => {
     mount("/app/frontier/zones/zone-glp1?tab=items&role=approval&window=90d&picked=1&q=%E5%8F%B8%E7%BE%8E");
     await screen.findByRole("region", { name: "专区动态" });
     expect(topic.fetchZoneItems).toHaveBeenCalledWith("zone-glp1", { role: "approval", picked: true, window: "90d", q: "司美" });
-    expect(screen.getByRole("searchbox", { name: "搜索当前专区的动态" })).toHaveValue("司美");
+    expect(screen.getByRole("searchbox", { name: "搜索专区动态" })).toHaveValue("司美");
   });
 
   it("reads on by the cursor, one page at a time, and shows each item once", async () => {

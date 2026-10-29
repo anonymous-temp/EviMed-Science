@@ -12,8 +12,8 @@ import { itemsHref, weekLabel, weekWindow, zonePath } from "./zoneText";
 const TOP = 5;
 /** Weeks the chart draws. */
 const WEEKS = 12;
-/** The chart's tallest bar, in px. */
-const BAR_HEIGHT = 40;
+/** The chart's tallest bar, in px: the height of every small control of the feed, so a bar is one of their looks and not one of its own. */
+const BAR_HEIGHT = 28;
 
 const LABEL = "text-caption text-text-3";
 const CHIP = filterChipClasses({ selected: true });
@@ -66,8 +66,8 @@ function Weekly({ weekly, path, now }: { weekly: ZoneSide["weekly"]; path: strin
             <li key={week.weekStart} className="flex h-full min-w-0 flex-1 items-end">
               <Tooltip content={name} kind="label">
                 <Link to={itemsHref(path, { week: start, window: weekWindow(start, now) })} aria-label={name}
-                  className="group flex h-full w-full items-end rounded-sm outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
-                  <span aria-hidden="true" data-bar="" className={cn("block w-full rounded-sm bg-accent-soft transition-colors duration-fast group-hover:bg-accent", week.count > 0 && "min-h-0.5")}
+                  className="group flex h-full w-full items-end rounded outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
+                  <span aria-hidden="true" data-bar="" className={cn("block w-full rounded-sm bg-border-control transition-colors duration-fast group-hover:bg-accent group-focus-visible:bg-accent", week.count > 0 && "min-h-0.5")}
                     style={{ height: week.count > 0 ? Math.max(2, Math.round((week.count / top) * BAR_HEIGHT)) : 1 }} />
                 </Link>
               </Tooltip>
