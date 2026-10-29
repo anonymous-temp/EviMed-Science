@@ -629,6 +629,9 @@ export class EvidenceZoneService {
         where.push(
           `z.user_id=${param(user.id)}`,
           ...(cards ? [`c.user_id=${param(user.id)}`] : []),
+          // The zones a reader's cards live in. A topic zone (lifecycle other than 'none') holds no card of the reader's — it has its own
+          // directory (view=mine) — so it is never offered as the home of one (「发布为证据卡」 reads this list).
+          ...(cards ? [] : ["z.lifecycle='none'"]),
         );
       else
         where.push(

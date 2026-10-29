@@ -1880,6 +1880,7 @@ export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
   evidence_result_zone_required: '请选择一个自己的专区，或者新建一个。',
   evidence_result_zone_not_owned: '研究结果只能发布到你自己的专区。',
   evidence_result_zone_kind_refused: '研究结果只能发布到用户专区；官方专区和产品专区不接受这种发布。',
+  evidence_result_zone_topic_refused: '研究结果不能发布到按主题建的专区；请选择一个放证据卡的专区，或者新建一个。',
   evidence_continue_unavailable: '这个部署没有开通知识库，不能从证据卡带着来源继续研究。',
   evidence_continue_request_invalid: '这次继续研究的内容不对，没有建项目也没有存入来源。',
   evidence_author_not_found: '没有这位作者公开的内容。',
