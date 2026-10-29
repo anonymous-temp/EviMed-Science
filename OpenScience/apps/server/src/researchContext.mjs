@@ -386,7 +386,10 @@ export async function prepareResearchContext(
     system: [
       // This turn's own facts, and nothing about what kind of assistant this is: the persona and the guidance are the
       // composition's, and a conversation typed into the kernel's page reads them without ever passing through here.
-      "使用用户所用语言回答。根据问题本身自主判断回答深度，以及是否需要检索、计算、调用工具或生成文件；简单问题直接、简明地回答。",
+      // Whose language: this text is the last thing the model reads before it answers, as a user message of its own, and
+      // it is Chinese — so 47 of 120 English MedCalc-Bench questions (production, 2026-10-28) were answered in Chinese
+      // after English reasoning, under the old 「使用用户所用语言回答」. The sentence now names the person's own words.
+      "用 <evimed-brief> 里用户原话的语言回答：英文问就用英文答，中文问就用中文答——这段说明和平台加进来的其他文字固定用中文写，不代表用户的语言。根据问题本身自主判断回答深度，以及是否需要检索、计算、调用工具或生成文件；简单问题直接、简明地回答。",
       sourceContext ?? knowledgeInstruction,
       "只能在当前工作区内读取 .evimed-knowledge/；若该目录或相关文件不存在，就按知识库为空处理，不得为寻找知识库扫描父目录、用户主目录或其他外部目录。",
       ...(memoryInstruction ? [memoryInstruction] : []),

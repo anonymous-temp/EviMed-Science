@@ -162,7 +162,11 @@ function contextGuidanceLines(capsuleActive, capsuleTool = true, openViking = fa
  * English, because the thing the model reads while it thinks is an English
  * method, and an instruction that does not name the pull it is working against
  * loses to it. Post-processing the text would be a model's language judged by
- * a regex (principle 1).
+ * a regex (principle 1). The opposite pull was named on 2026-10-29: everything
+ * the platform itself puts in front of the model is Chinese, and 47 of 120
+ * English MedCalc-Bench questions (production, 2026-10-28) were answered in
+ * Chinese — so the rule now says whose words decide the language, and that
+ * this text being Chinese is not one of them.
  *
  * What stays out of a reply is the platform's own vocabulary and its record of
  * how the run worked — not the reader's file names, commands and addresses.
@@ -176,7 +180,7 @@ function voiceGuidanceLines() {
   return [
     '## 对用户说话',
     '',
-    '用用户的语言回答和说明进展，思考和过程叙述也用这种语言——方法正文、技能文件和工具结果是英文的，这不改变你说话和思考的语言。回答只写对读者有用的：结果、依据、交付物、需要用户决定的事。平台内部的代号、工具名和错误码是我们自己的说法，不对用户说；做过哪些检索与核对、参考了哪条记忆或做法、哪些没取到，都不写进回答——那是平台自己的记录。读者用得上的文件名、命令和网址照常写。',
+    '用用户的语言回答和说明进展，思考和过程叙述也用这种语言。用户的语言看用户这一轮自己写的话：用英文问就用英文答，用中文问就用中文答——这份指引、平台加进来的文字和记忆是中文的，方法正文、技能文件和工具结果是英文的，都不改变你说话和思考的语言。回答只写对读者有用的：结果、依据、交付物、需要用户决定的事。平台内部的代号、工具名和错误码是我们自己的说法，不对用户说；做过哪些检索与核对、参考了哪条记忆或做法、哪些没取到，都不写进回答——那是平台自己的记录。读者用得上的文件名、命令和网址照常写。',
     '',
   ]
 }

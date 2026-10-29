@@ -316,12 +316,16 @@ test("the user's language is the thinking's and the narration's too, and the ans
   const text = buildGuidanceText([], { askUserEnabled: false, capsuleActive: false, reviewEnabled: true });
   const start = text.indexOf("## 对用户说话");
   const rule = text.slice(start, text.indexOf("\n## ", start + 1));
-  assert.match(rule, /用用户的语言回答和说明进展，思考和过程叙述也用这种语言——/);
+  assert.match(rule, /用用户的语言回答和说明进展，思考和过程叙述也用这种语言。/);
   // 2026-09-26 (融合方案 §8.2): the rule names the pull it is working
   // against. The reasoning rows of a running conversation stayed English for
   // six days under the 09-20 wording, because what the model reads while it
   // thinks is an English method.
-  assert.match(rule, /方法正文、技能文件和工具结果是英文的，这不改变你说话和思考的语言。/);
+  assert.match(rule, /方法正文、技能文件和工具结果是英文的，都不改变你说话和思考的语言。/);
+  // 2026-10-29: and the opposite pull. Everything the platform writes to the model is Chinese, and 47 of 120 English
+  // MedCalc-Bench questions on production were answered in Chinese: whose words decide the language is said, and that
+  // this text being Chinese is not one of them.
+  assert.match(rule, /用户的语言看用户这一轮自己写的话：用英文问就用英文答，用中文问就用中文答——这份指引、平台加进来的文字和记忆是中文的/);
   // What the reply holds, and that how the run worked is not part of it
   // (owner, 2026-09-24: 「本次任务我按既往习惯核对了…」 is the back office).
   assert.match(rule, /回答只写对读者有用的：结果、依据、交付物、需要用户决定的事。/);

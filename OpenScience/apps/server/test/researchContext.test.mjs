@@ -63,6 +63,11 @@ test("builds a hidden system context without changing the user's prompt", async 
     );
 
     assert.match(prepared.system, /自主判断回答深度/);
+    // The language is the person's own words, not this Chinese text around them (2026-10-29: English MedCalc-Bench
+    // questions answered in Chinese under 「使用用户所用语言回答」).
+    assert.match(prepared.system, /用 <evimed-brief> 里用户原话的语言回答：英文问就用英文答/);
+    assert.match(prepared.system, /这段说明和平台加进来的其他文字固定用中文写，不代表用户的语言/);
+    assert.doesNotMatch(prepared.system, /使用用户所用语言回答/);
     assert.match(prepared.system, /\.evimed-knowledge/);
     assert.match(prepared.system, /不得为寻找知识库扫描父目录/);
     assert.match(prepared.system, /不把服务不可用、零结果或没有读到的内容写成结论/);
