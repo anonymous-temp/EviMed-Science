@@ -1,6 +1,10 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
-/** @param {{store:any,service:any,editorial?:any,frontier:any,config:any,maxJsonBytes:number}} options */
+/**
+ * `reads` is the topic zones' read side (`evidenceZoneReads.mjs`): the directory views, a topic zone's detail, overview, 「动态」 and
+ * cards. Without it every route answers as it did before topic zones. A zone is addressed by its id or its slug.
+ * @param {{store:any,service:any,editorial?:any,frontier:any,config:any,maxJsonBytes:number,reads?:any}} options
+ */
 export function createEvidenceZoneRoutes({
   store,
   service,
@@ -8,6 +12,7 @@ export function createEvidenceZoneRoutes({
   frontier,
   config,
   maxJsonBytes,
+  reads=null,
 }) {
   return async (/** @type {any} */ req, /** @type {any} */ res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -61,13 +66,25 @@ export function createEvidenceZoneRoutes({
       return reply(await service.list(user, url.searchParams, "*"));
     if (parts[0] === "zones" && parts.length === 1) {
       if (method === "GET")
-        return reply(await service.list(user, url.searchParams));
+        return reply(
+          reads && url.searchParams.has("view")
+            ? await reads.directory(user, url.searchParams)
+            : await service.list(user, url.searchParams),
+        );
       if (method === "POST")
         return reply(await service.save(user, await body()));
     }
-    const zoneId = parts[1];
+    // `draft` and `preview` are the writer's words, not zones; any other second part is a zone's id or its slug.
+    const zoneId =
+      reads && parts.length >= 2 && !["draft", "preview"].includes(parts[1])
+        ? await reads.resolveId(user, parts[1])
+        : parts[1];
     if (parts.length === 2) {
-      if (method === "GET") return reply(await service.detail(user, zoneId));
+      if (method === "GET") {
+        // A topic zone is answered by the reads (its detail shape); any other zone by the old service.
+        const topic = reads ? await reads.detail(user, zoneId) : null;
+        return reply(topic ?? (await service.detail(user, zoneId)));
+      }
       if (method === "PATCH")
         return reply(await service.save(user, await body(), zoneId));
     }
@@ -90,21 +107,28 @@ export function createEvidenceZoneRoutes({
         return reply(await service.save(user, value, zoneId, null, true));
       }
     }
+    if (reads && parts.length === 3 && method === "GET") {
+      if (parts[2] === "overview") return reply(await reads.overview(user, zoneId));
+      if (parts[2] === "items") return reply(await reads.items(user, zoneId, url.searchParams));
+      if (parts[2] === "cards") return reply(await reads.cards(user, zoneId));
+    }
     if (
       parts.length === 3 &&
       ["follow", "feedback", "research"].includes(parts[2]) &&
       (method === "POST" || (parts[2] === "follow" && method === "DELETE"))
-    )
-      return reply(
-        await service.act(
-          user,
-          zoneId,
-          parts[2],
-          await body(),
-          null,
-          method === "DELETE",
-        ),
+    ) {
+      const acted = await service.act(
+        user,
+        zoneId,
+        parts[2],
+        await body(),
+        null,
+        method === "DELETE",
       );
+      // Following a topic zone answers with the zone as its page holds it, not the old card-zone view.
+      const topic = parts[2] === "follow" && reads ? await reads.detail(user, zoneId) : null;
+      return reply(topic ? { zone: topic.zone } : acted);
+    }
     if (parts.length === 4 && parts[2] === "evidence") {
       if (method === "GET")
         return reply(await service.detail(user, zoneId, parts[3]));

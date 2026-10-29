@@ -46,6 +46,10 @@
 //   cards do not have, is asking about items. A card search that fails costs
 //   the run the cards and nothing else: the items stand, and the answer says
 //   `cardsUnavailable` rather than reading as "no card matched".
+// - `zone` restricts a search to one topic zone of 「证据专区」 (ez-api-read 2026-10-29): the zone's id or slug, resolved here for the
+//   account the token names (`zones.resolve`: a zone is seen when it is published or the reader's own), then handed to the page's
+//   own list as a filter on the model's judged members. A zone the account cannot see — or a deployment without topic zones — is
+//   `frontier_search_zone_not_found`; it never reads as "the zone has nothing".
 // - Hot-event topics ride the same way (c2-leads 2026-10-25): an active or
 //   recent topic a query names is a result of kind `topic` — the general
 //   medical question a public event raised, its field, the attributed line
@@ -58,7 +62,9 @@ import { CARD_SEARCH_MAX } from "./evidenceCardSearch.mjs";
 import { FRONTIER_WINDOWS } from "./frontierService.mjs";
 
 const gatewayPath = "/internal/frontier/v1/search";
-const allowedFields = new Set(["q", "lane", "specialty", "window", "mode", "limit"]);
+const allowedFields = new Set(["q", "lane", "specialty", "window", "mode", "limit", "zone"]);
+/** A zone's id or slug, as the zone routes spell them. */
+const ZONE_REF = /^[a-zA-Z0-9_-]{1,100}$/;
 /** A public item id, as the page's addresses spell it. */
 const ITEM_ID = /^[a-z0-9]{12,32}$/;
 /** What of an item's text one answer carries, in characters (c3-ask: the contract's 6,000). */
@@ -171,7 +177,10 @@ function validatedRequest(body) {
   if (typeof body.limit === "boolean" || !Number.isInteger(limit) || limit < 1 || limit > maxLimit) {
     throw gatewayError(400, "frontier_search_limit_invalid", `limit must be an integer between 1 and ${maxLimit}.`);
   }
-  return { q, lane, specialty, window, mode, limit };
+  if (body.zone != null && (typeof body.zone !== "string" || !ZONE_REF.test(body.zone))) {
+    throw gatewayError(400, "frontier_search_zone_invalid", "zone must be the id or slug of an evidence zone.");
+  }
+  return { q, lane, specialty, window, mode, limit, ...(body.zone != null ? { zone: /** @type {string} */ (body.zone) } : {}) };
 }
 
 /** @param {unknown} value */
@@ -210,10 +219,10 @@ function projectedItem(item) {
 
 /**
  * The search itself: the page's list read for this account, cut to the
- * tool's contract.
- * @param {any} service @param {{ id: string }} user @param {ReturnType<typeof validatedRequest>} request
+ * tool's contract. `zone` is the zone the request named, already resolved.
+ * @param {any} service @param {{ id: string }} user @param {ReturnType<typeof validatedRequest>} request @param {{ id: string, title: string } | null} [zone]
  */
-async function search(service, user, request) {
+async function search(service, user, request, zone = null) {
   // Only a search widens the selected view; a plain list of the picks is
   // exactly what the page's 精选 already lists.
   const dropUnselected = request.mode === "selected" && request.q != null;
@@ -233,7 +242,7 @@ async function search(service, user, request) {
     if (cursor) params.set("cursor", cursor);
     let answer;
     try {
-      answer = await service.listItems(user, params);
+      answer = await service.listItems(user, params, null, zone ? { zoneId: zone.id } : {});
     } catch (error) {
       // The list moved between two pages (something was published or
       // withdrawn): what was read stands, and the answer says there may be
@@ -259,6 +268,7 @@ async function search(service, user, request) {
     asOf: new Date().toISOString(),
     items,
     more,
+    ...(zone ? { zone: { id: zone.id, title: zone.title } } : {}),
     ...(dropUnselected ? { unselectedSkipped: unselected } : {}),
   };
 }
@@ -389,12 +399,14 @@ export function frontierGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ service: any, cards?: any, topics?: any, evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
+ * @param {{ service: any, cards?: any, topics?: any, zones?: { resolve: (user: { id: string }, ref: string) => Promise<{ id: string, title: string } | null> } | null,
+ *   evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
  *   or null when the module is off; `cards` the evidence-card search (`evidenceCardSearch.mjs`), absent where there are no cards;
+ *   `zones` resolves the id or slug a search names to a zone the account may read, absent where there are no topic zones;
  *   `report` hears the code of a failure the run is only told was one; `budgetMs`
  *   is the plan's five seconds everywhere but in a test that would otherwise wait them out
  */
-export function createFrontierGatewayHandler(config, runtimeManager, { service, cards = null, topics = null, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
+export function createFrontierGatewayHandler(config, runtimeManager, { service, cards = null, topics = null, zones = null, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
   const windows = new Map();
   return async function frontierGatewayHandler(req, res, onFailure) {
     try {
@@ -426,15 +438,22 @@ export function createFrontierGatewayHandler(config, runtimeManager, { service, 
       const requestBody = await readJsonBody(req, 16 * 1024);
       const itemId = requestedItemId(requestBody);
       const request = itemId ? null : validatedRequest(requestBody);
+      /** @type {{ id: string, title: string } | null} */
+      let zone = null;
+      if (request?.zone) {
+        zone = zones ? await zones.resolve(user, request.zone) : null;
+        if (!zone) throw gatewayError(404, "frontier_search_zone_not_found", "No such evidence zone is open to this account: search without a zone, or name another.");
+      }
       let timer;
       // An evaluation run is frozen at a date and kept from what the platform has written since: a card is
       // written after any such cutoff, and may be about the very paper being evaluated.
       const isolated = Boolean(evaluationIsolation && await evaluationIsolation.isEvaluation(identity));
-      const cardsForRun = cards && !isolated ? cards : null;
+      // A search inside a zone is about that zone's items: the platform-wide cards and hot-event topics are not its answer.
+      const cardsForRun = cards && !isolated && !zone ? cards : null;
       // A topic is written after any evaluation's cutoff too.
-      const topicsForRun = topics && !isolated ? topics : null;
+      const topicsForRun = topics && !isolated && !zone ? topics : null;
       const result = await Promise.race([
-        itemId ? readItem(service, user, itemId) : Promise.all([search(service, user, /** @type {ReturnType<typeof validatedRequest>} */ (request)),
+        itemId ? readItem(service, user, itemId) : Promise.all([search(service, user, /** @type {ReturnType<typeof validatedRequest>} */ (request), zone),
           cardPart(cardsForRun, user, /** @type {ReturnType<typeof validatedRequest>} */ (request), report, { projectId: identity.projectId, runId: identity.runId ?? null }),
           topicPart(topicsForRun, user, /** @type {ReturnType<typeof validatedRequest>} */ (request), report)]).then(([items, found, topicsFound]) => ({ ...items, ...found, ...topicsFound })),
         new Promise((_, reject) => {

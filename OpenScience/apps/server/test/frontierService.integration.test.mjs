@@ -544,3 +544,58 @@ test("editor diagnostics survive a new service and expose only bounded metadata"
     assert.ok(!JSON.stringify(answer.body.item.editorDiagnostics).includes("private"));
   } finally { await reopened.close(); }
 });
+
+// ez-api-read 2026-10-29: the topic zones an item stands in, and a list read inside one zone.
+test("an item's page carries up to three topic zones from the hook the server sets, and a hook that fails leaves the item as it was", options, async () => {
+  const item = await insertItem(database, { title: "Zoned item", selected: true, timelineAt: "2026-09-22T03:00:00Z" });
+  const service = serviceFor();
+  assert.deepEqual((await service.getItem(reader, item.publicId)).body.item.zones, [], "no zones module: an empty list, the same shape");
+  /** @type {any[]} */ const asked = [];
+  service.zonesForItem = async (rowId, userId) => {
+    asked.push([rowId, userId]);
+    return [{ id: "ez_1", slug: "glp1-obesity", title: "GLP-1 受体激动剂减重" }, { id: "ez_2", title: "二" }, { id: "ez_3", title: "三" }, { id: "ez_4", title: "四" }];
+  };
+  const served = await service.getItem(reader, item.publicId);
+  assert.deepEqual(asked, [[item.id, reader.id]]);
+  assert.deepEqual(served.body.item.zones, [{ id: "ez_1", slug: "glp1-obesity", title: "GLP-1 受体激动剂减重" }, { id: "ez_2", title: "二" }, { id: "ez_3", title: "三" }]);
+  service.zonesForItem = async () => { throw new Error("the zones module is down"); };
+  const failed = await service.getItem(reader, item.publicId);
+  assert.equal(failed.status, 200);
+  assert.deepEqual(failed.body.item.zones, []);
+  assert.equal(failed.body.item.title, "Zoned item");
+});
+
+test("a list inside a topic zone holds only its judged members, for a zone the reader may see, in the list and in a search", options, async () => {
+  const inside = await insertItem(database, { title: "Alpha inside", selected: true, timelineAt: "2026-09-22T03:00:00Z" });
+  const pinned = await insertItem(database, { title: "Alpha pinned", timelineAt: "2026-09-22T02:00:00Z" });
+  const judgedOut = await insertItem(database, { title: "Alpha judged out", timelineAt: "2026-09-22T02:30:00Z" });
+  await insertItem(database, { title: "Alpha outside", timelineAt: "2026-09-22T01:00:00Z" });
+  const zones = [["ez_read_public", "published", other.id], ["ez_read_private", "draft", other.id], ["ez_read_own", "draft", reader.id]];
+  try {
+    for (const [id, state, owner] of zones) {
+      await database.query("INSERT INTO evimed_frontier.evidence_zones (id, user_id, title, state, kind, lifecycle) VALUES ($1,$2,'t',$3,'user','active')", [id, owner, state]);
+      for (const [member, memberState] of [[inside, "in"], [pinned, "pinned"], [judgedOut, "out"]]) {
+        await database.query("INSERT INTO evimed_frontier.zone_items (zone_id, item_id, state, via, role) VALUES ($1,$2,$3,'tag','research')", [id, member.id, memberState]);
+      }
+    }
+    const service = serviceFor();
+    const listed = async (/** @type {string} */ zoneId, /** @type {Record<string, string>} */ query = {}) =>
+      (await service.listItems(reader, params({ view: "all", ...query }), null, { zoneId })).body.items.map((/** @type {any} */ item) => item.titleRaw);
+    assert.deepEqual(await listed("ez_read_public"), ["Alpha inside", "Alpha pinned"], "the in and pinned rows, not the judged-out one, not the item that is in no zone");
+    assert.deepEqual(await listed("ez_read_public", { q: "Alpha" }), ["Alpha inside", "Alpha pinned"], "a search keeps to the zone: the unjudged items match the words too");
+    assert.deepEqual(await listed("ez_read_own"), ["Alpha inside", "Alpha pinned"], "a reader's own unpublished zone");
+    assert.deepEqual(await listed("ez_read_private"), [], "another reader's unpublished zone is the reader's to see nothing of, whatever the caller resolved");
+    assert.deepEqual(await listed("ez_nothing"), []);
+    // The route's own parameters never name a zone: the same list without the option is the whole feed.
+    assert.equal((await service.listItems(reader, params({ view: "all", zone: "ez_read_public" }))).body.items.length, 4);
+    // A zone's list is read fresh and cursors belong to it.
+    const first = await service.listItems(reader, params({ view: "all", limit: "1" }), null, { zoneId: "ez_read_public" });
+    assert.ok(first.body.nextCursor);
+    await assert.rejects(service.listItems(reader, params({ view: "all", limit: "1", cursor: first.body.nextCursor })), { code: "invalid_cursor" },
+      "a cursor minted inside a zone is not one of the whole list");
+    const second = await service.listItems(reader, params({ view: "all", limit: "1", cursor: first.body.nextCursor }), null, { zoneId: "ez_read_public" });
+    assert.deepEqual(second.body.items.map((/** @type {any} */ item) => item.titleRaw), ["Alpha pinned"]);
+  } finally {
+    await database.query("DELETE FROM evimed_frontier.evidence_zones WHERE id = ANY($1::text[])", [zones.map(([id]) => id)]);
+  }
+});

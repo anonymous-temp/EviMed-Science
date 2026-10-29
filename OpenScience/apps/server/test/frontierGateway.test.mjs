@@ -40,8 +40,8 @@ function scriptedService({ pages = [{ items: [pageItem()], nextCursor: null, mod
   return {
     calls,
     allows,
-    async listItems(user, params) {
-      calls.push({ user, params: Object.fromEntries(params) });
+    async listItems(user, params, _ifNoneMatch, options = {}) {
+      calls.push({ user, params: Object.fromEntries(params), ...(options.zoneId ? { zoneId: options.zoneId } : {}) });
       const page = pages[Math.min(calls.length - 1, pages.length - 1)];
       if (page instanceof Error) throw page;
       return { status: 200, etag: "W/\"0.0.x\"", body: { version: "7", ...page } };
@@ -49,10 +49,11 @@ function scriptedService({ pages = [{ items: [pageItem()], nextCursor: null, mod
   };
 }
 
-async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report, cards, evaluationIsolation } = {}) {
+async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report, cards, topics, zones, evaluationIsolation } = {}) {
   const failures = [];
   const handler = createFrontierGatewayHandler({ frontierEnabled: true, ...config }, runtimeManager,
-    { service, ...(budgetMs ? { budgetMs } : {}), ...(report ? { report } : {}), ...(cards ? { cards } : {}), ...(evaluationIsolation ? { evaluationIsolation } : {}) });
+    { service, ...(budgetMs ? { budgetMs } : {}), ...(report ? { report } : {}), ...(cards ? { cards } : {}), ...(topics ? { topics } : {}),
+      ...(zones ? { zones } : {}), ...(evaluationIsolation ? { evaluationIsolation } : {}) });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -465,4 +466,52 @@ test("an evaluation run is frozen like its searches: what its filter takes out o
   const answer = await call({ id: "k7q2m9x4t1b8" });
   assert.equal(answer.status, 200);
   assert.equal(answer.body.data.item, undefined, "the tool reads this as an item that is not there");
+});
+
+// A zone of 证据专区 (ez-api-read 2026-10-29): the id or slug is resolved for the account the token names, and only what the
+// resolver returns reaches the page's list, as a filter on the zone's members.
+test("a zone is resolved for the account and the page's list is read inside it, without the platform-wide cards and topics", async (t) => {
+  const resolved = [];
+  const zones = { async resolve(user, ref) { resolved.push({ user, ref }); return ref === "glp1-obesity" ? { id: "ez_0123", title: "GLP-1 受体激动剂减重" } : null; } };
+  const cardSearches = [];
+  const cards = { async search(user, request) { cardSearches.push({ user, request }); return { cards: [], more: false }; } };
+  const topicSearches = [];
+  const topics = { async search(user, request) { topicSearches.push({ user, request }); return { topics: [] }; } };
+  const { call, service } = await withGateway(t, { zones, cards, topics });
+  const inside = await call({ q: "司美格鲁肽", mode: "all", zone: "glp1-obesity" });
+  assert.equal(inside.status, 200);
+  assert.deepEqual(resolved, [{ user: { id: "user-1" }, ref: "glp1-obesity" }]);
+  assert.deepEqual(service.calls[0].zoneId, "ez_0123", "the resolved id, not the name the run gave, is what the list is filtered by");
+  assert.equal(service.calls[0].params.zone, undefined, "the zone is not a parameter of the page's route");
+  assert.equal(inside.body.data.query.zone, "glp1-obesity");
+  assert.deepEqual(inside.body.data.zone, { id: "ez_0123", title: "GLP-1 受体激动剂减重" });
+  assert.equal("cards" in inside.body.data, false);
+  assert.equal("topics" in inside.body.data, false);
+  assert.deepEqual([cardSearches, topicSearches], [[], []], "a search inside a zone is about that zone's items");
+
+  const outside = await call({ q: "司美格鲁肽", mode: "all" });
+  assert.equal(outside.status, 200);
+  assert.equal(service.calls[1].zoneId, undefined);
+  assert.equal("zone" in outside.body.data, false);
+  assert.equal(cardSearches.length, 1, "without a zone the platform-wide parts ride beside the items as before");
+});
+
+test("a zone the account cannot read, or one named wrongly, is refused by name and the list is not read", async (t) => {
+  const zones = { async resolve() { return null; } };
+  const { call, service, failures } = await withGateway(t, { zones });
+  const unknown = await call({ zone: "someone-elses-private-zone" });
+  assert.equal(unknown.status, 404);
+  assert.equal(unknown.body.code, "frontier_search_zone_not_found");
+  for (const zone of ["", "glp 1", "a/b", "x".repeat(101), 7, ["a"]]) {
+    const refused = await call({ zone });
+    assert.equal(refused.status, 400, JSON.stringify(zone));
+    assert.equal(refused.body.code, "frontier_search_zone_invalid", JSON.stringify(zone));
+  }
+  assert.deepEqual(service.calls, []);
+  assert.deepEqual(failures.map((failure) => failure.code), ["frontier_search_zone_not_found", ...Array(6).fill("frontier_search_zone_invalid")]);
+
+  const without = await withGateway(t);
+  const noModule = await without.call({ zone: "glp1-obesity" });
+  assert.equal(noModule.status, 404, "a deployment without topic zones has no zone to name");
+  assert.equal(noModule.body.code, "frontier_search_zone_not_found");
 });

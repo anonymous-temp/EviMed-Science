@@ -1175,6 +1175,8 @@ test("frontier_search offers exactly the domain's lanes and specialties, and the
   assert.equal(schema.properties.q.maxLength, FRONTIER_SEARCH_MAX_QUERY_LENGTH);
   // `id` reads one item (c3-ask): the tool's pattern is the gateway's own id shape, and the description says how a conversation names it.
   assert.equal(schema.properties.id.pattern, "^[a-z0-9]{12,32}$");
+  // `zone` names an evidence topic zone as the zone routes and the gateway spell it.
+  assert.equal(schema.properties.zone.pattern, "^[a-zA-Z0-9_-]{1,100}$");
   assert.match(description, /frontier:<id>/);
   assert.equal(schema.required, undefined, "no field is required: without q the tool lists the newest items");
   assert.match(description, /leads, not evidence/);

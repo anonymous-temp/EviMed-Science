@@ -263,6 +263,8 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // An item the conversation was opened from that the feed no longer holds (withdrawn, or an id nobody published): the run goes on
   // with the link it was given.
   "frontier_search_item_not_found",
+  // A zone of 证据专区 the search named that this account cannot read (or that does not exist): the run searches without it.
+  "frontier_search_zone_not_found",
   // The service's own name for it, which the gateway reads and answers as the line above: classified the same, so it is never fatal
   // should it reach a run unchanged.
   "frontier_item_not_found",
@@ -663,6 +665,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "frontier_search_mode_invalid",
   "frontier_search_limit_invalid",
   "frontier_search_id_invalid",
+  "frontier_search_zone_invalid",
   "frontier_search_request_invalid",
   "frontier_search_request_too_large",
   // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a

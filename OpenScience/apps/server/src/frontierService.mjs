@@ -395,13 +395,14 @@ export function normalizeItemsQuery(params, vocabulary) {
 }
 
 /** @typedef {ReturnType<typeof normalizeItemsQuery> & { readerKey?: string,
- * subscriptions?: Awaited<ReturnType<FrontierSubscriptions["read"]>> }} ItemsQuery */
+ * subscriptions?: Awaited<ReturnType<FrontierSubscriptions["read"]>>,
+ * zoneId?: string }} ItemsQuery `zoneId` is no parameter of the route: the runtime's search gives it, for a zone it has already resolved. */
 
 /** The filters a cursor was minted under, as a short fingerprint. @param {ItemsQuery} query */
 const filterPrint = (query) => shortHash(JSON.stringify([query.lane, query.specialty, query.window, query.starred, query.q, query.safety,
   query.q ? query.sort : "relevance", query.follow, query.readerKey ?? null, ...(query.channel ? [query.channel] : []),
   ...(query.tag || query.evidence || query.unread ? [query.tag, query.evidence, query.unread] : []),
-  ...(query.industryKind ? [query.industryKind] : [])]));
+  ...(query.industryKind ? [query.industryKind] : []), ...(query.zoneId ? [query.zoneId] : [])]));
 
 /** @param {Record<string, unknown>} value */
 const encodeCursor = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -568,6 +569,11 @@ export class FrontierService {
     this.interactions = interactions;
     /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): 热榜's 「热点话题」, the topic page and `frontier_search`; null serves none. */
     this.topics = topics;
+    /**
+     * The topic zones an item stands in for a reader (`EvidenceZoneMembership#zonesForItem`, set by the server when zones are composed);
+     * null serves none. @type {((rowId: string, userId: string) => Promise<Array<{ id: string, slug?: string | null, title: string }>>) | null}
+     */
+    this.zonesForItem = null;
     /** 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the approval and guideline records and the congress hubs, read. */
     // The congress list and hubs are read from a ten-minute cache refreshed behind the read (`readCacheMs`, frontierTrack.mjs).
     this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai"), readCacheMs: 10 * 60_000 });
@@ -785,6 +791,11 @@ export class FrontierService {
       where.push(`NOT EXISTS (SELECT 1 FROM evimed_frontier.user_state us WHERE us.user_id = ${param(userId)} AND us.item_id = i.id AND us.read_at IS NOT NULL)`);
     }
     if (query.safety) where.push("i.safety_alert");
+    // A topic zone's items (the model's judged members; the zone must be one this reader may see).
+    if (query.zoneId) {
+      where.push(`EXISTS (SELECT 1 FROM evimed_frontier.zone_items zi JOIN evimed_frontier.evidence_zones z ON z.id = zi.zone_id
+        WHERE zi.zone_id = ${param(query.zoneId)} AND zi.item_id = i.id AND zi.state IN ('in', 'pinned') AND (z.state = 'published' OR z.user_id = ${param(userId)}))`);
+    }
     if (query.channel) where.push(channelPredicate(query.channel));
     if (query.window) where.push(`${axis} >= ${param(new Date(this.now().getTime() - FRONTIER_WINDOWS[query.window]).toISOString())}::timestamptz`);
     if (query.starred) {
@@ -940,11 +951,13 @@ export class FrontierService {
 
   /**
    * A list or search page for one reader, or a 304.
-   * @param {{ id: string }} user @param {URLSearchParams} params @param {unknown} ifNoneMatch
+   * `zoneId` (the runtime's `frontier_search` with a `zone`) restricts the list to one topic zone's items; the route never sets it.
+   * @param {{ id: string }} user @param {URLSearchParams} params @param {unknown} ifNoneMatch @param {{ zoneId?: string | null }} [options]
    * @returns {Promise<{ status: 200 | 304, etag: string, body?: any }>}
    */
-  async listItems(user, params, ifNoneMatch = null) {
+  async listItems(user, params, ifNoneMatch = null, { zoneId = null } = {}) {
     const query = /** @type {ItemsQuery} */ (normalizeItemsQuery(params, this.vocabulary));
+    if (zoneId) query.zoneId = String(zoneId);
     this.counters.lists += 1;
     if (query.tag) {
       // The address of a tag folded into another lists as that one; one the tree does not show is not a filter anybody can mean.
@@ -954,7 +967,9 @@ export class FrontierService {
     }
     const versions = await this.#transaction((client) => this.#versions(client, user.id));
     query.subscriptions = await this.subscriptions.read(user.id, query.follow);
-    if (query.follow || query.subscriptions.muted.length) query.readerKey = `${user.id}:${versions.state}`;
+    // A zone's list is not shared between readers or kept past a membership change (the model moves items in and out between two
+    // content versions): it is read fresh, like a list of the reader's follows.
+    if (query.follow || query.subscriptions.muted.length || query.zoneId) query.readerKey = `${user.id}:${versions.state}`;
     if (query.subscriptions.selected?.kind === "topic") {
       query.q = [query.subscriptions.selected.key, query.q].filter(Boolean).join(" ");
     }
@@ -1036,7 +1051,9 @@ export class FrontierService {
    */
   async getItem(user, publicId, ifNoneMatch = null) {
     if (!PUBLIC_ID.test(String(publicId ?? ""))) throw failure(404, "frontier_item_not_found", "No such item.");
-    return this.#transaction(async (client) => {
+    /** @type {string | null} */
+    let rowId = null;
+    const answer = await this.#transaction(async (client) => {
       const versions = await this.#versions(client, user.id);
       const etag = `W/"${versions.content}.${versions.state}.${shortHash(`item:${user.id}:${publicId}`)}"`;
       if (etagMatches(ifNoneMatch, etag)) {
@@ -1054,6 +1071,7 @@ export class FrontierService {
       const marks = await this.#overlay(client, user.id, [String(row.id)]);
       const enrichment = row.enrichment && typeof row.enrichment === "object" ? row.enrichment : {};
       const card = this.#item(row);
+      rowId = String(row.id);
       return {
         status: /** @type {const} */ (200), etag,
         body: {
@@ -1080,6 +1098,15 @@ export class FrontierService {
         },
       };
     });
+    // The topic zones the item belongs to (at most three: the platform's and the reader's own), asked after the read so no connection
+    // waits on another; a zones module that is off or failing leaves the list empty and the item as it was.
+    if (answer.status === 200 && rowId !== null) {
+      /** @type {Array<{ id: string, slug?: string | null, title: string }>} */
+      let zones = [];
+      try { zones = this.zonesForItem ? await this.zonesForItem(rowId, user.id) : []; } catch { zones = []; }
+      /** @type {any} */ (answer.body).item.zones = zones.slice(0, 3).map((zone) => ({ id: String(zone.id), ...(zone.slug ? { slug: String(zone.slug) } : {}), title: String(zone.title) }));
+    }
+    return answer;
   }
 
   /**
