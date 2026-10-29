@@ -639,6 +639,25 @@ async function capture(item, group, finished, result, dir) {
     log(`item ${item.key}: runtime was gone; start_runtime -> ${said(started)}`);
     transcript = await api("GET", `/api/runtime/sessions/${encodeURIComponent(result.sessionId)}/transcript`, { project: projectId, timeoutMs: 120_000 });
   }
+  // Settle (item.settleSeconds): a run can end its turn while a background job it started is still working, and the
+  // kernel wakes the session again when the job finishes — a person at the page sees the work continue as a later turn.
+  // The driver waits like that person: it keeps reading the transcript while it grows and takes the answer once it has
+  // not changed for settleSeconds, never past the item's timeout. Only a run that ended on its own is waited for.
+  const settle = Number(item.settleSeconds) || 0;
+  if (settle > 0 && !finished.timedOut && transcript.status === 200 && transcript.body?.data) {
+    const deadline = (Date.parse(result.startedAt) || Date.now()) + Number(item.timeoutMin ?? 15) * 60_000;
+    const size = (body) => (body?.data?.messages ?? body?.data?.records ?? []).length;
+    let last = size(transcript.body), quietSince = Date.now(), grew = 0;
+    while (Date.now() - quietSince < settle * 1000 && Date.now() < deadline) {
+      await sleep(30_000);
+      const again = await api("GET", `/api/runtime/sessions/${encodeURIComponent(result.sessionId)}/transcript`, { project: projectId, timeoutMs: 120_000 });
+      if (again.status !== 200 || !again.body?.data) { result.settle = { stoppedBy: `transcript ${said(again)}` }; break; }
+      const now = size(again.body);
+      if (now > last) { grew += now - last; last = now; quietSince = Date.now(); transcript = again; }
+    }
+    result.settle = { ...(result.settle ?? {}), seconds: settle, grewMessages: grew, endedBy: Date.now() >= deadline ? "deadline" : (result.settle?.stoppedBy ? "error" : "quiet") };
+    if (grew) log(`item ${item.key}: the session continued after the run ended (+${grew} messages)`);
+  }
   if (transcript.status === 200 && transcript.body?.data) {
     messages = Array.isArray(transcript.body.data.messages ?? transcript.body.data.records) ? transcript.body.data.messages ?? transcript.body.data.records : [];
     answer = finalAnswer(messages);
@@ -686,7 +705,7 @@ async function capture(item, group, finished, result, dir) {
 }
 
 /**
- * Read back the text files the run wrote (`POST /api/commands/read_artifact`): at most 40, at most 2 MB each.
+ * Read back the files the run wrote (`POST /api/commands/read_artifact`): at most 40; text up to 2 MB, Office/PDF documents up to 10 MB.
  * @param {string} projectId @param {any} run @param {string} dir @param {Record<string, string>} captured
  */
 async function collectFiles(projectId, run, dir, captured) {
@@ -698,10 +717,14 @@ async function collectFiles(projectId, run, dir, captured) {
     const read = await api("POST", "/api/commands/read_artifact", { project: projectId, body: { path: name }, timeoutMs: 60_000 });
     const data = read.body?.data;
     if (read.status !== 200 || !data) { index.push({ path: name, saved: false, reason: `read ${said(read)}` }); continue; }
-    if (data.encoding !== "utf8") { index.push({ path: name, saved: false, reason: "binary", size: data.size ?? null, mime: data.mime ?? null }); continue; }
-    const bytes = Buffer.from(String(data.data), "utf8");
+    // Office and PDF deliverables are the product's answer as often as the reply is (a long report arrives as a .docx):
+    // they are kept as bytes, up to 10 MB; other binaries (images, archives) are listed, not kept.
+    const document = /\.(docx|pdf|xlsx|pptx)$/i.test(name);
+    if (data.encoding !== "utf8" && !document) { index.push({ path: name, saved: false, reason: "binary", size: data.size ?? null, mime: data.mime ?? null }); continue; }
+    const bytes = data.encoding === "utf8" ? Buffer.from(String(data.data), "utf8") : Buffer.from(String(data.data), "base64");
     const target = safeUnder(filesRoot, name);
-    if (bytes.length > ARTIFACT_MAX_BYTES || !target) { index.push({ path: name, saved: false, reason: target ? "over 2 MB" : "unsafe path", size: bytes.length }); continue; }
+    const cap = document ? 10 * 1024 * 1024 : ARTIFACT_MAX_BYTES;
+    if (bytes.length > cap || !target) { index.push({ path: name, saved: false, reason: target ? `over ${cap} bytes` : "unsafe path", size: bytes.length }); continue; }
     await writeAtomic(target, bytes);
     index.push({ path: name, saved: true, size: bytes.length });
   }
