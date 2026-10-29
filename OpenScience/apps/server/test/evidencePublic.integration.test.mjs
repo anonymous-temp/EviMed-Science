@@ -344,7 +344,8 @@ test("indexing: with the switch off every page says noindex in its markup and it
   assert.match(robots.headers.get("content-type") ?? "", /^text\/plain/);
   assert.ok(robots.body.includes("Disallow: /app/\n") && robots.body.includes("Disallow: /evidence/api/\n"));
   assert.equal(robots.body.includes("Sitemap:") || robots.body.includes("Allow:"), false);
-  assert.equal(robots.body.split("\n").some((line) => /^Disallow: \/(evidence\/?)?$/.test(line)), false, "no rule closes the pages that say noindex");
+  // (The training crawlers are shut out entirely, by the owner's decision; every group that admits a crawler leaves the pages open.)
+  assert.equal(robots.body.replace(/User-agent: GPTBot[\s\S]*?\n\n/, "").split("\n").some((line) => /^Disallow: \/(evidence\/?)?$/.test(line)), false, "no rule closes the pages that say noindex");
 });
 
 test("indexing: on, a page is indexable unless its author is new (fewer than three published cards that each carry a ✓) or the card is withdrawn; the new-author rule lifts at exactly three", options, async (t) => {

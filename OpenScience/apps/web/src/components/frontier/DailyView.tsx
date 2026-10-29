@@ -9,7 +9,6 @@ import {
   type FrontierDaily,
   type FrontierDailySchedule,
   type FrontierDailySummary,
-  type FrontierFollowedQuery,
   type FrontierFollowedZone,
   type FrontierItem,
 } from "@/lib/frontierClient";
@@ -24,6 +23,7 @@ import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { useNarrow } from "@/lib/useMediaQuery";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
+import { zonePath } from "./zoneLinks";
 import { archiveEntryName, archiveMonths, dayInMonth, issuedStamp, monthKey, sectionsBelow, topThings, type TopThing } from "./frontierRecord";
 
 /** 往期 in a menu (the weekly's, an empty day's, a phone's without months) lists this many issues: two weeks, a menu that fits a laptop screen. */
@@ -346,8 +346,7 @@ function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issu
       {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit ?? DAILY_SAFETY_ROWS} />}
       {sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
-      {issue.followedQueries && issue.followedQueries.length > 0 && <FollowedQueries follows={issue.followedQueries} />}
-      {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
+      {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} weekly={weekly} />}
 
       {(previous || next) && (
         <nav aria-label={weekly ? "周报翻页" : "日报翻页"} className="mt-8 flex items-center justify-between">
@@ -435,49 +434,27 @@ function TopThings({ things, className }: { things: TopThing[]; className: strin
 }
 
 /**
- * 「你关注的」: the things this reader typed to follow that have news, each one a link to its feed with the number of new items
- * (c3-watch). Theirs alone, like the zones below it.
+ * 「你关注的专区」: the key updates, in the issue's window, of the zones this reader owns or follows — a zone's title, which opens it, and
+ * under it the items as an issue's rows (a day two a zone, a week three, each with the week's category in front). It is the reader's
+ * alone — the issue above it reads the same to everyone — so it is a section of its own, not a lane.
  */
-function FollowedQueries({ follows }: { follows: FrontierFollowedQuery[] }) {
-  return (
-    <section aria-labelledby="daily-followed-queries" className="mt-8">
-      <h3 id="daily-followed-queries" className="text-body font-semibold text-text">你关注的</h3>
-      <ul aria-label="有新动态的关注" className="mt-1">
-        {follows.map((follow) => (
-          <li key={follow.id} className="flex items-baseline gap-2 border-b border-border py-3">
-            <Link to={`/app/frontier?view=following&follow=${encodeURIComponent(follow.id)}`} className="min-w-0 flex-1 text-body font-semibold leading-6 text-text hover:text-accent hover:underline">
-              {follow.label}
-            </Link>
-            <span className="shrink-0 text-caption tabular-nums text-text-3">{follow.newItems >= 99 ? "99+" : follow.newItems} 条新动态</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/**
- * 「你关注的专区」: this reader's own followed zones, with the cards that are new or changed in the issue's window.
- * It is the reader's alone — the issue above it reads the same to everyone — so it is a section of its own, not a lane.
- */
-function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
+function FollowedZones({ zones, weekly }: { zones: FrontierFollowedZone[]; weekly: boolean }) {
   return (
     <section aria-labelledby="daily-followed-zones" className="mt-8">
       <h3 id="daily-followed-zones" className="text-body font-semibold text-text">你关注的专区</h3>
       {zones.map((zone) => (
         <div key={zone.zoneId} className="mt-2">
-          <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}`} className={cn(INLINE_ACTION, "-ml-1 px-1 text-text-3 hover:text-accent")}>
+          <Link to={zonePath({ id: zone.zoneId, slug: zone.slug })} className={cn(INLINE_ACTION, "-ml-1 px-1 text-text-3 hover:text-accent")}>
             <span className="text-caption">{zone.zoneTitle}</span>
           </Link>
           <ul aria-label={zone.zoneTitle}>
-            {zone.cards.map((card) => (
-              <li key={card.id} className="flex gap-2 border-b border-border py-3">
-                <span className="w-8 shrink-0 text-caption leading-6 text-text-3">{card.change === "new" ? "新" : "更新"}</span>
+            {zone.entries.map(({ item, categoryLabel }) => (
+              <li key={item.id} className="flex gap-2 border-b border-border py-3">
+                {weekly && <span className="w-20 shrink-0 text-caption leading-6 text-text-3">{categoryLabel}</span>}
                 <div className="min-w-0 flex-1">
-                  <p className="text-body font-semibold leading-6 text-text">
-                    <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}/evidence/${encodeURIComponent(card.id)}`} className="hover:text-accent hover:underline">{card.title}</Link>
-                  </p>
-                  {card.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{card.summary}</p>}
+                  <p data-row-title data-prose="" className="text-body font-semibold leading-6 text-text"><ArticleLink item={item}>{item.title}</ArticleLink></p>
+                  {item.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{item.summary}</p>}
+                  <p className="mt-1 truncate text-caption text-text-3">{item.source.name}</p>
                 </div>
               </li>
             ))}

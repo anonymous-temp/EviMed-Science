@@ -6,6 +6,8 @@
 //   /evidence/                        the index          /evidence/about            《编辑说明》
 //   /evidence/z/<zone>                a zone             /evidence/metrics          the monthly figures
 //   /evidence/z/<zone>/changes        its change log     /evidence/simulations[/id] 「模拟研究」
+//   /evidence/z/s/<slug>              a topic zone, by   /evidence/z/<zone>/feed.xml   a topic zone's feed (also under /z/s/<slug>)
+//                                     its readable name
 //   /evidence/c/<card>?view=          a card             /evidence/requests         the public topic requests
 //   /evidence/a/<handle>              an author (`au_…`) /evidence/sitemap.xml      only while indexing is on
 //   /evidence/api/v1/…                the JSON API       /evidence/assets/site.css  the stylesheet
@@ -20,6 +22,9 @@
 // - **`/robots.txt` is answered here, outside the base, while the pages are on.** The application is the host's catch-all, and its
 //   single-page fallback used to hand a crawler's first request an HTML shell. The text is made by `evidenceRobotsTxt` (indexing,
 //   the sitemap's address); it needs no database, is not limited per address, and is counted as its own kind of request.
+// - **A topic zone is its own kind of page** (plan 2026-10-29 §4.7): the platform's (`official`) topic zones, open to the internet, read at
+//   `/z/<id>` and `/z/s/<slug>` (the alias, whose canonical address is the id's) with a feed at `/feed.xml`; a reader's topic zone is
+//   never found, and a zone of cards (`lifecycle = 'none'`) keeps the page it had.
 // - **Not found is one answer.** A page or API id that is missing, is a draft, sits in a zone that is platform-visible, or belongs to an
 //   account that is gone gets the same 404 body and the same headers, so the answer cannot be used to find out what exists.
 // - **A withdrawn card keeps its page**: 410, the reason and the date, `noindex`. It is not counted as a read.
@@ -37,9 +42,11 @@ import { createEvidencePublicIndexing, evidenceRobotsTxt, evidenceSitemapXml } f
 import { createEvidencePublicMetrics } from "./evidencePublicMetrics.mjs";
 import { createEvidencePublicApi, evidencePublicApiPrefix } from "./evidencePublicApi.mjs";
 import { evidencePublicDay, evidencePublicIsBot, recordPageRead } from "./evidencePublicReads.mjs";
-import { aigcMetadata, authorPath, cardPath, changesPath, renderPage, zonePath } from "./evidencePublicLayout.mjs";
+import { EVIDENCE_SITE_NAME, aigcMetadata, authorPath, cardPath, changesPath, renderPage, zonePath } from "./evidencePublicLayout.mjs";
 import { evidencePublicBase, evidencePublicPath, evidencePublicSuffix } from "./evidencePublicPaths.mjs";
 import { evidencePublicStylesheet, evidencePublicStylesheetPath } from "./evidencePublicStyle.mjs";
+import { createEvidencePublicTopicReads, EVIDENCE_PUBLIC_TOPIC_LIMITS } from "./evidencePublicTopicReads.mjs";
+import { topicZoneFeedPath, topicZonePage, topicZonePath, topicZoneRss, topicZoneSlugPath } from "./evidencePublicTopicPages.mjs";
 import {
   aboutPage, authorPage, cardPage, changesPage, indexPage, metricsPage, notFoundPage, rateLimitedPage, requestsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage,
 } from "./evidencePublicPages.mjs";
@@ -91,10 +98,11 @@ function matches(header, etag) {
 export function createEvidencePublicRoutes({ config, database, simulations = null, requests = null, limiter = null, now = () => new Date(), metrics, questionBank = null, predictionCalibration = null, receiptsFor = null, report = () => {} }) {
   const enabled = config.evidencePublicWebEnabled === true && Boolean(database);
   const counters = {
-    pages: 0, api: 0, assets: 0, sitemap: 0, robots: 0, notFound: 0, withdrawn: 0, rateLimited: 0, notModified: 0, errors: 0,
+    pages: 0, api: 0, assets: 0, sitemap: 0, robots: 0, feeds: 0, notFound: 0, withdrawn: 0, rateLimited: 0, notModified: 0, errors: 0,
     readsCounted: 0, readsSkippedBot: 0, readsFailed: 0,
   };
   const reads = enabled ? createEvidencePublicReads({ database, now, receiptsFor }) : null;
+  const topics = enabled ? createEvidencePublicTopicReads({ database, now }) : null;
   const indexing = reads ? createEvidencePublicIndexing({ config, reads }) : null;
   const figures = enabled ? (metrics ?? createEvidencePublicMetrics({ database, now, questionBank, predictionCalibration, report })) : null;
   const api = reads && figures ? createEvidencePublicApi({ reads, metrics: figures, config }) : null;
@@ -110,7 +118,8 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
    * A page.
    * @param {any} res @param {boolean} head @param {number} status
    * @param {{ title: string, description: string, body: any }} page
-   * @param {{ path: string, noindex: boolean, active?: string, wide?: boolean, aigc?: string | null, alternates?: boolean, ogType?: "website" | "article" }} frame
+   * @param {{ path: string, noindex: boolean, active?: string, wide?: boolean, aigc?: string | null, alternates?: boolean, ogType?: "website" | "article",
+   *   canonicalPath?: string | null, feed?: { title: string, href: string } | null }} frame
    */
   function sendPage(res, head, status, page, frame) {
     counters.pages += 1;
@@ -138,7 +147,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     const r = /** @type {NonNullable<typeof reads>} */ (reads);
     if (section === "" && parts.length === 1) {
       const sections = await r.indexZones();
-      return sendPage(res, head, 200, indexPage(sections), { path: evidencePublicPath("/"), noindex: await noindexFor({ kind: "site" }), active: "zones", alternates: true });
+      return sendPage(res, head, 200, indexPage({ ...sections, topics: await /** @type {NonNullable<typeof topics>} */ (topics).index() }), { path: evidencePublicPath("/"), noindex: await noindexFor({ kind: "site" }), active: "zones", alternates: true });
     }
     if (section === "about" && parts.length === 1) {
       return sendPage(res, head, 200, aboutPage(), { path: evidencePublicPath("/about"), noindex: await noindexFor({ kind: "site" }), active: "about", wide: false });
@@ -164,6 +173,13 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       const record = simulations && SIMULATION_ID.test(id) ? await simulations.get(id) : null;
       if (!record) return sendNotFound(res, head);
       return sendPage(res, head, 200, simulationPage(record), { path: evidencePublicPath(`/simulations/${encodeURIComponent(id)}`), noindex: await noindexFor({ kind: "site" }), active: "simulations", wide: false });
+    }
+    if (section === "z" && id === "s" && (parts.length === 3 || (parts.length === 4 && parts[3] === "feed.xml"))) {
+      return serveTopic(req, res, head, parts[2], parts.length === 4 ? "feed" : "page");
+    }
+    if (section === "z" && id && id !== "s" && (parts.length === 2 || (parts.length === 3 && sub === "feed.xml"))) {
+      const served = await serveTopic(req, res, head, id, parts.length === 3 ? "feed" : "page", { quiet: true });
+      if (served) return;
     }
     if (section === "z" && id && (parts.length === 2 || (parts.length === 3 && sub === "changes"))) {
       const zone = await r.zone(id);
@@ -203,6 +219,45 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       });
     }
     return sendNotFound(res, head);
+  }
+
+  /**
+   * A platform topic zone's page or its feed, by id or slug. Answers 404 itself unless `quiet`, where it returns false and lets the caller
+   * try the zones of cards (an id may be either kind).
+   * @param {any} req @param {any} res @param {boolean} head @param {string} ref @param {"page" | "feed"} kind @param {{ quiet?: boolean }} [options]
+   * @returns {Promise<boolean>}
+   */
+  async function serveTopic(req, res, head, ref, kind, { quiet = false } = {}) {
+    const source = /** @type {NonNullable<typeof topics>} */ (topics);
+    const zone = await source.zone(ref);
+    if (!zone) {
+      if (quiet) return false;
+      sendNotFound(res, head);
+      return true;
+    }
+    if (kind === "feed") {
+      counters.feeds += 1;
+      const items = await source.items(zone.id, { limit: EVIDENCE_PUBLIC_TOPIC_LIMITS.feedItems });
+      send(res, 200, { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": `public, max-age=${MAX_AGE_SECONDS}` },
+        topicZoneRss({ zone, items, generatedAt: now(), publicUrl: config.publicUrl }), head);
+      return true;
+    }
+    // The newest few hundred decide the key updates; the page shows the newest fifty.
+    const found = await source.items(zone.id, { limit: 300 });
+    const items = found.slice(0, EVIDENCE_PUBLIC_TOPIC_LIMITS.items);
+    const keyUpdates = found.filter((item) => item.key).slice(0, EVIDENCE_PUBLIC_TOPIC_LIMITS.keyUpdates);
+    const [cited, tags] = await Promise.all([source.cited((zone.progress?.refs ?? []).map((reference) => reference.itemId)), source.keywordTags(zone)]);
+    const page = topicZonePage({ zone, items, cited, keyUpdates, shown: Math.max(found.length, zone.month), publicUrl: config.publicUrl, tags });
+    const alias = ref !== zone.id;
+    await countRead(req, head, { zoneId: zone.id });
+    sendPage(res, head, 200, page, {
+      path: alias && zone.slug ? topicZoneSlugPath(zone.slug) : topicZonePath(zone.id), canonicalPath: topicZonePath(zone.id), active: "zones", ogType: "article",
+      // 最新进展 is written by a model, so the page carries the implicit AI-content label (as a card an AI wrote does) beside the visible note under it.
+      aigc: zone.progress ? aigcMetadata({ producerName: EVIDENCE_PLATFORM_PRODUCER_NAME, produceId: `${zone.id}@${zone.progress.at}`, propagateId: `${zone.id}@${zone.progress.at}` }) : null,
+      noindex: await noindexFor({ kind: "topic", month: zone.month, hasProgress: Boolean(zone.progress) }),
+      feed: { title: `${zone.title} · ${EVIDENCE_SITE_NAME}`, href: topicZoneFeedPath(zone.id) },
+    });
+    return true;
   }
 
   /** One read of a zone or card page, counted once; a program's request and a failed write are not. @param {any} req @param {boolean} head @param {{ zoneId: string, cardId?: string | null }} read */
@@ -313,7 +368,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
           if (config.evidencePublicIndexable !== true) { sendNotFound(res, head); return true; }
           counters.sitemap += 1;
           indexing.count("sitemapRequests");
-          const xml = evidenceSitemapXml(await indexing.sitemapPaths(await reads.sitemapEntries()), config.publicUrl);
+          const xml = evidenceSitemapXml(await indexing.sitemapPaths({ ...(await reads.sitemapEntries()), topics: await /** @type {NonNullable<typeof topics>} */ (topics).sitemapEntries() }), config.publicUrl);
           send(res, 200, { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": `public, max-age=${MAX_AGE_SECONDS}` }, xml, head);
           return true;
         }
@@ -345,7 +400,7 @@ export function evidencePublicMetricFamilies(stats) {
     { name: "open_science_evidence_public_base_path", help: "The path the public evidence pages, their API, the sitemap and the feed are served under (OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH): one series, labelled with it.",
       type: /** @type {const} */ ("gauge"), series: [{ labels: { path: stats.base }, value: 1 }] },
     counter("open_science_evidence_public_requests_total", "Requests the public evidence pages answered, by kind (a page, the read-only API, the stylesheet, the sitemap, robots.txt).", [
-      { labels: { kind: "page" }, value: stats.pages }, { labels: { kind: "api" }, value: stats.api }, { labels: { kind: "asset" }, value: stats.assets }, { labels: { kind: "sitemap" }, value: stats.sitemap }, { labels: { kind: "robots" }, value: stats.robots },
+      { labels: { kind: "page" }, value: stats.pages }, { labels: { kind: "api" }, value: stats.api }, { labels: { kind: "asset" }, value: stats.assets }, { labels: { kind: "sitemap" }, value: stats.sitemap }, { labels: { kind: "robots" }, value: stats.robots }, { labels: { kind: "feed" }, value: stats.feeds },
     ]),
     counter("open_science_evidence_public_refusals_total", "Public evidence requests that were refused or answered without content, by reason.", [
       { labels: { reason: "not_found" }, value: stats.notFound }, { labels: { reason: "withdrawn" }, value: stats.withdrawn },
@@ -354,9 +409,10 @@ export function evidencePublicMetricFamilies(stats) {
     counter("open_science_evidence_public_page_reads_total", "Reads of a zone or card page that were counted for the selector, and those not counted.", [
       { labels: { outcome: "counted" }, value: stats.readsCounted }, { labels: { outcome: "skipped_bot" }, value: stats.readsSkippedBot }, { labels: { outcome: "failed" }, value: stats.readsFailed },
     ]),
-    counter("open_science_evidence_public_noindex_total", "Public evidence pages answered noindex, by reason (the deployment's switch, a new author, a withdrawn card, a page that is never indexed).", [
+    counter("open_science_evidence_public_noindex_total", "Public evidence pages answered noindex, by reason (the deployment's switch, a new author, a withdrawn card, a page that is never indexed, a topic zone with too little on it).", [
       { labels: { reason: "switch_off" }, value: stats.indexing.noindexSwitchOff }, { labels: { reason: "new_author" }, value: stats.indexing.noindexNewAuthor },
       { labels: { reason: "withdrawn" }, value: stats.indexing.noindexWithdrawn }, { labels: { reason: "never" }, value: stats.indexing.noindexAlways },
+      { labels: { reason: "thin" }, value: stats.indexing.noindexThin },
     ]),
     counter("open_science_evidence_public_verifications_total", "Cards whose claims the public pages checked against their sources, and checks answered from the cache.", [
       { labels: { outcome: "checked" }, value: stats.reads.verifications }, { labels: { outcome: "cache_hit" }, value: stats.reads.verificationCacheHits },

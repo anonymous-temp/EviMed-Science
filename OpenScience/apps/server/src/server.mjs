@@ -2460,12 +2460,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // its push, 与你相关, and the two reader actions — every model call the
     // editor's, under the pipeline's budget; the worker's compose hook ticks them.
     // Typed follows (c3-watch 2026-10-25): their words read by the editor under the feed's budget, matched to published items by the
-    // shared glossary's keys and the search vector, counted new, and named in the daily notice.
+    // shared glossary's keys and the search vector, and counted new. (The daily notice names zones now, frontierZoneUpdates.mjs.)
     const followWatch = new FrontierFollowWatch({ database: productDatabase, editor, embedder, glossary: entityVocabulary.glossaryStore, budget, config,
       dimension: config.kbEmbeddingDimension });
     const events = new FrontierEvents({ database: productDatabase, editor, embedder, config, budget });
     const daily = new FrontierDaily({ database: productDatabase, jobs: productJobs, notifications: notificationService, editor, events, config,
-      owner: () => editor.owner, budget, watch: followWatch, workerId: randomId("frontier-daily-") });
+      owner: () => editor.owner, budget, workerId: randomId("frontier-daily-") });
     const weekly = new FrontierWeekly({ database: productDatabase, jobs: productJobs, owner: () => editor.owner, config,
       workerId: randomId("frontier-weekly-") });
     // The monthly (2026-10-22): compiled from the month's dailies; its writer is the editor, its sentences held to the entries.
@@ -2509,12 +2509,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     // Official zones belong to the platform publisher; a zone and its cards are tagged with the shared entity keys.
-    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID,
-      // A card published or revised in a followed zone is an inbox notice for each follower (flywheel F10): told after the
-      // write committed, and a notice that could not be queued is said on stderr and never reaches the writer.
-      onCardPublished: async (event) => {
-        try { await frontierNotifications.notifyZoneFollowers(event); } catch (error) { process.stderr.write(`frontier zone notice: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`); }
-      }});
+    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID});
     // Lead triggers (ct-mix 2026-10-24): searches for what the feed is missing, through the gateway's search under the
     // module's purpose and budget, handed to the plugin.
     const leads = new FrontierLeads({ database: productDatabase, plugin: client, config, budget, owner: () => editor.owner, topics,
@@ -3204,20 +3199,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // Keeping the evidence cards current and answering a reader's challenge (evidenceCurrency.mjs, evidenceChallenges.mjs; flywheel F13, F14). Composed with
   // the frontier and switched by OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED; off, the routes answer 404 and the worker's `evidence-upkeep` loop does not exist. The
   // frontier worker ticks the loops (no new scheduler), and what a changed source reaches besides cards — the result impact path and the memory labels — is driven
-  // from the same feed, which nothing polled until now. `notifyZoneFollowers` is the frontier-links package's push to a zone's followers; absent, none.
+  // from the same feed, which nothing polled until now.
   /** @type {{ changeLog: ReturnType<typeof createEvidenceChangeLog>, upkeep: ReturnType<typeof createEvidenceUpkeep>, challenges: ReturnType<typeof createEvidenceChallenges>, figures: ReturnType<typeof createEvidenceFigures> } | null} */
   let evidenceUpkeep = null;
   if (frontier && config.evidenceUpkeepEnabled && productDatabase) {
     const zones = frontier.evidenceZones;
-    const followers = /** @type {any} */ (frontier.notifications);
-    // The upkeep names what happened to the card (updated, corrected, withdrawn); the followers' notice names the change it words. One notice per
-    // card revision either way: a revision the zone service already announced as published content changing is not announced twice.
-    const notifyZoneFollowers = typeof followers?.notifyZoneFollowers === "function"
-      ? (/** @type {{ zoneId: string, cardId: string, revision: number, kind: string }} */ event) => followers.notifyZoneFollowers({ zoneId: event.zoneId, cardId: event.cardId, revision: event.revision, change: event.kind === "updated" ? "revised" : event.kind })
-      : null;
     const changeLog = createEvidenceChangeLog({ database: productDatabase });
     const upkeep = createEvidenceUpkeep({
-      database: productDatabase, changeLog, sourceChanges, notifications: notificationService, notifyZoneFollowers, resultImpacts, knowledgeChange,
+      database: productDatabase, changeLog, sourceChanges, notifications: notificationService, resultImpacts, knowledgeChange,
       levers: { batch: config.evidenceUpkeepBatch, intervalHours: config.evidenceUpkeepIntervalHours, challengesPerDay: config.evidenceChallengesPerDay },
       isOperator: (/** @type {string} */ userId) => config.operatorUsers.includes(userId),
       report: (code) => process.stderr.write(`${code}\n`),
@@ -3225,7 +3214,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const judge = createChallengeJudge({ config, usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch, callModel: callModelForControlPlane,
       parseJson: parseModelJson, billing: () => ensureEvidenceProject(store) });
     const challenges = createEvidenceChallenges({ database: productDatabase, service: zones, changeLog, notifications: notificationService, judge, budget: evidenceBudget,
-      levers: { challengesPerDay: config.evidenceChallengesPerDay }, notifyZoneFollowers, report: (code) => process.stderr.write(`${code}\n`),
+      levers: { challengesPerDay: config.evidenceChallengesPerDay }, report: (code) => process.stderr.write(`${code}\n`),
       // A calculated claim is checked against its receipt: the reader the composition gives the zone service below (read when a challenge is, not now).
       receiptsFor: (card) => zones.receiptsFor(card) });
     zones.onCardSaved = async (event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };

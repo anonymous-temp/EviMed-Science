@@ -172,7 +172,10 @@ test("the zone, index, simulations, requests and withdrawn pages escape every va
     assert.equal(/<(script|b|i|u|s|p)>/.test(body.replace(/<p[ >]/g, "")), false, `${name} has no markup from a value`);
   }
   assert.match(zoneBody, /href="\/evidence\/z\/ez_0123456789ab\?cursor=abc"/, "a next page is a cursor link");
-  assert.match(indexBody, /<h2 id="official">官方专区<\/h2>[\s\S]*<h2 id="product">产品专区<\/h2>[\s\S]*<h2 id="user">用户专区<\/h2>/);
+  // A section of zones of cards is drawn when it has any; an empty one is not a heading over a sentence that says so.
+  assert.match(indexBody, /<h2 id="product">产品专区<\/h2>[\s\S]*<h2 id="user">用户专区<\/h2>/);
+  assert.doesNotMatch(indexBody, /id="official"|id="topics"|现在没有公开的专区/);
+  assert.match(String(indexPage({ official: [], product: [], user: [] }).body), /现在没有公开的专区/, "a deployment with nothing to list says so once");
   assert.match(withdrawn, /changes\?before=8#log-7/, "the withdrawal links to its log entry");
 });
 
@@ -291,15 +294,23 @@ test("renderPage writes the Open Graph tags a link preview reads, repeating the 
 });
 
 test("robots.txt keeps crawlers off the private surfaces and the pages' JSON API, names the sitemap only while it exists, and never disallows a page", () => {
+  const closed = ["Disallow: /evidence/api/", "Disallow: /app/", "Disallow: /api/", "Disallow: /internal/", "Disallow: /evolution/"];
   const on = evidenceRobotsTxt({ indexable: true, publicUrl: "https://www.evimed.test" });
+  // Three groups (owner, 2026-10-29): the AI and ordinary search crawlers are allowed to the pages, the training crawlers are shut out,
+  // everyone else is as before. A crawler obeys only the group that names it, so the private surfaces are closed in both open groups.
   assert.equal(on, [
-    "User-agent: *", "Allow: /evidence/", "Disallow: /evidence/api/", "Disallow: /app/", "Disallow: /api/", "Disallow: /internal/", "Disallow: /evolution/", "", "Sitemap: https://www.evimed.test/evidence/sitemap.xml", "",
+    ...["OAI-SearchBot", "PerplexityBot", "Claude-SearchBot", "Bingbot", "Googlebot", "Baiduspider"].map((agent) => `User-agent: ${agent}`), "Allow: /evidence/", ...closed, "",
+    ...["GPTBot", "ClaudeBot", "CCBot", "Google-Extended", "Bytespider", "anthropic-ai"].map((agent) => `User-agent: ${agent}`), "Disallow: /", "",
+    "User-agent: *", "Allow: /evidence/", ...closed, "", "Sitemap: https://www.evimed.test/evidence/sitemap.xml", "",
   ].join("\n"));
-  // Indexing off: the pages say noindex and must stay crawlable to be read as such; no sitemap exists to announce.
+  // Indexing off: the pages say noindex and must stay crawlable to be read as such; no sitemap exists to announce, and nothing is allowed aloud.
   const off = evidenceRobotsTxt({ indexable: false, publicUrl: "https://www.evimed.test" });
   assert.equal(off.includes("Sitemap:"), false);
   assert.equal(off.includes("Allow:"), false);
-  assert.doesNotMatch(off, /^Disallow: \/(evidence\/?)?$/m, "no rule shuts the site or the pages");
+  const withoutTraining = (/** @type {string} */ text) => text.replace(/User-agent: GPTBot[\s\S]*?\n\n/, "");
+  assert.doesNotMatch(withoutTraining(off), /^Disallow: \/(evidence\/?)?$/m, "no rule shuts the site or the pages for the crawlers that may read them");
+  assert.doesNotMatch(withoutTraining(on), /^Disallow: \/(evidence\/?)?$/m);
+  assert.match(off, /^User-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Google-Extended\nUser-agent: Bytespider\nUser-agent: anthropic-ai\nDisallow: \/$/m, "the training crawlers are shut out whatever indexing says");
   // Indexing on but no usable public address: the sitemap answers 404 there, so it is not announced either.
   for (const publicUrl of ["", "not a url", "ftp://www.evimed.test"]) assert.equal(evidenceRobotsTxt({ indexable: true, publicUrl }).includes("Sitemap:"), false, publicUrl);
   // The base the deployment serves the pages at is the one written, and the bare IP keeps its scheme and port.
@@ -307,6 +318,7 @@ test("robots.txt keeps crawlers off the private surfaces and the pages' JSON API
   try {
     const ip = evidenceRobotsTxt({ indexable: true, publicUrl: "https://82.156.128.153" });
     assert.match(ip, /^Allow: \/evimed-evidence\/$/m);
+    assert.equal(ip.match(/^Allow: \/evimed-evidence\/$/gm)?.length, 2, "both open groups");
     assert.match(ip, /^Disallow: \/evimed-evidence\/api\/$/m);
     assert.match(ip, /^Sitemap: https:\/\/82\.156\.128\.153\/evimed-evidence\/sitemap\.xml$/m);
     assert.equal(ip.includes("/evidence/"), false);

@@ -63,6 +63,8 @@ main.read { max-width: ${rem(CONTAINERS.read + SPACE.pageGutter * 2)}; }
 h1 { ${rung("title")} font-weight: 600; margin: 0 0 ${gap(2)}; }
 h2 { ${rung("heading")} font-weight: 600; margin: ${gap(6)} 0 ${gap(2)}; }
 h3 { ${rung("section")} font-weight: 600; margin: ${gap(5)} 0 ${gap(1)}; }
+h4 { ${rung("ui")} font-weight: 600; margin: ${gap(3)} 0 ${gap(1)}; }
+.group { ${rung("ui")} color: var(--text-2); margin: ${gap(3)} 0 ${gap(1)}; }
 p { margin: 0 0 ${gap(3)}; }
 ul, ol { margin: 0 0 ${gap(3)}; padding-left: ${gap(5)}; }
 li { margin-bottom: ${gap(0)}; }
@@ -91,7 +93,7 @@ li { margin-bottom: ${gap(0)}; }
 .tile {
   background: var(--surface); border: 1px solid var(--border-hairline); border-radius: ${rem(RADII.card)}; padding: ${rem(SPACE.cardPadding)};
 }
-.tile h3 { ${rung("section")} margin: 0 0 ${gap(1)}; }
+.tile h3, .tile h4 { ${rung("section")} margin: 0 0 ${gap(1)}; }
 .tile p { ${rung("ui")} margin: 0 0 ${gap(1)}; }
 .list { list-style: none; padding: 0; margin: 0 0 ${gap(4)}; }
 .list > li { background: var(--surface); border: 1px solid var(--border-hairline); border-radius: ${rem(RADII.card)}; padding: ${gap(3)} ${rem(SPACE.cardPadding)}; margin-bottom: ${rem(SPACE.gridGap)}; }

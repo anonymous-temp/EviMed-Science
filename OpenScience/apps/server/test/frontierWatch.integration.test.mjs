@@ -271,27 +271,6 @@ test("a query with no key also takes the items near its words by embedding, and 
   assert.deepEqual(await feed(alice, keyed.id), []);
 });
 
-test("the daily issue lists, for the reader alone, the typed follows with news and no other kind, nor any in the weekly", options, async () => {
-  const issue = (/** @type {string} */ day) => ({ day, weekStart: day, weekEnd: "2026-10-25", windowStart: at(-1440), windowEnd: at(0), generatedAt: at(0), lead: null, sections: [], safety: [],
-    aiMinute: null, markdown: "日报", previousDay: null, nextDay: null });
-  const daily = { async read(/** @type {string} */ day) { return issue(day); } };
-  service = new FrontierService({ database: db, vocabulary: frontierVocabularyView(TEST_VOCABULARY), config: { frontierEnabled: true, frontierAudience: "all" },
-    profiles: null, watch, daily, weekly: daily, now: () => clock });
-  const semaglutide = await typed(alice, "司美格鲁肽 和胰腺炎");
-  await service.createFollow(alice, { kind: "drug", key: "semaglutide", label: "司美格鲁肽" });
-  await typed(alice, "没有新动态的词");
-  await publish(5, "Semaglutide pancreatitis once", { keys: ["drug:semaglutide", "disease:pancreatitis"] });
-  await publish(6, "Semaglutide pancreatitis twice", { keys: ["drug:semaglutide", "disease:pancreatitis"] });
-  clock = new Date(at(10));
-  await watch.sweep();
-  const mine = (await service.issue(alice, "2026-10-25")).daily.followedQueries;
-  assert.deepEqual(mine, [{ id: semaglutide.follow.id, label: "司美格鲁肽 和胰腺炎", newItems: 2 }]);
-  assert.deepEqual((await service.issue(bob, "2026-10-25")).daily.followedQueries, [], "another reader's issue holds none of it");
-  assert.deepEqual((await service.issue(alice, "2026-10-19", true)).weekly.followedQueries, [], "the weekly names none");
-  await service.markFollowSeen(alice, semaglutide.follow.id);
-  assert.deepEqual((await service.issue(alice, "2026-10-25")).daily.followedQueries, [], "opened, it is no longer news");
-});
-
 test("全部关注 lists what typed follows matched beside what the other follows list, once, and 与我相关's reasons name the typed words", options, async () => {
   const { follow } = await typed(alice, "司美格鲁肽 和胰腺炎");
   await service.createFollow(alice, { kind: "topic", key: "heart failure", label: "heart failure" });

@@ -308,23 +308,3 @@ export function followQueryView(query) {
       .filter((/** @type {string[]} */ names) => names.length),
   };
 }
-
-/** The follow lines one notice carries; the rest are one 「另有 N 个关注」 line. */
-export const FRONTIER_FOLLOW_NOTICE_LINES = 3;
-
-/** The line of a daily notice about one follow. @param {string} label @param {number} count */
-export function followNoticeLine(label, count) {
-  return `你关注的“${label}”有 ${count} 条新动态`;
-}
-
-/**
- * The lines a notice carries for the follows with news: one per follow, the busiest first, at most `FRONTIER_FOLLOW_NOTICE_LINES`, and
- * one line for the rest.
- * @param {Array<{ label: string, count: number }>} news
- */
-export function followNoticeLines(news) {
-  const ordered = [...news].filter((entry) => entry.count > 0).sort((left, right) => right.count - left.count);
-  const lines = ordered.slice(0, FRONTIER_FOLLOW_NOTICE_LINES).map((entry) => followNoticeLine(entry.label, entry.count));
-  if (ordered.length > FRONTIER_FOLLOW_NOTICE_LINES) lines.push(`另有 ${ordered.length - FRONTIER_FOLLOW_NOTICE_LINES} 个关注有新动态`);
-  return lines;
-}

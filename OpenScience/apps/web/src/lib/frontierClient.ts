@@ -728,17 +728,17 @@ export interface FrontierDailyArchive {
 }
 
 /**
- * 「你关注的专区」 of an issue (flywheel F10): the cards of the zones this reader follows that were published
- * (`new`) or changed (`updated`) in the issue's window. Theirs alone — the issue's text is the same for everyone.
+ * 「你关注的专区」 of an issue (2026-10-29): the key updates, in the issue's window, of the zones this reader owns or follows — at most two
+ * an item-zone in a day and three in a week, each with the week's category it stands in. Theirs alone — the issue's text is the same for
+ * everyone.
  */
 export interface FrontierFollowedZone {
   zoneId: string;
+  /** The zone's readable address, when it has one. */
+  slug: string | null;
   zoneTitle: string;
-  cards: Array<{ id: string; title: string; summary: string; change: "new" | "updated"; revision: number; updatedAt: string | null }>;
+  entries: Array<{ item: FrontierItem; category: string; categoryLabel: string }>;
 }
-
-/** One typed follow with news, as the daily page lists it. */
-export interface FrontierFollowedQuery { id: string; label: string; newItems: number }
 
 /**
  * `GET /api/frontier/dailies/:day`. The header reads 「9月23日 周三 · {itemCount} 条 · 约 {readingMinutes} 分钟」;
@@ -756,10 +756,8 @@ export interface FrontierDaily {
   lead: { item: FrontierItem; text: string | null; event: { id: string; title: string } | null } | null;
   sections: Array<{ lane: string; laneLabel: string; items: FrontierItem[] }>;
   safety: FrontierItem[];
-  /** This reader's followed zones' new and changed cards; absent from a server that does not send it. */
+  /** The key updates of the zones this reader owns or follows; absent from a server that does not send it. */
   followedZones?: FrontierFollowedZone[];
-  /** The things this reader typed to follow that have items they have not opened (c3-watch): each links to its feed. Theirs alone. */
-  followedQueries?: FrontierFollowedQuery[];
   aiMinute: string | null;
   markdown: string;
   /** The items the issue shows now. */
@@ -1416,24 +1414,13 @@ function parseFollowedZones(value: unknown): FrontierFollowedZone[] {
     const zone = record(entry);
     const zoneId = text(zone?.zoneId);
     const zoneTitle = text(zone?.zoneTitle);
-    const cards = (Array.isArray(zone?.cards) ? zone.cards : []).flatMap((card) => {
-      const raw = record(card);
-      const id = text(raw?.id);
-      const title = text(raw?.title);
-      return id && title ? [{ id, title, summary: text(raw?.summary) ?? "", change: raw?.change === "new" ? "new" as const : "updated" as const, revision: count(raw?.revision), updatedAt: moment(raw?.updatedAt) }] : [];
+    const entries = (Array.isArray(zone?.entries) ? zone.entries : []).flatMap((row) => {
+      const raw = record(row);
+      const item = parseFrontierItem(raw?.item);
+      return item ? [{ item, category: text(raw?.category) ?? "evidence", categoryLabel: text(raw?.categoryLabel) ?? "" }] : [];
     });
-    return zoneId && zoneTitle && cards.length > 0 ? [{ zoneId, zoneTitle, cards }] : [];
+    return zoneId && zoneTitle && entries.length > 0 ? [{ zoneId, slug: text(zone?.slug), zoneTitle, entries }] : [];
   });
-}
-
-function parseFollowedQueries(value: unknown): FrontierFollowedQuery[] {
-  return (Array.isArray(value) ? value : []).flatMap((entry) => {
-    const row = record(entry);
-    const followId = text(row?.id);
-    const label = text(row?.label);
-    const count = row?.newItems;
-    return followId && label && typeof count === "number" && Number.isInteger(count) && count > 0 ? [{ id: followId, label, newItems: count }] : [];
-  }).slice(0, 12);
 }
 
 function parseDaily(value: unknown): FrontierDaily | null {
@@ -1453,7 +1440,8 @@ function parseDaily(value: unknown): FrontierDaily | null {
   return {
     listId: text(raw.listId),
     slots: { ...slotsOf(leadRaw ? [leadRaw] : []), ...slotsOf(raw.safety),
-      ...Object.assign({}, ...(Array.isArray(raw.sections) ? raw.sections : []).map((section) => slotsOf(record(section)?.items))) },
+      ...Object.assign({}, ...(Array.isArray(raw.sections) ? raw.sections : []).map((section) => slotsOf(record(section)?.items))),
+      ...Object.assign({}, ...(Array.isArray(raw.followedZones) ? raw.followedZones : []).map((zone) => slotsOf((Array.isArray(record(zone)?.entries) ? record(zone)!.entries as unknown[] : []).map((row) => record(row)?.item)))) },
     day,
     windowStart: moment(raw.windowStart),
     windowEnd: moment(raw.windowEnd),
@@ -1466,7 +1454,6 @@ function parseDaily(value: unknown): FrontierDaily | null {
     sections,
     safety: parseItems(raw.safety),
     followedZones: parseFollowedZones(raw.followedZones),
-    followedQueries: parseFollowedQueries(raw.followedQueries),
     aiMinute: text(raw.aiMinute),
     markdown: typeof raw.markdown === "string" ? raw.markdown : "",
     itemCount: count(raw.itemCount),

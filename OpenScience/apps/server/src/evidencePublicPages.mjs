@@ -21,6 +21,7 @@ import { externalLink, html, pathLink, timeTag } from "./evidencePublicHtml.mjs"
 import { EVIDENCE_ABOUT_SECTIONS } from "./evidencePublicAbout.mjs";
 import { EVIDENCE_SITE_NAME, appCardPath, appZonePath, authorPath, cardPath, changesPath, zonePath } from "./evidencePublicLayout.mjs";
 import { evidencePublicPath } from "./evidencePublicPaths.mjs";
+import { topicIndexSection } from "./evidencePublicTopicPages.mjs";
 
 const CLAIM_TYPE_LABELS = { direct: "直接引用", synthesized: "跨来源综合", derived: "分析者推算", calculated: "平台计算" };
 const CLAIM_STATUS_LABELS = {
@@ -103,28 +104,34 @@ function pager(cursor, base) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{ official: any[], product: any[], user: any[] }} sections
+ * The index: the platform's topic zones by specialty and group, then — each only when there is any — the zones of cards: the platform's,
+ * the products' and the researchers'. A deployment with nothing to list says so once.
+ * @param {{ topics?: Array<{ specialty: { key: string, label: string }, groups: Array<{ label: string, zones: any[] }> }>, official: any[], product: any[], user: any[] }} sections
  */
 export function indexPage(sections) {
   /** @param {string} id @param {string} title @param {string} note @param {any[]} zones @param {boolean} showProducer */
-  const section = (id, title, note, zones, showProducer) => html`<section aria-labelledby="${id}">
+  const section = (id, title, note, zones, showProducer) => zones.length ? html`<section aria-labelledby="${id}">
 <h2 id="${id}">${title}</h2>
 <p class="muted">${note}</p>
-${zones.length ? html`<ul class="grid">${zones.map((zone) => html`<li class="tile">
+<ul class="grid">${zones.map((zone) => html`<li class="tile">
 <h3>${pathLink(zonePath(zone.id), zone.title)}</h3>
 ${showProducer ? producerLine(zone.producer, zone.owner.name) : html`<p class="meta">出品：${zone.producer?.name ?? zone.owner.name}</p>`}
 ${zone.description ? html`<p>${clip(zone.description, 120)}</p>` : ""}
 <p class="meta">${countOf(zone.cards, "张证据卡")} · ${countOf(zone.follows, "人关注")} · 更新于 ${timeTag(zone.lastCardAt ?? zone.updatedAt)}</p>
-</li>`)}</ul>` : html`<p class="muted">这一栏现在没有公开的专区。</p>`}
-</section>`;
+</li>`)}</ul>
+</section>` : html``;
+  const topics = sections.topics ?? [];
+  const nothing = !topics.length && !sections.official.length && !sections.product.length && !sections.user.length;
   return {
-    title: `${EVIDENCE_SITE_NAME}：官方专区、产品专区和用户专区`,
-    description: "EviMed 证据中心公开的证据专区。官方专区、产品专区和用户专区分开列出，每张证据卡都写明出品方，每条结论都能追到来源原文。",
+    title: `${EVIDENCE_SITE_NAME}：证据专区`,
+    description: "EviMed 证据中心公开的证据专区：每个专区一个主题，最新进展和动态都链接到原文；证据卡写明出品方，每条结论都能追到来源原文。",
     body: html`<h1>${EVIDENCE_SITE_NAME}</h1>
-<p class="lede">每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。详见${pathLink(evidencePublicPath("/about"), "编辑说明")}。</p>
-${section("official", "官方专区", "由平台出品。", sections.official, false)}
+<p class="lede">每个专区只讲一个主题，由 AI 依据公开原文整理最新进展，每条动态都链接到原文。每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。详见${pathLink(evidencePublicPath("/about"), "编辑说明")}。</p>
+${topicIndexSection(topics)}
+${section("official", "官方证据卡", "由平台出品。", sections.official, false)}
 ${section("product", "产品专区", "由企业或医生出品，讲的是他们自己的产品；每个专区写明出品方和与产品的关系。", sections.product, true)}
-${section("user", "用户专区", "由研究者出品、署名发表，并选择公开到互联网。", sections.user, false)}`,
+${section("user", "用户专区", "由研究者出品、署名发表，并选择公开到互联网。", sections.user, false)}
+${nothing ? html`<p class="muted">现在没有公开的专区。</p>` : ""}`,
   };
 }
 
