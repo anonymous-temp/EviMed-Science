@@ -6,7 +6,9 @@
  *    something in them — the daily's window is the one the module computes for the day, and its issue is written by the module's own
  *    composer (`composer.tick()`: cluster, hot list, daily), not by hand;
  *  - one official zone (the platform's, written by its own account) with a long card — thirty-nine sources the platform has read, eighteen
- *    claims with their ✓ and ⚠ — and two shorter ones; one zone of the fixture account's own with a card in it, which is the author page.
+ *    claims with their ✓ and ⚠ — and two shorter ones; one zone of the fixture account's own with a card in it, which is the author page;
+ *  - the topic zones of 证据专区 (2026-10-29): one platform zone of two keywords over the newest items, with a cited 最新进展, and the
+ *    account's own private zone.
  *
  * Every title, journal, trial number and sentence is invented.
  */
@@ -457,6 +459,48 @@ async function furnishZones(app, user, { log }) {
     limitations: "只有两项试验。", provenance: "自己整理", content: { question: "房颤筛查值得做吗？", answer: "可能值得。", population: "65 岁以上社区人群" },
     claims: [{ claimId: "CLM-001", claimType: "direct", claim: "筛查组卒中发生率更低。", sourceIndexes: [1], supportQuote: "筛查组卒中发生率降低 14%" }], state: "published" }, mineLive.id, null, true)
     .catch((/** @type {any} */ error) => log(`frontier: own card — ${String(error?.message ?? error).slice(0, 200)}`));
+  await furnishTopicZones(app, user, publisher, { log });
   log(`frontier: zones written, the long card is ${long?.id}`);
   return { officialZoneId: published.id, cardId: long?.id ?? null };
+}
+
+/**
+ * The topic zones of 证据专区 (2026-10-29) as the planner and the data plane leave them, over the fixture's own items: one platform
+ * zone of two keywords (its definition, its judged items — eight core, the rest related —, a cited 最新进展 and its counts) and the
+ * account's own private zone. Written directly: the planner and the judge are model calls the fixture does not make.
+ * @param {any} app @param {any} user @param {{ id: string }} publisher @param {{ log: (line: string) => void }} context
+ */
+async function furnishTopicZones(app, user, publisher, { log }) {
+  const db = app.store.database;
+  const { evidenceZoneRole } = await import("@evimed/domain");
+  const items = (await db.query(`SELECT i.id, i.public_id, i.genre, i.safety_alert, i.source_type, i.evidence_type, i.flags, i.lane, i.platform, i.channel
+    FROM evimed_frontier.items i WHERE i.state = 'published' ORDER BY i.visible_at DESC, i.id DESC LIMIT 14`)).rows;
+  if (!items.length) { log("frontier: no published items for the topic zones"); return; }
+  const definition = (/** @type {string} */ group) => ({ version: 1, type: "drug-indication",
+    keywords: [{ label: "每周一次降糖药", terms: ["每周一次降糖药", "周制剂"], tagIds: [], entityKeys: [] }, { label: "体重管理", terms: ["体重管理", "减重", "肥胖"], tagIds: [], entityKeys: [] }],
+    perspective: null, scope: "每周一次的降糖药用于体重管理的疗效、安全性与可及性；单纯降糖的研究不在此列", include: "以体重为主要结局的研究、指南、审批与安全信号。",
+    exclude: "只讲降糖、体重是次要结局的研究。", excludeTerms: [], specialties: ["endocrinology"], group, seeds: { positive: [], negative: [] } });
+  const zones = [
+    ["ez_walk_topic", publisher.id, "official", "published", "internet", "walk-weekly-weight", "每周一次降糖药与体重管理", "肥胖"],
+    ["ez_walk_mine", user.id, "user", "draft", "platform", null, "我关注的周制剂心血管结局", "心血管"],
+  ];
+  for (const [id, owner, kind, state, visibility, slug, title, group] of zones) {
+    const value = definition(String(group));
+    await db.query(`INSERT INTO evimed_frontier.evidence_zones (id, user_id, title, description, state, kind, visibility, slug, zone_type, specialties, group_label,
+        scope_zh, definition, definition_version, backfilled_version, lifecycle)
+      VALUES ($1,$2,$3,'',$4,$5,$6,$7,'drug-indication','{endocrinology}',$8,$9,$10::jsonb,1,1,'active') ON CONFLICT (id) DO NOTHING`,
+      [id, owner, title, state, kind, visibility, slug, group, value.scope, JSON.stringify(value)]);
+    for (const [index, item] of items.entries()) {
+      await db.query(`INSERT INTO evimed_frontier.zone_items (zone_id, item_id, state, relevance, via, role, score, decided_by, definition_version, judged_at)
+        VALUES ($1,$2,'in',$3,'tag',$4,1,'model:fixture',1,now()) ON CONFLICT DO NOTHING`,
+        [id, item.id, index < 8 ? "core" : "related", evidenceZoneRole({ ...item, safetyAlert: item.safety_alert })]);
+    }
+  }
+  const refs = items.slice(0, 2).map((item, index) => ({ n: index + 1, itemId: item.public_id }));
+  await db.query(`UPDATE evimed_frontier.evidence_zones SET overview = $2::jsonb, overview_at = now() WHERE id = $1`, ["ez_walk_topic", JSON.stringify({
+    text: "示例医学杂志发表了一项每周一次降糖药的减重试验，干预组 52 周体重下降 12%[1]。示例药品监管机构批准了一种周制剂用于体重管理的新适应症[2]。",
+    refs, basis: "fixture", model: "fixture", version: "zone-progress-1" })]);
+  const membership = app.frontier?.zoneMembership;
+  for (const [id] of zones) await membership?.refreshStats?.(id).catch((/** @type {any} */ error) => log(`frontier: topic zone stats — ${String(error?.message ?? error).slice(0, 200)}`));
+  log(`frontier: topic zones written over ${items.length} items`);
 }
