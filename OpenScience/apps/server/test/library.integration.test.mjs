@@ -553,3 +553,21 @@ test("deleting a file from the knowledge base removes every project's copy of it
     assert.ok(await app.sourceService.documents.get(user.id, "source", again2.id), "the other project's copy stays");
   } finally { await context.close(); }
 });
+
+test("a project's library view is converged in a transaction of its own: the account's lock is free again when it returns, whatever transaction asked", { skip }, async () => {
+  // 2026-10-29: a launch asks from inside the plugin admission's transaction, which stays open until the runtime is up; the
+  // view's account lock, taken in a savepoint of it, was held for the whole start and a second project's start waited for it.
+  const context = await signedIn();
+  try {
+    const { app, user } = context;
+    const owner = await app.store.userById(user.id);
+    await app.store.createProject(owner, "papers-a", "资料 A");
+    const database = app.sourceService.documents.database;
+    const lockFree = () => database.withoutTransactionClient(() => database.transaction(async (/** @type {any} */ client) =>
+      (await client.query("SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS free", [`library:${user.id}`])).rows[0].free));
+    await database.transaction((/** @type {any} */ client) => database.withTransactionClient(client, async () => {
+      await app.libraryService.ensureProjectView(user.id, "papers-a");
+      assert.equal(await lockFree(), true, "the enclosing transaction does not hold the account's library lock");
+    }));
+  } finally { await context.close(); }
+});

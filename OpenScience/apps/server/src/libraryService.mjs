@@ -676,8 +676,15 @@ export class LibraryService {
       }
       return view;
     };
-    return typeof this.sources.withRegistrationLocks === "function"
-      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+    const locked = () => (typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work());
+    // In a transaction of its own, never the caller's. A launch asks from inside the plugin admission's transaction, which stays
+    // open until the runtime is up, and a transaction-scoped lock taken in a savepoint is held until the outermost commit: the
+    // account's library lock was held for a whole start, so a second project of the account starting meanwhile waited for it
+    // (2026-10-29, S7 opening project B seconds after a turn in A; with a leaked 5 s timeout the wait became a 500). The view is
+    // a directory the records decide, converged under the account's own lock; it needs nothing from the caller's transaction.
+    const database = /** @type {any} */ (this.sources.documents)?.database;
+    return typeof database?.withoutTransactionClient === "function" ? database.withoutTransactionClient(locked) : locked();
   }
 
   /**

@@ -312,6 +312,14 @@ export class ControlPlaneDatabase {
       const run = async () => {
         const name = `evimed_scoped_${++this.savepointSequence}`;
         const atomic = { scope: scoped, open: true, serial: Promise.resolve() };
+        // A module that bounds its own statements (`SET LOCAL statement_timeout`, a `lock_timeout`) does so for "its"
+        // transaction, and here that is a savepoint: PostgreSQL keeps a SET LOCAL made after a savepoint through RELEASE
+        // SAVEPOINT, so the enclosing transaction went on under the nested one's bound. 2026-10-29: a runtime start (which
+        // runs inside the plugin admission's transaction) read the GEO store (5 s), then waited on the account's library lock
+        // and was cancelled after 5 s — `start_runtime` 500 (57014). The enclosing values are put back after the release.
+        const bounds = (await scoped.client.query(
+          "SELECT current_setting('statement_timeout') AS statement_timeout, current_setting('lock_timeout') AS lock_timeout",
+        ))?.rows?.[0];
         await scoped.client.query(`SAVEPOINT ${name}`);
         try {
           const result = await this.atomicTransactions.run(atomic, () => operation(scoped.client));
@@ -319,6 +327,10 @@ export class ControlPlaneDatabase {
           await atomic.serial;
           if (rollbackOnly) await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`);
           await scoped.client.query(`RELEASE SAVEPOINT ${name}`);
+          if (typeof bounds?.statement_timeout === "string" && typeof bounds?.lock_timeout === "string") {
+            await scoped.client.query("SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $2, true)",
+              [bounds.statement_timeout, bounds.lock_timeout]);
+          }
           return result;
         } catch (error) {
           atomic.open = false;

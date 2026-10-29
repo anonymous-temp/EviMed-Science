@@ -59,3 +59,20 @@ test('detached closed-scope work rejects while explicit independently admitted w
   assert.equal((await detached).code, 'product_revision_conflict')
   assert.equal(await independent, 1)
 })
+
+test('a nested transaction bounds only its own statements: its SET LOCAL timeouts end with its savepoint', options, async () => {
+  // 2026-10-29: a runtime start runs inside the plugin admission's transaction; a GEO read in it set `statement_timeout = 5000`
+  // in a savepoint, PostgreSQL kept it through RELEASE SAVEPOINT, and the start's next lock wait was cancelled after 5 s (57014).
+  const bounds = async () => (await database.query("SELECT current_setting('statement_timeout') AS s, current_setting('lock_timeout') AS l")).rows[0]
+  await database.transaction(client => database.withTransactionClient(client, async () => {
+    const before = await bounds()
+    await database.transaction(async c => {
+      await c.query('SET LOCAL statement_timeout = 100')
+      await c.query("SELECT set_config('lock_timeout', '50ms', true)")
+    })
+    assert.deepEqual(await bounds(), before, 'released: the enclosing transaction keeps its own bounds')
+    await database.query('SELECT pg_sleep(0.3)')
+    await assert.rejects(database.transaction(async c => { await c.query('SET LOCAL statement_timeout = 100'); throw new Error('rollback child') }))
+    assert.deepEqual(await bounds(), before, 'rolled back: the same')
+  }))
+})
