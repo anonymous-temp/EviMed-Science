@@ -86,9 +86,9 @@ vcr_case("N36b", c("AC-08", "AC-30"), function() {
   subj <- data.frame(USUBJID = sprintf("T%04d", seq_len(n)), arm = z, x1 = x1, x2 = x2)
   ev <- data.frame(USUBJID = subj$USUBJID, PARAMCD = "OS", AVAL = pmin(tt, cn), CNSR = as.integer(tt > cn))
   ev_in <- vcr_test_input(ev, "snp_n36b_t:events", "event")
-  rt <- vcr_test_run(.n36_job(subj, "n36b_t", list(covariateSets = .n36_sets(`x1 and x2` = c("x1", "x2"), `x1` = "x1"), tau = 8), endpoint = "time_to_event", extra_inputs = list(ev_in)))
+  rt <- vcr_test_run(.n36_job(subj, "n36b_t", list(covariateSets = .n36_sets(`x1 and x2` = c("x1", "x2"), `x1` = "x1"), tau = 8, timeUnit = "months"), endpoint = "time_to_event", extra_inputs = list(ev_in)))
   ev_in2 <- vcr_test_input(ev, "snp_n36b_ta:events", "event")
-  at <- vcr_test_run(.n36_job(subj, "n36b_ta", list(covariates = list("x1", "x2"), tau = 8), endpoint = "time_to_event", extra_inputs = list(ev_in2), method = "comparator.entropy_balance"))
+  at <- vcr_test_run(.n36_job(subj, "n36b_ta", list(covariates = list("x1", "x2"), tau = 8, timeUnit = "months"), endpoint = "time_to_event", extra_inputs = list(ev_in2), method = "comparator.entropy_balance"))
   same <- function(r, a, name_a) { m <- vcr_get_measure(r, "covariate_set_estimate_1"); b <- vcr_get_measure(a, name_a)
     identical(m$value, b$value) && identical(unlist(m$interval[c("low", "high")]), unlist(b$interval[c("low", "high")])) }
   rec <- function(r) vapply(r$diagnostics$sets, function(s) s$status, character(1))

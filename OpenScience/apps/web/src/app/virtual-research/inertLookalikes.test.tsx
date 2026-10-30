@@ -58,7 +58,7 @@ describe("nothing that looks pressed is inert", () => {
     try {
       drawStudy("/app/virtual-research");
       await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
-      await screen.findByRole("list", { name: "七步进度" });
+      await screen.findByRole("list", { name: "研究进度" });
       expect(screen.getByRole("link", { name: /EV-201 二线/ })).toHaveAttribute("aria-current", "true");
       expect(inertLookalikes(document.body).map(describeEach)).toEqual([]);
     } finally {

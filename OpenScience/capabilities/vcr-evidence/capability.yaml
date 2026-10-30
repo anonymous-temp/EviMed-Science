@@ -2,7 +2,7 @@
 # Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-evidence
 visibility: public
-version: 1.4.0
+version: 1.4.1
 title: Virtual Clinical Research — Evidence Parameterization
 category: Clinical Research
 description: |

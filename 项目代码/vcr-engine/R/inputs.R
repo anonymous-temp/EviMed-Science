@@ -228,6 +228,7 @@ vcr_read_table_input <- function(input) {
   attr(df, "vcrSource") <- as.character(input[["valueSource"]] %||% "")
   attr(df, "vcrColumnSources") <- .vcr_column_sources_of(input)
   attr(df, "vcrShape") <- if (length(shape) && !is.na(shape)) unname(shape) else NA_character_
+  attr(df, "vcrTimeUnit") <- input[["timeUnit"]]
   attr(df, "vcrInputId") <- as.character(input[["id"]] %||% "")
   attr(df, "vcrKind") <- as.character(input[["kind"]] %||% "")
   df

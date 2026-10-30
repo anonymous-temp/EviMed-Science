@@ -28,7 +28,7 @@ const labels: Record<string, string> = {
   logistic: "Logistic 回归", logrank: "Log-rank 检验", rmst: "限制平均生存时间（RMST）", ttest: "两样本 t 检验",
   one_sample_t: "单样本 t 检验", one_sample_z: "单样本 Z 检验", one_sample_logrank: "单样本 Log-rank 检验",
   simon_boundary: "Simon 两阶段界值", stratified_beta_binomial: "分层 Beta-二项模型", stratified_risk_difference: "分层风险差",
-  both_opposite: "两组施加相反方向的倍数", two_arm: "两组比较",
+  both_opposite: "两组施加相反方向的倍数", two_arm: "两组比较", subject: "每人一行",
 };
 const ruleLabels: Record<string, string> = {
   all: "满足全部条件", any: "至少满足一项", not: "不满足", compare: "比较", between: "处于范围内", in: "属于指定值", not_in: "不属于指定值", missing: "值缺失", present: "值存在",

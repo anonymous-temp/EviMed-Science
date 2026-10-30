@@ -105,7 +105,7 @@ vcr_case("N24c", c("AC-26", "AC-12"), function() {
               data.frame(USUBJID = subj$USUBJID, PARAMCD = "PFS", AVAL = pfs, CNSR = 1L - pfs_status))
   in_s <- vcr_test_input(subj, "snp_n24c:subject", "subject"); in_e <- vcr_test_input(ev, "snp_n24c:event", "event")
   run <- function(sc, inputs) vcr_test_run(vcr_test_job("comparator.rmst", sc, inputs, job_id = "job_n24c"))
-  base <- list(tau = 12, treatmentColumn = "arm")
+  base <- list(tau = 12, treatmentColumn = "arm", timeUnit = "months")
   none <- run(base, list(in_s, in_e))
   os <- run(c(base, list(parameterCode = "OS")), list(in_s, in_e)); pf <- run(c(base, list(parameterCode = "PFS")), list(in_s, in_e))
   ref <- function(time, status) survRM2::rmst2(time, status, d$arm, tau = 12)$unadjusted.result[1, "Est."]
@@ -267,9 +267,14 @@ vcr_case("N24d", c("AC-26"), function() {
   pq_in <- csv_in; pq_in$id <- "snp_n24d_pq:subject"; pq_in$location <- pq_rel; pq_in$hash <- vcr_file_sha256(pq_path)
   prof <- function(inp) vcr_test_run(vcr_test_job("profile.snapshot", vcr_empty_object(), list(inp), job_id = "job_n24d"))
   a <- prof(csv_in); b <- prof(pq_in)
-  cols <- function(r) vapply(r$diagnostics$columns, function(x) paste(x$name, x$type %||% ""), character(1))
-  same <- identical(a$status, "succeeded") && identical(b$status, "succeeded") && identical(cols(a), cols(b)) && length(cols(b)) == 3L &&
-    identical(a$counts$realPatients, b$counts$realPatients) && b$counts$realPatients == 80
+  cols <- function(r) vapply(r$diagnostics$columns, function(x) paste(x$column, x$kind), character(1))
+  numeric_col <- function(r) Filter(function(x) identical(x$column, "age"), r$diagnostics$columns)[[1]]
+  raw_csv <- csv_in; raw_csv$kind <- "snapshot_file"; raw_csv$shape <- NULL
+  raw_pq <- pq_in; raw_pq$kind <- "snapshot_file"; raw_pq$shape <- NULL
+  raw_a <- prof(raw_csv); raw_b <- prof(raw_pq)
+  same <- identical(a$status, "succeeded") && identical(b$status, "succeeded") && identical(cols(a), cols(b)) && length(cols(b)) == 2L &&
+    abs(numeric_col(a)$mean - numeric_col(b)$mean) < 1e-12 && identical(a$counts$realPatients, b$counts$realPatients) && b$counts$realPatients == 80 &&
+    identical(raw_a$status, "succeeded") && identical(raw_b$status, "succeeded") && is.null(raw_a$counts$realPatients) && is.null(raw_b$counts$realPatients)
   # bytes that are not Parquet, under a matching hash
   junk_rel <- file.path("snapshots", "snp_test", "n24d-junk.parquet")
   writeLines("SECRET-PARQUET-CONTENT this is not a parquet file", file.path(root, junk_rel))
@@ -278,6 +283,6 @@ vcr_case("N24d", c("AC-26"), function() {
   json <- as.character(jsonlite::toJSON(j, auto_unbox = TRUE, null = "null"))
   ok_junk <- identical(j$status, "failed") && "input_parse_failed" %in% vcr_test_issue_codes(j) && !grepl("SECRET-PARQUET-CONTENT", json, fixed = TRUE) && !grepl("ArrowInvalid|Traceback", json)
   list(pass = status == 0L && same && ok_junk,
-       detail = sprintf("the same 80-row table as CSV and as Parquet: both profile (%s), 3 columns each, %d real patients; a non-Parquet file under a matching hash -> %s, no file content in the result: %s",
+       detail = sprintf("the same 80-row table as CSV and as Parquet: both profile (%s), 2 non-identifier columns each, %d declared-subject patients, raw grain unknown; a non-Parquet file under a matching hash -> %s, no file content in the result: %s",
                         paste(c(a$status, b$status), collapse = "/"), b$counts$realPatients %||% NA_integer_, paste(vcr_test_issue_codes(j), collapse = ","), !grepl("SECRET-PARQUET-CONTENT", json, fixed = TRUE)))
 })

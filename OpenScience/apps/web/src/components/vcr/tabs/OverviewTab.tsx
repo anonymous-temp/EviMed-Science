@@ -1,3 +1,4 @@
+import { VcrResearchProgress } from "../VcrResearchProgress";
 import { resumeVcrStep } from "../vcrConversationActions";
 import { Link } from "react-router";
 import { VCR_STEPS, VCR_STEP_STATUS_LABELS_ZH } from "@evimed/domain";
@@ -31,14 +32,26 @@ import { stepName } from "../vcrActivity";
  * There is no button for the next step here: it is in the header of every tab, where it is whichever tab the reader is on
  * (`StudyFrame`), and while work goes on the strip under the header says what is happening. A study nobody has described has none
  * of the above, and says what is missing: the first sentence, said in its conversation.
+ * Component: OverviewTab; owner: VCR; rules: show facts backed by study records.
+ * Anatomy: Headline, progress, counts, attention, steps and deliverables.
+ * Variants: Empty study and populated study.
+ * States: Progress distinguishes input, definition and result states.
+ * Hit area: Links and buttons retain shared component sizing.
+ * Keyboard: Native links and buttons remain focusable.
+ * Long content: Fact rows wrap.
+ * Theme: Shared sections and semantic tokens.
+ * Responsive: Sections stack.
+ * Verification: OverviewTab.test.tsx and VcrResearchProgress.test.tsx.
  */
 export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const { headline, counts, attention, deliverables } = study.overview;
-  if (!study.question?.trim() && !headline && !counts && deliverables.length === 0) return <VcrNoDefinition study={study} />;
+  if (!study.question?.trim() && !headline && !counts && deliverables.length === 0 && study.overview.researchProgress?.definition !== "saved") return <VcrNoDefinition study={study} />;
   const sentence = headline ?? study.question;
   return (
     <div className="flex flex-col gap-6">
       {sentence && <Headline parts={[sentence]} className={headline ? undefined : "text-text-2"} />}
+
+      <VcrResearchProgress progress={study.overview.researchProgress} studyId={studyId} />
 
       <VcrCountsBand counts={counts} tabOf={(key) => countTab(key, study, studyId)} />
 

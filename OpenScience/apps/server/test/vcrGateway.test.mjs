@@ -1142,7 +1142,7 @@ test("a copiedFrom link is honoured only for a copy of the same variable at the 
 
 test("a defect in the metadata no verdict reads costs that metadata, never the quote-verified fact; the metadata a verdict reads is still refused (E-18)", async () => {
   const text = "2026-09-01 血肌酐 1.1 mg/dL。";
-  const quote = "血肌酐 1.1 mg/dL";
+  const quote = "2026-09-01 血肌酐 1.1 mg/dL";
   const start = text.indexOf(quote);
   /** @param {Record<string, any>} clinical */
   const fact = (clinical) => ({ subjectKey: "P-1", documentId: "doc_1", variable: "creatinine", value: 1.1, unit: "mg/dL", surface: "血肌酐", quote, start, end: start + quote.length,

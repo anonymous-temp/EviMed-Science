@@ -48,6 +48,7 @@
  * @module vcrMatching
  */
 
+import { clinicalDateInQuote, clinicalIntervalInQuote } from './vcrClinicalDateEvidence.mjs';
 import { CLINICAL_ASSERTIVE_POLARITIES, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
@@ -298,6 +299,11 @@ export function verifyFactEvidence(fact, context = {}) {
     }
   }
   if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface)) {
+    return { ok: false, reason: "date_not_in_span" };
+  }
+  // New source extractions bind dates as literally as numeric values. Legacy records retain their original evidence schema.
+  if (fact?.provenance?.factSchema >= 2 && ([fact.occurredAt, fact.recordedAt].some(date => date != null && !clinicalDateInQuote(date, span))
+      || fact.clinical?.occurredInterval && !clinicalIntervalInQuote(fact.clinical.occurredInterval, span, fact.dateSurface))) {
     return { ok: false, reason: "date_not_in_span" };
   }
   // A unit supports a number only where the quote prints it beside that number: a quote with two units supports each for its own

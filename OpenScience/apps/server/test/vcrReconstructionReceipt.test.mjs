@@ -16,10 +16,13 @@ test('reconstruction listing and binding share verifier-origin keyless proof wit
   const producer={scenario:{},inputs:[],checkpoint:{curveReceiptId:'curve',curveImageHash:'image',curvePointsHash:'points',curvePrincipal:'owner'}};
   const store={result:async(study,id)=>study==='study'&&id==='result'?result:null,one:async sql=>sql.includes('.executions')?{method:'evidence.reconstruct_km',receipt,output_hash:hash,job_id:'job'}:producer,
    rows:async()=>[{id:'result',execution_id:'execution',version:1,tables:[table],curve_origin:'upload',execution_receipt:receipt,execution_output_hash:hash}]};
-  const jobs=new VcrJobs({store,config:{vcrDataPlaneDir:root}});let curveHash='image';
-  jobs.curveVerifier=async()=>({detail:{curveImageHash:curveHash,curvePointsHash:'points'}});
+  const jobs=new VcrJobs({store,config:{vcrDataPlaneDir:root}});let curveHash='image';let unsupported=false;
+  jobs.curveVerifier=async()=>({detail:{curveImageHash:curveHash,curvePointsHash:'points',curveTimeUnit:'months',curveTimeUnitUnsupported:unsupported}});
   assert.equal((await jobs.reconstructionResults('study')).length,1);
   assert.equal((await jobs.prepareReconstruction('study',VCR_RECONSTRUCTION_REFERENCE.kind,{},'result')).reconstructionResultId,'result');
+  await assert.rejects(jobs.prepareReconstruction('study',VCR_RECONSTRUCTION_REFERENCE.kind,{timeUnit:'days'},'result'),{code:'vcr_job_scenario_invalid'});
+  assert.equal((await jobs.prepareReconstruction('study',VCR_RECONSTRUCTION_REFERENCE.kind,{timeUnit:'months'},'result')).reconstructionResultId,'result');
+  unsupported=true;await assert.rejects(jobs.prepareReconstruction('study',VCR_RECONSTRUCTION_REFERENCE.kind,{timeUnit:'months'},'result'),{code:'vcr_job_scenario_invalid'});unsupported=false;
   for(const proof of [{signed:false,outputHash:hash},{signed:false,hashVerified:true,outputHash:'b'.repeat(64)},{signed:true,outputHash:'b'.repeat(64)},{signed:true,ok:false}]){
    receipt=proof;assert.equal((await jobs.reconstructionResults('study')).length,0);await assert.rejects(jobs.prepareReconstruction('study',VCR_RECONSTRUCTION_REFERENCE.kind,{},'result'),{code:'vcr_curve_provenance_unavailable'});
   }

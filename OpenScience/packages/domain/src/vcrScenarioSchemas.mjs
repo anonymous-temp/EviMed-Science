@@ -377,7 +377,7 @@ const MISSINGNESS = array({
 const WEIGHTING_CONTEXT = {
   endpoint: ENDPOINT(),
   tau: req(gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT)),
-  timeUnit: string({ maxLength: 20, default: 'months' }),
+  timeUnit: string({ maxLength: 20 }),
   parameterCode: string({ maxLength: 64 }),
   cohortRules: COHORT_STEPS,
   targetTrial: TARGET_TRIAL,
@@ -460,6 +460,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     timeZero: object({ column: req(COLUMN) }),
     exit: object({ column: req(COLUMN) }),
     idColumn: { ...COLUMN, default: 'USUBJID' },
+    grain: string({ values: ['subject'] }),
     // A second version of the definition on the same table, and the baseline columns the two cohorts are
     // compared on: counts, overlap and a standardized difference per covariate (a definition library's
     // version comparison). The primary `rules` are version A.
@@ -618,7 +619,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     phAlpha: number({ gt: 0, lt: 1, default: 0.05 }),
     phTransform: string({ values: ['km', 'rank', 'identity'], default: 'km' }),
     endpoint: ENDPOINT(),
-    timeUnit: string({ maxLength: 20, default: 'months' }),
+    timeUnit: string({ maxLength: 20 }),
     parameterCode: string({ maxLength: 64 }),
     cohortRules: COHORT_STEPS,
     targetTrial: TARGET_TRIAL,
@@ -672,7 +673,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     aggregateSe: gated(number({ gt: 0 }), is('anchored', 'true')),
     ties: string({ values: ['efron', 'breslow'], default: 'efron' }),
     endpoint: ENDPOINT(),
-    timeUnit: string({ maxLength: 20, default: 'months' }),
+    timeUnit: string({ maxLength: 20 }),
     parameterCode: string({ maxLength: 64 }),
     unadjustedEffectModifiers: array(string({ maxLength: 80 }), { min: 0, max: 50 }),
   }, {
@@ -684,7 +685,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     tau: req(number({ gt: 0, unit: 'time units' })),
     treatmentColumn: { ...COLUMN, default: 'arm' },
     weightColumn: COLUMN,
-    timeUnit: string({ maxLength: 20, default: 'months' }),
+    timeUnit: string({ maxLength: 20 }),
     parameterCode: string({ maxLength: 64 }),
     cohortRules: COHORT_STEPS,
   }),

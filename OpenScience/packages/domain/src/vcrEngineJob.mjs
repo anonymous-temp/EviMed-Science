@@ -52,6 +52,7 @@ import {
   VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES,
 } from './vcrVocabulary.mjs'
 import { VCR_DESIGN_SUPPORT, validateScenario, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
+import { VCR_TIME_UNITS } from './vcrTimeUnits.mjs'
 import { VCR_LONGITUDINAL_JOBS } from './vcrLongitudinal.mjs'
 
 // The schemas live in their own module (they are the file most likely to be
@@ -99,8 +100,8 @@ const SIMULATE_RELEASES = Object.freeze([Object.freeze({
 export const VCR_ENGINE_METHODS = Object.freeze({
   'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
   'model.prognostic_apply': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
-  'profile.snapshot': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
-  'cohort.build': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
+  'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
+  'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
   'population.scenario': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
   'population.literature': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
   'population.synthpop': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['synthpop']), modelTier: 'data' },
@@ -110,9 +111,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv']), modelTier: 'scenario' },
   'evidence.pool': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['metafor', 'meta engine']), modelTier: 'literature' },
   'evidence.reconstruct_km': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM']), modelTier: 'literature' },
-  'comparator.entropy_balance': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
-  'comparator.propensity_weight': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt']), modelTier: 'data' },
-  'comparator.rmst': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['survRM2']), modelTier: 'data' },
+  'comparator.entropy_balance': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
+  'comparator.propensity_weight': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt']), modelTier: 'data' },
+  'comparator.rmst': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survRM2']), modelTier: 'data' },
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
@@ -125,10 +126,10 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
   // The comparator-effect methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the
   // methods above changed.
-  'comparator.weighted_cox': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
-  'comparator.maic_time_to_event': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
+  'comparator.weighted_cox': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
+  'comparator.maic_time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
   'comparator.aipw': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
-  'comparator.covariate_sets': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
+  'comparator.covariate_sets': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
   // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
   'comparator.negative_control': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
   'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'Jackson et al. 2014']), modelTier: 'data' },
@@ -304,7 +305,7 @@ export const VCR_CALLER_SNAPSHOT_KIND = 'snapshot'
  * snapshot input carries nothing but its kind and id.
  */
 export const VCR_CALLER_INPUT_KEYS = frozen(['kind', 'id', 'value'])
-export const VCR_ENGINE_TABLE_INPUT_KEYS = frozen(['kind', 'id', 'shape', 'location', 'hash', 'valueSource', 'columnSources'])
+export const VCR_ENGINE_TABLE_INPUT_KEYS = frozen(['kind', 'id', 'shape', 'location', 'hash', 'valueSource', 'columnSources', 'timeUnit'])
 /**
  * What a table input's `columnSources` may be: an object naming, for some of the
  * table's columns, the source of that column (`VCR_COLUMN_SOURCES`). A column it
@@ -492,7 +493,7 @@ export function validateCallerInputs(inputs, { kind = undefined } = {}) {
         bad('input_kind_missing', `${at}.kind`, 'An input names what it is (assumption, snapshot, population …).')
       } else bad('input_kind_unknown', `${at}.kind`, `Unknown input kind ${JSON.stringify(input.kind)}.`)
     }
-    for (const key of ['location', 'shape', 'valueSource', 'columnSources']) {
+    for (const key of ['location', 'shape', 'valueSource', 'columnSources', 'timeUnit']) {
       if (input[key] !== undefined && input[key] !== null) bad('input_location_forbidden', `${at}.${key}`, `A caller never supplies ${key}: the control plane resolves it from the snapshot.`)
     }
     if (input.hash !== undefined && input.hash !== null) bad('input_location_forbidden', `${at}.hash`, 'A caller never supplies a hash: the control plane hashes the file it resolved.')
@@ -501,7 +502,7 @@ export function validateCallerInputs(inputs, { kind = undefined } = {}) {
       bad('input_version_missing', `${at}.id`, 'A lineage input names a version: `<id>@<n>`.')
     }
     for (const key of Object.keys(input)) {
-      if (['location', 'shape', 'valueSource', 'columnSources', 'hash'].includes(key)) continue
+      if (['location', 'shape', 'valueSource', 'columnSources', 'timeUnit', 'hash'].includes(key)) continue
       if (VCR_CALLER_INPUT_KEYS.includes(key) && !(key === 'value' && input.kind === VCR_CALLER_SNAPSHOT_KIND)) continue
       bad('input_field_unknown', `${at}.${key}`, 'A caller input is { kind, id } (and a lineage input its frozen value), nothing else.')
     }
@@ -592,6 +593,7 @@ export function validateEngineJob(job) {
           bad('input_field_unknown', `${at}.${key}`, `A ${VCR_ENGINE_TABLE_INPUT_KINDS.includes(input.kind) ? 'table' : 'lineage'} input carries only ${allowedKeys.join(', ')}.`)
         }
       }
+      if (input.timeUnit != null && !VCR_TIME_UNITS.includes(input.timeUnit)) bad('input_shape_invalid', `${at}.timeUnit`, 'The input timeUnit is a supported canonical unit.')
       const hasHash = input.hash !== undefined && input.hash !== null
       if (hasHash && !SHA256.test(input.hash)) bad('input_hash_invalid', `${at}.hash`, 'An input hash is a lowercase sha256 hex digest.')
       const hasSource = input.valueSource !== undefined && input.valueSource !== null
@@ -691,7 +693,7 @@ export function validateEngineJob(job) {
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
-  if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) return !job.scenario?.pairing && !job.scenario?.cohortRules
+  if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
   const base = job.scenario?.design?.kind
   const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)
     ? job.scenario.designs.map((/** @type {any} */ design) => design.kind ?? base) : [base]

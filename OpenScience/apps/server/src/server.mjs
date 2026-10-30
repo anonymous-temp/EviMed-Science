@@ -132,6 +132,7 @@ import { evolutionRunGap } from './evolutionIntegration.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, readDeliveryReceipt,runHistory } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
+import { preservedRunEvidence } from "./runEvidenceRead.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { MethodFeedbackService } from "./methodFeedback.mjs";
@@ -432,6 +433,8 @@ import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
+import { createVcrDataIntake } from './vcrDataIntake.mjs';
+import { createVcrUploadReceipts } from './vcrUploadReceipts.mjs';
 import { recordNativeUploadAttempt } from "./nativeUploadActivity.mjs";
 import { createVcrDraftSweeper, createVcrDraftUsage } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
@@ -4632,7 +4635,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const children = await agentRuns.childSessionsOf(project, run).catch(() => []);
           const sessions = preStopTranscripts.take(run.id)
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
-          const receipt = await persistRunTranscript({ project, run, sessions });
+          const receipt = await persistRunTranscript({ project, run, sessions, ownedChildSessionIds: children.map(child => child.sessionId) });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
           await rsiOnline?.offerRun(project, run.id).catch(error => securityAudit(config, "rsi.incident.offer", "failed", { code: error?.code ?? "rsi_incident_unavailable" }));
           if (evolution && reusableClinicalContext) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
@@ -5845,6 +5848,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // 「虚拟临床研究」's runtime channel: the token decides the account and the study,
   // a read answers aggregates and structure only, and a write refuses item by
   // item (build plan §11.2 layer 3).
+  const vcrUploadReceipts = vcr && productDocuments ? createVcrUploadReceipts({ documents: productDocuments, sources: sourceService,
+    write: (project, relative, bytes) => withProjectStorageMutation(project, async () => {
+      const full = resolveScopedPath(project.baseDir, relative);
+      await assertProjectCapacity(project, full, bytes.length, config);
+      await writeFileAtomicNoFollow(project.baseDir, full, bytes, { mode: 0o600 });
+    }) }) : null;
+  if (vcr && vcrUploadReceipts) vcr.dataIntake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane,
+    sources: vcrUploadReceipts, resolveProject: sourceProject,
+    sourceScope: origin => conversationSourceScope(origin, origin.rootSessionId) });
   if (vcr) vcr.patientContext = createVcrPatientContext({ store:vcr.store,dataStore:vcr.dataStore,dataPlane:vcr.dataPlane,documents:vcr.documents,
     sources:sourceService,
     isHumanMessage: async (origin,message) => (await agentRuns.list(await sourceProject(origin))).some(run => run.sessionId === origin.rootSessionId
@@ -7599,7 +7611,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const ctx = await context(req, res);
         const sessionId = decodeRouteComponent(historyRoute[1], "research session id");
         const runId = new URL(req.url ?? "/", "http://localhost").searchParams.get("runId");
-        sendJson(res, 200, { data: await preservedConversationHistory(ctx.project, sessionId, await agentRuns.list(ctx.project), undefined, { runId }) });
+        const runs = await agentRuns.list(ctx.project);
+        const include = new URL(req.url ?? "/", "http://localhost").searchParams.get("include");
+        if (include === "tools") {
+          if (!runId) throw new HttpError(400, "invalid_request", "Select an exact run for preserved tool evidence.");
+          const run = runs.find(item => item.id === runId && item.sessionId === sessionId);
+          if (!run) throw new HttpError(404, "run_not_found", "Run not found in this conversation.");
+          sendJson(res, 200, { data: await preservedRunEvidence(ctx.project, sessionId, runId, runs) });
+        } else {
+          sendJson(res, 200, { data: await preservedConversationHistory(ctx.project, sessionId, runs, undefined, { runId }) });
+        }
         return;
       }
 
@@ -8785,7 +8806,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const encoding = args.encoding === "base64" ? "base64" : "utf8";
         const buffer = encoding === "base64" ? Buffer.from(data, "base64") : Buffer.from(data, "utf8");
         const registered = await writeProjectUpload(ctx, { root, rel, buffer });
-        sendJson(res, 200, { data: { path: rel, ...(registered
+        const vcrInput = !registered ? await vcrUploadReceipts?.record(ctx.project, { name: rel, bytes: buffer }) : null;
+        sendJson(res, 200, { data: { path: rel, ...(vcrInput ? { vcrInput } : {}), ...(registered
           ? { ...registered, source: projectSourceManifestRecord(registered.source) } : {}) } });
         return;
       }
@@ -8907,6 +8929,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     usageLedger,
     managedBrowser,
     authorizeOpenSession: authorizeOwnedNativeSession,
+    recordUploadSuccess: vcrUploadReceipts ? (project, upload) => vcrUploadReceipts.record(project, upload) : null,
     recordUploadAttempt: productDocuments ? (project) => recordNativeUploadAttempt(productDocuments, project) : null,
     // A file the researcher opens in the kernel's own file panel is a use of the run that delivered it (`LearningEvidence.noteFileUse`).
     noteFileRead: (project, opened) => learningEvidence?.noteFileUse(project, opened) ?? null,

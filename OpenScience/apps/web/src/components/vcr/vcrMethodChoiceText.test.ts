@@ -31,11 +31,13 @@ it("covers all declared choices and authored examples of all preserved method-fo
     }
     for (const example of VCR_SCENARIO_EXAMPLES[method]) expect(methodExampleLabel(method, example.label), `${method}:${example.label}`).toMatch(/[\u3400-\u9fff]/);
   }
-  expect(count).toBe(127); expect(values.size).toBe(127); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(38);
+  expect(count).toBe(128); expect(values.size).toBe(128); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(38);
   for (const value of [...VCR_ROW_RULE_OPS, ...VCR_ROW_RULE_COMPARATORS]) expect(ruleChoiceLabel(value)).not.toBe(value);
   expect(Object.keys(VCR_LONGITUDINAL_METHODS)).toHaveLength(4);
 });
 it("uses field context, preserves acronyms and leaves user/source values unchanged", () => {
+  expect(methodChoiceLabel("cohort.build", "grain", "subject")).toBe("每人一行");
+  expect(methodChoiceLabel("population.scenario", "population.variables[0].name", "subject")).toBe("subject");
   expect(methodChoiceLabel("patients.time_to_event", "accrual.kind", "uniform")).toBe("匀速入组");
   expect(methodChoiceLabel("population.scenario", "population.variables[2].family", "uniform")).toBe("均匀分布");
   expect(methodChoiceLabel("evidence.pool", "scale", "identity")).toBe("原始尺度");

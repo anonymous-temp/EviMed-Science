@@ -1,6 +1,6 @@
 {
   "id": "vcr-evidence",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "title": "Virtual Clinical Research — Evidence Parameterization",
   "description": "Retrieve and preserve registry and publication evidence, verify numerical values and units, and produce source-bound assumptions for the requested research task.",
   "whenToUse": "Virtual Clinical Research (虚拟临床研究): Use when a VCR task needs trial precedents, preserved literature parameters, baseline evidence or source-grounded assumptions. Search before requesting statistical inputs; retain specific source gaps.",

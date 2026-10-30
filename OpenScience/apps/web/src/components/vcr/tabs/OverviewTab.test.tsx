@@ -208,6 +208,12 @@ describe("总览", () => {
   });
 
   describe("the deliverables", () => {
+    it("keeps existing deliverables visible when cohort input and computation fail", () => {
+      draw(study((raw) => { raw.overview.researchProgress = { populationId: "p1", populationVersion: 1, definition: "saved", input: "missing", calculation: "failed", resultId: null, counts: {}, profileStatistics: [] }; }));
+      expect(screen.getByText("计算未完成")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /研究包 v1/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "返回研究对话" })).toBeInTheDocument();
+    });
     it("lists the finished ones, each opening the package in the reader on this page, and folds the drafts under one line", () => {
       const { container } = draw(study());
       const section = screen.getByRole("heading", { name: "交付物" }).closest("section") as HTMLElement;

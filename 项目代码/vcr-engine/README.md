@@ -637,6 +637,12 @@ estimate moves with the adjustment set, never a rule for choosing among them. A 
 returns no measures; a spent CPU budget keeps the sets that finished and says that the rest
 were not run.
 
+### Patient grain and event time units (method 1.1.0)
+
+`profile.snapshot` counts distinct complete USUBJID values only for declared subject, longitudinal, and event analysis tables; a raw file or incomplete identities give an unknown real-patient count. Row identifiers are not profiled as clinical variables. `cohort.build` reads one row per subject, with complete unique IDs; for a raw input it additionally requires `grain: "subject"`. Each waterfall step states its subject denominator and its remaining subjects, including the stated treatment of indeterminate results. Duplicate or missing identifiers are refused rather than treated as patients. The 1.0.0 behavior remains available for replay.
+
+`comparator.rmst`, `comparator.entropy_balance`, and `comparator.propensity_weight` require a known time unit for a time-to-event endpoint. A confirmed frozen outcome-time mapping supplies it when all event columns agree; otherwise the scenario must state `timeUnit`. A mismatch is refused and no conversion is implied. The time unit also applies to `tau`. The older 1.0.0 method retains its recorded month default. The direction between mean and median is descriptive and does not establish skew or a causal bias.
+
 ## 12. Numerical-validation evidence: one reference case per method
 
 The module shows, per method, whether its numerical validation is measured. The

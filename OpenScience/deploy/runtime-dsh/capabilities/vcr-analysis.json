@@ -1,6 +1,6 @@
 {
   "id": "vcr-analysis",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "title": "Virtual Clinical Research Analysis",
   "description": "Execute the requested population, individual prediction, comparator or trial-design analysis through deterministic tools. Preserve source and model scope, counts, uncertainty and exact result versions; do not start unrelated steps.",
   "whenToUse": "Virtual Clinical Research (虚拟临床研究): Use for an explicitly requested VCR analysis deliverable or named specialist. Ordinary aggregate questions may use research_calculate directly. Cohorts and individual patients share one research workspace; computations are tools, not forms.",

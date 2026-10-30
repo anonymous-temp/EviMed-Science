@@ -29,6 +29,16 @@ const UNKNOWN_HATCH = "repeating-linear-gradient(135deg, var(--warn) 0 3px, var(
 /**
  * The screening waterfall: how many are left after each rule, and how many of
  * those still lack the evidence that rule needs.
+ * Component: VcrAttritionChart; owner: VCR; rules: sequential counts from the engine.
+ * Anatomy: Named screening steps with bars and counts.
+ * Variants: Legacy steps may omit a denominator.
+ * States: Unknown counts follow each rule's include or exclude setting.
+ * Hit area: Read-only chart.
+ * Keyboard: No interactive targets.
+ * Long content: Step names wrap.
+ * Theme: Shared accent and hatch tokens.
+ * Responsive: Bars move below labels on narrow screens.
+ * Verification: VcrDiagrams.progress.test.tsx.
  */
 export function VcrAttritionChart({ steps, className }: { steps: readonly VcrAttritionStep[]; className?: string }) {
   const total = Math.max(...steps.map((step) => step.remaining ?? 0), 1);
@@ -36,16 +46,16 @@ export function VcrAttritionChart({ steps, className }: { steps: readonly VcrAtt
     <ol data-vcr-attrition="" className={cn("flex flex-col gap-1.5", className)}>
       {steps.map((step) => {
         const remaining = step.remaining ?? 0;
-        const unknown = Math.min(step.unknown ?? 0, remaining);
+        const unknown = step.indeterminateTreatment === "exclude" ? 0 : Math.min(step.unknown ?? 0, remaining);
         const known = remaining - unknown;
         return (
           // Five columns need about 22rem before the bar has any room; on a phone the bar takes the row under the name and the counts.
           <li key={step.key} className="grid grid-cols-[2.5rem_minmax(0,1fr)_4rem_3.5rem] items-center gap-x-2 gap-y-1 text-caption sm:grid-cols-[3rem_9rem_minmax(0,1fr)_4.5rem_3.5rem]">
             <span className="truncate tabular-nums text-text-3">{step.code ?? ""}</span>
-            <span className="truncate text-text-2">{step.label}</span>
+            <span className="text-text-2">{step.label}{step.denominator != null && <span className="block text-text-3">本步分母 {numberText(step.denominator, 0)} {step.grain === "subject" ? "人" : "条"}；无法判断 {numberText(step.unknown ?? 0, 0)}{step.indeterminateTreatment === "include" ? "，计入保留" : step.indeterminateTreatment === "exclude" ? "，未计入保留" : ""}</span>}</span>
             <span
               role="img"
-              aria-label={`${step.label}：保留 ${numberText(known, 0)}，无法判断 ${numberText(unknown, 0)}`}
+              aria-label={step.denominator != null ? `${step.label}：本步分母 ${numberText(step.denominator, 0)}，保留 ${numberText(remaining, 0)}，无法判断 ${numberText(step.unknown ?? 0, 0)}` : `${step.label}：保留 ${numberText(known, 0)}，无法判断 ${numberText(unknown, 0)}`}
               data-forced-colors="preserve"
               className="flex h-3 w-full overflow-hidden rounded-full bg-surface-2 max-sm:order-last max-sm:col-span-full"
             >

@@ -37,6 +37,16 @@ criteria with cited evidence. A human override stays distinguished from the mode
 or code's judgment. Describe supplementary evidence as scientific gaps; do not
 create a contact/referral workflow or promise enrollment.
 
+## Evidence decisions before writing an assessment
+
+Read the scope-independent `mcp__evimed__vcr_read` what `contracts` and the existing matching contract before mutations. A rejected write is not a reason to probe by saving an empty patient collection or decision. For uploaded case batches, use the preserved original handles from `data_intake` and its `import_documents` action; use returned pseudonyms, never identifiers guessed from file rows. Automated evaluation requests are not authenticated human messages: do not guess message sequence numbers or change automation flags. Use the owned-upload path.
+
+Keep three questions separate for every criterion: does the criterion apply, is the necessary fact recorded, and does that fact satisfy it? Missing a prerequisite means unknown applicability, not not-applicable. Proven inapplicability stays `applicable: false` in the saved assessment and reader output. Missing family history is not a negative family history. Age alone does not establish menopause, pregnancy, fertility, consent or eligibility. A diagnosis/symptom does not establish an undocumented procedure, treatment failure or imaging modality. A known negative finding must be an explicit negative finding in the original evidence.
+
+A registry publication date, dataset year, file modification time and upload time are source metadata, not patient encounter or event dates. Do not derive a birth year or washout interval from an undated reported age or from benchmark metadata. Only a clinical encounter/event anchor in the source supports calendar arithmetic. For a new exact `occurredAt` or `recordedAt`, include the stated calendar date in its source quotation; otherwise omit that timestamp and retain the corresponding uncertainty.
+
+Do not mark a person eligible while your own explanation says a required fact remains unconfirmed. Read the evaluator's assessment back; preserve its `applicable` and `state` separately. If protected subject intake or evaluation could not complete, deliver any useful file-based interpretation as provisional and explicitly state that a persisted patient assessment was not produced. Never replace the evaluator's unknown with a confident statement in an exported file.
+
 ## 一、读方案，必要时结构化
 
 `mcp__evimed__vcr_read` `{ "what": "criteria" }` 给出最新的方案版本和它的条件（每条带 `id`、`kind`、`requirement`、`applicability`、`sourceText`）。
@@ -196,3 +206,5 @@ Reuse `matching.semanticFields` through `mcp__evimed__dataset_semantics` as meta
 Read `mcp__evimed__vcr_read` with `what: "longitudinal"` for the study's event histories, imported/cloud predictions and validation results. The `vcr-analysis` skill documents history mapping and the `forecast_trajectories`, `evaluate_forecast`, `compare_forecasts` and `benchmark_trial_effect` jobs. DeepSeek + DSH interprets and plans; the cloud provider or imported file supplies predictions and deterministic executors supply metrics. Preserve input versions, actual model versions, prediction origins, horizons and uncertainty meanings in the existing model analysis plan/report. Keep synthetic engineering, NLP and real longitudinal evidence separate. Predictions may inform research stratification or feasibility; they must never fill observed eligibility criteria or override a source-grounded unknown. No new whole-package quality gate or mandatory human review is introduced.
 
 Longitudinal records now expose stable `numberPath` references in `report_model.longitudinal.byId`. Read both records and related; a `prediction_set` groups independently usable endpoint ids from one external upload. Sensitivity/model/update comparisons use `compare_forecasts` with the named mode and common calendar targets. Keep these outputs separate from observed clinical facts; local data partitions and input masking do not establish the external model's training independence.
+
+Preserve a criterion's stated calendar unit. A window written in months uses the supported month window; do not silently replace six calendar months with 180 or 182 days. If an exact boundary needs a missing encounter date, retain unknown rather than manufacture an anchor.

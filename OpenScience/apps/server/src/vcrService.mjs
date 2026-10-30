@@ -1,3 +1,4 @@
+import { vcrContractsRead } from './vcrWriteContracts.mjs';
 import { followupHistoryCsv, presentFollowupHistory } from './vcrFollowupHistory.mjs';
 import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
 /**
@@ -71,6 +72,7 @@ export const VCR_READ_MAX_ITEMS = 50;
 
 /** What a runtime read may ask for. Closed; the MCP tool's schema copies it. */
 export const VCR_READ_WHATS = Object.freeze([
+  "contracts", "data_intake",
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
   "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
@@ -127,6 +129,7 @@ export function stripPlaneAddresses(value, ancestors = new Set()) {
 export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents", "trial_registry_record"]);
 
 export const VCR_WRITE_WHATS = Object.freeze([
+  "data_intake",
   "task_context", "patient_context", "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
@@ -1034,6 +1037,17 @@ export class VcrService {
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
       currentNodes,
     };
+    if (tab === 'overview' || tab === 'population') {
+      let inputs = null;
+      try { inputs = await this.packages.dataPlane?.taskInputs?.(study, user) ?? null; }
+      catch { /* An unreadable permission/input ledger is unknown, never zero available sources. */ }
+      bundle.taskInputs = Object.fromEntries(['matching', 'cohort', 'patient', 'comparator', 'trial'].map(key => {
+        const candidates = Array.isArray(inputs?.[key]) ? inputs[key] : [];
+        const partial = !Array.isArray(inputs?.[key]) || inputs.partial === true || candidates.length > 24;
+        const sources = candidates.slice(0, 24);
+        return [key, { status: sources.length ? 'available' : partial ? 'unknown' : 'missing', sources, partial }];
+      }));
+    }
     if (tab === "trial" && this.packages.matching?.readAccrual) {
       bundle.accrualReads = new Map(await Promise.all(reviewedAll.filter(result => result.kind === "accrual_forecast")
         .map(async result => /** @type {[string, any]} */ ([result.id, await this.packages.matching.readAccrual(result)]))));
@@ -1136,10 +1150,12 @@ export class VcrService {
 
   /** What each finished job ran: method, version, seed, replicates, cost. @param {string} studyId */
   async #executions(studyId) {
-    const rows = await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at
+    const rows = await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
       FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]);
     return new Map(rows.map((row) => [String(row.id), {
-      id: String(row.id), jobId: String(row.job_id), method: String(row.method), methodVersion: String(row.method_version ?? ""),
+      id: String(row.id), jobId: String(row.job_id), inputs: list(row.inputs)
+        .filter(input => ['analysis_table', 'snapshot_file'].includes(input?.kind) && typeof input.id === 'string')
+        .map(input => ({ kind: input.kind, id: input.id })), method: String(row.method), methodVersion: String(row.method_version ?? ""),
       scenarioHash: String(row.scenario_hash ?? ""), seed: row.seed == null ? null : Number(row.seed),
       replicates: row.replicates == null ? null : Number(row.replicates), cpuSeconds: numeric(row.cpu_seconds),
       finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
@@ -1601,7 +1617,10 @@ export class VcrService {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
     this.counters.reads += 1;
-    if (!study.id && !['trial_registry_record','models','library'].includes(what)) return { available:true,empty:true,study:null,scope:'conversation' };
+    if (what === 'contracts') return vcrContractsRead(filter.kind ?? null);
+    if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
+    if (!study.id && !['trial_registry_record','models','library'].includes(what)
+      && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
     const payload = await this.#runtimeRead(study, what, filter);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
@@ -1764,7 +1783,7 @@ export class VcrService {
         }
         return evidence.runtimeRead(study, { ...filter, what: "precedents" });
       }
-      default: {
+      case "trial_registry_record": {
         // `trial_registry_record`: a registry id in, a structured record out.
         // The control plane resolves it through package C's registry client,
         // so a run never reaches a registry itself.
@@ -1774,6 +1793,7 @@ export class VcrService {
         }
         return evidence.registryRecord(study, filter);
       }
+      default: throw failure(400, "vcr_read_what_invalid", "This read has no implementation.");
     }
   }
 

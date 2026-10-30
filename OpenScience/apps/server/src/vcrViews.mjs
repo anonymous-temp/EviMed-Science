@@ -1,3 +1,4 @@
+import { presentResearchProgress } from "./vcrResearchProgress.mjs";
 import { vcrAnalyticComputationBasis } from "./vcrScientificBasis.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 import { createHash } from "node:crypto";
@@ -611,6 +612,7 @@ export function presentStudy(bundle) {
   // The headline number's dependencies preserve review currency independently of its use ceiling.
   const dependsOn = headline && bundle.edges ? vcrDependencies(bundle.edges, resultNode(headline)) : null;
   const overview = {
+    researchProgress: presentResearchProgress(bundle),
     headline: overviewHeadline({ results: allResultsOf(bundle), designs, comparators }),
     metrics: overviewMetrics(bundle, designs),
     counts: headline ? countsView(headline.counts, { tier: study.dataTier, scope: headlineScope(headline, rows) }) : null,

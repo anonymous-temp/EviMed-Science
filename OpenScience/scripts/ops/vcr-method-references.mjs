@@ -94,6 +94,11 @@ export const NUMERIC_REFERENCES = {
   // matching.evaluate: the Kleene truth table, every verdict asserted
   N29: { methods: ['matching.evaluate'], anchors: ['Every verdict of the three-valued eligibility logic is asserted', 'identical(got, want) && tb_ok'] },
   // profile.snapshot and population.synthpop had no case that compared a figure with anything: these are new (N41)
+  N41i: { methods: ['comparator.maic_time_to_event'], anchors: ['MAIC missing=%s pseudo unknown=%s mixed=%s common declaration=%s legacy=%s'] },
+  N41h: { methods: ['comparator.weighted_cox', 'comparator.covariate_sets'], anchors: ['weighted Cox and covariate-set RMST both refuse missing/conflicting units'] },
+  N41d: { methods: ['cohort.build'], anchors: ['80 -> 52 -> 40'] },
+  N41e: { methods: ['comparator.rmst'], anchors: ['missing=%s explicit=%s mapped=%s conflict=%s legacy=%s'] },
+  N41c: { methods: ['profile.snapshot'], anchors: ['4407 observations and 78 distinct patients'] },
   N41a: { methods: ['profile.snapshot'], anchors: ['Every figure the profile prints is recomputed from its', 'worst < 1e-9'] },
   N41b: { methods: ['population.synthpop'], anchors: ['The synthesis against the table it was fitted to', 'ok_syn <- all(within(fs))'] },
 

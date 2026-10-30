@@ -109,6 +109,12 @@ test("every `what` a run may read leaves through the boundary: no head count bel
     // The three reads of another trial's published figures (an extracted value and its sample size, a registry
     // record's enrolment and site count) are not this study's people: the boundary leaves them whole, by `what`,
     // and the tests below prove they are neither hollowed nor a way round it.
+    if (what === 'contracts') {
+      assert.equal(answer.schemaOnly, true);
+      assert.ok(answer.requirementGrammar.nodes.compare.keys.includes('value'));
+      assert.equal(answer.record, undefined, 'schema reads cannot fall through to a registry payload');
+      continue;
+    }
     if (VCR_PUBLISHED_FIGURE_READS.includes(what)) continue;
     const small = numbersIn(answer).filter((value) => Number.isInteger(value) && value >= 1 && value < VCR_MIN_CELL_SIZE && SMALL.includes(value));
     // Numbers that are not people (a version, an ordinal) are not in SMALL's set by construction of the fixtures.

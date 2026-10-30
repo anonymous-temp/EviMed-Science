@@ -2071,6 +2071,8 @@ export {
 // with their limits, validators and the row-rule evaluator the parity fixture pins
 export {
   VCR_REQUIREMENT_AGGREGATES,
+  VCR_REQUIREMENT_NODE_FIELDS,
+  VCR_REQUIREMENT_CONTRACT,
   VCR_ELAPSED_COMPARATORS,
   VCR_REQUIREMENT_COMPARATORS,
   VCR_REQUIREMENT_LIMITS,

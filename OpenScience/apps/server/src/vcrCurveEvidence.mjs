@@ -11,7 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { canonicalScenarioJson, validateScenario } from '@evimed/domain';
+import { canonicalScenarioJson, validateScenario, vcrTimeUnitOf } from '@evimed/domain';
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from './security.mjs';
 import { VCR_DIGITIZER_TOOL } from './vcrCurveDigitizer.mjs';
 
@@ -137,7 +137,8 @@ export function createVcrCurveEvidence({ store, studyStore, access, resolveProje
       }
       const lineage = { kind: 'evidence', id: `evidence:${id}@1` };
       return { scenario: structuredClone(receipt.scenario), inputs: [...inputs.filter(input => input?.id !== lineage.id), lineage],
-        detail: { curveReceiptId: id, curvePrincipal: principal, curveImageHash: image.sha256, curvePointsHash: receipt.pointsHash } };
+        detail: { curveReceiptId: id, curvePrincipal: principal, curveImageHash: image.sha256, curvePointsHash: receipt.pointsHash, curveTimeUnit: vcrTimeUnitOf(recorded?.calibration?.x?.unit),
+          curveTimeUnitUnsupported: Boolean(typeof recorded?.calibration?.x?.unit === "string" && recorded.calibration.x.unit.trim() && !vcrTimeUnitOf(recorded.calibration.x.unit)) } };
     },
     /** Identifiers only; source image bytes/paths never enter model context.
      * @param {{studyId:string,principal:string}} request */

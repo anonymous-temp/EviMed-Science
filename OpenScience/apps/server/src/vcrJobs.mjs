@@ -212,6 +212,12 @@ export function vcrBindReconstruction(kind, scenario, entries, resolved) {
         invalid: [{ code: "scenario_field_unknown", field: `scenario.${reference?.bindTo}`,
           detail: "The comparator's input is named by the platform from the reconstruction result, never by the scenario." }] };
     }
+    const curveUnit = vcrTimeUnitOf(resolved[at].timeUnit);
+    const scenarioUnit = vcrTimeUnitOf(next.timeUnit);
+    if (curveUnit && scenarioUnit && curveUnit !== scenarioUnit) {
+      return { ok: false, code: "vcr_job_scenario_invalid", message: "The declared time unit conflicts with the verified curve calibration.",
+        invalid: [{ code: "scenario_value_invalid", field: "scenario.timeUnit", detail: "Observed and reconstructed time units must agree; convert before analysis." }] };
+    }
     next = { ...next, [reference?.bindTo ?? ""]: resolved[at].id };
   }
   return { ok: true, scenario: next };
@@ -957,6 +963,7 @@ export class VcrJobs {
       ? await this.store.one(`SELECT method, receipt, output_hash, job_id FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, studyId]) : null;
     const source = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[String(execution?.method ?? "")];
     if (!source) throw new HttpError(400, "vcr_derived_table_unsupported", "这张表不能作为另一项计算的输入。");
+    let derivedTimeUnit = null;
     if (entry.bindTo !== undefined) {
       if (source !== VCR_RECONSTRUCTION_REFERENCE.source) throw new HttpError(400, "vcr_derived_table_unsupported", "The comparator requires reconstructed curve data.");
       const producer = execution?.job_id ? await this.store.one(`SELECT scenario, inputs, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1 AND id=$2`, [studyId, execution.job_id]) : null;
@@ -966,6 +973,8 @@ export class VcrJobs {
       }
       const verified = await this.curveVerifier({ studyId, principal: producer.checkpoint.curvePrincipal,
         scenario: producer.scenario, inputs: producer.inputs, receiptId: producer.checkpoint.curveReceiptId });
+      if (verified.detail.curveTimeUnitUnsupported === true) throw new HttpError(400, "vcr_job_scenario_invalid", "The curve calibration uses an unsupported time unit; convert it before analysis.");
+      derivedTimeUnit = vcrTimeUnitOf(verified.detail.curveTimeUnit);
       if (verified.detail.curveImageHash !== producer.checkpoint.curveImageHash || verified.detail.curvePointsHash !== producer.checkpoint.curvePointsHash) {
         throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction source receipt changed.");
       }
@@ -979,7 +988,7 @@ export class VcrJobs {
     }
     // The engine reads it as a raw table of the value source the method that
     // wrote it earns; it is not an analysis table of a snapshot.
-    return { kind: "snapshot_file", id: `${resultId}:${table}`, location, hash, valueSource: source };
+    return { kind: "snapshot_file", id: `${resultId}:${table}`, location, hash, valueSource: source, ...(derivedTimeUnit ? { timeUnit: derivedTimeUnit } : {}) };
   }
 
   /** Validate only the server-selected generated quality input; this grants no general derived-input privilege.

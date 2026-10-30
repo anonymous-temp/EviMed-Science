@@ -408,9 +408,15 @@ vcr_suppress_cells <- function(tab, min_cell) {
   list(cells = cells, withheld = NULL)
 }
 
-vcr_profile_table <- function(df, min_cell) {
+vcr_profile_identifier_columns <- function(df) {
+  names(df)[names(df) %in% VCR_SUBJECT_KEY_COLUMNS | grepl("^(row|record)[_. -]?(id|number|index)$|^row$", names(df), ignore.case = TRUE)]
+}
+
+vcr_profile_table <- function(df, min_cell, exclude_identifiers = FALSE) {
   rows <- nrow(df)
-  cols <- lapply(names(df), function(v) {
+  columns <- names(df)
+  if (exclude_identifiers) columns <- setdiff(columns, vcr_profile_identifier_columns(df))
+  cols <- lapply(columns, function(v) {
     x <- df[[v]]
     nmiss <- sum(is.na(x)); nonmiss <- rows - nmiss
     suppressed <- character(0)
@@ -427,6 +433,7 @@ vcr_profile_table <- function(df, min_cell) {
       q <- stats::quantile(xs, c(0.05, 0.25, 0.5, 0.75, 0.95), na.rm = TRUE, names = FALSE)
       out <- c(base, list(kind = "numeric", mean = mean(xs), sd = stats::sd(xs),
                           p25 = q[2], median = q[3], p75 = q[4]))
+      if (exclude_identifiers) out$meanMedianDirection <- if (mean(xs) > q[3]) "mean_above_median" else if (mean(xs) < q[3]) "mean_below_median" else "equal"
       # The tails are near-individual values in a small table.
       if (length(xs) >= 20L * min_cell) { out$p05 <- q[1]; out$p95 <- q[5] } else suppressed <- c(suppressed, "p05", "p95")
     } else {
@@ -448,20 +455,31 @@ vcr_job_profile_snapshot <- function(job, output_dir = NULL, ...) {
   min_cell <- vcr_domain()$limits$minCellSize
   profiles <- lapply(all, function(df) c(list(input = attr(df, "vcrInputId"), shape = attr(df, "vcrShape") %||% NA_character_,
                                               valueSource = .vcr_source_label(df, "unlabelled")),
-                                         vcr_profile_table(df, min_cell)))
+                                         vcr_profile_table(df, min_cell, !identical(job$methodVersion, "1.0.0"))))
   miss <- do.call(rbind, lapply(seq_along(all), function(i) {
     df <- all[[i]]
+    input_id <- attr(df, "vcrInputId")
+    if (!identical(job$methodVersion, "1.0.0")) df <- df[, setdiff(names(df), vcr_profile_identifier_columns(df)), drop = FALSE]
     r <- vapply(df, function(x) { n <- sum(is.na(x)); if ((n >= 1L && n < min_cell) || (nrow(df) - n >= 1L && nrow(df) - n < min_cell)) NA_real_ else n / max(nrow(df), 1L) }, numeric(1))
-    data.frame(table = attr(df, "vcrInputId"), column = names(df), missingRate = as.numeric(r), stringsAsFactors = FALSE)
+    data.frame(table = rep(input_id, length(r)), column = names(df), missingRate = as.numeric(r), stringsAsFactors = FALSE)
   }))
   first <- all[[1]]
   used <- vcr_used_sources(list(list(df = first, columns = names(first))))   # a profile reads every column
   src <- if (is.na(used$source)) "calculated" else used$source
   measures <- list(vcr_measure("columns", ncol(first), source = "calculated"))
   if (nrow(first) >= min_cell) measures <- c(list(vcr_measure("rows", nrow(first), source = src)), measures)
+  counts <- vcr_table_counts(first)
+  count_basis <- "legacy_rows"
+  if (!identical(job$methodVersion, "1.0.0") && vcr_table_source(first) %in% unlist(vcr_domain()$realPatientSources)) {
+    shape <- attr(first, "vcrShape")
+    ids <- if (!is.na(shape) && shape %in% c("subject", "long", "event") && "USUBJID" %in% names(first)) as.character(first$USUBJID) else NULL
+    complete <- !is.null(ids) && all(!is.na(ids) & nzchar(trimws(ids)))
+    counts["realPatients"] <- list(if (complete) length(unique(ids)) else NULL)
+    count_basis <- if (complete) "distinct_USUBJID" else "unknown_identity_or_grain"
+  }
   list(status = "succeeded", measures = measures,
-       counts = vcr_table_counts(first),
-       diagnostics = list(tables = profiles, columns = profiles[[1]]$columns, minimumCellSize = min_cell,
+       counts = counts,
+       diagnostics = list(tables = profiles, columns = profiles[[1]]$columns, minimumCellSize = min_cell, patientCountBasis = count_basis,
                           valueSourcesUsed = vcr_value_sources_used(used),
                           rowsSuppressed = nrow(first) < min_cell,
                           qualityCategories = vcr_domain()$qualityCategories),
@@ -516,6 +534,16 @@ vcr_apply_cohort_rules <- function(df, rules) {
 vcr_job_build_cohort <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   df <- .vcr_main_table(vcr_job_tables(job))
+  if (!identical(job$methodVersion, "1.0.0")) {
+    shape <- attr(df, "vcrShape")
+    if ((!is.na(shape) && shape != "subject") || (is.na(shape) && !identical(sc$grain, "subject")))
+      vcr_abort("input_shape_invalid", "inputs", "A cohort requires a subject-grain table; declare grain subject for a raw file.")
+    id <- as.character(sc$idColumn %||% "USUBJID")
+    if (!(id %in% names(df))) vcr_abort("input_shape_invalid", "scenario.idColumn", "A cohort requires a patient identifier column.")
+    ids <- as.character(df[[id]])
+    if (anyNA(ids) || any(!nzchar(trimws(ids))) || anyDuplicated(ids))
+      vcr_abort("input_shape_invalid", "scenario.idColumn", "A cohort requires complete unique subject identifiers; longitudinal rows must first be resolved to one row per subject.")
+  }
   items <- sc$rules
   if (is.null(items) || !length(items)) {
     vcr_abort("scenario_field_missing", "scenario.rules", "A cohort has at least one named rule; an empty list would keep everyone.")
@@ -523,6 +551,18 @@ vcr_job_build_cohort <- function(job, output_dir = NULL, ...) {
   cons <- vcr_named_rules(items, names(df), "scenario.rules")
   if (length(cons$issues)) vcr_abort_issue(cons$issues[[1]])
   res <- vcr_apply_cohort_rules(df, items)
+  if (!identical(job$methodVersion, "1.0.0")) {
+    denominator <- nrow(df)
+    for (i in seq_along(res$steps)) {
+      step <- res$steps[[i]]
+      step$denominator <- denominator
+      step$grain <- "subject"
+      step$remaining <- step$kept + if (identical(step$indeterminateTreatment, "include")) step$indeterminate else 0L
+      step$denominatorBasis <- if (i == 1L) "input_subjects" else "previous_step_remaining"
+      res$steps[[i]] <- step
+      denominator <- step$remaining
+    }
+  }
   # time zero and exit: the two other parts of the three-part cohort model
   time_col <- function(spec, field) {
     if (is.null(spec)) return(NULL)
@@ -565,7 +605,9 @@ vcr_job_build_cohort <- function(job, output_dir = NULL, ...) {
        measures = list(vcr_measure("cohort_size", size, source = src),
                        vcr_measure("cohort_size_strict", sum(res$strict), source = src),
                        vcr_measure("cohort_size_lenient", sum(res$lenient), source = src)),
-       counts = if (vcr_table_source(df) %in% unlist(vcr_domain()$realPatientSources)) vcr_counts(realPatients = size) else vcr_table_counts(df),
+       counts = if (identical(job$methodVersion, "1.0.0")) {
+         if (vcr_table_source(df) %in% unlist(vcr_domain()$realPatientSources)) vcr_counts(realPatients = size) else vcr_table_counts(df)
+       } else vcr_table_counts(df[res$alive, , drop = FALSE]),
        diagnostics = list(waterfall = res$steps, startingRows = nrow(df), criterionImpact = res$impact,
                           cohortRulesHash = .vcr_rules_hash(items),
                           valueSourcesUsed = vcr_value_sources_used(used),
@@ -1066,6 +1108,20 @@ vcr_outcome_frame <- function(sc, tabs, subj, endpoint) {
 #' a time-to-event one the weighted Kaplan-Meier RMST(tau) difference with the
 #' survival difference at tau beside it. Every estimate sits inside the
 #' bootstrap closure, so the weights are re-estimated in every resample.
+# Units are declarations on the frozen scenario; they never convert data.
+.vcr_observed_time_unit <- function(job, tabs, subj) {
+  sc <- job$scenario
+  if (identical(job$methodVersion, "1.0.0")) return(list(unit = as.character(sc$timeUnit %||% "months"), basis = "legacy_default_or_scenario"))
+  explicit <- sc$timeUnit; source <- attr(tabs$event %||% subj, "vcrTimeUnit")
+  allowed <- names(vcr_domain()$timeUnits$daysPerUnit)
+  if (is.null(explicit) && is.null(source)) vcr_abort("scenario_field_missing", "scenario.timeUnit", "State the time unit of the input and tau; it cannot be inferred from numeric values.")
+  if ((!is.null(explicit) && !(explicit %in% allowed)) || (!is.null(source) && !(source %in% allowed)))
+    vcr_abort("scenario_value_invalid", "scenario.timeUnit", "Time unit must be a supported unit.")
+  if (!is.null(explicit) && !is.null(source) && !identical(explicit, source))
+    vcr_abort("scenario_value_invalid", "scenario.timeUnit", "The analysis and declared source time units conflict; convert the input before analysis.")
+  list(unit = as.character(explicit %||% source), basis = if (!is.null(source)) "input_metadata" else "declared_scenario")
+}
+
 vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   sc <- job$scenario
   tabs <- vcr_job_tables(job)
@@ -1094,6 +1150,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   if (sum(treat == 1L) < 2L || sum(treat == 0L) < 2L) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "Both groups need at least two people.")
 
   endpoint <- as.character(sc$endpoint$type %||% (if (!is.null(sc$tau) || !is.null(tabs$event)) "time_to_event" else "continuous"))
+  time_unit <- if (identical(endpoint, "time_to_event")) .vcr_observed_time_unit(job, tabs, subj) else NULL
   outcome <- vcr_outcome_frame(sc, tabs, subj, endpoint)
   if (!is.null(outcome$y)) {
     if (anyNA(outcome$y)) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "The outcome has missing values.")
@@ -1187,7 +1244,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
     iv <- boot$intervals[j, ]
     if (anyNA(iv)) NULL else vcr_interval("confidence", transform(iv[1]), transform(iv[2]))
   }
-  unit <- as.character(sc$timeUnit %||% "months")
+  unit <- if (is.null(time_unit)) NULL else time_unit$unit
   measures <- if (identical(endpoint, "time_to_event")) list(
     vcr_measure("rmst_difference", est[1], unit = unit, interval = ci(1), source = est_src),
     vcr_measure("rmst_treatment", est[2], unit = unit, interval = ci(2), source = est_src),
@@ -1212,7 +1269,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
        conclusion = if (limited) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
                            events = if (identical(endpoint, "time_to_event")) sum(outcome$status) else NULL),
-       diagnostics = list(method = method, estimand = estimand, endpoint = endpoint,
+       diagnostics = list(method = method, estimand = estimand, endpoint = endpoint, timeUnit = time_unit,
                           tau = if (identical(endpoint, "time_to_event")) tau else NULL,
                           curves = if (identical(endpoint, "time_to_event"))
                             vcr_arm_curves(outcome$time, outcome$status, treat, weights = w, source = data_src, tau = tau)
@@ -1251,6 +1308,7 @@ vcr_job_rmst <- function(job, output_dir = NULL, ...) {
   arm <- subj[[tc]]
   if (anyNA(arm) || !all(arm %in% c(0, 1))) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "The treatment column is 1 or 0, complete.")
   arm <- as.integer(arm)
+  time_unit <- .vcr_observed_time_unit(job, tabs, subj)
   o <- vcr_outcome_frame(sc, tabs, subj, "time_to_event")
   if (anyNA(o$time) || anyNA(o$status)) vcr_abort("input_shape_invalid", "inputs", "Time and status are complete.")
   # The counts follow the input's value source: a real person's row is a real
@@ -1267,15 +1325,15 @@ vcr_job_rmst <- function(job, output_dir = NULL, ...) {
                 diagnostics = c(rule, list(valueSourcesUsed = vcr_value_sources_used(used)))))
   }
   r <- vcr_rmst_difference(o$time, o$status, arm, tau)
-  unit <- as.character(sc$timeUnit %||% "months")
+  unit <- time_unit$unit
   list(status = "succeeded",
        measures = list(
          vcr_measure("rmst_difference", r$estimate, unit = unit, source = est_src,
                      interval = vcr_interval("confidence", r$interval[1], r$interval[2])),
-         vcr_measure("rmst_treatment", r$arm1, source = est_src), vcr_measure("rmst_control", r$arm0, source = est_src),
+         vcr_measure("rmst_treatment", r$arm1, unit = if (identical(job$methodVersion, "1.0.0")) NULL else unit, source = est_src), vcr_measure("rmst_control", r$arm0, unit = if (identical(job$methodVersion, "1.0.0")) NULL else unit, source = est_src),
          vcr_measure("survival_difference_at_tau", as.numeric(r$survivalAtTau[1] - r$survivalAtTau[2]), source = est_src)),
        counts = counts,
-       diagnostics = list(tau = tau, survivalAtTau = r$survivalAtTau, weighted = FALSE, cohort = cohort$info,
+       diagnostics = list(tau = tau, timeUnit = time_unit, survivalAtTau = r$survivalAtTau, weighted = FALSE, cohort = cohort$info,
                           valueSourcesUsed = vcr_value_sources_used(used),
                           curves = vcr_arm_curves(o$time, o$status, arm, weights = NULL, source = if (is.na(used$source)) "observed" else used$source, tau = tau),
                           intervalBasis = "Greenwood-type variance of the unweighted Kaplan-Meier areas"))

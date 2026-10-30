@@ -1,6 +1,6 @@
 {
   "id": "vcr-protocol",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "title": "Virtual Clinical Research Protocol",
   "description": "Conversation-native virtual clinical research: interpret the requested task, ground its evidence, preserve versioned objects, call exact computation and explain results. Full protocol definitions are optional and task-specific.",
   "whenToUse": "Virtual Clinical Research (虚拟临床研究): Use for an explicitly selected VCR analyst conversation or protocol deliverable. Ordinary conversation can use this skill directly without specialist rebinding, a new module visit or mandatory PICO. Complete only the requested task.",

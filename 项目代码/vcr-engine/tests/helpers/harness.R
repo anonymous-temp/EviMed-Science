@@ -302,7 +302,7 @@ vcr_test_handler_jobs <- function() {
     list("evidence.reconstruct_km", list(curve = curve_arm(12)$curve, riskTable = curve_arm(12)$riskTable, provenance = list(kind = "digitizer", tool = "e05-digitizer")), list(list(kind = "evidence", id = "ev_e05@1"))),
     list("comparator.entropy_balance", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
     list("comparator.propensity_weight", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
-    list("comparator.rmst", list(tau = 5, treatmentColumn = "arm"), list(in_subj, in_event)),
+    list("comparator.rmst", list(tau = 5, treatmentColumn = "arm", timeUnit = "months"), list(in_subj, in_event)),
     list("comparator.maic", list(covariates = list("age"), targets = list(age = 58), outcomeColumn = "y", aggregateOutcome = 1.2, aggregateSe = 0.1), list(in_subj)),
     list("comparator.weighted_cox", list(covariates = list("x1", "x2"), treatmentColumn = "arm", weighting = "entropy_balance", moments = 1L, estimand = "ATT",
                                          tau = 4, ties = "efron", phAlpha = 0.05, phTransform = "km", timeUnit = "months", parameterCode = "OS"), list(in_cmp, in_cmp_ev)),

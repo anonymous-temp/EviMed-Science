@@ -109,6 +109,23 @@
     "reasons": []
   },
   "overview": {
+    "researchProgress": {
+      "populationId": null,
+      "populationVersion": null,
+      "definition": "none",
+      "input": "unknown",
+      "calculation": "none",
+      "resultId": null,
+      "resultStale": false,
+      "counts": {
+        "sourcePatients": null,
+        "realPatients": null,
+        "observations": null,
+        "generatedRecords": null,
+        "reconstructedPseudoPatients": null
+      },
+      "profileStatistics": []
+    },
     "headline": null,
     "metrics": [],
     "counts": null,

@@ -112,7 +112,7 @@ import { fileURLToPath } from "node:url";
 import {
   RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_COLUMN_SOURCE_LIMITS, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
   VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson,
-  suppressForModel, vcrTierSupportedBy, workspaceLayout,
+  suppressForModel, vcrTierSupportedBy, vcrTimeUnitOf, workspaceLayout,
 } from "@evimed/domain";
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
@@ -611,6 +611,21 @@ export function engineColumnSources(columnSources, columns, valueSource) {
   return named > 0 && named <= VCR_COLUMN_SOURCE_LIMITS.maxColumns ? out : null;
 }
 
+/** A frozen event table has one unit only when every outcome-time mapping agrees.
+ * @param {any} table @param {any[]} entries
+ * @returns {{ unit: string | null, conflict: boolean }}
+ */
+export function engineEventTimeUnit(table, entries) {
+  if (table.shape !== "events") return { unit: null, conflict: false };
+  const mapped = table.derivedFrom?.columns ?? [];
+  const mappings = entries.filter(entry => entry.role === "outcome_time" && (table.derivedFrom?.files ?? []).includes(entry.table)
+    && mapped.some(column => column.name === "AVAL" && column.source === entry.column));
+  const units = mappings.map(entry => vcrTimeUnitOf(entry.unit));
+  const known = [...new Set(units.filter(Boolean))];
+  const unsupported = mappings.some(entry => typeof entry.unit === "string" && entry.unit.trim() && !vcrTimeUnitOf(entry.unit));
+  return { unit: units.length && units.every(Boolean) && known.length === 1 ? known[0] : null, conflict: Boolean(unsupported) || known.length > 1 || (known.length > 0 && !units.every(Boolean)) };
+}
+
 // ---------------------------------------------------------------------------
 // Hashing and reading bytes (the control plane may; the model may not)
 // ---------------------------------------------------------------------------
@@ -720,7 +735,7 @@ const RESERVED_ANALYSIS_NAMES = Object.freeze(["USUBJID", "PARAMCD", "AVAL", "CN
 export const VCR_DECLARED_TYPES = Object.freeze(["integer", "number", "date", "text"]);
 /** Roles that put a column into a derived table. */
 const DERIVING_ROLES = Object.freeze(["arm", "covariate", "outcome_time", "outcome_event", "time_zero", "measurement", "visit_date"]);
-const FIELD_ENTRY_KEYS = Object.freeze([
+export const VCR_FIELD_MAP_ENTRY_KEYS = Object.freeze([
   "table", "column", "role", "concept", "unit", "codingSystem", "timeKind", "missingReason", "identifier", "parameter",
   "alias", "type", "range", "required", "outcome", "codes", "valueSource",
 ]);
@@ -771,7 +786,7 @@ export function normalizeFieldMap(input) {
     if (!isObject(raw)) { bad("", "entry_not_object", "每一项是一个对象。"); return; }
     const before = issues.length;
     for (const key of Object.keys(raw)) {
-      if (!FIELD_ENTRY_KEYS.includes(key)) bad(key, "field_unknown", `字段映射的一项不含「${key}」。`);
+      if (!VCR_FIELD_MAP_ENTRY_KEYS.includes(key)) bad(key, "field_unknown", `字段映射的一项不含「${key}」。`);
     }
     const column = text(raw.column);
     if (!column || column.length > VCR_FIELD_MAP_LIMITS.name || hasControl(column)) bad("column", "column_invalid", "列名是 1 到 128 个字符的一行文字。");
@@ -2566,7 +2581,7 @@ export class VcrDataPlane {
    * type the values do not have, a value outside a declared range, a code that is
    * not the coding system's shape — come back with the confirmation. They are
    * advice: the map is confirmed, and each finding is a thing to look at.
-   * @param {{ actor: string, studyId: string, sourceId: string, hash: string }} entry
+   * @param {{ actor: string, studyId: string, sourceId: string, hash: string, by?: string }} entry
    */
   async confirmFieldMap(entry) {
     const root = this.root();
@@ -2594,7 +2609,7 @@ export class VcrDataPlane {
       });
       checks = Object.fromEntries(VCR_QUALITY_CATEGORIES.map((category) => [category, Array.isArray(result?.quality?.[category]) ? result.quality[category].length : 0]));
     }
-    const confirmed = await this.store.confirmFieldMapDraft({ sourceId: source.id, hash: entry.hash, by: String(entry.actor), actor: String(entry.actor) });
+    const confirmed = await this.store.confirmFieldMapDraft({ sourceId: source.id, hash: entry.hash, by: entry.by ?? String(entry.actor), actor: String(entry.actor) });
     if (!confirmed) throw refuse(409, VCR_DATA_PLANE_CODES.fieldMapChanged, "The field map changed since it was shown; read it again before confirming.");
     return { source: confirmed, checks };
   }
@@ -2612,13 +2627,16 @@ export class VcrDataPlane {
    * is a snapshot, and the refusal is what a person acts on.
    *
    * @param {{ userId: string, studyId: string, sourceId: string, fileIds?: string[] | null, asOf?: string | null,
-   *   derive?: boolean, actor?: string }} entry
+   *   derive?: boolean, actor?: string, expectedFieldMapHash?: string }} entry
    */
   async freezeSnapshot(entry) {
     this.root();
     const study = await this.#manager(entry.studyId, entry.userId);
     const source = await this.#source(entry.studyId, entry.sourceId);
     this.#assertOpen(source);
+    if (entry.expectedFieldMapHash != null && entry.expectedFieldMapHash !== source.fieldMapHash) {
+      throw refuse(409, VCR_DATA_PLANE_CODES.fieldMapChanged, 'The requested field map changed before freezing the snapshot.');
+    }
     if (source.fieldMapState !== "confirmed") {
       throw refuse(409, VCR_DATA_PLANE_CODES.fieldMapUnconfirmed, "Confirm the field map before freezing a snapshot: a snapshot is read through what its columns mean.");
     }
@@ -2685,11 +2703,12 @@ export class VcrDataPlane {
       },
       quality: profile?.quality ?? {},
       sealedFields, sealedUntil, valueSource: source.valueSource, fieldMapHash: source.fieldMapHash,
+      expectedFieldMapHash: source.fieldMapHash,
       fileHashes: files.map(({ file }) => ({ id: file.id, name: file.name, location: file.location, sha256: file.sha256, bytes: file.bytes, role: file.role })),
       fieldMaps: entries.map((mapped) => ({
         tableName: mapped.table, columnName: mapped.column, concept: mapped.concept, unit: mapped.unit, codingSystem: mapped.codingSystem,
         timeKind: mapped.timeKind, missingReason: mapped.missingReason, identifier: mapped.identifier || mapped.role === "subject_key",
-        reviewState: "reviewed", role: mapped.role, parameter: mapped.parameter, alias: mapped.alias, declaredType: mapped.type,
+        reviewState: String(source.fieldMapConfirmedBy ?? "").startsWith("run:") ? "ai_set" : "reviewed", role: mapped.role, parameter: mapped.parameter, alias: mapped.alias, declaredType: mapped.type,
         range: mapped.range, required: mapped.required, outcome: isOutcomeEntry(mapped), codes: mapped.codes,
       })),
     });
@@ -2974,7 +2993,7 @@ export class VcrDataPlane {
     /** @type {Map<string, string>} */
     const why = new Map(decision.fields.denied.map((denial) => [denial.field, denial.code === "vcr_field_sealed" ? "sealed" : denial.code === "vcr_field_identifying" ? "identifying" : "not_granted"]));
 
-    /** @type {{ kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string>, columnUnits?: Record<string, string> }[]} */
+    /** @type {{ kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string>, columnUnits?: Record<string, string>, timeUnit?: string }[]} */
     const inputs = [];
     /** @type {{ id: string, kind: string, shape?: string, reason: string, fields: string[] }[]} */
     const withheld = [];
@@ -2988,9 +3007,15 @@ export class VcrDataPlane {
       const mapped = table.derivedFrom?.columns ?? [];
       const missing = [...new Set(mapped.map((column) => column.source).filter((name) => judgeable(name) && !allowed.has(name)))];
       if (!missing.length) {
+        // Only the frozen outcome-time mappings can supply the unit of AVAL.
+        // A single input-level unit is safe only when every mapped parameter agrees.
+        const unitDecision = engineEventTimeUnit(table, entries);
+        if (unitDecision.conflict && ["comparator.rmst", "comparator.entropy_balance", "comparator.propensity_weight", "comparator.weighted_cox", "comparator.covariate_sets", "comparator.maic_time_to_event"].includes(method))
+          throw refuse(422, VCR_DATA_PLANE_CODES.analysisTableInvalid, "Mapped event time columns have inconsistent or partially missing units; resolve them before this analysis.");
+        const timeUnit = unitDecision.unit;
         const labels = engineColumnSources(table.derivedFrom?.columnSources, table.columns, table.valueSource);
         inputs.push({ kind: "analysis_table", id, shape: table.shape, location: table.location, hash: table.sha256, valueSource: table.valueSource,
-          ...(labels ? { columnSources: labels } : {}), ...(needsScientificUnits ? { columnUnits: analysisUnits(table) } : {}) });
+          ...(labels ? { columnSources: labels } : {}), ...(timeUnit ? { timeUnit } : {}), ...(needsScientificUnits ? { columnUnits: analysisUnits(table) } : {}) });
         if (table.outcomeBearing) for (const column of mapped.map((item) => item.source)) if (outcomeColumns.has(column)) outcomeRead.add(column);
         continue;
       }

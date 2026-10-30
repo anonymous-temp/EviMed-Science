@@ -17,7 +17,7 @@ import { VCR_COLUMN_SOURCE_LIMITS, VCR_ENGINE_PROTOCOL_VERSION, VCR_MIN_CELL_SIZ
 import {
   VCR_ANALYSIS_TABLE_BLOCKING_ISSUES, VCR_COLUMN_SOURCE_ORDER, VCR_DATA_PLANE_CODES, VCR_PROFILER_SCRIPT, VCR_UNSUPPORTED_FORMAT_HINTS, VCR_UPLOAD_FORMATS,
   analysisTableIssues, asOfIssues, assertDataPlaneLocation, assertDataPlaneRoot, checkedTable, columnSourceIssues, decodeUploadText, deriveAnalysisShapes,
-  dictionaryEntries, engineColumnSources, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
+  dictionaryEntries, engineColumnSources, engineEventTimeUnit, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
   qualitySummary, rowsVisibleAsOf, safeUploadName, sha256OfFile, snapshotClocks, suppressSmallCells, tablesNeededBy, tableVisibleAsOf, toCsv, treatmentEvidence,
   validateFieldMap, VcrDataPlane, weakestSource, writeContentAddressed,
 } from "../src/vcrDataPlane.mjs";
@@ -956,4 +956,16 @@ test("a method is given the tables it reads and no more: files to profile, the s
 test("a corrected upload is a newer version of the same file: a snapshot takes the latest of each name", () => {
   const files = [{ id: "a", name: "cohort.csv", role: "data" }, { id: "b", name: "visits.csv", role: "data" }, { id: "c", name: "cohort.csv", role: "data" }, { id: "d", name: "dict.csv", role: "dictionary" }];
   assert.deepEqual(latestDataFiles(files).map((file) => file.id).sort(), ["b", "c"]);
+});
+
+
+test("event time units come only from the frozen matching outcome mappings", () => {
+  const table = { shape: "events", derivedFrom: { files: ["a.csv"], columns: [{ name: "AVAL", source: "duration" }] } };
+  const row = { table: "a.csv", column: "duration", role: "outcome_time", unit: "day" };
+  assert.deepEqual(engineEventTimeUnit(table, [row]), { unit: "days", conflict: false });
+  assert.deepEqual(engineEventTimeUnit(table, [{ ...row, unit: null }]), { unit: null, conflict: false });
+  assert.deepEqual(engineEventTimeUnit(table, [{ ...row, unit: "cycles" }]), { unit: null, conflict: true });
+  assert.deepEqual(engineEventTimeUnit(table, [row, { ...row, unit: "months" }]), { unit: null, conflict: true });
+  assert.deepEqual(engineEventTimeUnit(table, [row, { ...row, unit: null }]), { unit: null, conflict: true });
+  assert.deepEqual(engineEventTimeUnit(table, [{ ...row, table: "other.csv" }]), { unit: null, conflict: false });
 });

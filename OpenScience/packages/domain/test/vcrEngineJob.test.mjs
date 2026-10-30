@@ -106,7 +106,7 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
   assert.deepEqual(snapshot.observedOnlyMethods, [...VCR_OBSERVED_ONLY_METHODS]);
   assert.deepEqual(snapshot.columnSources, [...VCR_COLUMN_SOURCES]);
   assert.deepEqual(snapshot.columnSourceLimits, plain(VCR_COLUMN_SOURCE_LIMITS));
-  assert.deepEqual(snapshot.engineTableInputKeys, ["kind", "id", "shape", "location", "hash", "valueSource", "columnSources"]);
+  assert.deepEqual(snapshot.engineTableInputKeys, ["kind", "id", "shape", "location", "hash", "valueSource", "columnSources", "timeUnit"]);
   assert.equal(snapshot.maxReplicates, VCR_MAX_REPLICATES);
   for (const [id, spec] of Object.entries(VCR_ENGINE_METHODS)) assert.equal(snapshot.methods[id].modelTier, spec.modelTier, id);
 });
@@ -421,7 +421,7 @@ test("the comparator-effect methods are appended, read patients, and every rule 
   for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
     assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);
-    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.0.0", method);
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, ["comparator.weighted_cox", "comparator.covariate_sets", "comparator.maic_time_to_event"].includes(method) ? "1.1.0" : "1.0.0", method);
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
     assert.ok(VCR_OBSERVED_ONLY_METHODS.includes(method), `${method} refuses synthetic, aggregate and predicted rows`);
@@ -646,4 +646,13 @@ test("no input carries a key its kind does not allow — a prefix of a reserved 
   assert.deepEqual(keys(validateCallerInputs([{ kind: "snapshot", id: "snp_1", value: 1 }])), ["input_field_unknown@inputs[0].value"]);
   // A lineage input may carry its frozen value; a table input its location, hash, shape and source.
   assert.deepEqual(validateCallerInputs([{ kind: "assumption", id: "dropout_rate@2", value: { pointValue: 0.1 } }]), []);
+});
+
+test("only resolved table inputs may carry canonical event time units", () => {
+  const job = clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "profile.snapshot").job);
+  job.inputs[0].timeUnit = "days";
+  assert.deepEqual(keys(validateEngineJob(job)), []);
+  job.inputs[0].timeUnit = "visits";
+  assert.ok(keys(validateEngineJob(job)).includes("input_shape_invalid@inputs[0].timeUnit"));
+  assert.ok(validateCallerInputs([{ kind: "snapshot", id: "snp_1", timeUnit: "days" }]).some(issue => issue.code === "input_location_forbidden"));
 });

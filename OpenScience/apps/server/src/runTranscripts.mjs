@@ -392,10 +392,10 @@ function describeSession(session) {
  *
  * Separate from writing so a test can assert the bytes without a filesystem,
  * and so the size cap is applied to the thing that is actually stored.
- * @param {{ runId: string, capturedAt: string, sessions: CollectedSession[], maxBytes?: number }} input
+ * @param {{ runId: string, capturedAt: string, sessions: CollectedSession[], maxBytes?: number, ownedChildSessionIds?:string[] }} input
  * @returns {{ text: string, header: any, messages: number }}
  */
-export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes = TRANSCRIPT_MAX_BYTES }) {
+export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes = TRANSCRIPT_MAX_BYTES, ownedChildSessionIds = undefined }) {
   /** @type {TranscriptSessionRecord[]} */
   const records = [];
   /** @type {TranscriptGap[]} */
@@ -431,6 +431,7 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
   let kept = lines.length;
   const headerFor = () => ({
     schemaVersion: TRANSCRIPT_SCHEMA_VERSION,
+    ...(ownedChildSessionIds === undefined ? {} : { runChildSessionIds: [...new Set(ownedChildSessionIds)].slice(0, 64) }),
     runId,
     capturedAt,
     completeness: completenessOf(records, missing),
@@ -551,13 +552,14 @@ function completenessOf(records, missing) {
 /**
  * Write one run's transcript and return the receipt the ledger records.
  *
- * @param {{ project: any, run: { id: string, sessionId: string }, sessions: CollectedSession[], now?: Date, maxBytes?: number }} input
+ * @param {{ project: any, run: { id: string, sessionId: string }, sessions: CollectedSession[], now?: Date, maxBytes?: number, ownedChildSessionIds?:string[] }} input
  * @returns {Promise<TranscriptReceipt>}
  */
-export async function persistRunTranscript({ project, run, sessions, now = new Date(), maxBytes = TRANSCRIPT_MAX_BYTES }) {
+export async function persistRunTranscript({ project, run, sessions, now = new Date(), maxBytes = TRANSCRIPT_MAX_BYTES, ownedChildSessionIds = undefined }) {
   const { text, header, messages } = serializeRunTranscript({
     runId: run.id,
     capturedAt: now.toISOString(),
+    ownedChildSessionIds,
     sessions,
     maxBytes,
   });

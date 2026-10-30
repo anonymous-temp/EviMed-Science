@@ -1,4 +1,4 @@
-import { CLINICAL_FACT_CONTRACT, clinicalTerminologyContext } from '@evimed/domain';
+import { CLINICAL_FACT_CONTRACT, VCR_REQUIREMENT_CONTRACT, VCR_CRITERION_TYPES, clinicalTerminologyContext } from '@evimed/domain';
 import { clinicalSemanticFields } from '@evimed/domain';
 import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
 /**
@@ -616,6 +616,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
     async runtimeRead(study, filter) {
       if(filter.kind==='contract') return {
         factContract:clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
+        requirementGrammar: VCR_REQUIREMENT_CONTRACT, criterionTypes: VCR_CRITERION_TYPES,
+        writeEnvelope: 'Single: {what,data:<one object>}; batch: {what,items:[<object>]}. Never nest items inside data; never use writes as schema probes.',
         note:'Examples describe syntax only. Use only criteria and facts supported by the supplied protocol and preserved patient material. Do not guess internal message sequence numbers.',
         patientContext:{tool:'vcr_write',what:'patient_context',data:{}},
         protocolWrite:{tool:'vcr_write',what:'protocol',data:{criteria:[{kind:'inclusion',criterionType:'demographic',sourceText:'Exact protocol wording',requirement:{op:'compare',variable:'age',comparator:'between',value:18,highValue:65,unit:'year'}}]}},

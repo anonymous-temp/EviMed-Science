@@ -323,6 +323,23 @@
     ]
   },
   "overview": {
+    "researchProgress": {
+      "populationId": "pop_1",
+      "populationVersion": 2,
+      "definition": "saved",
+      "input": "unknown",
+      "calculation": "none",
+      "resultId": null,
+      "resultStale": false,
+      "counts": {
+        "sourcePatients": null,
+        "realPatients": null,
+        "observations": null,
+        "generatedRecords": null,
+        "reconstructedPseudoPatients": null
+      },
+      "profileStatistics": []
+    },
     "headline": "已模拟 3 个方案，成功把握 58%～74%；真实外部对照不可估计，缺 3 项数据。",
     "metrics": [
       {

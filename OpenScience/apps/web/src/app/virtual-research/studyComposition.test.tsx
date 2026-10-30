@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
@@ -115,10 +116,15 @@ describe("T2 — the list of studies, with a preview beside it", () => {
     expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
     expect(column).toContainElement(facts.toolbars[0]);
     expect(precedes(facts.toolbars[0], rows)).toBe(true);
-    // The header is the list column's, with the page's one solid button; the preview's ways on are secondary.
+    // The new-task pane owns the primary; after choosing a study, the list header owns it.
     expect(column).toContainElement(facts.header);
     expect(precedes(facts.header!, facts.toolbars[0])).toBe(true);
-    expect(facts.headerPrimaryActions).toHaveLength(1);
+    expect(facts.headerPrimaryActions).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "开始" })).toHaveClass("bg-accent");
+    expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
+    await userEvent.click(screen.getByRole("link", { name: /EV-201 二线/ }));
+    expect(screen.getByRole("button", { name: "新研究" })).toHaveClass("bg-accent");
+    expect(screen.queryByRole("button", { name: "开始" })).toBeNull();
     expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
   });
 
