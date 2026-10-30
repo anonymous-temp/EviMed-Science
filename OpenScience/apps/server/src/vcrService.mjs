@@ -1262,13 +1262,13 @@ export class VcrService {
         AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable
           AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, matchingArgs).catch(() => []),
     ]);
-    // What the evaluation rested on, when that has since changed (a document, a projection, a permission) or was withdrawn: a plain
-    // state beside the subject, and the evaluation that already exists offered again. Nothing is blocked and nothing re-runs.
-    const marks = await this.packages.erasure?.assessmentMarks?.(study.id, subjectRows.map((row) => String(row.id))).catch(() => new Map()) ?? new Map();
     // A person asked for by name who the cap left out is still read: the page opens whoever it is told to, not the first 200.
     if (query.candidate && !subjectRows.some((row) => String(row.subject_key) === query.candidate)) {
       subjectRows.push(...await matchStore.rows(`SELECT * FROM (${latest}) l WHERE subject_key = $3`, [...matchingArgs, query.candidate]).catch(() => []));
     }
+    // What the evaluation rested on, when that has since changed (a document, a projection, a permission) or was withdrawn: a plain
+    // state beside the subject, and the evaluation that already exists offered again. Nothing is blocked and nothing re-runs.
+    const marks = await this.packages.erasure?.assessmentMarks?.(study.id, subjectRows.map((row) => String(row.id))).catch(() => new Map()) ?? new Map();
     const subjects = subjectRows.map((row) => ({
       id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
       priority: row.priority ?? null, direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,

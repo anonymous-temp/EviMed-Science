@@ -2924,7 +2924,7 @@ export class VcrDataPlane {
    *
    * @param {{ studyId: string, snapshotId: string, principal: string, purpose?: string | null, fields?: string[] | null,
    *   kind?: string | null, jobKind?: string | null, method?: string | null, endpointType?: string | null,
-   *   include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
+   *   parameterCode?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
    * @returns {Promise<{ snapshotId: string,
    *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[],
    *   withheld: { id: string, kind: string, shape?: string, reason: string, fields: string[] }[],

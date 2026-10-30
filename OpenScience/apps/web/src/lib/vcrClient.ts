@@ -1650,7 +1650,7 @@ function readResearchProgress(raw: unknown): VcrResearchProgress | null {
   const input = value.input === "available" || value.input === "missing" || value.input === "not_required" ? value.input : "unknown";
   return { populationId: text(value.populationId), populationVersion: finite(value.populationVersion), definition: value.definition === "saved" ? "saved" : "none", input, calculation, resultId: text(value.resultId), resultStale: value.resultStale === true,
     resultNotCounted: obj(value.resultNotCounted).reason === "other_snapshot"
-      ? { reason: "other_snapshot", resultId: text(obj(value.resultNotCounted).resultId), snapshotIds: arr(obj(value.resultNotCounted).snapshotIds).filter((id): id is string => typeof id === "string") } : null,
+      ? { reason: "other_snapshot", resultId: text(obj(value.resultNotCounted).resultId), snapshotIds: arr(obj(value.resultNotCounted).snapshotIds).filter((id) => typeof id === "string").map(String) } : null,
     counts: { sourcePatients: finite(counts.sourcePatients), realPatients: finite(counts.realPatients), observations: finite(counts.observations), generatedRecords: finite(counts.generatedRecords), reconstructedPseudoPatients: finite(counts.reconstructedPseudoPatients) },
     profileStatistics: arr(value.profileStatistics).flatMap(row => {
       const direction = row.direction;
