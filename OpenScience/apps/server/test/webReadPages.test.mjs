@@ -142,7 +142,7 @@ test("the terminal hook feeds the list from the transcript it already read", asy
   // The hook reads the run's sessions once for the transcript; the list must
   // come from those same sessions and reach the ledger in a write of its own.
   const source = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
-  const at = source.indexOf("const receipt = await persistRunTranscript({ project, run, sessions });");
+  const at = source.indexOf("const receipt = await persistRunTranscript({ project, run, sessions");
   assert.ok(at >= 0, "the terminal hook's transcript write moved");
   const hook = source.slice(at);
   assert.match(hook.slice(0, 1200), /const reading = pagesReadFromSessions\(sessions\);/);
