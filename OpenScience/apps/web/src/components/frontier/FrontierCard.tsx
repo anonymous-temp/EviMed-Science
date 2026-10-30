@@ -3,7 +3,7 @@ import { useId, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem, type FrontierTagRef } from "@/lib/frontierClient";
+import { addFrontierFollow, frontierErrorMessage, type FrontierFollowRequestKind, type FrontierItem, type FrontierTagRef } from "@/lib/frontierClient";
 import { trackFrontierItemAction } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
@@ -95,7 +95,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
       toast.error("没有复制成功");
     }
   };
-  const follow = async (kind: FrontierFollow["kind"], key: string, label: string, muted = false) => {
+  const follow = async (kind: FrontierFollowRequestKind, key: string, label: string, muted = false) => {
     try { await addFrontierFollow({ kind, key, label, muted }); toast.success(muted ? "已屏蔽" : "已关注"); }
     catch (error) { toast.error(frontierErrorMessage(error)); }
   };

@@ -1612,11 +1612,15 @@ export async function listFrontierFollows(): Promise<FrontierFollow[]> {
   return (Array.isArray(raw?.follows) ? raw.follows : []).map(parseFollow).filter((follow): follow is FrontierFollow => follow !== null);
 }
 
+/** The kinds a follow is asked for: every kind but `query`, which is a zone of the reader's own now and only an old row is left of. */
+export type FrontierFollowRequestKind = Exclude<FrontierFollow["kind"], "query">;
+
 /**
- * Follow — or, with `muted`, see less of — a topic, specialty, drug, source or event; or, as `query`, words the reader typed (the label
- * is what they wrote, the server reads it). Following again updates, never duplicates.
+ * Follow — or, with `muted`, see less of — a topic, specialty, tag, drug, source or event. Following again updates, never duplicates.
+ * Words the reader typed are not a follow any more: the server makes a zone of them (`kind: "query"` answers `{ follow: null, zone }`),
+ * so this function does not take that kind and a caller that wants one makes the zone (the zone editor's drafting).
  */
-export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; key: string; label: string; muted?: boolean }): Promise<FrontierFollow> {
+export async function addFrontierFollow(input: { kind: FrontierFollowRequestKind; key: string; label: string; muted?: boolean }): Promise<FrontierFollow> {
   const follow = parseFollow(record(await productRequest<unknown>("/frontier/follows", "POST", {
     kind: input.kind, key: input.key, label: input.label, muted: input.muted === true,
   }))?.follow);
