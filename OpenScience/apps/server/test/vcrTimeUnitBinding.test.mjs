@@ -23,7 +23,9 @@ test("text that names no unit is refused before queueing, naming the four words;
   assert.equal(refused.issue?.code, "scenario_value_invalid");
   assert.equal(refused.issue?.field, "scenario.timeUnit");
   assert.match(refused.issue?.detail ?? "", /days, weeks, months, years/);
-  assert.equal(vcrCanonicalScenarioTimeUnit("comparator.rmst", { timeUnit: "cycles" }).issue?.field, "scenario.timeUnit");
+  for (const method of ["comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"]) {
+    assert.equal(vcrCanonicalScenarioTimeUnit(method, { timeUnit: "cycles" }).issue?.field, "scenario.timeUnit", method);
+  }
   const kept = { tau: 24, timeUnit: "months" };
   assert.equal(vcrCanonicalScenarioTimeUnit("comparator.rmst", kept).scenario, kept, "an already canonical scenario is the same object");
   assert.equal(vcrCanonicalScenarioTimeUnit("comparator.rmst", { tau: 24 }).issue, null, "a table's own unit may supply it");
@@ -71,4 +73,25 @@ test("a verifier that cannot look leaves the unbound table's unit unstated, and 
   }
   // a verifier that answered and found a different image: the hash mismatch is the refusal, and it is not swallowed
   await assert.rejects(vcrCurveTimeUnit({ ...base, verifier: verifying({ curveImageHash: "z".repeat(8) }), strict: false }), { code: "vcr_curve_provenance_unavailable" });
+});
+
+// `comparator.tipping_point` and `comparator.prognostic_adjustment` write the scenario's unit into the result as a label
+// (`as.character(sc$timeUnit %||% "months")`), and vcrTimeUnits.mjs takes a unit outside the table as written. Refusing "cycles" for
+// them before queueing refused a job the engine runs. Only the comparators whose R path goes through `.vcr_observed_time_unit` abort on it.
+test("a unit outside the table is refused only where the engine aborts on it; the known spellings are written canonical for every comparator", () => {
+  for (const method of ["comparator.tipping_point", "comparator.prognostic_adjustment", "comparator.aipw", "comparator.covariate_sets", "comparator.negative_control"]) {
+    const kept = { timeUnit: "cycles" };
+    const outcome = vcrCanonicalScenarioTimeUnit(method, kept);
+    assert.equal(outcome.issue, null, method);
+    assert.equal(outcome.scenario, kept, `${method}: the label is taken as written, the scenario is the same object`);
+    assert.equal(vcrCanonicalScenarioTimeUnit(method, { timeUnit: "Months" }).scenario.timeUnit, "months", `${method}: a known spelling is the unit it names`);
+  }
+  // the weighting comparators read the unit only for a time-to-event endpoint
+  for (const method of ["comparator.entropy_balance", "comparator.propensity_weight"]) {
+    assert.equal(vcrCanonicalScenarioTimeUnit(method, { timeUnit: "cycles", endpoint: { type: "time_to_event" } }).issue?.field, "scenario.timeUnit", `${method} time to event`);
+    assert.equal(vcrCanonicalScenarioTimeUnit(method, { timeUnit: "cycles", tau: 24 }).issue?.field, "scenario.timeUnit", `${method}: a horizon makes it time to event`);
+    assert.equal(vcrCanonicalScenarioTimeUnit(method, { timeUnit: "cycles", endpoint: { type: "binary" } }).issue, null, `${method} binary`);
+    assert.equal(vcrCanonicalScenarioTimeUnit(method, { timeUnit: "cycles" }).issue, null, `${method}: nothing says time to event`);
+    assert.equal(vcrCanonicalScenarioTimeUnit(method, { timeUnit: "天", endpoint: { type: "binary" } }).scenario.timeUnit, "days");
+  }
 });

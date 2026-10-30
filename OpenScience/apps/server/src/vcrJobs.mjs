@@ -496,11 +496,36 @@ export function vcrBindScientificInputUnits(method, scenario, inputs) {
 }
 
 /**
+ * The comparators whose R path reads the scenario's unit through `.vcr_observed_time_unit` (`R/engine.R`) and aborts on text outside the
+ * four words: the restricted-mean comparison, the weighted Cox model and the time-to-event MAIC always, the two weighting comparators
+ * (`vcr_job_weight_comparator`) when their endpoint is time to event. The others either never read `timeUnit` (aipw, covariate sets,
+ * negative control, e-value, MAP prior) or take it as a label (`comparator.tipping_point` and `comparator.prognostic_adjustment` write
+ * `as.character(sc$timeUnit %||% "months")` into the result), and text outside the table is taken as written there
+ * (`vcrTimeUnits.mjs`: "cycles" converts nothing and is said to be so).
+ */
+const OBSERVED_TIME_UNIT_ALWAYS = Object.freeze(["comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"]);
+const OBSERVED_TIME_UNIT_FOR_TIME_TO_EVENT = Object.freeze(["comparator.entropy_balance", "comparator.propensity_weight"]);
+
+/**
+ * Whether the engine will read this scenario's `timeUnit` and abort on text that is not a unit.
+ * @param {string} method @param {Record<string, any>} scenario
+ */
+function readsTimeUnitStrictly(method, scenario) {
+  if (OBSERVED_TIME_UNIT_ALWAYS.includes(method)) return true;
+  if (!OBSERVED_TIME_UNIT_FOR_TIME_TO_EVENT.includes(method)) return false;
+  // The engine's own rule for the endpoint: the stated type, else time to event when a horizon is named.
+  const stated = object(scenario.endpoint).type;
+  return stated === undefined || stated === null ? scenario.tau !== undefined && scenario.tau !== null : stated === "time_to_event";
+}
+
+/**
  * The unit a comparator scenario states, in the engine's four words. The scenario schema takes any text of up to 20 characters (jobs
  * saved at method version 1.0.0 carry whatever their author wrote and replay as they were), but the engine of version 1.1 reads only
  * `days`, `weeks`, `months` and `years` and aborts on anything else: `day`, `Days` and `天` passed here and failed there. The closed
- * spellings (`vcrTimeUnitOf`) are written as the unit they name, before the scenario is hashed, so the same request is the same job
- * in whichever spelling; text that names no unit is refused before queueing, with the four words.
+ * spellings (`vcrTimeUnitOf`) are written as the unit they name for every comparator, before the scenario is hashed, so the same
+ * request is the same job in whichever spelling; text that names no unit is refused before queueing, with the four words, only for the
+ * comparators whose R path aborts on it (`readsTimeUnitStrictly`) — for the others it is a label and is taken as written.
+ * Only a job being enqueued goes through here: a job already stored is replayed as it was saved.
  * @param {string} method @param {Record<string, any>} scenario
  * @returns {{ scenario: Record<string, any>, issue: { code: string, field: string, detail: string } | null }}
  */
@@ -508,6 +533,7 @@ export function vcrCanonicalScenarioTimeUnit(method, scenario) {
   if (!method.startsWith("comparator.") || scenario.timeUnit === undefined || scenario.timeUnit === null) return { scenario, issue: null };
   const unit = vcrTimeUnitOf(scenario.timeUnit);
   if (unit) return { scenario: unit === scenario.timeUnit ? scenario : { ...scenario, timeUnit: unit }, issue: null };
+  if (!readsTimeUnitStrictly(method, scenario)) return { scenario, issue: null };
   return { scenario, issue: { code: "scenario_value_invalid", field: "scenario.timeUnit",
     detail: `timeUnit is one of ${VCR_TIME_UNITS.join(", ")} (day, week, month, year and their abbreviations are read as these); ${JSON.stringify(String(scenario.timeUnit).slice(0, 30))} is not a time unit.` } };
 }
