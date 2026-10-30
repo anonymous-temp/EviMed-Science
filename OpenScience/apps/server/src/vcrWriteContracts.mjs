@@ -1,5 +1,5 @@
 import { VCR_DATA_INTAKE_CONTRACT } from './vcrDataIntake.mjs';
-import { VCR_POPULATION_KINDS, VCR_CRITERION_TYPES, VCR_REQUIREMENT_CONTRACT, CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE } from '@evimed/domain';
+import { VCR_POPULATION_KINDS, VCR_CRITERION_TYPES, VCR_REQUIREMENT_CONTRACT, CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, RUNTIME_SKILL_ROOTS } from '@evimed/domain';
 
 /** Closed top-level fields shared by mutation validation and read-only discovery. */
 export const VCR_WRITE_FIELDS = Object.freeze({
@@ -274,10 +274,22 @@ export function vcrWriteContracts(kind = null) {
   return kind ? { [kind]: Object.hasOwn(contracts, kind) ? contracts[kind] : null } : contracts;
 }
 
+/**
+ * Where the VCR methods are, for a conversation whose skill catalogue does not list them. They are capability skill bodies, which a
+ * planned capability's run is handed; a plain conversation in a study calls the same tools and loads nothing unless the tools point it
+ * at the files. The root is the image's declared one (`RUNTIME_SKILL_ROOTS`), the methods the five VCR capabilities'.
+ */
+export const VCR_METHOD_SKILLS = Object.freeze(['vcr-matching', 'vcr-protocol', 'vcr-evidence', 'vcr-analysis', 'vcr-package']);
+const capabilityRoot = RUNTIME_SKILL_ROOTS.find(root => root.family === 'capability-skills')?.path ?? '/opt/evimed/capability-skills';
+export const VCR_METHODS = Object.freeze({
+  note: 'These methods are not in the skill catalogue: read the SKILL.md at the path before the work it governs. vcr-matching governs facts, criteria, candidate trials and eligibility verdicts.',
+  files: Object.freeze(Object.fromEntries(VCR_METHOD_SKILLS.map(name => [name, `${capabilityRoot}/${name}/SKILL.md`]))),
+});
+
 /** Schema literals only. This entry never reads a store or adopts arbitrary package output. */
 export function vcrContractsRead(kind = null) {
   return { what: 'contracts', schemaOnly: true, available: true,
-    writes: vcrWriteContracts(kind), dataIntake: VCR_DATA_INTAKE_CONTRACT,
+    writes: vcrWriteContracts(kind), dataIntake: VCR_DATA_INTAKE_CONTRACT, methods: VCR_METHODS,
     requirementGrammar: VCR_REQUIREMENT_CONTRACT, factContract: CLINICAL_FACT_CONTRACT,
     writeEnvelope: { single: { what: '<kind>', data: '<one object>' }, batch: { what: '<kind>', items: ['<object>'] },
       rule: 'items is top level, never nested inside data. Read these schemas rather than issuing probe writes.' },

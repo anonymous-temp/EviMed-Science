@@ -122,6 +122,11 @@ OBJECT_SHAPES = {
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
+# Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
+# capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
+# name the files (the deployment's own variable, as the guidance's skill roots are, with the image's path as the default).
+SKILLS_ENV = "EVIMED_CAPABILITY_SKILLS_DIR"
+SKILLS_DEFAULT = "/opt/evimed/capability-skills"
 READ_MAX_LIMIT = 50
 WRITE_MAX_ITEMS = 200
 # The one operation whose answer waits on a container: the gateway's budget is the
@@ -469,11 +474,18 @@ def _detailed_tool_definitions():
     ]
 
 
+def skills_root() -> str:
+    """The directory holding the VCR methods' SKILL.md files, without a trailing slash."""
+    root = os.environ.get(SKILLS_ENV, "").strip().rstrip("/")
+    return root if root.startswith("/") else SKILLS_DEFAULT
+
+
 def tool_definitions():
     """Compact root catalogue; the workflow skill and shape action carry detail."""
+    root = skills_root()
     descriptions = {
-        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
-        "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
+        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
+        "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
         "vcr_simulate": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
     }
     tools = _detailed_tool_definitions()
@@ -654,8 +666,11 @@ def read(arguments: dict) -> dict:
                 next_actions.append("No computed assessment is saved yet. Start vcr_simulate action=start kind=match_criteria, then read matching with this subjectKey when it completes. Do not invent judgments.")
             else:
                 next_actions.append("The saved assessment contains criterion judgments and approved evidence. To read one criterion narrowly use filter.subjectKey plus filter.id=criterionId; missing evidence remains unknown.")
+                next_actions.append("Deliver from this read-back: copy summary, each judgment's state and applicable and the evidence quotes as saved; if your own reasoning differs, say so beside the saved verdict, do not replace it.")
         else:
             next_actions.append("Read one returned subjectKey to obtain its saved assessment and quoted evidence; use filter.id for one criterion if needed.")
+    if what == "candidate_trials" and data.get("subjectKey") and data.get("ranking"):
+        next_actions.append("ranking holds this patient's saved verdict for each trial, in the platform's order. A delivered per-trial table copies registryId, eligibility, criteriaCounts and evidenceGaps from it; a criterion belongs to the trial it was saved under, so never move one between trials.")
     if what == 'report_model':
         next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':
