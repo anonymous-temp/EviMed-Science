@@ -59,6 +59,7 @@ import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { locateSourceText } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
+import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
@@ -271,6 +272,40 @@ function writeRequest(body) {
     throw gatewayError(400, "vcr_write_payload_invalid", "data is an object.");
   }
   return { what: body.what, items: body.items ?? null, data: body.data ?? null };
+}
+
+/** Top-level fields that are references to an engine output, not one (`forecast.resultId`): exempt from the output scan, as the writer exempts them. */
+const WRITE_ID_FIELDS = Object.freeze(/** @type {Record<string, readonly string[]>} */ ({ forecast: ["resultId"] }));
+
+/**
+ * The refusals a write earns on its shape alone — before the call has a scope, so that a write that will be refused creates nothing
+ * (a probe of the syntax once opened a hidden task for each malformed call). `null` when at least one item can be written, or
+ * the kind's items have no closed shape to judge (`task_context`, `patient_context`); otherwise the issues, exactly as the writers
+ * would give them: the closed field list and the engine-output and expression scans of `Item.only`, a criterion's own grammar for a
+ * protocol, an item that is not an object. Pure: nothing is read, nothing is stored.
+ * @param {string} what @param {any[]} rows @returns {Promise<Array<Record<string, any>> | null>}
+ */
+async function shapeRefusals(what, rows) {
+  if (!rows.length) return null;
+  /** @type {Array<Record<string, any>>} */
+  const issues = [];
+  if (what === "protocol" || what === "criteria") {
+    // A protocol version is written only with criteria that can be kept; with none, nothing is written whatever else the call carries.
+    const { criteria } = await checkedCriteria({ study: null, store: null }, rows, issues, what);
+    if (criteria.length) return null;
+    if (!issues.length) issues.push(issue(null, "criteria", "vcr_write_value_invalid", "入排条件至少要有一条能写入的。"));
+    return issues;
+  }
+  const fields = /** @type {Record<string, readonly string[]>} */ (VCR_WRITE_FIELDS)[what];
+  if (!fields) return null;
+  for (const [index, raw] of rows.entries()) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      issues.push(issue(index, "", "vcr_write_value_invalid", "每一项是一个对象。"));
+      continue;
+    }
+    if (new Item({ row: raw, index, issues, study: null, store: null }).only(fields, { ids: WRITE_ID_FIELDS[what] })) return null;
+  }
+  return issues;
 }
 
 /**
@@ -1395,19 +1430,19 @@ const WRITERS = {
   },
 
   async history(item, {service,study}) {
-    if (!item.only(['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation'])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.history)) return null;
     const longitudinal = service.packages.longitudinal;
     if (!longitudinal) return void item.bad('snapshotId','数据平面尚未接入；可以继续文献情景分析。');
     const saved = await longitudinal.freezeHistory(study,item.row,study.userId);
     return saved.id;
   },
   async trial_benchmark(item,{service,study}) {
-    if (!item.only(['model','comparisons','split','trainingOverlap','sourceFile'])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.trial_benchmark)) return null;
     if (!service.packages.longitudinal) return void item.bad('comparisons','纵向研究尚未接入。');
     return (await service.packages.longitudinal.importBenchmark(study,item.row,study.userId)).id;
   },
   async forecast_design(item,{service,study}) {
-    if (!item.only(['predictionId','controlPredictionId','horizonDays','allocation','alpha','power','prognosticEvaluationId','randomizationAt','lambda','gamma'])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.forecast_design)) return null;
     const longitudinal = service.packages.longitudinal;
     if (!longitudinal) return void item.bad('predictionId','数据平面尚未接入；可以继续文献情景分析。');
     const queued = await longitudinal.enqueueDesign(study,item.row,study.userId);
@@ -2140,9 +2175,21 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
       // Parse before choosing a scope: a malformed syntax probe never creates a scientific task.
       if (operation === 'read') readRequest(body);
+      if (operation === 'simulate') simulateRequest(body);
       if (operation === 'write') {
         const parsed = writeRequest(body);
         const rows = parsed.items ?? (parsed.data ? [parsed.data] : []);
+        // A data intake is one typed action, never a list, and an unknown action or a field of another one is refused here.
+        if (parsed.what === 'data_intake') {
+          if (parsed.items) throw gatewayError(400, 'vcr_write_payload_invalid', 'Data intake uses one typed data action and a verified conversation.');
+          if (!dataIntakeShapeValid(parsed.data)) throw gatewayError(400, 'vcr_intake_payload_invalid', 'Select a current owned upload with its returned generation and SHA-256; runtime files are not original patient sources.');
+        }
+        // A write whose every item is refused on its shape alone answers with those refusals and opens no scope.
+        const refused = await shapeRefusals(parsed.what, rows);
+        if (refused) {
+          sendJson(res, 200, { data: { what: parsed.what, ok: false, ids: [], issues: refused } });
+          return;
+        }
         const emptyProbe = parsed.what === 'patient_set' && rows.length && rows.every(raw => { const row = object(raw); return !row.populationId && !row.modelId && !Object.keys(object(row.scenario)).length; })
           || parsed.what === 'decision' && rows.length && rows.every(raw => { const row = object(raw); return !Object.keys(object(row.chosen)).length || !String(row.rationale ?? '').trim(); });
         if (emptyProbe) {

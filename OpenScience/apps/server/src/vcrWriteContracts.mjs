@@ -222,6 +222,34 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "section",
     "template",
     "text"
+  ],
+  "history": [
+    "snapshotId",
+    "asOf",
+    "mappings",
+    "split",
+    "priorHistoryId",
+    "includeClinicalFacts",
+    "perturbation"
+  ],
+  "trial_benchmark": [
+    "model",
+    "comparisons",
+    "split",
+    "trainingOverlap",
+    "sourceFile"
+  ],
+  "forecast_design": [
+    "predictionId",
+    "controlPredictionId",
+    "horizonDays",
+    "allocation",
+    "alpha",
+    "power",
+    "prognosticEvaluationId",
+    "randomizationAt",
+    "lambda",
+    "gamma"
   ]
 });
 
@@ -230,6 +258,11 @@ export function vcrWriteContracts(kind = null) {
   const contracts = Object.fromEntries(Object.entries(VCR_WRITE_FIELDS).map(([what, fields]) => [what, { fields, additionalProperties: false }]));
   Object.assign(contracts, {
     fact: { ...contracts.fact, rule: FACT_EVIDENCE_RULE },
+    // One typed action object in `data`, never `items`: the fields are the union of the actions' own, which are the intake adapter's
+    // (`VCR_DATA_INTAKE_CONTRACT.actions`) and so cannot drift from what it accepts.
+    data_intake: { fields: [...new Set(Object.values(VCR_DATA_INTAKE_CONTRACT.actions).flat())], actions: VCR_DATA_INTAKE_CONTRACT.actions,
+      envelope: 'data is one object whose action names its fields; items is refused', additionalProperties: false,
+      detail: 'dataIntake in this read gives each action\'s required fields and the sequence' },
     task_context: { fields: [], required: [], creates: 'owned hidden conversation scope only' },
     patient_context: { fields: ['messageSeq', 'sourceId'], oneOf: ['authenticated human message sequence', 'owned uploaded source id'], automatedMessages: 'never admitted as human' },
     patient_set: { ...contracts.patient_set, anyOf: ['nonempty scenario', 'populationId', 'modelId'], scenario: 'when supplied, use vcr_simulate action=shape kind=generate_patients or supported variant gives exact keys' },
@@ -244,7 +277,7 @@ export function vcrWriteContracts(kind = null) {
 /** Schema literals only. This entry never reads a store or adopts arbitrary package output. */
 export function vcrContractsRead(kind = null) {
   return { what: 'contracts', schemaOnly: true, available: true,
-    writes: kind === 'data_intake' ? {} : vcrWriteContracts(kind), dataIntake: VCR_DATA_INTAKE_CONTRACT,
+    writes: vcrWriteContracts(kind), dataIntake: VCR_DATA_INTAKE_CONTRACT,
     requirementGrammar: VCR_REQUIREMENT_CONTRACT, factContract: CLINICAL_FACT_CONTRACT,
     writeEnvelope: { single: { what: '<kind>', data: '<one object>' }, batch: { what: '<kind>', items: ['<object>'] },
       rule: 'items is top level, never nested inside data. Read these schemas rather than issuing probe writes.' },

@@ -1223,3 +1223,73 @@ test('native model calculations require the exact immutable string model version
  const stale=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:'1.0.1'}),stale);assert.equal(stale.status,409);assert.equal(stale.json().code,'vcr_model_version_changed');
  const invalid=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:1}),invalid);assert.equal(invalid.status,400);
 });
+
+// ---------------------------------------------------------------------------
+// A write refused on its shape creates nothing: no hidden task study for a probe of the syntax
+// ---------------------------------------------------------------------------
+
+/** A native call: the proof resolves to a conversation of the study's project that the study does not yet own, so a scope would be made. */
+function nativeProbe() {
+  /** @type {any[]} */
+  const scopes = [];
+  const made = fixture();
+  made.vcr.store.taskContext = async (/** @type {any} */ origin, /** @type {any} */ options) => { scopes.push([origin.rootSessionId, options]); return { id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId }; };
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }) });
+  /** @param {string} operation @param {Record<string, any>} body */
+  const call = async (operation, body) => {
+    const res = response();
+    await handler(request(`/internal/vcr/v1/${operation}`, body, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    return res;
+  };
+  return { scopes, call };
+}
+
+test("a write that will be refused on its shape alone opens no scope; one that can be written still does", async () => {
+  const probe = nativeProbe();
+  const criterion = { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } };
+  for (const body of [
+    { what: "trial_scenario", data: { label: "x", notAField: 1 } },
+    { what: "history", data: { snapshotId: "a".repeat(64), mappings: [], bogus: true } },
+    { what: "trial_benchmark", data: { unknown: 1 } },
+    { what: "forecast_design", items: [{ predictionId: "p", extra: 1 }, "not an object"] },
+    { what: "fact", items: [{ subjectKey: "P-1", engineOutput: 1 }] },
+    { what: "protocol", data: { title: "t", criteria: [{ ...criterion, requirement: { op: "compare", variable: "age", comparator: "ge", value: 18 } }] } },
+    { what: "criteria", items: [{ ...criterion, kind: "maybe" }] },
+    { what: "criteria", data: { criteria: [] } },
+  ]) {
+    const res = await probe.call("write", body);
+    assert.equal(res.status, 200, JSON.stringify(body));
+    const data = res.json().data;
+    assert.equal(data.ok, false, JSON.stringify(body));
+    assert.deepEqual(data.ids, [], JSON.stringify(body));
+    assert.ok(data.issues.length >= 1, `the refusal is named: ${JSON.stringify(body)}`);
+  }
+  // The refusals are the writers' own words: the closed list names the field it refused.
+  const named = (await probe.call("write", { what: "trial_scenario", data: { label: "x", notAField: 1 } })).json().data.issues[0];
+  assert.deepEqual([named.field, named.code], ["notAField", "vcr_write_field_forbidden"]);
+  const grammar = (await probe.call("write", { what: "protocol", data: { criteria: [{ ...criterion, requirement: { op: "compare", variable: "age", comparator: "ge", value: 18 } }] } })).json().data.issues[0];
+  assert.deepEqual([grammar.field, grammar.code], ["criteria[0].requirement", "vcr_criterion_malformed"]);
+  // A data intake is one typed action: an unknown action, a field of another action, or a list is refused with its status, and nothing is opened.
+  for (const body of [
+    { what: "data_intake", data: { action: "teleport", sourceId: "src_1" } },
+    { what: "data_intake", data: { action: "confirm_map", sourceId: "src_1", hash: "h", columns: [] } },
+    { what: "data_intake", data: { action: "constructor", sourceId: "src_1" } },
+    { what: "data_intake", data: {} },
+    { what: "data_intake", items: [{ action: "freeze", sourceId: "src_1", hash: "h" }] },
+  ]) {
+    const res = await probe.call("write", body);
+    assert.equal(res.status, 400, JSON.stringify(body));
+    assert.match(res.json().code, /^vcr_(intake|write)_payload_invalid$/);
+  }
+  // A simulation that cannot be started on its shape opens none either.
+  const refusedStart = await probe.call("simulate", { action: "start", kind: "not_a_kind" });
+  assert.equal(refusedStart.status, 400);
+  assert.deepEqual(probe.scopes, [], "none of the refused calls opened a hidden task");
+
+  // Controls: a write with an item that can be written reaches the writer, and so the scope.
+  const mixed = await probe.call("write", { what: "trial_scenario", items: [{ label: "x", notAField: 1 }, { label: "y", design: { kind: "two_arm_fixed" } }] });
+  assert.equal(mixed.status, 200, mixed.body);
+  assert.equal(probe.scopes.length, 1, "a batch with one writable item is written, so it has its scope");
+  assert.ok(mixed.json().data.issues.some((/** @type {any} */ found) => found.index === 0 && found.code === "vcr_write_field_forbidden"), "and the refused item is still named");
+});

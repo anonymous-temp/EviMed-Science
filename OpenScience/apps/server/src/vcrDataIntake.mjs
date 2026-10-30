@@ -15,6 +15,17 @@ const ACTION_FIELDS = Object.freeze({
   confirm_map: ['action', 'sourceId', 'hash'],
   freeze: ['action', 'sourceId', 'hash', 'asOf'],
 });
+/**
+ * Whether a data_intake payload has the shape of one typed action: a known action and only that action's fields. Nothing is read or
+ * created to decide it, so the gateway asks it before it opens a scope for the call (a refused shape creates no hidden task).
+ * @param {unknown} input @returns {boolean}
+ */
+export function dataIntakeShapeValid(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const action = /** @type {Record<string, unknown>} */ (input).action;
+  return typeof action === 'string' && Object.hasOwn(ACTION_FIELDS, action)
+    && Object.keys(input).every(key => /** @type {readonly string[]} */ (ACTION_FIELDS[/** @type {keyof typeof ACTION_FIELDS} */ (action)]).includes(key));
+}
 export const VCR_DATA_INTAKE_CONTRACT = Object.freeze({
   actions: ACTION_FIELDS,
   import: { required: ['action', 'sourceId', 'generation', 'sha256'], formats: ['csv', 'tsv', 'json', 'xlsx'], maxBytes: 32 * 1024 * 1024,
@@ -51,8 +62,7 @@ export function createVcrDataIntake({ store, dataStore, dataPlane, sources, reso
   };
   const intake = async (study, input, origin) => {
     if (!origin || !study || origin.userId !== study.userId || origin.projectId !== study.projectId
-      || !input || typeof input !== 'object' || Array.isArray(input) || !ACTION_FIELDS[input.action]
-      || Object.keys(input).some(key => !ACTION_FIELDS[input.action].includes(key))) throw fail('vcr_intake_payload_invalid');
+      || !dataIntakeShapeValid(input)) throw fail('vcr_intake_payload_invalid');
     if (typeof input.sourceId !== 'string' || !input.sourceId) throw fail();
     if (['import', 'import_documents'].includes(input.action)) {
       const source = await permitted(origin, input.sourceId);
