@@ -41,6 +41,20 @@ function snapshotOfInputId(id) {
 }
 
 /**
+ * The table inputs of a stored execution as its readers hold them: what was read (`kind`, `id`) and where it sat (`location`). The
+ * location is what tells a snapshot's table from a derived one, whose id (`<result id>:<table>`) reads like a snapshot's: without it
+ * a computation that read the control plane's own derived table beside the population's snapshot would be taken to have read a
+ * second snapshot, and a valid result would be hidden from its population. Nothing but the three fields is kept.
+ * @param {unknown} inputs the execution's recorded inputs
+ * @returns {Array<{ kind: string, id: string, location?: string }>}
+ */
+export function vcrExecutionInputs(inputs) {
+  return list(inputs)
+    .filter((input) => ["analysis_table", "snapshot_file"].includes(input?.kind) && typeof input.id === "string")
+    .map((input) => ({ kind: input.kind, id: input.id, ...(typeof input.location === "string" ? { location: input.location } : {}) }));
+}
+
+/**
  * The snapshots a list of inputs reads, sorted and without repeats.
  * @param {unknown} inputs requested (`{ kind: "snapshot", id }`) or resolved (`analysis_table` / `snapshot_file`) entries
  * @returns {string[]}

@@ -8,7 +8,7 @@ import test from "node:test";
 import { VcrJobs } from "../src/vcrJobs.mjs";
 import { presentResearchProgress } from "../src/vcrResearchProgress.mjs";
 import {
-  VCR_COHORT_BINDING_CODE, vcrCohortBinding, vcrCohortInputIssue, vcrPopulationsWithOwnResults, vcrSnapshotIdsOf,
+  VCR_COHORT_BINDING_CODE, vcrCohortBinding, vcrCohortInputIssue, vcrExecutionInputs, vcrPopulationsWithOwnResults, vcrSnapshotIdsOf,
 } from "../src/vcrSnapshotBinding.mjs";
 import { prepareVcrSubjectPopulation, resolveJobSubject } from "../src/vcrSubjects.mjs";
 
@@ -157,4 +157,27 @@ test("a result with no recorded execution is not guessed to be another snapshot'
   const bundle = study();
   const [kept] = vcrPopulationsWithOwnResults(bundle.populations, bundle.allResults, new Map());
   assert.equal(kept.resultId, "res_pop");
+});
+
+// The service reads an execution's inputs from its row and keeps only what a reader needs. A derived table's input id
+// (`<result id>:<table>`) reads like a snapshot's, so dropping the location made a valid result look like it had read a second snapshot.
+test("an execution keeps where each input sat, so a derived table beside the population's snapshot is not taken for another snapshot", () => {
+  const derived = { kind: "snapshot_file", id: "res_9:population", location: "derived/study_1/job_1/population.csv", hash: "d".repeat(64), valueSource: "synthetic" };
+  const stored = [table(A), derived, { kind: "reference", id: "asm_1" }, { kind: "analysis_table", id: 5 }];
+  const kept = vcrExecutionInputs(stored);
+  assert.deepEqual(kept, [
+    { kind: "analysis_table", id: `${A}:subject`, location: `snapshots/${A}/subject.csv` },
+    { kind: "snapshot_file", id: "res_9:population", location: "derived/study_1/job_1/population.csv" },
+  ], "table inputs only, with their kind, id and location and nothing else (no hash, no value source)");
+  assert.deepEqual(vcrSnapshotIdsOf(kept), [A], "the derived table names no snapshot");
+  // a stored row from before the location was recorded still reads
+  assert.deepEqual(vcrExecutionInputs([{ kind: "analysis_table", id: `${A}:subject` }]), [{ kind: "analysis_table", id: `${A}:subject` }]);
+  assert.deepEqual(vcrExecutionInputs(null), []);
+  // the result is kept on its population
+  const results = [{ id: "res_pop", executionId: "ex_cohort", kind: "population", subjectId: "pop_a" }];
+  const executions = new Map([["ex_cohort", { method: "cohort.build", inputs: kept }]]);
+  assert.equal(vcrPopulationsWithOwnResults([population()], results, executions)[0].resultId, "res_pop", "a valid result is not hidden");
+  // and without the location (as the service used to hold it) the same result was hidden
+  const stripped = new Map([["ex_cohort", { method: "cohort.build", inputs: kept.map(({ kind, id }) => ({ kind, id })) }]]);
+  assert.equal(vcrPopulationsWithOwnResults([population()], results, stripped)[0].resultId, null);
 });
