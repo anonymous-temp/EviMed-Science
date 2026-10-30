@@ -59,6 +59,7 @@ import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
 import { dominatedScenarioMap, numeric, withReviewState, zhUnit } from "./vcrViewsKit.mjs";
+import { vcrPopulationsWithOwnResults } from "./vcrSnapshotBinding.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
 import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
@@ -992,7 +993,7 @@ export class VcrService {
   async #bundle(study, user, tab = "overview", query = {}) {
     const wants = tab === "overview" || tab === "trial" || tab === "comparator";
     const [definition, results, allResults, stale, reviews, jobs, budget, assumptions, members, exports, decisions, roles,
-      scenarios, comparators, populations, patientSets, grid, forecasts, models, executions, protocol, jobMarks] = await Promise.all([
+      scenarios, comparators, loadedPopulations, patientSets, grid, forecasts, models, executions, protocol, jobMarks] = await Promise.all([
       this.store.latestDefinition(study.id),
       this.store.results(study.id),
       this.store.allResults(study.id),
@@ -1017,6 +1018,8 @@ export class VcrService {
       // Why an object is not being computed (a refusal recorded before any job was queued).
       this.store.rows(`SELECT key, state, detail FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'job' AND state = 'failed'`, [study.id]),
     ]);
+    // A real population has the results computed on its own snapshot and no other: one filed under it from another snapshot is history.
+    const populations = await this.#ownPopulationResults(study.id, loadedPopulations, allResults, executions);
     // The protocol's visit schedule and the study's regulatory contacts: read for the trial tab and the package, which print them.
     const [schedule, regulatory] = tab === "trial"
       ? await Promise.all([this.store.latestSchedule?.(study.id) ?? null, this.store.regulatoryContacts?.(study.id) ?? []]) : [null, []];
@@ -1148,10 +1151,16 @@ export class VcrService {
     return this.store.personNames(ids).catch(() => null);
   }
 
-  /** What each finished job ran: method, version, seed, replicates, cost. @param {string} studyId */
-  async #executions(studyId) {
-    const rows = await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
-      FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]);
+  /**
+   * What each finished job ran: method, version, seed, replicates, cost. The newest 200 of the study, or exactly the ones named.
+   * @param {string} studyId @param {string[] | null} [ids]
+   */
+  async #executions(studyId, ids = null) {
+    const rows = ids
+      ? await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
+          FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 AND id = ANY($2::text[])`, [studyId, ids])
+      : await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
+          FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]);
     return new Map(rows.map((row) => [String(row.id), {
       id: String(row.id), jobId: String(row.job_id), inputs: list(row.inputs)
         .filter(input => ['analysis_table', 'snapshot_file'].includes(input?.kind) && typeof input.id === 'string')
@@ -1160,6 +1169,27 @@ export class VcrService {
       replicates: row.replicates == null ? null : Number(row.replicates), cpuSeconds: numeric(row.cpu_seconds),
       finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
     }]));
+  }
+
+  /**
+   * The populations with only the results computed on their own snapshot (`vcrPopulationsWithOwnResults`). The executions a result
+   * names are read when the caller does not hold them, so a result older than the newest 200 is judged by what it read too.
+   * @param {string} studyId @param {any[]} populations @param {any[]} known results the caller already holds
+   * @param {Map<string, any> | null} [executions] the caller's map, completed in place
+   */
+  async #ownPopulationResults(studyId, populations, known, executions = null) {
+    const real = populations.filter(row => row.kind === "real" && row.resultId);
+    if (!real.length) return populations;
+    const results = [...known];
+    for (const population of real) {
+      if (results.some(row => row.id === population.resultId)) continue;
+      const found = await this.store.result(studyId, String(population.resultId)).catch(() => null);
+      if (found) results.push(found);
+    }
+    const held = executions ?? new Map();
+    const missing = [...new Set(results.filter(row => real.some(population => population.resultId === row.id)).map(row => row.executionId).filter(id => id && !held.has(id)))];
+    if (missing.length) for (const [id, execution] of await this.#executions(studyId, missing)) held.set(id, execution);
+    return vcrPopulationsWithOwnResults(populations, results, held);
   }
 
   /**
@@ -1219,7 +1249,10 @@ export class VcrService {
       // A subject whose consent was withdrawn is listed with their evaluation, as withdrawn, and is not counted among the candidates.
       matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l
         WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) GROUP BY summary`, matchingArgs).catch(() => []),
-      matchStore.rows(`SELECT * FROM (${latest}) l WHERE summary <> 'ineligible' ORDER BY subject_key LIMIT 200`, matchingArgs).catch(() => []),
+      // Everyone who has been assessed is a person on the page, the ones judged not eligible too: their rule-by-rule judgement is what
+      // says which rule failed and on what evidence. Those still in play come first, so the cap cuts the not-eligible ones.
+      matchStore.rows(`SELECT * FROM (${latest}) l ORDER BY CASE summary WHEN 'eligible' THEN 0 WHEN 'insufficient_evidence' THEN 1
+        WHEN 'pending' THEN 2 ELSE 3 END, subject_key LIMIT 200`, matchingArgs).catch(() => []),
       matchStore.rows(`SELECT j.criterion_id, count(*)::int AS unknown FROM ${VCR_SCHEMA}.criterion_judgments j
         WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, matchingArgs).catch(() => []),
       // Excluded on a model's word alone: they wait in 「待复核排除」, so the
@@ -1229,6 +1262,10 @@ export class VcrService {
         AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable
           AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, matchingArgs).catch(() => []),
     ]);
+    // A person asked for by name who the cap left out is still read: the page opens whoever it is told to, not the first 200.
+    if (query.candidate && !subjectRows.some((row) => String(row.subject_key) === query.candidate)) {
+      subjectRows.push(...await matchStore.rows(`SELECT * FROM (${latest}) l WHERE subject_key = $3`, [...matchingArgs, query.candidate]).catch(() => []));
+    }
     // What the evaluation rested on, when that has since changed (a document, a projection, a permission) or was withdrawn: a plain
     // state beside the subject, and the evaluation that already exists offered again. Nothing is blocked and nothing re-runs.
     const marks = await this.packages.erasure?.assessmentMarks?.(study.id, subjectRows.map((row) => String(row.id))).catch(() => new Map()) ?? new Map();
@@ -1239,9 +1276,9 @@ export class VcrService {
     }));
     const wanted = subjects.map((subject) => subject.id);
     const openRows = wanted.length
-      ? await matchStore.rows(`SELECT j.assessment_id, j.criterion_id, j.state, j.recheck_at FROM ${VCR_SCHEMA}.criterion_judgments j
+      ? await matchStore.rows(`SELECT j.assessment_id, j.criterion_id, COALESCE(j.override_state, j.state) AS state, j.recheck_at FROM ${VCR_SCHEMA}.criterion_judgments j
           JOIN ${VCR_SCHEMA}.criteria c ON c.id = j.criterion_id
-          WHERE j.assessment_id = ANY($1::text[]) AND j.applicable AND j.state IN ('unknown', 'pending_recheck')
+          WHERE j.assessment_id = ANY($1::text[]) AND j.applicable AND COALESCE(j.override_state, j.state) IN ('unknown', 'pending_recheck', 'not_satisfied')
           ORDER BY j.assessment_id, c.ordinal`, [wanted]).catch(() => [])
       : [];
     /** @type {Map<string, Array<{ criterionId: string, state: string, recheckAt: string | null }>>} */
@@ -1252,7 +1289,7 @@ export class VcrService {
       openByAssessment.set(String(row.assessment_id), list_);
     }
     // The candidate the detail panel is about: the one asked for, else the first listed.
-    const order = ["eligible", "insufficient_evidence", "pending"];
+    const order = ["eligible", "insufficient_evidence", "pending", "ineligible"];
     const listed = [...subjects].sort((a, b) => order.indexOf(a.summary) - order.indexOf(b.summary)
       || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0) || a.subjectKey.localeCompare(b.subjectKey));
     const focus = listed.find((subject) => subject.subjectKey === query.candidate) ?? listed[0] ?? null;
@@ -1684,7 +1721,7 @@ export class VcrService {
           curveReceipts: evidence.curves ? await evidence.curves.receipts({ studyId: study.id, principal: study.userId }) : [] };
       }
       case "population": {
-        const populations = await this.store.populations(study.id, limit);
+        const populations = await this.#ownPopulationResults(study.id, await this.store.populations(study.id, limit), []);
         return { populations: populations.map((population) => ({ ...population, counts: vcrCountBand(population.counts) })) };
       }
       case "patients": {

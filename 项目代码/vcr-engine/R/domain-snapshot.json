@@ -1827,7 +1827,7 @@
         },
         "m": {
           "t": "integer",
-          "min": 1,
+          "min": 5,
           "max": 50,
           "default": 5
         },

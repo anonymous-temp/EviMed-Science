@@ -23,6 +23,12 @@ describe("VcrResearchProgress", () => {
     draw({ ...progress, input: "missing", calculation: "failed" }); expect(screen.getByText("计算未完成")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回研究对话" })).toBeInTheDocument();
   });
+  it("says a result computed on another snapshot is not counted, and draws no count for it", () => {
+    draw({ ...progress, counts: { ...progress.counts, realPatients: null }, resultNotCounted: { reason: "other_snapshot", resultId: "r1", snapshotIds: ["a", "b", "c"] } });
+    expect(screen.getByText("尚无计算结果")).toBeInTheDocument();
+    expect(screen.getByText(/未计入：它不是在这个人群的数据快照上算的/)).toBeInTheDocument();
+    expect(screen.queryByText("结果真实患者")).not.toBeInTheDocument();
+  });
   it("does not call stale results current", () => {
     draw({ ...progress, calculation: "stale" }); expect(screen.getByText("结果已过期，需重新计算")).toBeInTheDocument();
   });

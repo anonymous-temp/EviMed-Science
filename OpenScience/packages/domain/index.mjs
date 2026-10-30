@@ -2028,6 +2028,19 @@ export {
   vcrTimeUnitPeriodsPerYear,
 } from './src/vcrTimeUnits.mjs'
 
+// vcrSynthesisLimits — what an empirical synthesis can finish inside a job's CPU budget (a measured cost model) and the sentence that
+// names what to change when it cannot; the copies the engine makes (at least five)
+export {
+  VCR_ENGINE_CPU_CEILING_SECONDS,
+  VCR_ENGINE_CPU_STOP_SHARE,
+  VCR_SYNTHPOP_COPIES,
+  VCR_SYNTHPOP_COST,
+  vcrSynthpopBudgetSeconds,
+  vcrSynthpopEstimateSeconds,
+  vcrSynthpopFeasibility,
+  vcrSynthpopHelpNotes,
+} from './src/vcrSynthesisLimits.mjs'
+
 // vcrSchedule — a protocol's schedule of activities and a study's regulatory-contact log: the limits of both, what a schedule adds
 // up to, the visit times a virtual-patient trajectory may take from it and how a day and a window read
 export {

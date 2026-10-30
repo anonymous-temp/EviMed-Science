@@ -611,15 +611,20 @@ export function engineColumnSources(columnSources, columns, valueSource) {
   return named > 0 && named <= VCR_COLUMN_SOURCE_LIMITS.maxColumns ? out : null;
 }
 
-/** A frozen event table has one unit only when every outcome-time mapping agrees.
- * @param {any} table @param {any[]} entries
+/** A frozen event table has one unit only when every outcome-time mapping agrees. An analysis that names its parameter
+ * (`parameterCode`) reads that parameter's rows only, so it is decided by that parameter's mapping alone: overall survival in months
+ * beside progression-free survival in days is no conflict for an analysis of one of them. Without a parameter, or when the one named
+ * is not mapped, every mapping decides, as before.
+ * @param {any} table @param {any[]} entries @param {string | null} [parameterCode]
  * @returns {{ unit: string | null, conflict: boolean }}
  */
-export function engineEventTimeUnit(table, entries) {
+export function engineEventTimeUnit(table, entries, parameterCode = null) {
   if (table.shape !== "events") return { unit: null, conflict: false };
   const mapped = table.derivedFrom?.columns ?? [];
-  const mappings = entries.filter(entry => entry.role === "outcome_time" && (table.derivedFrom?.files ?? []).includes(entry.table)
+  const all = entries.filter(entry => entry.role === "outcome_time" && (table.derivedFrom?.files ?? []).includes(entry.table)
     && mapped.some(column => column.name === "AVAL" && column.source === entry.column));
+  const own = parameterCode ? all.filter(entry => String(entry.parameter ?? "") === parameterCode) : [];
+  const mappings = own.length ? own : all;
   const units = mappings.map(entry => vcrTimeUnitOf(entry.unit));
   const known = [...new Set(units.filter(Boolean))];
   const unsupported = mappings.some(entry => typeof entry.unit === "string" && entry.unit.trim() && !vcrTimeUnitOf(entry.unit));
@@ -2919,7 +2924,7 @@ export class VcrDataPlane {
    *
    * @param {{ studyId: string, snapshotId: string, principal: string, purpose?: string | null, fields?: string[] | null,
    *   kind?: string | null, jobKind?: string | null, method?: string | null, endpointType?: string | null,
-   *   include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
+   *   parameterCode?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
    * @returns {Promise<{ snapshotId: string,
    *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[],
    *   withheld: { id: string, kind: string, shape?: string, reason: string, fields: string[] }[],
@@ -3009,7 +3014,7 @@ export class VcrDataPlane {
       if (!missing.length) {
         // Only the frozen outcome-time mappings can supply the unit of AVAL.
         // A single input-level unit is safe only when every mapped parameter agrees.
-        const unitDecision = engineEventTimeUnit(table, entries);
+        const unitDecision = engineEventTimeUnit(table, entries, typeof input.parameterCode === "string" && input.parameterCode ? input.parameterCode : null);
         if (unitDecision.conflict && ["comparator.rmst", "comparator.entropy_balance", "comparator.propensity_weight", "comparator.weighted_cox", "comparator.covariate_sets", "comparator.maic_time_to_event"].includes(method))
           throw refuse(422, VCR_DATA_PLANE_CODES.analysisTableInvalid, "Mapped event time columns have inconsistent or partially missing units; resolve them before this analysis.");
         const timeUnit = unitDecision.unit;

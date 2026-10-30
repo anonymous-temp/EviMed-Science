@@ -341,9 +341,15 @@
     },
     "population.synthpop": {
       "endpoints": [],
+      "notes": [
+        "m is the number of synthetic copies, 5 to 50: fewer than 5 cannot support inference on synthetic data and the engine refuses them. Every copy costs the same again.",
+        "Size limit. The copies and their quality scores are made in one R process whose CPU budget is the job's cpuSecondsLimit (the platform's default is 600 s, of which 90% can be used); a job that reaches it fails with no table and no copy kept. The cost grows with the square of the columns for the copies, with the fourth power for the quality score (a logistic model of every pair of columns) and with the square of the rows for its nearest-neighbour check, so a wide table is the expensive one, not a long one. The queue estimates the CPU seconds from the table it will read (rows × columns × m, the subject key not counted) and refuses before queueing a synthesis estimated, with a 1.35× margin, to exceed the budget.",
+        "At the default budget and 5 copies the model allows about 41 columns at 1,000 rows, 35 at 4,000 and 13 at 12,000. The estimate is for numeric, count and 0/1 columns; a text column with many levels costs more.",
+        "A refusal names what to change: fewer columns (keep only the variables the analysis needs when the field map is built, then freeze a new snapshot), fewer rows (a smaller snapshot), fewer copies down to the minimum, or the job's cpuSecondsLimit where the platform allows more. The engine does not sample rows and does not drop columns, and neither does the queue."
+      ],
       "rows": [
         {"path":"holdoutShare","type":"number","min":0,"lt":1,"default":0.2},
-        {"path":"m","type":"integer","min":1,"max":50,"default":5},
+        {"path":"m","type":"integer","min":5,"max":50,"default":5},
         {"path":"constraints","type":"rules"},
         {"path":"criteria","type":"rules"},
         {"path":"analyses","type":"list","count":{"min":1,"max":20},"items":{"type":"object"}},
@@ -1036,6 +1042,9 @@
     },
     "comparator.entropy_balance": {
       "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+      ],
       "rows": [
         {"path":"covariates","type":"list","count":{"min":1,"max":100},"items":{"type":"string","maxLength":64,"role":"column"},"unique":true,"required":true},
         {"path":"treatmentColumn","type":"string","maxLength":64,"role":"column","default":"arm"},
@@ -1059,6 +1068,9 @@
     },
     "comparator.propensity_weight": {
       "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+      ],
       "rows": [
         {"path":"covariates","type":"list","count":{"min":1,"max":100},"items":{"type":"string","maxLength":64,"role":"column"},"unique":true,"required":true},
         {"path":"treatmentColumn","type":"string","maxLength":64,"role":"column","default":"arm"},
@@ -1081,6 +1093,9 @@
     },
     "comparator.rmst": {
       "endpoints": ["time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+      ],
       "rows": [
         {"path":"tau","type":"number","gt":0,"unit":"time units","required":true},
         {"path":"treatmentColumn","type":"string","maxLength":64,"role":"column","default":"arm"},
@@ -2437,6 +2452,9 @@
     },
     "comparator.weighted_cox": {
       "endpoints": ["time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+      ],
       "rows": [
         {"path":"covariates","type":"list","count":{"min":1,"max":100},"items":{"type":"string","maxLength":64,"role":"column"},"unique":true,"required":true},
         {"path":"treatmentColumn","type":"string","maxLength":64,"role":"column","default":"arm"},
@@ -2475,6 +2493,9 @@
     },
     "comparator.maic_time_to_event": {
       "endpoints": ["time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+      ],
       "rows": [
         {"path":"covariates","type":"list","count":{"min":1,"max":100},"items":{"type":"string","maxLength":64,"role":"column"},"unique":true,"required":true},
         {"path":"targets","type":"map","of":{"type":"number"},"keysFrom":"covariates","count":{"min":1,"max":100},"required":true},
@@ -2539,6 +2560,9 @@
     },
     "comparator.covariate_sets": {
       "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+      ],
       "rows": [
         {"path":"analysis","type":"string","values":["entropy_balance","propensity","aipw"],"default":"entropy_balance"},
         {"path":"covariateSets","type":"list","count":{"min":2,"max":8},"items":{"type":"object"},"required":true},
@@ -2625,6 +2649,9 @@
     },
     "comparator.tipping_point": {
       "endpoints": ["binary","time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years (the usual spellings are written as these when the job is queued; text that names no unit is refused before queueing); months when none is stated. It labels the horizon and the times in the result; nothing is converted."
+      ],
       "rows": [
         {"path":"endpoint","type":"object","required":true},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true},
@@ -2751,6 +2778,9 @@
     },
     "comparator.prognostic_adjustment": {
       "endpoints": ["binary","time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years (the usual spellings are written as these when the job is queued; text that names no unit is refused before queueing); months when none is stated. It labels the horizon and the times in the result; nothing is converted."
+      ],
       "rows": [
         {"path":"endpoint","type":"object","required":true},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true},

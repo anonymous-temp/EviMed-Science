@@ -1235,6 +1235,8 @@ const WRITERS = {
     }
     const snapshotId = item.row.snapshotId == null ? null : String(item.row.snapshotId);
     if (snapshotId) await item.owned("snapshotId", "snapshot", snapshotId);
+    // A real population is its rules on one frozen snapshot; without the snapshot nothing says where its cohort is computed.
+    else if (kind === "real") item.bad("snapshotId", "kind real 的人群要写 snapshotId：它是这套入选规则所在的那份冻结数据快照（先用 vcr_read what=data_intake 读可用的）。");
     if (!item.ok) return null;
     const saved = await store.savePopulation({
       studyId: study.id, userId: study.userId, name, kind, definition, snapshotId, allowedUses: allowedUses.map(String),
@@ -2520,7 +2522,7 @@ async function startJob(vcr, study, request) {
     runId: study.executionOrigin?.runId ?? null,
     detail: { ...detail, ...(study.completionOrigin ? { conversationOrigin: study.completionOrigin } : {}) },
   }).catch(error => {
-    if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
+    if (error?.status === 400 && error.code !== "vcr_synthesis_too_large" && ['generate_population', 'literature_population', 'synthesize_population',
       'generate_patients', 'generate_patients_continuous', 'generate_patients_binary', 'generate_patients_longitudinal'].includes(request.kind)) {
       const refusal = gatewayError(400, 'vcr_simulate_payload_invalid', String(error.message));
       refusal.issues = fieldFindings(error.issues);

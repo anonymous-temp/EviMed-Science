@@ -498,7 +498,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
 
   'population.synthpop': object({
     holdoutShare: number({ min: 0, lt: 1, default: 0.2 }),
-    m: integer({ min: 1, max: 50, default: 5 }),
+    m: integer({ min: 5, max: 50, default: 5 }),
     constraints: { t: 'rules', allowEmpty: true },
     criteria: { t: 'rules', allowEmpty: true },
     analyses: ANALYSES,

@@ -240,6 +240,19 @@ describe("the 研究 view beside its preview", () => {
     expect(where()).toBe("/app/virtual-research");
   });
 
+  it("does not open the closed preview again on Back: closing replaces the entry that chose the study", async () => {
+    render(<MemoryRouter initialEntries={["/app/virtual-research"]}><VcrHomePage /><Where /><Back /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("link", { name: EV }));
+    expect(where()).toBe("/app/virtual-research?study=std_1");
+    const pane = screen.getByRole("region", { name: "研究预览" });
+    await userEvent.click(within(pane).getByRole("button", { name: "关闭预览" }));
+    expect(where()).toBe("/app/virtual-research");
+    // The entry that chose the study is gone, so Back is the page before this one (here, none: the router stays where it is).
+    await userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
+    expect(where()).toBe("/app/virtual-research");
+    expect(within(screen.getByRole("region", { name: "研究预览" })).queryByRole("button", { name: "关闭预览" })).toBeNull();
+  });
+
   it("leaves Escape to a field that has a use for it: the search box clears its words and the study stays chosen", async () => {
     drawHome("/app/virtual-research?study=std_1");
     const pane = await screen.findByRole("region", { name: "研究预览" });

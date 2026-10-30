@@ -1,0 +1,321 @@
+{
+  "view": "matching",
+  "available": true,
+  "protocols": [
+    {
+      "id": "prt_1",
+      "version": 1,
+      "title": "EV-201 方案 v1",
+      "sourceRef": null
+    }
+  ],
+  "protocolVersionId": "prt_1",
+  "candidateRoster": [],
+  "comparisons": [
+    {
+      "protocol": {
+        "id": "prt_1",
+        "version": 1,
+        "title": "EV-201 方案 v1",
+        "sourceRef": null
+      },
+      "summary": "ineligible",
+      "asOf": "2026-09-28T00:00:00.000Z",
+      "evidenceGaps": []
+    }
+  ],
+  "timeline": [],
+  "headline": "6 人已评估，2 人全部满足，2 人至少有 1 条未知或待复评。",
+  "partner": {
+    "name": null,
+    "candidates": 6,
+    "tier": "T0",
+    "snapshotAt": null
+  },
+  "direction": "trial_to_patient",
+  "directions": [
+    "trial_to_patient",
+    "patient_to_trial"
+  ],
+  "funnel": [
+    {
+      "key": "candidates",
+      "label": "已评估",
+      "count": 6,
+      "note": null,
+      "tone": "neutral"
+    },
+    {
+      "key": "insufficient",
+      "label": "可能符合 · 待补证",
+      "count": 2,
+      "note": null,
+      "tone": "attention"
+    },
+    {
+      "key": "eligible",
+      "label": "符合",
+      "count": 2,
+      "note": null,
+      "tone": "accent"
+    },
+    {
+      "key": "ineligible",
+      "label": "不符合",
+      "count": 2,
+      "note": null,
+      "tone": "neutral"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "P-0201",
+      "summary": "6 条满足 · 0 条未知 · 0 条待复评",
+      "eligibility": "eligible",
+      "open": [],
+      "priority": null
+    },
+    {
+      "id": "P-0207",
+      "summary": "6 条满足 · 0 条未知 · 0 条待复评",
+      "eligibility": "eligible",
+      "open": [],
+      "priority": null
+    },
+    {
+      "id": "P-0192",
+      "summary": "4 条满足 · 1 条未知 · 1 条待复评",
+      "eligibility": "insufficient_evidence",
+      "open": [
+        {
+          "code": "E1",
+          "state": "unknown",
+          "note": null
+        },
+        {
+          "code": "E2",
+          "state": "pending_recheck",
+          "note": "10 月 18 日 复评"
+        }
+      ],
+      "priority": {
+        "label": "临床优先级（不是获益概率）",
+        "score": 0.8,
+        "rationale": "ECOG 1，一线含铂后进展"
+      }
+    },
+    {
+      "id": "P-0233",
+      "summary": "3 条满足 · 3 条未知 · 0 条待复评",
+      "eligibility": "insufficient_evidence",
+      "open": [
+        {
+          "code": "I2",
+          "state": "unknown",
+          "note": null
+        },
+        {
+          "code": "E1",
+          "state": "unknown",
+          "note": null
+        },
+        {
+          "code": "E3",
+          "state": "unknown",
+          "note": null
+        }
+      ],
+      "priority": null
+    },
+    {
+      "id": "P-0240",
+      "summary": "5 条满足 · 0 条未知 · 0 条待复评 · 1 条不满足",
+      "eligibility": "ineligible",
+      "open": [],
+      "failed": [
+        {
+          "code": "I2",
+          "state": "not_satisfied"
+        }
+      ],
+      "priority": null
+    },
+    {
+      "id": "P-0251",
+      "summary": "5 条满足 · 0 条未知 · 0 条待复评 · 1 条不满足",
+      "eligibility": "ineligible",
+      "open": [],
+      "failed": [
+        {
+          "code": "I1",
+          "state": "not_satisfied"
+        }
+      ],
+      "priority": null
+    }
+  ],
+  "selected": {
+    "candidate": {
+      "id": "P-0240",
+      "summary": "5 条满足 · 0 条未知 · 0 条待复评 · 1 条不满足",
+      "eligibility": "ineligible",
+      "open": [],
+      "failed": [
+        {
+          "code": "I2",
+          "state": "not_satisfied"
+        }
+      ],
+      "priority": null
+    },
+    "assessmentId": "mas_3",
+    "facts": [
+      {
+        "label": "临床资格",
+        "value": "不符合",
+        "tone": "attention"
+      },
+      {
+        "label": "满足",
+        "value": "5",
+        "tone": "neutral"
+      },
+      {
+        "label": "未知",
+        "value": "0",
+        "tone": "neutral"
+      },
+      {
+        "label": "待复评",
+        "value": "0",
+        "tone": "neutral"
+      },
+      {
+        "label": "评估时点",
+        "value": "今天",
+        "tone": "neutral"
+      }
+    ],
+    "criteria": [
+      {
+        "criterionId": "crt_1",
+        "code": "I1",
+        "kind": "inclusion",
+        "text": "年龄 ≥ 18 岁",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": null,
+        "evidenceItems": [],
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "criterionId": "crt_2",
+        "code": "I2",
+        "kind": "inclusion",
+        "text": "ECOG 体能评分 0–1（近 4 周内）",
+        "state": "not_satisfied",
+        "applicable": true,
+        "evidence": null,
+        "evidenceItems": [],
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "criterionId": "crt_3",
+        "code": "I3",
+        "kind": "inclusion",
+        "text": "一线接受过含铂双药化疗，可联合 PD-1/PD-L1 抑制剂",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": null,
+        "evidenceItems": [],
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "criterionId": "crt_4",
+        "code": "E1",
+        "kind": "exclusion",
+        "text": "活动性脑转移",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": null,
+        "evidenceItems": [],
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "criterionId": "crt_5",
+        "code": "E2",
+        "kind": "exclusion",
+        "text": "末次免疫治疗距今不足 28 天",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": null,
+        "evidenceItems": [],
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "criterionId": "crt_6",
+        "code": "E3",
+        "kind": "exclusion",
+        "text": "妊娠或哺乳期",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": null,
+        "evidenceItems": [],
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      }
+    ],
+    "verdict": {
+      "text": "不符合：I2 不满足",
+      "note": null
+    },
+    "priority": null,
+    "reviewedBy": null,
+    "reviewedByName": null
+  },
+  "gaps": [
+    {
+      "code": "E1",
+      "label": "合并症",
+      "detail": "活动性脑转移",
+      "count": 2
+    },
+    {
+      "code": "I2",
+      "label": "体能状态",
+      "detail": "ECOG 体能评分 0–1（近 4 周内）",
+      "count": 1
+    },
+    {
+      "code": "E3",
+      "label": "妊娠",
+      "detail": "妊娠或哺乳期",
+      "count": 1
+    }
+  ],
+  "pendingReview": null,
+  "protocol": {
+    "version": 1,
+    "title": "EV-201 方案 v1"
+  },
+  "counts": {
+    "scope": null
+  }
+}

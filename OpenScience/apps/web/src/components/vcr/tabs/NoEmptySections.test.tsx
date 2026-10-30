@@ -194,7 +194,8 @@ describe("no title over an empty box", () => {
     const raw = fixture("ev201/matching.json");
     // The study keeps its protocol version (the fixture's own): a protocol with nothing evaluated yet is the case this guards, and
     // clearing `protocols` in the fixture, as 2026-10-10 did to keep the test green, removed the case instead of the toolbar.
-    Object.assign(raw, { selected: null, timeline: [], candidateRoster: ["P-0201"], candidates: [], comparisons: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+    // Nothing judged means no tally either: a funnel with people in it is a study that has results, whatever the list shows.
+    Object.assign(raw, { selected: null, timeline: [], candidateRoster: ["P-0201"], candidates: [], funnel: [], comparisons: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
     expect(raw.protocols).toHaveLength(1);
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/matching`]: raw });
     const view = await drawTab(<MatchingTab studyId={STUDY_ID} study={study((rawStudy) => { rawStudy.steps.matching = { status: "none", requested: false }; })} />);

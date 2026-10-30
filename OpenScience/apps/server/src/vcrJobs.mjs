@@ -1,4 +1,4 @@
-import { vcrTimeUnitOf } from "@evimed/domain";
+import { VCR_TIME_UNITS, vcrTimeUnitOf } from "@evimed/domain";
 import { maintenanceAllowsClaims } from "./maintenanceService.mjs";
 import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
 // What a study's compute budget holds a job back for. Three things are counted and a fourth is not:
@@ -137,6 +137,8 @@ import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
 import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues, vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
+import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
+import { vcrSynthesisIssue } from "./vcrSynthesisGuard.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
 /** States a job may still move out of. */
@@ -493,6 +495,51 @@ export function vcrBindScientificInputUnits(method, scenario, inputs) {
   return { scenario: { ...scenario, inputUnits: bound }, detail: { basis: "frozen_snapshot_field_map", columns: bound, conversion: "none" } };
 }
 
+/**
+ * The unit a comparator scenario states, in the engine's four words. The scenario schema takes any text of up to 20 characters (jobs
+ * saved at method version 1.0.0 carry whatever their author wrote and replay as they were), but the engine of version 1.1 reads only
+ * `days`, `weeks`, `months` and `years` and aborts on anything else: `day`, `Days` and `天` passed here and failed there. The closed
+ * spellings (`vcrTimeUnitOf`) are written as the unit they name, before the scenario is hashed, so the same request is the same job
+ * in whichever spelling; text that names no unit is refused before queueing, with the four words.
+ * @param {string} method @param {Record<string, any>} scenario
+ * @returns {{ scenario: Record<string, any>, issue: { code: string, field: string, detail: string } | null }}
+ */
+export function vcrCanonicalScenarioTimeUnit(method, scenario) {
+  if (!method.startsWith("comparator.") || scenario.timeUnit === undefined || scenario.timeUnit === null) return { scenario, issue: null };
+  const unit = vcrTimeUnitOf(scenario.timeUnit);
+  if (unit) return { scenario: unit === scenario.timeUnit ? scenario : { ...scenario, timeUnit: unit }, issue: null };
+  return { scenario, issue: { code: "scenario_value_invalid", field: "scenario.timeUnit",
+    detail: `timeUnit is one of ${VCR_TIME_UNITS.join(", ")} (day, week, month, year and their abbreviations are read as these); ${JSON.stringify(String(scenario.timeUnit).slice(0, 30))} is not a time unit.` } };
+}
+
+/**
+ * The time unit a reconstruction's curve was calibrated in, read from its verified source receipt. `strict` (the table is bound as a
+ * comparator's pseudo-patients) refuses a reconstruction whose receipt cannot be verified or whose unit is outside the table; otherwise
+ * the unit is simply absent when it cannot be shown. A receipt that has changed since the reconstruction is refused either way.
+ * @param {{ studyId: string, execution: Record<string, any> | null, producer: Record<string, any> | null,
+ *   verifier: ((request: Record<string, any>) => Promise<any>) | null, strict: boolean }} input
+ * @returns {Promise<string | null>}
+ */
+export async function vcrCurveTimeUnit({ studyId, execution, producer, verifier, strict }) {
+  const checkpoint = object(producer?.checkpoint);
+  const verifiable = execution?.method === "evidence.reconstruct_km" && vcrExecutionReceiptVerified(/** @type {any} */ (execution))
+    && checkpoint.curveReceiptId && checkpoint.curveImageHash && checkpoint.curvePointsHash && typeof verifier === "function";
+  if (!verifiable) {
+    if (strict) throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
+    return null;
+  }
+  const verified = await /** @type {Function} */ (verifier)({ studyId, principal: checkpoint.curvePrincipal,
+    scenario: producer?.scenario, inputs: producer?.inputs, receiptId: checkpoint.curveReceiptId });
+  if (verified.detail.curveTimeUnitUnsupported === true) {
+    if (strict) throw new HttpError(400, "vcr_job_scenario_invalid", "The curve calibration uses an unsupported time unit; convert it before analysis.");
+    return null;
+  }
+  if (verified.detail.curveImageHash !== checkpoint.curveImageHash || verified.detail.curvePointsHash !== checkpoint.curvePointsHash) {
+    throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction source receipt changed.");
+  }
+  return vcrTimeUnitOf(verified.detail.curveTimeUnit);
+}
+
 export class VcrJobs {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config?: Record<string, any>, engine?: any,
@@ -707,6 +754,9 @@ export class VcrJobs {
     const longitudinal = Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind);
     if (longitudinal && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','Longitudinal jobs freeze owned input references before enqueue.');
     let scenario = { ...object(input.scenario) };
+    const unitBound = vcrCanonicalScenarioTimeUnit(method, scenario);
+    if (unitBound.issue) throw this.#invalid("vcr_job_scenario_invalid", [unitBound.issue]);
+    scenario = unitBound.scenario;
     const patientGenerator = ["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind);
     if (patientGenerator && !scenario.pairing && object(input.detail).populationId) {
       scenario = { ...scenario, pairing: { key: `${object(input.detail).populationId}@${object(input.detail).populationVersion}`, replicate: 1 } };
@@ -780,6 +830,14 @@ export class VcrJobs {
       ...resolvedDerived,
       ...(qualityInput ? [qualityInput] : []),
     ];
+    // The one place every caller passes (the conversation, the page, the programme): a cohort filed under a real population is
+    // computed on that population's snapshot and rules, whatever the caller named.
+    if (kind === "build_cohort" && object(input.detail).resultKind === "population" && object(input.detail).subjectId
+      && typeof this.store.populations === "function") {
+      const population = (await this.store.populations(studyId, 1000)).find(row => row.id === object(input.detail).subjectId);
+      const issue = population ? vcrCohortInputIssue(population, resolvedInputs, scenario) : null;
+      if (issue) throw new HttpError(400, issue.code, issue.message);
+    }
 
     const unitBinding = vcrBindScientificInputUnits(method, scenario, resolvedInputs);
     scenario = unitBinding.scenario;
@@ -795,6 +853,12 @@ export class VcrJobs {
     const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
+    // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: say so before it is queued.
+    if (kind === "synthesize_population") {
+      const configured = String(this.config.vcrDataPlaneDir ?? "").trim();
+      const issue = await vcrSynthesisIssue({ root: configured ? assertDataPlaneRoot(configured) : null, inputs, scenario, cpuSecondsLimit, cpuSecondsCeiling: this.jobCpuSeconds });
+      if (issue) throw new HttpError(400, issue.code, issue.message);
+    }
     const id = vcrId("job");
     const job = {
       jobId: id, studyId, kind, method, methodVersion,
@@ -886,6 +950,7 @@ export class VcrJobs {
         const resolved = await this.dataPlane.resolveEngineInputs({
           studyId, snapshotId: String(entry.id), principal, purpose: VCR_JOB_PURPOSE, kind, method,
           endpointType: object(scenario.endpoint).type ?? null, ...(fields.length ? { fields } : {}),
+          ...(typeof scenario.parameterCode === "string" && scenario.parameterCode ? { parameterCode: scenario.parameterCode } : {}),
           ...(["model.prognostic_apply", "model.survival_fit"].includes(method) && typeof scenario.inputId === "string" && scenario.inputId.startsWith(`${entry.id}:`)
             ? { include: [scenario.inputId.slice(String(entry.id).length + 1)].every(shape => ["subject", "events", "longitudinal"].includes(shape))
               ? [scenario.inputId.slice(String(entry.id).length + 1)] : ["files"] } : {}),
@@ -964,20 +1029,16 @@ export class VcrJobs {
     const source = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[String(execution?.method ?? "")];
     if (!source) throw new HttpError(400, "vcr_derived_table_unsupported", "这张表不能作为另一项计算的输入。");
     let derivedTimeUnit = null;
-    if (entry.bindTo !== undefined) {
-      if (source !== VCR_RECONSTRUCTION_REFERENCE.source) throw new HttpError(400, "vcr_derived_table_unsupported", "The comparator requires reconstructed curve data.");
+    if (entry.bindTo !== undefined && source !== VCR_RECONSTRUCTION_REFERENCE.source) {
+      throw new HttpError(400, "vcr_derived_table_unsupported", "The comparator requires reconstructed curve data.");
+    }
+    // A reconstructed table carries the unit its curve was calibrated in wherever it is read — the indirect comparison that names it
+    // as its comparator (`bindTo`, which refuses an unverifiable curve) and the restricted-mean comparison of the same reconstruction,
+    // whose design states no unit of its own. Where nothing binds the table, a curve that cannot be verified only leaves the unit
+    // unstated (the scenario's own declaration, or the engine's refusal to guess).
+    if (source === VCR_RECONSTRUCTION_REFERENCE.source && (entry.bindTo !== undefined || execution?.method === "evidence.reconstruct_km")) {
       const producer = execution?.job_id ? await this.store.one(`SELECT scenario, inputs, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1 AND id=$2`, [studyId, execution.job_id]) : null;
-      if (execution?.method !== "evidence.reconstruct_km" || !vcrExecutionReceiptVerified(execution)
-        || !producer?.checkpoint?.curveReceiptId || !producer.checkpoint.curveImageHash || !producer.checkpoint.curvePointsHash || !this.curveVerifier) {
-        throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
-      }
-      const verified = await this.curveVerifier({ studyId, principal: producer.checkpoint.curvePrincipal,
-        scenario: producer.scenario, inputs: producer.inputs, receiptId: producer.checkpoint.curveReceiptId });
-      if (verified.detail.curveTimeUnitUnsupported === true) throw new HttpError(400, "vcr_job_scenario_invalid", "The curve calibration uses an unsupported time unit; convert it before analysis.");
-      derivedTimeUnit = vcrTimeUnitOf(verified.detail.curveTimeUnit);
-      if (verified.detail.curveImageHash !== producer.checkpoint.curveImageHash || verified.detail.curvePointsHash !== producer.checkpoint.curvePointsHash) {
-        throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction source receipt changed.");
-      }
+      derivedTimeUnit = await vcrCurveTimeUnit({ studyId, execution, producer, verifier: this.curveVerifier, strict: entry.bindTo !== undefined });
     }
     const root = assertDataPlaneRoot(String(this.config.vcrDataPlaneDir ?? ""));
     const file = path.resolve(root, location);

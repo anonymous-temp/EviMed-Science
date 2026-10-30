@@ -227,6 +227,19 @@ test("the matching tab answers each view and the candidate it is asked for", opt
   assert.equal("canContact" in waiting.selected,false);
   assert.equal("referralId" in waiting.selected,false);
   check("ev201/matching-p0192.json", waiting);
+  // A person judged not eligible is as readable as any other: listed (with the rule they fail), and opened to the rule-by-rule
+  // judgement on request — which rule failed, which were satisfied, and the record each rests on.
+  const excluded = await service.tab({ id: seeded.owner }, seeded.study.id, "matching", new URLSearchParams("candidate=P-0240"));
+  const listed = excluded.candidates.find((/** @type {any} */ candidate) => candidate.id === "P-0240");
+  assert.equal(listed.eligibility, "ineligible");
+  assert.deepEqual(listed.failed, [{ code: "I2", state: "not_satisfied" }]);
+  assert.equal(excluded.selected.candidate.id, "P-0240");
+  const failedRule = excluded.selected.criteria.find((/** @type {any} */ row) => row.code === "I2");
+  assert.equal(failedRule.state, "not_satisfied");
+  assert.equal(failedRule.applicable, true);
+  assert.match(excluded.selected.verdict.text, /^不符合：I2 不满足/);
+  assert.ok(excluded.funnel.find((/** @type {any} */ step) => step.key === "ineligible").count >= excluded.candidates.filter((/** @type {any} */ candidate) => candidate.eligibility === "ineligible").length);
+  check("ev201/matching-p0240.json", excluded);
   for (const view of ["referral", "sites", "followup"]) {
     await assert.rejects(service.tab({ id: seeded.owner }, seeded.study.id, "matching", new URLSearchParams(`view=${view}`)),{status:410,code:"vcr_recruitment_retired"});
   }

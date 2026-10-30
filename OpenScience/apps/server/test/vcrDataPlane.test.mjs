@@ -969,3 +969,20 @@ test("event time units come only from the frozen matching outcome mappings", () 
   assert.deepEqual(engineEventTimeUnit(table, [row, { ...row, unit: null }]), { unit: null, conflict: true });
   assert.deepEqual(engineEventTimeUnit(table, [{ ...row, table: "other.csv" }]), { unit: null, conflict: false });
 });
+
+test("an analysis of one parameter takes the unit of that parameter's mapping, and a conflict between two parameters is not its own", () => {
+  const table = { shape: "events", derivedFrom: { files: ["a.csv"], columns: [{ name: "AVAL", source: "os_time" }, { name: "AVAL", source: "pfs_time" }] } };
+  const os = { table: "a.csv", column: "os_time", role: "outcome_time", unit: "months", parameter: "OS" };
+  const pfs = { table: "a.csv", column: "pfs_time", role: "outcome_time", unit: "days", parameter: "PFS" };
+  // no parameter named: the table has two units, as it did
+  assert.deepEqual(engineEventTimeUnit(table, [os, pfs]), { unit: null, conflict: true });
+  assert.deepEqual(engineEventTimeUnit(table, [os, pfs], null), { unit: null, conflict: true });
+  // each parameter's analysis has its own
+  assert.deepEqual(engineEventTimeUnit(table, [os, pfs], "OS"), { unit: "months", conflict: false });
+  assert.deepEqual(engineEventTimeUnit(table, [os, pfs], "PFS"), { unit: "days", conflict: false });
+  // a parameter that is mapped to an unusable unit is that analysis's conflict, not the other's
+  assert.deepEqual(engineEventTimeUnit(table, [os, { ...pfs, unit: "cycles" }], "OS"), { unit: "months", conflict: false });
+  assert.deepEqual(engineEventTimeUnit(table, [os, { ...pfs, unit: "cycles" }], "PFS"), { unit: null, conflict: true });
+  // a parameter that is not mapped changes nothing: every mapping decides
+  assert.deepEqual(engineEventTimeUnit(table, [os, pfs], "DFS"), { unit: null, conflict: true });
+});

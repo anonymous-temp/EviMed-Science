@@ -11,6 +11,9 @@
 // a database may do.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { after, before, test } from "node:test";
 import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
@@ -259,6 +262,34 @@ test("explicit draft method jobs use the existing engine without activating the 
     assert.equal((await store.job(study.id, next.id)).state, "succeeded", `${workerId} can advance its own claim`);
   }
   assert.equal((await store.studyById(study.id)).status, "draft");
+});
+
+test("a synthesis that fits its CPU budget is queued; one that cannot finish is refused before anything is stored, with what to change", options, async () => {
+  const study = await makeStudy("synthesis-budget");
+  const root = await mkdtemp(path.join(os.tmpdir(), "vcr-synth-"));
+  try {
+    /** @param {string} name @param {number} rows @param {number} columns */
+    const table = async (name, rows, columns) => {
+      const header = ["USUBJID", ...Array.from({ length: columns }, (_, index) => `v${index + 1}`)];
+      await mkdir(path.join(root, "snapshots", "snp_synth"), { recursive: true });
+      await writeFile(path.join(root, "snapshots", "snp_synth", name), `${[header.join(","), ...Array.from({ length: rows }, (_, row) => [`P${row}`, ...header.slice(1).map(() => "1")].join(","))].join("\n")}\n`);
+      return { kind: "analysis_table", id: "snp_synth:subject", shape: "subject", location: `snapshots/snp_synth/${name}`, hash: "a".repeat(64), valueSource: "observed" };
+    };
+    const fitting = await table("small.csv", 200, 8);
+    const wide = await table("wide.csv", 2000, 40);
+    let served = fitting;
+    const dataPlane = { async resolveEngineInputs() { return [served]; } };
+    const jobs = new VcrJobs({ store, config: { ...config, vcrDataPlaneDir: root, vcrJobCpuSeconds: 100 }, engine: engineDouble(), dataPlane });
+    const ask = (/** @type {Record<string, any>} */ more = {}) => jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "synthesize_population",
+      inputs: [{ kind: "snapshot", id: "snp_synth" }], scenario: { m: 5, holdoutShare: 0.2 }, ...more });
+    const { job } = await ask();
+    assert.equal(job.state, "queued", "a table the budget holds is queued as it was");
+    served = wide;
+    await assert.rejects(ask(), (/** @type {any} */ error) => error.status === 400 && error.code === "vcr_synthesis_too_large"
+      && /2000 行 × 40 列 × 5 份/.test(error.message) && /列数减到/.test(error.message));
+    const stored = await store.rows("SELECT id FROM evimed_vcr.jobs WHERE study_id=$1", [study.id]);
+    assert.equal(stored.length, 1, "the refused one stored nothing");
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("inactive or deleted studies refuse new jobs and cannot claim previously queued work", options, async () => {

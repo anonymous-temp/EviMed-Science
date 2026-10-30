@@ -395,6 +395,8 @@ export interface VcrResearchProgress {
   input: "available" | "missing" | "unknown" | "not_required";
   calculation: "none" | "queued" | "running" | "awaiting_budget" | "failed" | "canceled" | "available" | "limited" | "not_estimable" | "stale";
   resultId: string | null; resultStale: boolean;
+  /** A result exists but was computed on another data snapshot than the population's: it is not counted here. */
+  resultNotCounted?: { reason: "other_snapshot"; resultId: string | null; snapshotIds: string[] } | null;
   counts: { sourcePatients: number | null; realPatients: number | null; observations: number | null; generatedRecords: number | null; reconstructedPseudoPatients: number | null };
   profileStatistics: Array<{ column: string; mean: number | null; median: number | null; direction: "mean_above_median" | "mean_below_median" | "equal" }>;
 }
@@ -1091,6 +1093,8 @@ export interface VcrCandidate {
   eligibility: VcrEligibility;
   /** The rules still open on this person: 「E3 未知」「E5 待复评 10月6日」. */
   open: Array<{ code: string; state: VcrCriterionState; note?: string | null }>;
+  /** The rules this person fails, by code: where to look first in their rule-by-rule judgement. Absent when none. */
+  failed?: Array<{ code: string; state: VcrCriterionState }>;
   /** What the evaluation rested on has since been withdrawn (the person's consent, or a record), or changed. */
   basis?: "withdrawn" | "updated";
   /** The model's ranking hint, carried with its own label and never as a probability of benefit. */
@@ -1645,6 +1649,8 @@ function readResearchProgress(raw: unknown): VcrResearchProgress | null {
   const calculation = states.find(state => state === value.calculation) ?? "none";
   const input = value.input === "available" || value.input === "missing" || value.input === "not_required" ? value.input : "unknown";
   return { populationId: text(value.populationId), populationVersion: finite(value.populationVersion), definition: value.definition === "saved" ? "saved" : "none", input, calculation, resultId: text(value.resultId), resultStale: value.resultStale === true,
+    resultNotCounted: obj(value.resultNotCounted).reason === "other_snapshot"
+      ? { reason: "other_snapshot", resultId: text(obj(value.resultNotCounted).resultId), snapshotIds: arr(obj(value.resultNotCounted).snapshotIds).filter((id) => typeof id === "string").map(String) } : null,
     counts: { sourcePatients: finite(counts.sourcePatients), realPatients: finite(counts.realPatients), observations: finite(counts.observations), generatedRecords: finite(counts.generatedRecords), reconstructedPseudoPatients: finite(counts.reconstructedPseudoPatients) },
     profileStatistics: arr(value.profileStatistics).flatMap(row => {
       const direction = row.direction;

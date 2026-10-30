@@ -30,6 +30,8 @@ export function VcrResearchProgress({ progress, studyId, showPopulationLink = tr
     { label: "人群定义", value: progress.definition === "saved" ? "已保存" : "尚未保存" },
     { label: "队列输入", value: availability[progress.input] ?? "待检查" },
     { label: "计算", value: computation[progress.calculation] ?? "待检查" },
+    // A result that exists for another snapshot is neither this population's nor a zero: said once, with how to go on.
+    ...(progress.resultNotCounted ? [{ label: "另一份快照的结果", value: "未计入：它不是在这个人群的数据快照上算的。要在新快照上算，保存一个新的人群版本再计算。" }] : []),
     ...(progress.resultStale && progress.calculation !== "stale" ? [{ label: "已有结果", value: "已过期" }] : []),
     ...(counts.sourcePatients != null ? [{ label: "来源表患者", value: `${counts.sourcePatients.toLocaleString()} 人` }] : []),
     ...(counts.realPatients != null ? [{ label: "结果真实患者", value: `${counts.realPatients.toLocaleString()} 人` }] : []),

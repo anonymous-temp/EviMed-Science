@@ -1217,26 +1217,36 @@ export function presentMatchingTab(bundle, query = {}) {
     { key: "eligible", label: "符合", count: count("eligible") ?? 0, note: null, tone: "accent" },
     { key: "ineligible", label: "不符合", count: count("ineligible") ?? 0, note: null, tone: "neutral" },
   ] : [];
-  const ordered = [...subjects].filter((row) => row.summary !== "ineligible").sort((a, b) =>
+  // Everyone assessed is listed, the not-eligible after the rest: their judgement is as readable as anyone's.
+  const ordered = [...subjects].sort((a, b) =>
     Number(a.basis === "withdrawn") - Number(b.basis === "withdrawn")
       || SUMMARY_ORDER.indexOf(a.summary) - SUMMARY_ORDER.indexOf(b.summary) || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0)
       || String(a.subjectKey).localeCompare(String(b.subjectKey)));
   const candidateOf = (/** @type {any} */ row) => {
     const counts = object(row.counts);
+    const judged = openByAssessment.get(row.id) ?? [];
+    const notSatisfied = Number(counts.not_satisfied ?? 0);
     return {
       id: String(row.subjectKey),
-      summary: `${Number(counts.satisfied ?? 0)} 条满足 · ${Number(counts.unknown ?? 0)} 条未知 · ${Number(counts.pending_recheck ?? 0)} 条待复评`,
+      summary: `${Number(counts.satisfied ?? 0)} 条满足 · ${Number(counts.unknown ?? 0)} 条未知 · ${Number(counts.pending_recheck ?? 0)} 条待复评${notSatisfied > 0 ? ` · ${notSatisfied} 条不满足` : ""}`,
       eligibility: row.summary,
       // What the evaluation rested on has changed since, or was withdrawn: said as a state beside the person (依据已更新 / 已撤回).
       ...(row.basis ? { basis: row.basis } : {}),
-      open: (openByAssessment.get(row.id) ?? []).map((/** @type {any} */ open) => ({
+      open: judged.filter((/** @type {any} */ open) => open.state !== "not_satisfied").map((/** @type {any} */ open) => ({
         code: criterionCode(open.criterionId), state: open.state,
         note: open.recheckAt ? `${zhDate(open.recheckAt, now)} 复评` : null,
       })),
+      // The rules this person fails, by code: where to look first in their rule-by-rule judgement.
+      ...(judged.some((/** @type {any} */ open) => open.state === "not_satisfied")
+        ? { failed: judged.filter((/** @type {any} */ open) => open.state === "not_satisfied").map((/** @type {any} */ open) => ({ code: criterionCode(open.criterionId), state: open.state })) } : {}),
       priority: row.priority ? { label: text(object(row.priority).label) ?? "临床优先级（不是获益概率）", score: numeric(object(row.priority).score), rationale: text(object(row.priority).rationale) } : null,
     };
   };
   const candidates = ordered.slice(0, 50).map(candidateOf);
+  // The person asked for by name is on the page even when 50 others rank before them.
+  const askedFor = query.candidate && !candidates.some((candidate) => candidate.id === query.candidate)
+    ? ordered.find((row) => String(row.subjectKey) === query.candidate) : null;
+  if (askedFor) candidates.push(candidateOf(askedFor));
   const chosen = candidates.find((candidate) => candidate.id === query.candidate) ?? candidates[0] ?? null;
   const selectedAssessment = match.selected ?? null;
   const selected = chosen && selectedAssessment && selectedAssessment.subjectKey === chosen.id ? (() => {
