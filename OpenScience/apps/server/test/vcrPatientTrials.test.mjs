@@ -7,8 +7,8 @@ import test from "node:test";
 
 import { ctgovPrecedent } from "../src/trialRegistryClient.mjs";
 import {
-  CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, phaseLabel, rankPatientTrials,
-  registryStatusLabel, registryStatusRank,
+  CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, phaseLabel, rankPatientTrials,
+  registryStatusLabel, registryStatusRank, sourceTextLength,
 } from "../src/vcrPatientTrials.mjs";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 
@@ -83,6 +83,28 @@ test("the platform finds where a criterion's original wording stands in the reco
   assert.equal(locateSourceText("Prior treatment with paclitaxel.", ELIGIBILITY), null);
   assert.equal(locateSourceText("", ELIGIBILITY), null);
   assert.equal(locateSourceText("anything", ""), null);
+});
+
+test("the wording is compared as the record spells it: case, spacing, >= against ≥, dashes and quotation marks are the same, a near match is not", () => {
+  const record = "Inclusion Criteria:\n* Patients must provide Written Informed Consent\n* Age >= 18 years\n* ECOG 0\u20131 (\"fit\")\n* Hb <= 9 g/dL";
+  const at = (/** @type {string} */ wording) => locateSourceText(wording, record);
+  const spanOf = (/** @type {string} */ wording) => { const found = at(wording); return found && record.slice(found.start, found.end); };
+  assert.equal(spanOf("written informed consent"), "Written Informed Consent", "the span is the record's own characters");
+  assert.equal(spanOf("Age ≥ 18 years"), "Age >= 18 years", "the span of a two-character >= is two characters");
+  assert.equal(spanOf("hb ≤ 9 g/dl"), "Hb <= 9 g/dL");
+  assert.equal(spanOf("ECOG 0-1 (\u201Cfit\u201D)"), "ECOG 0\u20131 (\"fit\")", "a hyphen is an en dash, curly quotes are straight ones");
+  assert.equal(spanOf("Age\u00A0 \u2265\n18 years"), "Age >= 18 years", "a no-break space is whitespace");
+  assert.equal(spanOf("1. Age ≥ 18 years"), "Age >= 18 years", "a list marker in front is the list's");
+  assert.equal(at("Age > 18 years"), null);
+  assert.equal(at("Adults aged 18 years or more"), null);
+  assert.equal(at("Age 18 years"), null);
+});
+
+test("how long a wording is is measured on the folded form, without its list marker", () => {
+  assert.equal(sourceTextLength("Age >= 18 years"), "age ≥ 18 years".length);
+  assert.equal(sourceTextLength("  1.  Prior   platinum-based chemotherapy "), "prior platinum-based chemotherapy".length);
+  assert.equal(sourceTextLength(""), 0);
+  assert.equal(OTHER_TRIAL_MIN_SOURCE_CHARS, 30);
 });
 
 // ---------------------------------------------------------------------------

@@ -285,6 +285,55 @@ test("spent attempts with no zone at all leave the seeding open: a restart may t
   assert.equal(await db.query("SELECT 1 FROM evimed_frontier.meta WHERE key = 'zone_planner_seed'").then((result) => result.rowCount), 0);
 });
 
+const seedAttemptCount = async () => Number((await db.query("SELECT value FROM evimed_frontier.meta WHERE key = 'zone_planner_seed_attempts'")).rows[0]?.value?.count ?? 0);
+const seedMarker = async () => (await db.query("SELECT value FROM evimed_frontier.meta WHERE key = 'zone_planner_seed'")).rows[0]?.value ?? null;
+
+// An attempt used to be counted before the model was asked. A control plane restarting through an hour of model trouble spent the
+// database's six on timeouts and unreadable answers and, with any zone standing, closed the seeding for good below the count.
+test("a timeout, an unreadable answer and a feed with no candidates are not attempts: restarts through model trouble leave the seeding open", options, async () => {
+  await items(20, 5, ["ezt-sema", "ezt-obesity"]);
+  await platformZone("alpha", "甲专区");
+  const timeout = () => Object.assign(new Error("slow"), { code: "frontier_model_timeout" });
+  const trouble = scriptedModel({ seed: [timeout(), { zones: "not a list" }, timeout(), { nonsense: true }, timeout(), { zones: "still not" }, timeout(), timeout()] });
+  let clock = MONDAY;
+  for (let restart = 0; restart < 8; restart += 1) {
+    compose({ model: trouble, now: () => clock });
+    const result = await planner.tick(clock);
+    assert.equal(result.seeded.complete, false, `look ${restart + 1}`);
+    clock = new Date(clock.getTime() + 61 * 60_000);
+  }
+  assert.equal(trouble.calls.filter((call) => call.kind === "seed").length, 8, "each look asked once");
+  assert.equal(await seedAttemptCount(), 0, "none of the eight is an attempt");
+  assert.equal(await seedMarker(), null, "the seeding is not closed");
+  // No candidates at all is no call and no attempt either.
+  await db.query("TRUNCATE evimed_frontier.items CASCADE");
+  const empty = scriptedModel();
+  for (let restart = 0; restart < 7; restart += 1) {
+    compose({ model: empty, now: () => clock });
+    assert.deepEqual((await planner.tick(clock)).seeded, { skipped: "no_candidates" });
+    clock = new Date(clock.getTime() + 61 * 60_000);
+  }
+  assert.equal(await seedAttemptCount(), 0);
+  assert.equal(await seedMarker(), null);
+  // The model recovers: the first readable answer is the first attempt, and the seeding finishes.
+  await items(20, 5, ["ezt-sema", "ezt-obesity"]);
+  const recovered = scriptedModel({ seed: [{ zones: [{ slug: "b", draft: draftOf("乙专区") }, { slug: "c", draft: draftOf("丙专区") }, { slug: "d", draft: draftOf("丁专区") }] }] });
+  compose({ model: recovered, now: () => clock });
+  const done = await planner.tick(clock);
+  assert.equal(done.seeded.complete, true);
+  assert.equal(await officialCount(), 4);
+  assert.equal(await seedAttemptCount(), 1);
+});
+
+test("an answer that is readable and makes no zone is an attempt: the database counts it, however many rounds it took", options, async () => {
+  await items(20, 5, ["ezt-sema", "ezt-obesity"]);
+  const model = scriptedModel({ seed: Array(6).fill({ zones: [] }) });
+  compose({ model, now: () => MONDAY });
+  assert.equal((await planner.tick(MONDAY)).seeded.complete, false);
+  assert.equal(await seedAttemptCount(), 1, "one attempt, however many questions it asked");
+  assert.ok(model.calls.length >= 2, "two empty rounds in a row end it");
+});
+
 test("a seed count of zero is seeding switched off: the zones there are still kept by the weekly pass", options, async () => {
   await platformZone("alpha", "甲专区");
   const model = scriptedModel({ weekly: [{ actions: [] }] });

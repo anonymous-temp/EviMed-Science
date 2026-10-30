@@ -18,7 +18,9 @@
  *   sixty. The finished seeding is a marker in the feed's `meta` (`zone_planner_seed`); after it the planner never seeds again. The
  *   seed count is what the model is asked for, not a condition of the weekly pass: attempts are counted in `meta` too
  *   (`zone_planner_seed_attempts`, across restarts), and once `MAX_SEED_ATTEMPTS` of them are spent with any platform zone standing,
- *   the feed is taken to support no more and the marker is written, so the weekly pass runs with the zones there are.
+ *   the feed is taken to support no more and the marker is written, so the weekly pass runs with the zones there are. An attempt is
+ *   counted when the model has given a readable answer, even one that makes no zone; a timeout, an unreadable answer or a feed with
+ *   no candidates is not an attempt (it says nothing of what the feed supports) and is looked at again after an hour.
  * - **Reader zones are not touched.** The planner reads a published reader zone as a signal (its followers) and may make a platform
  *   zone "developed from" it; it never edits, hides or merges a reader's own.
  * - **Everything is undoable.** Each action writes `zone_changes` with actor `planner` and the detail an undo needs (the lifecycle it
@@ -355,11 +357,19 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
     }
     if (attempts.seed >= MAX_SEED_ATTEMPTS || at.getTime() < attempts.seedNextAt) return { skipped: "waiting" };
     if (!(await mayAsk())) return { skipped: "cannot_ask" };
-    attempts.seed += 1;
+    // The hour's wait is taken for any look, so a model in trouble is asked once an hour and not on every tick. An attempt is counted
+    // only when the model gave a readable answer (below): a timeout, an unreadable answer or a feed with nothing to show says nothing
+    // of what the feed supports, and several restarts in a bad hour must not close the seeding short of the count.
     attempts.seedNextAt = at.getTime() + RETRY_AFTER_MS;
-    await database.query(`INSERT INTO evimed_frontier.meta(key, value, updated_at) VALUES ($1, jsonb_build_object('count', 1, 'at', $2::text), clock_timestamp())
-      ON CONFLICT (key) DO UPDATE SET value = jsonb_build_object('count', coalesce((evimed_frontier.meta.value->>'count')::integer, 0) + 1, 'at', $2::text), updated_at = clock_timestamp()`,
-    [SEED_ATTEMPTS_KEY, at.toISOString()]);
+    let counted = false;
+    const countAttempt = async () => {
+      if (counted) return;
+      counted = true;
+      attempts.seed += 1;
+      await database.query(`INSERT INTO evimed_frontier.meta(key, value, updated_at) VALUES ($1, jsonb_build_object('count', 1, 'at', $2::text), clock_timestamp())
+        ON CONFLICT (key) DO UPDATE SET value = jsonb_build_object('count', coalesce((evimed_frontier.meta.value->>'count')::integer, 0) + 1, 'at', $2::text), updated_at = clock_timestamp()`,
+      [SEED_ATTEMPTS_KEY, at.toISOString()]);
+    };
     const stats = await candidateStatistics(at);
     if (!stats.pairs.length && !stats.policy.length) return { skipped: "no_candidates" };
     const shown = statisticsForModel(stats);
@@ -393,6 +403,7 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
       }
       const listed = Array.isArray(answer?.zones) ? answer.zones : null;
       if (!listed) { counters.failures += 1; lastError = "evidence_zone_seed_unreadable"; failed = true; break; }
+      await countAttempt();
       const result = await makeOfficialZones(listed, { room: async (client) => seedCount - (await platformZoneCount(client)), reason: "seed" });
       created += result.made.length;
       dropped += result.dropped.length;

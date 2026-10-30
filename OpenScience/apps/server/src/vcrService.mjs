@@ -59,7 +59,7 @@ import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
 import { dominatedScenarioMap, numeric, withReviewState, zhUnit } from "./vcrViewsKit.mjs";
-import { vcrPopulationsWithOwnResults } from "./vcrSnapshotBinding.mjs";
+import { vcrExecutionInputs, vcrPopulationsWithOwnResults } from "./vcrSnapshotBinding.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
 import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
@@ -1162,9 +1162,8 @@ export class VcrService {
       : await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
           FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]);
     return new Map(rows.map((row) => [String(row.id), {
-      id: String(row.id), jobId: String(row.job_id), inputs: list(row.inputs)
-        .filter(input => ['analysis_table', 'snapshot_file'].includes(input?.kind) && typeof input.id === 'string')
-        .map(input => ({ kind: input.kind, id: input.id })), method: String(row.method), methodVersion: String(row.method_version ?? ""),
+      id: String(row.id), jobId: String(row.job_id), inputs: vcrExecutionInputs(row.inputs),
+      method: String(row.method), methodVersion: String(row.method_version ?? ""),
       scenarioHash: String(row.scenario_hash ?? ""), seed: row.seed == null ? null : Number(row.seed),
       replicates: row.replicates == null ? null : Number(row.replicates), cpuSeconds: numeric(row.cpu_seconds),
       finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,

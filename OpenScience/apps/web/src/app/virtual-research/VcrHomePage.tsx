@@ -1,6 +1,6 @@
 import { VcrLegacyDraftRecovery } from "@/components/vcr/VcrLegacyDraftRecovery";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { Plus, RefreshCw, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -45,6 +45,9 @@ const TABS: ReadonlyArray<{ value: HomeTab; label: string }> = Object.freeze([
   { value: "definitions", label: "人群定义" },
   { value: "models", label: "模型与参数" },
 ]);
+
+/** Router state on the entry the page pushed to open a preview: closing it goes back one entry, to the list it was pushed from. */
+const PREVIEW_PUSHED = "vcrPreviewPushed";
 
 /**
  * The room the preview is given beside the 340 px list. The task selector and the study preview both want about this
@@ -101,6 +104,8 @@ export function VcrHomePage() {
   const feature = useVcrFeature();
   const ask = useGeneralResearchDraft();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const pushedHere = (useLocation().state as Record<string, unknown> | null)?.[PREVIEW_PUSHED] === true;
   const tab = (TABS.find((item) => item.value === params.get("tab"))?.value ?? "studies") as HomeTab;
   const asked = params.get("study");
   const wantsNew = params.get("new") === "1";
@@ -175,7 +180,10 @@ export function VcrHomePage() {
   }
 
   const loading = feature === "loading" || listing.kind === "loading";
-  const newStudy: PageActionPlan = { primary: { id: "new-study", label: "新研究", icon: Plus, onSelect: () => setParams(current => { const next = new URLSearchParams(current); next.delete("study"); next.set("new", "1"); return next; }) } };
+  // How the page moves to a preview: onto the list as a new entry when nothing is open (Back returns to the list), in place of the open one
+  // when one is (switching studies is one preview, not a trail of them), keeping whether the entry under it is the list's.
+  const opening = { replace: showingDetail, state: { [PREVIEW_PUSHED]: showingDetail ? pushedHere : true } };
+  const newStudy: PageActionPlan = { primary: { id: "new-study", label: "新研究", icon: Plus, onSelect: () => setParams(current => { const next = new URLSearchParams(current); next.delete("study"); next.set("new", "1"); return next; }, opening) } };
 
   // A state with no study in it is not a chip: 0 is not a filter.
   const filters: ToolbarFilter[] = [];
@@ -219,13 +227,17 @@ export function VcrHomePage() {
     next.set("study", id);
     return `?${next.toString()}`;
   };
-  // Closing replaces the entry that opened the preview: Back from the list must leave the page, not open the preview again.
-  const closePreview = () => setParams((current) => {
-    const next = new URLSearchParams(current);
-    next.delete("study");
-    next.delete("new");
-    return next;
-  }, { replace: true });
+  // A preview this page pushed onto the list is closed by going back to the list's own entry, so Back from the list leaves the page in one
+  // press and does not open the preview again. One a link or a reload opened has no list entry under it: it is closed in place.
+  const closePreview = () => {
+    if (pushedHere) { navigate(-1); return; }
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("study");
+      next.delete("new");
+      return next;
+    }, { replace: true });
+  };
   const clearFilters = () => { setQuery(""); setState("all"); };
 
   const entry = <TaskEntry ask={ask} />;
@@ -243,7 +255,7 @@ export function VcrHomePage() {
           ? <EmptyState icon={UsersRound} title="没有匹配的研究" action={<Button variant="secondary" onClick={clearFilters}>清除筛选</Button>} />
           : (
             <List label="研究">
-              {shown.map((study) => <StudyRow key={study.id} study={study} to={choose(study.id)} selected={study.id === chosen?.id} />)}
+              {shown.map((study) => <StudyRow key={study.id} study={study} to={choose(study.id)} selected={study.id === chosen?.id} opening={opening} />)}
             </List>
           );
   const retainedWarning = refreshError ? <LoadError message={refreshError} onRetry={() => setReloads(value => value + 1)} /> : null;
@@ -353,10 +365,11 @@ function OtherViews({ tab, children }: { tab: HomeTab; children: ReactNode }) {
  * One study in the list: its name, one line under it and when it last moved. The row chooses the study (the preview shows it), and a
  * historical calculation's row is a link to its own page: `to` is where the press goes.
  */
-function StudyRow({ study, to, selected }: { study: VcrStudySummary; to: string; selected: boolean }) {
+function StudyRow({ study, to, selected, opening }: { study: VcrStudySummary; to: string; selected: boolean; opening?: { replace: boolean; state: unknown } }) {
   return (
     <ListRow
       to={to}
+      {...(opening ?? {})}
       selected={selected}
       title={<span className="line-clamp-2">{study.name}</span>}
       meta={<span data-vcr-status="" className="block truncate">{studyStatusLine(study)}</span>}

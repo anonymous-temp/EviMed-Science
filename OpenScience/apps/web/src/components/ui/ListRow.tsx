@@ -188,6 +188,7 @@ export function ListRow({
   title,
   to,
   state,
+  replace = false,
   href,
   leaves = false,
   onOpen,
@@ -211,6 +212,8 @@ export function ListRow({
   to?: string;
   /** Router state handed to the page `to` opens: where it was opened from, so its way back returns here (`FrontierBack`). */
   state?: unknown;
+  /** The route replaces the current history entry instead of adding one: a row that switches what a pane shows, not a place Back should return to. */
+  replace?: boolean;
   /** An outside address the row opens in a new tab. */
   href?: string;
   /** A route the row opens that leaves the section the list is in (a file's own page from a memory list): its mark is ↗, as an outside address's. */
@@ -276,7 +279,7 @@ export function ListRow({
   // `data-row-title` is what the release walk measures: every title in a
   // list must start on one left edge (scripts/ops/ui-walk.mjs).
   const heading = to ? (
-    <Link to={to} state={state} onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...current} {...titleProps}>{title}</Link>
+    <Link to={to} state={state} replace={replace} onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...current} {...titleProps}>{title}</Link>
   ) : href ? (
     <a href={href} target="_blank" rel="noreferrer" onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...current} {...titleProps}>{title}</a>
   ) : onOpen ? (

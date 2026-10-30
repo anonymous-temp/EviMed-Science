@@ -8,7 +8,7 @@ import test from "node:test";
 import { VcrJobs } from "../src/vcrJobs.mjs";
 import { presentResearchProgress } from "../src/vcrResearchProgress.mjs";
 import {
-  VCR_COHORT_BINDING_CODE, vcrCohortBinding, vcrCohortInputIssue, vcrPopulationsWithOwnResults, vcrSnapshotIdsOf,
+  VCR_COHORT_BINDING_CODE, vcrCohortBinding, vcrCohortInputIssue, vcrExecutionInputs, vcrPopulationsWithOwnResults, vcrSnapshotIdsOf,
 } from "../src/vcrSnapshotBinding.mjs";
 import { prepareVcrSubjectPopulation, resolveJobSubject } from "../src/vcrSubjects.mjs";
 
@@ -47,6 +47,26 @@ test("a cohort job is refused before queueing when it reads another snapshot or 
   assert.equal(vcrCohortInputIssue(population({ snapshotId: null }), [{ kind: "snapshot", id: A }])?.code, VCR_COHORT_BINDING_CODE);
 });
 
+test("a cohort job whose time zero or end of follow-up is another column than the population's is refused, as other rules are", () => {
+  const defined = population({ definition: { rules: RULES, timeZero: { column: "ICUADMIT" }, exit: { column: "DEATHDATE" } } });
+  const inputs = [{ kind: "snapshot", id: A }];
+  assert.equal(vcrCohortInputIssue(defined, inputs, { rules: RULES, timeZero: { column: "ICUADMIT" }, exit: { column: "DEATHDATE" } }), null, "the same columns are the same definition");
+  assert.equal(vcrCohortInputIssue(defined, inputs, { rules: RULES }), null, "a scenario that states neither takes the definition's");
+  assert.equal(vcrCohortInputIssue(defined, inputs, {}), null);
+  const zero = vcrCohortInputIssue(defined, inputs, { rules: RULES, timeZero: { column: "HOSPADMIT" } });
+  assert.equal(zero?.code, VCR_COHORT_BINDING_CODE);
+  assert.match(zero?.message ?? "", /时间零点列/);
+  assert.match(zero?.message ?? "", /HOSPADMIT.*ICUADMIT/, "names the column asked for and the one saved");
+  assert.match(zero?.message ?? "", /新的人群版本/, "names the way out");
+  const exit = vcrCohortInputIssue(defined, inputs, { exit: { column: "DISCHARGE" } });
+  assert.equal(exit?.code, VCR_COHORT_BINDING_CODE, "without rules too: the merge of the definition would let the caller's column win");
+  assert.match(exit?.message ?? "", /随访结束列/);
+  // a definition that names no such column has nothing for the scenario to disagree with
+  assert.equal(vcrCohortInputIssue(population(), inputs, { rules: RULES, timeZero: { column: "ICUADMIT" } }), null);
+  // only a real population's definition is held to it
+  assert.equal(vcrCohortInputIssue({ ...defined, kind: "scenario" }, inputs, { timeZero: { column: "HOSPADMIT" } }), null);
+});
+
 /** A store that knows one population, as far as `resolveJobSubject` and the queue read it. */
 const storeWith = (/** @type {Record<string, any>} */ row) => ({
   async populations() { return [row]; },
@@ -72,6 +92,17 @@ test("the conversation's and the page's preparation pins a cohort to its populat
   await assert.rejects(prepare([{ kind: "snapshot", id: A }, { kind: "snapshot", id: B }, { kind: "snapshot", id: C }]), { code: VCR_COHORT_BINDING_CODE });
   await assert.rejects(prepare([{ kind: "snapshot", id: B }]), { code: VCR_COHORT_BINDING_CODE });
   await assert.rejects(prepare([], { rules: [{ name: "elderly", rule: { op: "compare", column: "age", comparator: "gte", value: 65 } }] }), { code: VCR_COHORT_BINDING_CODE });
+});
+
+test("the preparation does not let a caller's time zero win over the population's, and keeps the population's own when none is named", async () => {
+  const row = population({ definition: { rules: RULES, timeZero: { column: "ICUADMIT" } } });
+  const store = storeWith(row);
+  const study = { id: "study_1", userId: "u1" };
+  const subject = await resolveJobSubject({ store, study, kind: "build_cohort", subjectId: row.id, scenario: {} });
+  const prepare = (/** @type {Record<string, any>} */ scenario) => prepareVcrSubjectPopulation({ store, study, kind: "build_cohort", subject, scenario, inputs: [] });
+  await assert.rejects(prepare({ timeZero: { column: "HOSPADMIT" } }), { code: VCR_COHORT_BINDING_CODE });
+  assert.deepEqual((await prepare({})).scenario.timeZero, { column: "ICUADMIT" });
+  assert.deepEqual((await prepare({ timeZero: { column: "ICUADMIT" } })).scenario.timeZero, { column: "ICUADMIT" });
 });
 
 test("the queue refuses a cohort filed under a population that reads a snapshot beside its own, whoever asks", async () => {
@@ -157,4 +188,27 @@ test("a result with no recorded execution is not guessed to be another snapshot'
   const bundle = study();
   const [kept] = vcrPopulationsWithOwnResults(bundle.populations, bundle.allResults, new Map());
   assert.equal(kept.resultId, "res_pop");
+});
+
+// The service reads an execution's inputs from its row and keeps only what a reader needs. A derived table's input id
+// (`<result id>:<table>`) reads like a snapshot's, so dropping the location made a valid result look like it had read a second snapshot.
+test("an execution keeps where each input sat, so a derived table beside the population's snapshot is not taken for another snapshot", () => {
+  const derived = { kind: "snapshot_file", id: "res_9:population", location: "derived/study_1/job_1/population.csv", hash: "d".repeat(64), valueSource: "synthetic" };
+  const stored = [table(A), derived, { kind: "reference", id: "asm_1" }, { kind: "analysis_table", id: 5 }];
+  const kept = vcrExecutionInputs(stored);
+  assert.deepEqual(kept, [
+    { kind: "analysis_table", id: `${A}:subject`, location: `snapshots/${A}/subject.csv` },
+    { kind: "snapshot_file", id: "res_9:population", location: "derived/study_1/job_1/population.csv" },
+  ], "table inputs only, with their kind, id and location and nothing else (no hash, no value source)");
+  assert.deepEqual(vcrSnapshotIdsOf(kept), [A], "the derived table names no snapshot");
+  // a stored row from before the location was recorded still reads
+  assert.deepEqual(vcrExecutionInputs([{ kind: "analysis_table", id: `${A}:subject` }]), [{ kind: "analysis_table", id: `${A}:subject` }]);
+  assert.deepEqual(vcrExecutionInputs(null), []);
+  // the result is kept on its population
+  const results = [{ id: "res_pop", executionId: "ex_cohort", kind: "population", subjectId: "pop_a" }];
+  const executions = new Map([["ex_cohort", { method: "cohort.build", inputs: kept }]]);
+  assert.equal(vcrPopulationsWithOwnResults([population()], results, executions)[0].resultId, "res_pop", "a valid result is not hidden");
+  // and without the location (as the service used to hold it) the same result was hidden
+  const stripped = new Map([["ex_cohort", { method: "cohort.build", inputs: kept.map(({ kind, id }) => ({ kind, id })) }]]);
+  assert.equal(vcrPopulationsWithOwnResults([population()], results, stripped)[0].resultId, null);
 });

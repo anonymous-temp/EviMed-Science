@@ -41,6 +41,20 @@ function snapshotOfInputId(id) {
 }
 
 /**
+ * The table inputs of a stored execution as its readers hold them: what was read (`kind`, `id`) and where it sat (`location`). The
+ * location is what tells a snapshot's table from a derived one, whose id (`<result id>:<table>`) reads like a snapshot's: without it
+ * a computation that read the control plane's own derived table beside the population's snapshot would be taken to have read a
+ * second snapshot, and a valid result would be hidden from its population. Nothing but the three fields is kept.
+ * @param {unknown} inputs the execution's recorded inputs
+ * @returns {Array<{ kind: string, id: string, location?: string }>}
+ */
+export function vcrExecutionInputs(inputs) {
+  return list(inputs)
+    .filter((input) => ["analysis_table", "snapshot_file"].includes(input?.kind) && typeof input.id === "string")
+    .map((input) => ({ kind: input.kind, id: input.id, ...(typeof input.location === "string" ? { location: input.location } : {}) }));
+}
+
+/**
  * The snapshots a list of inputs reads, sorted and without repeats.
  * @param {unknown} inputs requested (`{ kind: "snapshot", id }`) or resolved (`analysis_table` / `snapshot_file`) entries
  * @returns {string[]}
@@ -75,6 +89,9 @@ export function vcrCohortBinding(population, inputs) {
   return { state: snapshotIds.every((id) => id === population.snapshotId) ? "matches" : "other_snapshot", snapshotIds };
 }
 
+/** The columns of a real population's definition that a cohort job carries with the cohort, and what to call each. */
+const COHORT_COLUMN_PARTS = Object.freeze(/** @type {Array<[string, string]>} */ ([["timeZero", "时间零点列"], ["exit", "随访结束列"]]));
+
 /**
  * The refusal a cohort job is given when it is not about the population it will be filed under, or `null`. Said with the way out:
  * a recomputation on another snapshot, or under other rules, is a new population version, and the old version keeps its result.
@@ -103,8 +120,20 @@ export function vcrCohortInputIssue(population, inputs, scenario = {}) {
       message: `这次的入选规则和${label}保存的规则不一样：结果会记在这个人群名下，却不是它的定义算出来的。`
         + "改规则就写一个新的人群版本，再用新版本算；不传 scenario，队列按人群自己的规则算。" };
   }
+  // The definition's time zero and the end of follow-up are columns the cohort carries to every job that reads it: a scenario that
+  // names another column for either computes a cohort the definition does not describe, and files it under the definition.
+  for (const [key, words] of COHORT_COLUMN_PARTS) {
+    const definedColumn = object(object(population.definition)[key]).column;
+    const askedColumn = object(object(scenario)[key]).column;
+    if (typeof definedColumn === "string" && definedColumn && typeof askedColumn === "string" && askedColumn && definedColumn !== askedColumn) {
+      return { code: VCR_COHORT_BINDING_CODE,
+        message: `这次的${words}（${askedColumn.slice(0, 60)}）和${label}保存的（${definedColumn.slice(0, 60)}）不一样：结果会记在这个人群名下，却不是它的定义算出来的。`
+          + `改${words}就写一个新的人群版本，再用新版本算；不传 scenario，队列按人群自己的定义算。` };
+    }
+  }
   return null;
 }
+
 
 /**
  * Populations as a reader may take them: a real population whose result was computed on another snapshot has no result of its own,

@@ -97,33 +97,92 @@ export function candidateTrialFromRecord({ precedent, record = null }) {
   };
 }
 
+/** Spellings of one character that the comparison of a quotation with its record treats as the same (each maps to its first key). */
+const DASHES = /[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/u;
+const SINGLE_QUOTES = /[\u2018\u2019\u201A\u201B\u2032\u00B4`]/u;
+const DOUBLE_QUOTES = /[\u201C\u201D\u201E\u201F\u2033]/u;
+const GREATER_EQUAL = /[\u2267\u2A7E]/u;
+const LESS_EQUAL = /[\u2266\u2A7D]/u;
+
+/**
+ * A text in the form two spellings of the same words agree in, and for each character of that form the span of the original it
+ * came from. Case, runs of whitespace (a no-break space is whitespace), width variants (NFKC), `>=` / `<=` against `≥` / `≤`, and the
+ * dash and quotation-mark variants are folded; nothing else is, so this compares and never guesses.
+ * @param {string} value
+ * @returns {{ text: string, start: number[], end: number[] }}
+ */
+function foldedSourceText(value) {
+  const source = String(value ?? "");
+  /** @type {string[]} */
+  const out = [];
+  /** @type {number[]} */
+  const start = [];
+  /** @type {number[]} */
+  const end = [];
+  /** @param {string} piece @param {number} from @param {number} to */
+  const emit = (piece, from, to) => { for (const char of piece) { out.push(char); start.push(from); end.push(to); } };
+  let gap = null;
+  let at = 0;
+  while (at < source.length) {
+    const code = source.codePointAt(at) ?? 0;
+    const char = String.fromCodePoint(code);
+    let next = at + char.length;
+    if (/\s/u.test(char)) {
+      while (next < source.length && /\s/u.test(source[next])) next += 1;
+      if (out.length) gap = { from: at, to: next };
+      at = next;
+      continue;
+    }
+    if (gap) { emit(" ", gap.from, gap.to); gap = null; }
+    if ((char === ">" || char === "<") && source[next] === "=") {
+      next += 1;
+      emit(char === ">" ? "\u2265" : "\u2264", at, next);
+    } else if (GREATER_EQUAL.test(char)) emit("\u2265", at, next);
+    else if (LESS_EQUAL.test(char)) emit("\u2264", at, next);
+    else if (DASHES.test(char)) emit("-", at, next);
+    else if (SINGLE_QUOTES.test(char)) emit("'", at, next);
+    else if (DOUBLE_QUOTES.test(char)) emit("\"", at, next);
+    else emit(char.normalize("NFKC").toLowerCase(), at, next);
+    at = next;
+  }
+  return { text: out.join(""), start, end };
+}
+
+/** The list marker in front of a criterion's wording, which is the list's and not the wording's. */
+const LIST_MARKER = /^(?:[*\-\u2022]|\d{1,3}[.)])\s+/u;
+
+/**
+ * Wording shorter than this is boilerplate that any two trials share ("Written informed consent", "Age >= 18 years"): finding it in
+ * another trial's record says nothing about where the run took it from, so only wording of at least this many characters (in the
+ * folded form of `foldedSourceText`) is ever attributed to another trial.
+ */
+export const OTHER_TRIAL_MIN_SOURCE_CHARS = 30;
+
+/**
+ * How many characters a criterion's wording is, as the comparison reads it.
+ * @param {string} sourceText
+ */
+export function sourceTextLength(sourceText) {
+  const folded = foldedSourceText(sourceText).text;
+  return [...folded.replace(LIST_MARKER, "")].length;
+}
+
 /**
  * Where a criterion's original wording stands in the record's eligibility text: a list marker in front is
- * the list's and not the wording's, runs of whitespace are one space on both sides, and the answer is the
- * span in the record's own characters. `null` when the words are not there.
+ * the list's and not the wording's, and the two sides are compared in the form `foldedSourceText` gives (case, whitespace, `>=`
+ * against `≥`, dash and quotation-mark variants are the same), the answer being the span in the record's own characters.
+ * `null` when the words are not there; a near match is not a match.
  * @param {string} sourceText @param {string} eligibilityText @returns {{ start: number, end: number } | null}
  */
 export function locateSourceText(sourceText, eligibilityText) {
-  const record = String(eligibilityText ?? "");
-  if (!record.trim()) return null;
-  /** The record with whitespace runs folded to one space, and for each folded character where it came from. */
-  const folded = [];
-  const origin = [];
-  let gap = false;
-  for (let at = 0; at < record.length; at += 1) {
-    if (/\s/.test(record[at])) { gap = folded.length > 0; continue; }
-    if (gap) { folded.push(" "); origin.push(at); gap = false; }
-    folded.push(record[at]);
-    origin.push(at);
-  }
-  const haystack = folded.join("");
-  const fold = (/** @type {string} */ value) => String(value ?? "").replace(/\s+/g, " ").trim();
-  const wording = fold(sourceText);
-  for (const candidate of [wording, wording.replace(/^(?:[*\-•]|\d{1,3}[.)])\s+/, "")]) {
+  const record = foldedSourceText(eligibilityText);
+  if (!record.text) return null;
+  const wording = foldedSourceText(sourceText).text;
+  for (const candidate of [wording, wording.replace(LIST_MARKER, "")]) {
     if (!candidate) continue;
-    const found = haystack.indexOf(candidate);
+    const found = record.text.indexOf(candidate);
     if (found < 0) continue;
-    return { start: origin[found], end: origin[found + candidate.length - 1] + 1 };
+    return { start: record.start[found], end: record.end[found + candidate.length - 1] };
   }
   return null;
 }

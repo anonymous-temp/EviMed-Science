@@ -496,11 +496,36 @@ export function vcrBindScientificInputUnits(method, scenario, inputs) {
 }
 
 /**
+ * The comparators whose R path reads the scenario's unit through `.vcr_observed_time_unit` (`R/engine.R`) and aborts on text outside the
+ * four words: the restricted-mean comparison, the weighted Cox model and the time-to-event MAIC always, the two weighting comparators
+ * (`vcr_job_weight_comparator`) when their endpoint is time to event. The others either never read `timeUnit` (aipw, covariate sets,
+ * negative control, e-value, MAP prior) or take it as a label (`comparator.tipping_point` and `comparator.prognostic_adjustment` write
+ * `as.character(sc$timeUnit %||% "months")` into the result), and text outside the table is taken as written there
+ * (`vcrTimeUnits.mjs`: "cycles" converts nothing and is said to be so).
+ */
+const OBSERVED_TIME_UNIT_ALWAYS = Object.freeze(["comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"]);
+const OBSERVED_TIME_UNIT_FOR_TIME_TO_EVENT = Object.freeze(["comparator.entropy_balance", "comparator.propensity_weight"]);
+
+/**
+ * Whether the engine will read this scenario's `timeUnit` and abort on text that is not a unit.
+ * @param {string} method @param {Record<string, any>} scenario
+ */
+function readsTimeUnitStrictly(method, scenario) {
+  if (OBSERVED_TIME_UNIT_ALWAYS.includes(method)) return true;
+  if (!OBSERVED_TIME_UNIT_FOR_TIME_TO_EVENT.includes(method)) return false;
+  // The engine's own rule for the endpoint: the stated type, else time to event when a horizon is named.
+  const stated = object(scenario.endpoint).type;
+  return stated === undefined || stated === null ? scenario.tau !== undefined && scenario.tau !== null : stated === "time_to_event";
+}
+
+/**
  * The unit a comparator scenario states, in the engine's four words. The scenario schema takes any text of up to 20 characters (jobs
  * saved at method version 1.0.0 carry whatever their author wrote and replay as they were), but the engine of version 1.1 reads only
  * `days`, `weeks`, `months` and `years` and aborts on anything else: `day`, `Days` and `天` passed here and failed there. The closed
- * spellings (`vcrTimeUnitOf`) are written as the unit they name, before the scenario is hashed, so the same request is the same job
- * in whichever spelling; text that names no unit is refused before queueing, with the four words.
+ * spellings (`vcrTimeUnitOf`) are written as the unit they name for every comparator, before the scenario is hashed, so the same
+ * request is the same job in whichever spelling; text that names no unit is refused before queueing, with the four words, only for the
+ * comparators whose R path aborts on it (`readsTimeUnitStrictly`) — for the others it is a label and is taken as written.
+ * Only a job being enqueued goes through here: a job already stored is replayed as it was saved.
  * @param {string} method @param {Record<string, any>} scenario
  * @returns {{ scenario: Record<string, any>, issue: { code: string, field: string, detail: string } | null }}
  */
@@ -508,6 +533,7 @@ export function vcrCanonicalScenarioTimeUnit(method, scenario) {
   if (!method.startsWith("comparator.") || scenario.timeUnit === undefined || scenario.timeUnit === null) return { scenario, issue: null };
   const unit = vcrTimeUnitOf(scenario.timeUnit);
   if (unit) return { scenario: unit === scenario.timeUnit ? scenario : { ...scenario, timeUnit: unit }, issue: null };
+  if (!readsTimeUnitStrictly(method, scenario)) return { scenario, issue: null };
   return { scenario, issue: { code: "scenario_value_invalid", field: "scenario.timeUnit",
     detail: `timeUnit is one of ${VCR_TIME_UNITS.join(", ")} (day, week, month, year and their abbreviations are read as these); ${JSON.stringify(String(scenario.timeUnit).slice(0, 30))} is not a time unit.` } };
 }
@@ -515,7 +541,8 @@ export function vcrCanonicalScenarioTimeUnit(method, scenario) {
 /**
  * The time unit a reconstruction's curve was calibrated in, read from its verified source receipt. `strict` (the table is bound as a
  * comparator's pseudo-patients) refuses a reconstruction whose receipt cannot be verified or whose unit is outside the table; otherwise
- * the unit is simply absent when it cannot be shown. A receipt that has changed since the reconstruction is refused either way.
+ * the unit is simply absent when it cannot be shown, including when the verifier could not look at all (it threw). A receipt that the
+ * verifier read and found changed since the reconstruction is refused either way.
  * @param {{ studyId: string, execution: Record<string, any> | null, producer: Record<string, any> | null,
  *   verifier: ((request: Record<string, any>) => Promise<any>) | null, strict: boolean }} input
  * @returns {Promise<string | null>}
@@ -528,8 +555,18 @@ export async function vcrCurveTimeUnit({ studyId, execution, producer, verifier,
     if (strict) throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
     return null;
   }
-  const verified = await /** @type {Function} */ (verifier)({ studyId, principal: checkpoint.curvePrincipal,
-    scenario: producer?.scenario, inputs: producer?.inputs, receiptId: checkpoint.curveReceiptId });
+  /** @type {any} */
+  let verified;
+  try {
+    verified = await /** @type {Function} */ (verifier)({ studyId, principal: checkpoint.curvePrincipal,
+      scenario: producer?.scenario, inputs: producer?.inputs, receiptId: checkpoint.curveReceiptId });
+  } catch (error) {
+    // The verifier throws when it cannot look (the principal no longer may run the study, the receipt is gone, the source image cannot be
+    // read). Where nothing binds the table that is no reason to refuse an analysis that never consulted the receipt before: the unit is
+    // left unstated. A bound comparator needs the proof, so its refusal stands.
+    if (strict) throw error;
+    return null;
+  }
   if (verified.detail.curveTimeUnitUnsupported === true) {
     if (strict) throw new HttpError(400, "vcr_job_scenario_invalid", "The curve calibration uses an unsupported time unit; convert it before analysis.");
     return null;
@@ -741,7 +778,8 @@ export class VcrJobs {
    * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
    *   qualityBasis?: Record<string, any> | null, derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
    *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean }} input
-   * @returns {Promise<{ job: any, created: boolean }>}
+   * @returns {Promise<{ job: any, created: boolean, notice?: { code: string, message: string } }>} `notice` is what the caller must tell the person
+   *   about a job that was queued (a synthesis the budget may not hold)
    */
   async enqueue(input) {
     const kind = String(input.kind);
@@ -853,11 +891,15 @@ export class VcrJobs {
     const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
-    // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: say so before it is queued.
+    // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: one that could not finish even at the model's
+    // best measured case is refused before it is queued; one that may or may not is queued and the caller is told so beside the job.
+    /** @type {{ code: string, message: string } | null} */
+    let notice = null;
     if (kind === "synthesize_population") {
       const configured = String(this.config.vcrDataPlaneDir ?? "").trim();
       const issue = await vcrSynthesisIssue({ root: configured ? assertDataPlaneRoot(configured) : null, inputs, scenario, cpuSecondsLimit, cpuSecondsCeiling: this.jobCpuSeconds });
-      if (issue) throw new HttpError(400, issue.code, issue.message);
+      if (issue?.refused) throw new HttpError(400, issue.code, issue.message);
+      if (issue) notice = { code: issue.code, message: issue.message };
     }
     const id = vcrId("job");
     const job = {
@@ -920,7 +962,7 @@ export class VcrJobs {
     } else {
       this.counters.deduplicated += 1;
     }
-    return { job: jobSummaryFromRow(row), created };
+    return { job: jobSummaryFromRow(row), created, ...(notice ? { notice } : {}) };
   }
 
   /** @param {string} code @param {readonly { code: string, field: string, detail?: string }[]} issues */

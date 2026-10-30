@@ -103,24 +103,83 @@ const PLATINUM = { kind: "inclusion", criterionType: "prior_treatment", sourceTe
 const ILD = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Symptomatic interstitial lung disease",
   requirement: { op: "present", variable: "interstitial_lung_disease" } };
 
-test("a criterion that is not in this trial's record but stands word for word in another trial the study holds refuses this trial, by name, and the rest of the batch goes on", async () => {
+test("a criterion that is not in this trial's record but stands as a whole sentence in another trial the study holds is not written, by name; the trial's own criteria are, and the rest of the batch goes on", async () => {
   const seam = seams({ others: [OTHER] });
   const outcome = await write(seam, [
     { registryId: "NCT05000001", criteria: [AGE, PLATINUM, ILD, BRAIN], subjectKeys: ["P-0192"] },
     { registryId: "NCT05000002", criteria: [AGE] },
   ]);
-  assert.deepEqual(outcome.ids, ["ctr_1"], "the second trial is written");
-  assert.equal(seam.written.length, 1);
-  assert.equal(seam.written[0].trial.registryId, "NCT05000002");
+  assert.deepEqual(outcome.ids, ["ctr_1", "ctr_1"], "both trials are written");
+  assert.deepEqual(seam.written.map((call) => call.trial.registryId), ["NCT05000001", "NCT05000002"]);
+  assert.deepEqual(seam.written[0].criteria.map((criterion) => criterion.sourceText), [AGE.sourceText, BRAIN.sourceText],
+    "the two sentences that are another trial's are not saved; the two that are this trial's are");
+  assert.equal(seam.written[1].criteria.length, 1);
   const refused = outcome.issues.filter((entry) => entry.index === 0);
   assert.deepEqual(refused.map((entry) => [entry.field, entry.code]), [
     ["criteria[1].sourceText", "criterion_from_other_trial"],
     ["criteria[2].sourceText", "criterion_from_other_trial"],
-  ], "every offending criterion is named, the one that is this trial's own is not");
+  ], "every offending criterion is named by its place in the run's list, the one that is this trial's own is not");
   assert.match(refused[0].message, /NCT05000001/);
   assert.match(refused[0].message, /NCT05000009/);
   assert.match(refused[0].message, /Trial B/);
+  assert.match(refused[0].message, /其余条件照常写入/);
+  assert.equal(outcome.issues.filter((entry) => entry.index === 1).length, 0);
+  const row = outcome.results.find((result) => result.index === 0);
+  assert.equal(row.criteria, 2);
+  assert.equal(row.refused, 2);
+  assert.match(row.note, /整套再写一次/);
   assert.deepEqual(seam.asked[0], { registry: "clinicaltrials.gov", registryId: "NCT05000001" }, "the trial being written is told apart from its siblings");
+});
+
+test("when every criterion of the trial is another trial's, nothing of it is written: a trial with no criterion judges nobody", async () => {
+  const seam = seams({ others: [OTHER] });
+  const outcome = await write(seam, [
+    { registryId: "NCT05000001", criteria: [PLATINUM, ILD] },
+    { registryId: "NCT05000002", criteria: [AGE] },
+  ]);
+  assert.deepEqual(seam.written.map((call) => call.trial.registryId), ["NCT05000002"]);
+  assert.deepEqual(outcome.issues.map((entry) => [entry.index, entry.field, entry.code]), [
+    [0, "criteria[0].sourceText", "criterion_from_other_trial"],
+    [0, "criteria[1].sourceText", "criterion_from_other_trial"],
+  ]);
+  assert.match(outcome.issues[0].message, /这个试验这次没有写入/);
+});
+
+// Boilerplate is every trial's: the model writes "Written informed consent" for the record's "Patients must provide written informed
+// consent" and "Age ≥ 18 years" for "Age >= 18 years", and a sibling trial states both lines in just those words. Before this change that
+// refused the whole trial (the locator compared case-sensitively and the sibling's exact strings were taken as the source).
+const BOILERPLATE_RECORD = "Inclusion Criteria:\n* Patients must provide written informed consent\n* Age >= 18 years\n* Histologically confirmed NSCLC";
+const BOILERPLATE_SIBLING = { id: "ctr_8", registry: "clinicaltrials.gov", registryId: "NCT05000008", title: "Trial C",
+  eligibilityText: "Inclusion Criteria:\n* Written informed consent\n* Age ≥ 18 years\n* Signed informed consent form" };
+const boilerplateRecord = () => ({ ...record(), trial: { ...record().trial, eligibilityText: BOILERPLATE_RECORD } });
+const CONSENT = { kind: "inclusion", criterionType: "other", sourceText: "Written informed consent",
+  requirement: { op: "present", variable: "informed_consent" } };
+const AGE_SYMBOL = { ...AGE, sourceText: "Age ≥ 18 years" };
+
+test("boilerplate wording is the trial's own when it is in the record under case, spacing and symbol variants, and is never attributed to another trial", async () => {
+  const seam = seams({ others: [BOILERPLATE_SIBLING], record: boilerplateRecord });
+  const outcome = await write(seam, [{ registryId: "NCT05000001", criteria: [CONSENT, AGE_SYMBOL, NSCLC] }]);
+  assert.deepEqual(outcome.issues, [], "no refusal, no warning: all three are in this record");
+  assert.equal(seam.written.length, 1);
+  assert.equal(seam.written[0].criteria.length, 3);
+  assert.equal(outcome.results[0].located, 3);
+  assert.equal(outcome.results[0].refused, undefined);
+  const consent = BOILERPLATE_RECORD.indexOf("written informed consent");
+  assert.deepEqual(seam.written[0].criteria[0].sourceLocator, { recordHash: HASH, start: consent, end: consent + "written informed consent".length },
+    "located in the record's own characters, whatever case the run wrote");
+  const age = BOILERPLATE_RECORD.indexOf("Age >= 18 years");
+  assert.deepEqual(seam.written[0].criteria[1].sourceLocator, { recordHash: HASH, start: age, end: age + "Age >= 18 years".length },
+    "the span of the record's >= is two characters where the run's ≥ is one");
+  assert.equal(seam.asked.length, 0, "nothing is left to compare against a sibling");
+});
+
+test("short wording found in a sibling but not in this record keeps the old warning: boilerplate is not evidence of where the run copied it from", async () => {
+  const seam = seams({ others: [BOILERPLATE_SIBLING], record: boilerplateRecord });
+  const SIGNED = { ...CONSENT, sourceText: "Signed informed consent form" };
+  const outcome = await write(seam, [{ registryId: "NCT05000001", criteria: [SIGNED, AGE_SYMBOL] }]);
+  assert.deepEqual(outcome.issues, []);
+  assert.equal(seam.written[0].criteria.length, 2, "written, not located");
+  assert.deepEqual(outcome.results[0].warnings.map((warning) => [warning.field, warning.code]), [["criteria[0].sourceText", "source_text_not_in_record"]]);
 });
 
 test("wording that is in this record is this trial's even when another trial says it too; wording found nowhere is still only a warning", async () => {

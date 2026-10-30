@@ -1302,7 +1302,7 @@ export function createVcrRoutes(dependencies) {
           // The queue binds the verified reconstruction once; the preview above is only for subject validation.
           scenario: body.scenario ?? {}, inputs: body.inputs ?? [], sourceModel });
         const designBinding = await prepareVcrModelDesign({ store: hooks.jobs.store, study, subject, scenario: population.scenario, inputs: population.inputs });
-        const { job, created } = await audited("vcr.job.enqueue", (result) => ({ code: result.job.id, detail: String(body.kind) }),
+        const { job, created, notice } = await audited("vcr.job.enqueue", (result) => ({ code: result.job.id, detail: String(body.kind) }),
           { code: id, detail: String(body.kind) }, () => hooks.jobs.enqueue({
             studyId: study.id, userId: String(user.id), kind: body.kind, scenario: designBinding.scenario, derived: [...(reconstruction.derived ?? []), ...population.derived], inputs: designBinding.inputs, qualityBasis: body.qualityBasis ?? null,
             ...(population.derived.length ? { internal: true } : {}),
@@ -1310,7 +1310,7 @@ export function createVcrRoutes(dependencies) {
             detail: { ...(subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {})), ...population.detail, ...designBinding.detail, ...(sourceModel ? { sourceModel } : {}) },
           }));
         if (subject && hooks.orchestrator?.noteRuntimeJob) await hooks.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
-        return reply(job, created ? 201 : 200);
+        return reply(notice ? { ...job, notice } : job, created ? 201 : 200);
       }
       if (parts.length === 4 && method === "GET") {
         const { study } = await authorize(id, "read");

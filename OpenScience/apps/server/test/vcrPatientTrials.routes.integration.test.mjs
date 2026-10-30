@@ -208,18 +208,20 @@ test("a run writes two registry trials for a patient, the platform judges her ag
   assert.equal("ledger" in page, false);
 });
 
-test("a criterion taken from another trial the study holds refuses the trial it was written under, naming the one it belongs to", options, async () => {
+test("a criterion taken from another trial the study holds is not written under the trial it was typed in, naming the one it belongs to", options, async () => {
   const study = await furnishedStudy();
   const first = await runWrites(study, [{ registryId: "NCT07000001", criteria: [AGE, ECOG, BRAIN], subjectKeys: ["P-0192"] }]);
   assert.deepEqual(first.issues, []);
   // The ECOG line is NCT07000001's wording; this record has no such line, and the EGFR line is its own.
   const mixed = await runWrites(study, [{ registryId: "NCT07000002", criteria: [AGE, ECOG, EGFR, BRAIN], subjectKeys: ["P-0192"] }]);
-  assert.equal(mixed.ok, false);
   assert.deepEqual(mixed.issues.map((row) => [row.field, row.code]), [["criteria[1].sourceText", "criterion_from_other_trial"]]);
   assert.match(mixed.issues[0].message, /NCT07000001/);
+  assert.equal(mixed.ids.length, 1, "the trial is written with the lines that are its own");
   const held = await context.app.vcr.service.runtimeRead(study, "candidate_trials", {});
-  assert.deepEqual(held.trials.map((row) => row.registryId), ["NCT07000001"], "the mixed trial was not written");
-  // Written with its own lines it is, and the shared age line (in both records) was never the problem.
+  assert.deepEqual(held.trials.map((row) => row.registryId).sort(), ["NCT07000001", "NCT07000002"]);
+  const written = await context.app.vcr.service.runtimeRead(study, "candidate_trials", { registryId: "NCT07000002" });
+  assert.deepEqual(written.trials[0].criteria.map((row) => row.sourceText), [AGE.sourceText, EGFR.sourceText, BRAIN.sourceText], "the foreign line was not kept");
+  // The shared age line (in both records) was never the problem.
   const own = await runWrites(study, [{ registryId: "NCT07000002", criteria: [AGE, EGFR, BRAIN], subjectKeys: ["P-0192"] }]);
   assert.deepEqual(own.issues, []);
   assert.equal(own.ids.length, 1);

@@ -1,5 +1,5 @@
 /**
- * The refusal of an empirical synthesis that cannot finish, said before it is queued (2026-10-31).
+ * The refusal of an empirical synthesis that cannot finish, and the notice of one that may not, said before it is queued (2026-10-31).
  *
  * `population.synthpop` makes its copies one after another inside one R process, then scores each of them against the training table,
  * and the process stops at 90 % of the job's CPU limit with nothing to show for the work done. The domain holds the cost model and the
@@ -50,10 +50,11 @@ export async function vcrTableShape(file) {
 }
 
 /**
- * The refusal for a synthesis job whose table cannot be finished inside its budget, or null.
+ * What the budget says of a synthesis job's table, or null when it fits. `refused` is a table that could not be finished even at the
+ * model's best measured case (not queued); otherwise the table may or may not finish and the job is queued with this as its notice.
  * @param {{ root: string | null, inputs: ReadonlyArray<Record<string, any>>, scenario: Record<string, any>, cpuSecondsLimit: number, cpuSecondsCeiling?: number }} input
  *   `root` is the data plane's directory; `inputs` the table inputs as the queue resolved them
- * @returns {Promise<{ code: string, message: string } | null>}
+ * @returns {Promise<{ code: string, message: string, refused: boolean } | null>}
  */
 export async function vcrSynthesisIssue({ root, inputs, scenario, cpuSecondsLimit, cpuSecondsCeiling }) {
   if (!root) return null;
@@ -65,5 +66,6 @@ export async function vcrSynthesisIssue({ root, inputs, scenario, cpuSecondsLimi
   if (!shape || shape.columns < 1) return null;
   const copies = Number.isInteger(object(scenario).m) ? Number(object(scenario).m) : VCR_SYNTHPOP_COPIES.min;
   const verdict = vcrSynthpopFeasibility({ rows: shape.rows, columns: shape.columns, copies, cpuSecondsLimit, cpuSecondsCeiling });
-  return "message" in verdict ? { code: "vcr_synthesis_too_large", message: verdict.message } : null;
+  if ("message" in verdict) return { code: "vcr_synthesis_too_large", message: verdict.message, refused: true };
+  return verdict.risk ? { code: "vcr_synthesis_may_not_finish", message: verdict.risk.message, refused: false } : null;
 }
