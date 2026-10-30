@@ -95,17 +95,19 @@ describe("an event", () => {
     for (const gone of ["由多篇报道综合", "当事方自己的说法", "最新在前", "仍在发展", "篇报道"]) expect(document.body).not.toHaveTextContent(gone);
   });
 
-  it("reads a long timeline a page at a time: thirty reports, then 显示更多 with the rest counted", async () => {
+  it("reads a long timeline a page at a time: twenty reports, then 显示更多 with the rest counted", async () => {
     const reports = Array.from({ length: 45 }, (_, index) => ({ ...frontierItem({ id: `r${index}`, title: `报道 ${index}`, source: { id: "mx", name: "Medical Xpress" },
       sourceType: "media", sourceTypeLabel: "媒体", url: `https://medicalxpress.com/${index}`, timelineAt: ago(index + 1), selected: false }), role: "report" as const }));
     client.fetchFrontierEvent.mockResolvedValue(event({ items: reports, hasPrimary: false, primary: null as unknown as FrontierEvent["primary"] }));
     renderEvent();
     await screen.findByRole("heading", { level: 1 });
-    expect(timelineRows()).toHaveLength(30);
+    expect(timelineRows()).toHaveLength(20);
     const more = screen.getByRole("button", { name: /显示更多/ });
-    expect(more).toHaveTextContent("15");
-    expect(more.closest("[data-show-more]")).not.toBeNull();
+    expect(more).toHaveTextContent("25");
     fireEvent.click(more);
+    expect(timelineRows()).toHaveLength(40);
+    expect(more.closest("[data-show-more]")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /显示更多/ }));
     expect(timelineRows()).toHaveLength(45);
     expect(screen.queryByRole("button", { name: /显示更多/ })).toBeNull();
   });

@@ -368,18 +368,21 @@ function EventRecord({ event, layout }: { event: FrontierEvent; layout: "column"
  * there, and the way back to all of them is where it was.
  */
 function ReportGroup({ id, title, rows, toolbar }: { id: string; title: string; rows: Array<FrontierItem & { role: FrontierEventRole }>; toolbar?: ReactNode }) {
+  const page = useShowMore(rows, { first: TIMELINE_PAGE, step: TIMELINE_PAGE, resetKey: `${rows.length}:${rows[0]?.id ?? ""}` });
   if (rows.length === 0 && !toolbar) return null;
   return (
     <Section title={title} count={rows.length} toolbar={toolbar} className="mt-0">
       <ol id={id} aria-label={title} className="ml-1 border-l border-border">
-        {rows.map((item) => <TimelineRow key={item.id} item={item} />)}
+        {page.visible.map((item) => <TimelineRow key={item.id} item={item} />)}
       </ol>
+      <ShowMore remaining={page.remaining} unit="篇" onMore={page.more} />
     </Section>
   );
 }
 
-/** Reports on the timeline before 「显示更多」. */
-const TIMELINE_PAGE = 30;
+/** Reports in a group or on the timeline before 「显示更多」: twenty keep a hot event's page within six phone windows (thirty drew
+ * 5,209 px on a 844 px phone, 2026-10-30). */
+const TIMELINE_PAGE = 20;
 
 /**
  * 「报道时间线」: the reports cut into Beijing days, in the order the page reads them (newest day first, or oldest on 最早), each day a
