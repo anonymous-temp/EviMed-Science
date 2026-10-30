@@ -342,15 +342,15 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
   async function seedIfNeeded(at) {
     if (seedCount <= 0) return { skipped: "seed_count_zero" };
     if (await readMarker(SEED_MARKER)) return { skipped: "seeded" };
-    const standing = await platformZoneCount();
-    if (standing >= seedCount) {
+    const held = await platformZoneCount();
+    if (held >= seedCount) {
       await database.transaction((/** @type {any} */ client) => writeMarker(client, SEED_MARKER, { at: at.toISOString(), by: "count" }));
       return { skipped: "seeded" };
     }
     // The attempts are spent: the feed does not support the rest. The zones there are the platform's, and the weekly pass keeps them (a
     // restart must not buy six attempts more, so the count is the database's). With no zone at all the seeding stays open.
-    if (standing > 0 && (Number((await readMarker(SEED_ATTEMPTS_KEY))?.count) || 0) >= MAX_SEED_ATTEMPTS) {
-      await database.transaction((/** @type {any} */ client) => writeMarker(client, SEED_MARKER, { at: at.toISOString(), by: "attempts", zones: standing }));
+    if (held > 0 && (Number((await readMarker(SEED_ATTEMPTS_KEY))?.count) || 0) >= MAX_SEED_ATTEMPTS) {
+      await database.transaction((/** @type {any} */ client) => writeMarker(client, SEED_MARKER, { at: at.toISOString(), by: "attempts", zones: held }));
       return { skipped: "seeded" };
     }
     if (attempts.seed >= MAX_SEED_ATTEMPTS || at.getTime() < attempts.seedNextAt) return { skipped: "waiting" };
