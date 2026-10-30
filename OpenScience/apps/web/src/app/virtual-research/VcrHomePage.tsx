@@ -219,12 +219,13 @@ export function VcrHomePage() {
     next.set("study", id);
     return `?${next.toString()}`;
   };
+  // Closing replaces the entry that opened the preview: Back from the list must leave the page, not open the preview again.
   const closePreview = () => setParams((current) => {
     const next = new URLSearchParams(current);
     next.delete("study");
     next.delete("new");
     return next;
-  });
+  }, { replace: true });
   const clearFilters = () => { setQuery(""); setState("all"); };
 
   const entry = <TaskEntry ask={ask} />;
