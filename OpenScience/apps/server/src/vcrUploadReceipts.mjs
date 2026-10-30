@@ -3,8 +3,12 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { HttpError, resolveScopedPath, writeFileAtomicNoFollow } from './security.mjs';
+import { VCR_DATA_INTAKE_CONTRACT } from './vcrDataIntake.mjs';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const recordType = 'vcr-upload-original';
+// Only what the study's data intake can import is kept: every other attachment would be a second copy nobody reads.
+const KEPT_FORMATS = new Set(VCR_DATA_INTAKE_CONTRACT.import.formats);
+const KEPT_MAX_BYTES = VCR_DATA_INTAKE_CONTRACT.import.maxBytes;
 
 export function createVcrUploadReceipts({ documents, sources, write }) {
   return {
@@ -12,6 +16,7 @@ export function createVcrUploadReceipts({ documents, sources, write }) {
       if (!Buffer.isBuffer(bytes) || !bytes.length || typeof name !== 'string') return null;
       const basename = path.basename(name.replaceAll('\\', '/'));
       if (!basename || basename === '.' || basename === '..') return null;
+      if (!KEPT_FORMATS.has(path.posix.extname(basename).slice(1).toLowerCase()) || bytes.length > KEPT_MAX_BYTES) return null;
       const sha256 = digest(bytes);
       const id = `upl_${digest(`${project.id}\0${sha256}\0${basename}\0${sessionId ?? ''}`).slice(0, 40)}`;
       const relative = `.evimed-upload-originals/${sha256}/${basename}`;

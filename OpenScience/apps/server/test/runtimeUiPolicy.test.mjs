@@ -2437,6 +2437,27 @@ test('only successful authenticated native raw uploads retain original byte rece
 });
 
 
+test('a failed copy of the original bytes leaves the native upload successful and is audited', { timeout: 5000 }, async t => {
+  const audits = [];
+  const f = await fixture(t, {}, {}, {
+    recordUploadSuccess: async () => { throw Object.assign(new Error('full'), { code: 'project_capacity_exceeded' }); },
+    audit: async (event, fields) => { audits.push({ event, ...fields }); },
+  });
+  const bytes = Buffer.from('original,patient\n1,62\n');
+  f.manager.proxy = async (req, res, _project, _suffix, options) => {
+    const body = Buffer.from(JSON.stringify({ ok: true, value: { receiptId: 'native-success', file: { attachmentId: 'file', name: 'baseline.csv', bytes: bytes.length } } }));
+    await options.observeResponse?.({ status: 200, body, contentType: 'application/json' });
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end(body);
+  };
+  const response = await fetch(`${f.base}/api/session/uploadFileBinary?sessionId=s1&name=baseline.csv`, {
+    method: 'POST', headers: { Cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/octet-stream' }, body: bytes,
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).value.receiptId, 'native-success');
+  assert.deepEqual(audits.filter(entry => entry.event === 'vcr.upload_original.record').map(entry => entry.code), ['project_capacity_exceeded']);
+});
+
+
 test('native Remote file-upload fallback retains only upstream-confirmed original bytes', { timeout: 5000 }, async t => {
   const successes = [];
   const f = await fixture(t, {}, {}, { recordUploadSuccess: async (project, upload) => { successes.push({ project: project.id, ...upload }); } });

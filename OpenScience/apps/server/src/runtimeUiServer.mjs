@@ -286,6 +286,17 @@ function assertNativeModelSelection(config, payload) {
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
+  // The original bytes of a native upload are kept for the study's data intake beside the kernel's own copy. A failed
+  // copy (the project's capacity, the ledger) is that copy's failure: the upload the kernel already stored stands.
+  /** @param {any} project @param {any} upload */
+  const keepUploadOriginal = async (project, upload) => {
+    try {
+      await recordUploadSuccess?.(project, upload);
+    } catch (error) {
+      await audit("vcr.upload_original.record", { userId: project.userId, projectId: project.id,
+        code: /** @type {any} */ (error)?.code ?? "vcr_upload_original_unavailable" }).catch(() => {});
+    }
+  };
   /** The person's signed attendance receipt, written before the prompt is forwarded and never a reason to refuse it (review F5):
    * a missing receipt makes the turn read as unattended at worst. The writer counts its own failures
    * (`open_science_attendance_receipt_write_failures_total`). @param {any} user @param {any} project @param {any} request */
@@ -932,7 +943,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         const value = answer?.ok === true ? answer.value : null;
         if (typeof value?.receiptId !== 'string' || !value.receiptId || typeof value.file?.attachmentId !== 'string'
           || value.file.bytes !== originalUpload.bytes.length || typeof value.file.name !== 'string') return;
-        await recordUploadSuccess(project, { ...originalUpload, name: originalUpload.name ?? value.file.name });
+        await keepUploadOriginal(project, { ...originalUpload, name: originalUpload.name ?? value.file.name });
       } } : {}),
     });
     const forwardPrompt = async () => {
@@ -1110,7 +1121,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
                 const bytes = Buffer.from(request.data, 'base64');
                 if (bytes.length === value.file.bytes && bytes.length <= config.maxFileBytes) {
                   await authorizePromptSession(project, { args: { request: { sessionId } } });
-                  await recordUploadSuccess(project, { name: request.name ?? value.file.name, sessionId, bytes });
+                  await keepUploadOriginal(project, { name: request.name ?? value.file.name, sessionId, bytes });
                 }
               }
             }
