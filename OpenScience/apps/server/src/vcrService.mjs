@@ -1249,7 +1249,10 @@ export class VcrService {
       // A subject whose consent was withdrawn is listed with their evaluation, as withdrawn, and is not counted among the candidates.
       matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l
         WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) GROUP BY summary`, matchingArgs).catch(() => []),
-      matchStore.rows(`SELECT * FROM (${latest}) l WHERE summary <> 'ineligible' ORDER BY subject_key LIMIT 200`, matchingArgs).catch(() => []),
+      // Everyone who has been assessed is a person on the page, the ones judged not eligible too: their rule-by-rule judgement is what
+      // says which rule failed and on what evidence. Those still in play come first, so the cap cuts the not-eligible ones.
+      matchStore.rows(`SELECT * FROM (${latest}) l ORDER BY CASE summary WHEN 'eligible' THEN 0 WHEN 'insufficient_evidence' THEN 1
+        WHEN 'pending' THEN 2 ELSE 3 END, subject_key LIMIT 200`, matchingArgs).catch(() => []),
       matchStore.rows(`SELECT j.criterion_id, count(*)::int AS unknown FROM ${VCR_SCHEMA}.criterion_judgments j
         WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, matchingArgs).catch(() => []),
       // Excluded on a model's word alone: they wait in 「待复核排除」, so the
@@ -1262,6 +1265,10 @@ export class VcrService {
     // What the evaluation rested on, when that has since changed (a document, a projection, a permission) or was withdrawn: a plain
     // state beside the subject, and the evaluation that already exists offered again. Nothing is blocked and nothing re-runs.
     const marks = await this.packages.erasure?.assessmentMarks?.(study.id, subjectRows.map((row) => String(row.id))).catch(() => new Map()) ?? new Map();
+    // A person asked for by name who the cap left out is still read: the page opens whoever it is told to, not the first 200.
+    if (query.candidate && !subjectRows.some((row) => String(row.subject_key) === query.candidate)) {
+      subjectRows.push(...await matchStore.rows(`SELECT * FROM (${latest}) l WHERE subject_key = $3`, [...matchingArgs, query.candidate]).catch(() => []));
+    }
     const subjects = subjectRows.map((row) => ({
       id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
       priority: row.priority ?? null, direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
@@ -1269,9 +1276,9 @@ export class VcrService {
     }));
     const wanted = subjects.map((subject) => subject.id);
     const openRows = wanted.length
-      ? await matchStore.rows(`SELECT j.assessment_id, j.criterion_id, j.state, j.recheck_at FROM ${VCR_SCHEMA}.criterion_judgments j
+      ? await matchStore.rows(`SELECT j.assessment_id, j.criterion_id, COALESCE(j.override_state, j.state) AS state, j.recheck_at FROM ${VCR_SCHEMA}.criterion_judgments j
           JOIN ${VCR_SCHEMA}.criteria c ON c.id = j.criterion_id
-          WHERE j.assessment_id = ANY($1::text[]) AND j.applicable AND j.state IN ('unknown', 'pending_recheck')
+          WHERE j.assessment_id = ANY($1::text[]) AND j.applicable AND COALESCE(j.override_state, j.state) IN ('unknown', 'pending_recheck', 'not_satisfied')
           ORDER BY j.assessment_id, c.ordinal`, [wanted]).catch(() => [])
       : [];
     /** @type {Map<string, Array<{ criterionId: string, state: string, recheckAt: string | null }>>} */
@@ -1282,7 +1289,7 @@ export class VcrService {
       openByAssessment.set(String(row.assessment_id), list_);
     }
     // The candidate the detail panel is about: the one asked for, else the first listed.
-    const order = ["eligible", "insufficient_evidence", "pending"];
+    const order = ["eligible", "insufficient_evidence", "pending", "ineligible"];
     const listed = [...subjects].sort((a, b) => order.indexOf(a.summary) - order.indexOf(b.summary)
       || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0) || a.subjectKey.localeCompare(b.subjectKey));
     const focus = listed.find((subject) => subject.subjectKey === query.candidate) ?? listed[0] ?? null;

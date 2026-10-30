@@ -88,9 +88,11 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
             if (query.get("candidate") === "P-0192") return fixture(query.get("trial") === "ctr_2" ? "ev201/matching-patient-trials-open.json" : "ev201/matching-patient-trials.json");
             return fixture("ev201/matching-patient-trials-nobody.json");
           }
-          // Two subjects have evidence-backed matching detail records.
+          // Three subjects have matching detail records.
           if (query.get("candidate") === "P-0201") return fixture("ev201/matching-p0201.json");
           if (query.get("candidate") === "P-0192") return fixture("ev201/matching-p0192.json");
+          // A person judged not eligible: the rule they fail, in the same rule-by-rule table.
+          if (query.get("candidate") === "P-0240") return fixture("ev201/matching-p0240.json");
           return fixture("ev201/matching.json");
         }
         void item;

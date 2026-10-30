@@ -213,7 +213,9 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
  * matching has already run, and offering 「开始评估」 there would ask for work that is done.
  */
 function emptyPage(data: MatchingData): boolean {
-  return data.candidates.length === 0 && !data.pendingReview
+  // The funnel is the server's tally of the assessments that are stored; a page whose list is empty and whose tally is not has
+  // results (they are all on people the list does not show), and 「尚未生成」 would say the opposite of what the study holds.
+  return data.candidates.length === 0 && !data.funnel.some((step) => (step.count ?? 0) > 0) && !data.pendingReview
     // A person in view counts once something is known of them: recorded facts, or an assessment. A protocol listed as 尚未评估 is not one.
     && !(data.timeline?.length || data.comparisons?.some((entry) => entry.summary));
 }
@@ -360,8 +362,11 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 </div>
               )}
             >
+              {/* Each opens the person's rule-by-rule judgement beside the list: which rule failed, and on what evidence. */}
               <ul data-vcr-pending-review="" className="flex flex-wrap gap-1.5">
-                {data.pendingReview.subjects.map((subject) => <li key={subject}><Tag>{subject}</Tag></li>)}
+                {data.pendingReview.subjects.map((subject) => (
+                  <li key={subject}><Button size="sm" variant="secondary" aria-current={current === subject ? "true" : undefined} onClick={() => onPick(subject)}>{subject}</Button></li>
+                ))}
               </ul>
             </Card>
           )}
@@ -458,6 +463,7 @@ function CandidateRow({ candidate, current, onPick }: { candidate: VcrCandidate;
       titleProps={{ "data-vcr-candidate": candidate.id }}
       trailing={(
         <>
+          {candidate.eligibility === "ineligible" && <Tag>不符合</Tag>}
           {candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
           {candidate.basis === "updated" && <Tag>依据已更新</Tag>}
         </>
@@ -465,8 +471,12 @@ function CandidateRow({ candidate, current, onPick }: { candidate: VcrCandidate;
       meta={(
         <span className="flex flex-col gap-1">
           <span className="truncate text-caption text-text-2">{candidate.summary}</span>
-          {candidate.open.length > 0 && (
+          {(candidate.open.length > 0 || (candidate.failed?.length ?? 0) > 0) && (
             <span className="flex flex-wrap gap-1">
+              {/* The rules this person fails first: a not-eligible person's row says which, and the row opens the evidence. */}
+              {(candidate.failed ?? []).map((failed) => (
+                <Tag key={`failed-${failed.code}`} tone="warn">{`${failed.code} ${criterionStateLabel(failed.state)}`}</Tag>
+              ))}
               {candidate.open.map((open) => (
                 <Tag key={open.code} tone="warn">
                   {`${open.code} ${criterionStateLabel(open.state)}${open.note ? ` ${open.note}` : ""}`}

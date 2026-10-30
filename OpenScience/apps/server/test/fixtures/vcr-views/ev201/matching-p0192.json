@@ -134,6 +134,32 @@
         }
       ],
       "priority": null
+    },
+    {
+      "id": "P-0240",
+      "summary": "5 条满足 · 0 条未知 · 0 条待复评 · 1 条不满足",
+      "eligibility": "ineligible",
+      "open": [],
+      "failed": [
+        {
+          "code": "I2",
+          "state": "not_satisfied"
+        }
+      ],
+      "priority": null
+    },
+    {
+      "id": "P-0251",
+      "summary": "5 条满足 · 0 条未知 · 0 条待复评 · 1 条不满足",
+      "eligibility": "ineligible",
+      "open": [],
+      "failed": [
+        {
+          "code": "I1",
+          "state": "not_satisfied"
+        }
+      ],
+      "priority": null
     }
   ],
   "selected": {

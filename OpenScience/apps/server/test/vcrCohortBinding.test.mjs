@@ -115,7 +115,7 @@ test("the progress of a population on A counts A's computation and A's profile, 
   const progress = presentResearchProgress(bundle);
   assert.equal(progress.calculation, "available");
   assert.equal(progress.resultId, "res_pop");
-  assert.equal(progress.resultNotCounted, null);
+  assert.equal("resultNotCounted" in progress, false);
   assert.equal(progress.counts.realPatients, 2181);
   assert.equal(progress.counts.sourcePatients, 4000, "A's own profile, though two later profiles superseded it in the current list");
   // the same study, with the current list as the store holds it (superseded results are not in it)

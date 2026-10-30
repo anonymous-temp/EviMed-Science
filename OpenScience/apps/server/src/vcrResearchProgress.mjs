@@ -57,7 +57,7 @@ export function presentResearchProgress(bundle) {
     definition: population ? "saved" : "none", input: availability, calculation: status,
     resultId: result?.id ?? null, resultStale: stale,
     // A result that exists but was computed on another snapshot: not counted here, said so, never drawn as a zero.
-    resultNotCounted: otherSnapshot ? { reason: "other_snapshot", resultId: otherSnapshot.resultId ?? null, snapshotIds: list(otherSnapshot.snapshotIds).map(String) } : null,
+    ...(otherSnapshot ? { resultNotCounted: { reason: "other_snapshot", resultId: otherSnapshot.resultId ?? null, snapshotIds: list(otherSnapshot.snapshotIds).map(String) } } : {}),
     counts: {
       sourcePatients: numeric(profileCounts.realPatients),
       realPatients: population?.kind === "real" && (execution?.method !== "cohort.build" || !hasPatientCountContract(execution?.methodVersion)) ? null : numeric(selectedCounts.realPatients),

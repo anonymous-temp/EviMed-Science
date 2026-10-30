@@ -1093,6 +1093,8 @@ export interface VcrCandidate {
   eligibility: VcrEligibility;
   /** The rules still open on this person: 「E3 未知」「E5 待复评 10月6日」. */
   open: Array<{ code: string; state: VcrCriterionState; note?: string | null }>;
+  /** The rules this person fails, by code: where to look first in their rule-by-rule judgement. Absent when none. */
+  failed?: Array<{ code: string; state: VcrCriterionState }>;
   /** What the evaluation rested on has since been withdrawn (the person's consent, or a record), or changed. */
   basis?: "withdrawn" | "updated";
   /** The model's ranking hint, carried with its own label and never as a probability of benefit. */
