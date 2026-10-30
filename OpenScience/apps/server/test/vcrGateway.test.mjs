@@ -328,6 +328,21 @@ test("「从方案出发查覆盖」: a real population written from the protoco
   await noProtocol.handler(request("/internal/vcr/v1/write", { what: "population", data: { fromProtocol: true, snapshotId: "snp_1" } }), none);
   assert.match(none.json().data.issues[0].message, /还没有结构化的入排条件/);
   assert.equal(saved.length, before, "nothing was saved by a refusal");
+  // a cohort for the population on snp_1 that names another snapshot, or other rules, is refused with the way out and queues nothing
+  const queuedBefore = queued.length;
+  for (const body of [{ inputs: [{ kind: "snapshot", id: "snp_2" }] },
+    { inputs: [{ kind: "snapshot", id: "snp_1" }, { kind: "snapshot", id: "snp_2" }, { kind: "snapshot", id: "snp_3" }] },
+    { scenario: { rules: [{ name: "I1", rule: { op: "compare", column: "age", comparator: "gte", value: 65 } }] } }]) {
+    const wrong = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "build_cohort", subjectId: "pop_cov", ...body }), wrong);
+    assert.equal(wrong.status, 400, wrong.body);
+    // the service's 400 reaches the run as a request that was wrong, with the sentence that says how to go on
+    assert.equal(wrong.json().code, "vcr_request_invalid");
+    assert.match(wrong.body, /新(的)?人群版本/, wrong.body);
+  }
+  assert.equal(queued.length, queuedBefore, "nothing was queued for a cohort that is not the population's");
+  // a real population is written with its snapshot
+  assert.equal((await write({ kind: "real", name: "no data yet", definition: { rules: [] } })).issues[0].field, "snapshotId");
   // a cohort with no scenario and no real population behind it says what to write
   const lonely = fixture({ jobs });
   const answer = response();

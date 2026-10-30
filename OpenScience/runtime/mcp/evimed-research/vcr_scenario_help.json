@@ -341,9 +341,15 @@
     },
     "population.synthpop": {
       "endpoints": [],
+      "notes": [
+        "m is the number of synthetic copies, 5 to 50: fewer than 5 cannot support inference on synthetic data and the engine refuses them. Every copy costs the same again.",
+        "Size limit. The copies and their quality scores are made in one R process whose CPU budget is the job's cpuSecondsLimit (the platform's default is 600 s, of which 90% can be used); a job that reaches it fails with no table and no copy kept. The cost grows with the square of the columns for the copies, with the fourth power for the quality score (a logistic model of every pair of columns) and with the square of the rows for its nearest-neighbour check, so a wide table is the expensive one, not a long one. The queue estimates the CPU seconds from the table it will read (rows × columns × m, the subject key not counted) and refuses before queueing a synthesis estimated, with a 1.35× margin, to exceed the budget.",
+        "At the default budget and 5 copies the model allows about 41 columns at 1,000 rows, 35 at 4,000 and 13 at 12,000. The estimate is for numeric, count and 0/1 columns; a text column with many levels costs more.",
+        "A refusal names what to change: fewer columns (keep only the variables the analysis needs when the field map is built, then freeze a new snapshot), fewer rows (a smaller snapshot), fewer copies down to the minimum, or the job's cpuSecondsLimit where the platform allows more. The engine does not sample rows and does not drop columns, and neither does the queue."
+      ],
       "rows": [
         {"path":"holdoutShare","type":"number","min":0,"lt":1,"default":0.2},
-        {"path":"m","type":"integer","min":1,"max":50,"default":5},
+        {"path":"m","type":"integer","min":5,"max":50,"default":5},
         {"path":"constraints","type":"rules"},
         {"path":"criteria","type":"rules"},
         {"path":"analyses","type":"list","count":{"min":1,"max":20},"items":{"type":"object"}},

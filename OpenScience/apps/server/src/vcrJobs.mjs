@@ -138,6 +138,7 @@ import { HttpError } from "./security.mjs";
 import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues, vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
+import { vcrSynthesisIssue } from "./vcrSynthesisGuard.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
 /** States a job may still move out of. */
@@ -852,6 +853,12 @@ export class VcrJobs {
     const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
+    // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: say so before it is queued.
+    if (kind === "synthesize_population") {
+      const configured = String(this.config.vcrDataPlaneDir ?? "").trim();
+      const issue = await vcrSynthesisIssue({ root: configured ? assertDataPlaneRoot(configured) : null, inputs, scenario, cpuSecondsLimit, cpuSecondsCeiling: this.jobCpuSeconds });
+      if (issue) throw new HttpError(400, issue.code, issue.message);
+    }
     const id = vcrId("job");
     const job = {
       jobId: id, studyId, kind, method, methodVersion,

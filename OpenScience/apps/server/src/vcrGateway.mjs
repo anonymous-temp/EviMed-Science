@@ -2426,7 +2426,7 @@ async function startJob(vcr, study, request) {
     runId: study.executionOrigin?.runId ?? null,
     detail: { ...detail, ...(study.completionOrigin ? { conversationOrigin: study.completionOrigin } : {}) },
   }).catch(error => {
-    if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
+    if (error?.status === 400 && error.code !== "vcr_synthesis_too_large" && ['generate_population', 'literature_population', 'synthesize_population',
       'generate_patients', 'generate_patients_continuous', 'generate_patients_binary', 'generate_patients_longitudinal'].includes(request.kind)) {
       const refusal = gatewayError(400, 'vcr_simulate_payload_invalid', String(error.message));
       refusal.issues = fieldFindings(error.issues);

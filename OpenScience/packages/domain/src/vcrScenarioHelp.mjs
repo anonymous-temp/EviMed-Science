@@ -39,6 +39,7 @@
 import { VCR_DESIGN_SUPPORT, VCR_SCENARIO_SCHEMAS, VCR_SINGLE_ARM_ANALYSIS_METHODS, VCR_TWO_ARM_ANALYSIS_METHODS, whenHolds } from './vcrScenarioSchemas.mjs'
 import { VCR_ENGINE_METHODS, VCR_JOB_METHODS } from './vcrEngineJob.mjs'
 import { VCR_LONGITUDINAL_SCHEMAS } from './vcrLongitudinal.mjs'
+import { vcrSynthpopHelpNotes } from './vcrSynthesisLimits.mjs'
 
 /** The version of the file's own shape. */
 export const VCR_SCENARIO_HELP_VERSION = 1
@@ -414,6 +415,7 @@ const METHOD_NOTES = Object.freeze({
   'comparator.rmst': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.tipping_point': ROBUSTNESS_TIME_UNIT_NOTES,
   'comparator.prognostic_adjustment': ROBUSTNESS_TIME_UNIT_NOTES,
+  'population.synthpop': vcrSynthpopHelpNotes(),
   'patients.continuous': PATIENT_PAIRING_NOTES,
   'patients.binary': PATIENT_PAIRING_NOTES,
   'patients.time_to_event': PATIENT_PAIRING_NOTES,
