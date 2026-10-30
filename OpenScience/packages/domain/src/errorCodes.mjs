@@ -1892,6 +1892,26 @@ export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
 })
 
 /**
+ * What the topic zones' reads and writes refuse with (证据专区 topics, 2026-10-29/30): each names the one operation it stopped —
+ * a save over a newer revision, a zone that is not the caller's, a feature this deployment does not carry — and never a verdict on a
+ * run. The page maps some of them to its own words; these are the sentences for every other surface that shows a code.
+ */
+export const EVIDENCE_ZONE_ERROR_MESSAGES_ZH = Object.freeze({
+  evidence_revision_conflict: '内容刚刚有更新，不是你打开时的那一版，没有保存。请刷新后再改。',
+  evidence_request_conflict: '这次提交的内容和同一个请求之前提交的不一样，没有保存。请刷新后重新提交。',
+  evidence_owner_required: '只有创建者可以做这个操作。',
+  evidence_user_zone_limit: '自己建的专区已经到上限了，先删掉不用的再建。',
+  evidence_draft_unavailable: '这个部署暂时不能帮你起草专区，可以自己填写关键词和范围。',
+  evidence_feedback_unavailable: '这个部署暂时不能记录对专区的反馈。',
+  frontier_zones_unavailable: '这个部署暂时不能建自己的专区。',
+  evidence_zone_forbidden: '这是别人的专区，不能对它的内容做这个操作。',
+  evidence_zone_not_found: '没有这个专区，或者这条动态已经不存在。',
+  evidence_zone_item_not_found: '这条动态不在这个专区里。',
+  evidence_zone_feedback_invalid: '这种反馈没有被识别，没有记录。',
+  evidence_cursor_invalid: '列表已有更新，请重新加载列表。',
+})
+
+/**
  * The public evidence pages' own refusals (flywheel F08, F09): the feed that lets the knowledge-source plugin read
  * what the platform publishes is a public URL, and with the module's switch off it is a route that answers by name
  * rather than a path that never existed.
@@ -2025,6 +2045,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EVIDENCE_FLYWHEEL_ERROR_CODES,
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
+  ...Object.keys(EVIDENCE_ZONE_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
   ...Object.keys(RESEARCH_DB_ERROR_MESSAGES_ZH),
 ])])
@@ -2121,6 +2142,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // must name. Each touches the one write it names.
   ...EVIDENCE_CARD_ERROR_MESSAGES_ZH,
   ...EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
+  ...EVIDENCE_ZONE_ERROR_MESSAGES_ZH,
   ...EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH,
   // The research-database connector's refusals: one operation each, and a connection failure says which of three it is.
   ...RESEARCH_DB_ERROR_MESSAGES_ZH,
@@ -3245,6 +3267,8 @@ export function errorCodeOutcome(code) {
   // An evidence card's refusals are about one write to one zone, never a verdict on a run.
   if (Object.hasOwn(EVIDENCE_CARD_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
+  // A topic zone's refusals are about one read or write of one zone, never a verdict on a run.
+  if (Object.hasOwn(EVIDENCE_ZONE_ERROR_MESSAGES_ZH, text)) return 'upstream'
   // Keeping a card current refuses one operation on one card (a challenge, a switch), never a run.
   if (Object.hasOwn(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH, text)) return 'upstream'
   // The research-database connector refuses one listing, one credential or one import, never a run.
@@ -3365,7 +3389,7 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,
     ...EVIMED_CREDITS_ROUTE_ERROR_CODES, ...EVIDENCE_PUBLIC_ERROR_CODES, ...EVIDENCE_FLYWHEEL_ERROR_CODES,
     ...keys(DOCUMENT_EXPORT_ERROR_MESSAGES), ...keys(SOURCE_CHANGE_ERROR_MESSAGES), ...keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
-    ...keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH), ...keys(RESEARCH_DB_ERROR_MESSAGES_ZH),
+    ...keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_ZONE_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH), ...keys(RESEARCH_DB_ERROR_MESSAGES_ZH),
     // What the control plane refused on a page or a ceiling the reader meets: the engine and the map of memory, the holds on
     // a project's runtime, the limits of an account (the gateway's and the independent check's own codes are the run's).
     ...CONTROL_PLANE_ERROR_CODES,
