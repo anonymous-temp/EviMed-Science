@@ -63,6 +63,7 @@ import {
   frontierItemGenre,
   normalizeEvidenceZoneDefinition,
 } from "@evimed/domain";
+import { resetPreTopicZones } from "./evidenceZonePersistence.mjs";
 import { followNamesTsquery } from "./frontierFollowQuery.mjs";
 import { migrateFrontier } from "./frontierPersistence.mjs";
 import { verifyOverview } from "./frontierTopics.mjs";
@@ -526,7 +527,10 @@ export class EvidenceZoneMembership {
 
   /** The tables the recall reads, and what the vector legs can use. @returns {Promise<MembershipCapabilities>} */
   async ready() {
-    return migrateFrontier(this.database, { dimension: this.dimension });
+    const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
+    // The zones from before topic zones go once, and only where topic zones are on to take their place.
+    if (this.enabled) await resetPreTopicZones(this.database);
+    return capabilities;
   }
 
   /** @param {string} code */
