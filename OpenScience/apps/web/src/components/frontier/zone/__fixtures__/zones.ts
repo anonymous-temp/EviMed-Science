@@ -20,7 +20,7 @@ export function rawZone(overrides: Record<string, unknown> = {}): Record<string,
     kind: "official", published: true, creator: null, following: false,
     counts: { week: 58, month: 247, all: 610 }, perWeek: 58, cards: 0,
     latest: { itemId: "k1", title: "司美格鲁肽获批新适应症", at: "2026-10-29T05:00:00.000Z" },
-    lifecycle: "active", updatedAt: "2026-10-29T06:20:00.000Z",
+    lifecycle: "active", updatedAt: "2026-10-29T06:20:00.000Z", countsAt: "2026-10-29T06:20:00.000Z",
     revision: 3, definition: null, canEdit: false, canDelete: false, band: "normal", overviewAt: "2026-10-29T06:00:00.000Z", related: [],
     ...overrides,
   };

@@ -103,6 +103,23 @@ describe("a zone's header", () => {
     expect(head).toBeInTheDocument();
   });
 
+  it("states the time the counts were taken, not the zone's last edit", async () => {
+    topic.fetchZone.mockResolvedValue(zone({ updatedAt: "2026-10-20T01:05:00.000Z", countsAt: "2026-10-29T06:20:00.000Z" }));
+    mount();
+    await header();
+    const facts = screen.getByText(/截至 .*（北京时间）/).closest("p")!;
+    expect(facts.textContent).toContain("截至 10月29日 14:20（北京时间）");
+    expect(facts.textContent).not.toContain("10月20日");
+  });
+
+  it("states no time while the counts are being taken again, instead of borrowing the edit time", async () => {
+    topic.fetchZone.mockResolvedValue(zone({ updatedAt: "2026-10-29T06:20:00.000Z", countsAt: null }));
+    mount();
+    await header();
+    expect(screen.getByRole("link", { name: /近 7 天 58 条/ })).toBeInTheDocument();
+    expect(screen.queryByText(/截至 .*（北京时间）/)).toBeNull();
+  });
+
   it("says the number of cards only when there are some, and the tab with them is offered then and not before", async () => {
     mount();
     await header();

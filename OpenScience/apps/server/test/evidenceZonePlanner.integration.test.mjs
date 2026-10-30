@@ -135,7 +135,7 @@ beforeEach(async () => {
   if (!db) return;
   await db.query("TRUNCATE evimed_frontier.evidence_zones, evimed_frontier.items, evimed_frontier.zone_changes CASCADE");
   await db.query("DELETE FROM evimed_frontier.sources");
-  await db.query("DELETE FROM evimed_frontier.meta WHERE key IN ('zone_planner_seed', 'zone_planner_weekly')");
+  await db.query("DELETE FROM evimed_frontier.meta WHERE key IN ('zone_planner_seed', 'zone_planner_seed_attempts', 'zone_planner_weekly')");
   await db.query("DELETE FROM evimed_frontier.tags WHERE slug LIKE 'ezt-%'");
   await insertSource(db, "nejm");
   await insertSource(db, "lancet");
@@ -227,6 +227,72 @@ test("with no platform zone the planner asks in rounds, makes what is usable up 
   assert.deepEqual((await planner.tick()).seeded, { skipped: "seeded" });
   assert.equal(model.calls.length, 2);
   assert.equal(await officialCount(), 4);
+});
+
+test("a feed that supports fewer zones than the seed count: after the attempts are spent, across restarts, the seeding is done and the weekly pass runs", options, async () => {
+  await items(20, 5, ["ezt-sema", "ezt-obesity"]);
+  const nothing = { zones: [] };
+  const model = scriptedModel({
+    seed: [{ zones: [{ slug: "a", draft: draftOf("甲专区") }, { slug: "b", draft: draftOf("乙专区") }] }, ...Array(40).fill(nothing)],
+    weekly: [{ actions: [] }],
+  });
+  let clock = MONDAY;
+  compose({ model, now: () => clock });
+  const seedCalls = () => model.calls.filter((call) => call.kind === "seed").length;
+  assert.equal((await planner.tick(clock)).seeded.complete, false, "the feed gave two of four");
+  assert.equal(await officialCount(), 2);
+  // Attempts two and three, then a restart: a new planner has no memory of them, the database has.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    clock = new Date(clock.getTime() + 61 * 60_000);
+    assert.equal((await planner.tick(clock)).seeded.complete, false);
+  }
+  compose({ model, now: () => clock });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    clock = new Date(clock.getTime() + 61 * 60_000);
+    assert.equal((await planner.tick(clock)).seeded.complete, false, `attempt ${attempt + 4}`);
+  }
+  assert.equal(seedCalls(), 3 + 5 * 2, "six attempts: the first asks three times (two zones, then two empty answers), the others twice");
+  assert.equal((await db.query("SELECT value FROM evimed_frontier.meta WHERE key = 'zone_planner_seed_attempts'")).rows[0].value.count, 6);
+  assert.equal(await db.query("SELECT 1 FROM evimed_frontier.meta WHERE key = 'zone_planner_seed'").then((result) => result.rowCount), 0, "not yet");
+  // The seventh look: the attempts are spent, the zones there are the platform's, and the week's pass runs with them.
+  clock = new Date(clock.getTime() + 61 * 60_000);
+  const last = await planner.tick(clock);
+  assert.deepEqual(last.seeded, { skipped: "seeded" });
+  assert.equal(last.weekly.week, "2026-10-26", "the weekly pass ran with two zones, short of the seed count");
+  const marker = (await db.query("SELECT value FROM evimed_frontier.meta WHERE key = 'zone_planner_seed'")).rows[0].value;
+  assert.deepEqual([marker.by, marker.zones], ["attempts", 2]);
+  assert.equal(seedCalls(), 3 + 5 * 2, "nothing more was asked");
+  // Another restart buys no attempts back.
+  compose({ model, now: () => clock });
+  assert.deepEqual((await planner.tick(clock)).seeded, { skipped: "seeded" });
+  assert.equal(seedCalls(), 3 + 5 * 2);
+});
+
+test("spent attempts with no zone at all leave the seeding open: a restart may try again", options, async () => {
+  await items(20, 5, ["ezt-sema", "ezt-obesity"]);
+  const model = scriptedModel({ seed: Array(60).fill({ zones: [] }) });
+  let clock = MONDAY;
+  compose({ model, now: () => clock });
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    assert.equal((await planner.tick(clock)).seeded.complete, false);
+    clock = new Date(clock.getTime() + 61 * 60_000);
+  }
+  assert.deepEqual((await planner.tick(clock)).seeded, { skipped: "waiting" }, "this process has spent its six");
+  const before = model.calls.length;
+  compose({ model, now: () => clock });
+  assert.equal((await planner.tick(clock)).seeded.complete, false, "a new process asks again: there is nothing to keep");
+  assert.ok(model.calls.length > before);
+  assert.equal(await db.query("SELECT 1 FROM evimed_frontier.meta WHERE key = 'zone_planner_seed'").then((result) => result.rowCount), 0);
+});
+
+test("a seed count of zero is seeding switched off: the zones there are still kept by the weekly pass", options, async () => {
+  await platformZone("alpha", "甲专区");
+  const model = scriptedModel({ weekly: [{ actions: [] }] });
+  compose({ model, config: { evidenceZoneSeedCount: 0 } });
+  const result = await planner.tick(MONDAY);
+  assert.deepEqual(result.seeded, { skipped: "seed_count_zero" });
+  assert.equal(result.weekly.week, "2026-10-26");
+  assert.equal(model.calls.length, 1);
 });
 
 test("a failed or unreadable seeding keeps what was made, tries again after an hour, and finishes without duplicating", options, async () => {

@@ -93,12 +93,15 @@ export function FrontierFollows({ selected, onSelect, onChanged, onCreateZone }:
         </div> },
         { key: "kind", header: "类型", cell: (row) => <Tag>{row.query ? `${KIND_WORDS[row.kind]} · ${READING_WORDS[row.query.kind]}` : KIND_WORDS[row.kind]}</Tag> },
         { key: "state", header: "状态", cell: (row) => <span className="whitespace-nowrap">{row.muted ? "已屏蔽" : "关注中"}</span> },
-        { key: "actions", header: "管理", cell: (row) => <div className="flex gap-2">
-          {row.kind !== "query" && <Button size="sm" variant="text" disabled={pending} aria-label={`${row.muted ? "取消屏蔽" : "屏蔽"} ${row.label}`}
-            onClick={() => void act(() => addFrontierFollow({ kind: row.kind, key: row.key, label: row.label, muted: !row.muted }), !row.muted ? row.id : undefined)}>{row.muted ? "取消屏蔽" : "屏蔽"}</Button>}
-          <Button size="sm" variant="text" disabled={pending} aria-label={`移除 ${row.label}`}
-            onClick={() => void act(() => removeFrontierFollow(row.id), row.id)}>移除</Button>
-        </div> },
+        { key: "actions", header: "管理", cell: (row) => {
+          const { kind } = row;
+          return <div className="flex gap-2">
+            {kind !== "query" && <Button size="sm" variant="text" disabled={pending} aria-label={`${row.muted ? "取消屏蔽" : "屏蔽"} ${row.label}`}
+              onClick={() => void act(() => addFrontierFollow({ kind, key: row.key, label: row.label, muted: !row.muted }), !row.muted ? row.id : undefined)}>{row.muted ? "取消屏蔽" : "屏蔽"}</Button>}
+            <Button size="sm" variant="text" disabled={pending} aria-label={`移除 ${row.label}`}
+              onClick={() => void act(() => removeFrontierFollow(row.id), row.id)}>移除</Button>
+          </div>;
+        } },
       ]} />
     <p><Link to="/app/frontier?view=zones&scope=mine" className="text-caption text-text-3 hover:text-accent">我的专区和关注的专区在“证据专区”里管理 ›</Link></p>
   </div>;

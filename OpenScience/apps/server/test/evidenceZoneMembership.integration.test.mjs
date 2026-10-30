@@ -29,6 +29,7 @@ const minutes = (/** @type {number} */ n) => n * 60_000;
 /** @type {(user: string, round: number) => string} */ let progressRule;
 /** @type {"ok" | "exhausted"} */ let budgetState;
 /** @type {Error | null} */ let judgeFailure;
+/** Run once, inside the next judge call after its answer is fixed and before it is returned: the owner saves while the call is out. @type {(() => Promise<void>) | null} */ let duringJudge;
 /** @type {any} */ let tags;
 const fakeEntities = {
   /** @param {{ texts: string[] }} input */
@@ -67,6 +68,11 @@ async function callModel(_deps, call) {
         if (verdict) judgements.push({ item: Number(head[1]), zone: label, verdict });
       }
     }
+    if (duringJudge) {
+      const run = duringJudge;
+      duringJudge = null;
+      await run();
+    }
     return reply({ judgements });
   }
   if (system.includes("最新进展")) {
@@ -103,6 +109,7 @@ beforeEach(async () => {
   progressRule = () => PROGRESS;
   budgetState = "ok";
   judgeFailure = null;
+  duringJudge = null;
   tags = new FrontierTagStore({ database: db });
 });
 
@@ -288,6 +295,80 @@ test("a definition change keeps the old rows until the new judgement replaces th
   assert.deepEqual([stored.get("REL becomes out").state, stored.get("REL becomes out").definition_version], ["out", 3], "replaced by the new judgement");
   assert.deepEqual([stored.get("OUT old").state, stored.get("OUT old").relevance, stored.get("OUT old").definition_version], ["in", "related", 3], "an out the new definition recalls is judged again");
   assert.equal((await zoneRow()).backfilled_version, 3);
+});
+
+test("a verdict for an older definition than the zone now has is dropped: the pair is judged again under the new version", options, async () => {
+  await createZone();
+  await item("CORE late", { summaryZh: "semaglutide for obesity" });
+  const membership = makeMembership();
+  // The first tick backfills (version 1); the owner then saves version 2 while the next judge call is out, and the backfill for it has
+  // already put the pair back to pending at version 2 when the version-1 answer (`out`) comes in.
+  judgeFailure = Object.assign(new Error("upstream"), { code: "model_gateway_upstream_error" });
+  await membership.tick(clock);
+  judgeFailure = null;
+  assert.equal((await rows()).get("CORE late").state, "pending");
+  judgeRule = () => "out";
+  duringJudge = async () => {
+    await db.query("UPDATE evimed_frontier.evidence_zones SET definition_version = 2, backfilled_version = 2 WHERE id = 'ez_g'");
+    await db.query("UPDATE evimed_frontier.zone_items SET definition_version = 2, attempts = 0 WHERE zone_id = 'ez_g'");
+  };
+  clock = new Date(clock.getTime() + minutes(2));
+  await membership.tick(clock);
+  let stored = (await rows()).get("CORE late");
+  assert.deepEqual([stored.state, stored.definition_version], ["pending", 2], "the stale `out` was not written over the pair waiting for version 2");
+  judgeRule = () => "core";
+  clock = new Date(clock.getTime() + minutes(2));
+  await membership.tick(clock);
+  stored = (await rows()).get("CORE late");
+  assert.deepEqual([stored.state, stored.relevance, stored.definition_version], ["in", "core", 2], "judged under the new definition");
+});
+
+test("a stale `out` does not take an `in` row left for the new version out of the queue", options, async () => {
+  await createZone();
+  await item("CORE kept", { summaryZh: "semaglutide for obesity" });
+  const membership = makeMembership();
+  await membership.tick(clock);
+  assert.equal((await rows()).get("CORE kept").state, "in");
+  // Version 2 is saved: the `in` row stays at version 1 and is queued. While its call is out, version 3 is saved and the answer for
+  // version 2 comes in as `out`.
+  await db.query("UPDATE evimed_frontier.evidence_zones SET definition_version = 2, backfilled_version = 2 WHERE id = 'ez_g'");
+  judgeRule = () => "out";
+  duringJudge = async () => {
+    await db.query("UPDATE evimed_frontier.evidence_zones SET definition_version = 3, backfilled_version = 3 WHERE id = 'ez_g'");
+  };
+  clock = new Date(clock.getTime() + minutes(2));
+  await membership.tick(clock);
+  let stored = (await rows()).get("CORE kept");
+  assert.deepEqual([stored.state, stored.definition_version], ["in", 1], "the row keeps its place and its old version");
+  judgeRule = () => "related";
+  clock = new Date(clock.getTime() + minutes(2));
+  await membership.tick(clock);
+  stored = (await rows()).get("CORE kept");
+  assert.deepEqual([stored.state, stored.relevance, stored.definition_version], ["in", "related", 3]);
+});
+
+test("afterSave while a judge call is out: the answer for the old definition never overwrites the new judgement", options, async () => {
+  await createZone();
+  await item("CORE both", { summaryZh: "semaglutide for obesity" });
+  const membership = makeMembership();
+  judgeFailure = Object.assign(new Error("upstream"), { code: "model_gateway_upstream_error" });
+  await membership.tick(clock);
+  judgeFailure = null;
+  assert.equal((await rows()).get("CORE both").state, "pending");
+  // The first call answers `out` for version 1; the owner's save (version 2) and its backfill and first judgement (`core`) happen
+  // before that answer is returned.
+  judgeRule = () => (calls.judge.length === 1 ? "out" : "core");
+  calls.judge.length = 0;
+  duringJudge = async () => {
+    await db.query("UPDATE evimed_frontier.evidence_zones SET definition_version = 2 WHERE id = 'ez_g'");
+    await membership.afterSave("ez_g");
+    await membership.settled();
+  };
+  clock = new Date(clock.getTime() + minutes(2));
+  await membership.tick(clock);
+  const stored = (await rows()).get("CORE both");
+  assert.deepEqual([stored.state, stored.relevance, stored.definition_version], ["in", "core", 2]);
+  assert.equal((await zoneRow()).backfilled_version, 2);
 });
 
 test("an unreadable judge answer drops the batch, leaves the pairs pending and counts one attempt", options, async () => {

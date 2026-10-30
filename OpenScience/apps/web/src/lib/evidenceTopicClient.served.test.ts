@@ -41,6 +41,13 @@ describe("a zone read by its address", () => {
     expect(await fetchZone("z1")).toMatchObject({ id: "z1", lifecycle: "archived", successors: [{ id: "z2", slug: "s2", title: "继任" }], lastItemAt: "2026-05-03T08:00:00.000Z" });
   });
 
+  it("keeps the time the counts were taken apart from the last edit, and has none to give while they are stale", async () => {
+    request.mockResolvedValue({ zone: rawZone({ updatedAt: "2026-10-20T01:00:00.000Z", countsAt: "2026-10-29T06:20:00.000Z" }) });
+    expect(await fetchZone("z1")).toMatchObject({ updatedAt: "2026-10-20T01:00:00.000Z", countsAt: "2026-10-29T06:20:00.000Z" });
+    request.mockResolvedValue({ zone: rawZone({ updatedAt: "2026-10-20T01:00:00.000Z" }) });
+    expect(await fetchZone("z1")).toMatchObject({ updatedAt: "2026-10-20T01:00:00.000Z", countsAt: null });
+  });
+
   it("is not one when the server answers in the old service's shape — a state and a count of cards, no counts of items", async () => {
     request.mockResolvedValue({ zone: { id: "ez_result", title: "我的研究结果", state: "published", kind: "user", evidenceCount: 1, canEdit: true, revision: 2 }, feedback: [] });
     await expect(fetchZone("ez_result")).rejects.toBeInstanceOf(NotTopicZoneError);

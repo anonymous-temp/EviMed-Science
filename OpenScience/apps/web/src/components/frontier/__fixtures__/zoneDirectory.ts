@@ -7,7 +7,7 @@ export function topicZone(over: Partial<ZoneSummary> = {}): ZoneSummary {
     id: "zone_glp1", slug: null, title: "GLP-1 受体激动剂减重", type: "drug-indication", keywords: ["GLP-1 受体激动剂", "减重"],
     scope: "GLP-1 类药物用于减重的研究、指南和监管动态", specialties: [{ key: "endocrinology", label: "内分泌" }], group: "肥胖", kind: "official",
     published: true, creator: null, following: false, counts: { week: 37, month: 150, all: 480 }, perWeek: 37, cards: 0, latest: null,
-    lifecycle: "active", updatedAt: "2026-10-28T08:00:00Z", ...over,
+    lifecycle: "active", updatedAt: "2026-10-28T08:00:00Z", countsAt: "2026-10-28T08:00:00Z", ...over,
   };
 }
 

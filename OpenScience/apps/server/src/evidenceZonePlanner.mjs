@@ -15,7 +15,10 @@
  *   `SEED_ZONES_PER_CALL` at a time until the seed count is reached, creating what came back before asking again; a draft whose recall finds nothing in the
  *   last thirty days is dropped (a zone with no items would be an empty page), a duplicate title or keyword set is dropped, and the
  *   creation is capped inside the transaction by the count of zones then standing, so two control planes asking at once cannot make
- *   sixty. The finished seeding is a marker in the feed's `meta` (`zone_planner_seed`); after it the planner never seeds again.
+ *   sixty. The finished seeding is a marker in the feed's `meta` (`zone_planner_seed`); after it the planner never seeds again. The
+ *   seed count is what the model is asked for, not a condition of the weekly pass: attempts are counted in `meta` too
+ *   (`zone_planner_seed_attempts`, across restarts), and once `MAX_SEED_ATTEMPTS` of them are spent with any platform zone standing,
+ *   the feed is taken to support no more and the marker is written, so the weekly pass runs with the zones there are.
  * - **Reader zones are not touched.** The planner reads a published reader zone as a signal (its followers) and may make a platform
  *   zone "developed from" it; it never edits, hides or merges a reader's own.
  * - **Everything is undoable.** Each action writes `zone_changes` with actor `planner` and the detail an undo needs (the lifecycle it
@@ -79,6 +82,8 @@ const MERGE_CONTAINMENT = 0.6;
 /** A quiet zone with no follower this long is archived. */
 const ARCHIVE_AFTER_MS = 365 * DAY;
 const SEED_MARKER = "zone_planner_seed";
+/** How many seeding attempts have been made, over every start of every control plane (`{ count, at }`). */
+const SEED_ATTEMPTS_KEY = "zone_planner_seed_attempts";
 const WEEKLY_MARKER = "zone_planner_weekly";
 const LOCK = "evimed-evidence-zone-planner";
 
@@ -337,14 +342,24 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
   async function seedIfNeeded(at) {
     if (seedCount <= 0) return { skipped: "seed_count_zero" };
     if (await readMarker(SEED_MARKER)) return { skipped: "seeded" };
-    if (attempts.seed >= MAX_SEED_ATTEMPTS || at.getTime() < attempts.seedNextAt) return { skipped: "waiting" };
-    if ((await platformZoneCount()) >= seedCount) {
+    const held = await platformZoneCount();
+    if (held >= seedCount) {
       await database.transaction((/** @type {any} */ client) => writeMarker(client, SEED_MARKER, { at: at.toISOString(), by: "count" }));
       return { skipped: "seeded" };
     }
+    // The attempts are spent: the feed does not support the rest. The zones there are the platform's, and the weekly pass keeps them (a
+    // restart must not buy six attempts more, so the count is the database's). With no zone at all the seeding stays open.
+    if (held > 0 && (Number((await readMarker(SEED_ATTEMPTS_KEY))?.count) || 0) >= MAX_SEED_ATTEMPTS) {
+      await database.transaction((/** @type {any} */ client) => writeMarker(client, SEED_MARKER, { at: at.toISOString(), by: "attempts", zones: held }));
+      return { skipped: "seeded" };
+    }
+    if (attempts.seed >= MAX_SEED_ATTEMPTS || at.getTime() < attempts.seedNextAt) return { skipped: "waiting" };
     if (!(await mayAsk())) return { skipped: "cannot_ask" };
     attempts.seed += 1;
     attempts.seedNextAt = at.getTime() + RETRY_AFTER_MS;
+    await database.query(`INSERT INTO evimed_frontier.meta(key, value, updated_at) VALUES ($1, jsonb_build_object('count', 1, 'at', $2::text), clock_timestamp())
+      ON CONFLICT (key) DO UPDATE SET value = jsonb_build_object('count', coalesce((evimed_frontier.meta.value->>'count')::integer, 0) + 1, 'at', $2::text), updated_at = clock_timestamp()`,
+    [SEED_ATTEMPTS_KEY, at.toISOString()]);
     const stats = await candidateStatistics(at);
     if (!stats.pairs.length && !stats.policy.length) return { skipped: "no_candidates" };
     const shown = statisticsForModel(stats);
@@ -387,7 +402,7 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
     }
     counters.seeded += created;
     counters.seedDropped += dropped;
-    // Done when the count is reached; short of it, the next attempt (an hour on, at most MAX_SEED_ATTEMPTS) asks for the rest.
+    // Done when the count is reached; short of it, the next attempt (an hour on, at most MAX_SEED_ATTEMPTS in all, counted in the database) asks for the rest.
     const complete = !failed && (await platformZoneCount()) >= seedCount;
     // Zones made this week have no history to review: the week's pass is counted done with the seeding.
     if (complete) {
@@ -604,7 +619,8 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
     if (marker?.week === week) return { skipped: "done" };
     if (attempts.weekly !== week) { attempts.weekly = week; attempts.weeklyCount = 0; attempts.weeklyNextAt = 0; }
     if (attempts.weeklyCount >= MAX_WEEKLY_ATTEMPTS || at.getTime() < attempts.weeklyNextAt) return { skipped: "waiting" };
-    if (!(await readMarker(SEED_MARKER))) return { skipped: "not_seeded" };
+    // Seeding switched off (a seed count of zero) leaves the zones there are to the pass.
+    if (seedCount > 0 && !(await readMarker(SEED_MARKER))) return { skipped: "not_seeded" };
     if (!(await mayAsk())) return { skipped: "cannot_ask" };
     const state = await weeklyView(at);
     if (!state.view.size) return { skipped: "no_zones" };

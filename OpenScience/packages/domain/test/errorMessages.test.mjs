@@ -19,6 +19,7 @@ import {
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
+  EVIDENCE_ZONE_ERROR_MESSAGES_ZH,
   RUNTIME_ROOM_REFUSAL_CODES,
   RUNTIME_START_RECOVERY,
   RUN_OUTCOME_KINDS,
@@ -257,6 +258,24 @@ test("every known code names its reader, and a code nobody classified is read by
   assert.equal(errorCodeAudience("a_code_from_the_future"), null);
   assert.equal(personErrorCodeMessage("a_code_from_the_future"), null);
   assert.equal(errorCodeAudience(""), null);
+});
+
+// The topic zones' reads and writes raise these (evidenceZone*.mjs, evidenceCurrency.mjs, frontierService.mjs): each was a code a
+// person could be shown with no sentence of the registry's behind it, so a surface that did not map it by hand showed the code.
+test("the codes the topic zones refuse with are known, in plain Chinese, and a person's to read", () => {
+  const codes = Object.keys(EVIDENCE_ZONE_ERROR_MESSAGES_ZH);
+  for (const code of ["evidence_request_conflict", "evidence_user_zone_limit", "evidence_draft_unavailable", "evidence_feedback_unavailable",
+    "frontier_zones_unavailable", "evidence_zone_forbidden", "evidence_zone_item_not_found", "evidence_owner_required", "evidence_revision_conflict"]) {
+    assert.ok(codes.includes(code), `${code} is not registered`);
+  }
+  for (const code of codes) {
+    assert.ok(ALL_ERROR_CODES.includes(code), `${code} is in no list`);
+    assert.equal(knownErrorCodeMessage(code), EVIDENCE_ZONE_ERROR_MESSAGES_ZH[/** @type {keyof typeof EVIDENCE_ZONE_ERROR_MESSAGES_ZH} */ (code)]);
+    assert.ok(hasChinese(knownErrorCodeMessage(code) ?? ""), code);
+    assert.equal(errorCodeAudience(code), "person", code);
+    assert.equal(personErrorCodeMessage(code), knownErrorCodeMessage(code));
+    assert.equal(errorCodeOutcome(code), "upstream", `${code} is a refusal of one operation, not a run's verdict`);
+  }
 });
 
 test("the sentence of a run's failure is never handed to a surface that lists things for everyone", () => {

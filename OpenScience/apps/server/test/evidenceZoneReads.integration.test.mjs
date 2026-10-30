@@ -39,13 +39,13 @@ function definition(type, keywords, extra = {}) {
 /** @param {Record<string, any>} zone */
 async function addZone(zone) {
   const row = { owner: "pub", kind: "official", state: "published", lifecycle: "active", type: "drug-indication", specialties: [], group: "", scope: "范围", definition: null, stats: null,
-    overview: null, overviewAt: null, slug: null, updatedAt: ago(0), ...zone };
+    overview: null, overviewAt: null, slug: null, updatedAt: ago(0), statsAt: null, ...zone };
   await db.query(`INSERT INTO evimed_frontier.evidence_zones (id, user_id, title, state, kind, slug, zone_type, specialties, group_label, scope_zh, definition, definition_version,
-      lifecycle, stats, overview, overview_at, updated_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14::jsonb,$15::jsonb,$16,$17)`,
+      lifecycle, stats, overview, overview_at, updated_at, stats_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18)`,
   [row.id, row.owner, row.title, row.state, row.kind, row.slug, row.lifecycle === "none" ? null : row.type, row.specialties, row.group, row.scope,
     row.definition ? JSON.stringify(row.definition) : null, row.definition ? 1 : 0, row.lifecycle, row.stats ? JSON.stringify(row.stats) : null,
-    row.overview ? JSON.stringify(row.overview) : null, row.overviewAt, row.updatedAt]);
+    row.overview ? JSON.stringify(row.overview) : null, row.overviewAt, row.updatedAt, row.statsAt]);
 }
 
 /**
@@ -264,6 +264,19 @@ test("a zone's detail names the zones that took over from an archived one, and w
   assert.equal((await reads.detail(alice, "ez_glp1")).zone.lastItemAt, ago(0, 1));
   assert.equal((await reads.detail(alice, "ez_gone")).zone.lastItemAt, null, "a zone with no items has no date");
   assert.deepEqual(Object.keys((await reads.detail(alice, "ez_quiet")).zone).filter((key) => ["successors", "lastItemAt"].includes(key)).sort(), ["lastItemAt", "successors"], "always present");
+});
+
+test("the time the counts were taken is stats_at, served as countsAt beside updatedAt (the last edit); null while the counts are stale", options, async () => {
+  await addZone({ id: "ez_counted", title: "数过的专区", definition: definition("drug-indication", [{ label: "数过" }, { label: "数过主题" }]),
+    stats: { week: 2, month: 4, all: 9, perWeek: 2, cards: 0 }, updatedAt: ago(30), statsAt: ago(0, 2) });
+  await addZone({ id: "ez_stale", title: "待重数的专区", definition: definition("drug-indication", [{ label: "待数" }, { label: "待数主题" }]),
+    stats: { week: 1, month: 1, all: 3, perWeek: 1, cards: 0 }, updatedAt: ago(1), statsAt: null });
+  const counted = (await reads.detail(alice, "ez_counted")).zone;
+  assert.equal(counted.countsAt, ago(0, 2));
+  assert.equal(counted.updatedAt, ago(30), "the last edit is its own instant");
+  assert.equal((await reads.detail(alice, "ez_stale")).zone.countsAt, null);
+  const listed = (await reads.directory(alice, new URLSearchParams({ view: "recommended" }))).groups.flatMap((group) => group.sections.flatMap((section) => section.zones));
+  assert.equal(listed.find((zone) => zone.id === "ez_counted")?.countsAt, ago(0, 2), "a list line carries it too");
 });
 
 test("a zone's detail is a topic zone's: its definition only to its owner, edit rights by kind, a band, the related zones the reader may see", options, async () => {

@@ -479,6 +479,12 @@ describe("follows and operator actions", () => {
     await expect(listFrontierFollows()).resolves.toEqual([{ id: "7", kind: "specialty", key: "cardiology", label: "心血管", muted: false }]);
   });
 
+  it("is not asked to follow typed words: the server answers those with a zone and no follow, so the kind is refused at compile time", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { data: { follow: null, zone: { id: "ez_1" } } }));
+    // @ts-expect-error a typed follow (kind "query") is a zone of the reader's own now, made through the zone editor
+    await expect(addFrontierFollow({ kind: "query", key: "长新冠", label: "长新冠" })).rejects.toMatchObject({ status: 502 });
+  });
+
   it("names the operator action in the path and sends the reason", async () => {
     fetchMock.mockImplementation(async () => reply(200, { data: { item: { id: "a1" } } }));
     await operateFrontierItem("a1", "withdraw", "来源更正");

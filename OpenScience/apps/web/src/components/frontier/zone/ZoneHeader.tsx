@@ -32,7 +32,8 @@ export function ZoneHeader({ zone, path, cards, linked = true }: {
 }) {
   const owner = zoneOwnerLine(zone);
   const specialties = zoneSpecialties(zone);
-  const taken = zone.updatedAt ? dateClock(zone.updatedAt) : "";
+  // The time of the counts shown, not of the zone's last edit; while they are being counted again there is no time to state.
+  const taken = zone.countsAt ? dateClock(zone.countsAt) : "";
   const hasCounts = zone.counts.all > 0;
   /** A count: the link it is on the overview, plain text elsewhere. */
   const figure = (to: string, label: string, value: number) => linked

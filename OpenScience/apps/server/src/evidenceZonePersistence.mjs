@@ -247,13 +247,24 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.zone_changes (
  occurred_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX IF NOT EXISTS zone_changes_zone_idx ON evimed_frontier.zone_changes(zone_id, id DESC);
--- The owner (2026-10-29): the zones that existed before topic zones are deleted and the platform starts again (they were whole
--- diseases or kinds of card, and the platform no longer writes cards). Once per database: the platform's and readers' zones with no
--- topic definition go, with their cards (the foreign keys cascade); 循证 GEO's product zones stay. The marker makes it run once, so a
--- zone made later is never touched. The marker and the content version move in the one UPDATE of the singleton row: a second
--- UPDATE of the same row in the same statement (a CTE's, then the outer one) is skipped by PostgreSQL, which once left the version
--- unmoved after the reset and every version-keyed ETag answering 304 with deleted content. The version moves only when zones go.
+-- The one-time reset of the zones that existed before topic zones (owner 2026-10-29) is not run here: it is EVIDENCE_ZONE_RESET_SQL,
+-- run by resetPreTopicZones where the topic zones are switched on, because a deployment that has them off would otherwise lose its
+-- zones and get none in their place. This schema step only adds the marker's column, and marks a database that has no such zone to
+-- delete (a fresh one) at once, so a zone made later is never taken for one from before.
 ALTER TABLE evimed_frontier.evidence_zone_meta ADD COLUMN IF NOT EXISTS topics_reset_at timestamptz(3);
+UPDATE evimed_frontier.evidence_zone_meta SET topics_reset_at=clock_timestamp()
+ WHERE singleton AND topics_reset_at IS NULL AND NOT EXISTS (SELECT 1 FROM evimed_frontier.evidence_zones o WHERE o.kind IN ('official','user') AND o.lifecycle='none');
+`;
+
+/**
+ * The owner's reset (2026-10-29): the zones that existed before topic zones are deleted and the platform starts again (they were whole
+ * diseases or kinds of card, and the platform no longer writes cards). Once per database: the platform's and readers' zones with no
+ * topic definition go, with their cards (the foreign keys cascade); 循证 GEO's product zones stay. The marker makes it run once, so a
+ * zone made later is never touched. The marker and the content version move in the one UPDATE of the singleton row: a second UPDATE of
+ * the same row in the same statement (a CTE's, then the outer one) is skipped by PostgreSQL, which once left the version unmoved after
+ * the reset and every version-keyed ETag answering 304 with deleted content. The version moves only when zones go.
+ */
+export const EVIDENCE_ZONE_RESET_SQL = `
 WITH reset AS (
   UPDATE evimed_frontier.evidence_zone_meta
      SET topics_reset_at=clock_timestamp(),
@@ -328,4 +339,29 @@ export async function migrateEvidenceZones(database) {
         }),
     );
   await migrations.get(database);
+}
+
+const resets = new WeakMap();
+/**
+ * Run the one-time reset of the zones from before topic zones ({@link EVIDENCE_ZONE_RESET_SQL}) if it has not run in this database.
+ * Called only where the topic zones are on (`EvidenceZoneMembership.ready`), so a deployment with them off keeps the zones it has.
+ * Under the same advisory lock as the schema, and idempotent through the marker: any number of callers and starts delete once.
+ * @param {any} database
+ */
+export async function resetPreTopicZones(database) {
+  if (!resets.has(database)) {
+    resets.set(
+      database,
+      migrateEvidenceZones(database)
+        .then(() => database.transaction(async (/** @type {any} */ client) => {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-evidence-zones-v1'))");
+          await client.query(EVIDENCE_ZONE_RESET_SQL);
+        }))
+        .catch((/** @type {unknown} */ error) => {
+          resets.delete(database);
+          throw error;
+        }),
+    );
+  }
+  await resets.get(database);
 }

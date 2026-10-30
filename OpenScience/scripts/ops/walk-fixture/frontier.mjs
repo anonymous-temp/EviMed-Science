@@ -442,12 +442,8 @@ async function furnishZones(app, user, { log }) {
   for (const [kind, key, label] of [["specialty", "endocrinology", "内分泌代谢"], ["drug", "weekly-agent", "每周一次降糖药"], ["topic", "heart-failure", "射血分数保留心衰"], ["source", "example-journal-medicine", "示例医学杂志"]]) {
     await app.store.database.query("INSERT INTO evimed_frontier.user_follows (user_id, kind, key, label) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING", [user.id, kind, key, label]);
   }
-  // A typed follow (c3-watch), made the way the 「我的关注」 input makes it — the reading falls back to the typed words where no model is
-  // reachable, and the last week's matches are found at once — then read as seen a day ago, so the column shows a count of what is new.
-  const typed = await app.frontier?.service?.createFollow(user, { kind: "query", label: "周制剂降糖药" }).catch((/** @type {any} */ error) => ({ failed: String(error?.code ?? error?.message ?? error) }));
-  const typedId = typed?.follow?.id;
-  if (typedId) await app.store.database.query("UPDATE evimed_frontier.user_follows SET seen_at = now() - interval '1 day' WHERE user_id = $1 AND kind = 'query'", [user.id]);
-  log(`frontier: typed follow ${typedId ? `made, ${(await app.store.database.query("SELECT count(*)::int AS n FROM evimed_frontier.follow_matches m JOIN evimed_frontier.user_follows f ON f.id = m.follow_id WHERE f.user_id = $1", [user.id])).rows[0].n} matches` : `not made: ${JSON.stringify(typed).slice(0, 200)}`}`);
+  // A typed follow (c3-watch) is not made here any more: words the reader types are a zone of their own now (2026-10-29), which is a
+  // model's drafting and not a follow row; the fixture's own private zone (furnishTopicZones) is that zone.
   // The row `act(…, "follow")` writes; written directly because the zone's revision moved with every card saved above.
   await app.store.database.query("INSERT INTO evimed_frontier.evidence_zone_follows (user_id, zone_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [user.id, published.id]);
 
