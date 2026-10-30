@@ -28,6 +28,7 @@ import { HttpError } from "./security.mjs";
 import { VCR_SUBJECT_KINDS, vcrJobObjectKind } from "./vcrJobs.mjs";
 import { VCR_OBJECT_NODE_KINDS } from "./vcrStore.mjs";
 import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
+import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -277,6 +278,17 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
  * @param {{store:any,study:any,kind:string,subject:any,scenario:Record<string,any>,inputs:any[],sourceModel?:any}} input
  */
 export async function prepareVcrSubjectPopulation({ store, study, kind, subject, scenario, inputs, sourceModel = null }) {
+  // A cohort is the real population's own: its rules on the snapshot it names, and nothing else filed under its id.
+  if (kind === "build_cohort" && subject?.objectKind === "population" && subject.row.kind === "real") {
+    const row = subject.row;
+    const issue = vcrCohortInputIssue(row, inputs, scenario);
+    if (issue) throw new VcrSubjectError(issue.code, issue.message);
+    return {
+      scenario: list(object(scenario).rules).length ? scenario : { ...object(row.definition), ...scenario },
+      inputs: [...inputs.filter(entry => entry.kind !== "snapshot"), { kind: "snapshot", id: String(row.snapshotId) }],
+      derived: [], detail: { populationId: row.id, populationVersion: row.version },
+    };
+  }
   const isPrediction = kind === "apply_prognostic_model";
   const isGenerator = ["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind);
   if (!subject || (!isPrediction && !isGenerator)) return { scenario, inputs, derived: [], detail: {} };

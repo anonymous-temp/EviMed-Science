@@ -1,5 +1,6 @@
 import { allResultsOf, list, markFor, numeric, object } from "./vcrViewsKit.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
+import { vcrCohortBinding } from "./vcrSnapshotBinding.mjs";
 
 /** Whether a method has the subject-grain count contract. @param {unknown} version */
 function hasPatientCountContract(version) {
@@ -11,8 +12,15 @@ function hasPatientCountContract(version) {
 export function presentResearchProgress(bundle) {
   const population = list(bundle.populations)[0] ?? null;
   const results = allResultsOf(bundle);
-  const candidate = population?.resultId ? results.find(row => row.id === population.resultId && row.subjectId === population.id && row.kind === "population") ?? null : null;
-  const execution = candidate?.executionId && bundle.executions instanceof Map ? bundle.executions.get(candidate.executionId) : null;
+  const pointed = population?.resultId ? results.find(row => row.id === population.resultId && row.subjectId === population.id && row.kind === "population") ?? null : null;
+  const pointedExecution = pointed?.executionId && bundle.executions instanceof Map ? bundle.executions.get(pointed.executionId) : null;
+  // A result counts under a real population only when every snapshot its execution read is the population's own. The service has
+  // already taken such a result off the population (`resultOtherSnapshot`); a presenter handed rows directly says the same.
+  const binding = vcrCohortBinding(population, pointedExecution?.inputs);
+  const otherSnapshot = object(population?.resultOtherSnapshot).resultId ? object(population.resultOtherSnapshot)
+    : binding.state === "other_snapshot" ? { resultId: pointed?.id ?? null, snapshotIds: binding.snapshotIds } : null;
+  const candidate = otherSnapshot ? null : pointed;
+  const execution = candidate ? pointedExecution : null;
   const originatingJob = execution?.jobId ? list(bundle.jobs).find(row => row.id === execution.jobId) : null;
   const version = object(originatingJob?.checkpoint).configurationVersion;
   const result = candidate && (version == null || Number(version) === Number(population.version)) ? candidate : null;
@@ -31,7 +39,9 @@ export function presentResearchProgress(bundle) {
   const selectedCounts = object(result?.counts);
   // Profile jobs have no subjectId. Bind the reported first table to this snapshot
   // through the frozen execution input, never through a coincidental result label.
-  const profile = population?.snapshotId && bundle.executions instanceof Map ? list(bundle.results).find(row => {
+  // Profile jobs are filed under no object, so a later profile of another snapshot supersedes this one in `bundle.results`: the
+  // history is searched, newest first, and the profile taken is the one of this snapshot.
+  const profile = population?.snapshotId && bundle.executions instanceof Map ? results.find(row => {
     if (row.kind !== "snapshot_profile" || mark(row)) return false;
     const exec = bundle.executions.get(row.executionId);
     const first = list(object(row.diagnostics).tables)[0];
@@ -46,6 +56,8 @@ export function presentResearchProgress(bundle) {
     populationId: population?.id ?? null, populationVersion: population?.version ?? null,
     definition: population ? "saved" : "none", input: availability, calculation: status,
     resultId: result?.id ?? null, resultStale: stale,
+    // A result that exists but was computed on another snapshot: not counted here, said so, never drawn as a zero.
+    resultNotCounted: otherSnapshot ? { reason: "other_snapshot", resultId: otherSnapshot.resultId ?? null, snapshotIds: list(otherSnapshot.snapshotIds).map(String) } : null,
     counts: {
       sourcePatients: numeric(profileCounts.realPatients),
       realPatients: population?.kind === "real" && (execution?.method !== "cohort.build" || !hasPatientCountContract(execution?.methodVersion)) ? null : numeric(selectedCounts.realPatients),

@@ -59,6 +59,7 @@ import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
 import { dominatedScenarioMap, numeric, withReviewState, zhUnit } from "./vcrViewsKit.mjs";
+import { vcrPopulationsWithOwnResults } from "./vcrSnapshotBinding.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
 import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
@@ -992,7 +993,7 @@ export class VcrService {
   async #bundle(study, user, tab = "overview", query = {}) {
     const wants = tab === "overview" || tab === "trial" || tab === "comparator";
     const [definition, results, allResults, stale, reviews, jobs, budget, assumptions, members, exports, decisions, roles,
-      scenarios, comparators, populations, patientSets, grid, forecasts, models, executions, protocol, jobMarks] = await Promise.all([
+      scenarios, comparators, loadedPopulations, patientSets, grid, forecasts, models, executions, protocol, jobMarks] = await Promise.all([
       this.store.latestDefinition(study.id),
       this.store.results(study.id),
       this.store.allResults(study.id),
@@ -1017,6 +1018,8 @@ export class VcrService {
       // Why an object is not being computed (a refusal recorded before any job was queued).
       this.store.rows(`SELECT key, state, detail FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'job' AND state = 'failed'`, [study.id]),
     ]);
+    // A real population has the results computed on its own snapshot and no other: one filed under it from another snapshot is history.
+    const populations = await this.#ownPopulationResults(study.id, loadedPopulations, allResults, executions);
     // The protocol's visit schedule and the study's regulatory contacts: read for the trial tab and the package, which print them.
     const [schedule, regulatory] = tab === "trial"
       ? await Promise.all([this.store.latestSchedule?.(study.id) ?? null, this.store.regulatoryContacts?.(study.id) ?? []]) : [null, []];
@@ -1148,10 +1151,16 @@ export class VcrService {
     return this.store.personNames(ids).catch(() => null);
   }
 
-  /** What each finished job ran: method, version, seed, replicates, cost. @param {string} studyId */
-  async #executions(studyId) {
-    const rows = await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
-      FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]);
+  /**
+   * What each finished job ran: method, version, seed, replicates, cost. The newest 200 of the study, or exactly the ones named.
+   * @param {string} studyId @param {string[] | null} [ids]
+   */
+  async #executions(studyId, ids = null) {
+    const rows = ids
+      ? await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
+          FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 AND id = ANY($2::text[])`, [studyId, ids])
+      : await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at, inputs
+          FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]);
     return new Map(rows.map((row) => [String(row.id), {
       id: String(row.id), jobId: String(row.job_id), inputs: list(row.inputs)
         .filter(input => ['analysis_table', 'snapshot_file'].includes(input?.kind) && typeof input.id === 'string')
@@ -1160,6 +1169,27 @@ export class VcrService {
       replicates: row.replicates == null ? null : Number(row.replicates), cpuSeconds: numeric(row.cpu_seconds),
       finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
     }]));
+  }
+
+  /**
+   * The populations with only the results computed on their own snapshot (`vcrPopulationsWithOwnResults`). The executions a result
+   * names are read when the caller does not hold them, so a result older than the newest 200 is judged by what it read too.
+   * @param {string} studyId @param {any[]} populations @param {any[]} known results the caller already holds
+   * @param {Map<string, any> | null} [executions] the caller's map, completed in place
+   */
+  async #ownPopulationResults(studyId, populations, known, executions = null) {
+    const real = populations.filter(row => row.kind === "real" && row.resultId);
+    if (!real.length) return populations;
+    const results = [...known];
+    for (const population of real) {
+      if (results.some(row => row.id === population.resultId)) continue;
+      const found = await this.store.result(studyId, String(population.resultId)).catch(() => null);
+      if (found) results.push(found);
+    }
+    const held = executions ?? new Map();
+    const missing = [...new Set(results.filter(row => real.some(population => population.resultId === row.id)).map(row => row.executionId).filter(id => id && !held.has(id)))];
+    if (missing.length) for (const [id, execution] of await this.#executions(studyId, missing)) held.set(id, execution);
+    return vcrPopulationsWithOwnResults(populations, results, held);
   }
 
   /**
@@ -1684,7 +1714,7 @@ export class VcrService {
           curveReceipts: evidence.curves ? await evidence.curves.receipts({ studyId: study.id, principal: study.userId }) : [] };
       }
       case "population": {
-        const populations = await this.store.populations(study.id, limit);
+        const populations = await this.#ownPopulationResults(study.id, await this.store.populations(study.id, limit), []);
         return { populations: populations.map((population) => ({ ...population, counts: vcrCountBand(population.counts) })) };
       }
       case "patients": {

@@ -1612,6 +1612,8 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
   'vcr_model_not_applicable', 'vcr_model_not_found', 'vcr_model_interface_not_hosted',
+  // a computation that is not about the population it is filed under, and one the engine's budget cannot finish (vcrSnapshotBinding.mjs, vcrSynthesisLimits.mjs)
+  'vcr_cohort_binding_mismatch', 'vcr_synthesis_too_large',
   // members and access to data
   'vcr_member_role_unknown',
   'vcr_member_user_required',
@@ -2499,6 +2501,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_scenario_grid_empty: '方案网格里没有可比较的设计或真值。',
   vcr_scenario_unknown_fields: '情景里有这项计算不读取的字段，已拒绝。',
   vcr_model_not_applicable: '这个模型的适用范围没有覆盖当前研究（终点、变量或取值范围不符）；未排队计算，换一个适用的模型或补齐条件。',
+  vcr_cohort_binding_mismatch: '这项队列计算和它要记在名下的人群对不上（数据快照或入选规则不同），没有排队；先写一个对应的新人群版本再算，旧版本和它的结果不动。',
+  vcr_synthesis_too_large: '这份表在当前计算预算内合成不完，没有排队；按提示减少列数、行数或份数，或提高计算预算后再提交。',
   vcr_model_interface_not_hosted: '这个模型用的调用接口，本部署还没有接入能执行它的模型包；这一步不用替代模型，其他研究继续。',
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',

@@ -137,6 +137,7 @@ import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
 import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues, vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
+import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
 /** States a job may still move out of. */
@@ -780,6 +781,14 @@ export class VcrJobs {
       ...resolvedDerived,
       ...(qualityInput ? [qualityInput] : []),
     ];
+    // The one place every caller passes (the conversation, the page, the programme): a cohort filed under a real population is
+    // computed on that population's snapshot and rules, whatever the caller named.
+    if (kind === "build_cohort" && object(input.detail).resultKind === "population" && object(input.detail).subjectId
+      && typeof this.store.populations === "function") {
+      const population = (await this.store.populations(studyId, 1000)).find(row => row.id === object(input.detail).subjectId);
+      const issue = population ? vcrCohortInputIssue(population, resolvedInputs, scenario) : null;
+      if (issue) throw new HttpError(400, issue.code, issue.message);
+    }
 
     const unitBinding = vcrBindScientificInputUnits(method, scenario, resolvedInputs);
     scenario = unitBinding.scenario;
