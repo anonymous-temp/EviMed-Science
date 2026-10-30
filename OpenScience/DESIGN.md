@@ -759,6 +759,15 @@ activation guard against a second effect, and native `disabled` stays for a genu
 prerequisite, which the control explains nearby (a missing permission, a missing configuration and
 no selection are different reasons).
 
+**Layout stability** (owner, 2026-10-30). Across the frontend, routine changes in conditional
+controls, status/error visibility, selection, counts and loading must not unexpectedly move
+surrounding content vertically or horizontally. Prefer stable shared slots, reserved geometry or
+replacement within the same footprint; keep control rows and neighbouring actions in place.
+Menus and popovers remain anchored overlays, and dialogs overlay the page without reflowing it.
+Explicit content expansion may intentionally change the layout with a controlled transition that
+respects reduced motion. Never hide or clip actionable information, errors or recovery controls to
+keep a footprint fixed.
+
 **Motion**: three durations — `duration-fast` 120 ms for a state change, `duration-base` 200 ms
 for a container, `duration-slow` 320 ms for a page-sized change — one easing in
 (`ease-standard`) and one out (`ease-exit`, 2.1). A drawer travels 24 px, a toast 8, a menu 4
@@ -852,7 +861,7 @@ The table records implemented behaviour and the acceptance each still needs. The
 
 | Component / helper | Observed baseline and adopted change | Required acceptance |
 |---|---|---|
-| Button / buttonClasses | Implemented loading-only behavior uses guarded aria-disabled/busy, retain focus/name, draw the spinner's room only while it spins (a resting button has no empty slot) or preserve measured width; retain disabled for genuine prerequisites. CSS must cover aria-disabled and events must suppress mouse/keyboard/form activation. Focus loss is a browser risk to verify, not universal proof from the attribute. | T double click/Enter/form submit; G all sizes/long labels; W actual focus and width. AT35 |
+| Button / buttonClasses | Implemented loading-only behavior uses guarded aria-disabled/busy and retains focus/name. Button keeps its content span in flow in both states, applies opacity zero while loading to preserve its footprint and accessible name, and overlays an absolutely positioned centered spinner that adds no flow width or gap; retain disabled for genuine prerequisites. CSS must cover aria-disabled and events must suppress mouse/keyboard/form activation. Focus loss is a browser risk to verify, not universal proof from the attribute. | T double click/Enter/form submit; G all sizes/long labels; W actual focus and width. AT35 |
 | Switch | Implemented controlled pending and AsyncSwitch producer adapter support a single optimistic transition; keep requested position while pending, inline confirmed-failure rollback, and unknown-outcome reconciliation. An invariant label names the setting. A setting that takes effect later (插件与技能) is still a labelled switch for what was saved, with the effective-time status line beside it; an action button is for a one-off apply, not for a standing preference. `onChange` of an AsyncSwitch resolves with the write's confirmed state and nothing is read back; the readback is the recovery for an unknown outcome only, and a refusal is said once, in the switch's own line. | T out-of-order response, rejection, timeout, scope change; G pending/error; W persistence. AT36 |
 | Input / Select / Textarea | FieldShell unifies Input/Select/Textarea label/hint/error IDs and slots. Distinguish decorative prefix/suffix/unit from a trailing actionable control and preserve text space/accessible description. | T descriptions/error precedence/IDs; G prefix/suffix/error/narrow; M AT. AT37 |
 | NumberField | Central quantity adapter (`lib/quantity.ts`; see below). Raw text stays separate from the interpreted value. Do not replace it with a bare native number input that silently guesses scale. | T parsing/conversion/round-trip/domain mapping; G; W form/result. AT08/37 |

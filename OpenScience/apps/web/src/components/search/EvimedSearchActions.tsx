@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Download, Quote, Star } from "lucide-react";
+import { ChevronDown, Download, Loader2, MoreHorizontal, Quote, Star, X } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { Select, Textarea } from "@/components/ui/Input";
-import { Menu } from "@/components/ui/Menu";
+import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Note } from "@/components/ui/Note";
 import { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, WEB_SESSION_SYNC_STORAGE_KEY, WebApiError, webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -77,8 +78,8 @@ function ActionFailure({ error, fallback, onRetry }: { error: unknown; fallback:
   </div>;
 }
 
-function ExportMenu({ category, actionRefs, label = "题录导出", compact = true }: {
-  category: EvimedSearchCategory; actionRefs: string[]; label?: string; compact?: boolean;
+function ExportMenu({ category, actionRefs, label = "题录导出", compact = true, onDownload, triggerClassName }: {
+  category: EvimedSearchCategory; actionRefs: string[]; label?: string; compact?: boolean; onDownload?(): void; triggerClassName?: string;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -97,13 +98,22 @@ function ExportMenu({ category, actionRefs, label = "题录导出", compact = tr
     } catch (caught) { if (!controller.signal.aborted && !isCancelled(caught)) setError(caught); }
     finally { if (!controller.signal.aborted) { active.current = null; setPending(false); } }
   };
-  return <div className="min-w-0">
-    <Menu label={label} items={EXPORT_FORMATS.map((format) => ({ label: format.label, disabled: pending, onSelect: () => { void run(format.value); } }))}>
-      <Button variant={compact ? "text" : "secondary"} size="sm" loading={pending} disabled={!actionRefs.length || actionRefs.length > 20}>
+  const formats: MenuEntry[] = EXPORT_FORMATS.map(format => ({ label: format.label, disabled: pending,
+    onSelect: () => { void run(format.value); } }));
+  const items: MenuEntry[] = onDownload
+    ? [{ label: "原文下载", icon: Download, onSelect: onDownload }, ...(category === "literature" ? ["separator" as const, { heading: "题录导出" }, ...formats] : [])]
+    : formats;
+  return <div className="min-w-0 max-w-full">
+    <Menu label={onDownload ? "更多操作" : label} items={items}>
+      {onDownload ? <IconButton icon={pending ? Loader2 : MoreHorizontal} label={pending ? "正在导出题录" : "更多操作"} size="sm"
+        aria-busy={pending || undefined} className={pending ? "[&_svg]:animate-spin motion-reduce:[&_svg]:animate-none" : undefined} />
+        : <Button variant={compact ? "text" : "secondary"} size="sm" className={triggerClassName} loading={pending} disabled={!actionRefs.length || actionRefs.length > 20}>
         <Download size={16} aria-hidden="true" />{label}<ChevronDown size={16} aria-hidden="true" />
-      </Button>
+      </Button>}
     </Menu>
-    {error !== null && <ActionFailure error={error} fallback="题录导出失败，请重新选择格式重试。" />}
+    {error !== null && createPortal(<FormDialog title="题录导出失败" onClose={() => setError(null)}>
+      <ActionFailure error={error} fallback="题录导出失败，请重新选择格式重试。" />
+    </FormDialog>, document.body)}
   </div>;
 }
 
@@ -271,23 +281,46 @@ function ItemActions({ category, item, compact = true, onCollectedChange }: {
     } catch (caught) { if (!controller.signal.aborted) setError(caught); }
     finally { if (!controller.signal.aborted) { active.current = null; setWorking(false); } }
   };
-  return <div className="space-y-2">
+  return <div className="max-w-full space-y-2">
     <div role="group" aria-label={`${item.title}的操作`} className="flex flex-wrap items-center gap-1">
-      <Button variant={compact ? "text" : "secondary"} size="sm" aria-pressed={collected} loading={working} onClick={() => { void collect(); }}>
+      {compact ? <>
+        <IconButton icon={working ? Loader2 : Star} label={collected ? "已收藏" : "收藏"} size="sm" active={collected}
+          aria-pressed={collected} aria-busy={working || undefined} aria-disabled={working || undefined}
+          className={working ? "[&_svg]:animate-spin motion-reduce:[&_svg]:animate-none" : collected ? "text-accent [&_svg]:fill-current" : undefined}
+          onClick={() => { void collect(); }} />
+        {category === "literature" && <IconButton icon={Quote} label="引用" size="sm" onClick={() => setDialog("citation")} />}
+        <ExportMenu category={category} actionRefs={[item.actionRef!]} onDownload={() => setDialog("download")} />
+      </> : <>
+      <Button variant="secondary" size="sm" aria-pressed={collected} loading={working} onClick={() => { void collect(); }}>
         <Star size={16} aria-hidden="true" fill={collected ? "currentColor" : "none"} />{collected ? "已收藏" : "收藏"}
       </Button>
       {category === "literature" && <>
-        <Button variant={compact ? "text" : "secondary"} size="sm" onClick={() => setDialog("citation")}><Quote size={16} aria-hidden="true" />引用</Button>
-        <ExportMenu category={category} actionRefs={[item.actionRef!]} compact={compact} />
+        <Button variant="secondary" size="sm" onClick={() => setDialog("citation")}><Quote size={16} aria-hidden="true" />引用</Button>
+        <ExportMenu category={category} actionRefs={[item.actionRef!]} compact={false} />
       </>}
-      <Button variant={compact ? "text" : "secondary"} size="sm" onClick={() => setDialog("download")}><Download size={16} aria-hidden="true" />原文下载</Button>
+      <Button variant="secondary" size="sm" onClick={() => setDialog("download")}><Download size={16} aria-hidden="true" />原文下载</Button>
+      </>}
     </div>
-    {error !== null && <ActionFailure error={error} fallback="收藏操作失败，请重试。" onRetry={() => { void collect(); }} />}
+    {error !== null && createPortal(<FormDialog title="收藏失败" onClose={() => setError(null)}>
+      <ActionFailure error={error} fallback="收藏操作失败，请重试。" onRetry={() => { void collect(); }} />
+    </FormDialog>, document.body)}
     {dialog === "citation" && createPortal(<CitationDialog category={category} item={item} onClose={() => setDialog(null)} />, document.body)}
     {dialog === "download" && createPortal(<FullTextDialog category={category} item={item} onClose={() => setDialog(null)} />, document.body)}
   </div>;
 }
 
+/**
+ * Component: EvimedSearchActions; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Collection and citation controls, export formats and the full-text dialog.
+ * Variants: Compact icon strip with overflow menu; labelled controls in the reader.
+ * States: Pending mutations guard repeat intent; errors retain recovery; session changes abort work.
+ * Hit area: Shared small IconButton targets with tooltips; reader uses labelled small Buttons.
+ * Keyboard: Named controls, menu traversal and dialog focus return use shared primitives.
+ * Long content: Errors and their recovery actions open in dialogs without resizing rows or tools.
+ * Theme: Semantic neutral controls with a filled accent star for a saved item.
+ * Responsive: Compact controls share the provenance line; menus use viewport collision placement.
+ * Verification: Action and route regressions; Chrome verifies menu placement and row navigation.
+ */
 export function EvimedSearchActions(props: {
   category: EvimedSearchCategory; item: EvimedSearchActionItem; compact?: boolean; onCollectedChange?(collected: boolean): void; onRefresh?(): void;
 }) {
@@ -296,14 +329,26 @@ export function EvimedSearchActions(props: {
   return <SearchActionRefresh.Provider value={props.onRefresh}><ItemActions key={`${props.category}:${props.item.actionRef}`} {...props} /></SearchActionRefresh.Provider>;
 }
 
+/**
+ * Component: EvimedSearchBatchActions; owner: H; rules: DS21, stable conditional layout.
+ * Anatomy: Fixed-width export control with a compact clear action.
+ * Variants: Literature only; the host reserves the inactive footprint.
+ * States: Selection count updates in place; exports guard duplicates and expose failures in dialogs.
+ * Hit area: Shared small Button and IconButton targets.
+ * Keyboard: Menu traversal and native buttons; the host restores focus after clearing.
+ * Long content: One- and two-digit counts share the same trigger width.
+ * Theme: Existing neutral actions and semantic type tokens.
+ * Responsive: Non-wrapping controls fit the workspace summary slot.
+ * Verification: Action and route tests; browser geometry across selection states.
+ */
 export function EvimedSearchBatchActions({ category, items, onClear, onRefresh }: {
   category: EvimedSearchCategory; items: readonly EvimedSearchActionItem[]; onClear?(): void; onRefresh?(): void;
 }) {
   const actionRefs = [...new Set(items.map((item) => item.actionRef).filter((value): value is string => Boolean(value)))];
   const sessionValid = useActionSessionValid(`${category}:${JSON.stringify(actionRefs)}`);
   if (!sessionValid || category !== "literature" || !actionRefs.length) return null;
-  return <SearchActionRefresh.Provider value={onRefresh}><div role="group" aria-label="已选文献操作" className="flex flex-wrap items-center gap-2">
-    <ExportMenu key={JSON.stringify(actionRefs)} category={category} actionRefs={actionRefs} label={`导出已选 ${actionRefs.length} 篇`} compact={false} />
-    {onClear && <Button variant="text" size="sm" onClick={onClear}>清空选择</Button>}
+  return <SearchActionRefresh.Provider value={onRefresh}><div role="group" aria-label="已选文献操作" className="flex items-center gap-2">
+    <ExportMenu key={JSON.stringify(actionRefs)} category={category} actionRefs={actionRefs} label={`导出已选 ${actionRefs.length} 篇`} compact={false} triggerClassName="w-40 tabular-nums" />
+    {onClear && <IconButton icon={X} label="清空选择" size="sm" onClick={onClear} />}
   </div></SearchActionRefresh.Provider>;
 }

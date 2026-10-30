@@ -66,14 +66,16 @@ const malformed = () => new HttpError(502, "evimed_search_response_invalid", "Th
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const object = value => Boolean(value && typeof value === "object" && !Array.isArray(value));
 
-/** Only explicitly selected text fields leave the upstream boundary. @param {unknown} value @param {number} [limit] */
-function text(value, limit = 2000) {
+/** Only explicitly selected text fields leave the upstream boundary. @param {unknown} value @param {number} [limit] @param {boolean} [paragraphs] */
+function text(value, limit = 2000, paragraphs = false) {
   if (typeof value !== "string" && typeof value !== "number") return "";
   return String(value).slice(0, limit * 4).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<\/?(?:p|div|li|tr|h[1-6]|br)\b[^>]*>/gi, paragraphs ? "\n" : " ")
     .replace(/<\/?[A-Za-z][A-Za-z0-9:-]*(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>/g, " ")
     .replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'").replace(/\s+/g, " ").trim().slice(0, limit);
+    .replace(/&#39;/gi, "'").replace(paragraphs ? /[^\S\n]+/g : /\s+/g, " ")
+    .replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, limit);
 }
 
 /** @param {unknown[]} values @param {number} [limit] */
@@ -280,7 +282,7 @@ function contentText(value, depth = 0) {
       if (Array.isArray(parsed) && parsed.some(item => typeof item !== "number")) return contentText(parsed, depth + 1);
     } catch { /* Bracketed clinical prose is text, not a failed document. */ }
   }
-  return text(value, 12_000);
+  return text(value, 12_000, true);
 }
 
 const LABEL_SECTIONS = [

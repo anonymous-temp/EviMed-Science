@@ -58,6 +58,7 @@ export function useEvimedSearchState() {
   const [facetRevision, setFacetRevision] = useState(0);
   const [facetState, setFacetState] = useState<Resource<EvimedSearchFacets>>({ key: "", status: "loading" });
   const [draftState, setDraftState] = useState({ category, query, value: query });
+  const editingDraft = useRef<{ category: EvimedSearchCategory; value: string } | null>(null);
   const [listState, setListState] = useState<Resource<EvimedSearchResult>>({ key: "", status: "loading" });
   const [detailState, setDetailState] = useState<Resource<EvimedSearchDetail>>({ key: "", status: "loading" });
   const rootRef = useRef<HTMLDivElement>(null);
@@ -117,14 +118,17 @@ export function useEvimedSearchState() {
   useLayoutEffect(() => {
     if (store.query !== query) clearRound(query);
     const previous = store.views.get(category);
-    store.views.set(category, { query, search: listSearch, draft });
-    if (draftState.category !== category || draftState.query !== query) {
-      setDraftState({ category, query, value: previous?.query === query ? previous.draft : query });
+    const editing = !query && editingDraft.current?.category === category ? editingDraft.current : null;
+    store.views.set(category, { query, search: listSearch, draft: editing?.value ?? draft });
+    if (editing || draftState.category !== category || draftState.query !== query) {
+      setDraftState({ category, query, value: editing?.value ?? (previous?.query === query ? previous.draft : query) });
+      editingDraft.current = null;
     }
   }, [category, clearRound, draft, draftState.category, draftState.query, listSearch, query, store]);
 
   useEffect(() => {
     const clearSession = () => {
+      editingDraft.current = null;
       clearRound("");
       setDraftState({ category, query: "", value: "" });
       navigate(`/app/search/${category}`, { replace: true });
@@ -291,8 +295,16 @@ export function useEvimedSearchState() {
     setParams({ q: nextQuery });
   }
   function clearSearch() {
+    editingDraft.current = null;
     clearRound("");
     setDraftState({ category, query: "", value: "" });
+    setParams({});
+  }
+  function editSearch() {
+    // Preserve the input across router navigation; its layout effect owns the new round.
+    editingDraft.current = { category, value: draft };
+    store.controller?.abort();
+    store.facetController?.abort();
     setParams({});
   }
   function switchCategory(value: string) {
@@ -344,7 +356,7 @@ export function useEvimedSearchState() {
   return {
     selectedItems, selectItems, clearSelection: () => { store.selected.delete(selectionKey); setSelectionVersion(value => value + 1); }, updateCollected,
     rootRef, category, params: listParams, query, page, detailRef, language, sort, source, scholarly, filters, facets, facetsBusy,
-    draft, setDraft, composing, result, state, readerState, busy, update, submit, clearSearch, switchCategory,
+    draft, setDraft, composing, result, state, readerState, busy, update, submit, clearSearch, editSearch, switchCategory,
     resetFilters: () => update(Object.fromEntries([...EVIMED_SEARCH_FILTER_KEYS, "page"].map(key => [key, null]))),
     retryFacets: () => { store.facets.delete(facetKey); setFacetRevision(value => value + 1); },
     retrySearch: () => refresh(false), retryCurrent: () => refresh(false),

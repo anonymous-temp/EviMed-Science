@@ -15,7 +15,7 @@ export interface Fact {
   value: ReactNode;
 }
 
-function Rows({ rows, ruled }: { rows: readonly Fact[]; ruled: boolean }) {
+function Rows({ rows, ruled, layout }: { rows: readonly Fact[]; ruled: boolean; layout: "rows" | "stacked" }) {
   return (
     <>
       {rows.map((row, index) => (
@@ -23,7 +23,7 @@ function Rows({ rows, ruled }: { rows: readonly Fact[]; ruled: boolean }) {
         // In a framed card (`ruled={false}`) the card's frame is the one line and the rows are told apart by space (DESIGN.md: at most
         // one bordered container deep; separate by space first): a faint rule inside 总览's 项目 card was a fourth kind of border on a
         // data page held to three (the fixture walk of b559d4b7e).
-        <div key={`${index}-${row.label}`} className={ruled ? "grid grid-cols-[6rem_1fr] gap-3 border-b border-faint py-2 last:border-b-0" : "grid grid-cols-[6rem_1fr] gap-3 py-1.5"}>
+        <div key={`${index}-${row.label}`} className={`grid ${layout === "stacked" ? "grid-cols-1 gap-1" : "grid-cols-[6rem_1fr] gap-3"} ${ruled ? "border-b border-faint py-2 last:border-b-0" : "py-1.5"}`}>
           <dt className="text-caption text-text-3">{row.label}</dt>
           <dd className="min-w-0 text-ui text-text">{row.value}</dd>
         </div>
@@ -35,20 +35,22 @@ function Rows({ rows, ruled }: { rows: readonly Fact[]; ruled: boolean }) {
 /**
  * Component: FactList; owner: H; rules: DS21, DESIGN.md component adoption.
  * Anatomy: Definition rows plus a disclosure for rows beyond max.
- * Variants: Configurable first-row count, default eight.
+ * Variants: Configurable first-row count, default eight; stacked labels for narrow reading rails.
  * States: Static source rows; native disclosure expands remainder.
  * Hit area: Only remainder disclosure is interactive.
  * Keyboard: No focus stop or key handler added; child controls keep native semantics.
  * Long content: Values retained; six-rem labels and min-w-0 values share each row.
  * Theme: Secondary label and main value text with faint dividers.
- * Responsive: Two-column facts remain at narrow widths; caller owns unbreakable values.
+ * Responsive: Rows or stacked labels chosen by the caller; caller owns unbreakable values.
  * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function FactList({ rows, max = 8, ruled = true, className }: {
+export function FactList({ rows, max = 8, ruled = true, layout = "rows", className }: {
   rows: readonly Fact[];
   max?: number;
   /** `false` inside a framed card: no rule between rows, the card's frame is the line. */
   ruled?: boolean;
+  /** Stack each label over its value when the list lives in a narrow reading rail. */
+  layout?: "rows" | "stacked";
   className?: string;
 }) {
   const shown = rows.slice(0, max);
@@ -56,12 +58,12 @@ export function FactList({ rows, max = 8, ruled = true, className }: {
   return (
     <div data-fact-list="" className={className}>
       <dl>
-        <Rows rows={shown} ruled={ruled} />
+        <Rows rows={shown} ruled={ruled} layout={layout} />
       </dl>
       {rest.length > 0 && (
         <Disclosure summary={`全部 ${rows.length} 项`} className="mt-1">
           <dl>
-            <Rows rows={rest} ruled={ruled} />
+            <Rows rows={rest} ruled={ruled} layout={layout} />
           </dl>
         </Disclosure>
       )}

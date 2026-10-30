@@ -4,12 +4,12 @@ import { cn } from "@/lib/cn";
 
 /**
  * Component: Button; owner: H; rules: DS21, DESIGN.md component adoption.
- * Anatomy: visible action label, with a spinner before it only while loading.
+ * Anatomy: intrinsic content footprint with a centered spinner overlay while loading.
  * Variants: primary, secondary, text, danger; ghost aliases secondary; sm/md/lg.
  * States: loading keeps focus and guards activation even with legacy disabled=busy; idle prerequisites use native disabled.
  * Hit area: token control heights; caller chooses size.
  * Keyboard: native Enter/Space with busy duplicate guards.
- * Long content: single-line intrinsic label width.
+ * Long content: the mounted label preserves intrinsic width and its accessible name while loading.
  * Theme: semantic action and foreground tokens.
  * Responsive: intrinsic or caller full width.
  * Verification: Button.test.tsx; browser geometry and AT remain separate.
@@ -83,15 +83,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled && !loading}
       aria-disabled={loading || undefined}
       aria-busy={loading || undefined}
-      className={buttonClasses({ variant, size, destructive, className })}
+      className={buttonClasses({ variant, size, destructive, className: cn("relative", className) })}
       {...rest}
       onClick={(event) => { if (loading) { event.preventDefault(); event.stopPropagation(); return; } onClick?.(event); }}
       onKeyDown={(event) => { if (loading && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); return; } onKeyDown?.(event); }}
     >
-      {/* The spinner takes its 16 px only while it spins: about 170 buttons pass `loading={false}` at rest, and a permanent empty slot
-          pushed each one's label 16 px off centre and made every small button wider. The label stays visible beside it. */}
-      {loading && <span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center"><Loader2 size={16} className="animate-spin" /></span>}
-      {children}
+      {/* Keep the same content in flow in both states; the spinner adds no width or gap. Opacity retains the accessible name. */}
+      <span data-button-content="" className={cn("inline-flex min-w-0 flex-1 [align-items:inherit] [flex-direction:inherit] [flex-wrap:inherit] [gap:inherit] [justify-content:inherit]", loading && "opacity-0")}>
+        {children}
+      </span>
+      {loading && <span data-button-spinner="" aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
+      </span>}
     </button>
   );
 });

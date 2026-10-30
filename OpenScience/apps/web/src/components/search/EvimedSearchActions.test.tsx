@@ -38,6 +38,34 @@ afterEach(() => {
 });
 
 describe("search result actions", () => {
+  it("opens export formats from the compact overflow without fetching or downloading on menu open", async () => {
+    const user = userEvent.setup();
+    render(<EvimedSearchActions category="literature" item={item} />);
+    expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "引用" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "原文下载" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "原文下载" })).toBeInTheDocument();
+    expect(screen.getByText("题录导出")).toBeInTheDocument();
+    expect(api.status).not.toHaveBeenCalled();
+    expect(api.export).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("menuitem", { name: "PDF" }));
+    await waitFor(() => expect(api.export).toHaveBeenCalledWith("literature", [item.actionRef], 2, expect.any(AbortSignal)));
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();
+  });
+
+  it("retains labelled direct actions in the reader and does not offer literature exports for drug labels", async () => {
+    const user = userEvent.setup();
+    const view = render(<EvimedSearchActions category="literature" item={item} compact={false} />);
+    expect(screen.getByRole("button", { name: "题录导出" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "原文下载" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更多操作" })).not.toBeInTheDocument();
+    view.rerender(<EvimedSearchActions category="drugs" item={item} />);
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "原文下载" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "PDF" })).not.toBeInTheDocument();
+  });
+
   it("offers no unsupported trial actions or actions without an admitted reference", () => {
     const view = render(<EvimedSearchActions category="trials" item={item} />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -51,7 +79,10 @@ describe("search result actions", () => {
     const update = vi.fn(); const user = userEvent.setup();
     render(<EvimedSearchActions category="literature" item={item} onCollectedChange={update} />);
     await user.click(screen.getByRole("button", { name: "收藏" }));
-    expect(screen.getByRole("button", { name: "收藏" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "收藏" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "收藏" })).toHaveAttribute("aria-busy", "true");
+    await user.click(screen.getByRole("button", { name: "收藏" }));
+    expect(api.collect).toHaveBeenCalledTimes(1);
     expect(update).not.toHaveBeenCalled();
     await act(async () => pending.resolve({ collected: true }));
     expect(screen.getByRole("button", { name: "已收藏" })).toHaveAttribute("aria-pressed", "true");
@@ -94,7 +125,8 @@ describe("search result actions", () => {
   it("reads the full-text offer on open and downloads only after an explicit cost confirmation", async () => {
     const pending = deferred<{ blob: Blob; filename: string }>(); api.download.mockReturnValueOnce(pending.promise);
     const user = userEvent.setup(); render(<EvimedSearchActions category="literature" item={item} />);
-    await user.click(screen.getByRole("button", { name: "原文下载" }));
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "原文下载" }));
     const dialog = screen.getByRole("dialog", { name: "原文下载" });
     expect(await within(dialog).findByText("免费次数已用完，本次下载消耗 3 灵豆。")).toBeInTheDocument();
     expect(api.download).not.toHaveBeenCalled(); expect(api.request).not.toHaveBeenCalled();
@@ -109,7 +141,8 @@ describe("search result actions", () => {
   it("requires a new offer and another confirmation after a failed download authorization", async () => {
     api.download.mockRejectedValueOnce(new Error("cost changed"));
     const user = userEvent.setup(); render(<EvimedSearchActions category="literature" item={item} />);
-    await user.click(screen.getByRole("button", { name: "原文下载" }));
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "原文下载" }));
     await user.click(await screen.findByRole("button", { name: "确认下载 · 3 灵豆" }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认下载 · 3 灵豆" })).not.toBeInTheDocument();
@@ -123,7 +156,8 @@ describe("search result actions", () => {
   it("cancels an unfinished offer when its dialog closes without authorizing a download", async () => {
     const pending = deferred<typeof offer>(); api.offer.mockReturnValueOnce(pending.promise);
     const user = userEvent.setup(); render(<EvimedSearchActions category="literature" item={item} />);
-    await user.click(screen.getByRole("button", { name: "原文下载" }));
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "原文下载" }));
     await waitFor(() => expect(api.offer).toHaveBeenCalledOnce());
     const signal = api.offer.mock.calls[0][2] as AbortSignal;
     await user.click(screen.getByRole("button", { name: "取消" }));
@@ -137,7 +171,8 @@ describe("search result actions", () => {
     api.status.mockResolvedValue({ status: 0, url: null, canRequest: true, canDownload: false });
     const user = userEvent.setup(); render(<EvimedSearchActions category="drugs" item={item} />);
     expect(screen.queryByRole("button", { name: "引用" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "原文下载" }));
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "原文下载" }));
     expect(await screen.findByRole("button", { name: "获取原文" })).toBeInTheDocument();
     expect(api.request).not.toHaveBeenCalled(); expect(api.offer).not.toHaveBeenCalled();
     api.status.mockResolvedValueOnce({ status: 1, url: null, canRequest: false, canDownload: false });
@@ -166,10 +201,27 @@ describe("search result actions", () => {
     expect(api.collect).toHaveBeenCalledOnce();
   });
 
+  it("keeps batch export recovery outside the toolbar and restores the trigger on dismissal", async () => {
+    api.export.mockRejectedValueOnce(new WebApiError("Expired", { status: 401, code: "evimed_search_credential_expired" }));
+    const user = userEvent.setup();
+    const view = render(<EvimedSearchBatchActions category="literature" items={[item]} />);
+    const trigger = screen.getByRole("button", { name: "导出已选 1 篇" });
+    await user.click(trigger);
+    await user.click(screen.getByRole("menuitem", { name: "Excel" }));
+    const dialog = await screen.findByRole("dialog", { name: "题录导出失败" });
+    expect(view.container).not.toContainElement(dialog);
+    expect(within(dialog).getByRole("link", { name: "重新登录" })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "导出已选 1 篇" })).toBe(trigger);
+  });
+
   it.each(["local", "other-tab"])("closes actions and cancels outstanding reads on a %s account change", async (source) => {
     const pending = deferred<typeof offer>(); api.offer.mockReturnValueOnce(pending.promise);
     const user = userEvent.setup(); render(<EvimedSearchActions category="literature" item={item} />);
-    await user.click(screen.getByRole("button", { name: "原文下载" }));
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "原文下载" }));
     await waitFor(() => expect(api.offer).toHaveBeenCalledOnce());
     const signal = api.offer.mock.calls[0][2] as AbortSignal;
     act(() => window.dispatchEvent(source === "local" ? new Event(WEB_SESSION_ENDED_EVENT)

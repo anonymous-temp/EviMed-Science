@@ -14,6 +14,7 @@ import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODE
 
 const EVIMED_SEARCH_MESSAGES = Object.freeze({
   evimed_search_unavailable: "医学检索暂未开通，请联系管理员。",
+  evimed_search_topics_unavailable: "主题推荐暂时无法加载，请稍后重试；你也可以直接输入检索词。",
   evimed_search_login_required: "请重新登录 EviMed 账号后继续检索。",
   evimed_search_credential_expired: "检索授权已失效，请重新登录 EviMed 账号。",
   evimed_search_invalid_input: "请检查检索词、筛选条件和页码后重试。",

@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
  * a list of six notifications drawn as six bordered cards with two buttons
  * each was the loudest thing on the inbox.
  *
- * A row opens with a click anywhere on it: its title is the link or button,
+ * By default a row opens with a click anywhere on it: its title is the link or button,
  * stretched over the row, so the whole row is one target and a keyboard user
  * still lands on a real control. Secondary actions — two quiet controls at
  * most — and a 「⋯」 `menu` are always visible.
@@ -17,7 +17,7 @@ import { cn } from "@/lib/cn";
  * every title in the list starts on one vertical line; variable-width
  * metadata goes under the title (`meta`) or at the end (`trailing`).
  *
- * A row that can be pressed says so (R13 V-10; the owner's 「点不进去」):
+ * The default whole-row opening says so (R13 V-10; the owner's 「点不进去」):
  *
  * - **Hover** is `surface-2` and **selected** (`selected`, a master/detail list's
  *   open item) is `accent-soft` with `aria-current`. Hover on the page ground
@@ -27,8 +27,8 @@ import { cn } from "@/lib/cn";
  *   page, a conversation), 「⌄」 turned over while open when it expands in place
  *   (`onOpen` with `expanded` defined), 「↗」 when it leaves for an outside address
  *   (`href`, a new tab: a different arrow, because the reader does not stay) and for a route that leaves the section the list is in (`leaves`).
- *   A page does not draw its own arrow; `chevron={false}` is for the row whose press
- *   is not an opening (a 「返回上级」 row).
+ *   A page does not draw its own arrow; `chevron={false}` is for an explicit title
+ *   link or a row whose press is not an opening (a 「返回上级」 row).
  * - **`trailing` does not swallow the press.** Text, a time or a Tag there lets the
  *   click through to the row; a real control placed there (a switch, a button) stays
  *   clickable. `actions` and `menu` are the places a control belongs.
@@ -175,12 +175,12 @@ export function ListHeader({
 /**
  * Component: ListRow; owner: H; rules: DS21, DESIGN.md component adoption.
  * Anatomy: li with semantic primary title, meta, optional cells and independent actions.
- * Variants: Internal link, external link, button or static row; expanded/unread/muted/selected.
+ * Variants: Internal link, external link, button or static row; whole-row or title-only opening.
  * States: Caller owns selected/expanded; no data-fetch state machine.
- * Hit area: Interactive title stretches across row; action/cell controls sit above it.
+ * Hit area: Title stretches across the row by default; title-only mode leaves metadata and leading text selectable.
  * Keyboard: Native title and secondary controls; no row tab stop.
  * Long content: meta and leading let the press through to the row, real controls inside them stay pressable; `metaSelectable` makes an identifier line selectable without opening the row; title identity remains accessible.
- * Theme: Selected accent-soft ground; ordinary hover surface and semantic text.
+ * Theme: Selected accent-soft ground; row hover by default, accent and underline on title-only links.
  * Responsive: Cells move below title below sm; row content may wrap.
  * Verification: DataPrimitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
@@ -194,6 +194,7 @@ export function ListRow({
   expanded,
   selected = false,
   chevron,
+  openArea = "row",
   columns,
   leading,
   eyebrow,
@@ -230,9 +231,11 @@ export function ListRow({
   selected?: boolean;
   /**
    * Whether the row draws its trailing mark (›, ⌄ or ↗, from what it does). On by default for a row that can be pressed;
-   * `false` for a row whose press is not an opening.
+   * `false` for a row whose press is not an opening or whose title is the explicit entry point.
    */
   chevron?: boolean;
+  /** Whether opening spans the row or only the title; title-only mode uses ordinary link hover/focus feedback. */
+  openArea?: "row" | "title";
   /** Numeric columns, right-aligned and in line down the list; the page draws a `ListHeader` over them. */
   columns?: ReadonlyArray<ListCell>;
   /** Fixed-width content before the title. A selection control here keeps its own press; anything else lets it through to the row. */
@@ -270,12 +273,15 @@ export function ListRow({
 }) {
   // The global focus ring stays on the title itself; the stretched pseudo
   // element only widens where a pointer can press it.
-  const stretched = "after:absolute after:inset-0 after:rounded after:content-['']";
+  const interactive = Boolean(to || href || onOpen);
+  const rowInteractive = interactive && openArea === "row";
+  const stretched = rowInteractive && "after:absolute after:inset-0 after:rounded after:content-['']";
   // `rounded`: a text control's corner is the one every other link and button of the page has (8), so a row's title is not a second kind
   // of text control beside the links of its own meta line, and the focus ring follows the same corner.
   const titleClass = cn(
     "min-w-0 rounded text-left text-ui",
     unread ? "font-semibold text-text" : muted ? "text-text-2" : "text-text",
+    interactive && openArea === "title" && "max-w-full self-start underline-offset-4 hover:text-accent hover:underline focus-visible:text-accent focus-visible:underline",
   );
   // `aria-current` follows `selected`; an explicit one in `titleProps` (a page that says `page`) wins.
   const current = selected ? { "aria-current": "true" as const } : {};
@@ -290,7 +296,6 @@ export function ListRow({
   ) : (
     <span data-row-title className={titleClass} {...current} {...titleProps}>{title}</span>
   );
-  const interactive = Boolean(to || href || onOpen);
   // What the row does decides its mark: a route or a drawer opens something (›), an in-place row folds (⌄, turned over while
   // open), an outside address leaves (↗). A row with nothing to press has none.
   const mark = chevron === false || !interactive ? null
@@ -303,18 +308,18 @@ export function ListRow({
     <li
       className={cn(
         "relative flex items-start gap-3 rounded px-2 py-3",
-        selected ? "bg-accent-soft" : interactive && "hover:bg-surface-2",
+        selected ? "bg-accent-soft" : rowInteractive && "hover:bg-surface-2",
         columns?.length && "max-sm:flex-wrap",
         className,
       )}
     >
-      {leading && <div data-row-leading="" className={cn("flex shrink-0 items-center self-stretch", interactive && cn("pointer-events-none relative z-sticky", CONTROLS))}>{leading}</div>}
+      {leading && <div data-row-leading="" className={cn("flex shrink-0 items-center self-stretch", rowInteractive && cn("pointer-events-none relative z-sticky", CONTROLS))}>{leading}</div>}
       <div className={cn("flex min-w-0 flex-1 flex-col", footerLayout === "aside" ? "gap-3 xl:flex-row xl:items-start xl:gap-4" : "gap-0.5")}>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {eyebrow && <div className="mb-1 min-w-0 text-caption text-text-3">{eyebrow}</div>}
           {heading}
           {meta && <div data-row-selectable={metaSelectable ? "" : undefined}
-            className={cn("min-w-0 text-caption text-text-3", interactive && cn("relative z-page", metaSelectable ? "pointer-events-auto select-text" : cn("pointer-events-none", CONTROLS)))}>{meta}</div>}
+            className={cn("min-w-0 text-caption text-text-3", rowInteractive && cn("relative z-page", metaSelectable ? "pointer-events-auto select-text" : cn("pointer-events-none", CONTROLS)))}>{meta}</div>}
         </div>
         {footer && <div className={cn("pointer-events-none relative z-sticky min-w-0", footerLayout === "aside" ? "xl:w-36 xl:shrink-0 xl:self-center" : "mt-3", CONTROLS)}>{footer}</div>}
       </div>

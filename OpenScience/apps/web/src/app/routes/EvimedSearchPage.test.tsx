@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { EvimedSearchPage } from "./EvimedSearchPage";
 import * as api from "@/lib/evimedSearchClient";
+import { readEvimedSearchTopics } from "@/lib/evimedSearchTopicsClient";
 import { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, WEB_SESSION_SYNC_STORAGE_KEY, WebApiError } from "@/lib/apiClient";
 import { expectComposed } from "@/test/expectComposed";
 
@@ -20,6 +21,7 @@ vi.mock("@/lib/evimedSearchClient", async (load) => ({
   requestEvimedFullText: vi.fn(),
   downloadEvimedFullText: vi.fn(),
 }));
+vi.mock("@/lib/evimedSearchTopicsClient", () => ({ readEvimedSearchTopics: vi.fn() }));
 
 const item: api.EvimedSearchItem = {
   id: "paper-one", title: "血压管理研究", subtitle: "Blood pressure management", summary: "研究比较了不同干预方案的结果。",
@@ -106,6 +108,11 @@ async function switchTab(label: string, category: api.EvimedSearchCategory, quer
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(readEvimedSearchTopics).mockImplementation(async (_projectId, category) => ({
+    schemaVersion: 1, category,
+    topics: [{ id: `${category}-example`, query: { literature: "高血压", guidelines: "高血压诊疗", drugs: "阿司匹林", trials: "肺癌" }[category], description: "检索示例" }],
+    count: 1, total: 1, updatedAt: null, revision: "test-feed", source: { kind: "curated", label: "示例主题", isExample: true },
+  }));
   vi.mocked(api.searchEvimed).mockResolvedValue(result);
   vi.mocked(api.setEvimedSearchCollection).mockImplementation(async (_category, _ref, collected) => ({ collected }));
   vi.mocked(api.readEvimedSearchCitations).mockResolvedValue({ quotes: [{ label: "GB/T 7714", text: "Test citation" }] });
@@ -168,7 +175,7 @@ it.each([
   open(`/app/search/${category}`);
   const input = screen.getByRole("searchbox", { name: "检索关键词" });
   expect(input).toHaveAttribute("placeholder", placeholder);
-  await userEvent.click(screen.getByRole("button", { name: example }));
+  await userEvent.click(await screen.findByRole("button", { name: example }));
   expect(input).toHaveValue(example);
   expect(input).toHaveFocus();
   expect(api.searchEvimed).not.toHaveBeenCalled();
@@ -269,7 +276,7 @@ it("opens an addressed reader as plain text and restores the result list without
   expect(screen.getByText(/<script>untrusted text<\/script>/)).toBeInTheDocument();
   expect(container.querySelector("script")).toBeNull();
   expect(screen.getByRole("link", { name: "打开原文" })).toHaveAttribute("href", item.url);
-  await userEvent.click(screen.getByRole("link", { name: "返回检索结果" }));
+  await userEvent.click(screen.getByRole("link", { name: "返回" }));
   await screen.findByRole("link", { name: item.title });
   expect(api.searchEvimed).toHaveBeenCalledTimes(1);
   expect(screen.getByTestId("location")).toHaveTextContent("page=2");
@@ -313,6 +320,88 @@ it("does not expose an unsafe source URL as a clickable result", async () => {
   await screen.findByText(item.title);
   expect(screen.queryByRole("link", { name: item.title })).toBeNull();
   expect(screen.queryByRole("button", { name: item.title })).toBeNull();
+});
+
+it.each([
+  ["literature", "文献"], ["guidelines", "指南"], ["drugs", "药品"], ["trials", "临床试验"],
+] as const)("shows the submitted %s query as a search flow and releases results before facets finish", async (category, noun) => {
+  let finish!: (value: api.EvimedSearchResult) => void;
+  vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  vi.mocked(api.readEvimedSearchFacets).mockImplementationOnce(() => new Promise(() => {}));
+  open(`/app/search/${category}`);
+  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "阿司匹林");
+  await userEvent.click(screen.getByRole("button", { name: "检索" }));
+  const transition = screen.getByRole("region", { name: `正在检索${noun}` });
+  expect(transition).toHaveAttribute("aria-busy", "true");
+  expect(transition).toHaveTextContent("“阿司匹林”");
+  const flow = within(transition).getByRole("list", { name: "查找流程" });
+  expect(flow).toHaveTextContent("确认关键词，已完成");
+  expect(flow).toHaveTextContent("执行检索，进行中");
+  expect(flow).toHaveTextContent("展示结果，未开始");
+  expect(screen.queryByRole("progressbar")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "检索" }));
+  expect(api.searchEvimed).toHaveBeenCalledTimes(1);
+  await act(async () => finish({ ...result, category, query: "阿司匹林" }));
+  expect(await screen.findByRole("link", { name: item.title })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: `正在检索${noun}` })).toBeNull();
+});
+
+it("returns a pending search to its editable keyword and ignores cancelled responses", async () => {
+  let finish!: (value: api.EvimedSearchResult) => void;
+  vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  vi.mocked(api.readEvimedSearchFacets).mockImplementationOnce(() => new Promise(() => {}));
+  open("/app/search/literature");
+  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "高血压");
+  await userEvent.click(screen.getByRole("button", { name: "检索" }));
+  const searchSignal = vi.mocked(api.searchEvimed).mock.calls[0][2];
+  const facetSignal = vi.mocked(api.readEvimedSearchFacets).mock.calls[0][2];
+  await userEvent.click(screen.getByRole("button", { name: "返回修改" }));
+  expect(searchSignal?.aborted).toBe(true);
+  expect(facetSignal?.aborted).toBe(true);
+  expect(queryParams().has("q")).toBe(false);
+  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("高血压");
+  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveFocus();
+  await act(async () => finish({ ...result, items: [{ ...item, title: "Cancelled old result" }] }));
+  expect(screen.queryByText("Cancelled old result")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "检索" }));
+  expect(await screen.findByRole("link", { name: item.title })).toBeInTheDocument();
+  expect(api.searchEvimed).toHaveBeenCalledTimes(2);
+});
+
+it("uses the flow for an explicit refresh and local skeletons for later pagination", async () => {
+  serveByRequest();
+  open();
+  await screen.findByRole("link", { name: resultTitle("literature") });
+  let finishRefresh!: (value: api.EvimedSearchResult) => void;
+  vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise(resolve => { finishRefresh = resolve; }));
+  await userEvent.click(screen.getByRole("button", { name: "检索" }));
+  expect(screen.getByRole("region", { name: "正在检索文献" })).toBeInTheDocument();
+  await act(async () => finishRefresh({ ...result, total: 100 }));
+  await screen.findByRole("link", { name: item.title });
+  let finishPage!: (value: api.EvimedSearchResult) => void;
+  vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise(resolve => { finishPage = resolve; }));
+  await userEvent.click(screen.getByRole("button", { name: "下一页" }));
+  expect(screen.queryByRole("region", { name: "正在检索文献" })).toBeNull();
+  expect(screen.getByRole("status", { name: "正在检索" })).toBeInTheDocument();
+  await act(async () => finishPage({ ...result, page: 2 }));
+  await screen.findByRole("link", { name: item.title });
+});
+
+it.each(["empty", "error"] as const)("leaves the transition when the request ends with %s", async outcome => {
+  let finish!: (value: api.EvimedSearchResult) => void;
+  let fail!: (error: Error) => void;
+  vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+  open("/app/search/literature");
+  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "高血压");
+  await userEvent.click(screen.getByRole("button", { name: "检索" }));
+  expect(screen.getByRole("region", { name: "正在检索文献" })).toBeInTheDocument();
+  await act(async () => {
+    if (outcome === "empty") finish({ ...result, total: 0, items: [] });
+    else fail(new Error("upstream failure"));
+  });
+  expect(screen.queryByRole("region", { name: "正在检索文献" })).toBeNull();
+  if (outcome === "empty") expect(screen.getByText(/没有找到符合条件的结果/)).toBeInTheDocument();
+  else expect(screen.getByRole("alert")).toHaveTextContent("暂时无法读取检索结果，请重试。");
 });
 
 it("shows loading then empty results separately from upstream failures", async () => {
@@ -397,16 +486,39 @@ it("collapses the entire filter column without clearing an unfinished refinement
   const collapse = screen.getByRole("button", { name: "收起筛选栏" });
   const panel = document.getElementById(collapse.getAttribute("aria-controls")!)!;
   await userEvent.click(collapse);
-  expect(panel).not.toBeVisible();
+  expect(panel).toHaveAttribute("aria-hidden", "true");
+  expect(panel).toHaveAttribute("inert");
+  expect(screen.queryByRole("textbox", { name: "结果中搜索" })).toBeNull();
   expect(screen.getByRole("button", { name: "展开筛选栏" })).toHaveAttribute("aria-expanded", "false");
   expect(screen.getByRole("link", { name: item.title })).toBeVisible();
   expect(queryParams().get("language")).toBe("en");
   expect(api.searchEvimed).toHaveBeenCalledTimes(requests);
+  await waitFor(() => expect(panel.firstElementChild).not.toBeVisible());
   await userEvent.click(screen.getByRole("button", { name: "展开筛选栏" }));
+  expect(panel).not.toHaveAttribute("aria-hidden");
+  expect(panel).not.toHaveAttribute("inert");
   expect(panel).toBeVisible();
   expect(screen.getByRole("textbox", { name: "结果中搜索" })).toHaveValue("未提交的词语");
   expect(screen.getByRole("button", { name: "语言：英文" })).toBeVisible();
   expect(api.searchEvimed).toHaveBeenCalledTimes(requests);
+});
+
+it("settles filter collapse immediately when reduced motion is requested", async () => {
+  const originalMatchMedia = window.matchMedia.bind(window);
+  const media = vi.spyOn(window, "matchMedia").mockImplementation(query => ({
+    ...originalMatchMedia(query), matches: query === "(prefers-reduced-motion: reduce)",
+  }));
+  try {
+    open();
+    await screen.findByRole("link", { name: item.title });
+    await userEvent.type(screen.getByRole("textbox", { name: "结果中搜索" }), "保留草稿");
+    const collapse = screen.getByRole("button", { name: "收起筛选栏" });
+    const panel = document.getElementById(collapse.getAttribute("aria-controls")!)!;
+    await userEvent.click(collapse);
+    expect(panel.firstElementChild).not.toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "展开筛选栏" }));
+    expect(screen.getByRole("textbox", { name: "结果中搜索" })).toHaveValue("保留草稿");
+  } finally { media.mockRestore(); }
 });
 
 it("retains the horizontal collapse choice across tabs and reader return", async () => {
@@ -418,7 +530,7 @@ it("retains the horizontal collapse choice across tabs and reader return", async
   expect(screen.getByRole("button", { name: "展开筛选栏" })).toHaveAttribute("aria-expanded", "false");
   await userEvent.click(await screen.findByRole("link", { name: item.title }));
   await screen.findByRole("heading", { name: item.title });
-  await userEvent.click(screen.getByRole("link", { name: "返回检索结果" }));
+  await userEvent.click(screen.getByRole("link", { name: "返回" }));
   await screen.findByRole("link", { name: item.title });
   expect(screen.getByRole("button", { name: "展开筛选栏" })).toHaveAttribute("aria-expanded", "false");
 });
@@ -669,7 +781,7 @@ it("restores list scroll and draft after closing a detail reader", async () => {
   await userEvent.click(record);
   await screen.findByRole("heading", { level: 1, name: item.title });
   fireEvent.scroll(pageScroller(), { target: { scrollTop: 110 } });
-  await userEvent.click(screen.getByRole("link", { name: "返回检索结果" }));
+  await userEvent.click(screen.getByRole("link", { name: "返回" }));
   await screen.findByRole("link", { name: resultTitle("literature", "高血压", 2) });
   expect(api.searchEvimed).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("未提交的文献草稿");
@@ -712,7 +824,7 @@ it("aborts a closed detail reader and never caches its late response", async () 
   await userEvent.click(await screen.findByRole("link", { name: resultTitle("literature") }));
   await screen.findByRole("status", { name: "正在检索" });
   const detailSignal = vi.mocked(api.readEvimedSearchDetail).mock.calls[0][2];
-  await userEvent.click(screen.getByRole("link", { name: "返回检索结果" }));
+  await userEvent.click(screen.getByRole("link", { name: "返回" }));
   await screen.findByRole("link", { name: resultTitle("literature") });
   expect(detailSignal?.aborted).toBe(true);
   await act(async () => finishDetail({
@@ -1156,7 +1268,7 @@ it("synchronizes collection from the reader back to cached rows without crossing
   await userEvent.click(screen.getByRole("button", { name: /^收藏$/ }));
   await screen.findByRole("button", { name: "已收藏" });
   expect(api.setEvimedSearchCollection).toHaveBeenLastCalledWith("literature", "literature-detail-action", true, expect.any(AbortSignal));
-  await userEvent.click(screen.getByRole("link", { name: "返回检索结果" }));
+  await userEvent.click(screen.getByRole("link", { name: "返回" }));
   await screen.findByRole("link", { name: "literature collection record" });
   expect(screen.getByRole("button", { name: "已收藏" })).toHaveAttribute("aria-pressed", "true");
   await userEvent.click(screen.getByRole("tab", { name: "查指南" }));

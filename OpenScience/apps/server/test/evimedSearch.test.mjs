@@ -340,6 +340,18 @@ test("detail references reject another session/category, tampering and expiry wi
   });
 });
 
+test("detail prose preserves paragraphs and list breaks while stripping active HTML", async () => {
+  await fixture(async ({ config, store, signed }) => {
+    const upstream = provider(); const service = new EvimedSearchService(config, store, upstream);
+    const list = await service.search(signed.req, responseHeaders(), "literature", { query: "heart" });
+    upstream.answerWith(() => json({ title: "A\n title", abstract: '<p>Methods: n=170.</p><p>Results: P<0.05; 95% CI 1.299–1.467.<br>Second line.</p><ul><li>First item</li><li>Second item</li></ul><script>private()</script><style>body{display:none}</style>' }));
+    const detail = await service.detail(signed.req, responseHeaders(), "literature", { detailRef: list.items[0].detailRef });
+    assert.equal(detail.title, "A title");
+    assert.equal(detail.sections[0].text, "Methods: n=170.\n\nResults: P<0.05; 95% CI 1.299–1.467.\nSecond line.\n\nFirst item\n\nSecond item");
+    assert.equal(detail.sections[0].text.includes("private"), false);
+  });
+});
+
 test("drug details retain multilingual elements, nested text and tables as plain text", async () => {
   await fixture(async ({ config, store, signed }) => {
     const upstream = provider(); const service = new EvimedSearchService(config, store, upstream);

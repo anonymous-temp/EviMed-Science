@@ -78,6 +78,8 @@ import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { createInventoryRoutes } from "./inventoryRoutes.mjs";
+import { createSearchTopicsRoutes } from './searchTopicsRoutes.mjs';
+import { SearchTopicsRecommendations } from './searchTopicsRecommendations.mjs';
 import { ExtensionAccess } from "./extensionAccess.mjs";
 import { ExtensionService } from "./extensionService.mjs";
 import { createExtensionRoutes } from "./extensionRoutes.mjs";
@@ -1268,7 +1270,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null });
+  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null,
+    searchTopicsAvailable: (_user, project) => runtimeManager.searchTopicsAvailable(project) });
+  /** @type {SearchTopicsRecommendations | null} */
+  let searchTopicsRecommendations = null;
+  const searchTopicsRoutes = createSearchTopicsRoutes({ store, runtimeManager: { searchTopicsFor: (project, query) => runtimeManager.searchTopicsFor(project, query) },
+    ensureCurrent: async () => {
+      if (!searchTopicsRecommendations) throw new HttpError(503, 'evimed_search_topics_unavailable', 'Search topic recommendations are temporarily unavailable.');
+      return searchTopicsRecommendations.ensureCurrent();
+    } });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -2561,6 +2571,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evidenceBudget = createEvidenceBudget({ usageLedger, config });
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  if (config.searchTopicsEnabled && frontier && productDatabase) searchTopicsRecommendations = new SearchTopicsRecommendations({ database: productDatabase, config, tags: frontier.service.tags });
   // The community column of an official zone (evidenceCommunity.mjs, flywheel F07): other users' public cards on the zone's subjects. Composed with its
   // switch and the frontier; off, the route answers 404 by name and no table is read.
   const evidenceCommunity = config.evidenceCommunityCardsEnabled && frontier && productDatabase
@@ -7120,6 +7131,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       if (await evimedAuthRoutes(req, res)) return;
       if (await evimedSearchRoutes(req, res)) return;
+      if (await searchTopicsRoutes(req, res)) return;
       if (await personalSkillTransferRoutes(req, res)) return;
       if (await skillLibraryRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
