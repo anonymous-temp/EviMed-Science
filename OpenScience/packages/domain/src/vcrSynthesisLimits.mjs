@@ -12,7 +12,8 @@
  *
  * - **The cost is measured, not guessed.** `VCR_SYNTHPOP_COST` is a fit of the CPU seconds the engine's own job runner used on
  *   synthetic tables of the shape intensive-care baselines have (continuous, count and 0/1 columns), across rows, columns and
- *   copies, on the engine's R and package lock; its basis is written beside the numbers. It is an estimate for numeric, count and
+ *   copies, on the engine's R and package lock (`项目代码/vcr-engine/scripts/measure-synthpop-cost.R` runs the measurement and lists the
+ *   seconds it found); its basis is written beside the numbers. It is an estimate for numeric, count and
  *   binary columns; a text column with many levels costs more and is not in it, so the estimate is the cost of the table at its
  *   cheapest and a table it refuses is one the engine could not have finished either.
  * - **The budget is the engine's, not the job's.** The R side stops at 90 % of the smaller of the job's `cpuSecondsLimit` and the
