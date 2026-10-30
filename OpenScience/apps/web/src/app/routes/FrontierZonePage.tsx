@@ -66,8 +66,6 @@ const ZONE_EDITOR: ComponentType<ZoneEditorProps> | null = ZoneEditorDrawer;
 function zoneErrorMessage(error: unknown): string {
   return webErrorMessage(error, {
     codes: {
-      evidence_revision_conflict: "这个专区刚刚有更新，请刷新后再试。",
-      evidence_owner_required: "只有创建者可以修改这个专区。",
       evidence_not_found: "这个专区已不存在。",
     },
     fallback: "暂时读不到这个专区，请稍后重试。",

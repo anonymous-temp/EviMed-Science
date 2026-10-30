@@ -613,12 +613,7 @@ export function evidenceErrorMessage(error: unknown): string {
       evidence_invalid:
         "请检查必填项、图表数值和来源编号；每个来源需填写标题，并提供有效的网页链接或原文引句。",
       evidence_query_invalid: "搜索条件无效，请清空搜索条件后重试。",
-      evidence_revision_conflict:
-        "内容已有更新，当前填写内容仍保留。请先复制修改，再关闭编辑并重新打开最新版本后保存。",
-      evidence_cursor_invalid: "列表已有更新，请重新加载列表。",
-      evidence_owner_required: "只有创建者可以修改或发布这项内容。",
       evidence_not_found: "这项内容已撤回或不存在，请返回专区查看。",
-      evidence_request_conflict: "这次提交的内容已变更，请确认修改后重新提交。",
       evidence_reviewer_required:
         "创建者不能评议自己的证据，请由其他用户参与评议。",
       evidence_publication_incomplete:

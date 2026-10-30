@@ -1899,9 +1899,9 @@ export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
  * run. The page maps some of them to its own words; these are the sentences for every other surface that shows a code.
  */
 export const EVIDENCE_ZONE_ERROR_MESSAGES_ZH = Object.freeze({
-  evidence_revision_conflict: '内容刚刚有更新，不是你打开时的那一版，没有保存。请刷新后再改。',
+  evidence_revision_conflict: '内容已有更新，这次没有保存，你填写的内容仍保留。请先复制修改，再关闭编辑并重新打开最新版本后保存。',
   evidence_request_conflict: '这次提交的内容和同一个请求之前提交的不一样，没有保存。请刷新后重新提交。',
-  evidence_owner_required: '只有创建者可以做这个操作。',
+  evidence_owner_required: '只有创建者可以修改或发布这项内容。',
   evidence_user_zone_limit: '自己建的专区已经到上限了，先删掉不用的再建。',
   evidence_draft_unavailable: '这个部署暂时不能帮你起草专区，可以自己填写关键词和范围。',
   evidence_feedback_unavailable: '这个部署暂时不能记录对专区的反馈。',
