@@ -66,6 +66,6 @@ export async function vcrSynthesisIssue({ root, inputs, scenario, cpuSecondsLimi
   if (!shape || shape.columns < 1) return null;
   const copies = Number.isInteger(object(scenario).m) ? Number(object(scenario).m) : VCR_SYNTHPOP_COPIES.min;
   const verdict = vcrSynthpopFeasibility({ rows: shape.rows, columns: shape.columns, copies, cpuSecondsLimit, cpuSecondsCeiling });
-  if (!verdict.ok) return { code: "vcr_synthesis_too_large", message: verdict.message, refused: true };
+  if ("message" in verdict) return { code: "vcr_synthesis_too_large", message: verdict.message, refused: true };
   return verdict.risk ? { code: "vcr_synthesis_may_not_finish", message: verdict.risk.message, refused: false } : null;
 }

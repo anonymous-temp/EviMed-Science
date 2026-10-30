@@ -108,11 +108,11 @@ const LESS_EQUAL = /[\u2266\u2A7D]/u;
  * A text in the form two spellings of the same words agree in, and for each character of that form the span of the original it
  * came from. Case, runs of whitespace (a no-break space is whitespace), width variants (NFKC), `>=` / `<=` against `≥` / `≤`, and the
  * dash and quotation-mark variants are folded; nothing else is, so this compares and never guesses.
- * @param {string} text
+ * @param {string} value
  * @returns {{ text: string, start: number[], end: number[] }}
  */
-function foldedSourceText(text) {
-  const source = String(text ?? "");
+function foldedSourceText(value) {
+  const source = String(value ?? "");
   /** @type {string[]} */
   const out = [];
   /** @type {number[]} */
