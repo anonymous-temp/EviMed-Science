@@ -249,6 +249,7 @@ export function VcrHomePage() {
           <EmptyState
             icon={UsersRound}
             title="暂无研究"
+            reason="选一项任务开始后，研究会列在这里。"
           />
         )
         : shown.length === 0
@@ -328,15 +329,15 @@ function TaskEntry({ ask }: { ask: ReturnType<typeof useGeneralResearchDraft> })
   const [selected, setSelected] = useState<string>(VCR_TASKS[0].id);
   const task = VCR_TASKS.find((item) => item.id === selected) ?? VCR_TASKS[0];
   return (
-    <section aria-label="新研究" className="flex flex-col items-start gap-5">
+    <form aria-label="新研究" className="flex flex-col items-start gap-5" onSubmit={(event) => { event.preventDefault(); ask(task.draft); }}>
       <h2 className="text-section font-semibold text-text">新研究</h2>
       <div className="max-w-full overflow-x-auto">
         <SegmentedControl className="whitespace-nowrap" aria-label="研究任务" value={selected} onChange={setSelected} options={VCR_TASKS.map(item => ({ value: item.id, label: item.label }))} />
       </div>
       <p className="text-ui text-text-2">{task.summary}</p>
       <VcrTaskRequirements task={task} />
-      <Button onClick={() => ask(task.draft)}>开始</Button>
-    </section>
+      <Button type="submit">开始</Button>
+    </form>
   );
 }
 

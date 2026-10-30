@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,6 +93,21 @@ describe("an event", () => {
     expect(within(facts as HTMLElement).getByText("药学")).toHaveClass("rounded-tag");
     // No explanation under any heading: the old cards each said how they were made.
     for (const gone of ["由多篇报道综合", "当事方自己的说法", "最新在前", "仍在发展", "篇报道"]) expect(document.body).not.toHaveTextContent(gone);
+  });
+
+  it("reads a long timeline a page at a time: thirty reports, then 显示更多 with the rest counted", async () => {
+    const reports = Array.from({ length: 45 }, (_, index) => ({ ...frontierItem({ id: `r${index}`, title: `报道 ${index}`, source: { id: "mx", name: "Medical Xpress" },
+      sourceType: "media", sourceTypeLabel: "媒体", url: `https://medicalxpress.com/${index}`, timelineAt: ago(index + 1), selected: false }), role: "report" as const }));
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: reports, hasPrimary: false, primary: null as unknown as FrontierEvent["primary"] }));
+    renderEvent();
+    await screen.findByRole("heading", { level: 1 });
+    expect(timelineRows()).toHaveLength(30);
+    const more = screen.getByRole("button", { name: /显示更多/ });
+    expect(more).toHaveTextContent("15");
+    expect(more.closest("[data-show-more]")).not.toBeNull();
+    fireEvent.click(more);
+    expect(timelineRows()).toHaveLength(45);
+    expect(screen.queryByRole("button", { name: /显示更多/ })).toBeNull();
   });
 
   it("says in the line of facts what the record does not: the studies the reports were tied to, and those not yet", async () => {

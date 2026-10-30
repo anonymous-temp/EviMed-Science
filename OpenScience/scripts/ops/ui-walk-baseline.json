@@ -7,6 +7,26 @@
   ],
   "entries": [
     {
+      "view": "frontier-evidence",
+      "rule": "not-walked",
+      "profiles": [
+        "owner"
+      ],
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "the owner's 2026-10-29 zones decision: the platform makes no evidence card until the owner's card API arrives (OPEN_SCIENCE_EVIDENCE_CARD_PROVIDER=none) and the topics reset deleted the old cards, so production holds no card to open; the fixture walk reads one; data, not a defect"
+    },
+    {
+      "view": "frontier-author",
+      "rule": "not-walked",
+      "profiles": [
+        "owner"
+      ],
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "the owner's 2026-10-29 zones decision: the platform makes no evidence card until the owner's card API arrives (OPEN_SCIENCE_EVIDENCE_CARD_PROVIDER=none) and the topics reset deleted the old cards, so production holds no card to open; the fixture walk reads one; data, not a defect"
+    },
+    {
       "view": "files",
       "rule": "not-walked",
       "profiles": [

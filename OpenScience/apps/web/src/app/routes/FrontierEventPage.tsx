@@ -23,6 +23,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Section } from "@/components/ui/Section";
+import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import { StateScreen } from "@/components/ui/StateScreen";
 import { Tag } from "@/components/ui/Tag";
 import { Toolbar } from "@/components/ui/Toolbar";
@@ -377,6 +378,9 @@ function ReportGroup({ id, title, rows, toolbar }: { id: string; title: string; 
   );
 }
 
+/** Reports on the timeline before 「显示更多」. */
+const TIMELINE_PAGE = 30;
+
 /**
  * 「报道时间线」: the reports cut into Beijing days, in the order the page reads them (newest day first, or oldest on 最早), each day a
  * heading with its number of reports over its rows, which say the clock they stand at. Where there is a first-hand group it holds the
@@ -384,12 +388,16 @@ function ReportGroup({ id, title, rows, toolbar }: { id: string; title: string; 
  * no rows unless it carries the filter.
  */
 function ReportTimeline({ rows, toolbar }: { rows: Array<FrontierItem & { role: FrontierEventRole }>; toolbar?: ReactNode }) {
+  // A hot event gathers a hundred reports and more: the timeline reads a page at a time (a 6,455 px page on production, 2026-10-30),
+  // back to its first page when the order or the source filter changes what heads it.
+  const page = useShowMore(rows, { first: TIMELINE_PAGE, step: TIMELINE_PAGE, resetKey: `${rows.length}:${rows[0]?.id ?? ""}` });
   if (rows.length === 0 && !toolbar) return null;
   return (
     <Section title="报道时间线" count={rows.length} toolbar={toolbar} className="mt-0">
       <div data-event-timeline="">
-        {groupByDay(rows).map((day) => <TimelineDay key={day.key} day={day} />)}
+        {groupByDay(page.visible).map((day) => <TimelineDay key={day.key} day={day} />)}
       </div>
+      <ShowMore remaining={page.remaining} unit="篇" onMore={page.more} />
     </Section>
   );
 }

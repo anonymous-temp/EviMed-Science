@@ -32,6 +32,8 @@ function drawHome(path = "/app/virtual-research") { return render(<MemoryRouter 
 const where = () => screen.getByTestId("where").textContent;
 it.each(["患者匹配", "人群与患者", "合成对照", "虚拟试验"])("opens %s as an unsent native conversation draft without creating a study", async label => {
   draw("/app/virtual-research?new=1"); await userEvent.click(await screen.findByRole("radio", { name: label }));
+  // The task choice and 开始 are one form: 开始 submits the selected task (the page's own primary stays 新研究).
+  expect(screen.getByRole("button", { name: "开始" }).closest("form")).toBe(screen.getByRole("form", { name: "新研究" }));
   await userEvent.click(screen.getByRole("button", { name: "开始" }));
   const location = JSON.parse(screen.getByTestId("location").textContent!);
   expect(location.path).toBe("/app/chat");
@@ -46,6 +48,8 @@ it.each(["患者匹配", "人群与患者", "合成对照", "虚拟试验"])("op
 it("keeps the empty list concise and shows only the selected task's requirements", async () => {
   server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], reviews: [] } }); draw();
   await screen.findByText("暂无研究");
+  // An empty state is a recipe: with no button of its own, it says why the list is empty and what fills it.
+  expect(screen.getByText("暂无研究").closest("[data-empty]")).toHaveAttribute("data-reason");
   expect(screen.queryByRole("radiogroup", { name: "研究任务" })).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "新研究" }));
   expect(screen.getByRole("radio", { name: "患者匹配" })).toHaveAttribute("aria-checked", "true");
