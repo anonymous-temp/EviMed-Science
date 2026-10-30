@@ -53,3 +53,22 @@ test("a reconstructed table carries its curve's unit when it is read without bei
     await assert.rejects(vcrCurveTimeUnit({ ...base, verifier: verifying({ curvePointsHash: "x".repeat(8) }), strict }), { code: "vcr_curve_provenance_unavailable" });
   }
 });
+
+// The verifier throws when it cannot look: the reconstruction's principal lost permission to run the study, the curve receipt is gone,
+// the source image cannot be read (a storage error reads there as a changed source). An analysis of the table that never consulted the
+// receipt before must not start failing for that; a table bound as a comparator needs the proof and keeps its refusal.
+test("a verifier that cannot look leaves the unbound table's unit unstated, and refuses the bound one; a receipt it read and found changed is refused either way", async () => {
+  const base = { studyId: "s1", execution: reconstruction, producer };
+  for (const failure of [
+    Object.assign(new Error("principal may not run"), { code: "vcr_forbidden", status: 403 }),
+    Object.assign(new Error("receipt not found"), { code: "vcr_curve_receipt_missing", status: 404 }),
+    Object.assign(new Error("storage"), { code: "vcr_curve_source_changed", status: 409 }),
+    new Error("ECONNRESET"),
+  ]) {
+    const throwing = async () => { throw failure; };
+    assert.equal(await vcrCurveTimeUnit({ ...base, verifier: throwing, strict: false }), null, String(failure.message));
+    await assert.rejects(vcrCurveTimeUnit({ ...base, verifier: throwing, strict: true }), failure);
+  }
+  // a verifier that answered and found a different image: the hash mismatch is the refusal, and it is not swallowed
+  await assert.rejects(vcrCurveTimeUnit({ ...base, verifier: verifying({ curveImageHash: "z".repeat(8) }), strict: false }), { code: "vcr_curve_provenance_unavailable" });
+});

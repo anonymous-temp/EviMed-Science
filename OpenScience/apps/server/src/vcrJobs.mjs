@@ -515,7 +515,8 @@ export function vcrCanonicalScenarioTimeUnit(method, scenario) {
 /**
  * The time unit a reconstruction's curve was calibrated in, read from its verified source receipt. `strict` (the table is bound as a
  * comparator's pseudo-patients) refuses a reconstruction whose receipt cannot be verified or whose unit is outside the table; otherwise
- * the unit is simply absent when it cannot be shown. A receipt that has changed since the reconstruction is refused either way.
+ * the unit is simply absent when it cannot be shown, including when the verifier could not look at all (it threw). A receipt that the
+ * verifier read and found changed since the reconstruction is refused either way.
  * @param {{ studyId: string, execution: Record<string, any> | null, producer: Record<string, any> | null,
  *   verifier: ((request: Record<string, any>) => Promise<any>) | null, strict: boolean }} input
  * @returns {Promise<string | null>}
@@ -528,8 +529,18 @@ export async function vcrCurveTimeUnit({ studyId, execution, producer, verifier,
     if (strict) throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
     return null;
   }
-  const verified = await /** @type {Function} */ (verifier)({ studyId, principal: checkpoint.curvePrincipal,
-    scenario: producer?.scenario, inputs: producer?.inputs, receiptId: checkpoint.curveReceiptId });
+  /** @type {any} */
+  let verified;
+  try {
+    verified = await /** @type {Function} */ (verifier)({ studyId, principal: checkpoint.curvePrincipal,
+      scenario: producer?.scenario, inputs: producer?.inputs, receiptId: checkpoint.curveReceiptId });
+  } catch (error) {
+    // The verifier throws when it cannot look (the principal no longer may run the study, the receipt is gone, the source image cannot be
+    // read). Where nothing binds the table that is no reason to refuse an analysis that never consulted the receipt before: the unit is
+    // left unstated. A bound comparator needs the proof, so its refusal stands.
+    if (strict) throw error;
+    return null;
+  }
   if (verified.detail.curveTimeUnitUnsupported === true) {
     if (strict) throw new HttpError(400, "vcr_job_scenario_invalid", "The curve calibration uses an unsupported time unit; convert it before analysis.");
     return null;
