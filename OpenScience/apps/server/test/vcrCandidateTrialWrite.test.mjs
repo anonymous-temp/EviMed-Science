@@ -33,11 +33,19 @@ function seams(options = {}) {
   const written = [];
   /** @type {any[]} */
   const fetched = [];
+  /** @type {any[]} */
+  const asked = [];
   const evidence = {
     async candidateRecord(input) { fetched.push(input); return options.record ? options.record(input) : record(input.registryId); },
   };
   const patientTrials = options.patientTrials === null ? null : {
     async holds() { return options.holds ?? true; },
+    // The study's other candidate trials with their saved eligibility text (`createPatientTrials.otherTrials`).
+    ...(options.others === undefined ? {} : { async otherTrials(_target, key) {
+      asked.push(key);
+      if (options.others instanceof Error) throw options.others;
+      return options.others;
+    } }),
     async writeTrial(target, input) {
       written.push({ studyId: target.id, ...input });
       if (options.refuse) throw new HttpError(409, "vcr_write_refused", options.refuse);
@@ -46,7 +54,7 @@ function seams(options = {}) {
     },
   };
   const matchStore = { async candidateSubjects() { return options.roster ?? ["P-0192", "P-0201"]; }, async holdsSubject() { return false; } };
-  return { written, fetched, deps: { store: {}, service: {}, orchestrator: null, study, evidence, matchStore, patientTrials, documents: null } };
+  return { written, fetched, asked, deps: { store: {}, service: {}, orchestrator: null, study, evidence, matchStore, patientTrials, documents: null } };
 }
 
 /** @param {ReturnType<typeof seams>} seam @param {any[]} items */
@@ -86,6 +94,56 @@ test("wording that is not in the record is kept as written, not located, and sai
   assert.deepEqual(seam.written[0].criteria[0].sourceLocator, { recordHash: HASH, located: false });
   assert.equal(outcome.results[0].located, 1);
   assert.deepEqual(outcome.results[0].warnings.map((warning) => [warning.field, warning.code]), [["criteria[0].sourceText", "source_text_not_in_record"]]);
+});
+
+const OTHER_ELIGIBILITY = "Inclusion Criteria:\n* Age >= 18 years\n* Prior platinum-based chemotherapy\nExclusion Criteria:\n* Symptomatic interstitial lung disease";
+const OTHER = { id: "ctr_9", registry: "clinicaltrials.gov", registryId: "NCT05000009", title: "Trial B", eligibilityText: OTHER_ELIGIBILITY };
+const PLATINUM = { kind: "inclusion", criterionType: "prior_treatment", sourceText: "Prior platinum-based chemotherapy",
+  requirement: { op: "present", variable: "platinum_chemotherapy" } };
+const ILD = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Symptomatic interstitial lung disease",
+  requirement: { op: "present", variable: "interstitial_lung_disease" } };
+
+test("a criterion that is not in this trial's record but stands word for word in another trial the study holds refuses this trial, by name, and the rest of the batch goes on", async () => {
+  const seam = seams({ others: [OTHER] });
+  const outcome = await write(seam, [
+    { registryId: "NCT05000001", criteria: [AGE, PLATINUM, ILD, BRAIN], subjectKeys: ["P-0192"] },
+    { registryId: "NCT05000002", criteria: [AGE] },
+  ]);
+  assert.deepEqual(outcome.ids, ["ctr_1"], "the second trial is written");
+  assert.equal(seam.written.length, 1);
+  assert.equal(seam.written[0].trial.registryId, "NCT05000002");
+  const refused = outcome.issues.filter((entry) => entry.index === 0);
+  assert.deepEqual(refused.map((entry) => [entry.field, entry.code]), [
+    ["criteria[1].sourceText", "criterion_from_other_trial"],
+    ["criteria[2].sourceText", "criterion_from_other_trial"],
+  ], "every offending criterion is named, the one that is this trial's own is not");
+  assert.match(refused[0].message, /NCT05000001/);
+  assert.match(refused[0].message, /NCT05000009/);
+  assert.match(refused[0].message, /Trial B/);
+  assert.deepEqual(seam.asked[0], { registry: "clinicaltrials.gov", registryId: "NCT05000001" }, "the trial being written is told apart from its siblings");
+});
+
+test("wording that is in this record is this trial's even when another trial says it too; wording found nowhere is still only a warning", async () => {
+  const seam = seams({ others: [OTHER] });
+  const outcome = await write(seam, [{ registryId: "NCT05000001", criteria: [AGE, { ...NSCLC, sourceText: "Lung cancer, confirmed" }, BRAIN] }]);
+  assert.deepEqual(outcome.issues, [], "the age line is in both records and located here; the invented wording is in neither");
+  assert.equal(seam.written.length, 1);
+  assert.deepEqual(outcome.results[0].warnings.map((warning) => [warning.field, warning.code]), [["criteria[1].sourceText", "source_text_not_in_record"]]);
+});
+
+test("a record with no eligibility text proves nothing about a criterion; a sibling lookup that fails costs the check, never the trial", async () => {
+  const bare = seams({ others: [OTHER], record: () => ({ ...record(), trial: { ...record().trial, eligibilityText: "" } }) });
+  const unproven = await write(bare, [{ registryId: "NCT05000001", criteria: [PLATINUM] }]);
+  assert.deepEqual(unproven.issues, []);
+  assert.equal(bare.written.length, 1);
+  const down = seams({ others: new Error("store down") });
+  const kept = await write(down, [{ registryId: "NCT05000001", criteria: [PLATINUM] }]);
+  assert.deepEqual(kept.issues.map((entry) => entry.code), [], "the wording stays a warning when the siblings cannot be read");
+  assert.equal(down.written.length, 1);
+  // Nothing to compare against: the lookup is not even made when every criterion is located.
+  const clean = seams({ others: [OTHER] });
+  await write(clean, [{ registryId: "NCT05000001", criteria: [AGE, BRAIN] }]);
+  assert.equal(clean.asked.length, 0);
 });
 
 test("a criterion outside the closed grammar refuses its trial whole, by name and path, and the other items are written", async () => {

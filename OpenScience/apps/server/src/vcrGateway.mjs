@@ -1008,9 +1008,26 @@ const WRITERS = {
     /** @type {any[]} */
     const warnings = [];
     let located = 0;
+    const where = checked?.map((criterion) => locateSourceText(criterion.sourceText, trial.eligibilityText)) ?? [];
+    // A criterion is the trial's own wording. One that is not in this record but stands word for word in the eligibility text of
+    // another trial this study holds was taken from that trial (46 patient tasks merged the criteria of several trials into one):
+    // this trial is not written with it, the other is named, and the rest of the batch goes on. Wording found nowhere stays the
+    // warning below. A record with no eligibility text proves nothing about any criterion, so nothing is refused for it.
+    if (checked && trial.eligibilityText && where.some((found) => !found) && typeof patientTrials.otherTrials === "function") {
+      const others = await patientTrials.otherTrials(study, { registry: trial.registry ?? registry, registryId: trial.registryId ?? registryId }).catch(() => []);
+      for (const [at, criterion] of checked.entries()) {
+        if (where[at]) continue;
+        const owner = others.find((/** @type {any} */ other) => locateSourceText(criterion.sourceText, other.eligibilityText));
+        if (owner) {
+          item.bad(`criteria[${at}].sourceText`, `这句原文不在 ${registryId} 的登记记录里，却逐字出现在本研究已有的候选试验 ${owner.registryId}${owner.title ? `（${String(owner.title).slice(0, 80)}）` : ""}的入排条件里：`
+            + `一个试验只写它自己登记记录里的条件。把它改成 ${registryId} 自己的原句，或把它写进 ${owner.registryId} 的条件；这个试验这次没有写入，其余的项照常。`, "criterion_from_other_trial");
+        }
+      }
+      if (!item.ok) return null;
+    }
     const criteria = checked?.map((criterion, at) => {
       warnNegatedExclusion(criterion, `criteria[${at}].requirement`, warnings);
-      const found = locateSourceText(criterion.sourceText, trial.eligibilityText);
+      const found = where[at];
       if (found) located += 1;
       else if (trial.eligibilityText) {
         warnings.push({ field: `criteria[${at}].sourceText`, code: "source_text_not_in_record",
