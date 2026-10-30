@@ -498,7 +498,7 @@ export function vcrBindScientificInputUnits(method, scenario, inputs) {
 /**
  * The comparators whose R path reads the scenario's unit through `.vcr_observed_time_unit` (`R/engine.R`) and aborts on text outside the
  * four words: the restricted-mean comparison, the weighted Cox model and the time-to-event MAIC always, the two weighting comparators
- * (`vcr_job_weight_comparator`) when their endpoint is time to event. The others either never read `timeUnit` (aipw, covariate sets,
+ * (entropy balance and propensity weighting) when their endpoint is time to event. The others either never read `timeUnit` (aipw, covariate sets,
  * negative control, e-value, MAP prior) or take it as a label (`comparator.tipping_point` and `comparator.prognostic_adjustment` write
  * `as.character(sc$timeUnit %||% "months")` into the result), and text outside the table is taken as written there
  * (`vcrTimeUnits.mjs`: "cycles" converts nothing and is said to be so).
