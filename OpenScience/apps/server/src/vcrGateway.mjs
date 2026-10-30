@@ -291,7 +291,7 @@ async function shapeRefusals(what, rows) {
   const issues = [];
   if (what === "protocol" || what === "criteria") {
     // A protocol version is written only with criteria that can be kept; with none, nothing is written whatever else the call carries.
-    const { criteria } = await checkedCriteria({ study: null, store: null }, rows, issues, what);
+    const { criteria } = await checkedCriteria(/** @type {WriteDeps} */ (/** @type {unknown} */ ({ study: null, store: null })), rows, issues, what);
     if (criteria.length) return null;
     if (!issues.length) issues.push(issue(null, "criteria", "vcr_write_value_invalid", "入排条件至少要有一条能写入的。"));
     return issues;
