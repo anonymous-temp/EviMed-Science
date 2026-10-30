@@ -1068,13 +1068,18 @@ export class EvidenceZoneMembership {
     const byN = new Map(entries.map((entry) => [entry.n, entry]));
     let written = 0;
     if (checked.verdicts.length) {
+      // A verdict answers the definition the call was shown. When the owner saved a newer one while the call was out (the backfill has
+      // by then put the pair back to `pending` for it, or left an `in` row to be judged again), the answer is dropped: writing it would
+      // stamp the old version on the row and nothing would look at the pair again. The pair stays in the queue under the new version.
       const result = await this.database.query(`UPDATE evimed_frontier.zone_items zi SET
           state = CASE u.verdict WHEN 'out' THEN 'out' ELSE 'in' END,
           relevance = CASE u.verdict WHEN 'core' THEN 'core' WHEN 'related' THEN 'related' ELSE NULL END,
           score = CASE u.verdict WHEN 'core' THEN 1.0 WHEN 'related' THEN 0.6 ELSE 0 END,
           decided_by = $5, definition_version = u.version, attempts = 0, judged_at = $6::timestamptz
         FROM unnest($1::text[], $2::bigint[], $3::text[], $4::integer[]) AS u(zone_id, item_id, verdict, version)
+          JOIN evimed_frontier.evidence_zones z ON z.id = u.zone_id
         WHERE zi.zone_id = u.zone_id AND zi.item_id = u.item_id AND zi.state IN ('pending', 'in', 'out')
+          AND z.definition_version <= u.version
         RETURNING zi.via, zi.state, u.verdict`,
       [checked.verdicts.map((verdict) => verdict.zoneId), checked.verdicts.map((verdict) => byN.get(verdict.n)?.itemId),
         checked.verdicts.map((verdict) => verdict.verdict), checked.verdicts.map((verdict) => versions.get(`${verdict.n}\u0000${verdict.zoneId}`) ?? 1),
