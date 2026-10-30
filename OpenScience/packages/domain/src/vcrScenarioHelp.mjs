@@ -395,8 +395,25 @@ function designNotes(method) {
  */
 const PATIENT_PAIRING_NOTES = Object.freeze(["A selected immutable population uses a stable cohort pairing key by default. Explicit pairing.key and pairing.replicate select the comparison group and an independent L'Ecuyer-CMRG replicate stream. Common random numbers require the same key, seed, method and member ordering; changing the replicate changes random draws, while member identity stays fixed. A paired synthetic scenario does not identify an individual causal effect."])
 
+/**
+ * What a comparator's `timeUnit` row (any text up to 20 characters, for the jobs saved before the engine's unit rules) cannot say: the
+ * four words the engine reads, what the queue does with the spellings of them, and what a table's own unit does.
+ * @type {readonly string[]}
+ */
+const COMPARATOR_TIME_UNIT_NOTES = Object.freeze(["timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."])
+/** The two robustness analyses that take the declared unit as it is and default it to months. @type {readonly string[]} */
+const ROBUSTNESS_TIME_UNIT_NOTES = Object.freeze(["timeUnit is days, weeks, months or years (the usual spellings are written as these when the job is queued; text that names no unit is refused before queueing); months when none is stated. It labels the horizon and the times in the result; nothing is converted."])
+
 /** @type {Readonly<Record<string, readonly string[]>>} */
 const METHOD_NOTES = Object.freeze({
+  'comparator.entropy_balance': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.propensity_weight': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.covariate_sets': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.weighted_cox': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.maic_time_to_event': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.rmst': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.tipping_point': ROBUSTNESS_TIME_UNIT_NOTES,
+  'comparator.prognostic_adjustment': ROBUSTNESS_TIME_UNIT_NOTES,
   'patients.continuous': PATIENT_PAIRING_NOTES,
   'patients.binary': PATIENT_PAIRING_NOTES,
   'patients.time_to_event': PATIENT_PAIRING_NOTES,
