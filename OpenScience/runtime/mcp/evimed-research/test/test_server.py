@@ -1613,6 +1613,31 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(response["error"]["code"], -32603)
 
 
+    def test_an_unpaired_surrogate_neither_exits_the_server_nor_fails_the_call(self):
+        # Production 2026-10-30: a tool result carrying half of a character ("\\ud835", text cut by UTF-16 index
+        # upstream) raised UnicodeEncodeError in the frame loop, the server exited and the next calls read
+        # "Connection closed". The result is written with the surrogate as its JSON escape; the request is read
+        # with it replaced, so a later UTF-8 encode of the arguments cannot fail either.
+        server = load_server()
+        seen = []
+        response = server.process_frame(
+            b'{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"x","arguments":{"q":"a\\ud835b"}}}',
+            handler=lambda request: (seen.append(request), {"jsonrpc": "2.0", "id": 9, "result": {"text": "c\ud835d"}})[1],
+        )
+        self.assertEqual(seen[0]["params"]["arguments"]["q"], "a\ufffdb")
+        line = server.wire_json(response)
+        line.encode("utf-8")
+        self.assertEqual(json.loads(line)["result"]["text"], "c\ud835d")
+        self.assertEqual(json.loads(server.wire_json({"t": "\U0001d400 中"}))["t"], "\U0001d400 中")
+
+        # An unknown tool's name is echoed in its error: the old frame loop exited on this line with rc=1.
+        frames = b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"no_such_\\ud835","arguments":{}}}\n'
+        frames += b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"health","arguments":{}}}\n'
+        proc = subprocess.run([sys.executable, str(SERVER_FILE)], input=frames, capture_output=True, check=False, timeout=5)
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode())
+        self.assertEqual([json.loads(line)["id"] for line in proc.stdout.splitlines()], [1, 2])
+
+
 class DisabledToolsTests(unittest.TestCase):
     """A deployment that does not offer a tool must neither advertise it nor run
     it -- and must say which of the two reasons applies, because "switched off"

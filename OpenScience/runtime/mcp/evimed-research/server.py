@@ -2713,12 +2713,43 @@ def handle_request(request):
     return _rpc_error(request_id, -32601, "Method not found")
 
 
+LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def without_lone_surrogates(value):
+    """The value with every unpaired UTF-16 surrogate replaced by U+FFFD.
+
+    JSON may escape half of a character ("\\ud835" from text cut by UTF-16 index upstream); decoded, it is a code point
+    UTF-8 cannot encode, and the first encode of a request that carries one -- a gateway payload -- fails. After json.loads
+    a valid pair is already one code point, so any surrogate left is unpaired.
+    """
+    if isinstance(value, str):
+        return LONE_SURROGATE.sub("\ufffd", value)
+    if isinstance(value, list):
+        return [without_lone_surrogates(item) for item in value]
+    if isinstance(value, dict):
+        return {without_lone_surrogates(key): without_lone_surrogates(item) for key, item in value.items()}
+    return value
+
+
+def wire_json(message):
+    """One JSON-RPC line that UTF-8 can always encode.
+
+    A tool result may carry an unpaired surrogate read from upstream; written raw it raised UnicodeEncodeError in the frame
+    loop and the server exited, so the next calls of the turn answered "Connection closed" (production, 2026-10-30). A
+    surrogate can only stand inside a JSON string, where its backslash escape is the same character, so the line stays
+    valid JSON and loses nothing.
+    """
+    text = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
+    return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
 def process_frame(raw, handler=handle_request):
     request_id = None
     try:
         if not isinstance(raw, bytes):
             raise TypeError("JSON-RPC frames must be bytes")
-        request = json.loads(raw.decode("utf-8"))
+        request = without_lone_surrogates(json.loads(raw.decode("utf-8")))
         if isinstance(request, dict):
             request_id = request.get("id")
         return handler(request)
@@ -2745,7 +2776,7 @@ def main(handler=handle_request):
         else:
             response = process_frame(frame, handler)
         if response is not None:
-            sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
+            sys.stdout.write(wire_json(response) + "\n")
             sys.stdout.flush()
     return 0
 

@@ -187,7 +187,9 @@ def direct_query(connector, arguments):
 
 
 def reply(message):
-    sys.stdout.write(json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n")
+    # An unpaired surrogate from upstream text is written as its JSON escape, never raised (the server's wire_json).
+    text = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
+    sys.stdout.write(text.encode("utf-8", "backslashreplace").decode("utf-8") + "\n")
     sys.stdout.flush()
 
 
