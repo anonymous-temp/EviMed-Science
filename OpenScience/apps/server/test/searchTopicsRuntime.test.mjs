@@ -213,7 +213,7 @@ test('the public projection preserves verifiable corpus references and rejects u
   assert.equal(projected.topics[0].basis.sources[0].publishedAt, null, 'observation is not a publication date');
   for (const change of [
     row => { row.topics[0].basis.sources[0].url = 'http://localhost/private'; },
-    row => { row.topics[0].basis.sources[0].url = 'https://credential:secret@example.org/'; },
+    row => { row.topics[0].basis.sources[0].url = 'https://credential:test-only-password@example.org/'; },
     row => { delete row.topics[0].basis; },
     row => { row.recommendation.generatedAt = '2026-02-30T09:00:00.000Z'; },
     row => { row.source.isExample = true; },

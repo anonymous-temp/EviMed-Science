@@ -96,7 +96,7 @@ test('recommendations must have an honest provider, bounded corpus facts and val
 test('citation URLs cannot open local services or carry credentials and unsafe protocols', () => {
   for (const url of [
     'javascript:alert(1)', 'data:text/html,test', 'file:///etc/passwd', '//example.org/path',
-    'https://user:password@example.org/evidence', 'http://localhost/private', 'http://localhost./private',
+    'https://user:test-only-password@example.org/evidence', 'http://localhost/private', 'http://localhost./private',
     'http://service.local/private', 'http://service.internal/private', 'http://service/private',
     'http://127.0.0.1/private', 'http://2130706433/private', 'http://0x7f000001/private',
     'http://10.0.0.1/private', 'http://169.254.169.254/private', 'http://[::1]/private', 'http://[::ffff:127.0.0.1]/private',

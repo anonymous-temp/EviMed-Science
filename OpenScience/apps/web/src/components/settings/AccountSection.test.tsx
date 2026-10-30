@@ -58,9 +58,10 @@ describe("账户", () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
   it("keeps account read failure visible and retries without losing the page", async () => {
-    mocks.fetchWebMe.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ user: { id: "alice", name: "Recovered" } });
+    mocks.fetchWebMe.mockRejectedValue(new Error("offline"));
     open();
     expect(await screen.findByRole("note")).toHaveTextContent("无法读取账户");
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Recovered", authType: "local" } });
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("Recovered")).toBeInTheDocument();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
