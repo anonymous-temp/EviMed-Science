@@ -1,5 +1,5 @@
 import { VCR_DATA_INTAKE_CONTRACT } from './vcrDataIntake.mjs';
-import { VCR_POPULATION_KINDS, VCR_CRITERION_TYPES, VCR_REQUIREMENT_CONTRACT, CLINICAL_FACT_CONTRACT } from '@evimed/domain';
+import { VCR_POPULATION_KINDS, VCR_CRITERION_TYPES, VCR_REQUIREMENT_CONTRACT, CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE } from '@evimed/domain';
 
 /** Closed top-level fields shared by mutation validation and read-only discovery. */
 export const VCR_WRITE_FIELDS = Object.freeze({
@@ -229,6 +229,7 @@ export const VCR_WRITE_FIELDS = Object.freeze({
 export function vcrWriteContracts(kind = null) {
   const contracts = Object.fromEntries(Object.entries(VCR_WRITE_FIELDS).map(([what, fields]) => [what, { fields, additionalProperties: false }]));
   Object.assign(contracts, {
+    fact: { ...contracts.fact, rule: FACT_EVIDENCE_RULE },
     task_context: { fields: [], required: [], creates: 'owned hidden conversation scope only' },
     patient_context: { fields: ['messageSeq', 'sourceId'], oneOf: ['authenticated human message sequence', 'owned uploaded source id'], automatedMessages: 'never admitted as human' },
     patient_set: { ...contracts.patient_set, anyOf: ['nonempty scenario', 'populationId', 'modelId'], scenario: 'when supplied, use vcr_simulate action=shape kind=generate_patients or supported variant gives exact keys' },

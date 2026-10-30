@@ -58,6 +58,7 @@
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { locateSourceText } from "./vcrPatientTrials.mjs";
+import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
@@ -1585,13 +1586,23 @@ const WRITERS = {
       return void item.bad("visibleAt", `visibleAt 不能早于这份文档进入平台的时间（${verified.document.visibleAt}）。`);
     }
     if (!matchStore?.saveFact) return void item.bad("subjectKey", "匹配未接入本部署。", "vcr_write_refused");
+    const effective = clinicalFactPolarity({ clinical, polarity });
+    const mine = { variable: String(variable), polarity: effective, basis: surfaceBasis({ surface, source: { documentId, start: verified.span.start, quote: verified.span.quote } }) };
+    const sharing = mine.basis ? factsOnSameWords(mine, await factBasisOfSubject({ matchStore, study, subjectKey: String(subjectKey), seen: extra })) : [];
     const saved = await matchStore.saveFact({ studyId: study.id, userId: study.userId, fact: {
-      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity: clinicalFactPolarity({ clinical, polarity }), clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
+      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity: effective, clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
       source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null }, extractedBy: "model",
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 2 },
     } });
+    for (const other of sharing) {
+      const [denied, stated] = effective === "negated" ? [String(variable), other.variable] : [other.variable, String(variable)];
+      warnings.push({ field: "surface", code: "negated_on_words_of_another_fact", factId: saved.id, withFactId: other.id, variable: String(variable), withVariable: other.variable,
+        message: `「${denied}」被写成否认，用的原文和「${stated}」的确有是同一处文字。一个词不会既陈述这个、又否认那个：只有原文本身明确否认「${denied}」才算否认，没提到的是「未知」。`
+          + `事实已保存；原文没有明确否认的，请用 clinical.correctionOf 指向事实 ${saved.id}、assertion 写 unknown 并写 correctionReason 来更正；原文确实两者都说了的，不用理会。` });
+    }
+    if (mine.basis) (await factBasisOfSubject({ matchStore, study, subjectKey: String(subjectKey), seen: extra })).push({ id: saved.id, ...mine });
     extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(warnings.length ? { warnings } : {}) });
     return saved.id;
   },
@@ -1831,7 +1842,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
       detail: { by: "runtime", what },
     }).catch(() => null);
   }
-  return { ok: ids.length > 0, ids, issues, ...(results.length ? { results } : {}) };
+  return { ok: ids.length > 0, ids, issues, ...(results.length ? { results } : {}), ...(what === "fact" && ids.length ? { note: FACT_RESULT_NOTE } : {}) };
 }
 
 /**
@@ -1885,6 +1896,27 @@ async function studyHoldsSubject({ matchStore, documents, study, subjectKey, see
   known.set(subjectKey, held);
   return held;
 }
+
+/**
+ * The words of the chart each fact of this patient stands on, for the notice `factsOnSameWords` draws. Read once for a request and
+ * kept up to date as it writes; a store that cannot list them, or fails, gives an empty list — the notice is advice and a fact is
+ * never lost for it (principle 19).
+ * @param {{ matchStore: any, study: any, subjectKey: string, seen: Record<string, any> }} input
+ * @returns {Promise<Array<{ id?: string, variable: string, polarity: string, basis: { documentId: string, from: number, to: number } | null }>>}
+ */
+async function factBasisOfSubject({ matchStore, study, subjectKey, seen }) {
+  const known = (seen.factBasis ??= new Map());
+  if (!known.has(subjectKey)) {
+    /** @type {any[]} */
+    let facts = [];
+    try { if (typeof matchStore?.listFacts === "function") facts = await matchStore.listFacts({ studyId: study.id, subjectKey }); } catch { facts = []; }
+    known.set(subjectKey, facts.map((/** @type {any} */ fact) => ({ id: fact.id, variable: String(fact.variable ?? ""), polarity: String(fact.polarity ?? ""), basis: surfaceBasis(fact) })));
+  }
+  return known.get(subjectKey);
+}
+
+/** What the run is told beside every fact write: the rule it keeps being reminded of where it writes (`FACT_EVIDENCE_RULE`, in Chinese). */
+const FACT_RESULT_NOTE = "事实只记录引文自己说了什么：原文没提的是「未知」，不是「否认」；只有引文本身明确否认时才写 negated。年龄、性别或诊断推不出绝经、妊娠、哺乳、生育力、操作史或阴性结果，这类事实不要写，对应条件就保持未知。";
 
 /** Two ISO instants are one moment however each is written; two absent ones are one too, and an unreadable one is nothing.
  * @param {unknown} a @param {unknown} b */

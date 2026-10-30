@@ -11,7 +11,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
-import { validateEngineResult, validateEngineJob } from "@evimed/domain";
+import { validateEngineResult, validateEngineJob, FACT_EVIDENCE_RULE } from "@evimed/domain";
 
 import { freezeMatchingInputs, MATCHING_SNAPSHOT_PREFIX } from "../src/vcrMatchingSnapshot.mjs";
 import { loadConfig } from "../src/config.mjs";
@@ -928,6 +928,6 @@ test('matching result reads omit repeated schema/terminology and preserve narrow
  const subject=await seam.runtimeRead({id:'std_1'},{subjectKey:'P-001'});
  assert.equal('factContract' in subject,false);assert.equal('terminology' in subject,false);assert.ok(JSON.stringify(subject).length<5000);
  const narrow=await seam.runtimeRead({id:'std_1'},{subjectKey:'P-001',id:'crt_mi'});assert.deepEqual(narrow.assessment.judgments.map(row=>row.criterionId),['crt_mi']);assert.equal(narrow.assessment.judgments[0].state,'unknown');assert.ok('evidence' in narrow.assessment.judgments[0]);
- const contract=await seam.runtimeRead({id:'std_1'},{kind:'contract'});assert.ok(contract.factContract);assert.ok(contract.protocolWrite.data.criteria[0].requirement);assert.equal('terminology' in contract,false);
+ const contract=await seam.runtimeRead({id:'std_1'},{kind:'contract'});assert.ok(contract.factContract);assert.equal(contract.factRule,FACT_EVIDENCE_RULE);assert.ok(contract.protocolWrite.data.criteria[0].requirement);assert.equal('terminology' in contract,false);
  const terminology=await seam.runtimeRead({id:'std_1'},{kind:'terminology'});assert.ok(terminology.terminology);
 });

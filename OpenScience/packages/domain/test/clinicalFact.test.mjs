@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clinicalFactIssues, clinicalFactPolarity, clinicalFactView, clinicalSemanticFields, clinicalTerminologyContext, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from '../index.mjs';
+import { CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, clinicalFactIssues, clinicalFactPolarity, clinicalFactView, clinicalSemanticFields, clinicalTerminologyContext, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from '../index.mjs';
 const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
 /** @param {string} id @param {number} value @param {any} extra */
 const fact = (id, value, extra = {}) => ({ id, subjectKey: 'p1', variable: 'ecog', value, ...extra,
@@ -15,6 +15,12 @@ test('certainty and experiencer are independent, absent context remains invalid'
   assert.ok(clinicalFactIssues({ ...clinical, medication: { state: 'administered', dose: -2 } }).length);
   assert.ok(clinicalFactIssues({ ...clinical, locator: { kind: 'pdf', page: 0 } }).length);
   assert.ok(clinicalFactIssues({ ...clinical, relations: [{ type: 'dose_of', state: 'supported', quote: '5 mg' }] }).length);
+});
+
+test('the contract a run reads before writing a fact carries the rule that a missing mention is unknown, never a denial', () => {
+  assert.equal(CLINICAL_FACT_CONTRACT.evidenceRule, FACT_EVIDENCE_RULE);
+  assert.match(FACT_EVIDENCE_RULE, /unknown, not negated/);
+  assert.match(FACT_EVIDENCE_RULE, /Age, sex or a diagnosis never establishes/);
 });
 
 test('a correction changes the current view without erasing the original or rewriting historical replay', () => {
