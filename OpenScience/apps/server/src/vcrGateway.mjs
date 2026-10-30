@@ -57,7 +57,7 @@
 
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
-import { locateSourceText } from "./vcrPatientTrials.mjs";
+import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
@@ -361,6 +361,14 @@ function simulateRequest(body) {
 
 /** One refused item, as the run reads it. @param {number | null} index @param {string} field @param {string} code @param {string} message */
 const issue = (index, field, code, message) => ({ ...(index == null ? {} : { index }), field, code, message });
+
+/**
+ * The sentence for a criterion whose wording is another candidate trial's.
+ * @param {string} registryId the trial being written @param {{ registryId: string, title?: string }} owner @param {string} outcome what became of the write
+ */
+const otherTrialMessage = (registryId, owner, outcome) =>
+  `这句原文不在 ${registryId} 的登记记录里，却逐字出现在本研究已有的候选试验 ${owner.registryId}${owner.title ? `（${String(owner.title).slice(0, 80)}）` : ""}的入排条件里：`
+  + `一个试验只写它自己登记记录里的条件。把它改成 ${registryId} 自己的原句，或把它写进 ${owner.registryId} 的条件；${outcome}`;
 
 // ---------------------------------------------------------------------------
 // The write half
@@ -1044,23 +1052,38 @@ const WRITERS = {
     const warnings = [];
     let located = 0;
     const where = checked?.map((criterion) => locateSourceText(criterion.sourceText, trial.eligibilityText)) ?? [];
-    // A criterion is the trial's own wording. One that is not in this record but stands word for word in the eligibility text of
-    // another trial this study holds was taken from that trial (46 patient tasks merged the criteria of several trials into one):
-    // this trial is not written with it, the other is named, and the rest of the batch goes on. Wording found nowhere stays the
-    // warning below. A record with no eligibility text proves nothing about any criterion, so nothing is refused for it.
+    // A criterion is the trial's own wording. One that is not in this record (compared as the locator compares: case, spacing, ≥ against
+    // >=, dashes and quotation marks are the same) but stands as a whole sentence in the eligibility text of another trial this study
+    // holds was taken from that trial (46 patient tasks merged the criteria of several trials into one): that criterion is not written
+    // and the other trial is named, the trial's remaining criteria are written, and the rest of the batch goes on. Boilerplate that any
+    // two trials share ("Written informed consent") is shorter than OTHER_TRIAL_MIN_SOURCE_CHARS and is never attributed to another
+    // trial. Wording found nowhere stays the warning below. A record with no eligibility text proves nothing about any criterion, so
+    // nothing is refused for it.
+    /** @type {Array<{ at: number, owner: any }>} */
+    const foreign = [];
     if (checked && trial.eligibilityText && where.some((found) => !found) && typeof patientTrials.otherTrials === "function") {
       const others = await patientTrials.otherTrials(study, { registry: trial.registry ?? registry, registryId: trial.registryId ?? registryId }).catch(() => []);
       for (const [at, criterion] of checked.entries()) {
-        if (where[at]) continue;
+        if (where[at] || sourceTextLength(criterion.sourceText) < OTHER_TRIAL_MIN_SOURCE_CHARS) continue;
         const owner = others.find((/** @type {any} */ other) => locateSourceText(criterion.sourceText, other.eligibilityText));
-        if (owner) {
-          item.bad(`criteria[${at}].sourceText`, `这句原文不在 ${registryId} 的登记记录里，却逐字出现在本研究已有的候选试验 ${owner.registryId}${owner.title ? `（${String(owner.title).slice(0, 80)}）` : ""}的入排条件里：`
-            + `一个试验只写它自己登记记录里的条件。把它改成 ${registryId} 自己的原句，或把它写进 ${owner.registryId} 的条件；这个试验这次没有写入，其余的项照常。`, "criterion_from_other_trial");
-        }
+        if (owner) foreign.push({ at, owner });
       }
-      if (!item.ok) return null;
     }
-    const criteria = checked?.map((criterion, at) => {
+    /** The run's positions of the criteria that are written: the ones that were not taken from another trial. */
+    const kept = (checked ?? []).map((_, at) => at).filter((at) => !foreign.some((entry) => entry.at === at));
+    if (checked && !kept.length) {
+      // Nothing of this trial's own is left to write: a trial with no criterion is nothing to judge a patient against.
+      for (const { at, owner } of foreign) {
+        item.bad(`criteria[${at}].sourceText`, otherTrialMessage(registryId, owner, "这个试验这次没有写入，其余的项照常。"), "criterion_from_other_trial");
+      }
+      return null;
+    }
+    for (const { at, owner } of foreign) {
+      item.issues.push(issue(item.index, `criteria[${at}].sourceText`, "criterion_from_other_trial",
+        otherTrialMessage(registryId, owner, "这一条没有写入，这个试验的其余条件照常写入。")));
+    }
+    const criteria = checked ? kept.map((at) => {
+      const criterion = checked[at];
       warnNegatedExclusion(criterion, `criteria[${at}].requirement`, warnings);
       const found = where[at];
       if (found) located += 1;
@@ -1070,7 +1093,7 @@ const WRITERS = {
       }
       // Where the wording stands is the platform's to say: the platform's locator replaces whatever the run typed.
       return { ...criterion, sourceLocator: found ? { recordHash: trial.recordHash, ...found } : { recordHash: trial.recordHash, located: false } };
-    }) ?? null;
+    }) : null;
     /** The patients to evaluate: the ones the study holds. */
     const roster = new Set(typeof matchStore?.candidateSubjects === "function" ? await matchStore.candidateSubjects({ studyId: study.id }).catch(() => []) : []);
     /** @type {string[]} */
@@ -1090,6 +1113,8 @@ const WRITERS = {
       index: item.index, id: saved.trial.id, registryId, created: saved.created, criteria: saved.criteria.length,
       ...(criteria ? { located } : {}), evaluated: saved.evaluation?.evaluated ?? [],
       ...(unavailable.length ? { unavailable } : {}), ...(warnings.length ? { warnings } : {}),
+      // The trial's criteria are the set this write carried: a corrected criterion is written with the whole set again.
+      ...(foreign.length ? { refused: foreign.length, note: "被拒的条件没有写入。改好后把这个试验的全部条件整套再写一次；只补写被拒的几条会得到一个只有那几条的条件集。" } : {}),
     });
     return saved.trial.id;
   },
