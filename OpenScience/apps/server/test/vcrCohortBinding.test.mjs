@@ -47,6 +47,26 @@ test("a cohort job is refused before queueing when it reads another snapshot or 
   assert.equal(vcrCohortInputIssue(population({ snapshotId: null }), [{ kind: "snapshot", id: A }])?.code, VCR_COHORT_BINDING_CODE);
 });
 
+test("a cohort job whose time zero or end of follow-up is another column than the population's is refused, as other rules are", () => {
+  const defined = population({ definition: { rules: RULES, timeZero: { column: "ICUADMIT" }, exit: { column: "DEATHDATE" } } });
+  const inputs = [{ kind: "snapshot", id: A }];
+  assert.equal(vcrCohortInputIssue(defined, inputs, { rules: RULES, timeZero: { column: "ICUADMIT" }, exit: { column: "DEATHDATE" } }), null, "the same columns are the same definition");
+  assert.equal(vcrCohortInputIssue(defined, inputs, { rules: RULES }), null, "a scenario that states neither takes the definition's");
+  assert.equal(vcrCohortInputIssue(defined, inputs, {}), null);
+  const zero = vcrCohortInputIssue(defined, inputs, { rules: RULES, timeZero: { column: "HOSPADMIT" } });
+  assert.equal(zero?.code, VCR_COHORT_BINDING_CODE);
+  assert.match(zero?.message ?? "", /时间零点列/);
+  assert.match(zero?.message ?? "", /HOSPADMIT.*ICUADMIT/, "names the column asked for and the one saved");
+  assert.match(zero?.message ?? "", /新的人群版本/, "names the way out");
+  const exit = vcrCohortInputIssue(defined, inputs, { exit: { column: "DISCHARGE" } });
+  assert.equal(exit?.code, VCR_COHORT_BINDING_CODE, "without rules too: the merge of the definition would let the caller's column win");
+  assert.match(exit?.message ?? "", /随访结束列/);
+  // a definition that names no such column has nothing for the scenario to disagree with
+  assert.equal(vcrCohortInputIssue(population(), inputs, { rules: RULES, timeZero: { column: "ICUADMIT" } }), null);
+  // only a real population's definition is held to it
+  assert.equal(vcrCohortInputIssue({ ...defined, kind: "scenario" }, inputs, { timeZero: { column: "HOSPADMIT" } }), null);
+});
+
 /** A store that knows one population, as far as `resolveJobSubject` and the queue read it. */
 const storeWith = (/** @type {Record<string, any>} */ row) => ({
   async populations() { return [row]; },
@@ -72,6 +92,17 @@ test("the conversation's and the page's preparation pins a cohort to its populat
   await assert.rejects(prepare([{ kind: "snapshot", id: A }, { kind: "snapshot", id: B }, { kind: "snapshot", id: C }]), { code: VCR_COHORT_BINDING_CODE });
   await assert.rejects(prepare([{ kind: "snapshot", id: B }]), { code: VCR_COHORT_BINDING_CODE });
   await assert.rejects(prepare([], { rules: [{ name: "elderly", rule: { op: "compare", column: "age", comparator: "gte", value: 65 } }] }), { code: VCR_COHORT_BINDING_CODE });
+});
+
+test("the preparation does not let a caller's time zero win over the population's, and keeps the population's own when none is named", async () => {
+  const row = population({ definition: { rules: RULES, timeZero: { column: "ICUADMIT" } } });
+  const store = storeWith(row);
+  const study = { id: "study_1", userId: "u1" };
+  const subject = await resolveJobSubject({ store, study, kind: "build_cohort", subjectId: row.id, scenario: {} });
+  const prepare = (/** @type {Record<string, any>} */ scenario) => prepareVcrSubjectPopulation({ store, study, kind: "build_cohort", subject, scenario, inputs: [] });
+  await assert.rejects(prepare({ timeZero: { column: "HOSPADMIT" } }), { code: VCR_COHORT_BINDING_CODE });
+  assert.deepEqual((await prepare({})).scenario.timeZero, { column: "ICUADMIT" });
+  assert.deepEqual((await prepare({ timeZero: { column: "ICUADMIT" } })).scenario.timeZero, { column: "ICUADMIT" });
 });
 
 test("the queue refuses a cohort filed under a population that reads a snapshot beside its own, whoever asks", async () => {
