@@ -309,6 +309,23 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # An event target is counted among every patient, enrolled and still to enrol, and the shape says what happens beyond them.
         self.assertTrue(any("eventTarget counts events among every patient the forecast follows" in note and "scenario_value_invalid at eventTarget" in note for note in accrual["notes"]))
 
+    def test_the_tools_carry_the_fact_rule_and_name_the_methods_the_skill_catalogue_does_not_list(self):
+        # A plain conversation in a study uses these tools and its skill catalogue does not list the VCR methods: the rule
+        # that matters most where a fact is written, and the files holding the rest, ride in the descriptions.
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        write = definitions["vcr_write"]["description"]
+        self.assertIn("never negated", write)
+        self.assertIn("pregnancy", write)
+        self.assertIn("one trial's own eligibility lines", write)
+        for method in ("vcr-matching", "vcr-protocol", "vcr-evidence", "vcr-analysis", "vcr-package"):
+            self.assertIn(method, write)
+        self.assertIn("/opt/evimed/capability-skills/vcr-matching/SKILL.md", write)
+        self.assertIn("copied from the saved read-back", definitions["vcr_read"]["description"])
+        with mock.patch.dict(os.environ, {vcr_platform.SKILLS_ENV: "/srv/skills/"}):
+            self.assertIn("/srv/skills/vcr-matching/SKILL.md", {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_write"]["description"])
+        with mock.patch.dict(os.environ, {vcr_platform.SKILLS_ENV: "relative/path"}):
+            self.assertEqual(vcr_platform.skills_root(), vcr_platform.SKILLS_DEFAULT, "a root that is not absolute is not believed")
+
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]
         self.assertIn("matching", description)
@@ -427,6 +444,18 @@ class VcrReadWriteTests(_GatewayCase):
             vcr_platform.write({"what": "assumption", "items": [{}], "data": {}})
         self.assertEqual(caught.exception.code, "vcr_write_payload_invalid")
         self.assertEqual(len(_Gateway.seen), 1)
+
+    def test_a_delivered_verdict_is_told_to_come_from_the_saved_read_back(self):
+        # 8 of 46 mixed-up patient tasks delivered a result that disagreed with the platform's own saved judgments.
+        _Gateway.answers["read"] = (200, {"data": {"what": "matching", "subjectKey": "P-0192", "assessment": {"summary": "eligible", "judgments": []}}})
+        saved = self.server.call_tool("vcr_read", {"what": "matching", "filter": {"subjectKey": "P-0192"}})
+        self.assertTrue(any("Deliver from this read-back" in action for action in saved["next_actions"]), saved["next_actions"])
+        _Gateway.answers["read"] = (200, {"data": {"what": "candidate_trials", "subjectKey": "P-0192", "ranking": [{"rank": 1, "registryId": "NCT05000001"}], "requests": []}})
+        ranked = self.server.call_tool("vcr_read", {"what": "candidate_trials", "filter": {"subjectKey": "P-0192"}})
+        self.assertTrue(any("never move one between trials" in action for action in ranked["next_actions"]), ranked["next_actions"])
+        _Gateway.answers["read"] = (200, {"data": {"what": "candidate_trials", "trials": [], "more": False}})
+        listed = self.server.call_tool("vcr_read", {"what": "candidate_trials"})
+        self.assertFalse(any("ranking" in action for action in listed["next_actions"]), "the list of trials is not a patient's table")
 
     def test_the_trials_found_for_a_patient_are_a_write_and_a_read_of_their_own(self):
         # 「给患者找试验」: a run writes the registry trial and its structured criteria, and reads them back.

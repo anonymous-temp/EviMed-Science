@@ -58,6 +58,8 @@
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { locateSourceText } from "./vcrPatientTrials.mjs";
+import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
+import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
@@ -270,6 +272,40 @@ function writeRequest(body) {
     throw gatewayError(400, "vcr_write_payload_invalid", "data is an object.");
   }
   return { what: body.what, items: body.items ?? null, data: body.data ?? null };
+}
+
+/** Top-level fields that are references to an engine output, not one (`forecast.resultId`): exempt from the output scan, as the writer exempts them. */
+const WRITE_ID_FIELDS = Object.freeze(/** @type {Record<string, readonly string[]>} */ ({ forecast: ["resultId"] }));
+
+/**
+ * The refusals a write earns on its shape alone — before the call has a scope, so that a write that will be refused creates nothing
+ * (a probe of the syntax once opened a hidden task for each malformed call). `null` when at least one item can be written, or
+ * the kind's items have no closed shape to judge (`task_context`, `patient_context`); otherwise the issues, exactly as the writers
+ * would give them: the closed field list and the engine-output and expression scans of `Item.only`, a criterion's own grammar for a
+ * protocol, an item that is not an object. Pure: nothing is read, nothing is stored.
+ * @param {string} what @param {any[]} rows @returns {Promise<Array<Record<string, any>> | null>}
+ */
+async function shapeRefusals(what, rows) {
+  if (!rows.length) return null;
+  /** @type {Array<Record<string, any>>} */
+  const issues = [];
+  if (what === "protocol" || what === "criteria") {
+    // A protocol version is written only with criteria that can be kept; with none, nothing is written whatever else the call carries.
+    const { criteria } = await checkedCriteria(/** @type {WriteDeps} */ (/** @type {unknown} */ ({ study: null, store: null })), rows, issues, what);
+    if (criteria.length) return null;
+    if (!issues.length) issues.push(issue(null, "criteria", "vcr_write_value_invalid", "入排条件至少要有一条能写入的。"));
+    return issues;
+  }
+  const fields = /** @type {Record<string, readonly string[]>} */ (VCR_WRITE_FIELDS)[what];
+  if (!fields) return null;
+  for (const [index, raw] of rows.entries()) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      issues.push(issue(index, "", "vcr_write_value_invalid", "每一项是一个对象。"));
+      continue;
+    }
+    if (new Item({ row: raw, index, issues, study: null, store: null }).only(fields, { ids: WRITE_ID_FIELDS[what] })) return null;
+  }
+  return issues;
 }
 
 /**
@@ -1007,9 +1043,26 @@ const WRITERS = {
     /** @type {any[]} */
     const warnings = [];
     let located = 0;
+    const where = checked?.map((criterion) => locateSourceText(criterion.sourceText, trial.eligibilityText)) ?? [];
+    // A criterion is the trial's own wording. One that is not in this record but stands word for word in the eligibility text of
+    // another trial this study holds was taken from that trial (46 patient tasks merged the criteria of several trials into one):
+    // this trial is not written with it, the other is named, and the rest of the batch goes on. Wording found nowhere stays the
+    // warning below. A record with no eligibility text proves nothing about any criterion, so nothing is refused for it.
+    if (checked && trial.eligibilityText && where.some((found) => !found) && typeof patientTrials.otherTrials === "function") {
+      const others = await patientTrials.otherTrials(study, { registry: trial.registry ?? registry, registryId: trial.registryId ?? registryId }).catch(() => []);
+      for (const [at, criterion] of checked.entries()) {
+        if (where[at]) continue;
+        const owner = others.find((/** @type {any} */ other) => locateSourceText(criterion.sourceText, other.eligibilityText));
+        if (owner) {
+          item.bad(`criteria[${at}].sourceText`, `这句原文不在 ${registryId} 的登记记录里，却逐字出现在本研究已有的候选试验 ${owner.registryId}${owner.title ? `（${String(owner.title).slice(0, 80)}）` : ""}的入排条件里：`
+            + `一个试验只写它自己登记记录里的条件。把它改成 ${registryId} 自己的原句，或把它写进 ${owner.registryId} 的条件；这个试验这次没有写入，其余的项照常。`, "criterion_from_other_trial");
+        }
+      }
+      if (!item.ok) return null;
+    }
     const criteria = checked?.map((criterion, at) => {
       warnNegatedExclusion(criterion, `criteria[${at}].requirement`, warnings);
-      const found = locateSourceText(criterion.sourceText, trial.eligibilityText);
+      const found = where[at];
       if (found) located += 1;
       else if (trial.eligibilityText) {
         warnings.push({ field: `criteria[${at}].sourceText`, code: "source_text_not_in_record",
@@ -1377,19 +1430,19 @@ const WRITERS = {
   },
 
   async history(item, {service,study}) {
-    if (!item.only(['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation'])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.history)) return null;
     const longitudinal = service.packages.longitudinal;
     if (!longitudinal) return void item.bad('snapshotId','数据平面尚未接入；可以继续文献情景分析。');
     const saved = await longitudinal.freezeHistory(study,item.row,study.userId);
     return saved.id;
   },
   async trial_benchmark(item,{service,study}) {
-    if (!item.only(['model','comparisons','split','trainingOverlap','sourceFile'])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.trial_benchmark)) return null;
     if (!service.packages.longitudinal) return void item.bad('comparisons','纵向研究尚未接入。');
     return (await service.packages.longitudinal.importBenchmark(study,item.row,study.userId)).id;
   },
   async forecast_design(item,{service,study}) {
-    if (!item.only(['predictionId','controlPredictionId','horizonDays','allocation','alpha','power','prognosticEvaluationId','randomizationAt','lambda','gamma'])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.forecast_design)) return null;
     const longitudinal = service.packages.longitudinal;
     if (!longitudinal) return void item.bad('predictionId','数据平面尚未接入；可以继续文献情景分析。');
     const queued = await longitudinal.enqueueDesign(study,item.row,study.userId);
@@ -1585,13 +1638,23 @@ const WRITERS = {
       return void item.bad("visibleAt", `visibleAt 不能早于这份文档进入平台的时间（${verified.document.visibleAt}）。`);
     }
     if (!matchStore?.saveFact) return void item.bad("subjectKey", "匹配未接入本部署。", "vcr_write_refused");
+    const effective = clinicalFactPolarity({ clinical, polarity });
+    const mine = { variable: String(variable), polarity: effective, basis: surfaceBasis({ surface, source: { documentId, start: verified.span.start, quote: verified.span.quote } }) };
+    const sharing = mine.basis ? factsOnSameWords(mine, await factBasisOfSubject({ matchStore, study, subjectKey: String(subjectKey), seen: extra })) : [];
     const saved = await matchStore.saveFact({ studyId: study.id, userId: study.userId, fact: {
-      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity: clinicalFactPolarity({ clinical, polarity }), clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
+      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity: effective, clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
       source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null }, extractedBy: "model",
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 2 },
     } });
+    for (const other of sharing) {
+      const [denied, stated] = effective === "negated" ? [String(variable), other.variable] : [other.variable, String(variable)];
+      warnings.push({ field: "surface", code: "negated_on_words_of_another_fact", factId: saved.id, withFactId: other.id, variable: String(variable), withVariable: other.variable,
+        message: `「${denied}」被写成否认，用的原文和「${stated}」的确有是同一处文字。一个词不会既陈述这个、又否认那个：只有原文本身明确否认「${denied}」才算否认，没提到的是「未知」。`
+          + `事实已保存；原文没有明确否认的，请用 clinical.correctionOf 指向事实 ${saved.id}、assertion 写 unknown 并写 correctionReason 来更正；原文确实两者都说了的，不用理会。` });
+    }
+    if (mine.basis) (await factBasisOfSubject({ matchStore, study, subjectKey: String(subjectKey), seen: extra })).push({ id: saved.id, ...mine });
     extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(warnings.length ? { warnings } : {}) });
     return saved.id;
   },
@@ -1831,7 +1894,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
       detail: { by: "runtime", what },
     }).catch(() => null);
   }
-  return { ok: ids.length > 0, ids, issues, ...(results.length ? { results } : {}) };
+  return { ok: ids.length > 0, ids, issues, ...(results.length ? { results } : {}), ...(what === "fact" && ids.length ? { note: FACT_RESULT_NOTE } : {}) };
 }
 
 /**
@@ -1885,6 +1948,27 @@ async function studyHoldsSubject({ matchStore, documents, study, subjectKey, see
   known.set(subjectKey, held);
   return held;
 }
+
+/**
+ * The words of the chart each fact of this patient stands on, for the notice `factsOnSameWords` draws. Read once for a request and
+ * kept up to date as it writes; a store that cannot list them, or fails, gives an empty list — the notice is advice and a fact is
+ * never lost for it (principle 19).
+ * @param {{ matchStore: any, study: any, subjectKey: string, seen: Record<string, any> }} input
+ * @returns {Promise<Array<{ id?: string, variable: string, polarity: string, basis: { documentId: string, from: number, to: number } | null }>>}
+ */
+async function factBasisOfSubject({ matchStore, study, subjectKey, seen }) {
+  const known = (seen.factBasis ??= new Map());
+  if (!known.has(subjectKey)) {
+    /** @type {any[]} */
+    let facts = [];
+    try { if (typeof matchStore?.listFacts === "function") facts = await matchStore.listFacts({ studyId: study.id, subjectKey }); } catch { facts = []; }
+    known.set(subjectKey, facts.map((/** @type {any} */ fact) => ({ id: fact.id, variable: String(fact.variable ?? ""), polarity: String(fact.polarity ?? ""), basis: surfaceBasis(fact) })));
+  }
+  return known.get(subjectKey);
+}
+
+/** What the run is told beside every fact write: the rule it keeps being reminded of where it writes (`FACT_EVIDENCE_RULE`, in Chinese). */
+const FACT_RESULT_NOTE = "事实只记录引文自己说了什么：原文没提的是「未知」，不是「否认」；只有引文本身明确否认时才写 negated。年龄、性别或诊断推不出绝经、妊娠、哺乳、生育力、操作史或阴性结果，这类事实不要写，对应条件就保持未知。";
 
 /** Two ISO instants are one moment however each is written; two absent ones are one too, and an unreadable one is nothing.
  * @param {unknown} a @param {unknown} b */
@@ -2091,9 +2175,21 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
       // Parse before choosing a scope: a malformed syntax probe never creates a scientific task.
       if (operation === 'read') readRequest(body);
+      if (operation === 'simulate') simulateRequest(body);
       if (operation === 'write') {
         const parsed = writeRequest(body);
         const rows = parsed.items ?? (parsed.data ? [parsed.data] : []);
+        // A data intake is one typed action, never a list, and an unknown action or a field of another one is refused here.
+        if (parsed.what === 'data_intake') {
+          if (parsed.items) throw gatewayError(400, 'vcr_write_payload_invalid', 'Data intake uses one typed data action and a verified conversation.');
+          if (!dataIntakeShapeValid(parsed.data)) throw gatewayError(400, 'vcr_intake_payload_invalid', 'Select a current owned upload with its returned generation and SHA-256; runtime files are not original patient sources.');
+        }
+        // A write whose every item is refused on its shape alone answers with those refusals and opens no scope.
+        const refused = await shapeRefusals(parsed.what, rows);
+        if (refused) {
+          sendJson(res, 200, { data: { what: parsed.what, ok: false, ids: [], issues: refused } });
+          return;
+        }
         const emptyProbe = parsed.what === 'patient_set' && rows.length && rows.every(raw => { const row = object(raw); return !row.populationId && !row.modelId && !Object.keys(object(row.scenario)).length; })
           || parsed.what === 'decision' && rows.length && rows.every(raw => { const row = object(raw); return !Object.keys(object(row.chosen)).length || !String(row.rationale ?? '').trim(); });
         if (emptyProbe) {

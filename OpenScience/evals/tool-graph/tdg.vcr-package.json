@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:3cabd40f4c0efba13881a709e89f144aeb183490340554c484ee31875ba1f85d",
+  "version": "sha256:ec071fdac722e89554577201b736c6669deef6d663e8255c3b9f6259d6ae7085",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -838,7 +838,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
+      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -901,7 +901,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {

@@ -4,8 +4,16 @@ export const CLINICAL_FACT_SCHEMA = 1;
 export const CLINICAL_ASSERTIONS = Object.freeze(['affirmed', 'negated', 'possible', 'hypothetical', 'conditional', 'unknown']);
 export const CLINICAL_EXPERIENCERS = Object.freeze(['patient', 'family', 'other', 'unknown']);
 export const CLINICAL_RELATIONS = Object.freeze(['coreference', 'abbreviation', 'dose_of', 'route_of', 'frequency_of', 'result_of', 'specimen_of', 'indication_of', 'adverse_event_of', 'same_event', 'contradicts']);
+/**
+ * What a fact may claim, in the words the run reads where it writes one: the contract it asks for, the tool's description and the
+ * answer to a fact write all carry this one sentence (`vcr_write`, `vcr_read what: contracts`). The platform cannot judge meaning:
+ * the quote and the surface pass the literal check whatever the sentence implies, so the rule has to reach the model at the place
+ * it writes the fact. 「58 岁女性」 once became 「未妊娠」 and 「未哺乳」 and a formal judgment rested on them.
+ */
+export const FACT_EVIDENCE_RULE = 'A fact states only what its quoted words say. What the text does not mention is unknown, not negated: use polarity negated (assertion negated) only when the quote itself denies the finding. Age, sex or a diagnosis never establishes menopause, pregnancy, lactation, fertility, a procedure or a negative result; leave such a fact unwritten and the criterion stays unknown.';
 /** Machine-readable extraction help, returned with the clinical tool data. */
 export const CLINICAL_FACT_CONTRACT = Object.freeze({
+  evidenceRule: FACT_EVIDENCE_RULE,
   appliesTo: 'The optional clinical property inside one vcr_write fact item; never put schema/assertion/experiencer at the item root.',
   factRequired: ['subjectKey', 'documentId', 'variable', 'surface', 'quote'],
   factValue: 'value (number or text), unit and occurredAt belong at the fact item root, alongside variable and quote. Preserve every recorded measurement in value; surface and quote alone do not store a usable measurement.',

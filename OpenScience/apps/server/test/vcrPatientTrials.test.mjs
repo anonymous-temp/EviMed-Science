@@ -7,7 +7,7 @@ import test from "node:test";
 
 import { ctgovPrecedent } from "../src/trialRegistryClient.mjs";
 import {
-  CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, locateSourceText, phaseLabel, rankPatientTrials,
+  CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, phaseLabel, rankPatientTrials,
   registryStatusLabel, registryStatusRank,
 } from "../src/vcrPatientTrials.mjs";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
@@ -165,4 +165,18 @@ test("a registry's words for where a trial stands are read through a closed tabl
   assert.equal(phaseLabel("NA"), "不适用");
   assert.equal(phaseLabel("Ⅲ期"), "Ⅲ期", "a ChiCTR phase is shown as it was registered");
   assert.equal(phaseLabel(""), "");
+});
+
+test("the study's other candidate trials are the held ones less the trial being written, with the eligibility text each was saved from", async () => {
+  const held = [
+    { id: "ctr_1", registry: "clinicaltrials.gov", registryId: "NCT05000001", title: "A", eligibilityText: "Age >= 18 years" },
+    { id: "ctr_2", registry: "clinicaltrials.gov", registryId: "NCT05000002", title: "B", eligibilityText: "Prior platinum", conditions: ["x"] },
+    { id: "ctr_3", registry: "chictr", registryId: "NCT05000001", title: "C", eligibilityText: "Same id at another registry" },
+  ];
+  const patientTrials = createPatientTrials({ candidateStore: { async listCandidateTrials({ studyId }) { assert.equal(studyId, "std_1"); return held; } } });
+  const others = await patientTrials.otherTrials({ id: "std_1" }, { registry: "clinicaltrials.gov", registryId: "NCT05000001" });
+  assert.deepEqual(others.map((trial) => trial.id), ["ctr_2", "ctr_3"], "the same id at another registry is another trial");
+  assert.deepEqual(Object.keys(others[0]).sort(), ["eligibilityText", "id", "registry", "registryId", "title"]);
+  const unnamed = await patientTrials.otherTrials({ id: "std_1" }, { registryId: "NCT05000001" });
+  assert.deepEqual(unnamed.map((trial) => trial.id), ["ctr_2"], "with no registry named, the id alone identifies the trial being written");
 });

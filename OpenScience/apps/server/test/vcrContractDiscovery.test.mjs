@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { VCR_REQUIREMENT_CONTRACT, VCR_REQUIREMENT_OPS, validateRequirement } from '@evimed/domain';
-import { vcrContractsRead } from '../src/vcrWriteContracts.mjs';
+import { readFile } from 'node:fs/promises';
+import { VCR_METHOD_SKILLS, vcrContractsRead, vcrWriteContracts } from '../src/vcrWriteContracts.mjs';
+import { VCR_DATA_INTAKE_CONTRACT } from '../src/vcrDataIntake.mjs';
+import { VCR_WRITE_WHATS } from '../src/vcrService.mjs';
 import { VcrService } from '../src/vcrService.mjs';
 
 test('static discovery exposes every validator operation and every example validates without a write', () => {
@@ -45,4 +48,36 @@ test('contract and intake discovery cannot fall through into arbitrary store or 
   const intake = await service.runtimeRead({ id: 'study' }, 'data_intake', { registryId: 'unrelated' });
   assert.equal(intake.code, 'vcr_invocation_unavailable');
   assert.equal(touched, false);
+});
+
+test('every write the gateway takes has a contract, derived from the list its writer enforces and not written twice', async () => {
+  const contracts = vcrWriteContracts();
+  const without = VCR_WRITE_WHATS.filter(what => !contracts[what]);
+  assert.deepEqual(without, [], 'a write with no contract is one a run can only learn by being refused');
+  for (const what of ['history', 'trial_benchmark', 'forecast_design']) {
+    assert.ok(contracts[what].fields.length > 0, what);
+    assert.equal(contracts[what].additionalProperties, false, what);
+  }
+  assert.ok(contracts.history.fields.includes('snapshotId'));
+  assert.ok(contracts.forecast_design.fields.includes('predictionId'));
+  assert.ok(contracts.trial_benchmark.fields.includes('comparisons'));
+  // The intake's fields are the union of its actions' own, taken from the adapter's contract.
+  const intake = vcrContractsRead('data_intake').writes.data_intake;
+  assert.deepEqual(intake.actions, VCR_DATA_INTAKE_CONTRACT.actions);
+  for (const fields of Object.values(VCR_DATA_INTAKE_CONTRACT.actions)) for (const field of fields) assert.ok(intake.fields.includes(field), field);
+  assert.match(intake.envelope, /items is refused/);
+  // A writer that kept its own inline list would be a second copy that can drift from the contract.
+  const gateway = await readFile(new URL('../src/vcrGateway.mjs', import.meta.url), 'utf8');
+  assert.deepEqual(gateway.match(/item\.only\(\[/g) ?? [], [], 'every writer reads its closed list from VCR_WRITE_FIELDS');
+});
+
+test('the contract read names the files of the VCR methods, which a plain conversation\'s skill catalogue does not list', async () => {
+  const { methods } = vcrContractsRead();
+  assert.deepEqual(Object.keys(methods.files), [...VCR_METHOD_SKILLS]);
+  assert.equal(methods.files['vcr-matching'], '/opt/evimed/capability-skills/vcr-matching/SKILL.md');
+  assert.match(methods.note, /not in the skill catalogue/);
+  // Each named method exists as a capability skill, and the tool description names the same ones.
+  for (const name of VCR_METHOD_SKILLS) await readFile(new URL(`../../../capability-skills/${name}/SKILL.md`, import.meta.url), 'utf8');
+  const tools = await readFile(new URL('../../../runtime/mcp/evimed-research/vcr_platform.py', import.meta.url), 'utf8');
+  for (const name of VCR_METHOD_SKILLS) assert.ok(tools.includes(name), `${name} is named in the tool description`);
 });

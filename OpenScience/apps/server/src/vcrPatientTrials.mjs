@@ -302,6 +302,18 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
     },
 
     /**
+     * The study's other candidate trials with the eligibility text each was saved from: where a criterion that is not in this trial's
+     * record may have been taken from (`candidate_trial` refuses a trial whose criterion stands word for word in one of these).
+     * @param {any} study @param {{ registry?: string | null, registryId: string }} key the trial being written, which is not its own other
+     * @returns {Promise<Array<{ id: string, registry: string, registryId: string, title: string, eligibilityText: string }>>}
+     */
+    async otherTrials(study, { registry = null, registryId }) {
+      const held = await candidateStore.listCandidateTrials({ studyId: study.id, limit: 1000 });
+      return held.filter((trial) => !(trial.registryId === registryId && (!registry || trial.registry === registry)))
+        .map((trial) => ({ id: trial.id, registry: trial.registry, registryId: trial.registryId, title: trial.title, eligibilityText: trial.eligibilityText }));
+    },
+
+    /**
      * Judge patients against the study's candidate trials (every one, or the `trialIds` named) as of one instant. A pair that cannot be
      * judged is named in `unavailable` with its code and the others stand (principle 19); a table that cannot be read is a `note`.
      * @param {any} study @param {{ subjectKeys: readonly string[], trialIds?: readonly string[] | null, asOf?: string | null }} input
