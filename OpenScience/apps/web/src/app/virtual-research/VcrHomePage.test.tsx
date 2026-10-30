@@ -240,17 +240,66 @@ describe("the 研究 view beside its preview", () => {
     expect(where()).toBe("/app/virtual-research");
   });
 
-  it("does not open the closed preview again on Back: closing replaces the entry that chose the study", async () => {
-    render(<MemoryRouter initialEntries={["/app/virtual-research"]}><VcrHomePage /><Where /><Back /></MemoryRouter>);
+  /** The page after another one: the history the browser has before the list is opened. */
+  const afterAnotherPage = (path = "/app/virtual-research") =>
+    render(<MemoryRouter initialEntries={["/elsewhere", path]} initialIndex={1}><VcrHomePage /><Where /><Back /></MemoryRouter>);
+  const back = () => userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
+
+  it("closes a preview the list pushed by going back to the list's own entry: one Back from the list then leaves the page", async () => {
+    afterAnotherPage();
     await userEvent.click(await screen.findByRole("link", { name: EV }));
     expect(where()).toBe("/app/virtual-research?study=std_1");
     const pane = screen.getByRole("region", { name: "研究预览" });
     await userEvent.click(within(pane).getByRole("button", { name: "关闭预览" }));
     expect(where()).toBe("/app/virtual-research");
-    // The entry that chose the study is gone, so Back is the page before this one (here, none: the router stays where it is).
-    await userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
+    // The entry that chose the study is gone, not copied: the entry under it was the list, and it is the current one.
+    await back();
+    expect(where()).toBe("/elsewhere");
+  });
+
+  it("Escape closes a pushed preview the same way", async () => {
+    afterAnotherPage();
+    await userEvent.click(await screen.findByRole("link", { name: EV }));
+    await userEvent.keyboard("{Escape}");
     expect(where()).toBe("/app/virtual-research");
-    expect(within(screen.getByRole("region", { name: "研究预览" })).queryByRole("button", { name: "关闭预览" })).toBeNull();
+    await back();
+    expect(where()).toBe("/elsewhere");
+  });
+
+  it("switching from one study to another is one preview, not a trail of them: Back from either reaches the list", async () => {
+    afterAnotherPage();
+    await userEvent.click(await screen.findByRole("link", { name: EV }));
+    await userEvent.click(screen.getByRole("link", { name: GLP }));
+    expect(where()).toBe("/app/virtual-research?study=std_2");
+    // Back without closing: the list, not the study that was looked at first.
+    await back();
+    expect(where()).toBe("/app/virtual-research");
+    await userEvent.click(screen.getByRole("link", { name: GLP }));
+    await userEvent.click(screen.getByRole("link", { name: EV }));
+    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "关闭预览" }));
+    expect(where()).toBe("/app/virtual-research");
+    await back();
+    expect(where()).toBe("/elsewhere");
+  });
+
+  it("closes a preview an address opened in place: there is no list entry under it to go back to", async () => {
+    afterAnotherPage("/app/virtual-research?study=std_1");
+    const pane = await screen.findByRole("region", { name: "研究预览" });
+    await within(pane).findByRole("heading", { level: 2, name: EV });
+    await userEvent.click(within(pane).getByRole("button", { name: "关闭预览" }));
+    expect(where()).toBe("/app/virtual-research");
+    await back();
+    expect(where()).toBe("/elsewhere");
+  });
+
+  it("a study chosen from under a deep-linked preview replaces it, and closing leaves the page in one Back", async () => {
+    afterAnotherPage("/app/virtual-research?study=std_1");
+    await screen.findByRole("region", { name: "研究预览" });
+    await userEvent.click(await screen.findByRole("link", { name: GLP }));
+    expect(where()).toBe("/app/virtual-research?study=std_2");
+    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "关闭预览" }));
+    await back();
+    expect(where()).toBe("/elsewhere");
   });
 
   it("leaves Escape to a field that has a use for it: the search box clears its words and the study stays chosen", async () => {
@@ -360,6 +409,16 @@ describe("the 研究 view below the room for both", () => {
     await userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
     expect(where()).toBe("/app/virtual-research");
     await waitFor(() => expect(screen.getByRole("region", { name: "研究列表" }).contains(document.activeElement)).toBe(true));
+  });
+  it("closes the new-study pane the button pushed by going back to the list entry", async () => {
+    render(<MemoryRouter initialEntries={["/elsewhere", "/app/virtual-research"]} initialIndex={1}><VcrHomePage /><Where /><Back /></MemoryRouter>);
+    await screen.findByRole("list", { name: "研究" });
+    await userEvent.click(screen.getByRole("button", { name: "新研究" }));
+    expect(where()).toBe("/app/virtual-research?new=1");
+    await userEvent.click(screen.getByRole("button", { name: "研究列表" }));
+    expect(where()).toBe("/app/virtual-research");
+    await userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
+    expect(where()).toBe("/elsewhere");
   });
   it("preserves the search when returning from a selected study", async () => {
     drawHome(); await screen.findByRole("list", { name: "研究" });
