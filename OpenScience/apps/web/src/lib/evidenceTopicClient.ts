@@ -69,7 +69,10 @@ export interface ZoneSummary {
   cards: number;
   latest: { itemId: string; title: string; at: string | null } | null;
   lifecycle: ZoneLifecycle;
+  /** The last edit of the zone (ISO). */
   updatedAt: string | null;
+  /** When `counts`, `cards` and `latest` were taken (ISO); null while they are being counted again. The header's 「截至」 reads this one. */
+  countsAt: string | null;
 }
 export interface ZoneDirectory {
   view: ZoneDirectoryView;
@@ -216,6 +219,7 @@ export function parseZoneSummary(value: unknown): ZoneSummary | null {
     latest: latest && text(latest.itemId) ? { itemId: text(latest.itemId), title: text(latest.title), at: optionalText(latest.at) } : null,
     lifecycle: raw.lifecycle === "quiet" || raw.lifecycle === "archived" ? raw.lifecycle : "active",
     updatedAt: optionalText(raw.updatedAt),
+    countsAt: optionalText(raw.countsAt),
   };
 }
 const summaries = (value: unknown): ZoneSummary[] => list(value).map(parseZoneSummary).filter((zone): zone is ZoneSummary => zone !== null);

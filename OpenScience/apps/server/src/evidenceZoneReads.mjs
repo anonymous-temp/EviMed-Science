@@ -103,7 +103,7 @@ const PUBLISHED_AT = "coalesce(i.timeline_at, i.visible_at)";
 const EVENT_KEY = "coalesce(i.event_id, -i.id)";
 const KEYWORDS_SQL = (/** @type {string} */ alias) => `(CASE WHEN jsonb_typeof(${alias}.definition->'keywords') = 'array' THEN ${alias}.definition->'keywords' ELSE '[]'::jsonb END)`;
 const ZONE_COLUMNS = `z.id, z.slug, z.title, z.zone_type, z.specialties, z.group_label, z.scope_zh, z.kind, z.state, z.user_id, z.revision, z.lifecycle,
-  z.definition, z.stats, z.overview, z.overview_at, z.updated_at, u.name AS creator,
+  z.definition, z.stats, z.stats_at, z.overview, z.overview_at, z.updated_at, u.name AS creator,
   EXISTS (SELECT 1 FROM evimed_frontier.evidence_zone_follows f WHERE f.zone_id = z.id AND f.user_id = $1) AS following,
   (SELECT count(*)::integer FROM evimed_frontier.evidence_zone_follows f WHERE f.zone_id = z.id) AS followers`;
 const ZONE_FROM = `evimed_frontier.evidence_zones z JOIN evimed_control.users u ON u.id = z.user_id`;
@@ -184,6 +184,8 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
       latest: latest.itemId ? { itemId: String(latest.itemId), title: String(latest.title ?? ""), at: latest.at ? String(latest.at) : null } : null,
       lifecycle: row.lifecycle === "quiet" || row.lifecycle === "archived" ? row.lifecycle : "active",
       updatedAt: iso(row.updated_at),
+      // When `counts`, `perWeek`, `cards` and `latest` were taken; `updatedAt` is the last edit, which is not the same instant (null while the counts are stale).
+      countsAt: iso(row.stats_at),
     };
   }
 
