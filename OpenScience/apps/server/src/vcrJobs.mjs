@@ -752,7 +752,8 @@ export class VcrJobs {
    * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
    *   qualityBasis?: Record<string, any> | null, derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
    *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean }} input
-   * @returns {Promise<{ job: any, created: boolean }>}
+   * @returns {Promise<{ job: any, created: boolean, notice?: { code: string, message: string } }>} `notice` is what the caller must tell the person
+   *   about a job that was queued (a synthesis the budget may not hold)
    */
   async enqueue(input) {
     const kind = String(input.kind);
@@ -864,11 +865,15 @@ export class VcrJobs {
     const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
-    // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: say so before it is queued.
+    // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: one that could not finish even at the model's
+    // best measured case is refused before it is queued; one that may or may not is queued and the caller is told so beside the job.
+    /** @type {{ code: string, message: string } | null} */
+    let notice = null;
     if (kind === "synthesize_population") {
       const configured = String(this.config.vcrDataPlaneDir ?? "").trim();
       const issue = await vcrSynthesisIssue({ root: configured ? assertDataPlaneRoot(configured) : null, inputs, scenario, cpuSecondsLimit, cpuSecondsCeiling: this.jobCpuSeconds });
-      if (issue) throw new HttpError(400, issue.code, issue.message);
+      if (issue?.refused) throw new HttpError(400, issue.code, issue.message);
+      if (issue) notice = { code: issue.code, message: issue.message };
     }
     const id = vcrId("job");
     const job = {
@@ -931,7 +936,7 @@ export class VcrJobs {
     } else {
       this.counters.deduplicated += 1;
     }
-    return { job: jobSummaryFromRow(row), created };
+    return { job: jobSummaryFromRow(row), created, ...(notice ? { notice } : {}) };
   }
 
   /** @param {string} code @param {readonly { code: string, field: string, detail?: string }[]} issues */

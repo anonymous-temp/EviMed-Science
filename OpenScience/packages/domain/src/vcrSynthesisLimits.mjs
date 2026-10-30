@@ -15,12 +15,19 @@
  *   copies, on the engine's R and package lock (`项目代码/vcr-engine/scripts/measure-synthpop-cost.R` runs the measurement and lists the
  *   seconds it found); its basis is written beside the numbers. It is an estimate for numeric, count and
  *   binary columns; a text column with many levels costs more and is not in it, so the estimate is the cost of the table at its
- *   cheapest and a table it refuses is one the engine could not have finished either.
+ *   cheapest.
+ * - **Refused only when it could not finish even at its best measured case.** The model's error was measured (predicted over measured
+ *   seconds 0.75 to 1.18 across the 17 tables), so a table is refused only when the estimate divided by the model's worst
+ *   over-prediction (`VCR_SYNTHPOP_COST.worstOverPrediction`) is still more than the budget: in every measurement the engine used at
+ *   least that many seconds, so a table it refuses is one the engine could not have finished either (for numeric, count and 0/1
+ *   columns; a text column only costs more). A table between that and the estimate times the margin may finish and may not: it is
+ *   queued, and the person is told what the odds are and what to reduce (`risk` of the verdict), because a limit protects a resource
+ *   and must not refuse work that would finish.
  * - **The budget is the engine's, not the job's.** The R side stops at 90 % of the smaller of the job's `cpuSecondsLimit` and the
  *   engine's own ceiling (`VCR_ENGINE_CPU_LIMIT`, 3600 s by default) and a job that stops there is failed with no table: the copies
  *   already made are discarded. So the whole job is refused up front rather than most of it run and lost.
  * - **The host that measured is not the host that runs.** The estimate is multiplied by a margin before it is held against the
- *   budget, so a job is refused only when it would not finish with that much to spare.
+ *   budget, so a job passes in silence only when it would finish with that much to spare.
  * - **No row is dropped on the caller's behalf.** The engine has no sampling parameter and the queue does not subsample: the sentence
  *   names the three things a person can change (the number of columns, the rows, the copies) and the budget they can raise, and
  *   what it asks for of each.
@@ -51,14 +58,20 @@ export const VCR_SYNTHPOP_COST = frozen({
   basis: 'Weighted least squares on relative error over 17 synthetic tables of continuous, count and 0/1 columns: 500 to 12,000 rows, '
     + '10 to 50 columns, 5 and 10 copies, one core of the engine host class, R 4.3.3 with synthpop 1.9-3 (the engine lock), measured through '
     + 'the engine\'s own job runner (2026-10-31). Leave-one-out, the predicted over the measured seconds lies between 0.75 and 1.18; '
-    + 'the margin below is the reciprocal of the lowest (0.75, rounded up).',
+    + 'the margin below is the reciprocal of the lowest (0.75, rounded up) and the worst over-prediction is the highest (1.18).',
   fixedSeconds: 4.837,
   perRowColumnSquared: 4.971e-6,
   perRowColumn: 2.518e-4,
   perRowPairwise: 1.471e-7,
   perRowRowColumn: 1.686e-7,
-  /** Held against the budget: the estimate is multiplied by this before it is compared. */
+  /** Held against the budget: the estimate is multiplied by this before it is compared, and a job over it is queued with a notice. */
   margin: 1.35,
+  /**
+   * The model's worst over-prediction: the most the estimate exceeded the seconds the job used (the 1.18 above, a 12,000-row table at
+   * the top of the measured range). The cheapest a job can be expected to run is its estimate over this, and a job whose estimate over
+   * this is more than the budget is the only one refused.
+   */
+  worstOverPrediction: 1.18,
 })
 
 /**
@@ -115,16 +128,10 @@ function largestThatFits(cost, budget, high) {
 }
 
 /**
- * Whether a synthesis can finish in the job's budget, and — when it cannot — what to change.
- * @param {{ rows: number, columns: number, copies?: number, cpuSecondsLimit: number, cpuSecondsCeiling?: number }} input
- *   `cpuSecondsCeiling` is the most the platform lets a job ask for (the queue's own ceiling), when it is above the job's limit
- * @returns {{ ok: true } | { ok: false, estimateSeconds: number, budgetSeconds: number, columns: number, rows: number, copies: number,
- *   fits: { columns: number, rows: number, copies: number | null }, raiseTo: number | null, message: string }}
+ * What a table's synthesis would use, set against the budget, as the sentences and the sizes that go in both a refusal and a notice.
+ * @param {{ rows: number, columns: number, copies: number, cpuSecondsLimit: number, cpuSecondsCeiling?: number, estimate: number, budget: number }} input
  */
-export function vcrSynthpopFeasibility({ rows, columns, copies = VCR_SYNTHPOP_COPIES.min, cpuSecondsLimit, cpuSecondsCeiling }) {
-  const budget = vcrSynthpopBudgetSeconds(cpuSecondsLimit)
-  const estimate = vcrSynthpopEstimateSeconds({ rows, columns, copies })
-  if (estimate * VCR_SYNTHPOP_COST.margin <= budget) return { ok: true }
+function reductions({ rows, columns, copies, cpuSecondsLimit, cpuSecondsCeiling, estimate, budget }) {
   const fitsColumns = largestThatFits((value) => vcrSynthpopEstimateSeconds({ rows, columns: value, copies }), budget, columns)
   const fitsRows = largestThatFits((value) => vcrSynthpopEstimateSeconds({ rows: value, columns, copies }), budget, rows)
   const fitsCopies = copies > VCR_SYNTHPOP_COPIES.min
@@ -139,13 +146,42 @@ export function vcrSynthpopFeasibility({ rows, columns, copies = VCR_SYNTHPOP_CO
   if (fitsCopies >= VCR_SYNTHPOP_COPIES.min && fitsCopies < copies) ways.push(`份数 m 减到 ${fitsCopies}（最少 ${VCR_SYNTHPOP_COPIES.min}）`)
   if (raiseTo !== null) ways.push(`把计算上限 cpuSecondsLimit 提到 ${raiseTo} 秒（平台允许到 ${ceiling} 秒）`)
   else if (needed <= VCR_ENGINE_CPU_CEILING_SECONDS) ways.push(`平台单次计算的上限现在是 ${Math.round(ceiling)} 秒，这张表需要约 ${needed} 秒；由管理员把上限调到这个数（引擎自己的上限是 ${VCR_ENGINE_CPU_CEILING_SECONDS} 秒）后可以不改表直接算`)
-  const beyondEngine = needed > VCR_ENGINE_CPU_CEILING_SECONDS
-  const message = `这份表合成不完：${rows} 行 × ${columns} 列 × ${copies} 份，预计要 ${Math.round(estimate)} 秒 CPU（留出余量后按 ${Math.round(estimate * VCR_SYNTHPOP_COST.margin)} 秒算），`
-    + `而这项计算的预算是 ${Math.round(budget)} 秒（上限 ${Math.round(cpuSecondsLimit)} 秒的 90%，到点会整体失败、不留任何一份合成表）。没有排队，也没有替你抽样或删列。`
-    + (ways.length ? `可以改其中一项：${ways.join('；')}。` : '换一张列和行都更少的表。')
+  return { fits: { columns: fitsColumns, rows: fitsRows, copies: fitsCopies >= VCR_SYNTHPOP_COPIES.min ? fitsCopies : null }, raiseTo, ways }
+}
+
+/**
+ * Whether a synthesis can finish in the job's budget, and — when it cannot, or may not — what to change. Three answers: it fits with the
+ * margin to spare (`{ ok: true }`); it is queued but may not finish (`{ ok: true, risk }`: the estimate times the margin is over the
+ * budget, the estimate over the model's worst over-prediction is not); it could not finish even at its best measured case and is refused
+ * (`{ ok: false }`). Every reduction either names is one the first answer accepts.
+ * @param {{ rows: number, columns: number, copies?: number, cpuSecondsLimit: number, cpuSecondsCeiling?: number }} input
+ *   `cpuSecondsCeiling` is the most the platform lets a job ask for (the queue's own ceiling), when it is above the job's limit
+ * @returns {{ ok: true, risk?: { estimateSeconds: number, bestSeconds: number, worstSeconds: number, budgetSeconds: number, columns: number, rows: number,
+ *   copies: number, fits: { columns: number, rows: number, copies: number | null }, raiseTo: number | null, message: string } }
+ *   | { ok: false, estimateSeconds: number, bestSeconds: number, budgetSeconds: number, columns: number, rows: number, copies: number,
+ *   fits: { columns: number, rows: number, copies: number | null }, raiseTo: number | null, message: string }}
+ */
+export function vcrSynthpopFeasibility({ rows, columns, copies = VCR_SYNTHPOP_COPIES.min, cpuSecondsLimit, cpuSecondsCeiling }) {
+  const budget = vcrSynthpopBudgetSeconds(cpuSecondsLimit)
+  const estimate = vcrSynthpopEstimateSeconds({ rows, columns, copies })
+  const worst = estimate * VCR_SYNTHPOP_COST.margin
+  const best = estimate / VCR_SYNTHPOP_COST.worstOverPrediction
+  if (worst <= budget) return { ok: true }
+  const { fits, raiseTo, ways } = reductions({ rows, columns, copies, cpuSecondsLimit, cpuSecondsCeiling, estimate, budget })
+  const shape = `${rows} 行 × ${columns} 列 × ${copies} 份`
+  const budgetSentence = `而这项计算的预算是 ${Math.round(budget)} 秒（上限 ${Math.round(cpuSecondsLimit)} 秒的 90%，到点会整体失败、不留任何一份合成表）`
+  const tail = ways.length ? `可以改其中一项：${ways.join('；')}。` : '换一张列和行都更少的表。'
+  if (best <= budget) {
+    const message = `这份表合成可能在预算内完不成：${shape}，预计要 ${Math.round(estimate)} 秒 CPU（按实测的误差范围，实际约需 ${Math.round(best)} 到 ${Math.round(worst)} 秒），${budgetSentence}。`
+      + `已经排队，没有替你抽样或删列；它可能算完，也可能到点失败。要稳妥地算完，${tail}`
+    return { ok: true, risk: { estimateSeconds: estimate, bestSeconds: best, worstSeconds: worst, budgetSeconds: budget, columns, rows, copies, fits, raiseTo, message } }
+  }
+  // Not even at the best measured case: the platform's ceiling is no help when the engine's own largest budget does not hold it either.
+  const beyondEngine = Math.ceil(best / VCR_ENGINE_CPU_STOP_SHARE) > VCR_ENGINE_CPU_CEILING_SECONDS
+  const message = `这份表合成不完：${shape}，预计要 ${Math.round(estimate)} 秒 CPU（实测最快也要约 ${Math.round(best)} 秒），${budgetSentence}。`
+    + `没有排队，也没有替你抽样或删列。${tail}`
     + (beyondEngine ? `这张表按现在的大小，引擎自己的最大预算（${VCR_ENGINE_CPU_CEILING_SECONDS} 秒）也合成不完，提高上限没有用。` : '')
-  return { ok: false, estimateSeconds: estimate, budgetSeconds: budget, columns, rows, copies,
-    fits: { columns: fitsColumns, rows: fitsRows, copies: fitsCopies >= VCR_SYNTHPOP_COPIES.min ? fitsCopies : null }, raiseTo, message }
+  return { ok: false, estimateSeconds: estimate, bestSeconds: best, budgetSeconds: budget, columns, rows, copies, fits, raiseTo, message }
 }
 
 /**
@@ -158,8 +194,8 @@ export function vcrSynthpopHelpNotes() {
   const widest = (rows) => largestThatFits((columns) => vcrSynthpopEstimateSeconds({ rows, columns, copies: VCR_SYNTHPOP_COPIES.min }), budget, 400)
   return [
     `m is the number of synthetic copies, ${VCR_SYNTHPOP_COPIES.min} to ${VCR_SYNTHPOP_COPIES.max}: fewer than ${VCR_SYNTHPOP_COPIES.min} cannot support inference on synthetic data and the engine refuses them. Every copy costs the same again.`,
-    `Size limit. The copies and their quality scores are made in one R process whose CPU budget is the job's cpuSecondsLimit (the platform's default is 600 s, of which ${Math.round(VCR_ENGINE_CPU_STOP_SHARE * 100)}% can be used); a job that reaches it fails with no table and no copy kept. The cost grows with the square of the columns for the copies, with the fourth power for the quality score (a logistic model of every pair of columns) and with the square of the rows for its nearest-neighbour check, so a wide table is the expensive one, not a long one. The queue estimates the CPU seconds from the table it will read (rows × columns × m, the subject key not counted) and refuses before queueing a synthesis estimated, with a ${VCR_SYNTHPOP_COST.margin}× margin, to exceed the budget.`,
+    `Size limit. The copies and their quality scores are made in one R process whose CPU budget is the job's cpuSecondsLimit (the platform's default is 600 s, of which ${Math.round(VCR_ENGINE_CPU_STOP_SHARE * 100)}% can be used); a job that reaches it fails with no table and no copy kept. The cost grows with the square of the columns for the copies, with the fourth power for the quality score (a logistic model of every pair of columns) and with the square of the rows for its nearest-neighbour check, so a wide table is the expensive one, not a long one. The queue estimates the CPU seconds from the table it will read (rows × columns × m, the subject key not counted) and refuses before queueing a synthesis whose estimate, even divided by the model's worst over-prediction (${VCR_SYNTHPOP_COST.worstOverPrediction}×), exceeds the budget. A synthesis estimated, with a ${VCR_SYNTHPOP_COST.margin}× margin, to exceed the budget but not that is queued, and the start says it may not finish and what to reduce.`,
     `At the default budget and ${VCR_SYNTHPOP_COPIES.min} copies the model allows about ${widest(1000)} columns at 1,000 rows, ${widest(4000)} at 4,000 and ${widest(12000)} at 12,000. The estimate is for numeric, count and 0/1 columns; a text column with many levels costs more.`,
-    'A refusal names what to change: fewer columns (keep only the variables the analysis needs when the field map is built, then freeze a new snapshot), fewer rows (a smaller snapshot), fewer copies down to the minimum, or the job\'s cpuSecondsLimit where the platform allows more. The engine does not sample rows and does not drop columns, and neither does the queue.',
+    'A refusal, or the notice of a synthesis that may not finish, names what to change: fewer columns (keep only the variables the analysis needs when the field map is built, then freeze a new snapshot), fewer rows (a smaller snapshot), fewer copies down to the minimum, or the job\'s cpuSecondsLimit where the platform allows more. The engine does not sample rows and does not drop columns, and neither does the queue.',
   ]
 }

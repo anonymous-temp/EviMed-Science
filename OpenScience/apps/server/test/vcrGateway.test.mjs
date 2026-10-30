@@ -736,6 +736,17 @@ test("simulate is start / status / cancel, and a job over budget says so plainly
   assert.match(waiting.json().data.message, /预算/);
   assert.match(waiting.json().data.message, /不必等它/, "a run is told the job is not coming, so it does not wait or poll");
 
+  // A job the queue took with a notice (a synthesis its budget may not hold) hands the notice to the run beside the job id.
+  const risky = createVcrGatewayHandler(config, runtimeManager, {
+    vcr: { ...fixture().vcr, store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } },
+      jobs: { async enqueue() { return { job: { id: "job_3", state: "queued", progress: {} }, created: true, notice: { code: "vcr_synthesis_may_not_finish", message: "可能在预算内完不成" } }; } } },
+  });
+  const noticed = response();
+  await risky(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation" }), noticed);
+  assert.equal(noticed.json().data.jobId, "job_3");
+  assert.deepEqual(noticed.json().data.notice, { code: "vcr_synthesis_may_not_finish", message: "可能在预算内完不成" });
+  assert.equal("notice" in waiting.json().data, false, "a job queued without one carries none");
+
   // The status of a job that waits for a person says the same: a run that asks again is not left to read a bare state.
   const polled = createVcrGatewayHandler(config, runtimeManager, {
     vcr: { ...fixture().vcr, jobs: { ...fixture().vcr.jobs, async get() { return { id: "job_2", state: "awaiting_budget", progress: {}, cpuSecondsUsed: 0, error: null }; } } },

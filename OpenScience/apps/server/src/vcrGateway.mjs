@@ -2538,7 +2538,7 @@ async function startJob(vcr, study, request) {
     }
   }
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
-  const { job } = await vcr.jobs.enqueue({
+  const { job, notice } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
     ...(population.derived.length ? { internal: true } : {}),
     seed: request.seed, replicates: request.replicates, cpuSecondsLimit: request.cpuSecondsLimit,
@@ -2567,7 +2567,9 @@ async function startJob(vcr, study, request) {
     ...(subject ? { subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) } } : {}),
     // A job stopped for budget is the second human stop: the run is
     // told plainly so it goes on with what it can do (§10.1).
-    ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
+    ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}),
+    // A job that was queued but may not finish inside its budget (a synthesis): the run is told, with what to reduce.
+    ...(notice ? { notice } : {}) };
 }
 
 /** What a run is told of a job only a person can release: it is not coming, so the run does not wait for it or ask again. */
