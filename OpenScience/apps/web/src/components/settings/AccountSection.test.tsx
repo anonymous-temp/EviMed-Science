@@ -57,6 +57,15 @@ describe("账户", () => {
   });
   afterEach(() => { vi.restoreAllMocks(); });
 
+  it("keeps account read failure visible and retries without losing the page", async () => {
+    mocks.fetchWebMe.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ user: { id: "alice", name: "Recovered" } });
+    open();
+    expect(await screen.findByRole("note")).toHaveTextContent("无法读取账户");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("Recovered")).toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
+
   it("is one group, one item per row: 用户名, 密码, 退出登录 — and never the account id", async () => {
     open();
     const group = (await screen.findByRole("heading", { name: "账户" })).closest("section")!;

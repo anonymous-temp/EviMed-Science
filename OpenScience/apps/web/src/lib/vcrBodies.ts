@@ -20,7 +20,7 @@
 
 /** A member's role (`VCR_MEMBER_ROLES`). */
 export type VcrBodyRole =
-  | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "recruiter" | "site" | "viewer";
+  | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "viewer";
 
 export interface VcrCreateBody {
   purpose?: "programme" | "calculation";
@@ -126,36 +126,9 @@ export interface VcrMemberBody {
   userId: string;
   role: VcrBodyRole;
   /** A `site` member names the site it belongs to; the route refuses the role without it. */
-  detail?: { siteId?: string; note?: string };
+  detail?: { note?: string };
 }
 
-export interface VcrContactBody {
-  note?: string;
-  reason?: string;
-}
-
-/**
- * One move on the referral ledger. A move into a contact state is refused
- * unless a person confirmed the referral first (`contactBody`'s route), so the
- * only moves the page makes with this are the ones that are not contact:
- * 「请求补证」 is `to: "needs_evidence"`.
- */
-export interface VcrTransitionBody {
-  to: "candidate" | "needs_evidence" | "contactable" | "contacted" | "interested" | "referred" | "site_responded"
-    | "screening" | "enrolled" | "screen_failed" | "withdrawn";
-  note?: string;
-  siteId?: string;
-  screenFailCriterionId?: string;
-  screenFailReason?: string;
-  enrolledOn?: string;
-}
-
-/**
- * A model taken into the account's library (`POST /api/vcr/models`): a
- * prediction model a published trial fitted, always a literature-tier model.
- * Its applicability is written by the server from the trials it names — the
- * page never states a population nobody fitted the model on.
- */
 export interface VcrModelBody {
   /** A model taken from a study is written into that study's library by someone who may write there. */
   studyId?: string;
@@ -282,19 +255,8 @@ export function exportBody(kind: string) {
 }
 
 export function memberBody(input: VcrMemberBody) {
-  const detail = input.detail ? said({ siteId: input.detail.siteId, note: input.detail.note }) : undefined;
+  const detail = input.detail ? said({ note: input.detail.note }) : undefined;
   return said({ userId: input.userId, role: input.role, detail: detail && Object.keys(detail).length > 0 ? detail : undefined });
-}
-
-export function contactBody(input: VcrContactBody = {}) {
-  return said({ note: input.note, reason: input.reason });
-}
-
-export function transitionBody(input: VcrTransitionBody) {
-  return said({
-    to: input.to, note: input.note, siteId: input.siteId, screenFailCriterionId: input.screenFailCriterionId,
-    screenFailReason: input.screenFailReason, enrolledOn: input.enrolledOn,
-  });
 }
 
 export function modelBody(input: VcrModelBody) {

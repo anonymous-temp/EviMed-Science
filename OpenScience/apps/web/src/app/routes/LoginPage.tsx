@@ -59,6 +59,10 @@ export function LoginPage() {
     return () => { mounted.current = false; };
   }, []);
 
+  // The cursor goes to the account field once the form is there (the field used to ask for it with `autoFocus`). There is no field to
+  // focus where the deployment signs in through its identity provider.
+  useEffect(() => { if (!checking) usernameInput.current?.focus(); }, [checking]);
+
   useEffect(() => {
     let active = true;
     setChecking(true);

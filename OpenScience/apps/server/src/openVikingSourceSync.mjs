@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { sourceOriginOf } from "@evimed/domain";
 import { resourcesRoot } from "./openVikingLayout.mjs";
-import { sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
+import { isResearchDatabaseSource, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -95,7 +95,10 @@ export class OpenVikingSourceSync {
     if (!this.enabled || !userId || !sourceId) return null;
     try {
       // A mirrored page of a compiled tree is never pushed, so its versions ask for nothing (a compile mirrors a hundred).
-      if (!library && isCompiledPage(await this.#current(userId, sourceId).catch(() => null))) return null;
+      if (!library) {
+        const current = await this.#current(userId, sourceId).catch(() => null);
+        if (isCompiledPage(current) || isResearchDatabaseSource(current)) return null;
+      }
       // A key of its own per event: a job that already ran read the state as it was then, and this event is later.
       const job = await this.jobs.enqueue(userId, SOURCE_SYNC_JOB_KIND, { action: library ? "library" : "source", sourceId, projectId: projectId ?? null }, {
         idempotencyKey: `${library ? "ov-library" : "ov-source"}:${sourceId}:${this.now().getTime().toString(36)}-${randomUUID().slice(0, 8)}`,
@@ -151,9 +154,14 @@ export class OpenVikingSourceSync {
     }
   }
 
-  /** Whether a document belongs under `sources/`: readable, of a project, and not a page of a compiled tree. @param {any} source */
+  /**
+   * Whether a document belongs under `sources/`: readable, of a project, not a page of a compiled tree, and not a table
+   * imported from the researcher's own database (`isResearchDatabaseSource`: its rows are for the project's runs to read
+   * as a file, not for the engine to index across the account or the Compile to write into wiki pages).
+   * @param {any} source
+   */
   static pushable(source) {
-    return Boolean(source && !source.deletedAt && source.projectId && sourceReadable(source.payload) && !isCompiledPage(source)
+    return Boolean(source && !source.deletedAt && source.projectId && sourceReadable(source.payload) && !isCompiledPage(source) && !isResearchDatabaseSource(source)
       && source.payload.analysis?.textSha256 && source.payload.analysis.generation === source.payload.generation);
   }
 
@@ -201,7 +209,7 @@ export class OpenVikingSourceSync {
       const page = await this.sources.list(userId, { projectId, state: "ready", limit: 100, cursor });
       for (const item of page.items) {
         scanned += 1;
-        if (isCompiledPage(item) || item.deletedAt) continue;
+        if (isCompiledPage(item) || isResearchDatabaseSource(item) || item.deletedAt) continue;
         // The list's projection leaves the text digest out; the record itself has it.
         const source = await this.#current(userId, item.id);
         if (OpenVikingSourceSync.pushable(source)) {
@@ -280,7 +288,9 @@ export class OpenVikingSourceSync {
   async reconcileLibraryCurrent(userId, { apply = true } = {}) {
     const report = { expected: 0, present: 0, missing: /** @type {string[]} */ ([]), stale: /** @type {string[]} */ ([]), extra: /** @type {string[]} */ ([]), pushed: 0, removed: 0, failed: /** @type {{ sourceId: string, code: string }[]} */ ([]) };
     if (!this.library) return report;
-    const entries = (await this.library.searchScope(userId)).filter((/** @type {any} */ entry) => entry.status === "ready" && entry.textSha256);
+    // The engine holds the account's whole library under one root, whatever each document applies to: what a project may see of
+    // it is decided where the project asks (`kb_browse`), never by what is pushed here.
+    const entries = (await this.library.accountScope(userId)).filter((/** @type {any} */ entry) => entry.status === "ready" && entry.textSha256);
     const expected = new Map(entries.map((/** @type {any} */ entry) => [entry.sourceId, entry]));
     const present = new Map((await this.resources.listSources(userId, this.resources.roots(userId, "-").library)).map((/** @type {any} */ entry) => [entry.sourceId, entry]));
     report.expected = expected.size; report.present = present.size;

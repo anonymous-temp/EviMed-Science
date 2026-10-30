@@ -5,6 +5,12 @@ const ADDRESSABLE_TASK = /^[A-Za-z0-9_-]{1,160}$/;
 export const TASKS_PATH = "/app/autopilot";
 
 /**
+ * The new-task form is the page at `/app/autopilot/new`, in the same route: a task's id is `agenda-` and a random suffix, so the word is
+ * never one, and nothing that reads a task from the address (the frame pane, the history, the progress) reads this as a task.
+ */
+export const NEW_TASK = "new";
+
+/**
  * Where a task lives, with the list state that travels with it: the search text and the execution the researcher chose (the task
  * bar's 「第 N 次」). Both ride in the address so Back, Forward and a shared link restore what was on screen.
  */
@@ -17,13 +23,18 @@ export function taskPath(taskId?: string | null, state: { search?: string; execu
   return text ? `${base}?${text}` : base;
 }
 
+/** The new-task form, started from one of the page's examples when `example` names it (`?example=<id>`). */
+export function newTaskPath(example?: string | null): string {
+  return example && ADDRESSABLE_TASK.test(example) ? `${TASKS_PATH}/${NEW_TASK}?example=${encodeURIComponent(example)}` : `${TASKS_PATH}/${NEW_TASK}`;
+}
+
 /**
  * Whether an address is one task's page. The kernel's conversation frame is placed over this page's pane
  * (`SessionFrameHost`), so — as for the chat surface — this is read on every navigation, from the address alone.
- * It matches exactly the shape `autopilot/:taskId` matches.
+ * It matches the shape `autopilot/:taskId` matches, bar the new-task form, which is that route's other page and has no conversation.
  */
 export function isTaskPath(pathname: string): boolean {
-  return /^\/app\/autopilot\/[^/]+\/?$/.test(pathname);
+  return /^\/app\/autopilot\/[^/]+\/?$/.test(pathname) && !/^\/app\/autopilot\/new\/?$/.test(pathname);
 }
 
 /** The task an address names, or null for the list. */

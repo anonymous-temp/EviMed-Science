@@ -26,7 +26,7 @@ import { bandPath, linePath, posX, posY, scaleOf, spanRect, stepPath, type Point
  * A band is drawn only when it has a name (`bandKind`): an interval without a
  * name is not an interval (plan §9.6), and the legend takes that name from
  * the data rather than writing 「80% 预测区间」 whatever the data say. Our own
- * arm is the brand blue; every comparator is a grey, darkest first, so a
+ * arm is the brand accent; every comparator is a grey, darkest first, so a
  * reader finds their own arm without reading a legend.
  *
  * Geometry: the plot is `viewBox="0 0 100 100"` with `preserveAspectRatio

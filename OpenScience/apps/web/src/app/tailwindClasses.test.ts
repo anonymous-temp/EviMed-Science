@@ -44,6 +44,7 @@ const NOT_UTILITIES: Readonly<Record<string, string>> = {
   "not-applicable": "an activation phase value (app/extensions/catalogueModel.ts)",
   "not-configured": "an enum value (lib/imClient.ts)",
   "not-offered": "an enum value (app/routes/FrontierEventPage.tsx)",
+  "max-tokens": "a kernel turn-end kind (lib/researchObservation.ts)",
   "width:max-content": "CSS text written into a rendered Office document",
 };
 

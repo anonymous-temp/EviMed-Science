@@ -135,6 +135,7 @@ it("lists required and module skills under their groups with no control and no w
   open("/app/extensions/installed");
   const guard = (await screen.findByRole("button", { name: "必需校验" })).closest("li")!;
   expect(within(guard).queryByRole("switch")).not.toBeInTheDocument();
+  expect(within(guard).queryByRole("switch")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "内部方法" })).toBeInTheDocument();
   expect(screen.queryByRole("switch", { name: /内部方法/ })).not.toBeInTheDocument();
   expect(screen.getByRole("switch", { name: /科学绘图/ })).toBeInTheDocument();
@@ -156,9 +157,9 @@ it("a late policy response from a previous project never replaces the current pr
   open("/app/extensions/installed");
   await screen.findByRole("button", { name: "科学绘图" });
   act(() => useProjectStore.setState({ currentId: "two" }));
-  await waitFor(() => expect(screen.getByRole("switch", { name: /科学绘图/ })).toHaveAttribute("aria-checked", "false"));
+  await waitFor(() => expect(screen.getByRole("switch", { name: /科学绘图/ })).not.toBeChecked());
   await act(async () => finish(project));
-  expect(screen.getByRole("switch", { name: /科学绘图/ })).toHaveAttribute("aria-checked", "false");
+  expect(screen.getByRole("switch", { name: /科学绘图/ })).not.toBeChecked();
 });
 
 it("changes an optional bundled plugin without routing it to citation settings", async () => {

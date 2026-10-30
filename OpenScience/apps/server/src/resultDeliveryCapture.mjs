@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { workspaceLayout } from "@evimed/domain";
-import { attachClaimSourceLocations, claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
+import { attachClaimSourceLocations, claimEvidenceSources, claimVerification, PACKAGE_SOURCE_ARTIFACT_LIMIT } from "@evimed/domain/clinical-evidence";
 import { normalizeResultPath, RUN_FINDING_ID_PREFIX } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
 import { describedQualityNotices } from "./runNotices.mjs";
@@ -12,7 +12,9 @@ import { HttpError, openScopedFileNoFollow, readStableFileHandle, resolveScopedP
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const DIGEST = /^[a-f0-9]{64}$/;
 const MAX_MATRIX_BYTES = 8 * 1024 * 1024;
-const MAX_SOURCES = 48;
+// The gate's own bound (one canonical file per distinct document): a second number here read 55 cited documents as
+// "too many" after the gate had been raised to read them (2026-10-28).
+const MAX_SOURCES = PACKAGE_SOURCE_ARTIFACT_LIMIT;
 
 /** One workspace file, read whole and checked not to have changed while it was read. Exported for the lineage view's render. */
 export async function stableBytes(project, relativePath, limit) {

@@ -1,4 +1,6 @@
-import { useId, useRef, useState } from "react";
+import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
@@ -12,21 +14,29 @@ const PURPOSE_EXAMPLE = "例如：我给出一批随访记录，需要按时间�
 const INSTRUCTIONS_EXAMPLE = "适用情况：…\n需要的输入：…\n步骤：\n1. …\n2. …\n产出：…\n不要做：…";
 
 /**
- * The form a skill is written and edited in: a name, the purpose, the text.
- *
- * Creating (`create`) shows an example in each field and a switch — on by default — that selects the new skill for the
- * current project as it is saved, because a skill nobody has switched on is used nowhere and nothing else in the form says
- * so. Editing keeps the same captions and none of that. A name, purpose or text that is empty or only spaces is named in place and
- * sends nothing: the server would refuse it with a toast that names no field.
+ * Anatomy: name, purpose, instructions, optional project selection and commit/return actions.
+ * Variants: creation offers examples and a default-on current-project selection; editing does not.
+ * States: draft, field error and busy preserve entered content and the original revision.
+ * Hit area: shared Input, Textarea, Switch and Button controls.
+ * Keyboard: native form traversal, first-invalid-field focus and guarded return/navigation.
+ * Long content: the full instructions remain in a vertically growing text area.
+ * Theme: semantic surface and text roles.
+ * Responsive: one fluid column within its host's main-area width.
+ * Verification: ExtensionsPage and PersonalSkillDrawer tests cover validation, scope and dirty exits.
  */
-export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
-  initial: SkillWrite; busy: boolean;
+export function SkillEditor({ initial, busy, onSave, onCancel, create, onDirtyChange, cancelLabel = "取消", routeMode }: {
+  initial: SkillWrite; busy: boolean; cancelLabel?: string; onDirtyChange?: (dirty: boolean) => void;
+  /** The search parameter that holds this editor's mode in the address: leaving it (a link, Back) is asked about while a draft is open. */
+  routeMode?: string;
   /** `useInProject` is the create form's switch; an edit never turns it on. */
   onSave: (value: SkillWrite, useInProject: boolean) => void; onCancel: () => void;
   create?: { projectName: string };
 }) {
   const [value, setValue] = useState(initial);
   const [useInProject, setUseInProject] = useState(true);
+  const dirty = JSON.stringify(value) !== JSON.stringify(initial) || (!!create && !useInProject);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  const closeGuard = useUnsavedGuard(dirty, onCancel, busy, { draftKey: JSON.stringify([value, useInProject]), ...(routeMode ? { modeParams: [routeMode] } : {}) });
   const [errors, setErrors] = useState<{ title?: string; description?: string; instructions?: string }>({});
   const titleField = useRef<HTMLInputElement>(null), instructionsField = useRef<HTMLTextAreaElement>(null), purposeField = useRef<HTMLTextAreaElement>(null);
   const base = useId();
@@ -52,7 +62,7 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
     if (next.instructions !== undefined && errors.instructions) setErrors({ ...errors, instructions: undefined });
   };
 
-  return <form className="flex flex-col gap-4" noValidate onSubmit={event => { event.preventDefault(); if (!busy) submit(); }}>
+  return <><form className="flex flex-col gap-4" noValidate onSubmit={event => { event.preventDefault(); if (!busy) submit(); }}>
     <Input ref={titleField} label="名称" value={value.title} maxLength={80} aria-required="true" disabled={busy}
       placeholder={create ? TITLE_EXAMPLE : undefined} error={errors.title} onChange={event => change({ title: event.target.value })} />
     <div>
@@ -67,6 +77,6 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
       <p id={instructionsHint} className="mt-2 text-caption text-text-3">{INSTRUCTIONS_HINT}</p>
     </div>
     {create && <div className="rounded-card bg-surface-1 p-4"><Switch showLabel label={`保存后在“${create.projectName}”里使用`} checked={useInProject} disabled={busy} onChange={setUseInProject} /></div>}
-    <div className="flex gap-2"><Button type="submit" loading={busy}>保存</Button><Button type="button" variant="text" disabled={busy} onClick={onCancel}>取消</Button></div>
-  </form>;
+    <div className="flex gap-2"><Button type="submit" loading={busy}>保存</Button><Button type="button" variant="text" disabled={busy} onClick={closeGuard.requestClose}>{cancelLabel}</Button></div>
+  </form>{closeGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={closeGuard.discard} onCancel={closeGuard.keepEditing} />}</>;
 }

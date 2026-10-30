@@ -1,7 +1,7 @@
 {
  "registry_version": 1,
  "skipped": {
-  "egress_none": 32,
+  "egress_none": 33,
   "access_not_loaded": 0,
   "enrichment_endpoint": 3
  },
@@ -14666,7 +14666,7 @@
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
    "enabled": false,
-   "disabled_reason": "relay_not_accepted",
+   "disabled_reason": "probe_cloudflare",
    "category": "med-news-en",
    "config": {
     "url": "https://newsnetwork.mayoclinic.org/feed/",
@@ -14725,7 +14725,7 @@
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
    "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "disabled_reason": "probe_cloudflare",
    "category": "med-news-en",
    "config": {
     "url": "https://www.hopkinsmedicine.org/news/newsroom",
@@ -19132,33 +19132,6 @@
     "max_pages": 1,
     "allowed_hosts": [
      "www.iyiou.com"
-    ]
-   }
-  },
-  {
-   "id": "36kr-medical",
-   "name": "36氪 · 医疗健康",
-   "homepage": "https://36kr.com/",
-   "lane": "pipeline",
-   "source_type": "media",
-   "access": "html-list",
-   "egress": "direct",
-   "authority": 2,
-   "safety_feed": false,
-   "owner_entity": "36氪",
-   "launch_tier": "P2",
-   "language": "zh",
-   "region": "CN",
-   "poll_floor_s": 3600,
-   "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
-   "category": "cn-media-pharma",
-   "config": {
-    "url": "https://36kr.com/information/medical",
-    "max_pages": 1,
-    "allowed_hosts": [
-     "36kr.com"
     ]
    }
   },
@@ -23885,7 +23858,2300 @@
     },
     "max_items": 30
    }
+  },
+  {
+   "id": "cn-sh-mpa-dt",
+   "name": "上海市药品监督管理局 监管动态",
+   "homepage": "https://yjj.sh.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "上海市药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.sh.gov.cn/sjdt/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.sh.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.pageList li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "small.listTime"
+    },
+    "date_format": "%Y.%m.%d",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-sh-mpa-yp",
+   "name": "上海市药品监督管理局 药品（通告与文件）",
+   "homepage": "https://yjj.sh.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "上海市药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.sh.gov.cn/zx-yp/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.sh.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.pageList li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "small.listTime"
+    },
+    "date_format": "%Y.%m.%d",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-bj-mpa-dt",
+   "name": "北京市药品监督管理局 工作动态",
+   "homepage": "https://yjj.beijing.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "北京市药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.beijing.gov.cn/yjj/zwgk20/yjxw/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.beijing.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.list-ul li.easysite-article-li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span.article-time"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-bj-mpa-gg",
+   "name": "北京市药品监督管理局 公告",
+   "homepage": "https://yjj.beijing.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "北京市药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.beijing.gov.cn/yjj/zwgk20/gg17/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.beijing.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.list-ul li.easysite-article-li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span.article-time"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-js-mpa-gsgg",
+   "name": "江苏省药品监督管理局 公告通告",
+   "homepage": "https://da.jiangsu.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "江苏省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://da.jiangsu.gov.cn/col/col84627/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "da.jiangsu.gov.cn"
+    ],
+    "mode": "script-cdata",
+    "selectors": {
+     "item": "a.bt_link",
+     "title": ".",
+     "link": "@href",
+     "date": "@href"
+    },
+    "date_regex": "/art/(\\d{4}/\\d{1,2}/\\d{1,2})/",
+    "date_format": "%Y/%m/%d",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-js-mpa-dt",
+   "name": "江苏省药品监督管理局 省局信息",
+   "homepage": "https://da.jiangsu.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "江苏省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://da.jiangsu.gov.cn/col/col84602/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "da.jiangsu.gov.cn"
+    ],
+    "mode": "script-cdata",
+    "selectors": {
+     "item": "a.bt_link",
+     "title": ".",
+     "link": "@href",
+     "date": "@href"
+    },
+    "date_regex": "/art/(\\d{4}/\\d{1,2}/\\d{1,2})/",
+    "date_format": "%Y/%m/%d",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-zj-mpa-tzgg",
+   "name": "浙江省药品监督管理局 通知公告",
+   "homepage": "https://mpa.zj.gov.cn/col/col1228989285/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "浙江省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.zj.gov.cn/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.zj.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul#open1 li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "em"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-zj-mpa-dt",
+   "name": "浙江省药品监督管理局 省局动态",
+   "homepage": "https://mpa.zj.gov.cn/col/col1228989351/index.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "浙江省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.zj.gov.cn/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.zj.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul#outsj2 li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "em"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-sc-mpa-gsgg",
+   "name": "四川省药品监督管理局 公示公告",
+   "homepage": "https://yjj.sc.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "四川省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.sc.gov.cn/scyjj/c103154/gsgg.shtml",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.sc.gov.cn"
+    ],
+    "selectors": {
+     "item": "tr:has(> td.listtddate5)",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "td.listtddate5"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-sc-mpa-dt",
+   "name": "四川省药品监督管理局 省局动态",
+   "homepage": "https://yjj.sc.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "四川省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.sc.gov.cn/scyjj/ypjg4/ypjg.shtml",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.sc.gov.cn"
+    ],
+    "selectors": {
+     "item": "tr:has(> td.listtddate5)",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "td.listtddate5"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-ha-mpa-ggtg",
+   "name": "河南省药品监督管理局 公告通告",
+   "homepage": "https://yjj.henan.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "河南省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.henan.gov.cn/zwgk/ggtg/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.henan.gov.cn"
+    ],
+    "selectors": {
+     "item": "li:has(> span.listtime)",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span.listtime"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-cq-mpa-gggs",
+   "name": "重庆市药品监督管理局 公告公示",
+   "homepage": "https://yaojianju.cq.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "重庆市药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yaojianju.cq.gov.cn/zwxx_217/gggs/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yaojianju.cq.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.list li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-sn-mpa-dt",
+   "name": "陕西省药品监督管理局 药监动态",
+   "homepage": "https://mpa.shaanxi.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "陕西省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.shaanxi.gov.cn/sy/gzdt/sjdt/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.shaanxi.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.cm-news-list li",
+     "title": "a",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-sn-mpa-rcjg",
+   "name": "陕西省药品监督管理局 日常监管信息",
+   "homepage": "https://mpa.shaanxi.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "陕西省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.shaanxi.gov.cn/jgxx/rcjgxx/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.shaanxi.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.cm-news-list li",
+     "title": "a",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-fj-mpa-gstg",
+   "name": "福建省药品监督管理局 公示通告",
+   "homepage": "https://yjj.scjgj.fujian.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "福建省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://yjj.scjgj.fujian.gov.cn/zwgk/gstg/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "yjj.scjgj.fujian.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.list_base_date_01 li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-hb-mpa-tzgg",
+   "name": "湖北省药品监督管理局 通知公告",
+   "homepage": "https://mpa.hubei.gov.cn/zfxxgk/zc/qtzdgkwj/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "湖北省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.hubei.gov.cn/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.hubei.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.list-t li:has(a[href*=\"/qtzdgkwj/\"])",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span.date"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-ah-mpa-gsgg",
+   "name": "安徽省药品监督管理局 公示公告",
+   "homepage": "https://mpa.ah.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "安徽省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.ah.gov.cn/zwgz/gsgg/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.ah.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.doc_list li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span.date"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-yn-mpa-tztg",
+   "name": "云南省药品监督管理局 通知通告",
+   "homepage": "https://mpa.yn.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "云南省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.yn.gov.cn/zfxxgk/fdzdgknr/tztb/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.yn.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.lzy-gov-com-list li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span.date"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-xj-mpa-tzgg",
+   "name": "新疆维吾尔自治区药品监督管理局 通知公告",
+   "homepage": "https://mpa.xinjiang.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "新疆维吾尔自治区药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.xinjiang.gov.cn/xjyjj/tzgg/list_tywz.shtml",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.xinjiang.gov.cn"
+    ],
+    "selectors": {
+     "item": "tr:has(> td.ListColumnClass5)",
+     "title": "a",
+     "link": "a@href",
+     "date": "span.listtddate5"
+    },
+    "date_regex": "(\\d{4}-\\d{2}-\\d{2})",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-gd-mpa-dt",
+   "name": "广东省药品监督管理局 省局动态",
+   "homepage": "https://mpa.gd.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "广东省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://mpa.gd.gov.cn/xwdt/sjdt/index.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.gd.gov.cn"
+    ],
+    "selectors": {
+     "item": "ul.infoList li",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span.time"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cn-hn-mpa-tzgg",
+   "name": "湖南省药品监督管理局 通知公告",
+   "homepage": "http://mpa.hunan.gov.cn/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "湖南省药品监督管理局",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "http://mpa.hunan.gov.cn/mpa/zcgg/xxgk_zcgg_25.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "mpa.hunan.gov.cn"
+    ],
+    "selectors": {
+     "item": "tbody#number tr",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "td:nth-child(4)"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "at-basg-whatsnew",
+   "name": "奥地利联邦药品与医疗器械局 BASG 网站更新（Newsfeed）",
+   "homepage": "https://www.basg.gv.at/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Austrian Federal Office for Safety in Health Care (BASG)",
+   "launch_tier": "P2",
+   "language": "de",
+   "region": "AT",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.basg.gv.at/whatsnew/rss",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.basg.gv.at"
+    ]
+   }
+  },
+  {
+   "id": "ch-swissmedic-mitteilungen",
+   "name": "瑞士治疗产品管理局 Swissmedic 新闻通告（官方列表）",
+   "homepage": "https://www.swissmedic.ch/swissmedic/en/home/news/mitteilungen.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Swissmedic",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "CH",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.swissmedic.ch/swissmedic/en/home/news/mitteilungen.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.swissmedic.ch"
+    ],
+    "selectors": {
+     "item": ".mod-teaser",
+     "title": "h3 a",
+     "link": "h3 a@href",
+     "date": ".teaserDate",
+     "summary": ".wrapper"
+    },
+    "date_format": "%d.%m.%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "cz-sukl-aktuality",
+   "name": "捷克国家药品管理局 SÚKL 网站新闻",
+   "homepage": "https://sukl.gov.cz/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "State Institute for Drug Control (SUKL)",
+   "launch_tier": "P2",
+   "language": "cs",
+   "region": "CZ",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://sukl.gov.cz/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "sukl.gov.cz"
+    ]
+   }
+  },
+  {
+   "id": "cz-sukl-stahovani-pozastaveni",
+   "name": "捷克国家药品管理局 SÚKL 药品召回与暂停（质量缺陷）",
+   "homepage": "https://sukl.gov.cz/zavady-v-jakosti/opatreni-pri-zavadach-v-jakosti-leciv-a-registracni-opatreni-stahovani-pozastaveni/",
+   "lane": "safety",
+   "source_type": "regulator",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": true,
+   "owner_entity": "State Institute for Drug Control (SUKL)",
+   "launch_tier": "P2",
+   "language": "cs",
+   "region": "CZ",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "drug-safety",
+   "config": {
+    "url": "https://sukl.gov.cz/category/opatreni-pri-zavadach-v-jakosti-leciv-a-registracni-opatreni-stahovani-pozastaveni/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "sukl.gov.cz"
+    ]
+   }
+  },
+  {
+   "id": "de-bfarm-pressemitteilungen",
+   "name": "德国联邦药品与医疗器械研究所 BfArM 新闻稿",
+   "homepage": "https://www.bfarm.de/DE/Aktuelles/Presse/Pressemitteilungen/_node.html",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Federal Institute for Drugs and Medical Devices (BfArM)",
+   "launch_tier": "P2",
+   "language": "de",
+   "region": "DE",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.bfarm.de/DE/Aktuelles/Presse/Pressemitteilungen/_node.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.bfarm.de"
+    ],
+    "selectors": {
+     "item": "tr:has(td a)",
+     "title": "a",
+     "link": "a@href",
+     "date": "td",
+     "summary": ".teasertext-wrapper"
+    },
+    "date_format": "%d.%m.%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "de-pei-sicherheitsinformationen",
+   "name": "德国保罗·埃利希研究所 PEI 人用药安全信息（Rote-Hand-Brief 等）",
+   "homepage": "https://www.pei.de/DE/newsroom/veroffentlichungen-arzneimittel/sicherheitsinformationen-human/sicherheitsinformationen-human-node.html",
+   "lane": "safety",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Paul-Ehrlich-Institut (PEI)",
+   "launch_tier": "P2",
+   "language": "de",
+   "region": "DE",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "drug-safety",
+   "config": {
+    "url": "https://www.pei.de/DE/newsroom/veroffentlichungen-arzneimittel/sicherheitsinformationen-human/sicherheitsinformationen-human-node.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.pei.de"
+    ],
+    "selectors": {
+     "item": "tr:has(td a)",
+     "title": "a",
+     "link": "a@href",
+     "date": "td"
+    },
+    "date_format": "%d.%m.%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "es-aemps-notas-medicamentos",
+   "name": "西班牙药品与医疗器械局 AEMPS 人用药信息通告",
+   "homepage": "https://www.aemps.gob.es/comunicacion/notas-informativas-medicamentos-de-uso-humano/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Spanish Agency of Medicines and Medical Devices (AEMPS)",
+   "launch_tier": "P2",
+   "language": "es",
+   "region": "ES",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.aemps.gob.es/comunicacion/notas-informativas-medicamentos-de-uso-humano/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.aemps.gob.es"
+    ],
+    "selectors": {
+     "item": "tr:has(td a)",
+     "title": "td a",
+     "link": "td a@href",
+     "date": "td",
+     "summary": "td p"
+    },
+    "date_format": "%d/%m/%Y",
+    "max_items": 40
+   }
+  },
+  {
+   "id": "fr-ansm-actualites",
+   "name": "法国国家药品与健康产品安全局 ANSM 新闻",
+   "homepage": "https://ansm.sante.fr/actualites",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "French National Agency for the Safety of Medicines and Health Products (ANSM)",
+   "launch_tier": "P2",
+   "language": "fr",
+   "region": "FR",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://ansm.sante.fr/actualites",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "ansm.sante.fr"
+    ],
+    "selectors": {
+     "item": ".news-list a.news-item",
+     "title": "@title",
+     "link": "@href",
+     "date": ".ni-date"
+    },
+    "date_regex": "(\\d{2}/\\d{2}/\\d{4})",
+    "date_format": "%d/%m/%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "fr-ansm-informations-securite",
+   "name": "法国国家药品与健康产品安全局 ANSM 安全信息与召回",
+   "homepage": "https://ansm.sante.fr/informations-de-securite",
+   "lane": "safety",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "French National Agency for the Safety of Medicines and Health Products (ANSM)",
+   "launch_tier": "P2",
+   "language": "fr",
+   "region": "FR",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "drug-safety",
+   "config": {
+    "url": "https://ansm.sante.fr/informations-de-securite",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "ansm.sante.fr"
+    ],
+    "selectors": {
+     "item": "article.article-item a",
+     "title": "@title",
+     "link": "@href",
+     "date": ".article-date"
+    },
+    "date_regex": "(\\d{2}/\\d{2}/\\d{4})",
+    "date_format": "%d/%m/%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "gr-eof-farmaka",
+   "name": "希腊国家药品组织 EOF 药品类公告",
+   "homepage": "https://www.eof.gr/category/farmaka/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "National Organization for Medicines (EOF, Greece)",
+   "launch_tier": "P2",
+   "language": "el",
+   "region": "GR",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.eof.gr/category/farmaka/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.eof.gr"
+    ]
+   }
+  },
+  {
+   "id": "lv-zva-jaunumi",
+   "name": "拉脱维亚国家药品管理局 ZVA 新闻（含 DHPC 信函）",
+   "homepage": "https://www.zva.gov.lv/lv/jaunumi-un-publikacijas/jaunumi",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "State Agency of Medicines of Latvia (ZVA)",
+   "launch_tier": "P2",
+   "language": "lv",
+   "region": "LV",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.zva.gov.lv/lv/jaunumi-un-publikacijas/jaunumi",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.zva.gov.lv"
+    ],
+    "selectors": {
+     "item": ".node_news article",
+     "title": "h2 a",
+     "link": "h2 a@href",
+     "date": ".date .created"
+    },
+    "date_regex": "(\\d{2}\\.\\d{2}\\.\\d{4})",
+    "date_format": "%d.%m.%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "no-dmp-nyheter",
+   "name": "挪威药品管理局 DMP 新闻",
+   "homepage": "https://www.dmp.no/nyheter",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Norwegian Medical Products Agency (DMP, Legemiddelverket)",
+   "launch_tier": "P2",
+   "language": "no",
+   "region": "NO",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.dmp.no/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.dmp.no"
+    ],
+    "selectors": {
+     "item": "a.news-page-href",
+     "title": ".news-title",
+     "link": "@href",
+     "date": "time@datetime"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "pl-urpl-aktualnosci",
+   "name": "波兰药品医疗器械与生物杀灭剂注册局 URPL 新闻",
+   "homepage": "https://www.gov.pl/web/urpl/aktualnosci1",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "relay",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Office for Registration of Medicinal Products, Medical Devices and Biocidal Products (URPL)",
+   "launch_tier": "P2",
+   "language": "pl",
+   "region": "PL",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.gov.pl/web/urpl/aktualnosci1",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.gov.pl"
+    ],
+    "selectors": {
+     "item": ".art-prev li",
+     "title": ".title a",
+     "link": ".title a@href",
+     "date": ".date"
+    },
+    "date_format": "%d.%m.%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "pl-urpl-komunikaty-produkty-lecznicze",
+   "name": "波兰药品医疗器械与生物杀灭剂注册局 URPL 药品安全通告（DHPC）",
+   "homepage": "https://www.gov.pl/web/urpl/komunikaty-dot-produktow-leczniczych",
+   "lane": "safety",
+   "source_type": "regulator",
+   "access": "html-list",
+   "egress": "relay",
+   "authority": 5,
+   "safety_feed": true,
+   "owner_entity": "Office for Registration of Medicinal Products, Medical Devices and Biocidal Products (URPL)",
+   "launch_tier": "P2",
+   "language": "pl",
+   "region": "PL",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "drug-safety",
+   "config": {
+    "url": "https://www.gov.pl/web/urpl/komunikaty-dot-produktow-leczniczych",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.gov.pl"
+    ],
+    "selectors": {
+     "item": ".art-prev li",
+     "title": ".title a",
+     "link": ".title a@href",
+     "date": ".date"
+    },
+    "date_format": "%d.%m.%Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "pt-infarmed-noticias",
+   "name": "葡萄牙药品与健康产品管理局 INFARMED 新闻",
+   "homepage": "https://www.infarmed.pt/web/infarmed/noticias",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "National Authority of Medicines and Health Products (INFARMED)",
+   "launch_tier": "P2",
+   "language": "pt",
+   "region": "PT",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.infarmed.pt/web/infarmed/rss-noticias/-/asset_publisher/zQws9cSRmjar/rss?p_p_cacheability=cacheLevelFull",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.infarmed.pt"
+    ]
+   }
+  },
+  {
+   "id": "se-lakemedelsverket-pressmeddelanden",
+   "name": "瑞典医药产品局 Läkemedelsverket 新闻稿（经 TT 通讯社）",
+   "homepage": "https://www.lakemedelsverket.se/sv/nyheter",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "Swedish Medical Products Agency (Läkemedelsverket)",
+   "launch_tier": "P2",
+   "language": "sv",
+   "region": "SE",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://via.tt.se/rss/releases/latest?publisherId=3235477",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "via.tt.se"
+    ]
+   }
+  },
+  {
+   "id": "sk-sukl-aktuality",
+   "name": "斯洛伐克国家药品管理局 ŠÚKL 新闻",
+   "homepage": "https://www.sukl.sk/",
+   "lane": "regulatory",
+   "source_type": "regulator",
+   "access": "rss",
+   "egress": "relay",
+   "authority": 5,
+   "safety_feed": false,
+   "owner_entity": "State Institute for Drug Control (ŠÚKL, Slovakia)",
+   "launch_tier": "P2",
+   "language": "sk",
+   "region": "SK",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "regulator",
+   "config": {
+    "url": "https://www.sukl.sk/sk/rss?page_id=1355&days=365",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.sukl.sk"
+    ]
+   }
+  },
+  {
+   "id": "uni-ki-news",
+   "name": "卡罗林斯卡学院 Karolinska Institutet 新闻",
+   "homepage": "https://news.ki.se/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Karolinska Institutet",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "SE",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://news.ki.se/latest-news/rss.xml",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "news.ki.se"
+    ]
+   }
+  },
+  {
+   "id": "uni-washu-medicine-news",
+   "name": "华盛顿大学圣路易斯分校医学院 WashU Medicine 新闻",
+   "homepage": "https://medicine.washu.edu/news/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "browser",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Washington University School of Medicine in St. Louis",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://medicine.washu.edu/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "medicine.washu.edu"
+    ]
+   }
+  },
+  {
+   "id": "uni-cambridge-clinical-medicine-news",
+   "name": "剑桥大学临床医学院 University of Cambridge School of Clinical Medicine 新闻",
+   "homepage": "https://www.cam.ac.uk/research/news",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "browser",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "University of Cambridge",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "UK",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.cam.ac.uk/news-feed-generator.rss?field_taxonomy_affiliation_tid%5B%5D=107",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.cam.ac.uk"
+    ]
+   }
+  },
+  {
+   "id": "uni-harvard-gazette-health",
+   "name": "哈佛公报·健康 Harvard Gazette Health",
+   "homepage": "https://news.harvard.edu/gazette/section/health/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Harvard University (Harvard Gazette)",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 21600,
+   "poll_ceiling_s": 86400,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://news.harvard.edu/gazette/section/health/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "news.harvard.edu"
+    ]
+   }
+  },
+  {
+   "id": "uni-vumc-news",
+   "name": "范德堡大学医学中心 Vanderbilt University Medical Center 新闻",
+   "homepage": "https://news.vumc.org/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Vanderbilt University Medical Center",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": false,
+   "disabled_reason": "probe_beijing_unreachable",
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://news.vumc.org/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "news.vumc.org"
+    ]
+   }
+  },
+  {
+   "id": "uni-weill-cornell-news",
+   "name": "威尔康奈尔医学院 Weill Cornell Medicine 新闻",
+   "homepage": "https://news.weill.cornell.edu/news",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "browser",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Weill Cornell Medicine",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://news.weill.cornell.edu/news/rss",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "news.weill.cornell.edu"
+    ]
+   }
+  },
+  {
+   "id": "uni-unc-health-news",
+   "name": "北卡罗来纳大学医学院与UNC卫生保健 UNC Health & UNC School of Medicine 新闻",
+   "homepage": "https://news.unchealthcare.org/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "browser",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "UNC School of Medicine / UNC Health",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://news.unchealthcare.org/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "news.unchealthcare.org"
+    ]
+   }
+  },
+  {
+   "id": "uni-ucdavis-health-news",
+   "name": "加州大学戴维斯分校健康中心 UC Davis Health 新闻",
+   "homepage": "https://health.ucdavis.edu/news/headlines",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "UC Davis Health",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://health.ucdavis.edu/news/rss",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "health.ucdavis.edu"
+    ]
+   }
+  },
+  {
+   "id": "uni-cu-anschutz-news",
+   "name": "科罗拉多大学安舒茨医学院 CU Anschutz Medical Campus 新闻",
+   "homepage": "https://news.cuanschutz.edu/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "University of Colorado Anschutz Medical Campus",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://news.cuanschutz.edu/news-stories/rss.xml",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "news.cuanschutz.edu"
+    ]
+   }
+  },
+  {
+   "id": "uni-lshtm-news",
+   "name": "伦敦卫生与热带医学院 London School of Hygiene & Tropical Medicine 新闻",
+   "homepage": "https://www.lshtm.ac.uk/newsevents/news",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "London School of Hygiene & Tropical Medicine",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "UK",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.lshtm.ac.uk/newsevents/news/feed",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.lshtm.ac.uk"
+    ]
+   }
+  },
+  {
+   "id": "uni-columbia-mailman-news",
+   "name": "哥伦比亚大学梅尔曼公共卫生学院 Columbia Mailman School of Public Health 新闻",
+   "homepage": "https://www.publichealth.columbia.edu/news",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Columbia University Mailman School of Public Health",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.publichealth.columbia.edu/rss/news",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.publichealth.columbia.edu"
+    ]
+   }
+  },
+  {
+   "id": "uni-nyu-langone-research",
+   "name": "纽约大学朗格尼医学中心 NYU Langone Health 研究新闻",
+   "homepage": "https://nyulangone.org/news/research",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "relay",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "NYU Langone Health",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://nyulangone.org/news/research",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "nyulangone.org"
+    ],
+    "selectors": {
+     "item": "ul.list-articles > li.teaser",
+     "title": "h2.hed-teaser-title a",
+     "link": "h2.hed-teaser-title a@href",
+     "date": "time",
+     "summary": "h3.hed-teaser-subtitle"
+    },
+    "date_format": "%B %d, %Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-imperial-medicine-news",
+   "name": "帝国理工学院医学院 Imperial College London Faculty of Medicine 新闻",
+   "homepage": "https://www.imperial.ac.uk/medicine/news-events/all-news/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "relay",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Imperial College London",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "UK",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.imperial.ac.uk/medicine/news-events/all-news/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.imperial.ac.uk"
+    ],
+    "selectors": {
+     "item": "div.row article.col:has(a.listing-item)",
+     "title": "h3.listing-item__title",
+     "link": "a.listing-item@href",
+     "date": ".listing-item__meta p"
+    },
+    "date_format": "%d %B %Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-mdanderson-research-newsroom",
+   "name": "得克萨斯大学MD安德森癌症中心 MD Anderson Cancer Center 研究新闻",
+   "homepage": "https://www.mdanderson.org/newsroom/research-newsroom.html",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "The University of Texas MD Anderson Cancer Center",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.mdanderson.org/newsroom/research-newsroom.html",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.mdanderson.org"
+    ],
+    "selectors": {
+     "item": "div.blog-summary",
+     "title": "h3.blog-title",
+     "link": "a@href",
+     "date": "p.author-date"
+    },
+    "date_format": "%B %d, %Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-ucla-health-releases",
+   "name": "加州大学洛杉矶分校健康 UCLA Health 新闻稿",
+   "homepage": "https://www.uclahealth.org/news",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "UCLA Health",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.uclahealth.org/news",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.uclahealth.org"
+    ],
+    "selectors": {
+     "item": "div.card__content:has(h3.card__title a[href^=\"/news/release/\"])",
+     "title": "h3.card__title a",
+     "link": "h3.card__title a@href",
+     "date": "div.card__meta div.date span:nth-child(2)"
+    },
+    "date_format": "%B %d, %Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-cuhk-medicine-press",
+   "name": "香港中文大学医学院 CUHK Faculty of Medicine 新闻稿",
+   "homepage": "https://www.med.cuhk.edu.hk/press-releases",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "The Chinese University of Hong Kong, Faculty of Medicine",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "HK",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.med.cuhk.edu.hk/press-releases",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.med.cuhk.edu.hk"
+    ],
+    "selectors": {
+     "item": "div.press__item",
+     "title": "h2.press__title",
+     "link": "h2.press__title a@href",
+     "date": "time.press__date@datetime"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-shsmu-research",
+   "name": "上海交通大学医学院 科研动态",
+   "homepage": "https://www.shsmu.edu.cn/news/kydt1.htm",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "上海交通大学医学院",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.shsmu.edu.cn/news/kydt1.htm",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.shsmu.edu.cn",
+     "shsmu.edu.cn"
+    ],
+    "selectors": {
+     "item": "tr:has(span.link_16 a)",
+     "title": "a@title",
+     "link": "a@href",
+     "date": "span[style*=\"float:right\"]"
+    },
+    "date_regex": "\\((\\d\\d-\\d\\d-\\d\\d)\\)",
+    "date_format": "%y-%m-%d",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-fudan-shmc-research",
+   "name": "复旦大学上海医学院 科研进展",
+   "homepage": "https://shmc.fudan.edu.cn/news/kyjz/list.htm",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "复旦大学上海医学院",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://shmc.fudan.edu.cn/news/kyjz/list.htm",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "shmc.fudan.edu.cn"
+    ],
+    "selectors": {
+     "item": "ul.news_list > li.news.i1:has(.news_title a)",
+     "title": ".news_title a@title",
+     "link": ".news_title a@href",
+     "date": ".news_time .times"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-ccmu-research",
+   "name": "首都医科大学 学术科研",
+   "homepage": "https://www.ccmu.edu.cn/xsky/index.htm",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "首都医科大学",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.ccmu.edu.cn/xsky/index.htm",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.ccmu.edu.cn",
+     "news.ccmu.edu.cn"
+    ],
+    "selectors": {
+     "item": "ul.txtList > li",
+     "title": "h4",
+     "link": "a@href",
+     "date": "time"
+    },
+    "date_format": "%m-%d %Y",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-njmu-research",
+   "name": "南京医科大学 科研动态",
+   "homepage": "https://www.njmu.edu.cn/kydt/list.htm",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "browser",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "南京医科大学",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.njmu.edu.cn/kydt/list.htm",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.njmu.edu.cn"
+    ],
+    "selectors": {
+     "item": "ul.news_list > li.news",
+     "title": ".news_title a@title",
+     "link": ".news_title a@href",
+     "date": ".news_meta"
+    },
+    "date_format": "%Y-%m-%d",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-hrbmu-research",
+   "name": "哈尔滨医科大学 科学研究",
+   "homepage": "https://www.hrbmu.edu.cn/index/kxyj1.htm",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "哈尔滨医科大学",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.hrbmu.edu.cn/index/kxyj1.htm",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.hrbmu.edu.cn"
+    ],
+    "selectors": {
+     "item": "ul > li:has(a font):has(a span)",
+     "title": "a font",
+     "link": "a@href",
+     "date": "a span"
+    },
+    "date_format": "%Y.%m.%d",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-gzhmu-research",
+   "name": "广州医科大学 学术科研",
+   "homepage": "https://news.gzhmu.edu.cn/xsky.htm",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "广州医科大学",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": false,
+   "disabled_reason": "probe_beijing_unreachable",
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://news.gzhmu.edu.cn/xsky.htm",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "news.gzhmu.edu.cn"
+    ],
+    "selectors": {
+     "item": "li:has(a div.date)",
+     "title": "h3",
+     "link": "a@href",
+     "date": "div.date"
+    },
+    "date_format": "%d %Y-%m",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "medcity-news",
+   "name": "MedCity News 医疗健康商业新闻（融资、并购、人事）",
+   "homepage": "https://medcitynews.com/",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "rss",
+   "egress": "relay",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "MedCity News",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "industry-media",
+   "config": {
+    "url": "https://medcitynews.com/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "medcitynews.com"
+    ]
+   }
+  },
+  {
+   "id": "medtech-dive",
+   "name": "Medtech Dive 医疗器械行业新闻（并购、融资、监管）",
+   "homepage": "https://www.medtechdive.com/",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Industry Dive",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "industry-media",
+   "config": {
+    "url": "https://www.medtechdive.com/feeds/news/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.medtechdive.com"
+    ]
+   }
+  },
+  {
+   "id": "hit-consultant",
+   "name": "HIT Consultant 数字医疗商业新闻（融资、并购）",
+   "homepage": "https://hitconsultant.net/",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "HIT Consultant Media",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "industry-media",
+   "config": {
+    "url": "https://hitconsultant.net/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "hitconsultant.net"
+    ]
+   }
+  },
+  {
+   "id": "korea-biomedical-review",
+   "name": "韩国生物医学评论 Korea Biomedical Review（韩国药企与生物技术，交易与融资）",
+   "homepage": "https://www.koreabiomed.com/",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "rss",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "Korea Biomedical Review",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "KR",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "industry-media",
+   "config": {
+    "url": "https://www.koreabiomed.com/rss/allArticle.xml",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.koreabiomed.com"
+    ]
+   }
+  },
+  {
+   "id": "drug-discovery-trends",
+   "name": "Drug Discovery Trends 药物研发商业新闻（交易、管线、融资）",
+   "homepage": "https://www.drugdiscoverytrends.com/",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "rss",
+   "egress": "relay",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "WTWH Media",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "US",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "industry-media",
+   "config": {
+    "url": "https://www.drugdiscoverytrends.com/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.drugdiscoverytrends.com"
+    ]
+   }
+  },
+  {
+   "id": "pharmaceutical-business-review",
+   "name": "Pharmaceutical Business Review 制药商业评论（合作、并购、临床）",
+   "homepage": "https://www.pharmaceutical-business-review.com/",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "rss",
+   "egress": "browser",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "GlobalData",
+   "launch_tier": "P2",
+   "language": "en",
+   "region": "UK",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "industry-media",
+   "config": {
+    "url": "https://www.pharmaceutical-business-review.com/feed/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.pharmaceutical-business-review.com"
+    ]
+   }
+  },
+  {
+   "id": "pedaily-medical-health",
+   "name": "投资界 医疗健康（融资、并购、投资人动态）",
+   "homepage": "https://www.pedaily.cn/i-medical-health/",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "投资界（清科集团）",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "cn-media-pharma",
+   "config": {
+    "url": "https://www.pedaily.cn/i-medical-health/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.pedaily.cn",
+     "news.pedaily.cn",
+     "pe.pedaily.cn",
+     "vc.pedaily.cn"
+    ],
+    "selectors": {
+     "item": "li.h-news",
+     "title": "h3 a",
+     "link": "h3 a@href",
+     "date": "span.date"
+    },
+    "max_items": 30
+   }
+  },
+  {
+   "id": "pharnexcloud-sx",
+   "name": "摩熵医药（药融云）资讯·摩熵原创·时讯",
+   "homepage": "https://www.pharnexcloud.com/zixun/yuanchuang/sx",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "摩熵医药（药融云）",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "cn-media-pharma",
+   "config": {
+    "url": "https://www.pharnexcloud.com/zixun/yuanchuang/sx",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.pharnexcloud.com"
+    ],
+    "selectors": {
+     "item": "li.report-item",
+     "title": "a.item-title",
+     "link": "a.item-title@href",
+     "date": "div.info",
+     "summary": "div.desc"
+    },
+    "date_regex": "(\\d{4}-\\d{2}-\\d{2})",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "pharnexcloud-zcsp",
+   "name": "摩熵医药（药融云）资讯·摩熵原创·注册审批",
+   "homepage": "https://www.pharnexcloud.com/zixun/yuanchuang/zcsp",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "摩熵医药（药融云）",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "cn-media-pharma",
+   "config": {
+    "url": "https://www.pharnexcloud.com/zixun/yuanchuang/zcsp",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.pharnexcloud.com"
+    ],
+    "selectors": {
+     "item": "li.report-item",
+     "title": "a.item-title",
+     "link": "a.item-title@href",
+     "date": "div.info",
+     "summary": "div.desc"
+    },
+    "date_regex": "(\\d{4}-\\d{2}-\\d{2})",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "pharnexcloud-trz",
+   "name": "摩熵医药（药融云）资讯·摩熵原创·投融资",
+   "homepage": "https://www.pharnexcloud.com/zixun/yuanchuang/trz",
+   "lane": "pipeline",
+   "source_type": "media",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 2,
+   "safety_feed": false,
+   "owner_entity": "摩熵医药（药融云）",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "cn-media-pharma",
+   "config": {
+    "url": "https://www.pharnexcloud.com/zixun/yuanchuang/trz",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.pharnexcloud.com"
+    ],
+    "selectors": {
+     "item": "li.report-item",
+     "title": "a.item-title",
+     "link": "a.item-title@href",
+     "date": "div.info",
+     "summary": "div.desc"
+    },
+    "date_regex": "(\\d{4}-\\d{2}-\\d{2})",
+    "max_items": 30
+   }
+  },
+  {
+   "id": "uni-tsinghua-med-research",
+   "name": "清华大学医学院 科研动态",
+   "homepage": "https://www.med.tsinghua.edu.cn/",
+   "lane": "research",
+   "source_type": "evidence-body",
+   "access": "html-list",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "清华大学医学院",
+   "launch_tier": "P2",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 7200,
+   "poll_ceiling_s": 43200,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "medical-society-news",
+   "config": {
+    "url": "https://www.med.tsinghua.edu.cn/yj/kydt.htm",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.med.tsinghua.edu.cn"
+    ],
+    "selectors": {
+     "item": "div.newlist ul li",
+     "title": "h3",
+     "link": "a@href",
+     "date": "div.con span",
+     "summary": "h4"
+    },
+    "max_items": 30
+   }
   }
  ],
- "probe_sha256": "09ba424f2447b58eb4ee7e8197f343deb58c63575d0ffdc2cb0aa7775c76d94f"
+ "probe_sha256": "cdfdb835546093ceaebb1bb300d69ddb9b960a17ce9aea2583ec261a74e70ec5"
 }

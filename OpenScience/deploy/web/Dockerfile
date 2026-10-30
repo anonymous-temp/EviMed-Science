@@ -65,6 +65,10 @@ LABEL org.opencontainers.image.description="Hosted Web API and browser applicati
 LABEL org.opencontainers.image.source="https://github.com/ai4s-research/open-science"
 
 WORKDIR /app
+# The monthly refresh key (see deploy/runtime-dsh/Dockerfile): CI reuses this
+# stage's layers from its cache, and `apk add` names no version, so the month
+# CI passes here is what makes the packages renew at least once a month.
+ARG BASE_REFRESH=unset
 RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
   && apk add --no-cache aws-cli bash coreutils docker-cli tar python3
 ENV NODE_ENV=production
@@ -99,6 +103,10 @@ COPY --from=build /app/scripts/ops ./scripts/ops
 COPY --from=build /app/scripts/runtime/extensions/cowork ./scripts/runtime/extensions/cowork
 COPY --from=build /app/packages/domain/index.mjs ./packages/domain/index.mjs
 COPY --from=build /app/packages/domain/src ./packages/domain/src
+# The RSI dependency closure (rsiDependencyClosure.mjs) reads the lockfile and the domain package's manifest from the app root, to qualify a campaign
+# before it is imported and to resolve a policy read; without them every closure is unqualified and every campaign is refused.
+COPY --from=build /app/packages/domain/package.json ./packages/domain/package.json
+COPY --from=build /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=build /app/packages/contracts/healthflux/candidates.json ./packages/contracts/healthflux/candidates.json
 # The OpenViking compile scope proof the control plane and the runtime controller read when they load (openVikingCompileExecution.mjs).
 COPY --from=build /app/packages/contracts/openviking/compile-scope-proof.json ./packages/contracts/openviking/compile-scope-proof.json

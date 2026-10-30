@@ -113,33 +113,19 @@ export function requestMemo() {
  * @property {string} [state] `current | changed | retracted | expired | unknown` for `rests-on`
  * @property {string | null} [at] @property {string} [label] a typed relation's display name @property {string} [relation] its stable predicate
  *
- * @typedef {object} MapLaneSegment
- * @property {string} recordId @property {string} text @property {string | null} from @property {string | null} to
- * @property {"current" | "replaced"} state @property {boolean} conflict
- * @typedef {object} MapLane
- * @property {string} id @property {string} label @property {string | null} projectId @property {MapLaneSegment[]} segments
- *
  * @typedef {object} MapEvent
- * @property {string} id @property {string} at @property {"memory" | "method" | "feedback" | "run"} type @property {string} change
- * @property {string} ref the mark it is about, `<type>:<id>` @property {string} lane `project:<id>` or `account`
- * @property {string} [kind] the memory kind, or `method` @property {string} [text] the words it left behind, at most 80 characters
- *
- * @typedef {object} MapAxis
- * @property {string} id @property {string} label @property {number} value on the dimension's own scale
- * @property {number} previousValue @property {number} count
- * @typedef {object} MapDimension
- * @property {string} id `work` or `memory` @property {string} title @property {string} previous what the ghost polygon is
- * @property {"share" | "count"} scale @property {number} total @property {number} previousTotal @property {MapAxis[]} axes
+ * @property {string} id @property {string} at @property {"memory" | "method"} type @property {string} change
+ * @property {string} ref the mark it is about, `<type>:<id>` @property {string} [text] the words it left behind, at most 80 characters
  *
  * @typedef {object} MapTopic
  * @property {string} id @property {string} label @property {number} weight @property {number} trend
  * @property {string[]} members `memory:<id>` and `document:<id>` ids
  *
  * @typedef {object} MapContribution
- * @property {MapNode[]} [nodes] @property {MapEdge[]} [edges] @property {MapLane[]} [lanes] @property {MapEvent[]} [events]
- * @property {{ t: string, memory?: number, run?: number, method?: number, feedback?: number, document?: number }[]} [buckets] days, in the researcher's zone
- * @property {{ kinds?: { id: string, label: string, count: number }[], dimensions?: MapDimension[], topics?: MapTopic[],
- *   documentTypes?: { id: string, label: string, count: number }[], projectDocuments?: { id: string, count: number }[] }} [facets]
+ * @property {MapNode[]} [nodes] @property {MapEdge[]} [edges] @property {MapEvent[]} [events]
+ * @property {{ t: string, document: number }[]} [buckets] the documents added on each day, in the researcher's zone
+ * @property {{ topics?: MapTopic[], documentTypes?: { id: string, label: string, count: number }[],
+ *   projectDocuments?: { id: string, count: number }[] }} [facets]
  * @property {{ since?: string | null, topicsStatus?: "ready" | "stale" | "empty" | "off" }} [facts]
  * @property {string[]} [missing] the parts of this source that could not be read while the rest could
  *

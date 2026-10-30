@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { StudyFrame, activityStripOf, type StudyView } from "./StudyFrame";
 import { useStudyFrame, useVcrPrimary, useVcrToolbar } from "./studyFrameContext";
@@ -70,9 +69,9 @@ describe("the one band over every view of a study", () => {
     draw();
     const band = document.querySelector("[data-page-chrome]") as HTMLElement;
     expect(band).toHaveClass("sticky", "top-0");
-    expect(within(band).getByRole("navigation", { name: "研究进度" })).toBeInTheDocument();
+    expect(within(band).queryByRole("navigation", { name: "研究进度" })).toBeNull();
     // The tab row IS the step bar: there is no second rail of the same seven things.
-    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(0);
     const body = document.querySelector("[data-page-body]") as HTMLElement;
     expect(band.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -117,80 +116,16 @@ describe("the one band over every view of a study", () => {
     expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
-    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(7);
+    expect(screen.queryByRole("button", { name: "研究对话" })).toBeNull();
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
   });
 });
 
-describe("the tab row", () => {
-  it("says each stage's state as a dot, in words for a screen reader and as a tooltip, and what the stage found", () => {
-    draw();
-    const patient = document.querySelector('[data-rail-step="patients"]')!;
-    expect(patient).toHaveAttribute("data-rail-state", "attention");
-    expect(patient).toHaveTextContent("未完成");
-    const control = within(patient as HTMLElement).getByRole("link");
-    expect(document.getElementById(control.getAttribute("aria-describedby") ?? "")).toHaveTextContent("2,000 名");
-    expect(document.querySelector('[data-rail-step="definition"]')).toBeInTheDocument();
-    expect(document.querySelector('[data-rail-step="evidence"]')).toBeInTheDocument();
-    expect(screen.queryByRole("tablist")).toBeNull();
-  });
-
-  it("names a stage under way by the run that covers it", () => {
-    draw({ study: study(raw => { raw.steps.population = { ...raw.steps.population, status: "running" }; raw.activity = { run: { id: "r", step: "population", steps: ["population"], label: "构建人群", phase: null, counts: {}, startedAt: null, placement: "open-runtime", locked: false }, queue: [], jobs: [], last: null }; }) });
-    expect(document.querySelector('[data-rail-step="population"]')).toHaveTextContent("进行中");
-    expect(document.querySelector('[data-activity="strip"]')).toHaveTextContent("构建人群");
-  });
-});
-
-describe("the header's primary action is the study's next step, on every tab", () => {
-  it("is the server's next, in the header, whichever tab is open", async () => {
-    const view = draw({ view: "comparator" });
-    const header = document.querySelector("[data-page-header]") as HTMLElement;
-    expect(within(header).getByRole("button", { name: "接着做：生成虚拟患者" })).toBeInTheDocument();
-    view.unmount();
-    const fresh = study((raw) => { raw.next = { step: "comparator", label: "设计对照", reason: "start", reasonText: "" }; });
-    draw({ study: fresh, view: "trial" });
-    expect(within(document.querySelector("[data-page-header]") as HTMLElement).getByRole("button", { name: "下一步：设计对照" })).toBeInTheDocument();
-  });
-
-  it("starts that step with one request, and the page stays where it is", async () => {
-    const reload = vi.fn();
-    draw({ view: "trial", reload });
-    await userEvent.click(screen.getByRole("button", { name: "接着做：生成虚拟患者" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "patients" }));
-    await waitFor(() => expect(reload).toHaveBeenCalled());
-    expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1");
-  });
-
-  it("is not drawn while work goes on — the strip says what is happening — and not for a reader who may not run a step", () => {
-    const moving = draw();
-    expect(screen.getByRole("button", { name: /生成虚拟患者/ })).toBeInTheDocument();
-    moving.unmount();
-    const running = study((raw) => { raw.activity = { run: { id: "run_1", step: "patients", steps: ["patients"], label: "生成虚拟患者", phase: null, counts: {}, startedAt: null, placement: "open-runtime", locked: false }, queue: [], jobs: [], last: null }; });
-    const view = draw({ study: running });
-    expect(screen.queryByRole("button", { name: /^(下一步|接着做|重新做)/ })).toBeNull();
-    view.unmount();
-    const reader = study((raw) => { raw.abilities = ["read"]; });
-    draw({ study: reader });
-    expect(screen.queryByRole("button", { name: /^(下一步|接着做|重新做)/ })).toBeNull();
-  });
-
-  it("says nothing it need not: an unfinished step is 接着做 with its reason in a tooltip, a stale one 重新做", () => {
-    draw({ study: study((raw) => { raw.next = { step: "trial", label: "模拟试验方案", reason: "refresh", reasonText: "输入已变更，结果已过期" }; }) });
-    const button = screen.getByRole("button", { name: "重新做：模拟试验方案" });
-    expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")).toHaveTextContent("输入已变更，结果已过期");
-  });
-
-  it("says a held project in the sentence of what holds it, and keeps the page", async () => {
-    installVcrServer(network.productRequest, {
-      [`POST /vcr/studies/${STUDY_ID}/run`]: () => { throw new WebApiError("held", { status: 423, code: "runtime_reserved_for_autopilot", details: { reason: "module-step" } }); },
-    });
-    draw();
-    await userEvent.click(screen.getByRole("button", { name: "接着做：生成虚拟患者" }));
-    await waitFor(() => expect(toasts.error).toHaveBeenCalledTimes(1));
-    expect(String(toasts.error.mock.calls[0][0])).toContain("正在做研究里的一个步骤");
-    expect(String(toasts.error.mock.calls[0][0])).not.toContain("定时任务");
-  });
+it("offers result navigation and conversation without queued next-step actions", async () => {
+  draw();
+  expect(screen.queryByRole("button", { name: /下一步|接着做|选择方法/ })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "查看：总览" }));
+  for (const label of ["匹配", "人群与患者", "对照", "试验", "依据"]) expect(screen.getByRole("menuitemradio", { name: label })).toBeInTheDocument();
 });
 
 describe("a tab's own primary action is the header's", () => {
@@ -209,7 +144,7 @@ describe("a tab's own primary action is the header's", () => {
     const header = document.querySelector("[data-page-header]") as HTMLElement;
     const chosen = within(header).getByRole("button", { name: "选定方案" });
     expect(solid(chosen)).toBe(true);
-    expect(solid(within(header).getByRole("button", { name: "接着做：生成虚拟患者" }))).toBe(false);
+    expect(within(header).queryByRole("button", { name: "接着做：生成虚拟患者" })).toBeNull();
     expect([...header.querySelectorAll("button")].filter(solid)).toHaveLength(1);
     await userEvent.click(chosen);
     expect(screen.getByTestId("chosen")).toHaveTextContent("已选");
@@ -219,7 +154,7 @@ describe("a tab's own primary action is the header's", () => {
     draw({ study: noLead(), children: <Choosing ask={false} /> });
     const header = document.querySelector("[data-page-header]") as HTMLElement;
     expect(within(header).queryByRole("button", { name: "选定方案" })).toBeNull();
-    expect(solid(within(header).getByRole("button", { name: "接着做：生成虚拟患者" }))).toBe(true);
+    expect(within(header).queryByRole("button", { name: "接着做：生成虚拟患者" })).toBeNull();
   });
 });
 
@@ -227,10 +162,10 @@ describe("对话 is a view of the page", () => {
   it("is a button in the header that opens the study's conversation view in the same page, and is pressed there", async () => {
     const onChat = vi.fn();
     const closed = draw({ onChat });
-    await userEvent.click(screen.getByRole("button", { name: "对话" }));
+    await userEvent.click(screen.getByRole("button", { name: "研究对话" }));
     expect(onChat).toHaveBeenCalledOnce(); closed.unmount();
     draw({ view: "chat", onChat });
-    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "研究对话" })).toBeNull();
     expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
     expect(onChat).toHaveBeenCalledOnce();
   });
@@ -297,7 +232,7 @@ describe("the server's eight states of activity, drawn", () => {
     const { container } = draw({ study: study((raw) => { raw.activity = state("being-sent"); }), view: "chat" });
     // The conversation is not said to be held for it: `locked` is false and nothing in the frame disables it.
     expect(container.querySelector("[data-activity='strip']")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "研究对话" })).toBeNull();
     expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
   });
 

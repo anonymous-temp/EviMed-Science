@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrKnowledge, readVcrStudy } from "@/lib/vcrClient";
 import { ComparisonCard, VcrDefinitionsPanel, VcrDefinitionsSection, VcrKnowledgeSection } from "./VcrKnowledge";
@@ -174,9 +174,31 @@ describe("申请成为平台病种定义包 (flywheel F26)", () => {
 });
 
 describe("定义库 on the population tab", () => {
+  it("opens a directly linked definition and keeps its requested version", async () => {
+    render(<MemoryRouter initialEntries={["/?template=dfn_1&version=2"]}><VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun onChanged={() => undefined} /></MemoryRouter>);
+    expect(await screen.findByLabelText("用定义库里的定义")).toHaveValue("dfn_1");
+    expect(screen.getByLabelText("版本")).toHaveValue("2");
+    expect(screen.getByText("管理定义与版本").closest("details")).toHaveAttribute("open");
+  });
+  it("updates the linked definition and version on same-page navigation", async () => {
+    function Links() {
+      const navigate = useNavigate();
+      return <><button onClick={() => navigate("/?template=dfn_1&version=3")}>Version three</button><button onClick={() => navigate("/?template=dfn_2&version=1")}>Other definition</button></>;
+    }
+    render(<MemoryRouter initialEntries={["/?template=dfn_1&version=2"]}><Links /><VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun onChanged={() => undefined} /></MemoryRouter>);
+    expect(await screen.findByLabelText("版本")).toHaveValue("2");
+    await userEvent.click(screen.getByText("管理定义与版本"));
+    await userEvent.click(screen.getByRole("button", { name: "Version three" }));
+    expect(screen.getByLabelText("版本")).toHaveValue("3");
+    expect(screen.getByText("管理定义与版本").closest("details")).toHaveAttribute("open");
+    await userEvent.click(screen.getByRole("button", { name: "Other definition" }));
+    expect(screen.getByLabelText("用定义库里的定义")).toHaveValue("dfn_2");
+    expect(screen.getByLabelText("版本")).toHaveValue("1");
+  });
   it("saves a population's definition as a new entry, with the name and the plain-language text", async () => {
     const changed = vi.fn();
     draw(<VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun onChanged={changed} />);
+    await userEvent.click(screen.getByText("管理定义与版本"));
     await userEvent.click(screen.getByRole("button", { name: "存入定义库" }));
     const drawer = await screen.findByRole("dialog", { name: "存入定义库" });
     expect(within(drawer).getByLabelText("名称")).toHaveValue("成人 ECOG 0–1");
@@ -191,6 +213,7 @@ describe("定义库 on the population tab", () => {
 
   it("saves as the next version of an existing entry, carrying its id and not a name", async () => {
     draw(<VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun onChanged={() => undefined} />);
+    await userEvent.click(screen.getByText("管理定义与版本"));
     await userEvent.click(screen.getByRole("button", { name: "存入定义库" }));
     const drawer = await screen.findByRole("dialog", { name: "存入定义库" });
     await userEvent.selectOptions(await within(drawer).findByLabelText("存为"), "dfn_2");
@@ -207,6 +230,7 @@ describe("定义库 on the population tab", () => {
       [`POST /vcr/studies/${STUDY_ID}/definitions/dfn_1/use`]: { populationId: "pop_9", version: 3, renamed: [{ from: "AGE", to: "age_years" }], unmatched: ["HOSPITAL"] },
     });
     draw(<VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf({ savable: [] })} canWrite canRun={false} onChanged={() => undefined} />);
+    await userEvent.click(await screen.findByText("管理定义与版本"));
     const select = await screen.findByLabelText("用定义库里的定义");
     await userEvent.selectOptions(select, "dfn_1");
     await userEvent.selectOptions(await screen.findByLabelText("版本"), "2");
@@ -221,6 +245,7 @@ describe("定义库 on the population tab", () => {
     const { rerender } = draw(<VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun={false} onChanged={() => undefined} />);
     expect(screen.queryByRole("button", { name: "比较版本" })).not.toBeInTheDocument();
     rerender(<MemoryRouter><VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun onChanged={() => undefined} /></MemoryRouter>);
+    await userEvent.click(screen.getByText("管理定义与版本"));
     const compare = screen.getByRole("button", { name: "比较版本" });
     expect(compare).toBeDisabled();
     await userEvent.selectOptions(screen.getByLabelText("比较"), "1");
@@ -315,6 +340,7 @@ it("offers templates before any population exists and requires an explicit singl
     [`POST /vcr/studies/${STUDY_ID}/definitions/dfn_2/use`]: { populationId: "new_cohort", version: 1, renamed: [], unmatched: [] },
   });
   draw(<VcrDefinitionsSection studyId={STUDY_ID} knowledge={null} canWrite canRun onChanged={() => undefined} />);
+  await userEvent.click(await screen.findByText("管理定义与版本"));
   await userEvent.selectOptions(await screen.findByLabelText("用定义库里的定义"), "dfn_2");
   const use = screen.getByRole("button", { name: "用于本研究" });
   expect(use).toBeDisabled();

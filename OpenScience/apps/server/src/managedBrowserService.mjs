@@ -14,7 +14,7 @@ import {edgeProxyFromConfig,openEdgeTunnel} from './edgeProxy.mjs';
 const ID=/^[A-Za-z0-9][A-Za-z0-9:._-]{0,255}$/;
 const IDLE=5*60_000,LIFETIME=60*60_000,FRAME_BYTES=760*1024,MAX_RECORDS=256,MAX_OWNER_MARKERS=64,MAX_QUEUE=8;
 const keys=new Set(['Enter','Tab','Shift+Tab','Escape','Backspace','Delete','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown','Control+A','Meta+A']);
-const messages={managed_browser_invalid:'The browser request is invalid.',managed_browser_not_found:'The browser page is unavailable.',managed_browser_sequence_conflict:'The browser action sequence has changed.',managed_browser_busy:'Browser capacity is unavailable.',managed_browser_unavailable:'The browser operation could not be confirmed.',managed_browser_action_unknown:'The browser action outcome is unknown; it will not be repeated.'};
+const messages={managed_browser_invalid:'The browser request is invalid.',managed_browser_not_found:'The browser page is unavailable.',managed_browser_sequence_conflict:'The browser action sequence has changed.',managed_browser_busy:'Browser capacity is unavailable.',managed_browser_unavailable:'The browser operation could not be confirmed.',managed_browser_action_unknown:'The browser action outcome is unknown; it will not be repeated.',managed_browser_page_failed:'The page could not be opened.'};
 function error(code,status=503){return new HttpError(status,code,messages[code]);}
 function record(value,fields,required=fields){try{return extensionRequestObject(value,fields,required);}catch{throw error('managed_browser_invalid',400);}}
 function identifier(value){if(typeof value!=='string'||!ID.test(value))throw error('managed_browser_invalid',400);return value;}
@@ -137,7 +137,11 @@ export function createManagedBrowserService(config,deps={}){
   })().catch(()=>{slot.closing=null;throw error('managed_browser_unavailable');});}
   return within(slot.closing,closeTimeoutMs);
  }
- async function terminalFailure(slot,code){slot.state.loading=false;slot.state.error={code,message:messages[code]};await closeSlot(slot).catch(()=>{});return clone(slot.state);}
+ async function terminalFailure(slot,code,url){slot.state.loading=false;slot.state.error={code,message:messages[code]};if(url)slot.state.url=url;await closeSlot(slot).catch(()=>{});return clone(slot.state);}
+ /** The browser's own refusal of a navigation (2026-10-27): the page was asked for and did not load -- a certificate it does not trust, a name that
+  * does not resolve, a connection that was reset. That is the page, not an action of unknown outcome, so it has its own code, and the reply names the
+  * address that was asked for: a failed navigation leaves the page blank, and a reply that said so took the address away from the person. */
+ const pageFailed=(caught,command)=>command.type==='navigate'&&/net::ERR_[A-Z0-9_]+/.test(String(caught?.message??''));
  async function perform(slot,command){
   checkSlot(slot);slot.state.error=null;
   switch(command.type){
@@ -197,7 +201,7 @@ export function createManagedBrowserService(config,deps={}){
    checkSlot(slot);if(slot.pending>=MAX_QUEUE)throw error('managed_browser_busy',429);
    // Consume before any awaited validation or external action; timeout/unknown retries replay this promise.
    slot.sequence=input.sequence;slot.lastHash=hash;slot.activity=now();const sequence=input.sequence;
-   slot.lastPromise=enqueue(slot,async()=>{try{const observed=await within(perform(slot,command),timeoutMs);slot.appliedSequence=sequence;return{sequence,state:observed};}catch(caught){const code=caught?.code==='web_read_host_forbidden'?'managed_browser_unavailable':'managed_browser_action_unknown';const observed=await terminalFailure(slot,code);slot.appliedSequence=sequence;return{sequence,state:observed};}});
+   slot.lastPromise=enqueue(slot,async()=>{try{const observed=await within(perform(slot,command),timeoutMs);slot.appliedSequence=sequence;return{sequence,state:observed};}catch(caught){const failed=pageFailed(caught,command),code=failed?'managed_browser_page_failed':caught?.code==='web_read_host_forbidden'?'managed_browser_unavailable':'managed_browser_action_unknown';const observed=await terminalFailure(slot,code,failed?validatedWebUrl(command.url).href:undefined);slot.appliedSequence=sequence;return{sequence,state:observed};}});
    return clone(await slot.lastPromise);
   },
   async snapshot(scope,input){record(input,['id','sessionId','tabId']);const slot=slotFor(scope,input);if(slot.retired)return{sequence:slot.sequence,state:clone(slot.state),frame:null};return enqueue(slot,async()=>{try{

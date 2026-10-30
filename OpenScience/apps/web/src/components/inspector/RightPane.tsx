@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { INSPECTOR_MAX, INSPECTOR_MIN, useUiStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
-import { trapTab } from "@/lib/focusTrap";
+import { isFocusLayer, isTopFocusLayer, registerFocusLayer, trapTab } from "@/lib/focusTrap";
 
 /** Dragging the divider below this pane width closes the pane — the same
  *  snap-shut behaviour as the sidebar. Sits below INSPECTOR_MIN for a clear snap. */
@@ -158,15 +158,17 @@ function OverlayPane({
   useEffect(() => {
     restoreFocus.current = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
+      if (!isTopFocusLayer(layer.current)) return;
       if (e.key === "Tab") {
         trapTab(layer.current, e);
         return;
       }
       if (e.key !== "Escape") return;
       // A modal or an open menu owns Esc over the overlay (the overlay is a
-      // dialog itself, so it does not count).
+      // dialog itself, so it does not count, and neither does a registered layer
+      // beneath it: the stack above has already said the overlay is the top one).
       const owners = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]');
-      if ([...owners].some((element) => element !== layer.current)) {
+      if ([...owners].some((element) => element !== layer.current && !isFocusLayer(element))) {
         return;
       }
       e.preventDefault();
@@ -175,6 +177,8 @@ function OverlayPane({
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [onClose]);
+  // A modal layer for as long as the pane covers the window: a drawer opened beneath it must not take its Tab or Escape.
+  useEffect(() => registerFocusLayer(layer.current), []);
   // Return focus to the element that opened the pane (e.g. the Files toggle).
   useEffect(
     () => () => {

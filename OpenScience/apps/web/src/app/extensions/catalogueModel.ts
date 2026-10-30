@@ -1,3 +1,4 @@
+import { geoSkillDisplayTitle, skillDisplay } from "@evimed/domain/skill-display";
 import type { ExtensionInstallation, ExtensionSelection } from "@/lib/extensionsClient";
 import type { PlatformSkill, SkillActivation } from "@/lib/skillLibraryClient";
 
@@ -101,4 +102,14 @@ export async function allInstalledExtensions(read: (cursor?: string | null) => P
     cursor = result.nextCursor; cursors.add(cursor);
   }
   throw new Error("插件列表未能完整读取，请重试。");
+}
+
+/** Owned task names come from the shared catalogue; author-supplied third-party names stay intact. */
+export function skillDisplayName(skill: Pick<PlatformSkill, "id" | "title">): string {
+  const title = skill.title?.trim() || skill.id;
+  if (/[㐀-鿿]/u.test(title)) return title;
+  const [origin, name] = skill.id.split(":");
+  if (origin === "geo-private") return geoSkillDisplayTitle(name, title);
+  if (["core", "office", "curated", "evimed"].includes(origin)) return skillDisplay(name)?.title ?? title;
+  return title;
 }

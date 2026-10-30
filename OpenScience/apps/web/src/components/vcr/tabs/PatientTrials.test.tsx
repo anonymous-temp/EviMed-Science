@@ -130,7 +130,7 @@ describe("给患者找试验 — a patient with trials", () => {
     expect(trialRow("prt_2")).toHaveAttribute("data-vcr-trial-kind", "protocol");
   });
 
-  it("opens the first trial's criterion table by default: the trial's words, the state, the patient's own evidence", async () => {
+  it("opens the first trial's criteria and state without inventing a patient quotation for source-less facts", async () => {
     await openDirection();
     await choose("P-0192");
     await screen.findByRole("heading", { name: "P-0192 的试验" });
@@ -138,7 +138,7 @@ describe("给患者找试验 — a patient with trials", () => {
     expect(screen.getByRole("table", { name: /NCT05000001 的逐条判定/ })).toBeInTheDocument();
     expect(criterionRow("I1")).toHaveTextContent("Age >= 18 years");
     expect(criterionRow("I1")).toHaveAttribute("data-vcr-criterion-state", "satisfied");
-    expect(criterionRow("I1")).toHaveTextContent("age = 63 year");
+    expect(criterionRow("I1")).not.toHaveTextContent("age = 63 year");
     expect(criterionRow("E1")).toHaveAttribute("data-vcr-criterion-state", "satisfied");
     expect(screen.getByText("符合：全部适用的入排条件都满足")).toBeInTheDocument();
   });

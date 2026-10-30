@@ -28,7 +28,7 @@
  *
  *   node evals/memory-write-quality/run_native_eval.mjs --offline
  *   node evals/memory-write-quality/run_native_eval.mjs --url http://127.0.0.1:19330 --key-file <root key file> \
- *     [--account evimed] [--only g04,credentials] [--repeat 3] [--out evals/memory-write-quality/results/native-<date>.json]
+ *     [--account evimed] [--only g04,credentials] [--repeat 3] [--out evals/memory-write-quality/results/native-<date>.json] [--no-project-line]
  *
  * `--repeat N` runs every case N times, each as its own throwaway account, and reports the passes of each: one reworded sentence
  * moved a class from 0 of 8 to 8 of 8 in the 2026-10-12 replay, so a single sample misleads. A case with a `replay.seed` first
@@ -60,6 +60,12 @@ const PLATFORM_TAG = "<evimed-geo-run>geo_eval_run</evimed-geo-run>";
 
 /** The checks this runner decides: the corpus's whole vocabulary. */
 const FIELD_EXPECTATIONS = GENERAL_EXPECT_FIELDS;
+
+/** Where each kind's files live under `memories/`, for `onlyKinds` (a correction lives under the preferences, so a preference allows it). */
+const KIND_PLACES = Object.freeze({
+  profile: ["profile.md"], preference: ["preferences/"], correction: ["preferences/corrections/", "corrections/"], entity: ["entities/"],
+  project_fact: ["projects/", "project_facts/"], decision: ["decisions/"], follow_up: ["follow_ups/"], recent_work: ["recent_work/"],
+});
 
 /** What a project-card key looks like in the card's text. */
 export const CARD_PATTERNS = Object.freeze(/** @type {Record<string, RegExp>} */ ({
@@ -156,6 +162,17 @@ export function scoreNative(item, allFiles, operations, seedFiles = null) {
   for (const [kind, least] of Object.entries(expect.requireKinds ?? {})) if ((counts[kind] ?? 0) < Number(least)) failures.push(`${kind} ${counts[kind] ?? 0} < ${least}`);
   for (const needle of expect.requireTextContains ?? []) if (!text.includes(needle)) failures.push(`lacks "${needle}"`);
   if (expect.atMostRecords !== undefined && operations > expect.atMostRecords) failures.push(`${operations} memory operations > ${expect.atMostRecords}`);
+  // What a project's card must not carry, read in the card alone (a task line of 「最近在做」 names the task in the person's words).
+  const cardText = Object.entries(files).filter(([rel]) => rel.startsWith("projects/")).map(([, value]) => body(value)).join("\n");
+  for (const needle of expect.cardNoTextContains ?? []) if (cardText.includes(needle)) failures.push(`the card carries "${needle}"`);
+  // Only these kinds may be written at all (2026-10-27: inside a named project a task line of 「最近在做」 is the feature, and nothing else is).
+  if (Array.isArray(expect.onlyKinds)) {
+    for (const rel of Object.keys(files)) {
+      if (!(/** @type {string[]} */ (expect.onlyKinds)).some((kind) => (KIND_PLACES[/** @type {keyof typeof KIND_PLACES} */ (kind)] ?? []).some((place) => rel === place || rel.startsWith(place)))) {
+        failures.push(`wrote ${rel}, which is none of ${expect.onlyKinds.join("/")}`);
+      }
+    }
+  }
   if (expect.atLeastRecords !== undefined && operations < expect.atLeastRecords) failures.push(`${operations} memory operations < ${expect.atLeastRecords}`);
   for (const key of expect.requireKeys ?? []) if (!CARD_PATTERNS[key]?.test(text)) failures.push(`the card lacks ${key}`);
   for (const key of expect.noKeys ?? []) if (CARD_PATTERNS[key]?.test(text)) failures.push(`the card carries ${key}, which this work does not have`);
@@ -198,13 +215,32 @@ export function offlineVerdicts(cases, { filterCapturedMessage, identifierShapes
   return problems;
 }
 
+/**
+ * What the projects a case is held in are called, as a person would have named them: production hands the engine the project's name
+ * (`projectContextLine`, 2026-10-27), and a case's `replay.projectId` is an id. A case may name its project itself (`replay.projectName`);
+ * the catch-all (`default`) has no name and its conversations get no line.
+ */
+export const CASE_PROJECT_NAMES = Object.freeze({
+  "orders-service": "订单服务重构", thesis: "硕士学位论文", p_review: "SGLT2 抑制剂英文综述", "geo-eval": "达格列净循证传播", "vcr-eval": "房颤卒中预防虚拟临床研究",
+  proj_af_rwe: "房颤抗凝真实世界研究", proj_noac_cohort: "NOAC 出血风险队列", proj_nsclc_rct: "非小细胞肺癌免疫治疗 RCT", proj_customs_thesis: "近代海关史论文",
+  proj_cup_launch: "保温杯新品上市", proj_charging_market: "充电桩市场分析", proj_ckd_sglt2_claims: "CKD 患者 SGLT2 医保数据库研究",
+  proj_payment_refactor: "支付服务重构", proj_csv_task: "门诊数据整理",
+});
+/** @param {any} item @returns {string | null} */
+export function caseProjectName(item) {
+  const id = item?.replay?.projectId;
+  if (!id || id === "default") return null;
+  return typeof item.replay.projectName === "string" ? item.replay.projectName : CASE_PROJECT_NAMES[/** @type {keyof typeof CASE_PROJECT_NAMES} */ (id)] ?? null;
+}
+
 /** @param {string[]} argv */
 export function parseArguments(argv) {
-  const options = { offline: false, keep: false, url: "", keyFile: "", account: "evimed", only: "", out: "", waitMs: 300_000, repeat: 1 };
+  const options = { offline: false, keep: false, url: "", keyFile: "", account: "evimed", only: "", out: "", waitMs: 300_000, repeat: 1, projectLine: true };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--offline") { options.offline = true; continue; }
     if (argument === "--keep") { options.keep = true; continue; }
+    if (argument === "--no-project-line") { options.projectLine = false; continue; }
     const field = { "--url": "url", "--key-file": "keyFile", "--account": "account", "--only": "only", "--out": "out", "--wait-ms": "waitMs", "--repeat": "repeat" }[argument];
     if (!field) throw new Error(`unknown argument ${argument}`);
     const value = argv[index + 1];
@@ -223,7 +259,7 @@ async function main() {
     .filter((item) => !options.only || options.only.split(",").some((part) => item.id.includes(part)));
   const issues = cases.flatMap(nativeCaseIssues);
   if (issues.length) throw new Error(`the corpus has ${issues.length} shape problem(s):\n${issues.join("\n")}`);
-  const [{ OpenVikingClient }, { OpenVikingSessions, observationFile }, { filterCapturedMessage }, { identifierShapesIn, maskIdentifiers }, { NativeMemoryObservations }, { repeatedChoiceMessage }] = await Promise.all([
+  const [{ OpenVikingClient }, { OpenVikingSessions, observationFile }, { filterCapturedMessage }, { identifierShapesIn, maskIdentifiers, projectContextLine }, { NativeMemoryObservations }, { repeatedChoiceMessage }] = await Promise.all([
     import(pathToFileURL(path.join(serverSrc, "openVikingClient.mjs")).href),
     import(pathToFileURL(path.join(serverSrc, "openVikingSessions.mjs")).href),
     import(pathToFileURL(path.join(serverSrc, "memoryGateway.mjs")).href),
@@ -333,15 +369,20 @@ async function main() {
     const suffix = `${variant}${options.repeat > 1 ? `#${sample + 1}` : ""}`;
     const userId = `evmq-${run}-${createHash("sha256").update(`${item.id}${suffix}`).digest("hex").slice(0, 8)}`;
     const incoming = item.replay.messages.map((message) => ({ role: message.role, content: variant === "tagged" ? `${message.text}\n${PLATFORM_TAG}` : message.text }));
-    const { forwarded, dropped } = throughTheDoor(incoming);
-    const row = /** @type {Record<string, any>} */ ({ id: suffix ? `${item.id}:${suffix}` : item.id, case: item.id, class: item.class, decidable: item.decidable !== false, messages: incoming.length, forwarded: forwarded.length, dropped });
+    // A conversation held in a named project begins with the platform's line naming it, as the memory gateway writes it (`projectContextLine`);
+    // it is the gateway's own write, not a captured message, so it does not pass the door.
+    const line = options.projectLine ? projectContextLine(caseProjectName(item)) : null;
+    const { forwarded: captured, dropped } = throughTheDoor(incoming);
+    const forwarded = line ? [{ role: "assistant", parts: [{ type: "text", text: line }] }, ...captured] : captured;
+    const row = /** @type {Record<string, any>} */ ({ id: suffix ? `${item.id}:${suffix}` : item.id, case: item.id, class: item.class, decidable: item.decidable !== false, messages: incoming.length, forwarded: forwarded.length, dropped, projectLine: Boolean(line) });
     try {
       await sessions.register(userId).catch(() => false);
       /** The files the seed conversation left, for a case that starts from a memory. @type {Record<string, string> | null} */
       let seedFiles = null;
       if (item.replay.seed?.messages?.length) {
         // A case that starts from a memory has the engine write it: a conversation of its own, through the same door.
-        await countRepeats(userId, await converse(userId, `evmq-${run}-${item.id}${suffix}-seed`, throughTheDoor(item.replay.seed.messages.map((message) => ({ role: message.role, content: message.text }))).forwarded));
+        const seeded = throughTheDoor(item.replay.seed.messages.map((message) => ({ role: message.role, content: message.text }))).forwarded;
+        await countRepeats(userId, await converse(userId, `evmq-${run}-${item.id}${suffix}-seed`, line ? [{ role: "assistant", parts: [{ type: "text", text: line }] }, ...seeded] : seeded));
         seedFiles = await readMemoryFiles(userId);
       } else if (item.replay.existingKeys?.length) {
         // A case that restates a fact the account already holds stores it first, through a conversation of its own.

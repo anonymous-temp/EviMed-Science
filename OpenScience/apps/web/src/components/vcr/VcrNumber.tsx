@@ -1,3 +1,4 @@
+import { measurement } from "@/lib/measurement";
 import { useState, type ReactNode } from "react";
 import { Link, useInRouterContext, useParams } from "react-router";
 import { cn } from "@/lib/cn";
@@ -158,22 +159,14 @@ export function VcrStat({ label, value, note, lead = false, className }: {
   lead?: boolean;
   className?: string;
 }) {
-  const placeholder = isPlaceholder(value);
-  const mcse = mcseText(value.mcse);
   return (
     <StatTile
       label={label}
       lead={lead}
-      placeholder={placeholder}
       className={cn(value.stale && "opacity-disabled", className)}
       hint={valueSentence(value)}
-      value={<VcrNumber value={value} label={label}>{valueText(value)}</VcrNumber>}
-      unit={(
-        <span className="inline-flex items-center gap-1.5">
-          {value.unit}
-          {mcse && <span className="font-normal text-text-3">{mcse}</span>}
-        </span>
-      )}
+      reading={measurement(value.value, value.unit ?? "", valueSentence(value), null, value.text ?? value.reason ?? "不可估计")}
+      renderMeasured={() => <VcrNumber value={value} label={label}>{valueText(value)}{mcseText(value.mcse) && <span className="ml-1 text-caption font-normal text-text-3">{mcseText(value.mcse)}</span>}</VcrNumber>}
       note={(
         <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
           <SourceTag source={value.source} />
@@ -203,8 +196,7 @@ export function VcrWordStat({ label, word, note, source, className }: {
   return (
     <StatTile
       label={label}
-      placeholder
-      value={word}
+      reading={{ kind: "unmeasured", reason: word }}
       className={className}
       note={(
         <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">

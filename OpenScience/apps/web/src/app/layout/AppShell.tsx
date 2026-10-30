@@ -1,3 +1,4 @@
+import { UnsavedRouteGuard } from "./UnsavedRouteGuard";
 import { Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { Loader2, PanelLeft } from "lucide-react";
@@ -6,6 +7,7 @@ import { isChatPath } from "@/lib/runLocation";
 import { isMacPlatform } from "@/lib/platform";
 import { isEmbeddedShell } from "@/app/layout/embed";
 import { SessionFrameHost } from "@/app/layout/SessionFrameHost";
+import { isComposingKey } from "@/lib/compositionKeys";
 import { useRouteFocus } from "@/app/layout/routeFocus";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { IconButton } from "@/components/ui/IconButton";
@@ -49,7 +51,7 @@ export function AppShell() {
   // Where keyboard focus goes when the sidebar closes or opens, for the cases the DOM cannot tell afterwards: the scrim button and
   // the Escape key close it with focus on something that is gone or not in it, and a reader who opens it wants to be in it.
   const expandRef = useRef<HTMLButtonElement>(null);
-  const focusAfter = useRef<"expand" | "nav" | null>(null);
+  const focusAfter = useRef<"expand" | "nav" | "route" | null>(null);
   const drawerLayout = useDrawerLayout();
   // The sidebar over the content (below `lg`, open): the page behind it is not there to be reached.
   const drawerOpen = !embedded && drawerLayout && !sidebarCollapsed;
@@ -75,6 +77,17 @@ export function AppShell() {
     useUiStore.getState().settleSidebar();
   }, [drawerLayout]);
 
+  // Only a committed destination closes mobile navigation. Filter-only query changes
+  // keep it open; blocked transitions never change this pathname.
+  const acceptedPath = useRef(location.pathname);
+  useLayoutEffect(() => {
+    if (acceptedPath.current === location.pathname) return;
+    acceptedPath.current = location.pathname;
+    if (!drawerLayout) return;
+    focusAfter.current = "route";
+    setSidebarCollapsed(true);
+  }, [location.pathname, drawerLayout, setSidebarCollapsed]);
+
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip. An
   // embedded shell has no sidebar to toggle, and the key is the host's.
   useEffect(() => {
@@ -96,7 +109,7 @@ export function AppShell() {
   useEffect(() => {
     if (!drawerOpen) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.key !== "Escape" || event.defaultPrevented || isComposingKey(event)) return;
       focusAfter.current = "expand";
       setSidebarCollapsed(true);
     };
@@ -116,7 +129,7 @@ export function AppShell() {
     if (embedded) return;
     if (sidebarCollapsed) {
       const inSidebar = document.activeElement instanceof Element && document.activeElement.closest("[data-sidebar]") !== null;
-      if (wanted === "expand" || inSidebar) expandRef.current?.focus({ preventScroll: true });
+      if (wanted !== "route" && (wanted === "expand" || inSidebar)) expandRef.current?.focus({ preventScroll: true });
     } else if (wanted === "nav") {
       document.querySelector<HTMLElement>("[data-sidebar] nav a")?.focus({ preventScroll: true });
     }
@@ -156,7 +169,7 @@ export function AppShell() {
 
   // A new page's heading takes focus when the path changes (spec §5.3). Called here, above the early returns, because it is a hook;
   // it waits until there is a page to move focus into.
-  useRouteFocus(location.pathname, mainRef, authState === "authenticated");
+  useRouteFocus(location.pathname, mainRef, authState === "authenticated" && !drawerOpen);
 
   const isMac = isMacPlatform();
 
@@ -212,6 +225,7 @@ export function AppShell() {
         </>
       )}
       <main id="main" ref={mainRef} tabIndex={-1} inert={drawerOpen} className="flex min-w-0 flex-1 flex-col focus:outline-none">
+        <UnsavedRouteGuard />
         {!embedded && sidebarCollapsed && (
           <div className="flex h-12 shrink-0 items-center pl-2">
             {/* The chrome's 36 px icon button: below `lg` this is the only

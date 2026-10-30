@@ -477,8 +477,8 @@ test("the capability reads a pack through the tool's own path: the gateway, the 
   const study = { ...STUDY_A, name: "EV-301", dataTier: "T0", intendedUse: "exploratory", status: "active", steps: {}, budget: {}, outcomeSeal: {} };
   const service = new VcrService({ store: /** @type {any} */ ({}), config: { vcrEnabled: true, vcrAudience: "all" }, knowledge });
   const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" },
-    { assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_a" }) },
-    { vcr: /** @type {any} */ ({ service, store: { studyByControlProject: async () => study }, knowledge, jobs: null, orchestrator: null }) });
+    { boundedRuntimeScope:()=>({runId:"knowledge-dispatch"}),assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_a" }) },
+    { vcr: /** @type {any} */ ({ service, store: { studyByControlProject: async () => study,studyByRuntimeDispatch:async(userId,projectId,dispatchId)=>userId===study.userId && projectId===study.projectId && dispatchId==="knowledge-dispatch" ? study:null }, knowledge, jobs: null, orchestrator: null }) });
   /** @param {string} operation @param {any} body */
   const call = async (operation, body) => {
     const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url: `/internal/vcr/v1/${operation}`, headers: { authorization: "Bearer t" } });

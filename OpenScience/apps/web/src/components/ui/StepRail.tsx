@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Link, useNavigate } from "react-router";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import { useNarrow } from "@/lib/useMediaQuery";
 import { FilterChip } from "@/components/ui/FilterChips";
@@ -13,8 +13,8 @@ import { Tooltip } from "@/components/ui/Tooltip";
  * `ProgressRail` is the same program drawn as a card with a line under each step; it lived on one tab (「总览」) and scrolled
  * away, so on the other six the person could not see which step the program was on — or that switching a tab made the rail
  * disappear and the page jump. `StepRail` is its compact sibling and uses its marks: a dot and a name per step, the state as a
- * glyph, as a word in a tooltip and for a screen reader, and **one height whatever the states** — what a step produced
- * (`summary`) is in the tooltip, never a second line.
+ * glyph, as a word in a tooltip and for a screen reader. What a step produced (`summary`) is in the tooltip.
+ * A visible rail with measured overflow adds a named all-steps menu and gives trailing status its own wrapping row.
  *
  *  - A step's click goes to its home: `href` (a link) or `onSelect`.
  *  - `activeSteps` underlines the steps the open tab is built from, in the accent (the geo's 「行动」 tab is made of the content
@@ -55,17 +55,64 @@ export interface StepRailProps {
   showState?: boolean;
 }
 
+/**
+ * Component: StepRail; owner: H; rules: DS21, DS22.3/AT53, DESIGN.md component adoption.
+ * Anatomy: Named ordered step navigation with marks, state words and optional trailing fact.
+ * Variants: visible/showState; default narrow Menu fallback.
+ * States: activeSteps denotes current scope independently of supplied state.
+ * Hit area: 40px row or 56px with state; shared menu chip on narrow view.
+ * Keyboard: Native links/buttons; narrow Menu owns arrows/Escape.
+ * Long content: Expanded rail scrolls horizontally; overflow status wraps in its own row; Tooltip exposes summary.
+ * Theme: Success/info/warn marks; accent current-step rule.
+ * Responsive: Narrow default uses Menu; visible rails disclose all steps only on measured overflow, scroll current step into view and give trailing status its own wrapping row.
+ * Verification: StepRail.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function StepRail({ label, steps, activeSteps = [], trailing, className, visible = false, showState = false }: StepRailProps) {
   const narrow = useNarrow();
-  const navigate = useNavigate();
+  const list = useRef<HTMLOListElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const failedAt = useRef(0);
+  const previousWidth = useRef(0);
+  const previousActive = useRef('');
+  const activeKey = JSON.stringify(activeSteps);
+  const stepKey = JSON.stringify(steps.map(step => [step.id, step.label, step.stateLabel, showState ? step.state : null]));
+  const lastSteps = useRef(stepKey);
+  useLayoutEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const measure = () => {
+      const parentWidth = element.parentElement?.clientWidth ?? element.clientWidth;
+      if (lastSteps.current !== stepKey) { lastSteps.current = stepKey; failedAt.current = 0; }
+      // The disclosure moves status onto another row and changes OL width. Only parent growth retries the inline layout.
+      if (!overflow && element.scrollWidth > element.clientWidth + 1) { failedAt.current = parentWidth; setOverflow(true); }
+      else if (overflow && parentWidth > failedAt.current + 8) setOverflow(false);
+      const alignCurrent = previousActive.current !== activeKey || previousWidth.current === 0 || element.clientWidth < previousWidth.current;
+      previousActive.current = activeKey;
+      previousWidth.current = element.clientWidth;
+      const active = element.querySelector<HTMLElement>('[aria-current="step"]');
+      if (active && alignCurrent) {
+        const left = active.offsetLeft - element.offsetLeft;
+        if (left < element.scrollLeft) element.scrollLeft = left;
+        else if (left + active.offsetWidth > element.scrollLeft + element.clientWidth) element.scrollLeft = left + active.offsetWidth - element.clientWidth;
+      }
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    if (element.parentElement) observer?.observe(element.parentElement);
+    if (!observer) window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); if (!observer) window.removeEventListener('resize', measure); };
+  }, [stepKey, activeKey, narrow, visible, overflow]);
+  const entries: MenuEntry[] = steps.map(step => ({
+    label: `${step.label} · ${step.stateLabel ?? RAIL_STATE_WORDS[step.state]}`,
+    checked: activeSteps.includes(step.id),
+    to: step.href,
+    disabled: !step.href && !step.onSelect,
+    onSelect: () => step.onSelect?.(),
+  }));
   const done = steps.filter((step) => step.state === "done").length;
 
   if (narrow && !visible) {
-    const entries: MenuEntry[] = steps.map((step) => ({
-      label: `${step.label} · ${(step.stateLabel ?? RAIL_STATE_WORDS[step.state])}`,
-      checked: activeSteps.includes(step.id),
-      onSelect: () => (step.onSelect ? step.onSelect() : step.href ? navigate(step.href) : undefined),
-    }));
     return (
       <nav data-step-rail="" aria-label={label} className={cn("flex h-10 items-center gap-2", className)}>
         <Menu label={label} align="start" items={entries}>
@@ -78,8 +125,8 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className, 
   }
 
   return (
-    <nav data-step-rail="" aria-label={label} className={cn("flex min-w-0 items-stretch gap-4", showState ? "h-14" : "h-10", className)}>
-      <ol className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto">
+    <nav data-step-rail="" aria-label={label} className={cn("flex min-w-0 items-stretch gap-x-4", overflow ? "flex-wrap" : showState ? "h-14" : "h-10", className)}>
+      <ol ref={list} className={cn("flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto", showState ? "min-h-14" : "min-h-10")}>
         {steps.map((step) => {
           const active = activeSteps.includes(step.id);
           const body = (
@@ -113,7 +160,8 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className, 
           );
         })}
       </ol>
-      {trailing && <span className="min-w-0 shrink self-center truncate text-caption text-text-3">{trailing}</span>}
+      {overflow && <Menu label="全部步骤" align="end" items={entries}><FilterChip menu className="self-center">全部步骤</FilterChip></Menu>}
+      {trailing && <span className={cn("min-w-0 self-center text-caption text-text-3", overflow ? "w-full py-1 whitespace-normal break-words" : "shrink truncate")}>{trailing}</span>}
     </nav>
   );
 }

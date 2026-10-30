@@ -8,7 +8,7 @@ describe("capability icons", () => {
   const listed = Object.keys(CAPABILITY_DISPLAY).filter(capabilityListed);
 
   it("gives every capability 科研工具 lists a mark of its own, and none is the fallback", () => {
-    expect(listed.length).toBe(16);
+    expect(listed.length).toBe(12);
     const fallback = capabilityIcon("no-such-capability");
     for (const id of listed) expect(capabilityIcon(id), id).not.toBe(fallback);
   });

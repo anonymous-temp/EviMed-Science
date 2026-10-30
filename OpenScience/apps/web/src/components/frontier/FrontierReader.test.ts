@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insightParts, isPost, publishedLabel, readerOutline, readerParagraphs, readerTextKind, shownText } from "./FrontierReader";
+import { isPost, publishedLabel, readerOutline, readerParagraphs, readerTextKind, shownText } from "./FrontierReader";
 
 describe("when the reader says it was published", () => {
   // The production case (item 36760, 2026-10-26): posted 2026-10-25 19:00 Beijing, which is 11:00Z.
@@ -70,23 +70,6 @@ describe("the reader's paragraphs", () => {
     const forty = "研".repeat(40);
     expect(readerParagraphs(`${forty}：正文。`, { abstract: true })[0]).toMatchObject({ runIn: `${forty}：` });
     expect(readerParagraphs(`${forty}研：正文。`, { abstract: true })[0]).toMatchObject({ runIn: null });
-  });
-});
-
-describe("the 解读's citations", () => {
-  const refs = [
-    { n: 1, publicId: "item-a", title: "第一篇", source: "NEJM", at: null },
-    { n: 2, publicId: "item-b", title: "第二篇", source: "FDA", at: null },
-  ];
-
-  it("turns each [n] that names a ref into that ref, and leaves the words between them as they are", () => {
-    expect(insightParts("方向一致[1]，已受理[2]。", refs)).toEqual(["方向一致", refs[0], "，已受理", refs[1], "。"]);
-    expect(insightParts("[2]开头，[1][2]相连", refs)).toEqual([refs[1], "开头，", refs[0], refs[1], "相连"]);
-  });
-
-  it("keeps an [n] that names no ref as plain text, never a dead link", () => {
-    expect(insightParts("另见[3]，或 [x]、［1］。", refs)).toEqual(["另见[3]，或 [x]、［1］。"]);
-    expect(insightParts("没有引用。", [])).toEqual(["没有引用。"]);
   });
 });
 

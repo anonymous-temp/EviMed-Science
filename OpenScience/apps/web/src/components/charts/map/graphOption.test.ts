@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
 import { LAYOUT_HEIGHT, LAYOUT_WIDTH, layoutGraph, unitHash } from "./layout";
 import { TEST_PALETTE } from "./palette";
-import { LABELS_PER_HUB, chainOption, edgeTooltip, edgeWords, fittedBox, graphOption, isHideableEdge, labelPosition, symbolOf, tooltipOf } from "./graphOption";
+import { LABELS_PER_HUB, edgeTooltip, edgeWords, fittedBox, graphOption, isHideableEdge, labelPosition, symbolOf, tooltipOf } from "./graphOption";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, weight: 0.4, state: "current", ...over });
 const you: MapNode = { id: "you:account", type: "you", label: "你", state: "current" };
@@ -234,26 +234,6 @@ describe("what the tooltip says, escaped", () => {
     const html = tooltipOf(memory("b", { state: "check", reason: "conflict", group: "决定", at: "2026-09-20T00:00:00.000Z" }));
     expect(html).toContain("和另一条说法不一致");
     expect(html).toContain("偏好 · 2026-09-20");
-  });
-});
-
-describe("the source chain", () => {
-  it("is the memory, what it rests on with the state a check found, and what it replaced", () => {
-    const option: any = chainOption({
-      root: memory("b", { state: "check" }),
-      rests: [
-        { node: { id: "reference:doi:10.1/x", type: "reference", subtype: "doi", label: "10.1/x", state: "current" }, state: "retracted" },
-        { node: { id: "document:src_1", type: "document", label: "GOLD", group: "指南", state: "current" }, state: "current" },
-      ],
-      replaced: [memory("old", { state: "replaced" })], palette: TEST_PALETTE,
-    });
-    const root = option.series[0].data[0];
-    expect(root.children.map((child: any) => [child.id, child.value])).toEqual([
-      ["reference:doi:10.1/x", "论文 · 已撤回"], ["document:src_1", "资料"], ["memory:old", "偏好 · 曾经如此"],
-    ]);
-    expect(root.children[0].itemStyle.color).toBe("#amber");
-    expect(root.children[2].itemStyle.color).toBe("#grey");
-    expect(option.series[0].orient).toBe("LR");
   });
 });
 

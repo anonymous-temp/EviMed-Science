@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
-import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
+import { identifierShapesIn, maskIdentifiers, projectContextLine } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates } from "./nativeMemoryMetrics.mjs";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
@@ -353,14 +353,17 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
-  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {} }) {
+  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
+    settleExtractionsMs = 20_000 }) {
     this.sessions = sessions;
+    /** How long an account deletion waits for the account's running extractions before it is refused as in progress. */
+    this.settleExtractionsMs = settleExtractionsMs;
     this.overlay = overlay;
     this.memoryContexts = memoryContexts;
     this.now = now;
@@ -1449,15 +1452,19 @@ export class NativeMemoryStore {
    * 「记住这一条」 from the page: the person's words go to the engine the way a conversation's do — one session, one message,
    * a commit — so what is written has its type, its tags and its place among the memories the engine keeps updating. It
    * appears when the engine has written it (about twelve seconds); until then the page shows it as pending.
-   * @param {string} userId @param {{ text: string, projectId?: string | null }} input
+   * @param {string} userId @param {{ text: string, projectId?: string | null, projectName?: string | null }} input
    */
-  async remember(userId, { text, projectId = null }) {
+  async remember(userId, { text, projectId = null, projectName = null }) {
     const words = String(text ?? "").trim();
     if (!words || words.length > 2_000) throw new HttpError(400, "memory_payload_invalid", "What to remember must be 1 to 2000 characters.");
     if (identifierShapesIn(words).length) throw new HttpError(400, "memory_content_refused", "A memory cannot carry a credential or a personal identifier.");
     // A shared GEO project's page writes into the project's own namespace (`#projectContext`), the account's page into the account's.
+    const context = await this.#projectContext(userId, projectId);
+    // Remembered from a named project's page in the account's own namespace: the engine is told which project, as a conversation of it is
+    // (`projectContextLine`), so 「这个项目…」 goes on that project's card.
+    const line = context.kind !== 'geo-project' && projectId && projectId !== "default" ? projectContextLine(projectName) : null;
     const commit = await this.#submitWords(userId, { content: `请记住：${maskIdentifiers(words)}`, projectId, origin: "page", prefix: "evimed-page-", pendingText: words,
-      context: await this.#projectContext(userId, projectId) });
+      context, projectLine: line });
     return { pending: { id: commit.archiveUri, text: words, at: commit.createdAt, state: "pending" } };
   }
 
@@ -1500,9 +1507,9 @@ export class NativeMemoryStore {
    * One message to the engine in a session of its own, and its commit entered in the ledger: the one way a memory is written from
    * outside a conversation (the page, an import, a promotion), so the engine's own templates apply to all of them.
    * `context` is the namespace written to: the account's own unless the page names a shared GEO project (only the page's write can).
-   * @param {string} userId @param {{ content: string, projectId: string | null, origin: "page" | "import" | "promotion", prefix: string, pendingText?: string | null, context?: any }} write
+   * @param {string} userId @param {{ content: string, projectId: string | null, origin: "page" | "import" | "promotion", prefix: string, pendingText?: string | null, context?: any, projectLine?: string | null }} write
    */
-  async #submitWords(userId, { content, projectId, origin, prefix, pendingText = null, context = this.#personalContext(userId) }) {
+  async #submitWords(userId, { content, projectId, origin, prefix, pendingText = null, context = this.#personalContext(userId), projectLine = null }) {
     this.#assertConfigured();
     this.#touch(userId);
     if (context.kind === 'geo-project' && origin !== "page") throw new HttpError(403, 'memory_scope_denied', 'Only the page writes into a project memory namespace.');
@@ -1514,6 +1521,7 @@ export class NativeMemoryStore {
         await this.memoryContexts.noteInternal(context, session, { kind: 'page', operationRef: session });
       } else await sessions.register(userId).catch(() => false);
       await sessions.createSession(userId, session, { timeoutMs: sessions.timeoutMs });
+      if (projectLine) await sessions.addMessage(userId, session, { role: "assistant", parts: [{ type: "text", text: projectLine }] });
       await sessions.addMessage(userId, session, { role: "user", parts: [{ type: "text", text: content }] });
     });
     const answer = await this.#engine(() => sessions.commit(userId, session));
@@ -1658,6 +1666,7 @@ export class NativeMemoryStore {
     this.#assertConfigured();
     this.#touch(userId);
     const views = await this.#contexts(userId);
+    await this.#settleExtractions(userId, views);
     let deleted = false;
     for (const context of views) {
       if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
@@ -1668,6 +1677,31 @@ export class NativeMemoryStore {
     await this.overlay.purgeUser(userId);
     await this.overlay.forgetAccount(userId);
     return { deleted, pending: false };
+  }
+
+  /**
+   * No engine deletion is asked while an extraction of the account still runs. OpenViking's user deletion waits for the user's
+   * tasks and fails when one outlives that wait; an extraction that met the deletion's fence never finished (v0.5.1.1), so the
+   * deletion failed and every retry waited on the same task — three throwaway accounts stayed undeletable on 2026-10-27 until
+   * the engine was restarted. The ledger's pending commits name their tasks; past `waitMs` the deletion is refused as still in
+   * progress (the same 503 an unfinished engine deletion gives), to be asked again.
+   * @param {string} userId @param {any[]} views
+   */
+  async #settleExtractions(userId, views, { waitMs = this.settleExtractionsMs, pollMs = 500 } = {}) {
+    if (typeof this.overlay?.openCommits !== 'function') return;
+    const open = (await this.overlay.openCommits({ userId, limit: 100 })).filter((commit) => commit.state === 'pending' && commit.taskId);
+    if (!open.length) return;
+    const context = views.find((view) => view.kind === 'owned') ?? views[0];
+    if (typeof context?.sessions?.task !== 'function') return;
+    const deadline = Date.now() + waitMs;
+    for (const commit of open) {
+      for (;;) {
+        const task = await context.sessions.task(userId, commit.taskId).catch(() => null);
+        if (!task || !['pending', 'running'].includes(String(task.status ?? '').toLowerCase())) break;
+        if (Date.now() >= deadline) throw new HttpError(503, 'memory_engine_unavailable', 'Memory is still being written. Retry the deletion shortly.');
+        await new Promise((resolve) => { setTimeout(resolve, pollMs); });
+      }
+    }
   }
 
   /** The account's memories as the engine's own pack, for the account export. @param {string} userId */

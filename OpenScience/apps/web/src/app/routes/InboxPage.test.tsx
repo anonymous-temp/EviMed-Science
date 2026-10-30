@@ -1,3 +1,4 @@
+import { formatRelativeTime } from "@/lib/format";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -99,7 +100,8 @@ it("draws a notice as a row: unread dot, title, one line of what happened, and t
   const link = await screen.findByRole("link", { name: /中医药治疗儿童疳证的 Meta 分析检索 已完成/ });
   const row = link.closest("li")!;
   expect(within(row).getByText("报告和 6 个文件已在对话里")).toBeInTheDocument();
-  expect(within(row).getByText("昨天")).toBeInTheDocument();
+  expect(row.querySelector("time")).toHaveAttribute("datetime", yesterdayNoon);
+  expect(row.querySelector("time")).toHaveTextContent(formatRelativeTime(yesterdayNoon));
   expect(within(row).getByText("（未读）")).toHaveClass("sr-only");
   // No card around it and no buttons under it.
   expect(row.className).not.toMatch(/(^|\s)border(\s|$)/);
@@ -199,7 +201,7 @@ it("keeps a failed 「标为已读」 retryable and says why", async () => {
   vi.mocked(api.markInboxRead).mockRejectedValue(new Error("network"));
   open();
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
+  expect(await screen.findByRole("note")).toHaveTextContent("操作未完成，请重试。");
   expect(screen.getByRole("button", { name: "标为已读" })).toBeInTheDocument();
 });
 
@@ -342,6 +344,8 @@ it("empties the view with one sentence and no button", async () => {
   serve({ items: [], nextCursor: null });
   open();
   expect(await screen.findByText("收件箱为空")).toBeInTheDocument();
+  // An empty inbox says what arrives here: a new account opened at night has nothing yet and nothing to do about it.
+  expect(screen.getByText("定时任务的结果、长任务的进展、别人分享给你的记忆和每天的前沿精选会送到这里。")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   await waitFor(() => expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();
@@ -356,7 +360,7 @@ it("says so, with a retry, when the list cannot be read, rather than showing an 
     return { items: [review], nextCursor: null };
   });
   open();
-  expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
+  expect(await screen.findByRole("note")).toHaveTextContent("操作未完成，请重试。");
   expect(screen.queryByText("收件箱为空")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "重试" }));
   expect(await screen.findByText("审阅一个研究结论")).toBeInTheDocument();
@@ -372,7 +376,7 @@ it("discards a late page after changing filters and prevents duplicate page requ
   open();
   const more = await screen.findByRole("button", { name: "显示更多" });
   await userEvent.click(more);
-  expect(more).toBeDisabled();
+  expect(more).toHaveAttribute("aria-disabled", "true");
   await userEvent.click(more);
   // The page, the unread safety findings it pins, and the one next page — not two.
   expect(api.listInbox).toHaveBeenCalledTimes(3);
@@ -667,4 +671,53 @@ it("opens a terminal task failure in the task's own project", async () => {
   serve({ items: [{ ...review, id: "task-failure", title: "行业日报未完成", noticeType: "notify", projectId: "project-two", source: { type: "system", id: "autopilot-task:agenda-one" }, actions: [{ id: "open", label: "查看任务", style: "primary" }], readAt: at(1) }], nextCursor: null });
   open();
   expect(await screen.findByRole("link", { name: "行业日报未完成" })).toHaveAttribute("href", "/app/autopilot/agenda-one?project=project-two");
+});
+
+
+it("selects loaded IDs, excludes safety and retries only failed batch reads", async () => {
+ const first = runNotice({ id: "batch-a", title: "Batch A" }); const second = runNotice({ id: "batch-b", title: "Batch B" });
+ serve({ items: [first, second], nextCursor: null });
+ vi.mocked(api.markInboxRead).mockImplementation(async id => { if (id === "batch-b") throw new Error("offline"); return { ...first, readAt: at(0), revision: 2 }; });
+ open();
+ // Nothing is ticked: the toolbar has no selection group and the page draws no explanatory note for one.
+ const toolbar = await screen.findByRole("group", { name: "收件箱筛选" });
+ expect(screen.queryByRole("toolbar", { name: "批量标为已读" })).not.toBeInTheDocument();
+ expect(screen.queryByRole("button", { name: /所选标为已读|清除选择|全选已加载/ })).not.toBeInTheDocument();
+ expect(document.body).not.toHaveTextContent(/仅包括当前已加载|需要优先查看的消息请逐条打开/);
+ await userEvent.click(screen.getByRole("checkbox", { name: /选择：Batch A/ }));
+ // Ticking a row selects it; it neither opens the notice nor marks it read.
+ expect(api.markInboxRead).not.toHaveBeenCalled();
+ const selectionToolbar = within(toolbar).getByRole("toolbar", { name: "批量标为已读" });
+ expect(selectionToolbar).toHaveTextContent("已选 1 条");
+ // The one action is secondary: no second primary in the page.
+ const act = within(selectionToolbar).getByRole("button", { name: "所选标为已读" });
+ expect(act.className).not.toMatch(/bg-accent/);
+ await userEvent.click(within(selectionToolbar).getByRole("button", { name: "全选已加载的 2 条" }));
+ expect(selectionToolbar).toHaveTextContent("已选 2 条");
+ await userEvent.click(act);
+ expect(await screen.findByText(/失败 1 条：Batch B/)).toBeInTheDocument();
+ expect(screen.getByRole("checkbox", { name: /选择：Batch B/ })).toBeChecked();
+ vi.mocked(api.markInboxRead).mockClear();
+ await userEvent.click(screen.getByRole("button", { name: "所选标为已读" }));
+ await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledTimes(1)); expect(api.markInboxRead).toHaveBeenCalledWith("batch-b", 1);
+});
+
+it("lets go of a selection from the toolbar, and the group leaves with it", async () => {
+ serve({ items: [runNotice({ id: "batch-a", title: "Batch A" }), runNotice({ id: "batch-b", title: "Batch B" })], nextCursor: null });
+ open();
+ await userEvent.click(await screen.findByRole("checkbox", { name: /选择：Batch A/ }));
+ await userEvent.click(screen.getByRole("button", { name: "清除选择" }));
+ expect(screen.queryByRole("toolbar", { name: "批量标为已读" })).not.toBeInTheDocument();
+ expect(screen.getByRole("checkbox", { name: /选择：Batch A/ })).not.toBeChecked();
+});
+
+// Review R2 P1-1: the row's title is stretched over the whole row, and the selection box sat under it, so a click on the box opened
+// the notice. The leading slot is raised above the stretched title and lets through whatever is only a mark.
+it("keeps a row's selection box above the row's own target", async () => {
+ serve({ items: [runNotice({ id: "batch-a", title: "Batch A" })], nextCursor: null });
+ open();
+ const box = await screen.findByRole("checkbox", { name: /选择：Batch A/ });
+ const leading = box.closest("[data-row-leading]") as HTMLElement;
+ expect(leading).toHaveClass("relative", "z-sticky", "pointer-events-none");
+ expect(leading.className).toMatch(/label,\[role=switch\]/);
 });

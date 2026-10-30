@@ -115,3 +115,56 @@ export function frontierGenreDecision(item, modelGenre) {
   }
   return { genre: fallback, basis: 'code' }
 }
+
+/** @typedef {'deal' | 'financing' | 'people' | 'operations' | 'pipeline' | 'other'} FrontierIndustryKind */
+
+/**
+ * What a piece of 行业动态 is about (owner, 2026-10-26, after LifeSpark, which files business news as kinds of its own): a deal or a
+ * licence, a financing or a listing, a change of people or organisation, how a company is run, how a pipeline moved. The editor model
+ * names it for an item of genre `industry` and nothing else (language judgement); code checks the answer against this closed list and
+ * drops an unknown value instead of guessing one (`frontierIndustryKindDecision`). The order is the filter's.
+ */
+export const FRONTIER_INDUSTRY_KINDS = /** @type {readonly FrontierIndustryKind[]} */ (Object.freeze([
+  'deal',
+  'financing',
+  'people',
+  'operations',
+  'pipeline',
+  'other',
+]))
+
+export const FRONTIER_INDUSTRY_KIND_LABELS_ZH = /** @type {Readonly<Record<FrontierIndustryKind, string>>} */ (Object.freeze({
+  deal: '交易与授权',
+  financing: '融资与上市',
+  people: '人事与组织',
+  operations: '公司经营',
+  pipeline: '研发管线',
+  other: '其他',
+}))
+
+/** @param {unknown} value @returns {value is FrontierIndustryKind} */
+export function isFrontierIndustryKind(value) {
+  return typeof value === 'string' && /** @type {readonly string[]} */ (FRONTIER_INDUSTRY_KINDS).includes(value)
+}
+
+/**
+ * The kind an item is stored with: the model's when it names a known kind and the item's genre is `industry`, otherwise none. A kind
+ * belongs to the genre — an item that is not 行业动态 has none, and an unknown word is dropped, never mapped to the nearest kind.
+ *
+ * @param {unknown} genre @param {unknown} modelKind
+ * @returns {FrontierIndustryKind | null}
+ */
+export function frontierIndustryKindDecision(genre, modelKind) {
+  return genre === 'industry' && isFrontierIndustryKind(modelKind) ? modelKind : null
+}
+
+/**
+ * The one reading rule for an item's kind: `items.industry_kind` where written and the item is 行业动态, else none. Every reader
+ * (the list, the card, the reader page) calls this, so a kind written before the genre changed never shows on a paper.
+ *
+ * @param {{ genre?: string | null, industry_kind?: string | null, industryKind?: string | null } | null | undefined} row
+ * @returns {FrontierIndustryKind | null}
+ */
+export function frontierItemIndustryKind(row) {
+  return frontierIndustryKindDecision(row?.genre ?? null, row?.industry_kind ?? row?.industryKind ?? null)
+}

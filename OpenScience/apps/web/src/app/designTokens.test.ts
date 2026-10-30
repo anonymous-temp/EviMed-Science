@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   COLOR_ROLES,
+  colorRole,
   CONTAINERS,
   FONT_STACKS,
   RADII,
@@ -59,6 +60,7 @@ const ALLOWED: Record<string, string> = {
   "index.css": "the token file itself",
   "components/inspector/OfficePreview.tsx": "styles for a rendered Office document inside its own shadow root",
   "components/inspector/AnomalyMapView.tsx": "a data map drawn on a fixed dark scientific canvas",
+  "components/autopilot/ResearchObservatory.css": "主动科研's observatory and its queue: a fixed dark scene in both themes, its colours content (owner, 2026-10-28)",
   "components/inspector/FitsView.tsx": "an astronomy image well, fixed dark",
   "components/inspector/MeshView.tsx": "WebGL scene background handed to the renderer",
   "components/inspector/QCodeView.tsx": "a label colour handed to the circuit renderer",
@@ -150,16 +152,15 @@ describe("the token table has one source", () => {
   it("feeds the kernel frame the same values", () => {
     const frame = kernelThemeTokens();
     // The shell's accent and the conversation's send button are one colour, or
-    // the two halves of the window are visibly two products — and that colour
-    // is EviMed's live brand blue, because the platform has users and a logo.
-    expect(frame["--dsw-alias-button-info-fill"].light).toBe("#0a5dc1");
-    expect(frame["--dsw-alias-bg-base"]).toEqual({ light: "#fafbfc", dark: "#0f1318" });
+    // the two halves of the window would be visibly different products.
+    expect(frame["--dsw-alias-button-info-fill"].light).toBe(colorRole("accent", "light"));
+    expect(frame["--dsw-alias-bg-base"]).toEqual({ light: colorRole("bg", "light"), dark: colorRole("bg", "dark") });
     expect(frame["--dsw-font-family"].light).toBe(FONT_STACKS.sans);
     // The conversation is never set in the serif: the frame takes the sans
     // stack and the serif never crosses into it.
     expect(frame["--dsw-font-family"].light).not.toMatch(SERIF_FACES);
     // The two sidebars are the same grey.
-    expect(frame["--dsw-specific-sidebar-fill"].light).toBe("#f5f7f9");
+    expect(frame["--dsw-specific-sidebar-fill"].light).toBe(colorRole("surface-1", "light"));
     for (const [name, pair] of Object.entries(frame)) {
       expect(name, "a frame token must be a --dsw-* custom property").toMatch(/^--dsw-/);
       expect(typeof pair.light, `${name}.light`).toBe("string");
@@ -214,9 +215,10 @@ describe("the hand-written rules read the tokens (appendix E #1, #6, #12, #31)",
     expect(handWritten).toMatch(/svg\.lucide \{\n {2}stroke-width: var\(--icon-stroke\);/);
   });
 
-  it("draws focus as an outline, and gives a text field a transparent one forced colours can paint", () => {
+  it("draws accent control focus and independent ink field focus as outlines", () => {
     expect(handWritten).toMatch(/:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid var\(--focus\);\n {2}outline-offset: var\(--focus-ring-offset\);/);
-    expect(handWritten).toMatch(/\[contenteditable\]:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid transparent;/);
+    // A field's ring is inside its box: an outside one is cut off in an overflow container.
+    expect(handWritten).toMatch(/\[contenteditable\]:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid var\(--focus-input\);\n {2}outline-offset: calc\(var\(--focus-ring-width\) \* -1\);/);
     expect(handWritten).not.toMatch(/outline: none/);
   });
 

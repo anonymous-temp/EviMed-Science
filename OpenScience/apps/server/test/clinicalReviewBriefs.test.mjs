@@ -8,7 +8,7 @@ test("clinical review briefs are executable questions with identified replay sou
   const document = JSON.parse(await readFile(fixture, "utf8"));
   assert.equal(document.schemaVersion, "1.0.0");
   assert.equal(document.capability, "clinical-evidence-synthesis");
-  assert.equal(document.briefs.length, 3);
+  assert.equal(document.briefs.length, 4);
   for (const item of document.briefs) {
     assert.match(item.id, /^review-\d{3}-/);
     assert.ok(item.inputs.question.length >= 60, item.id + " needs a concrete clinical question");
@@ -41,3 +41,15 @@ test("the sparse-evidence brief keeps zero results separate from source failure"
   assert.ok(unavailable.reason);
 });
 
+
+test("the English outline brief reuses verified sources and asks for a named GRADE outline in English", async () => {
+  // 2026-10-28: a requested outline with a "Values and preferences" section was read as the reference list by the gate, and an English
+  // report's safety rules read nothing at all. The brief asks for exactly that shape; its sources are review-001's, verified 2026-09-06.
+  const { briefs } = JSON.parse(await readFile(fixture, "utf8"));
+  const item = briefs.find((entry) => entry.id === "review-004-english-grade-outline");
+  const first = briefs.find((entry) => entry.id === "review-001-empa-kidney-report-family");
+  assert.deepEqual(item.inputs.sources, first.inputs.sources, "no unverified identifier is introduced");
+  assert.match(item.inputs.question, /Values and preferences/);
+  assert.match(item.inputs.question, /in English/);
+  assert.ok(item.mustNotDo.some((entry) => /Chinese/.test(entry)));
+});

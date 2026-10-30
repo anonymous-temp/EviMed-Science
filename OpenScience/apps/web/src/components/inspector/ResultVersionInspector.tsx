@@ -16,6 +16,7 @@ import { formatClock, formatDay } from "@/lib/format";
 import { getWebProjectId } from "@/lib/apiClient";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { parseFailureMessage } from "@/lib/errorText";
+import { toast } from "@/lib/toast";
 import { assignResultAnchors, cancelResultReplay, directlyRelatedResults, exportResult, getResultReplay, getResultVersion, listRelatedResultVersions, listResultVersions, readResultBytes, replayEnvironmentLabel, replayErrorText, replayNumbersLabel, replayResult, requestResultRevision,
   resultActionFailure, resultEnvironmentDifference, resultTextDifference, resultValueDifference, resultGapLabel, saveResultBlob, selectionResultAnchor, type ResultAnchor, type ResultReplay, type ResultVersion } from "@/lib/resultProvenance";
 
@@ -47,7 +48,7 @@ export function ScopedResultVersionInspector({ path, runId, versionId, read }: {
   const filename = path.split('/').at(-1) ?? path;
   const download = () => saveResultBlob(value.bytes, filename);
   return <div className="space-y-4 p-4 text-ui text-text">
-    <Button variant="secondary" onClick={download}>下载此版本</Button>
+    {!(value.text !== null && /\.md$/i.test(path)) && <Button variant="secondary" onClick={download}>下载此版本</Button>}
     {value.text !== null ? /\.md$/i.test(path) ? <ReportReader path={path} text={value.text} layout="pane" immutableVersion={value.version} onDownload={download} sourceRunId={null} />
       : /\.(csv|tsv)$/i.test(path) ? <TablePreview table={parseTableFile(filename, value.text)} /> : <pre className="overflow-auto whitespace-pre-wrap text-ui">{value.text}</pre>
       : value.version.mimeType.startsWith('image/') && url ? <img src={url} alt={filename} className="max-w-full" />
@@ -304,7 +305,10 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
         {version.inputs.length > 0 && <ul className="space-y-2">{version.inputs.map((source) => <li key={`${source.id}:${source.versionId ?? source.digest}`}><SourceReference source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} /></li>)}</ul>}
         {version.machineValues.length > 0 && <MachineValues version={version} />}
       </Disclosure>}
-      {text !== null && /\.(md|markdown|txt)$/i.test(version.path) && <DocumentExportActions source={{ versionId: version.versionId }} groupLabel="导出此版本" />}
+      {text !== null && /\.(md|markdown|txt)$/i.test(version.path) && <DocumentExportActions source={{ versionId: version.versionId }} projectId={version.projectId} groupLabel={/\.md$/i.test(path) && !reading && !readError && blob ? "导出与打印" : "导出此版本"} extraItems={/\.md$/i.test(path) && !reading && !readError && blob ? [
+        { label: "下载 Markdown", onSelect: () => { void readResultBytes(version).then(bytes => saveResultBlob(bytes, filename)).catch(failure => toast.error(`无法下载 ${filename}：${parseFailureMessage(failure, "该文件")}`)); } },
+        { label: "打印 / 存为 PDF", onSelect: () => window.print() },
+      ] : []} />}
       <ResultCorrectionPanel key={`correction:${version.versionId}`} versionId={version.versionId} onOpen={(id) => void openSuccessor(id)} />
       <ResultLineagePanel key={`lineage:${version.versionId}`} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}
         onOpen={({ versionId, path: target, runId: targetRun }) => navigate(`/app/runs/${encodeURIComponent(targetRun ?? version.producer.runId ?? version.producer.sessionId ?? "result")}/files/${target.split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(versionId)}`)} />
@@ -315,7 +319,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       {comparison && <ResultComparison current={version} prior={comparison.prior} before={comparison.text} after={text} />}
       {anchor && anchor.versionId === version.versionId && <div className="space-y-2 rounded-card border border-border p-3"><blockquote className="max-h-32 overflow-auto whitespace-pre-wrap">“{anchor.selection.selectedText}”</blockquote><Button variant="secondary" loading={action === "revision"} disabled={action !== null} onClick={() => void continueRevision()}>在对话中修改所选内容</Button></div>}
       {!reading && !readError && blob && <div ref={previewRef}>
-        {text !== null ? /\.md$/i.test(path) ? <ReportReader path={path} text={text} layout="pane" immutableVersion={version} /> : /\.(csv|tsv)$/i.test(path) ? <TablePreview table={parseTableFile(filename, text)} /> : <pre className="overflow-auto whitespace-pre-wrap rounded-card bg-surface p-3 text-ui">{text}</pre>
+        {text !== null ? /\.md$/i.test(path) ? <ReportReader path={path} text={text} layout="pane" immutableVersion={version} externalExportActions /> : /\.(csv|tsv)$/i.test(path) ? <TablePreview table={parseTableFile(filename, text)} /> : <pre className="overflow-auto whitespace-pre-wrap rounded-card bg-surface p-3 text-ui">{text}</pre>
           : version.mimeType.startsWith("image/") && objectUrl ? <div className="space-y-2"><img src={objectUrl} alt={filename} className="max-w-full" /><Button variant="text" onClick={() => setAnchor({ versionId: version.versionId, digest: version.digest, selection: { kind: "figure", elementId: "figure-1", selectedText: filename } })}>选择此图修改</Button></div>
             : version.mimeType === "application/pdf" && objectUrl ? <iframe title="所选版本 PDF" src={objectUrl} className="h-96 w-full" /> : <p className="text-muted">此格式请下载所选版本后查看。</p>}
       </div>}

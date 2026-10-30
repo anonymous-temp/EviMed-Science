@@ -1,30 +1,36 @@
 import { SOURCE_KINDS } from "@evimed/domain";
-import type { KnowledgePageAddress, SourceKind, SourceScope } from "./sourceClient";
+import type { KnowledgePageAddress, SourceKind } from "./sourceClient";
 
 /**
- * Where the knowledge base is, said in its address (design reference §13.1, E-8 and E-19): the list's scope, type
- * filter and search, and — on a document's own page — the tab and the page of its original. A bookmark, a reload, the
- * back button and a link from somewhere else all land on the same place, and the way back from a document restores the
- * list as it was left.
+ * Where the knowledge base is, said in its address (design reference §13.1, E-8 and E-19): which of its four views it is at, the
+ * type filter and search, and — on a document — the tab and the page of its original. A bookmark, a reload, the back button and a
+ * link from somewhere else all land on the same place, and the way back from a document restores the list as it was left.
  *
  * ```
- * /app/files?scope=<project id | shared>&kind=<kind>&q=<text>
- * /app/files?scope=<project id>&view=outputs&q=<text>
- * /app/files?scope=<project id>&kind=wiki&view=graph&graph=<wiki | kg>&focus=<mark>&depth=<1-3>
- * /app/files/<source id>?<the same three>&tab=<content | original>&page=<n>
+ * /app/files?kind=<kind>&q=<text>                                                      the documents (every document, once each)
+ * /app/files?scope=<project id>&kind=wiki&q=<text>                                     a project's 知识页
+ * /app/files?scope=<project id>&kind=wiki&view=graph&graph=<wiki | kg>&focus=<mark>&depth=<1-3>   its 图谱
+ * /app/files?scope=<project id>&view=outputs&q=<text>                                  the files its conversations delivered
+ * /app/files/<source id>?<the same>&tab=<content | original>&page=<n>                  one document, in the pane beside the list
  * ```
  *
- * `scope` is absent for the project the tab is in. `view=outputs` is the list of files the project's conversations delivered
- * (「对话产出」), which stands in the row of type filters and is not a type: when it is there `kind` is not. The document page
- * carries the list's three so that its way back
- * (「知识库」) is the list it came from, and it reads the document by its own id, wherever that document lives.
+ * The documents are the account's, whatever project the sidebar is in: where a document takes effect is its own choice (「生效项目」),
+ * not a scope of the page, so the documents' address has no `scope`. The other three views are a project's — what the platform compiled
+ * from its documents, and what its conversations delivered — and `scope` names the project; without one they are the project the
+ * sidebar is in. `view=outputs` is not a type: when it is there `kind` is not. A document's address carries the list's own parameters so
+ * that its way back (「知识库」) is the list it came from, and it reads the document by its own id, wherever that document lives.
+ * An address from before the page had no picker may still say `scope=shared` or a project's id for the documents; both read as the
+ * documents, which is a superset of either.
  */
 
-/** The shared documents of the account, as a scope: no project's. */
+/** What an address from before the page listed every document said for the account's shared documents; it now reads as no scope. */
 export const SHARED_SCOPE = "shared";
 
+/** Where an account's personal materials are stored (the server's reserved id): a place, never a project to choose or to open. */
+export const LIBRARY_PROJECT_ID = "evimed-library";
+
 export interface KnowledgeListState {
-  /** `shared`, a project's id, or null for the project the tab is in. */
+  /** A project's id: whose pages, graph or delivered files the page shows. Null for the documents, which are the account's. */
   scope: string | null;
   kind: SourceKind | null;
   q: string;
@@ -49,10 +55,11 @@ const SOURCE_ID = /^[A-Za-z0-9_:.-]{1,200}$/;
 
 /** The list's state from an address, read as untrusted: a known type, a short scope, a bounded search. */
 export function readListState(params: URLSearchParams): KnowledgeListState {
-  const scope = (params.get("scope") ?? "").trim();
+  const named = (params.get("scope") ?? "").trim();
+  const scope = named === SHARED_SCOPE ? "" : named;
   const kind = params.get("kind") ?? "";
-  const outputs = params.get("view") === "outputs" && scope !== SHARED_SCOPE;
-  const graph = params.get("view") === "graph" && scope !== SHARED_SCOPE;
+  const outputs = params.get("view") === "outputs";
+  const graph = params.get("view") === "graph";
   const focus = (params.get("focus") ?? "").trim();
   const depth = Number(params.get("depth"));
   return {
@@ -65,6 +72,24 @@ export function readListState(params: URLSearchParams): KnowledgeListState {
     ...(graph && focus && focus.length <= MAX_SCOPE_CHARS ? { focus } : {}),
     ...(graph && focus && GRAPH_DEPTHS.some((entry) => entry === depth) ? { depth } : {}),
   };
+}
+
+/** The four views of the knowledge base: every document, and — of one project — the pages the platform compiled, their graph, and what its conversations delivered. */
+export type KnowledgeView = "documents" | "pages" | "graph" | "outputs";
+
+/** The view an address is at: `view=graph` is the graph, `view=outputs` the delivered files, the 知识页 type the pages, anything else the documents. */
+export function viewOf(state: Pick<KnowledgeListState, "kind" | "view">): KnowledgeView {
+  if (state.view === "graph") return "graph";
+  if (state.view === "outputs") return "outputs";
+  return state.kind === "wiki" ? "pages" : "documents";
+}
+
+/** A list state moved to a view: the documents are the account's and drop the project, the project views keep it; the search goes along. */
+export function stateForView(state: KnowledgeListState, view: KnowledgeView): KnowledgeListState {
+  if (view === "documents") return { scope: null, kind: null, q: state.q };
+  if (view === "pages") return { scope: state.scope, kind: "wiki", q: state.q };
+  if (view === "graph") return { scope: state.scope, kind: "wiki", q: state.q, view: "graph" };
+  return { scope: state.scope, kind: null, q: state.q, view: "outputs" };
 }
 
 /** The list's state as query parameters, in one order, with nothing in them that is the default. */
@@ -135,18 +160,6 @@ export function readerPath(sourceId: string, state: KnowledgeListState, view: Re
 export function legacySourceParam(params: URLSearchParams): string | null {
   const id = params.get("source");
   return id && SOURCE_ID.test(id) ? id : null;
-}
-
-/** The scope a list state names, with the tab's project standing for none. */
-export function scopeOf(state: KnowledgeListState, currentProjectId: string): SourceScope {
-  if (state.scope === SHARED_SCOPE) return { kind: "shared" };
-  return { kind: "project", projectId: state.scope ?? currentProjectId };
-}
-
-/** The `scope` parameter for a scope: nothing for the tab's own project. */
-export function scopeParam(scope: SourceScope, currentProjectId: string): string | null {
-  if (scope.kind === "shared") return SHARED_SCOPE;
-  return scope.projectId === currentProjectId ? null : scope.projectId;
 }
 
 /* ----------------------------------------------- a compiled file by place -- */

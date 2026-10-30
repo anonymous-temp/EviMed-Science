@@ -73,6 +73,10 @@ COPY capability-skills /opt/evimed/capability-skills
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
 COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-tokens
+# The full build copies the personal-skill validator into the socket tree (2026-10-02), and the line above this one wipes that
+# tree: every delta since dropped it, and the control plane's isolated skill validation (skillValidationController.mjs runs
+# this file in a disposable container of this image) failed until a hand hotfix put it back (2026-10-28).
+COPY scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
 
 RUN set -eux; \
   node /opt/evimed/socket/scripts/build-client.mjs; \
@@ -92,19 +96,24 @@ RUN set -eux; \
 # because it has to be installed at a pin and verified with the others. The
 # full build also generated `data/sider-4.1.sqlite` into this same tree from
 # pinned upstream bytes, a step that needs the network, so the tree is not
-# replaced whole — the sources are copied over it and the generated index
-# stays. A module deleted from the source would linger, so a deletion, a
-# changed `build_sider_cache.py` or a package outside the base's stack is a
-# full build.
+# replaced whole — the sources and the server's own data files (the top-level
+# `*.json` it reads at run time: `source_catalog.json`, `vcr_scenario_help.json`)
+# are copied over it and the generated index stays. A module deleted from the
+# source would linger, so a deletion or a package outside the base's stack is a
+# full build. A changed `build_sider_cache.py` is run here against the index the
+# base generated: it reuses an index whose record names the pinned inputs and
+# verifies it, without the network, and fails the delta when the index is not
+# the one its pins describe.
 # Importing every module is the acceptance: a source that needs something the
 # base does not have fails here, not in a run. It sees module-level imports
 # only: an import made inside a function (the record extractor imports `pypdf`
 # there, on purpose) passes it, so what keeps such a module honest is the
 # stack list above, not this loop.
-COPY runtime/mcp/evimed-research/*.py /opt/evimed/mcp/evimed-research/
+COPY runtime/mcp/evimed-research/*.py runtime/mcp/evimed-research/*.json /opt/evimed/mcp/evimed-research/
 RUN set -eux; \
   test -s /opt/evimed/mcp/evimed-research/data/sider-4.1.sqlite; \
   cd /opt/evimed/mcp/evimed-research; \
+  python3 build_sider_cache.py; \
   for module in *.py; do python3 -c "import sys; sys.path.insert(0, '.'); import ${module%.py}"; done; \
   chmod -R a-w /opt/evimed/mcp
 

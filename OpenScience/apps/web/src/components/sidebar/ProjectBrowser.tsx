@@ -1,10 +1,12 @@
+import { formatDateTime } from "@/lib/format";
+import { isComposingKey } from "@/lib/compositionKeys";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Radar, Search, UsersRound, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
 import { projectActivity, sortProjects, useProjectStore } from "@/lib/projects";
-import { PROJECT_NAME_MAX, labelOf, projectErrorMessage, projectLabels, projectNameProblem } from "@/lib/projectNames";
+import { PROJECT_NAME_MAX, projectLabelParts, labelOf, projectErrorMessage, projectLabels, projectNameProblem } from "@/lib/projectNames";
 import { chatPath, chatSessionId } from "@/lib/runLocation";
 import { compactTime, runMoment, runTitle } from "@/lib/runPresentation";
 import { conversationBegan, groupConversations, isConversationRun, type Conversation } from "@/lib/conversations";
@@ -504,7 +506,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
               placeholder="搜索对话"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key !== "Escape") return;
+                if (event.key !== "Escape" || isComposingKey(event)) return;
                 event.preventDefault();
                 closeSearch(true);
               }}
@@ -547,7 +549,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
             placeholder="项目名，回车创建"
             onChange={(event) => { setDraftName(event.target.value); setCreateError(null); }}
             onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
+              if (event.key !== "Escape" || isComposingKey(event)) return;
               event.preventDefault();
               setCreating(false);
               setDraftName("");
@@ -749,6 +751,7 @@ function ProjectGroup({
   const rows = runs?.status === "ready" ? groupConversations(runs.runs.filter((run) => taskTarget(run) != null)) : [];
   const shown = showAll ? rows : rows.slice(0, COLLAPSED_TASK_ROWS);
   const hidden = rows.length - Math.min(rows.length, COLLAPSED_TASK_ROWS);
+  const labelParts = projectLabelParts(label);
   const status = [current && !standIn && "当前项目", switching && "正在切换", running && "有对话正在运行"].filter(Boolean).join("，");
 
   return (
@@ -774,7 +777,7 @@ function ProjectGroup({
             disabled={renameBusy}
             onChange={(event) => { setDraft(event.target.value); setRenameError(null); }}
             onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
+              if (event.key !== "Escape" || isComposingKey(event)) return;
               event.preventDefault();
               endRename();
             }}
@@ -790,6 +793,7 @@ function ProjectGroup({
             <button
               ref={toggleRef}
               type="button"
+              aria-label={`${label}${status ? `（${status}）` : ""}`}
               aria-expanded={expanded}
               aria-controls={expanded ? listId : undefined}
               aria-busy={switching || undefined}
@@ -804,7 +808,7 @@ function ProjectGroup({
                 aria-hidden="true"
               />
               <Icon size={16} className={cn("shrink-0", current ? "text-accent" : "text-muted")} aria-hidden="true" />
-              <span className={cn("min-w-0 flex-1 truncate", current && "font-semibold")}>{label}</span>
+              <span className={cn("flex min-w-0 flex-1", current && "font-semibold")}><span className="truncate">{labelParts.prefix}</span>{labelParts.tail && <span className="shrink-0">{labelParts.tail}</span>}</span>
               {switching ? (
                 <Loader2 size={16} className="shrink-0 animate-spin text-muted motion-reduce:animate-none" aria-hidden="true" />
               ) : running && (
@@ -952,7 +956,7 @@ function TaskRow({
         <span className={cn("flex shrink-0 items-center gap-1.5", current && "group-hover/task:invisible group-focus-within/task:invisible")}>
           {unseen && <span className="h-1.5 w-1.5 rounded-full bg-accent" role="img" aria-label="未打开" />}
           <span className="max-w-24 truncate text-meta tabular-nums text-text-3">
-            {withProject ? projectName : compactTime(runMoment(run))}
+            {withProject ? projectName : <Tooltip content={runMoment(run) ? formatDateTime(runMoment(run)) : ""}><time dateTime={runMoment(run) ? new Date(runMoment(run)).toISOString() : undefined} aria-label={runMoment(run) ? formatDateTime(runMoment(run)) : undefined}>{compactTime(runMoment(run))}</time></Tooltip>}
           </span>
         </span>
       )}

@@ -124,3 +124,32 @@ test("library-only owners remain in the reconciliation pass", async () => {
   assert.deepEqual(seen, []);
   assert.deepEqual(libraries, ["library-only"]);
 });
+
+test("a table imported from the researcher's own database is never pushed to the engine, however the push is asked for, and one pushed earlier is withdrawn", async () => {
+  const f = fixture(2);
+  const queued = [];
+  const sync = new OpenVikingSourceSync({ config: { ovKnowledgeEnabled: true }, sources: f.sources, resources: f.resources, jobs: { async enqueue(...args) { queued.push(args); return {}; } } });
+  // The second document is a table imported from a database: its bytes sit in the databases folder's revision directory.
+  f.records.get(id(2)).payload.paths = [`knowledge-base/databases/.evimed-revisions/${sha256("table")}/public.cohort-1a2b3c4d.csv`];
+  f.records.get(id(2)).payload.logicalPath = "knowledge-base/databases/public.cohort-1a2b3c4d.csv";
+  const table = f.records.get(id(2)), uri = f.resources.sourceUri("owner", "project", id(2));
+  assert.equal(OpenVikingSourceSync.pushable(f.records.get(id(1))), true);
+  assert.equal(OpenVikingSourceSync.pushable(table), false, "readable, in a project and parsed, and still not for the engine");
+  assert.equal(OpenVikingSourceSync.pushable({ ...table, payload: { ...table.payload, paths: ["knowledge-base/cohort.csv"] } }), true, "the same record anywhere else is a document");
+  // A change event asks for nothing, and an ordinary document's does.
+  assert.equal(await sync.note("owner", "project", id(2)), null); assert.equal(queued.length, 0);
+  await sync.note("owner", "project", id(1)); assert.equal(queued.length, 1);
+  // A convergence leaves the engine without it; reconciliation does not expect it.
+  assert.equal((await sync.convergeSource("owner", id(2))).action, "absent");
+  assert.equal(f.engine.files.has(uri), false);
+  assert.equal((await sync.convergeSource("owner", id(1))).action, "pushed");
+  let report = await sync.reconcileProject("owner", "project", { apply: false });
+  assert.equal(report.expected, 1); assert.deepEqual(report.missing, []); assert.deepEqual(report.extra, []);
+  // A copy the engine already holds (from before the rule, or by hand) is withdrawn by the next convergence and by reconciliation.
+  await f.resources.pushSource("owner", uri, "rows of a table", { sourceId: id(2), sha: sha256("table"), docType: "dataset" });
+  assert.equal(f.engine.files.has(uri), true);
+  report = await sync.reconcileProject("owner", "project", { apply: false });
+  assert.deepEqual(report.extra, [id(2)]);
+  report = await sync.reconcileProject("owner", "project");
+  assert.equal(report.removed, 1); assert.equal(f.engine.files.has(uri), false);
+});

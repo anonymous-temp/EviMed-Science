@@ -76,10 +76,14 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   if (!page && error) return <LoadError message={error} onRetry={() => setRound(value => value + 1)} />;
   if (!page) return <p role="status" className="py-2 text-ui text-text-3">正在读取发现与处理</p>;
   if (!expanded && page.total === 0 && Object.values(page.counts).every(count => count === 0) && !error) return null;
+  if (!expanded && page.total === 0 && page.items.length === 0 && !error) return <div data-geo-signals-summary="" className="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <p className="text-caption text-text-3">{step ? "本阶段暂无待处理发现" : `当前没有待处理发现 · 已保留 ${Object.values(page.counts).reduce((sum, count) => sum + count, 0)} 条发现记录`}</p>
+    <Button variant="text" size="sm" onClick={onExpand}>{step ? "查看本阶段发现" : "查看全部发现"}</Button>
+  </div>;
   return <Section title="发现与处理" count={page.total} toolbar={<div className="flex items-center gap-2">
     {expanded && <Select aria-label="处理状态" value={filter} onChange={event => setFilter(event.target.value as GeoSignalState | '')}><option value="">全部状态</option>{Object.entries(GEO_SIGNAL_STATE_LABELS_ZH).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>}
     {expanded && <Button variant="text" size="sm" onClick={() => setRound(value => value + 1)}>刷新记录</Button>}
-    <Button variant="text" size="sm" onClick={onExpand}>{expanded ? '收起历史' : '查看全部发现'}</Button>
+    <Button variant="text" size="sm" onClick={onExpand}>{expanded ? '收起历史' : step ? '查看本阶段发现' : '查看全部发现'}</Button>
   </div>}>
     {error && <Note action={<Button variant="text" size="sm" onClick={() => setRound(value => value + 1)}>重试</Button>}>更新失败，保留已读记录。{error}</Note>}
     {page.items.length === 0 ? <p className="text-ui text-text-3">当前条件下没有记录。</p> : <List divided label="发现与处理记录">
@@ -146,7 +150,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
       if (!current()) return;
       const exactSession = previous ? attempt?.sessionId : latestProject.sessionId;
       if (previous && !exactSession) throw new Error("The original signal conversation is unavailable.");
-      const sessionId = await ensureGeoConversationSession(geoId, project.projectId, exactSession);
+      const sessionId = await ensureGeoConversationSession(geoId, project.projectId, exactSession, previous ? null : latestProject.sessionId);
       if (!current()) return;
       const body = { mode: 'signal' as const, signalId, expectedSignalRevision: signal.revision, sessionId, intent, focusRefs: focus,
         ...(previous ? { previousContextRef: previous } : {}) };

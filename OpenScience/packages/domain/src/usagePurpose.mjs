@@ -52,11 +52,10 @@
  *  internal `evimed-openviking` project and under the engine's own daily
  *  budget. What a compile used of its account's `knowledge` caps is counted
  *  separately, by the page service, from the tokens each task reports.
- *  `task-type` is the one small call that says what kind of work a finished
- *  conversation was (writing, a spreadsheet, code, …) so the memory map's
- *  「在做什么」 radar can be drawn for any account, not only for the ones that
- *  used a named capability: made on the researcher's own conversation, counted
- *  against their caps like a run title, and held by its own daily bound. */
+ *  `task-type` is no longer made by anything: it was the one small call that
+ *  said what kind of work a finished conversation was, for the memory map's
+ *  radar, which is gone. It stays in the vocabulary because the ledger's CHECK
+ *  is built from this list and the usage rows already written carry it. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',

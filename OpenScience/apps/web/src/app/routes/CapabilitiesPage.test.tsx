@@ -198,7 +198,8 @@ describe("CapabilitiesPage", () => {
   it("shows the list's shape while the catalogue loads", async () => {
     mocks.listWebResearchAgents.mockReturnValue(new Promise(() => {}));
     const { container } = renderPage();
-    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(container.querySelector(".animate-pulse")).not.toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).toBeInTheDocument());
     // The deployment's answer about billing lands meanwhile, and changes nothing here.
     await act(async () => {});
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
@@ -472,10 +473,10 @@ describe("CapabilitiesPage", () => {
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
     mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("later", { status: 503, code: "service_unavailable" }));
     renderPage();
-    expect(await screen.findByRole("alert")).toHaveTextContent("无法加载工具目录");
+    expect(await screen.findByRole("note")).toHaveTextContent("无法加载工具目录");
     mocks.listWebResearchAgents.mockResolvedValueOnce(agents);
     await userEvent.click(screen.getByRole("button", { name: /重试/ }));
-    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("note")).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
   });
 
@@ -708,18 +709,26 @@ describe("CapabilitiesPage", () => {
 });
 
 
-it("puts seven task entries before professional capabilities, searches methods, and keeps capability failure independent", async () => {
-  mocks.getVcrModels.mockResolvedValue({ models: [], methods: [
-    { id: "population", method: "population.scenario", name: "Reference population" }, { id: "binary", method: "patients.binary", name: "Binary simulator" }, { id: "continuous", method: "patients.continuous", name: "Continuous simulator" },
-    { id: "pool", method: "evidence.pool", name: "Evidence pooling" }, { id: "entropy", method: "comparator.entropy_balance", name: "Entropy balance" }, { id: "analytic", method: "design.analytic", name: "Analytic design" }, { id: "evalue", method: "comparator.evalue", name: "E-value" }, { id: "matching", method: "matching.evaluate", name: "Matching" },
-  ] });
+it("keeps virtual clinical research methods and links out of the research catalogue", async () => {
+  mocks.getVcrModels.mockReset();
+  mocks.getVcrModels.mockResolvedValue({ models: [], methods: [{ id: "analytic", method: "design.analytic", name: "Analytic design" }] });
   mocks.listWebResearchAgents.mockResolvedValue(agents);
   mocks.allowance.mockResolvedValue(billingOff); forgetResearchBilling();
   renderPage();
-  const tasks = await screen.findByRole("list", { name: "选择计算任务" });
-  expect(within(tasks).getAllByRole("button")).toHaveLength(7);
-  expect(screen.queryByRole("button", { name: "使用文献参数" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Binary simulator" })).toBeNull();
-  await userEvent.type(screen.getByLabelText("搜索工具"), "E-value");
-  expect(await screen.findByRole("button", { name: "E-value" })).toBeInTheDocument();
+  await screen.findByRole("button", { name: "药品安全性分析" });
+  expect(mocks.getVcrModels).not.toHaveBeenCalled();
+  expect(screen.queryByRole("list", { name: "选择计算任务" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "参考试验检索" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "自动化 Meta 分析" })).toBeInTheDocument();
+});
+
+it("lists only the twelve owner-selected research workflows and preserves hidden display metadata", () => {
+  const keep = ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation",
+    "drug-selection", "mendelian-randomization", "meta-analysis", "off-label-analysis", "peer-review",
+    "research-grant-development", "research-topic-selection", "statistical-analysis"].sort();
+  expect(Object.entries(CAPABILITY_DISPLAY).filter(([, display]) => display.listed !== false).map(([id]) => id).sort()).toEqual(keep);
+  for (const id of ["dataset-research-scoping", "evidence-appraisal", "gene-expression-analysis", "manuscript-support"]) {
+    expect(CAPABILITY_DISPLAY[id].title).toBeTruthy();
+    expect(CAPABILITY_DISPLAY[id].listed).toBe(false);
+  }
 });

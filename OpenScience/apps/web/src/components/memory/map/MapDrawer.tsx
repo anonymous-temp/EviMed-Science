@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
 import { fetchMemoryProfile, type WebMemoryProfile } from "@/lib/apiClient";
 import { listAllMethods } from "@/lib/methodsClient";
 import type { WebMethod } from "@/lib/methodsClient";
@@ -68,10 +70,9 @@ export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord,
     if (profile === null) return null;
     if (!item) {
       return (
-        <p role="status" className="mt-4 text-ui text-text-2">
+        <Note className="mt-4" action={<Button size="sm" variant="secondary" onClick={profile === "failed" ? reload : onClose}>{profile === "failed" ? "重试" : "知道了"}</Button>}>
           {profile === "failed" ? "暂时读不到这条记忆，请重试。" : "这条记忆已经不在了。"}
-          <button type="button" onClick={profile === "failed" ? reload : onClose} className="ml-2 text-accent hover:underline">{profile === "failed" ? "重试" : "知道了"}</button>
-        </p>
+        </Note>
       );
     }
     return (
@@ -91,10 +92,9 @@ export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord,
     const found = mine !== "failed" ? factItems([], mine.entries).find((entry) => entry.key === open) ?? null : null;
     if (!found) {
       return (
-        <p role="status" className="mt-4 text-ui text-text-2">
+        <Note className="mt-4" action={<Button size="sm" variant="secondary" onClick={mine === "failed" ? reload : onClose}>{mine === "failed" ? "重试" : "知道了"}</Button>}>
           {mine === "failed" ? "暂时读不到这条笔记，请重试。" : "这条笔记已经不在了。"}
-          <button type="button" onClick={mine === "failed" ? reload : onClose} className="ml-2 text-accent hover:underline">{mine === "failed" ? "重试" : "知道了"}</button>
-        </p>
+        </Note>
       );
     }
     return (
@@ -109,7 +109,7 @@ export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord,
   if (kind === "method") {
     const method = Array.isArray(methods) ? methods.find((entry) => `method:${entry.id}` === open) : null;
     if (methods === null) return null;
-    if (!method) return <p role="status" className="mt-4 text-ui text-text-2">这条做法已经不在了。<button type="button" onClick={onClose} className="ml-2 text-accent hover:underline">知道了</button></p>;
+    if (!method) return <Note className="mt-4" action={<Button size="sm" variant="secondary" onClick={onClose}>知道了</Button>}>这条做法已经不在了。</Note>;
     return <MethodDrawer key={method.id} method={method} onClose={onClose} onChanged={reload} />;
   }
   return null;

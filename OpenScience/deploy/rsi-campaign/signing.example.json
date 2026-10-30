@@ -1,0 +1,34 @@
+{
+  "purpose": "production",
+  "inputPath": "",
+  "outputPath": "",
+  "profileRef": "",
+  "consumerRoot": "",
+  "closurePaths": [],
+  "currentTarget": null,
+  "publisher": {
+    "provider": "alibaba-secret-manager",
+    "keyId": "",
+    "publicKeySha256": "",
+    "region": "",
+    "secretName": "",
+    "versionId": "",
+    "credentialRef": ""
+  },
+  "evaluator": {
+    "provider": "alibaba-secret-manager",
+    "keyId": "",
+    "publicKeySha256": "",
+    "region": "",
+    "secretName": "",
+    "versionId": "",
+    "credentialRef": ""
+  },
+  "statisticsPython": "/usr/bin/python3",
+  "statisticsModulePath": "/opt/evimed/rsi-python",
+  "closureSettings": {
+    "model": "",
+    "provider": ""
+  },
+  "closurePins": {}
+}

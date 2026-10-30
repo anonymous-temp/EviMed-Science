@@ -104,11 +104,11 @@ async function fixture(t) {
   return { project, adapter, jobs, calls };
 }
 
-async function calculate(f, method, scenario, jobId) {
+async function calculate(f, method, scenario, jobId, limits = {}) {
   const scope = { userId: "owner", projectId: "p", jobId, method, recipeDigest: "a".repeat(64) };
   const capability = (await f.adapter.capabilities(scope)).methods.find(item => item.method === method);
   assert.equal(capability.available, true);
-  const input = Buffer.from(JSON.stringify({ scenario, seed: 331331, cpuSecondsLimit: 60 }));
+  const input = Buffer.from(JSON.stringify({ scenario, seed: 331331, cpuSecondsLimit: 60, ...limits }));
   const relativePath = `result-replays/${jobId}/input.json`;
   await mkdir(path.dirname(path.join(f.project.workspaceDir, relativePath)), { recursive: true });
   await writeFile(path.join(f.project.workspaceDir, relativePath), input);
@@ -159,4 +159,21 @@ test("genuine comparator.evalue replay matches independent RR calculation and co
   assert.ok(Math.abs(values.e_value - 7.26) < 0.005);
   assert.equal(values.e_value_confidence_limit, 3);
   t.diagnostic(`Actual e_value=${values.e_value}; e_value_confidence_limit=${values.e_value_confidence_limit}; repeated R result identical.`);
+});
+
+test('genuine R aggregate design simulation and assurance retain explicit seed and precision without a study', {skip:!enabled && 'VCR_R_LIBS is required for genuine R integration'},async t=>{
+ const f=await fixture(t);
+ const scenarios=[
+  ['design.simulate',{design:{kind:'two_arm_fixed',nTreat:100,nControl:100},endpoint:{type:'binary'},truth:{controlRate:0.3,treatmentRate:0.5},analysis:{method:'logistic'}}],
+  ['design.assurance',{design:{allocation:0.5,events:300},endpoint:{type:'time_to_event'},designPrior:{mean:-0.3,sd:0.15},analysis:{alpha:0.025,sided:1}}],
+  ['accrual.poisson_gamma',{sites:[{id:'a',alpha:2,beta:4,startTime:0}],target:120,byTimes:[6,12,18]}],
+  ['comparator.map_prior',{historical:{events:[12,15,9],n:[60,70,50]},tauPrior:{kind:'half_normal',scale:0.5},components:2,robustWeight:0.2}],
+ ];
+ for(let index=0;index<scenarios.length;index++){
+  const [method,scenario]=scenarios[index];
+  const first=await calculate(f,method,scenario,`aggregate_${index}`,{replicates:300,seed:73});
+  const again=await calculate(f,method,scenario,`aggregate_repeat_${index}`,{replicates:300,seed:73});
+  assert.equal(first.methodRecord.seeded,true);assert.equal(first.methodRecord.seed,73);assert.deepEqual(first.machineValues,again.machineValues);
+  assert.ok(first.machineValues.length>0);t.diagnostic(`${method}: ${first.machineValues.length} finite scientific values; seed 73; repeated genuine R result identical.`);
+ }
 });

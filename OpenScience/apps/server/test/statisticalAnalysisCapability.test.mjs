@@ -32,7 +32,7 @@ test('statistical capability is clinical, optional-output and uses the existing 
 });
 
 test('statistical helper and skill ship byte-identically in injected and packed trees', async () => {
-  for (const name of ['SKILL.md', 'scripts/run_analysis.py', 'scripts/analysis_methods.py', 'scripts/analysis_method_records.json']) {
+  for (const name of ['SKILL.md', 'scripts/run_analysis.py', 'scripts/analysis_session.py', 'scripts/analysis_checks.py', 'scripts/analysis_methods.py', 'scripts/analysis_method_records.json']) {
     const canonical = await read(`capabilities/statistical-analysis/${name}`);
     assert.equal(await read(`capability-skills/statistical-analysis/${name}`), canonical);
     const packed = await read(`packages/socket/capability-skills/statistical-analysis/${name}`).catch((error) => {

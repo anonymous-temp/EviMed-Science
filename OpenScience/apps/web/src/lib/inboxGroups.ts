@@ -1,3 +1,4 @@
+import { formatClock, formatDate, formatRelativeTime } from "@/lib/format";
 import type { InboxItem, InboxSeverity } from "@/lib/inboxClient";
 
 /**
@@ -48,36 +49,30 @@ export function orderInbox(items: readonly InboxItem[], fetchedPinned: readonly 
   };
 }
 
-/** `YYYY-MM-DD` of a moment in the reader's own time zone. */
+/** `YYYY-MM-DD` in the shared display zone. */
 export function dayKey(value: string | number | Date): string | null {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return formatDate(value) || null;
 }
 
-/** 今天 / 昨天 / 9月16日 / 2025年9月16日. */
+/** 今天 / 昨天 / 9月16日 / 2025年9月16日, the days of the display zone (Beijing), whatever zone the browser is in. */
 export function dayLabel(key: string, now = Date.now()): string {
   const today = dayKey(now);
-  const yesterday = dayKey(new Date(now).setDate(new Date(now).getDate() - 1));
+  // Beijing keeps no daylight saving, so a day back is 24 hours back.
+  const yesterday = dayKey(now - 86_400_000);
   if (key === today) return "今天";
   if (key === yesterday) return "昨天";
   const [year, month, day] = key.split("-").map(Number);
-  return year === new Date(now).getFullYear() ? `${month}月${day}日` : `${year}年${month}月${day}日`;
+  return year === Number(today?.slice(0, 4)) ? `${month}月${day}日` : `${year}年${month}月${day}日`;
 }
 
-/** 14:02, in the reader's time zone. */
+/** Clock in the shared display zone. */
 export function timeOfDay(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return formatClock(value);
 }
 
-/** A row's time column: 14:02 today, then 昨天, 9月22日, 2025年9月22日. */
+/** A row uses the shared elapsed/absolute time policy. */
 export function inboxWhen(value: string, now = Date.now()): string {
-  const key = dayKey(value);
-  if (!key) return "";
-  return key === dayKey(now) ? timeOfDay(value) : dayLabel(key, now);
+  return formatRelativeTime(value, new Date(now));
 }
 
 /* ------------------------------------------------------------------- groups */
@@ -132,7 +127,13 @@ export type InboxEntry = { kind: "item"; item: InboxItem } | { kind: "group"; gr
 /** The key a notice folds under, or null for one that is not folded. */
 function foldKey(item: InboxItem): { key: string; source: string; subject: string; page: string; safety: boolean } | null {
   const source = item.source;
-  if (!source || !FOLDED_SOURCES.has(source.type)) return null;
+  if (!source) return null;
+  // Producer-owned incident subjects preserve role and destination boundaries.
+  if (source.type === "system" && /^(ops-alert-|geo-operator:)/.test(source.id)) {
+    const safety = severityOf(item) === "safety";
+    return { key: `system:${source.id}:${item.projectId ?? ""}:${safety ? "safety" : "other"}:${JSON.stringify(item.actions)}`, source: "system", subject: source.id, page: "incident", safety };
+  }
+  if (!FOLDED_SOURCES.has(source.type)) return null;
   const [subject, page = ""] = source.id.split("/");
   if (!subject) return null;
   const safety = severityOf(item) === "safety";
@@ -155,7 +156,7 @@ export function groupInbox(items: readonly InboxItem[]): InboxEntry[] {
   for (const item of items) {
     const found = foldKey(item);
     const members = found ? folded.get(found.key) ?? [] : [];
-    if (!found || members.length < GROUP_FROM) {
+    if (!found || members.length < (found.source === "system" ? 2 : GROUP_FROM)) {
       entries.push({ kind: "item", item });
       continue;
     }
@@ -176,6 +177,7 @@ export function groupInbox(items: readonly InboxItem[]): InboxEntry[] {
 
 /** 「信尔美：18 条新的讲错」: the subject's name where it is known, the count and what the notices are about. */
 export function inboxGroupTitle(group: Pick<InboxGroup, "source" | "page" | "items">, name?: string | null): string {
+  if (group.source === "system") return `${group.items[0]?.title ?? "系统动态"} · ${group.items.reduce((total, item) => total + Math.max(1, item.count), 0)} 条历史`;
   const word = GROUP_WORDS[group.source]?.[group.page] ?? GROUP_DEFAULT_WORDS[group.source] ?? "消息";
   return `${name ? `${name}：` : ""}${group.items.length} 条${word}`;
 }

@@ -355,13 +355,8 @@ test("PA-35 CS-40 a snapshot keeps every file's hash, the tables are derived in 
   const otherTables = await vcr.dataStore.listAnalysisTables({ snapshotId: otherFrozen.snapshot.id });
   const otherSubject = (await readPlane(otherTables.find((table) => table.shape === "subject").location)).trim().split("\n");
   assert.notEqual(otherSubject[1].split(",")[0], subject[1].split(",")[0], "two studies never see one person under one key");
-  // The way back exists, is audited, and needs manage_data.
-  const first = subject[1].split(",")[0];
-  const back = await vcr.dataPlane.identityOf({ studyId: study.id, snapshotId: snapshot.id, pseudonym: first, actor: OWNER });
-  assert.match(back.sourceSubjectId, /^HZ-3\d{4}$/);
-  await assert.rejects(() => vcr.dataPlane.identityOf({ studyId: study.id, snapshotId: snapshot.id, pseudonym: first, actor: ANALYST }),
-    (error) => error.status === 403);
-  assert.ok((await vcr.dataStore.auditTrail({ studyId: study.id, action: "identity.lookup" })).length >= 1);
+  assert.equal('identityOf' in vcr.dataPlane, false, "retired operations have no product re-identification reader");
+
 });
 
 test("C2-23 a table that is not what it says it is is refused by name and the snapshot stands", options, async () => {

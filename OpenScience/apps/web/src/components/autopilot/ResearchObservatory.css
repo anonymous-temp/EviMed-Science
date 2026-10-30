@@ -1,0 +1,269 @@
+/*
+ * 研究观测舱 — a fixed dark scene in both themes (owner, 2026-10-28: the process picture is the page's core, and it
+ * should land like a mission-control screen). Its colours are content, like the anomaly map's fixed canvas, and are
+ * named once here; the chrome around it keeps the token roles. Every text colour below is at least 5.5:1 on the
+ * scene's ground (#04070e); the neon strokes are graphics with words beside them.
+ *
+ * The scene is held to the page style budget of a data page like any page (the fixture walk, 2026-10-28): three kinds of border
+ * (a line, the cyan of what is pressed or selected, the magenta of a live run), five size × weight pairs (24/600, 18/600, 14/400,
+ * 14/600, 12/400). What used to be a border of another colour, a corner bracket or a bolder 11 px label is a glow, a gradient, a
+ * text colour — never a new kind.
+ */
+.obs {
+  --obs-ground: #04070e;
+  --obs-panel: #08111d;
+  --obs-panel-2: #0c1828;
+  --obs-line: #16314a;
+  --obs-cyan: #3fe8ff;
+  --obs-cyan-dim: #1e7f99;
+  --obs-magenta: #ff4fd8;
+  --obs-lime: #b8ff5c;
+  --obs-amber: #ffbe55;
+  --obs-red: #ff5c7a;
+  --obs-text: #e8f6ff;
+  --obs-text-2: #9fc0d6;
+  --obs-text-3: #7395ad;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid var(--obs-line);
+  border-radius: 14px;
+  padding: 18px 20px 20px;
+  color: var(--obs-text);
+  background:
+    radial-gradient(900px 380px at 12% -10%, #0d3550 0%, transparent 60%),
+    radial-gradient(700px 420px at 105% 110%, #3a0f40 0%, transparent 62%),
+    var(--obs-ground);
+  box-shadow: inset 0 0 0 1px #071423, inset 0 0 80px #000;
+}
+/* Scanlines and a vignette over everything. */
+.obs::after {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  content: "";
+  background:
+    repeating-linear-gradient(180deg, #ffffff07 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, #00000088 100%);
+  mix-blend-mode: screen;
+}
+/* The corner brackets of the screen: gradients, so they are no border. */
+.obs::before {
+  position: absolute; inset: 8px; z-index: 4; pointer-events: none; content: ""; opacity: .85;
+  --obs-bracket: var(--obs-cyan);
+  background:
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) top left / 18px 2px no-repeat,
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) top left / 2px 18px no-repeat,
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) top right / 18px 2px no-repeat,
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) top right / 2px 18px no-repeat,
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) bottom left / 18px 2px no-repeat,
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) bottom left / 2px 18px no-repeat,
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) bottom right / 18px 2px no-repeat,
+    linear-gradient(var(--obs-bracket), var(--obs-bracket)) bottom right / 2px 18px no-repeat;
+}
+
+.obs[data-observatory="empty"] .obs-clock { color: var(--obs-text-3); text-shadow: none; }
+
+.obs-head { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.obs-head-main { display: flex; min-width: 0; align-items: center; gap: 14px; }
+.obs-head-side { display: flex; align-items: center; gap: 12px; }
+.obs-kicker { font: 400 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .32em; color: var(--obs-cyan); }
+.obs-title { margin-top: 4px; max-width: 46rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; font-weight: 600; color: var(--obs-text); }
+.obs-live { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--obs-line); border-radius: 4px; padding: 3px 8px; font: 400 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .2em; color: var(--obs-text-2); }
+.obs-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--obs-text-3); }
+.obs-live.on { border-color: var(--obs-magenta); color: #ffffff; background: #ff4fd833; box-shadow: 0 0 16px #ff4fd877, inset 0 0 10px #ff4fd844; text-shadow: 0 0 8px #ff4fd8; }
+.obs-live.on i { background: var(--obs-magenta); box-shadow: 0 0 10px var(--obs-magenta); animation: obs-blink 1.1s steps(2, start) infinite; }
+.obs-clock { font: 600 24px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; color: var(--obs-cyan); text-shadow: 0 0 14px #3fe8ff88, 0 0 2px #3fe8ff; font-variant-numeric: tabular-nums; }
+.obs-status { border: 1px solid var(--obs-line); border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--obs-text-2); }
+.obs-status.s-live { border-color: var(--obs-cyan); color: var(--obs-cyan); }
+.obs-status.s-succeeded { color: var(--obs-lime); }
+.obs-status.s-failed { color: var(--obs-red); }
+
+.obs-hud { position: relative; z-index: 2; margin-top: 16px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--obs-line); border-radius: 10px; overflow: hidden; background: var(--obs-line); }
+.obs-metric { min-width: 0; padding: 10px 14px 12px; background: linear-gradient(180deg, #0a1626, #070f1a); }
+.obs-metric dt { font-size: 12px; color: var(--obs-text-3); letter-spacing: .04em; }
+.obs-metric dd { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.obs-metric-value { font: 600 24px/1.1 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--obs-text); text-shadow: 0 0 12px #3fe8ff44; font-variant-numeric: tabular-nums; }
+.obs-metric-sub { font-size: 12px; color: var(--obs-text-3); white-space: nowrap; }
+@media (max-width: 900px) { .obs-hud { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .obs-hud { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.obs-scene { position: relative; z-index: 1; margin: 8px -20px 0; height: clamp(240px, 32vw, 390px); }
+.obs-floor {
+  position: absolute; left: -10%; right: -10%; bottom: -30%; height: 75%;
+  background-image:
+    linear-gradient(#3fe8ff22 1px, transparent 1px),
+    linear-gradient(90deg, #3fe8ff22 1px, transparent 1px);
+  background-size: 48px 48px;
+  transform: perspective(420px) rotateX(62deg);
+  transform-origin: 50% 0;
+  mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 70%, transparent 100%);
+  animation: obs-floor 6s linear infinite;
+  opacity: .55;
+}
+.obs-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* Under 760 px the line keeps a legible size and scrolls sideways instead of shrinking to a thumbnail. */
+@media (max-width: 760px) {
+  .obs-scene { height: 300px; overflow-x: auto; overflow-y: hidden; scrollbar-color: #1d3b55 transparent; }
+  .obs-svg { position: relative; display: block; width: 760px; height: 300px; }
+  .obs-floor, .obs-sweep { width: 760px; }
+}
+.obs-stop-a { stop-color: var(--obs-cyan); }
+.obs-stop-b { stop-color: var(--obs-magenta); }
+.obs-track { fill: none; stroke: #1a3a55; stroke-width: 3; }
+.obs-track-lit { fill: none; stroke: url(#obs-track-lit); stroke-width: 3; filter: drop-shadow(0 0 6px #3fe8ffaa); }
+.obs-track-lit.flow { stroke-dasharray: 14 10; animation: obs-dash 1.2s linear infinite; }
+.obs-packet { fill: #ffffff; filter: drop-shadow(0 0 6px var(--obs-cyan)); }
+.obs-packet.alt { fill: var(--obs-magenta); filter: drop-shadow(0 0 6px var(--obs-magenta)); }
+.obs-ripple { fill: none; stroke: var(--obs-cyan); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: obs-ripple 2.4s ease-out infinite; }
+.obs-sweep { position: absolute; inset: 0 auto 0 0; width: 10%; pointer-events: none; background: linear-gradient(90deg, transparent, #3fe8ff0a 75%, #3fe8ff1c 97%, transparent); animation: obs-sweep 8s linear infinite; }
+
+.obs-hex { fill: #071321; stroke: #24506f; stroke-width: 2; transition: stroke 320ms, fill 320ms; }
+.obs-hex-in { fill: none; stroke: #16314a; stroke-width: 1; }
+.obs-count { text-anchor: middle; font: 600 18px "JetBrains Mono", ui-monospace, monospace; fill: var(--obs-text-3); }
+.obs-stage-label { text-anchor: middle; font-size: 14px; font-weight: 600; fill: var(--obs-text-2); }
+.obs-stage-code { text-anchor: middle; font: 400 12px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .18em; fill: var(--obs-text-3); }
+.obs-stage.m-done .obs-hex { stroke: var(--obs-cyan-dim); fill: #08202f; }
+.obs-stage.m-done .obs-count { fill: var(--obs-cyan); }
+.obs-stage.m-done .obs-stage-label { fill: var(--obs-text); }
+.obs-stage.m-busy .obs-hex { stroke: var(--obs-cyan); fill: #0a2c40; }
+.obs-stage.m-busy .obs-hex-in { stroke: #3fe8ff66; }
+.obs-stage.m-busy .obs-count { fill: #ffffff; }
+.obs-stage.m-busy .obs-stage-label { fill: var(--obs-cyan); }
+.obs-stage.m-busy .obs-stage-code { fill: var(--obs-cyan); }
+.obs-ring { fill: none; stroke: var(--obs-cyan); stroke-width: 1.5; stroke-dasharray: 6 9; opacity: .9; transform-box: fill-box; transform-origin: center; animation: obs-spin 6s linear infinite; }
+.obs-ring-root { stroke: var(--obs-magenta); stroke-dasharray: 3 7; animation-duration: 4s; }
+
+.obs-agent { transition: transform 700ms cubic-bezier(.2, .8, .2, 1); }
+.obs-core { fill: #1b0b26; stroke: var(--obs-magenta); stroke-width: 2.5; }
+.obs-root.on .obs-core { fill: #2a0d38; }
+.obs-mark { fill: #ffd6f6; }
+.obs-agent-label { text-anchor: middle; font-size: 14px; font-weight: 600; fill: #ffd6f6; letter-spacing: .06em; }
+.obs-agent-label.small { font-size: 12px; font-weight: 400; fill: var(--obs-text-2); }
+.obs-beam { stroke: #ff4fd866; stroke-width: 1.5; }
+.obs-beam.child { stroke: #3fe8ff55; }
+.obs-beam.flow { stroke-dasharray: 4 5; animation: obs-dash 0.8s linear infinite; }
+.obs-node { fill: #071321; stroke: var(--obs-text-3); stroke-width: 1.5; }
+.obs-node-count { text-anchor: middle; font: 400 12px "JetBrains Mono", ui-monospace, monospace; fill: var(--obs-text-2); }
+.obs-child.s-running .obs-node { stroke: var(--obs-cyan); fill: #0a2c40; filter: drop-shadow(0 0 6px #3fe8ffaa); }
+.obs-child.s-running .obs-node-count { fill: #ffffff; }
+.obs-child.s-done .obs-node { stroke: var(--obs-lime); }
+.obs-child.s-failed .obs-node { stroke: var(--obs-red); }
+.obs-pulse { fill: var(--obs-magenta); filter: drop-shadow(0 0 5px var(--obs-magenta)); animation: obs-travel 1.4s cubic-bezier(.4, 0, .6, 1) infinite; }
+.obs-pulse.up { fill: var(--obs-cyan); filter: drop-shadow(0 0 5px var(--obs-cyan)); }
+.obs-pulse.p-error { fill: var(--obs-red); }
+
+.obs-thought { position: relative; z-index: 2; margin-top: 4px; display: flex; align-items: baseline; gap: 10px; box-shadow: inset 2px 0 0 var(--obs-magenta); padding: 6px 12px; background: linear-gradient(90deg, #ff4fd814, transparent 70%); font-size: 14px; color: var(--obs-text-2); }
+.obs-thought-tag { flex: none; font: 400 12px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .2em; color: var(--obs-magenta); }
+.obs-thought-text { min-width: 0; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.obs-thought i { flex: none; width: 8px; height: 14px; background: var(--obs-magenta); animation: obs-blink 1s steps(2, start) infinite; }
+
+.obs-tasks { position: relative; z-index: 2; margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.obs-tasks li { display: inline-flex; max-width: 22rem; align-items: center; gap: 8px; border: 1px solid var(--obs-line); border-radius: 6px; padding: 4px 10px; background: #08121f; font-size: 12px; color: var(--obs-text-2); }
+.obs-tasks b { flex: none; font-weight: 400; color: var(--obs-cyan); }
+.obs-tasks .t-delivered b, .obs-tasks .t-accepted b { color: var(--obs-lime); }
+.obs-tasks .t-failed b, .obs-tasks .t-rejected b { color: var(--obs-red); }
+.obs-tasks .t-planned b { color: var(--obs-text-3); }
+
+.obs-feed-grid { position: relative; z-index: 2; margin-top: 14px; display: grid; gap: 12px; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+@media (max-width: 1023px) { .obs-feed-grid { grid-template-columns: minmax(0, 1fr); } }
+.obs-panel { min-width: 0; border: 1px solid var(--obs-line); border-radius: 10px; padding: 12px; background: #060d18e6; }
+.obs-panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.obs-section-label { font: 400 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .24em; color: var(--obs-cyan); }
+.obs-blink { margin-left: 6px; color: var(--obs-cyan); animation: obs-blink 1s steps(2, start) infinite; }
+.obs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.obs-chips button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--obs-line); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--obs-text-2); background: transparent; transition: border-color 120ms, color 120ms; }
+.obs-chips button:hover { border-color: var(--obs-cyan); color: var(--obs-text); }
+.obs-chips button[aria-pressed="true"] { border-color: var(--obs-cyan); color: var(--obs-cyan); background: #3fe8ff14; }
+.obs-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--obs-text-3); }
+.obs-dot.s-running { background: var(--obs-cyan); box-shadow: 0 0 6px var(--obs-cyan); }
+.obs-dot.s-done { background: var(--obs-lime); }
+.obs-dot.s-failed { background: var(--obs-red); }
+
+.obs-log { margin-top: 8px; max-height: 340px; overflow: auto; font-size: 14px; scrollbar-color: #1d3b55 transparent; }
+.obs-log li { animation: obs-arrive 420ms ease-out both; }
+.obs-line { display: grid; width: 100%; grid-template-columns: 4.2rem 3rem minmax(0, 1fr) auto auto; align-items: baseline; gap: 10px; border-radius: 6px; padding: 6px 8px; text-align: left; color: var(--obs-text-2); background: transparent; }
+.obs-line:hover { background: #0e1e31; }
+.obs-line[aria-pressed="true"] { background: #102a40; box-shadow: inset 2px 0 0 var(--obs-cyan); }
+.obs-line-time { font: 12px "JetBrains Mono", ui-monospace, monospace; color: var(--obs-text-3); font-variant-numeric: tabular-nums; }
+.obs-line-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.obs-line-text b { font-weight: 600; color: var(--obs-text); }
+.obs-line-who { max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--obs-text-3); }
+.obs-line-state { font: 12px "JetBrains Mono", ui-monospace, monospace; color: var(--obs-lime); white-space: nowrap; }
+.obs-line.c-running .obs-line-state { color: var(--obs-amber); }
+.obs-line.c-error .obs-line-state { color: var(--obs-red); }
+.obs-tag { justify-self: start; border: 1px solid var(--obs-line); border-radius: 4px; padding: 0 5px; font-size: 12px; line-height: 18px; color: var(--obs-text-3); }
+.obs-tag.g-plan { color: #c3a6ff; }
+.obs-tag.g-search { color: var(--obs-cyan); }
+.obs-tag.g-read { color: #7fb8ff; }
+.obs-tag.g-analyze { color: var(--obs-amber); }
+.obs-tag.g-verify { color: var(--obs-lime); }
+.obs-tag.g-write { color: #ff9fe6; }
+.obs-tag.g-deliver { color: #ffffff; }
+@media (max-width: 640px) { .obs-line { grid-template-columns: 3.6rem minmax(0, 1fr) auto; } .obs-tag, .obs-line-who { display: none; } }
+.obs-quiet { margin-top: 10px; font-size: 14px; color: var(--obs-text-3); }
+
+.obs-inspect-title { margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--obs-text); }
+.obs-inspect-meta { margin-top: 2px; font-size: 12px; color: var(--obs-text-3); }
+.obs-payload { margin-top: 10px; }
+.obs-payload-title { font-size: 12px; color: var(--obs-text-3); }
+.obs-payload pre { margin-top: 4px; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word; border: 1px solid var(--obs-line); border-radius: 6px; padding: 8px 10px; font: 12px/1.55 "JetBrains Mono", ui-monospace, monospace; color: #bfe9ff; background: #030810; }
+.obs-payload details { margin-top: 6px; font-size: 12px; color: var(--obs-cyan); }
+.obs-payload summary { cursor: pointer; }
+
+.obs-files { position: relative; z-index: 2; margin-top: 14px; }
+.obs-files ul { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+.obs-file { display: inline-block; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--obs-line); border-radius: 6px; padding: 5px 10px; font-size: 14px; color: var(--obs-text); background: #0a1a2b; }
+button.obs-file:hover { border-color: var(--obs-cyan); color: var(--obs-cyan); box-shadow: 0 0 12px #3fe8ff33; }
+
+.obs button:focus-visible, .obs-scene:focus-visible { outline: 2px solid var(--obs-cyan); outline-offset: 2px; }
+
+@keyframes obs-dash { to { stroke-dashoffset: -48; } }
+@keyframes obs-ripple { from { opacity: .8; transform: scale(1); } to { opacity: 0; transform: scale(2.1); } }
+@keyframes obs-sweep { from { transform: translateX(-100%); } to { transform: translateX(1000%); } }
+@keyframes obs-spin { to { transform: rotate(360deg); } }
+@keyframes obs-blink { to { visibility: hidden; } }
+@keyframes obs-floor { to { background-position: 0 48px; } }
+@keyframes obs-travel { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(var(--travel, 40px)); } }
+@keyframes obs-arrive { from { opacity: 0; transform: translateX(-6px); background: #3fe8ff22; } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .obs *, .obs *::before, .obs *::after { animation: none !important; transition-duration: 0ms !important; }
+  .obs-live.on i, .obs-thought i, .obs-blink { visibility: visible; }
+}
+
+/* The research queue: the console's top deck, the panel over the scene. */
+.rq {
+  position: relative;
+  border: 1px solid #16314a;
+  border-radius: 14px;
+  padding: 14px 20px 12px;
+  color: #e8f6ff;
+  background: linear-gradient(180deg, #071220, #04070e);
+}
+.rq + .obs { margin-top: 8px; }
+.rq-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rq-count { font: 12px "JetBrains Mono", ui-monospace, monospace; color: #9fc0d6; }
+.rq-list > li { display: flex; }
+.rq-list { margin-top: 10px; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scrollbar-color: #1d3b55 transparent; }
+.rq-card { display: flex; width: 15.5rem; flex: none; flex-direction: column; gap: 6px; border: 1px solid #16314a; border-radius: 10px; padding: 10px 12px; text-align: left; color: #e8f6ff; background: #08121f; transition: border-color 120ms, box-shadow 120ms, background 120ms; }
+.rq-card:hover { border-color: #3fe8ff; background: #0b1a2c; }
+.rq-card[aria-pressed="true"] { border-color: #3fe8ff; background: #0c2236; box-shadow: 0 0 0 1px #3fe8ff55, 0 0 18px #3fe8ff33; }
+.rq-card:disabled { opacity: .6; }
+.rq-card:focus-visible { outline: 2px solid #3fe8ff; outline-offset: 2px; }
+.rq-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rq-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #9fc0d6; }
+.rq-state i { width: 7px; height: 7px; border-radius: 50%; background: #7395ad; }
+.rq-card.m-running .rq-state, .rq-card.m-queued .rq-state { color: #3fe8ff; }
+.rq-card.m-running .rq-state i { background: #3fe8ff; box-shadow: 0 0 8px #3fe8ff; animation: obs-blink 1.1s steps(2, start) infinite; }
+.rq-card.m-queued .rq-state i { background: transparent; box-shadow: inset 0 0 0 1.5px #3fe8ff; }
+.rq-card.m-done .rq-state { color: #b8ff5c; }
+.rq-card.m-done .rq-state i { background: #b8ff5c; }
+.rq-card.m-failed .rq-state { color: #ff5c7a; }
+.rq-card.m-failed .rq-state i { border-radius: 1px; background: #ff5c7a; }
+.rq-card.m-paused .rq-state i, .rq-card.m-ended .rq-state i { background: transparent; box-shadow: inset 0 0 0 1.5px #7395ad; }
+.rq-kind { border: 1px solid #16314a; border-radius: 4px; padding: 0 6px; font-size: 12px; line-height: 18px; color: #9fc0d6; }
+.rq-title { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 14px; font-weight: 600; line-height: 1.45; }
+.rq-meta { font: 12px "JetBrains Mono", ui-monospace, monospace; color: #7395ad; }
+@media (prefers-reduced-motion: reduce) { .rq-card, .rq-card * { animation: none !important; transition-duration: 0ms !important; } }

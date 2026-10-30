@@ -361,8 +361,10 @@ export class MemorySettingsStore {
    * @returns {Promise<{ digest: string | null, deliveredAt: string | null, compactedAt: string | null, compactedSince: boolean, memos: { id: string, kind?: string, scope?: string }[] }>}
    */
   async residentState(userId, projectId, sessionId) {
+    // Both times are kept to the millisecond (timestamptz(3)): a compaction in the same millisecond as the delivery cannot be
+    // told to have come after it, so it counts as since — handing the block once more costs a few lines, losing it costs the card.
     const result = await this.#query(`SELECT resident_digest, resident_delivered_at, compacted_at, resident_memos,
-        (compacted_at IS NOT NULL AND (resident_delivered_at IS NULL OR compacted_at > resident_delivered_at)) AS compacted_since
+        (compacted_at IS NOT NULL AND (resident_delivered_at IS NULL OR compacted_at >= resident_delivered_at)) AS compacted_since
       FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2 AND session_id=$3`,
     [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId)]);
     const row = result.rows[0];

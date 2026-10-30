@@ -44,7 +44,8 @@ test("the extension parity jobs: every valid one is clean, every invalid one nam
 
 test("the trajectory method is registered once: a method, a kind, a schema, a tier, and the references its cases are held to", () => {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)["patients.longitudinal"];
-  assert.equal(spec.version, "1.0.0");
+  assert.equal(spec.version, "1.1.0");
+  assert.deepEqual([...spec.compatibleVersions], ["1.0.0"]);
   assert.equal(spec.modelTier, "scenario");
   assert.deepEqual([...spec.endpoints], ["continuous"]);
   assert.ok(spec.crossChecks.length > 0);

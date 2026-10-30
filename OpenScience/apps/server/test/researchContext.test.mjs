@@ -276,7 +276,10 @@ test("the personal library is named beside the knowledge base once it holds a do
     const empty = await prepareResearchContext(project, { mode: "open-domain" }, withLibrary);
     assert.doesNotMatch(empty.system, /library\//, "no library, no pointer");
     assert.match(empty.system, /当前个人知识库为空/);
+    // The account's master folder is not what a run reads: only the project's own view of the library is mounted.
     await mkdir(path.join(dataDir, "users", "alice", "library", `src_${"c".repeat(32)}`), { recursive: true });
+    assert.match((await prepareResearchContext(project, { mode: "open-domain" }, withLibrary)).system, /当前个人知识库为空/, "an entry that applies elsewhere is not this project's");
+    await mkdir(path.join(dataDir, "users", "alice", "library-views", project.id, `src_${"c".repeat(32)}`), { recursive: true });
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, withLibrary);
     assert.match(prepared.system, /个人资料库有 1 份文档，只读，在工作区的 library\/\*\/index\.md/);
     assert.match(prepared.system, /mcp__evimed__kb_search/);

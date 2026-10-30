@@ -18,7 +18,7 @@ import {
   criterionConfusion, criterionFunnel, dueRechecks, eligibilityCounts, errorLayer, evaluateCriterion,
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
-  pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation, separateLedgers,
+  pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation,
   summarizeEligibility, verifyFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
 import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
@@ -500,22 +500,6 @@ test("the model's clinical priority is carried, labelled, and never merged into 
   assert.equal(Object.keys(counts).includes("score"), false, "the priority never enters the deterministic summary");
 });
 
-test("the five ledgers are five fields, and eligibility is not one of the other four", () => {
-  const ledgers = separateLedgers({
-    summary: "eligible",
-    counts: { unknown: 2, pending_recheck: 1 },
-    willingness: "interested",
-    siteCapacity: { siteId: "ste-1", slotsAvailable: 0 },
-    referralState: "contactable",
-  });
-  assert.deepEqual(Object.keys(ledgers).sort(), [
-    "businessProgress", "clinicalEligibility", "evidenceSufficiency", "patientWillingness", "siteCapacity",
-  ]);
-  assert.equal(ledgers.clinicalEligibility, "eligible");
-  assert.equal(ledgers.evidenceSufficiency.sufficient, false, "eligible on the criteria is not evidence-complete");
-  assert.equal(ledgers.siteCapacity.slotsAvailable, 0, "and a full site does not change the eligibility");
-});
-
 // ----------------------------------------------------- the whole assessment
 
 test("AC-14 a full assessment keeps the gaps, the void facts and the blocking exclusions on the record", () => {
@@ -774,12 +758,13 @@ test("the capability declares itself the way the module needs it to", async () =
 test("the skill says the two things a run must not get wrong, and names its required outputs", async () => {
   const authored = await readFile(path.join(repoRoot, "capabilities", "vcr-matching", "SKILL.md"), "utf8");
   const shipped = await readFile(path.join(repoRoot, "capability-skills", "vcr-matching", "SKILL.md"), "utf8");
+  const operating = await readFile(path.join(repoRoot, "capabilities", "vcr-protocol", "references", "operating-contract.md"), "utf8");
   assert.equal(authored, shipped, "the authored skill and the shipped copy are one document");
-  assert.match(authored, /你只抽证据，判定由代码做/);
-  assert.match(authored, /联系患者之前必须有人确认/);
-  assert.match(authored, /逐人确认，不是批量确认/);
-  assert.match(authored, /「未知」永远不是「不满足」/u);
-  assert.match(authored, /只要有一条适用的排除标准是「未知」，这个人就不能是「符合」/u);
+  assert.match(authored, /The evaluator computes the final verdict/);
+  assert.match(authored, /\.\.\/vcr-protocol\/references\/operating-contract\.md/);
+  assert.match(operating, /No contact, referral, site CRM/);
+  assert.match(operating, /Unknown eligibility is never exclusion, a negative finding or zero/);
+  assert.match(authored, /unknown coverage, not an eligible verdict/);
   for (const name of ["matching-assessment.md", "matching.json"]) assert.ok(authored.includes(name), name);
 });
 
@@ -834,9 +819,9 @@ test("the eval pack carries real briefs, and every one of them names the input t
     assert.ok(brief.inputs.studyId, brief.id);
     assert.ok(brief.mustDo.length >= 3 && brief.mustNotDo.length >= 3, brief.id);
   }
-  // The two measurement briefs are the ones AC-36 and AC-37 are answered by.
+  // Historical matching replay remains; CRM accrual is outside this capability.
   assert.ok(ids.some((id) => id.includes("historical-replay")), "AC-36 needs a replay brief");
-  assert.ok(ids.some((id) => id.includes("accrual-forecast-backtest")), "AC-37 needs a backtest brief");
+  assert.ok(!ids.some((id) => id.includes("accrual-forecast-backtest")), "retired CRM accrual must not return as matching work");
 });
 
 test('C2-25 declared code vocabulary versions cannot silently select the current mapping', () => {

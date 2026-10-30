@@ -21,6 +21,7 @@
  *    rule, kept here so both sides of a page agree.
  */
 import {
+  VCR_RETIRED_MEMBER_ROLE_LABELS_ZH,
   VCR_CONCLUSION_LABELS_ZH,
   VCR_COUNT_LABELS_ZH,
   VCR_CRITERION_STATE_LABELS_ZH,
@@ -33,7 +34,6 @@ import {
   VCR_MEMBER_ROLE_LABELS_ZH,
   VCR_MODEL_RISK_LABELS_ZH,
   VCR_MODEL_TIER_LABELS_ZH,
-  VCR_REFERRAL_STATE_LABELS_ZH,
   VCR_REVIEW_KIND_LABELS_ZH,
   VCR_STEP_LABELS_ZH,
   VCR_VALUE_SOURCE_LABELS_ZH,
@@ -48,10 +48,9 @@ import type {
   VcrInterval,
   VcrJobState,
   VcrJobWait,
-  VcrMemberRole,
+  VcrStoredMemberRole,
   VcrModelRisk,
   VcrModelTier,
-  VcrReferralState,
   VcrReviewKind,
   VcrStepKey,
   VcrValue,
@@ -74,8 +73,7 @@ export const jobStateLabel = table<VcrJobState>(VCR_JOB_STATE_LABELS_ZH);
 export const jobWaitLabel = table<VcrJobWait>(VCR_JOB_WAIT_LABELS_ZH);
 export const criterionStateLabel = table<VcrCriterionState>(VCR_CRITERION_STATE_LABELS_ZH);
 export const eligibilityLabel = table<VcrEligibility>(VCR_ELIGIBILITY_SUMMARY_LABELS_ZH);
-export const referralStateLabel = table<VcrReferralState>(VCR_REFERRAL_STATE_LABELS_ZH);
-export const memberRoleLabel = table<VcrMemberRole>(VCR_MEMBER_ROLE_LABELS_ZH);
+export const memberRoleLabel = table<VcrStoredMemberRole>({ ...VCR_MEMBER_ROLE_LABELS_ZH, ...VCR_RETIRED_MEMBER_ROLE_LABELS_ZH });
 export const modelTierLabel = table<VcrModelTier>(VCR_MODEL_TIER_LABELS_ZH);
 export const modelRiskLabel = table<VcrModelRisk>(VCR_MODEL_RISK_LABELS_ZH);
 
@@ -303,7 +301,7 @@ export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freez
  * What the matching step gives a study that has only public material (T0), as the second half of its recipe (「用 … 得到 …」): there is
  * nobody to match yet, and what the step does instead is structure the criteria. Above T0 the step's own `VCR_STEP_GIVES` stands.
  */
-export const VCR_MATCHING_EMPTY_T0 = "逐条可判定的入排标准；接入你的数据（T1 及以上）后，再逐个匹配、转诊和随访";
+export const VCR_MATCHING_EMPTY_T0 = "逐条可判定的入排标准；接入你的数据（T1 及以上）后，再逐个核对患者";
 
 /**
  * 给患者找试验: what the direction says before it has anything to list. One sentence each, and the one button the page has (为该患者找试验)

@@ -172,6 +172,13 @@ test("remember from the page goes through the engine as a conversation, shows as
   const page = await store.profile(userId);
   assert.equal(page.pending.length, 1, "until the engine has written it the page says it is pending");
   assert.equal(page.pending[0].text, "我习惯用中文写综述的摘要");
+  // Remembered from a named project's page: the engine is told which project first, as a conversation of it is; the catch-all says none.
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,active_workspace) VALUES ($1,'p-orders','订单服务重构','w') ON CONFLICT DO NOTHING", [userId]).catch(() => null);
+  await store.remember(userId, { text: "这个仓库里测试文件一律不要动", projectId: "p-orders", projectName: "订单服务重构" }).catch(() => null);
+  assert.match(JSON.stringify(seen), /这段对话在用户的项目「订单服务重构」里进行。.*请记住：这个仓库里测试文件一律不要动/s);
+  assert.equal(JSON.parse(JSON.stringify(seen))[0].role, "assistant", "the platform's line comes first, as the assistant's, never as the person's");
+  await store.remember(userId, { text: "默认项目里的一句话", projectId: "default", projectName: "默认" }).catch(() => null);
+  assert.doesNotMatch(JSON.stringify(seen), /这段对话在用户的项目/);
   await assert.rejects(store.remember(userId, { text: "   " }), (error) => error.code === "memory_payload_invalid");
   await assert.rejects(store.remember(userId, { text: "my phone is 13800138000 please keep it" }), (error) => error.code === "memory_content_refused");
   assert.ok(root.startsWith("viking://user/"));
@@ -420,4 +427,19 @@ test("the actual overlay returns the 201st sensitive URI and refuses any incompl
   const complete = await overlay.sensitiveUris(userId);
   assert.deepEqual(complete, uris);
   await assert.rejects(overlay.sensitiveUris(userId, 200), { code: "memory_index_listing_too_large" });
+});
+
+test("the files of another named project are what a project's conversation does not read; the catch-all's and the account's are read everywhere", options, async (t) => {
+  const { userId, overlay, root } = await fixture(t);
+  const file = (rel) => `${root}/${rel}`;
+  await overlay.upsertFile({ userId, uri: file("projects/review.md"), memoryType: "project_context", projectId: "p-review", body: "## 约束\n- 一律用英文" });
+  await overlay.upsertFile({ userId, uri: file("decisions/review.md"), memoryType: "decisions", projectId: "p-review", body: "- 先做检索" });
+  await overlay.upsertFile({ userId, uri: file("projects/outreach.md"), memoryType: "project_context", projectId: "p-outreach", body: "## 目标\n- 社区科普" });
+  await overlay.upsertFile({ userId, uri: file("recent_work/default.md"), memoryType: "recent_work", projectId: "default", body: "- 写了一封邮件" });
+  await overlay.upsertFile({ userId, uri: file("preferences/self/short.md"), memoryType: "preferences", projectId: null, body: "- 回答短一点" });
+  assert.deepEqual(await overlay.otherProjectUris(userId, "p-outreach"), [file("decisions/review.md"), file("projects/review.md")]);
+  assert.deepEqual(await overlay.otherProjectUris(userId, "p-review"), [file("projects/outreach.md")]);
+  assert.deepEqual(await overlay.otherProjectUris(userId, "default"), [file("decisions/review.md"), file("projects/outreach.md"), file("projects/review.md")],
+    "the catch-all is inside no project: it reads no named project's files");
+  await assert.rejects(overlay.otherProjectUris(userId, "p-outreach", 1), /memory_index_listing_too_large|exceeds/);
 });

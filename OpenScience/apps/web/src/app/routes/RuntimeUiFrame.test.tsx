@@ -86,7 +86,7 @@ function PathProbe() {
  * What a task's page does for the frame: an empty pane at a place, and a request for the frame over it. The test sets where the
  * pane is and which conversation it wants (none, for an execution a bounded runtime is still running) before it navigates there.
  */
-const taskPane = { sessionId: "session-exec" as string | null, rect: { left: 300, top: 60, width: 700, height: 500 } };
+const taskPane = { onSessionAcknowledged: undefined as undefined | ((requestId: string, sessionId: string) => void), sessionId: "session-exec" as string | null, rect: { left: 300, top: 60, width: 700, height: 500 } };
 function TaskPaneProbe() {
   const { sessionId: geoSession } = useParams();
   const heldSession = geoSession ?? taskPane.sessionId;
@@ -94,7 +94,7 @@ function TaskPaneProbe() {
   useLayoutEffect(() => {
     const pane = element.current!;
     pane.getBoundingClientRect = () => ({ ...taskPane.rect, x: taskPane.rect.left, y: taskPane.rect.top, right: taskPane.rect.left + taskPane.rect.width, bottom: taskPane.rect.top + taskPane.rect.height, toJSON: () => ({}) }) as DOMRect;
-    return heldSession ? registerTaskPane({ element: pane, projectId: mocks.projectId, sessionId: heldSession }) : undefined;
+    return heldSession ? registerTaskPane({ element: pane, projectId: mocks.projectId, sessionId: heldSession, onSessionAcknowledged: taskPane.onSessionAcknowledged }) : undefined;
   }, [heldSession]);
   return <div ref={element} data-testid="task-pane">task bar and pane</div>;
 }
@@ -113,6 +113,7 @@ function mount(state: unknown = null, path = "/app/chat") {
     <Route path="/app/files" element={<div>knowledge base</div>} />
     <Route path="/app/autopilot" element={<div>scheduled tasks</div>} />
     <Route path="/app/autopilot/:taskId" element={<TaskPaneProbe />} />
+    <Route path="/app/active-research" element={<TaskPaneProbe />} />
     <Route path="/app/geo/:geoId/chat/:sessionId?" element={<TaskPaneProbe />} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
@@ -750,6 +751,8 @@ describe("native frame identity and readiness", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
       await act(async () => { screen.getByRole("button", { name: "查看已有成果" }).click(); await vi.advanceTimersByTimeAsync(0); });
       expect(screen.getByTestId("path")).toHaveTextContent("/app/files");
+      // The project named in the address: a bare /app/files is the account's materials, not this conversation's project.
+      expect(screen.getByTestId("search")).toHaveTextContent(/^\?scope=default$/);
       first.unmount();
 
       mocks.listRuns.mockRejectedValue(new Error("ledger down"));
@@ -758,6 +761,7 @@ describe("native frame identity and readiness", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
       await act(async () => { screen.getByRole("button", { name: "查看已有成果" }).click(); await vi.advanceTimersByTimeAsync(0); });
       expect(screen.getByTestId("path")).toHaveTextContent("/app/files");
+      expect(screen.getByTestId("search")).toHaveTextContent(/^\?scope=default$/);
     });
 
     it("says the same for a binding refused for the cleanup, and waits for it the same way", async () => {
@@ -2050,6 +2054,14 @@ describe("a scheduled task's card in the conversation", () => {
     view.unmount();
   });
 
+  it("opens the materials of the project on screen when the frame's rail asks for the knowledge base, not the account's whole list", async () => {
+    const { view, frame } = await openConversationWithCard();
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "knowledge" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/files$/));
+    expect(screen.getByTestId("search")).toHaveTextContent(/^\?scope=default$/);
+    view.unmount();
+  });
+
   it("leaves the destination `runs` alone: the ledger page it named is gone, and nothing sends it", async () => {
     const { view, frame } = await openConversationWithCard();
     emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "runs" });
@@ -2089,15 +2101,15 @@ describe("虚拟临床研究 in the conversation", () => {
     return { view, frame, post, vcrPosts };
   }
 
-  it("tells the chip where the study starts, what it is for, and the six starting points of a new study", async () => {
+  it("tells the chip where the study starts, what it is for, and the four task intents of a new study", async () => {
     const { view, vcrPosts } = await openVcrConversation("vcr-analysis");
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     const [options] = vcrPosts();
     expect(options).toMatchObject({ sessionId: "session-a", controls: true, canSetUse: true, start: "auto", intendedUse: "exploratory" });
-    expect(options.startOptions.map((choice: { label: string }) => choice.label)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
+    expect(options.startOptions).toEqual([]);
     expect(options.useOptions.map((choice: { label: string }) => choice.label)).toEqual(["探索", "研究设计支持", "指定研究分析", "申报准备"]);
     expect(options.starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
+      .toEqual(["患者匹配", "人群与患者", "合成对照", "虚拟试验"]);
     view.unmount();
   });
 
@@ -2147,7 +2159,7 @@ describe("虚拟临床研究 in the conversation", () => {
     const { view, frame, vcrPosts } = await openVcrConversation("vcr-protocol", study({ abilities: ["read", "write"] }));
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     expect(vcrPosts()[0]).toMatchObject({ controls: true, canSetUse: false });
-    expect(vcrPosts()[0].startOptions).toHaveLength(5);
+    expect(vcrPosts()[0].startOptions).toHaveLength(0);
     emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 4, sessionId: "session-a", intendedUse: "design_support" });
     await act(async () => { await Promise.resolve(); });
     expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
@@ -2163,12 +2175,12 @@ describe("虚拟临床研究 in the conversation", () => {
     const { view, vcrPosts } = await openVcrConversation("vcr-protocol", null);
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     expect(vcrPosts()[0]).toMatchObject({ controls: false, startOptions: [] });
-    expect(vcrPosts()[0].starters).toHaveLength(6);
+    expect(vcrPosts()[0].starters).toHaveLength(4);
     expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
     view.unmount();
   });
 
-  it("finds the study that 「新建研究」 has just made — a draft the home list leaves out — by its project, so the six starters and the chip's options are there", async () => {
+  it("finds the study that 「新建研究」 has just made — a draft the home list leaves out — by its project, so the four starters and the chip's permitted options are there", async () => {
     // The study a conversation belongs to is read by the project; the list (which has no draft in it) is never asked.
     const { view, vcrPosts } = await openVcrConversation("vcr-protocol", study({ status: "draft", name: "未命名研究" }));
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
@@ -2176,7 +2188,7 @@ describe("虚拟临床研究 in the conversation", () => {
     expect(vcr.getVcrHome).not.toHaveBeenCalled();
     expect(vcrPosts()[0]).toMatchObject({ sessionId: "session-a", controls: true, canSetUse: true, start: "auto", intendedUse: "exploratory" });
     expect(vcrPosts()[0].starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
+      .toEqual(["患者匹配", "人群与患者", "合成对照", "虚拟试验"]);
     view.unmount();
   });
 
@@ -2228,6 +2240,24 @@ describe("the frame over a task's pane", () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByTestId("path")).toHaveTextContent("/app/autopilot/agenda-one");
     expect(screen.getByTestId("state")).toHaveTextContent("null");
+  });
+
+  it("passes a created pane session acknowledgement to its owner without changing the page address", async () => {
+    const acknowledged = vi.fn(); taskPane.onSessionAcknowledged = acknowledged;
+    try {
+      const intent = { kind: "create", projectId: "default", requestId: "research-create", sessionId: "session-exec", draft: "/loopx " };
+      const { container } = mount({ runtimeUiIntent: intent }, "/app/active-research");
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      const frame = container.querySelector("iframe")!; const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await waitFor(() => expect(navigations(post)).toHaveLength(1));
+      const request = navigations(post)[0]; expect(request.intent.kind).toBe("create");
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "stale-request", ok: true, sessionId: "wrong" });
+      expect(acknowledged).not.toHaveBeenCalled();
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: request.requestId, ok: true, sessionId: "actual-session" });
+      expect(acknowledged).toHaveBeenCalledWith("research-create", "actual-session");
+      expect(screen.getByTestId("path")).toHaveTextContent("/app/active-research");
+    } finally { taskPane.onSessionAcknowledged = undefined; }
   });
 
   it("follows the pane when it moves or changes size, with the same document", async () => {
@@ -2380,6 +2410,23 @@ describe("conversation project history across global home", () => {
 
 
 describe("exact GEO scope in the existing native frame",()=>{
+  it("sends GEO starters for the authorized ordinary primary without a specialist binding or global project discovery",async()=>{
+    const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
+    nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);
+    geo.listGeoProjects.mockClear();geo.getGeoProject.mockResolvedValue({id:"geo-shared",projectId:"same-id",sessionId:"shared-root",product:{brandName:"Scoped brand"},engines:["kimi"],coverageDays:90});
+    const view=render(<MemoryRouter initialEntries={["/app/geo/geo-shared/chat/shared-root"]}><RuntimeUiFrame projectId="same-id" scope={scope} sessionId="shared-root" origin={mocks.profile.uiOrigin}/></MemoryRouter>);
+    await waitFor(()=>expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame=view.container.querySelector("iframe")!,post=vi.spyOn(frame.contentWindow!,"postMessage");
+    emit(frame,{type:"evimed.runtime-ui.booted",seq:1,projectId:"same-id"});
+    emit(frame,{type:"evimed.runtime-ui.ready",seq:2,projectId:"same-id"});
+    await waitFor(()=>expect(post.mock.calls.map(call=>call[0]).some(data=>data.type==="evimed.runtime-ui.navigate")).toBe(true));
+    const command=post.mock.calls.map(call=>call[0]).find(data=>data.type==="evimed.runtime-ui.navigate");
+    emit(frame,{type:"evimed.runtime-ui.ack",seq:3,projectId:"same-id",requestId:command.requestId,ok:true,sessionId:"shared-root"});
+    await waitFor(()=>expect(post.mock.calls.map(call=>call[0]).some(data=>data.type==="evimed.runtime-ui.geo"&&data.sessionId==="shared-root"&&data.starters?.length===6)).toBe(true));
+    expect(geo.listGeoProjects).not.toHaveBeenCalled();
+    expect(nativeGeo.capability).toHaveBeenCalledWith(scope);
+    expect(post.mock.calls.map(call=>call[0]).filter(data=>data.type==="evimed.runtime-ui.capability").at(-1)).toMatchObject({capabilityId:null});
+  });
   it("uses module start/status and signs the exact root without owned-project requests",async()=>{
     const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
     nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);

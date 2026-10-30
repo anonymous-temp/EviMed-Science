@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -34,7 +34,7 @@ describe("Tabs — what a stage found, and what its dot means", () => {
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.getAttribute("tabindex"))).toEqual(["0", "-1", "-1"]);
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();
-    tabs[0].focus();
+    act(() => tabs[0].focus());
     // From no open tab the arrow goes to the first one.
     await userEvent.keyboard("{ArrowRight}");
     expect(onChange).toHaveBeenCalledWith("overview");

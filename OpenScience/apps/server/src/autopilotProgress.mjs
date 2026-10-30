@@ -52,6 +52,22 @@ export function safeAutopilotArtifactRefs(projectId, run) {
     .filter(safePath).slice(0, 24).map(path => ({ projectId, runId: run.id, sessionId: run.sessionId, path, ...(run.artifactRoles?.[path] ? { role: run.artifactRoles[path] } : {}) }));
 }
 
+/**
+ * What a table read from the researcher's own database is, as a material entry says it: whether the file is the whole
+ * table, how many rows of how many, what was left out, and where the sidecar that explains it sits for a run (`details`,
+ * the runtime path of `<name>.import.json`). Nothing for any other kind of source.
+ * @param {any} facts a source's `payload.snapshot` (`researchDbSourceFacts`)
+ */
+function databaseImportOf(facts) {
+  if (facts?.kind !== "research-database-snapshot") return null;
+  const number = value => (Number.isSafeInteger(value) && value >= 0 ? value : null);
+  const sidecar = typeof facts.sidecar === "string" && facts.sidecar.startsWith(`${KNOWLEDGE_BASE_DIR}/`) && safePath(facts.sidecar)
+    ? `${RUNTIME_KNOWLEDGE_DIR}/${facts.sidecar.slice(KNOWLEDGE_BASE_DIR.length + 1)}` : null;
+  return { fromDatabase: true, partial: facts.partial === true, truncated: facts.truncated === true, rowCount: number(facts.rowCount), totalRows: number(facts.totalRows),
+    totalRowsExact: facts.totalRowsExact !== false, withheldCells: number(facts.withheldCells) ?? 0, droppedColumnCount: number(facts.droppedColumnCount) ?? 0,
+    ...(sidecar ? { details: sidecar } : {}) };
+}
+
 /** @param {any} snapshot @param {{ routine?: boolean }} [options] `routine`: a general task's execution, whose earlier executions made no evidence claims */
 export function renderAutopilotProgress(snapshot, { routine = false } = {}) {
   const json = JSON.stringify(snapshot).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e").replaceAll("&", "\\u0026");
@@ -98,8 +114,10 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
     const row = sourcesById.get(item.sourceId);
     const file = String(row.payload?.paths?.[0] ?? "");
     const inKnowledgeBase = file.startsWith(`${KNOWLEDGE_BASE_DIR}/`);
+    const imported = databaseImportOf(row.payload?.snapshot);
     add(snapshot.materials, { sourceId: row.id, name: cut(posix.basename(file) || row.id, 200), addedAt: item.addedAt, state: sourceStateOf(row.payload),
-      ...(inKnowledgeBase ? { path: `${RUNTIME_KNOWLEDGE_DIR}/${file.slice(KNOWLEDGE_BASE_DIR.length + 1)}` } : {}) });
+      ...(inKnowledgeBase ? { path: `${RUNTIME_KNOWLEDGE_DIR}/${file.slice(KNOWLEDGE_BASE_DIR.length + 1)}` } : {}),
+      ...(imported ? { import: imported } : {}) });
   }
   const ownedDigests = digests.filter(row => owns(row) && row.payload.date <= date && !(row.payload.episodeIds ?? []).includes(episodeId))
     .sort((left, right) => String(right.payload.createdAt ?? right.createdAt ?? right.payload.date).localeCompare(String(left.payload.createdAt ?? left.createdAt ?? left.payload.date)) || String(right.id).localeCompare(String(left.id)));
@@ -207,7 +225,7 @@ const STATE_ITEMS_MAX = 6;
  * @returns {{schemaVersion: 1, agendaId: string, asOf: string, truncated: boolean,
  *   found: Array<{statement: string, check: "reproduced" | "stands" | "refuted", sources: number, date: string}>,
  *   unresolved: Array<{kind: "unchecked" | "check_unavailable" | "not_rechecked" | "weakened" | "question" | "not_run", text?: string, date?: string, reason?: string}>,
- *   materials: Array<{sourceId: string, name: string, addedAt: string, state: string}>}}
+ *   materials: Array<{sourceId: string, name: string, addedAt: string, state: string, import?: object}>}}
  */
 export function projectResearchState(progress, { timeZone = DISPLAY_TIME_ZONE } = {}) {
   /** @type {Array<{statement: string, check: "reproduced" | "stands" | "refuted", sources: number, date: string}>} */
@@ -243,5 +261,5 @@ export function projectResearchState(progress, { timeZone = DISPLAY_TIME_ZONE } 
   if (found.length > STATE_ITEMS_MAX || unresolved.length > STATE_ITEMS_MAX) more = true;
   return { schemaVersion: 1, agendaId: progress?.agendaId ?? "", asOf: progress?.asOf ?? "", truncated: more,
     found: found.slice(0, STATE_ITEMS_MAX), unresolved: unresolved.slice(0, STATE_ITEMS_MAX),
-    materials: (progress?.materials ?? []).map((/** @type {any} */ item) => ({ sourceId: item.sourceId, name: item.name, addedAt: item.addedAt, state: item.state })) };
+    materials: (progress?.materials ?? []).map((/** @type {any} */ item) => ({ sourceId: item.sourceId, name: item.name, addedAt: item.addedAt, state: item.state, ...(item.import ? { import: item.import } : {}) })) };
 }

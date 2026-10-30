@@ -9,7 +9,8 @@
 //
 //   POST /internal/geo/v1/read    {what, filter?}          → the page's shapes (geoService.runtimeRead)
 //   POST /internal/geo/v1/write   {what, items? | data?}   → {ok, ids, issues[]} (geoWrites.mjs)
-//   POST /internal/geo/v1/social  {query, platforms?, sort?, limit?} → minimised posts (socialCrawlClient.mjs)
+//   POST /internal/geo/v1/social  {query, platforms, sort?, limit?} → minimised posts (socialCrawlClient.mjs); `pending` carries a jobId
+//   POST /internal/geo/v1/social_job {jobId}              → read on a job this user and project started (same shapes)
 //
 // Hidden knowledge:
 //
@@ -47,10 +48,10 @@ import { HttpError } from "./security.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "./socialCrawlClient.mjs";
 
 const gatewayPath = "/internal/geo/v1";
-const operations = Object.freeze(["read", "write", "social"]);
+const operations = Object.freeze(["read", "write", "social", "social_job"]);
 /** Calls one project may make per minute, per operation: the ceiling of a loop, not of a run. */
-const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
-const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
+const windowLimits = Object.freeze({ read: 120, write: 60, social: 12, social_job: 12 });
+const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024, social_job: 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
 const readFilterFields = Object.freeze([...new Set([...GEO_ANALYSIS_FIELDS, ...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "targetKey", "url", "key", "limit", "offset", "member"])]);
@@ -199,18 +200,22 @@ function writeRequest(body) {
   return { what: body.what, body: { items: body.items, data: body.data }, planContextRef: body.planContextRef, promptRequestId: body.promptRequestId };
 }
 
-/** @param {Record<string, any>} body */
-function socialRequest(body) {
+/** @param {Record<string, any>} body @param {number} maxPlatforms the deployment's bound on platforms in one call (`geoSocialMaxPlatforms`) */
+function socialRequest(body, maxPlatforms) {
   onlyFields(body, ["query", "platforms", "sort", "limit"]);
   const query = typeof body.query === "string" ? body.query.replace(/\s+/g, " ").trim() : "";
   if (!query || [...query].length > SOCIAL_MAX_QUERY_LENGTH || [...query].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
     throw gatewayError(400, "social_posts_query_invalid", `query must be text of 1 to ${SOCIAL_MAX_QUERY_LENGTH} characters.`);
   }
-  // One platform per call: the crawler serves one request at a time and one
-  // crawl takes 30–120 s (production, 2026-09-25), so more than one does not
-  // fit under the kernel's 180 s tool-call ceiling.
-  if (!Array.isArray(body.platforms) || body.platforms.length !== 1 || !GEO_SOCIAL_PLATFORMS.includes(body.platforms[0])) {
-    throw gatewayError(400, "social_posts_platform_invalid", `Name one platform per call, one of: ${GEO_SOCIAL_PLATFORMS.join(", ")}.`);
+  // The collector serves a job's platforms one at a time (30-120 s each) and a call waits one deadline: the bound is what fits, and the
+  // others are asked in another call, not dropped here.
+  const most = Math.max(1, Math.min(GEO_SOCIAL_PLATFORMS.length, Number.isSafeInteger(maxPlatforms) ? maxPlatforms : GEO_SOCIAL_PLATFORMS.length));
+  if (!Array.isArray(body.platforms) || body.platforms.length < 1 || new Set(body.platforms).size !== body.platforms.length
+    || body.platforms.some((platform) => !GEO_SOCIAL_PLATFORMS.includes(platform))) {
+    throw gatewayError(400, "social_posts_platform_invalid", `Name one to ${most} distinct platforms from: ${GEO_SOCIAL_PLATFORMS.join(", ")}.`);
+  }
+  if (body.platforms.length > most) {
+    throw gatewayError(400, "social_posts_platform_invalid", `At most ${most} platform${most === 1 ? "" : "s"} per call (the collector serves them one at a time, 30-120 s each): ask the others in another call.`);
   }
   const platforms = body.platforms;
   if (body.sort != null && !GEO_SOCIAL_SORTS.includes(body.sort)) {
@@ -221,6 +226,29 @@ function socialRequest(body) {
     throw gatewayError(400, "social_posts_limit_invalid", `limit must be a whole number from 1 to ${SOCIAL_MAX_LIMIT}.`);
   }
   return { query, platforms, sort: body.sort ?? "hot", limit };
+}
+
+/** What the job ledger's refusals say to the run; any other failure stays the gateway's own. @param {any} error */
+function socialJobError(error) {
+  switch (error?.code) {
+    case "social_posts_job_unknown":
+      return gatewayError(404, "social_posts_job_unknown", "This project started no social search with that jobId, or it is more than a day old: search again.");
+    case "social_posts_job_invalid":
+      return gatewayError(400, "social_posts_job_invalid", "jobId is the 32-character id a pending social_posts_search returned.");
+    case "social_posts_job_unavailable":
+      return gatewayError(503, "social_posts_job_unavailable", "The record of social searches could not be read; read the job again shortly.");
+    default:
+      return error;
+  }
+}
+
+/** @param {Record<string, any>} body */
+function socialJobRequest(body) {
+  onlyFields(body, ["jobId"]);
+  if (typeof body.jobId !== "string" || !/^[a-fA-F0-9]{32}$/.test(body.jobId)) {
+    throw gatewayError(400, "social_posts_job_invalid", "jobId is the 32-character id a pending social_posts_search returned.");
+  }
+  return { jobId: body.jobId };
 }
 
 /**
@@ -288,8 +316,9 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
         throw gatewayError(429, "geo_gateway_rate_limited", "Too many GEO calls in a minute.");
       }
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
-      const project = operation === "social" ? null : await geo.store.projectByControlProject(String(identity.userId), String(identity.projectId));
-      if (operation !== "social" && !project) {
+      const social = operation === "social" || operation === "social_job";
+      const project = social ? null : await geo.store.projectByControlProject(String(identity.userId), String(identity.projectId));
+      if (!social && !project) {
         throw gatewayError(404, "geo_no_project", "This conversation is not in a 循证 GEO project; open the GEO project's conversation to read or write its data.");
       }
       let work;
@@ -312,12 +341,16 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
           return { what: request.what, ...result };
         };
       } else {
-        const request = socialRequest(body);
+        const request = operation === "social_job" ? socialJobRequest(body) : socialRequest(body, Number(config.geoSocialMaxPlatforms));
         if (!geo.social?.configured) {
           throw gatewayError(503, "social_posts_unconfigured", "The social channel is not configured on this deployment; say “无信号” for real phrasings, never zero.");
         }
         budget = Math.max(budgetMs, Number(config.geoSocialTimeoutMs ?? 120_000) + 5_000);
-        work = async () => ({ query: request.query, sort: request.sort, ...(await geo.social.search(request)) });
+        // The token, never the request, names whose search this is: the job ledger and the idempotency key are both under it.
+        const scope = { userId: String(identity.userId), projectId: String(identity.projectId) };
+        work = "jobId" in request
+          ? async () => ({ jobId: request.jobId, ...(await geo.social.job({ jobId: request.jobId, scope }).catch((/** @type {any} */ error) => { throw socialJobError(error); })) })
+          : async () => ({ query: request.query, sort: request.sort, ...(await geo.social.search({ ...request, scope })) });
       }
       /** @type {any} */
       let timer;

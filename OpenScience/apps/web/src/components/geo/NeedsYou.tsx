@@ -1,6 +1,7 @@
 import { useGeoPath } from "./useGeoPath";
 import { useGeoDestinationPath } from "./useGeoPath";
 import { useState } from "react";
+import { Link } from "react-router";
 import { PenLine } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { runGeoStep, skipGeoAction, type GeoNeedsYou, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
@@ -8,6 +9,7 @@ import { toast } from "@/lib/toast";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { Note } from "@/components/ui/Note";
 import { Section } from "@/components/ui/Section";
 import { isSeverityLevel, SeverityBadge } from "@/components/ui/SeverityBadge";
 import { measurementPause, type MeasurementPause } from "./geoBand";
@@ -39,19 +41,21 @@ export function NeedsYou({ geoId, project }: { geoId: string; project: GeoProjec
   const paused = pause?.paused ? pause : null;
   if (items.length === 0 && !paused) return null;
   return (
-    <Section title="需要你" count={items.length + (paused ? 1 : 0)} className="mt-0">
+    <>
+    {paused && (
+      <Section title="监测状态" className="mt-0">
+        {/* The way on is where the numbers above come from: the trend, which says what the last round measured. */}
+        <div role="status" data-geo-measurement="paused">
+          <Note action={<Link className="text-link hover:underline" to={geoDestinationPath(geoId, GEO_STEP_HOME.monitoring)}>查看监测走势</Link>}>{paused.short}：{paused.detail}</Note>
+        </div>
+      </Section>
+    )}
+    {items.length > 0 && <Section title="需要你" count={items.length} className="mt-0">
       <List divided label="需要你处理的事">
-        {paused && (
-          <ListRow
-            title={paused.short}
-            titleProps={{ "data-geo-measurement": "paused" }}
-            meta={paused.detail}
-            to={geoDestinationPath(geoId, GEO_STEP_HOME.monitoring)}
-          />
-        )}
         {items.map((item) => <NeedsYouRow key={item.key} geoId={geoId} project={project} item={item} pause={paused} />)}
       </List>
-    </Section>
+    </Section>}
+    </>
   );
 }
 

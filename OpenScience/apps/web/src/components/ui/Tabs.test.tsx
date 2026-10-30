@@ -1,3 +1,4 @@
+import { RailMark } from "./ProgressRail";
 import { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -68,8 +69,8 @@ describe("Tabs", () => {
     expect(screen.getByRole("tab", { name: "定义与证据 部分完成" })).toBeInTheDocument();
     const [partial, active] = [...document.querySelectorAll("[data-tab-dot]")];
     expect(partial).toHaveAttribute("data-tab-dot", "partial");
-    expect(partial).toHaveClass("ring-2", "ring-accent", "bg-accent-soft");
-    expect(active).toHaveClass("ring-2", "ring-accent", "bg-surface");
+    expect(partial).toHaveClass("ring-2", "ring-info", "bg-info-soft");
+    expect(active).toHaveClass("ring-2", "ring-info", "bg-surface");
     expect(partial.className).not.toBe(active.className);
   });
 
@@ -245,4 +246,19 @@ describe("the optional moving underline", () => {
     expect(screen.getByRole("tab", { name: "短信登录" })).toHaveAttribute("tabindex", "0");
     expect(screen.getAllByRole("tab").every((tab) => tab.getAttribute("aria-selected") === "false")).toBe(true);
   });
+});
+
+it("uses success for completion and information for active and partial rail marks", () => {
+  const { container } = render(<><RailMark state="done" /><RailMark state="active" /><RailMark state="partial" /></>);
+  const marks = container.querySelectorAll("[data-status-mark]");
+  expect(marks[0]).toHaveClass("bg-ok");
+  expect(marks[1]).toHaveClass("border-info", "bg-surface");
+  expect(marks[2]).toHaveClass("border-info", "bg-info-soft");
+});
+
+it("manual activation moves focus without selecting until Enter",async()=>{
+ const change=vi.fn();render(<Tabs activation="manual" label="views" items={[{value:"a",label:"A"},{value:"b",label:"B"}]} value="a" onChange={change}/>);
+ screen.getByRole("tab",{name:"A"}).focus();await userEvent.keyboard("{ArrowRight}");
+ expect(screen.getByRole("tab",{name:"B"})).toHaveFocus();expect(change).not.toHaveBeenCalled();
+ await userEvent.keyboard("{Enter}");expect(change).toHaveBeenCalledWith("b");
 });

@@ -1,5 +1,5 @@
 // The memory page for an account whose memory is kept as files, beside the same page for the older kind of account. The two look
-// the same: the same tabs, the same rows, the same drawer, and not a word of which engine holds the memory.
+// the same: the same navigation, the same rows, the same drawer, and not a word of which engine holds the memory.
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -12,7 +12,7 @@ import { MemoryHubPage } from "./MemoryHubPage";
 const api = vi.hoisted(() => ({
   fetchMemoryProfile: vi.fn(), searchMemories: vi.fn(), fetchMemorySettings: vi.fn(), updateMemorySettings: vi.fn(), resetMemory: vi.fn(),
 }));
-const memory = vi.hoisted(() => ({ fetchMyCapsule: vi.fn(), rememberMemory: vi.fn(), fetchProjectOverview: vi.fn(), fetchMemoryGrowth: vi.fn(), fetchMemoryLearned: vi.fn() }));
+const memory = vi.hoisted(() => ({ fetchMyCapsule: vi.fn(), rememberMemory: vi.fn(), fetchMemoryGrowth: vi.fn(), fetchMemoryLearned: vi.fn() }));
 const practice = vi.hoisted(() => ({ listAllMethods: vi.fn() }));
 
 vi.mock("@/lib/apiClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")), getWebProjectId: () => "prj_1", ...api }));
@@ -41,7 +41,6 @@ beforeEach(() => {
   api.fetchMemorySettings.mockResolvedValue(nativeSettings);
   api.searchMemories.mockResolvedValue({ items: [], query: "", semantic: 0, conversations: {}, usage: {} });
   memory.fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
-  memory.fetchProjectOverview.mockRejectedValue(new Error("not read"));
   memory.fetchMemoryGrowth.mockResolvedValue({ unit: null, first: null, fromStart: false, points: [], moments: [], timeZone: "Asia/Shanghai" });
   memory.fetchMemoryLearned.mockResolvedValue({ days: [], timeZone: "Asia/Shanghai" });
   practice.listAllMethods.mockResolvedValue([]);
@@ -58,15 +57,21 @@ describe("the memory page of an account whose memory is kept as files", () => {
     const row = within(preferences).getByText("回答结构").closest("li")!;
     expect(row).toHaveTextContent("先给结论，再给依据；表格不超过五列");
     expect(within(preferences).getByText("meta analysis method")).toBeInTheDocument();
-    // The tab counts every row of the account that is about the person.
-    expect(screen.getByRole("tab", { name: /关于你/ })).toHaveTextContent("5");
+    // The list counts every row of the capsule that is about the person (five) and the project's two, which are its last group.
+    expect(screen.getByRole("link", { name: /关于你/ })).toHaveTextContent("7");
   });
 
-  it("files the project's files under the project, with the same dropdown", async () => {
-    open("?tab=project");
-    const list = await screen.findByRole("list", { name: "项目的记忆" });
+  it("lists the project's files as the last group of 关于你, each row naming its project in plain text", async () => {
+    open();
+    const list = await screen.findByRole("list", { name: "项目记忆" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row).toHaveTextContent("订单服务");
     expect(within(list).getByText("订单服务重构")).toBeInTheDocument();
     expect(within(list).getByText("发布窗口")).toBeInTheDocument();
+    // A name, not a control: the row is the one target, and what it says of its project is not another.
+    expect(within(list).queryByRole("link")).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 2 }).at(-1)).toHaveTextContent("项目记忆");
   });
 
   it("says nothing of the engine, a file or an address anywhere on the page or in a drawer", async () => {
@@ -125,16 +130,6 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(within(dialog).getByRole("textbox", { name: "要记住的内容" })).toHaveValue("我的手机号是 13800138000");
   });
 
-  it("files the words under the project when it is the project's tab that is showing", async () => {
-    memory.rememberMemory.mockResolvedValue({ pending: { id: "p2", text: "周五前出方案", at: new Date().toISOString(), state: "pending" } });
-    open("?tab=project");
-    await userEvent.click(await screen.findByRole("button", { name: "记住这一条" }));
-    const dialog = await screen.findByRole("dialog", { name: "记住这一条" });
-    await userEvent.type(within(dialog).getByRole("textbox", { name: "要记住的内容" }), "周五前出方案");
-    await userEvent.click(within(dialog).getByRole("button", { name: "记住" }));
-    await waitFor(() => expect(memory.rememberMemory).toHaveBeenCalledWith("周五前出方案", "prj_1"));
-  });
-
   it("says a memory that is taking long is taking long, instead of spinning", async () => {
     const old = { id: "p3", text: "以后写英文摘要", at: new Date(Date.now() - 5 * 60_000).toISOString(), state: "retrying" as const };
     api.fetchMemoryProfile.mockResolvedValue({ ...nativeProfile, pending: [old] });
@@ -150,8 +145,8 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(await screen.findByText(/记忆服务暂时不可用/)).toBeInTheDocument();
     expect(screen.queryByText("没有读到全部记忆。")).not.toBeInTheDocument();
     expect(screen.queryByText("还没有关于你的记忆")).not.toBeInTheDocument();
-    // The other tabs still answer for themselves.
-    await userEvent.click(screen.getByRole("tab", { name: /做法/ }));
+    // The other lists still answer for themselves.
+    await userEvent.click(screen.getByRole("link", { name: /做法/ }));
     expect(await screen.findByText("还没有学到的做法")).toBeInTheDocument();
     expect(screen.queryByText(/记忆服务暂时不可用/)).not.toBeInTheDocument();
   });

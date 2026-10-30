@@ -138,8 +138,9 @@ test("the matching tab is assembled from the package's store and its pure judgme
   assert.equal(tab.available, true);
   assert.equal(tab.criteria.length, 2);
   assert.equal(tab.protocol.id, "prt_1");
-  assert.ok(tab.funnel, "the referral funnel is computed, not stored");
-  assert.ok(Array.isArray(tab.sites));
+  assert.ok(Array.isArray(tab.candidates));
+  assert.equal("referrals" in tab, false);
+  assert.equal("sites" in tab, false);
   assert.ok(tab.assessments[0].counts, "an assessment carries its deterministic counts");
   assert.deepEqual(tab.tallies, { eligible: 12, ineligible: 40, insufficient_evidence: 3 }, "tallies over every subject, not a page of them");
 });
@@ -851,7 +852,7 @@ test("a row of the table is a person the study holds data on, not a patient to c
   const done = await seam.onJobFinished({ state: "succeeded", job: { kind: "match_criteria", studyId: "std_1", id: "job_t" },
     engineResult: { diagnostics: { protocolVersionId: "prt_1" }, assessments: [assessment("P-table", "subject_table"), assessment("P-chart")] } });
   assert.equal(done.persisted, 2, "both are saved and counted");
-  assert.deepEqual(referrals.map((referral) => referral.subjectKey), ["P-chart"], "only the person who came with a chart is offered to a site");
+  assert.deepEqual(referrals, [], "matching never creates recruitment records, including chart-based candidates");
 });
 
 test("a panel evaluation of another protocol records its assessments and never touches the referral ledger (E-05)", async () => {
@@ -878,7 +879,7 @@ test("a panel evaluation of another protocol records its assessments and never t
   // The current protocol's own evaluation makes the referrals, from its own assessments.
   const current = await finish("prt_2", [assessment("P-1", "prt_2", "ineligible"), assessment("P-2", "prt_2", "eligible"), assessment("P-3", "prt_2", "insufficient_evidence")]);
   assert.equal(current.persisted, 3);
-  assert.deepEqual(referrals.map((referral) => [referral.subjectKey, referral.assessmentId, referral.state]), [["P-2", "mas_4", "candidate"], ["P-3", "mas_5", "needs_evidence"]]);
+  assert.deepEqual(referrals, [], "current protocol matching also has no recruitment side effects");
   // A later panel run of the earlier protocol cannot re-point a live referral at its own verdict.
   referrals.length = 0;
   await finish("prt_1", [assessment("P-2", "prt_1", "eligible")]);
@@ -889,7 +890,7 @@ test("a panel evaluation of another protocol records its assessments and never t
     engineResult: { diagnostics: { protocolVersionId: "prt_2" }, assessments: [assessment("P-9", "prt_2", "eligible")] } });
   assert.equal(kept.persisted, 1);
   assert.deepEqual(referrals, []);
-  assert.deepEqual(reported, ["vcr_db_down"]);
+  assert.deepEqual(reported, [], "persisting research assessments needs no CRM protocol read");
 });
 
 test("a job's frozen inputs name the subject table it will read, and a study with no table keeps the token it had", async () => {
@@ -920,4 +921,13 @@ test("clinical enrichment is every study's unless the deployment lists study ids
   assert.equal(clinicalEnrichmentOn(["std_2"], "std_1"), false);
   assert.equal(clinicalEnrichmentOn(["std_2", "std_1"], "std_1"), true);
   assert.deepEqual(loadConfig({ rootDir: repoRoot }).vcrClinicalStudyIds, [], "the shipped default restricts nothing");
+});
+
+test('matching result reads omit repeated schema/terminology and preserve narrow criterion judgments',async()=>{
+ const seam=vcrMatchingSeam({matchStore:matchStoreDouble(),store:storeDouble,documents:cloudDocuments,clinicalContext:async()=>({terms:['large-reference'.repeat(500)]})});
+ const subject=await seam.runtimeRead({id:'std_1'},{subjectKey:'P-001'});
+ assert.equal('factContract' in subject,false);assert.equal('terminology' in subject,false);assert.ok(JSON.stringify(subject).length<5000);
+ const narrow=await seam.runtimeRead({id:'std_1'},{subjectKey:'P-001',id:'crt_mi'});assert.deepEqual(narrow.assessment.judgments.map(row=>row.criterionId),['crt_mi']);assert.equal(narrow.assessment.judgments[0].state,'unknown');assert.ok('evidence' in narrow.assessment.judgments[0]);
+ const contract=await seam.runtimeRead({id:'std_1'},{kind:'contract'});assert.ok(contract.factContract);assert.ok(contract.protocolWrite.data.criteria[0].requirement);assert.equal('terminology' in contract,false);
+ const terminology=await seam.runtimeRead({id:'std_1'},{kind:'terminology'});assert.ok(terminology.terminology);
 });

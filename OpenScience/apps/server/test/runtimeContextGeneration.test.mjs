@@ -130,16 +130,19 @@ test('shared launches retain separately verified published platform skills and s
  assert.ok(f.plan().args.includes(`type=bind,src=${root}/skills,dst=/opt/evimed/platform-skills,readonly`));assert.equal(receipt.restrictions.personalExtensions,'excluded-until-shared-byte-authorization');
 });
 
-test('shared provider and common plans exclude a populated owner library while ordinary plans retain it',async t=>{
- const f=await managerFixture(t),library=path.join(f.config.dataDir,'users','owner','library');
+// Since 2026-10-28 an ordinary plan mounts the project's own view of the library (the entries that apply to it), never the account's
+// master folder; a shared plan mounts neither.
+test('shared provider and common plans exclude a populated owner library while ordinary plans mount the project view',async t=>{
+ const f=await managerFixture(t),library=path.join(f.config.dataDir,'users','owner','library'),view=path.join(f.config.dataDir,'users','owner','library-views',f.project.id);
  await fs.mkdir(library,{recursive:true});await fs.writeFile(path.join(library,'foreign.md'),'PRIVATE OWNER LIBRARY');
+ await fs.mkdir(view,{recursive:true});
  f.project.baseDir=f.project.workspaceDir;await fs.mkdir(path.join(f.project.workspaceDir,'knowledge-base'),{recursive:true});await fs.writeFile(path.join(f.project.workspaceDir,'knowledge-base','project.md'),'PROJECT SOURCE');
  const generation=await f.manager.prepareSharedContext(f.project,policy),input={port:49152,pluginConfig:{revision:0,enabled:true,settings:{timeoutMs:15000}},capsuleMethodsMounted:0};
  const shared=await f.manager.provider.prepare(f.project,{...input,contextGeneration:generation}),ordinary=await f.manager.provider.prepare(f.project,input);
- assert.equal(shared.readOnlyViews.library,null);assert.ok(!shared.args.some(arg=>arg.includes(`src=${library},`)));
+ assert.equal(shared.readOnlyViews.library,null);assert.ok(!shared.args.some(arg=>arg.includes(`src=${library},`)||arg.includes(`src=${view},`)));
  assert.ok(shared.args.includes(`type=bind,src=${f.project.workspaceDir},dst=/workspace`));
  assert.ok(shared.args.includes(`type=bind,src=${f.project.workspaceDir}/knowledge-base,dst=/workspace/knowledge-base,readonly`));
- assert.ok(ordinary.args.includes(`type=bind,src=${library},dst=/workspace/library,readonly`));
+ assert.ok(ordinary.args.includes(`type=bind,src=${view},dst=/workspace/library,readonly`));assert.ok(!ordinary.args.some(arg=>arg.includes(`src=${library},`)),'the account folder is never mounted');
  assert.equal(await fs.readFile(path.join(library,'foreign.md'),'utf8'),'PRIVATE OWNER LIBRARY');
  const common=buildRuntimeLaunchPlan({...launchConfig,...f.config},f.project,49152,{contextGeneration:generation});assert.equal(common.readOnlyViews.library,null);
 });

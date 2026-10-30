@@ -4,9 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, GEO_SOCIAL_PLATFORMS, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
+import { researchDbSettings } from "./researchDbConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
 import { PINNED } from "./pinnedVersions.mjs";
@@ -690,6 +691,10 @@ function countSetting(overrides, key, name, fallback) {
  *   pack 「大家的做法」 (`officialPromotion.mjs`), after the code's field checks, a generality judge, a harm judge, the author rule and an independent re-check by a
  *   model of another family. It needs the learning loop on and a review provider that is not DeepSeek: with none, nothing is considered and nothing is spent.
  *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY` (3, at most 30) bounds the methods re-checked and activated in a day, each a model call of the platform's own.
+ *   An account is a voice only when it is at least `OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS` days old (14) and has finished
+ *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS` runs of its own (3) — the author of a method that waits for a second account and the second
+ *   account alike, and the author again when the method is re-checked — because accounts register themselves: two accounts made minutes apart (an
+ *   acceptance harness's, on 2026-10-27) corroborated each other and put a test conversation's method on every account's shelf.
  *   (This replaced the platform handbook path, `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_*`, whose one producer was a repaired delivery read at share 0; 2026-10-25.)
  *
  * @param {Record<string, any>} overrides
@@ -698,6 +703,13 @@ function evidenceFlywheelSettings(overrides) {
   const promotionRaw = overrides.officialPromotionPerDay !== undefined ? overrides.officialPromotionPerDay : process.env.OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY;
   const promotionPerDay = promotionRaw == null || promotionRaw === "" ? 3 : Number(promotionRaw);
   if (!Number.isSafeInteger(promotionPerDay) || promotionPerDay < 1 || promotionPerDay > 30) throw new Error(`OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(promotionRaw)}.`);
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} max */
+  const standingFloor = (key, name, fallback, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+    const value = raw == null || raw === "" ? fallback : Number(raw);
+    if (!Number.isSafeInteger(value) || value < 0 || value > max) throw new Error(`${name} must be a whole number from 0 to ${max}, got ${JSON.stringify(raw)}.`);
+    return value;
+  };
   const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
   const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
   if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
@@ -717,6 +729,8 @@ function evidenceFlywheelSettings(overrides) {
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
     officialPromotionEnabled: overrides.officialPromotionEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", true),
     officialPromotionPerDay: promotionPerDay,
+    officialPromotionMinAccountAgeDays: standingFloor("officialPromotionMinAccountAgeDays", "OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS", 14, 365),
+    officialPromotionMinFinishedRuns: standingFloor("officialPromotionMinFinishedRuns", "OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS", 3, 1000),
   };
 }
 
@@ -858,6 +872,9 @@ function geoSettings(overrides) {
     throw new Error(`OPEN_SCIENCE_GEO_ENGINES must be distinct values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(engines.join(","))}.`);
   }
   const inclusionEngines = [...new Set(list("geoInclusionEngines", "OPEN_SCIENCE_GEO_INCLUSION_ENGINES", "").map((engine) => engine.toLowerCase()))];
+  // A path only: the social client reads the key anew for every job request.
+  const socialKeyFile = String(read("geoSocialApiKeyFile", "OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE", "")).trim();
+  if (socialKeyFile && !path.isAbsolute(socialKeyFile)) throw new Error("OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE must be an absolute path.");
   if (inclusionEngines.some((engine) => !GEO_ENGINES.includes(engine))) {
     throw new Error(`OPEN_SCIENCE_GEO_INCLUSION_ENGINES must be values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(inclusionEngines.join(","))}.`);
   }
@@ -915,9 +932,25 @@ function geoSettings(overrides) {
     // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused
     // with `geo_probe_gateway_rate_limited` (429), which reaches the operator's ledger by its code. 12 is the social channel's.
     geoProbeCallsPerMinute: integer("geoProbeCallsPerMinute", "OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", 12, 1, 600),
+    // How long a probe task the host accepted may stay unfinished before the measurement queue gives up on it, counted from the host
+    // accepting it. The host answers a question in about five minutes; this is the margin for one that queues, restarts or cannot be
+    // reached while a task runs. Past it the job fails as `accepted_result_unavailable` and is never asked again, so a task that
+    // finishes late costs nothing twice. Counted as `open_science_geo_probe_tasks_total{outcome="accepted_result_unavailable"}`.
+    geoProbeTaskMaxAgeMinutes: integer("geoProbeTaskMaxAgeMinutes", "OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES", 45, 5, 1_440),
+    // How long the gateway keeps the record of a task it accepted for a runtime (the ask, not the answer), so an interactive ask that
+    // outlives the tool's deadline can be read later by its request id. The host's own retention of finished tasks bounds what a later
+    // read can still find. Counted as `open_science_geo_probe_tasks_total{outcome="pending"}`.
+    geoProbeResultKeepHours: integer("geoProbeResultKeepHours", "OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS", 24, 1, 168),
     geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
+    geoSocialApiKeyFile: socialKeyFile,
+    geoSocialAllowPlaintext: overrides.geoSocialAllowPlaintext ?? boolEnv("OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT", false),
     geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 140_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
+    // Platforms one social search may name. The collector serves a job's platforms one at a time, measured 30-120 s each, and a call waits one
+    // deadline (the timeout above, 140 s by default): at the median two platforms are what fits, so a call naming more is refused by name
+    // (`social_posts_platform_invalid`, counted with the gateway's refusals) and asks the rest in another call. A job that does overrun is
+    // not lost: it is answered `pending` with its id and read on. 1 to the vocabulary's size, for a collector measured faster or slower.
+    geoSocialMaxPlatforms: integer("geoSocialMaxPlatforms", "OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS", 2, 1, GEO_SOCIAL_PLATFORMS.length),
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,
@@ -1089,6 +1122,17 @@ function vcrSettings(overrides) {
     vcrStepsInStudySession: overrides.vcrStepsInStudySession ?? boolEnv("OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION", false),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
+    // Local, non-engine work and durable result delivery have separate bounded budgets.
+    vcrLocalConcurrency: integer("vcrLocalConcurrency", "OPEN_SCIENCE_VCR_LOCAL_CONCURRENCY", 2, 1, 4),
+    vcrCompletionIntervalMs: integer("vcrCompletionIntervalMs", "OPEN_SCIENCE_VCR_COMPLETION_INTERVAL_MS", 15_000, 1_000, 3_600_000),
+    vcrCompletionBatch: integer("vcrCompletionBatch", "OPEN_SCIENCE_VCR_COMPLETION_BATCH", 5, 1, 100),
+    vcrCompletionReconcileBatch: integer("vcrCompletionReconcileBatch", "OPEN_SCIENCE_VCR_COMPLETION_RECONCILE_BATCH", 50, 1, 1000),
+    vcrCompletionLeaseMs: integer("vcrCompletionLeaseMs", "OPEN_SCIENCE_VCR_COMPLETION_LEASE_MS", 300_000, 1_000, 3_600_000),
+    vcrCompletionRetryMs: integer("vcrCompletionRetryMs", "OPEN_SCIENCE_VCR_COMPLETION_RETRY_MS", 15_000, 1_000, 3_600_000),
+    vcrCompletionRetryMaxMs: integer("vcrCompletionRetryMaxMs", "OPEN_SCIENCE_VCR_COMPLETION_RETRY_MAX_MS", 900_000, 1_000, 86_400_000),
+    vcrCompletionMaxAttempts: integer("vcrCompletionMaxAttempts", "OPEN_SCIENCE_VCR_COMPLETION_MAX_ATTEMPTS", 12, 1, 100),
+    vcrCompletionMaxAgeMs: integer("vcrCompletionMaxAgeMs", "OPEN_SCIENCE_VCR_COMPLETION_MAX_AGE_MS", 86_400_000, 60_000, 604_800_000),
+    vcrCompletionRetentionMs: integer("vcrCompletionRetentionMs", "OPEN_SCIENCE_VCR_COMPLETION_RETENTION_MS", 604_800_000, 60_000, 31_536_000_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.
     vcrEngineUrl: engineUrl,
     vcrMethodValidationFile: String(overrides.vcrMethodValidationFile ?? process.env.OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE ?? '').trim(),
@@ -2177,6 +2221,12 @@ export function loadConfig(overrides = {}) {
     runtimeProxyConnectTimeoutMs: Number(
       overrides.runtimeProxyConnectTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS ?? 30_000,
     ),
+    // Only source/actor checks and the bounded prompt acceptance RPC hold this same-session fence.
+    runtimePromptAdmissionTimeoutMs: (()=>{
+      const value=Number(overrides.runtimePromptAdmissionTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS ?? 30000);
+      if(!Number.isSafeInteger(value) || value<500 || value>60000) throw new Error("OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS must be a whole number from 500 to 60000.");
+      return value;
+    })(),
     runtimeProxyRequestTimeoutMs: Number(
       overrides.runtimeProxyRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS ?? 120_000,
     ),
@@ -2469,6 +2519,11 @@ export function loadConfig(overrides = {}) {
     evimedDisabledTools: String(
       overrides.evimedDisabledTools ?? process.env.EVIMED_DISABLED_TOOLS ?? "",
     ).split(",").map((name) => name.trim()).filter(Boolean).join(","),
+    // The research-database connector (a project's own PostgreSQL, read as a snapshot) exists only when BOTH are set:
+    // the egress allowlist, comma-separated `host:port=IPv4` entries, and the independent keyring file that seals the
+    // saved credentials (`researchDbKeyring.mjs`: owner-only mode, key ids bound to their key material). The operator's
+    // CA directory and every limit, each with its reason, are `researchDbConfig.mjs`.
+    ...researchDbSettings(overrides),
     pharmacyReferenceDb: configuredPharmacyReferenceDb
       ? (path.isAbsolute(configuredPharmacyReferenceDb)
         ? configuredPharmacyReferenceDb
@@ -2994,6 +3049,10 @@ export function loadConfig(overrides = {}) {
     // the account mounts), its listing and the search scope it adds to every
     // project; past it the researcher is told to remove one first.
     libraryMaxItems: Number(overrides.libraryMaxItems ?? process.env.OPEN_SCIENCE_LIBRARY_MAX_ITEMS ?? 1_000),
+    // What an account's projects may hold of the library together. Each project that has a runtime gets its own real copy of the
+    // entries that apply to it (`libraryService.mjs`), so the library costs the disk once per project: a project whose
+    // directory does not exist yet and whose copy would pass this gets none, and its runtime starts without /workspace/library.
+    libraryViewMaxBytes: Number(overrides.libraryViewMaxBytes ?? process.env.OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES ?? 512 * 1024 * 1024),
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
@@ -3049,6 +3108,7 @@ export function loadConfig(overrides = {}) {
     // Literature-driven platform development (循证进化) has its own accounting. On by default since
     // 2026-10-07 (owner: 「循证进化默认打开」); it still needs PostgreSQL and the product ledger, and
     // `OPEN_SCIENCE_EVOLUTION_ENABLED=false` turns it off.
+    rsiOnlineConfigFile: overrides.rsiOnlineConfigFile ?? process.env.OPEN_SCIENCE_RSI_ONLINE_CONFIG_FILE ?? "",
     evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", true),
     evolutionEvaluationNetwork: overrides.evolutionEvaluationNetwork ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_NETWORK ?? '',
     // Defaults live in `evolutionConfiguration.mjs`'s schema, with the reasons and the bounds; the defaults written here must equal it (`evolutionConfiguration.test.mjs` holds them equal).
@@ -3057,6 +3117,14 @@ export function loadConfig(overrides = {}) {
     evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
     evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
     evolutionSearchPaused: overrides.evolutionSearchPaused ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED", false),
+    // The serving cutover (2026-10-26, the offline RSI lab): on, the control plane composes only what serves published state (events, decision
+    // expiries, the operators' digest, a retirement's completion, a published tool's self-check) and nothing experimental runs online. It is a
+    // one-way cutover of queued experimental work: at the first worker poll the nine experimental job kinds that are queued or lease-expired are
+    // cancelled as `evolution_offline_only`, queued events of any other type are closed as `retired-to-lab`, pending decision cards whose default
+    // is an experiment are closed, an unanswered harm review takes the protective retirement, the experimental POST /api/evolution routes answer
+    // 409, and the search pause above is implied. Off (the default), evolution composes exactly as before the lab and `evolutionSearchPaused`
+    // alone governs the pause.
+    evolutionServingOnly: overrides.evolutionServingOnly ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SERVING_ONLY", false),
     evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
     // How many different accounts of a class a user-originated signal or lead needs before the platform loop reads it (review D-E12). Researchers
     // need five, always: one person's private work must not steer the platform. An operator's own account is the platform's, and on a deployment
@@ -3191,6 +3259,15 @@ export function loadConfig(overrides = {}) {
     runtimeContextWindow: Number(overrides.runtimeContextWindow
       ?? process.env.OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW
       ?? overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 400_000),
+    // What the kernel reserves for one answer of the model, out of the context window above.
+    //
+    // DSH 0.2.1 compacts when the next request would pass contextWindow - maxTokens - 65,536, and its DeepSeek adapter
+    // reserves 256,000 when nothing says otherwise: against the 400,000 window that left about 78,000 tokens of input, and a
+    // 19-minute review run on the live check of 2026-10-28 compacted nine times, dropping the history it was reasoning
+    // over (production's 34-minute run compacted too). 65,536 covers a model turn with long thinking and a long file
+    // written in one call, and puts the trigger near 270,000.
+    runtimeMaxOutputTokens: Number(overrides.runtimeMaxOutputTokens
+      ?? process.env.OPEN_SCIENCE_RUNTIME_MAX_OUTPUT_TOKENS ?? 65_536),
     requireInbox: overrides.requireInbox ?? boolEnv("OPEN_SCIENCE_REQUIRE_INBOX", production),
     // How long a run may produce no new message and no new tool call before it
     // is treated as stalled. A ledger of start/dispatch/finish cannot tell a
@@ -3211,12 +3288,12 @@ export function loadConfig(overrides = {}) {
     // are finer controls and none of them is the whole thing: extraction off
     // still serves records, an index off still recalls by term match.
     memoryEnabled: overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
-    // 「记忆地图」 (memoryMap.mjs, 2026-10-12): the read-only map of what the platform remembers and knows. A view over the memory
-    // store, so it follows the subsystem's switch unless its own is set; off, its routes answer 503 by name and the page hides.
+    // The memory dashboard's document (memoryMap.mjs, 2026-10-12): the read-only map of what the platform remembers and knows. A view
+    // over the memory store, so it follows the subsystem's switch unless its own is set; off, its routes answer 503 by name and the page hides.
     memoryMapEnabled: overrides.memoryMapEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_MAP_ENABLED",
       overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true)),
     // The map's topics (memoryTopics.mjs): one Flash call groups an account's memories into open-vocabulary topics. `Enabled` off
-    // leaves the map without the 主题 view's data; `DailyRuns` is the most groupings one account may have made in a day (a grouping
+    // leaves the dashboard without topics; `DailyRuns` is the most groupings one account may have made in a day (a grouping
     // is only made when the memories changed, and a researcher's rename, merge or dismissal never costs one); `MinMemories` is how
     // few memories there must be before there is anything to group.
     memoryTopicsEnabled: overrides.memoryTopicsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_TOPICS_ENABLED", true),
@@ -3227,14 +3304,6 @@ export function loadConfig(overrides = {}) {
     memoryTopicsMinMemories: Math.max(4, Math.min(200, Math.trunc(Number(
       overrides.memoryTopicsMinMemories ?? process.env.OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES ?? 12,
     )) || 12)),
-    // The map's 「在做什么」 radar for any account (runTaskType.mjs): one Flash call says what kind of work a finished conversation was,
-    // from a short fixed list. `Enabled` off leaves the radar to the capabilities that answered; `DailyCalls` is the most such calls one
-    // account may have made in a day (a conversation is judged once, an older one only when the map is read) and 0 stops the judging.
-    taskTypeEnabled: overrides.taskTypeEnabled ?? boolEnv("OPEN_SCIENCE_TASK_TYPE_ENABLED", true),
-    taskTypeDailyCalls: (() => {
-      const asked = Number(overrides.taskTypeDailyCalls ?? process.env.OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS ?? 60);
-      return Number.isFinite(asked) ? Math.max(0, Math.min(1000, Math.trunc(asked))) : 60;
-    })(),
     // Off by default: turning it on publishes an account's memory to whoever
     // holds an API key. A deployment decides that, never a default.
     agentMemoryApiEnabled:
@@ -3467,6 +3536,13 @@ export function loadConfig(overrides = {}) {
     // asking for four more; a gate of ours, and the account's own caps already bound the cost). The caps count what this account's compile tasks used, as the engine
     // reports it when each ends (CNY; 0 = no cap): a round is not started past them, and a task is asked to stop after
     // `knowledgePagesTaskTimeoutMs`. `knowledgeGraphEnabled` off compiles the wiki only.
+    // Explicit operator opt-in: ordinary projects compile only their own inputs. With it on, the account's library root joins a
+    // project's compile only while EVERY library entry applies to that project (a document can be limited to some projects,
+    // 2026-10-28): the engine reads a compile root whole and holds the account's library under one root, so one entry limited
+    // to other projects keeps the root out of this project's compile, and the project compiles from its own documents. Feeding
+    // the entries that do apply one by one needs the engine to take a single document as a compile source, which has not been
+    // probed.
+    knowledgePagesIncludeLibrary: overrides.knowledgePagesIncludeLibrary ?? boolEnv("OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY", false),
     knowledgePagesMinSources: Math.max(1, Math.min(200, Math.trunc(Number(overrides.knowledgePagesMinSources ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES ?? 1)) || 1)),
     knowledgePagesDebounceMs: Math.max(0, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesDebounceMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DEBOUNCE_MS ?? 600_000)) || 0)),
     knowledgePagesDailyLimitCny: Number(overrides.knowledgePagesDailyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DAILY_LIMIT_CNY ?? 10),

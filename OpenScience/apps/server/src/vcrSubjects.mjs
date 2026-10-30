@@ -27,6 +27,7 @@ import { lineageNode, VCR_JOB_METHODS, validateScenario, canonicalScenarioJson, 
 import { HttpError } from "./security.mjs";
 import { VCR_SUBJECT_KINDS, vcrJobObjectKind } from "./vcrJobs.mjs";
 import { VCR_OBJECT_NODE_KINDS } from "./vcrStore.mjs";
+import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -59,6 +60,7 @@ export const VCR_SUBJECT_TABS = Object.freeze(/** @type {Record<string, string>}
  * and what the researcher downloads (`vcrRecords.mjs`). The programme names the same ones for the objects it queues itself.
  */
 export const VCR_KEPT_TABLES = Object.freeze(/** @type {Record<string, readonly string[]>} */ ({
+  apply_prognostic_model: ["prognostic-predictions"],
   generate_population: ["population"], literature_population: ["population"], synthesize_population: ["synthetic-population"],
   generate_patients: ["virtual-patients"], generate_patients_continuous: ["virtual-patients"], generate_patients_binary: ["virtual-patients"],
   generate_patients_longitudinal: ["virtual-patients"],
@@ -225,7 +227,14 @@ function holdings(objectKind, current) {
  *   lineage node, the step, the stage and the versions it replaces.
  */
 export async function resolveJobSubject({ store, study, kind, subjectId = null, scenario = {} }) {
-  const objectKind = vcrJobObjectKind(kind);
+  let objectKind = vcrJobObjectKind(kind);
+  if (kind === "apply_prognostic_model" && subjectId) {
+    const matches = (await Promise.all(["patient_set", "comparator"].map(async candidate => ({
+      kind: candidate, rows: await objectRows(store, study.id, candidate),
+    })))).filter(candidate => candidate.rows.some(row => row.id === subjectId));
+    if (matches.length !== 1) throw new VcrSubjectError("vcr_simulate_subject_unknown", "The prediction subject must be an owned patient set or comparator design.");
+    objectKind = matches[0].kind;
+  }
   if (!objectKind) return null;
   const rows = await objectRows(store, study.id, objectKind);
   const current = vcrCurrentObjects(objectKind, rows);
@@ -261,6 +270,52 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
       ...(VCR_KEPT_TABLES[kind] ? { keepTables: [...VCR_KEPT_TABLES[kind]] } : {}),
     },
   };
+}
+
+/** Freeze the exact selected cohort for both conversation and browser jobs. No newest-snapshot substitution.
+ * Only this server-side preparation may pass a generated population table to the queue.
+ * @param {{store:any,study:any,kind:string,subject:any,scenario:Record<string,any>,inputs:any[],sourceModel?:any}} input
+ */
+export async function prepareVcrSubjectPopulation({ store, study, kind, subject, scenario, inputs, sourceModel = null }) {
+  const isPrediction = kind === "apply_prognostic_model";
+  const isGenerator = ["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind);
+  if (!subject || (!isPrediction && !isGenerator)) return { scenario, inputs, derived: [], detail: {} };
+  const row = subject.row;
+  const configuration = subject.objectKind === "comparator" ? object(row.configuration) : object(row.scenario);
+  const modelId = row.modelId ?? configuration.modelId;
+  const modelVersion = row.modelVersion ?? configuration.modelVersion;
+  if (modelId && (!sourceModel || sourceModel.id !== modelId || sourceModel.version !== modelVersion)) {
+    throw new VcrSubjectError("vcr_model_not_applicable", "The computation must use the model version saved on its subject.");
+  }
+  const endpoint = object(configuration.endpoint).type;
+  if (endpoint && endpoint !== object(scenario.endpoint).type) throw new VcrSubjectError("vcr_model_not_applicable", "The computation endpoint differs from its saved subject.");
+  const populationId = row.populationId ?? configuration.populationId;
+  if (!populationId) return { scenario, inputs, derived: [], detail: {} };
+  const population = list(await store.populations(study.id, 1000)).find(entry => entry.id === populationId);
+  if (!population) throw new VcrSubjectError("vcr_model_not_applicable", "The exact selected population is unavailable.");
+  if (sourceModel) {
+    const model = list(await store.models(String(study.userId))).find(entry => entry.id === sourceModel.id && entry.version === sourceModel.version);
+    if (!model || vcrModelApplicabilityIssues(model, { endpointType: object(scenario.endpoint).type, variables: vcrPopulationVariables(population) }).length) {
+      throw new VcrSubjectError("vcr_model_not_applicable", "The source model does not cover this endpoint and selected population.");
+    }
+  }
+  const target = { ...scenario };
+  const detail = { populationId: population.id, populationVersion: population.version };
+  if (population.kind === "real") {
+    const rules = object(population.definition).rules;
+    if (rules && target.cohortRules && canonicalScenarioJson(rules) !== canonicalScenarioJson(target.cohortRules)) throw new VcrSubjectError("vcr_model_not_applicable", "The cohort rules differ from the selected population version.");
+    if (!population.snapshotId || inputs.some(entry => entry.kind === "snapshot" && entry.id !== population.snapshotId)) throw new VcrSubjectError("vcr_model_not_applicable", "Use the exact snapshot of the selected population version.");
+    if (isPrediction && (typeof target.inputId !== "string" || !target.inputId.startsWith(`${population.snapshotId}:`))) throw new VcrSubjectError("vcr_model_not_applicable", "Select a baseline table from this population's exact snapshot.");
+    if (rules) target.cohortRules = rules;
+    return { scenario: target, inputs: [...inputs.filter(entry => entry.kind !== "snapshot"), { kind: "snapshot", id: population.snapshotId }], derived: [], detail };
+  }
+  const result = population.resultId ? await store.result(study.id, population.resultId) : null;
+  const execution = result?.executionId ? await store.one("SELECT method FROM evimed_vcr.executions WHERE id=$1 AND study_id=$2", [result.executionId, study.id]) : null;
+  const selected = vcrPopulationGenerationInput(population, result, execution);
+  if (!selected) throw new VcrSubjectError("vcr_model_not_applicable", "The selected generated population has no retained immutable table yet.");
+  if (inputs.some(entry => ["snapshot", "snapshot_file", "analysis_table"].includes(entry.kind)) || target.inputId && target.inputId !== selected.inputId) throw new VcrSubjectError("vcr_model_not_applicable", "The input table differs from the selected generated population.");
+  if (isPrediction) { target.inputId = selected.inputId; target.idColumn = "__generated_patient_id"; }
+  return { scenario: target, inputs, derived: [{ resultId: selected.resultId, table: selected.table }], detail: { ...detail, populationGeneration: selected } };
 }
 
 // ---------------------------------------------------------------------------

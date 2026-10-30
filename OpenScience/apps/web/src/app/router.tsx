@@ -6,6 +6,7 @@ import { FrameSkeleton } from "./routes/RuntimeUiFrame";
 import { LoginPage } from "./routes/LoginPage";
 import { NotFound } from "./routes/NotFound";
 import { RouteError } from "./routes/RouteError";
+import { MemoryMapRedirect } from "./routes/MemoryMapRedirect";
 
 /**
  * Every workbench page is its own chunk.
@@ -23,16 +24,15 @@ const FrontierArticlePage = lazy(() => import("./routes/FrontierArticlePage").th
 const GlobalHomeRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.GlobalHomeRoute })));
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
-const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
+const ActiveResearchPage = lazy(() => import("./routes/ActiveResearchPage").then((m) => ({ default: m.ActiveResearchPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
 const VcrCalculationWorkbenchPage = lazy(() => import("./routes/VcrCalculationWorkbenchPage").then((m) => ({ default: m.VcrCalculationWorkbenchPage })));
 const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPage").then((m) => ({ default: m.VcrMethodWorkbenchPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
-const MemoryMapPage = lazy(() => import("./routes/MemoryMapPage").then((m) => ({ default: m.MemoryMapPage })));
 const MemoryOverviewPage = lazy(() => import("./routes/MemoryOverviewPage").then((m) => ({ default: m.MemoryOverviewPage })));
 const SharedCapsulePage = lazy(() => import("./routes/SharedCapsulePage").then((m) => ({ default: m.SharedCapsulePage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
@@ -132,21 +132,22 @@ export const routes: RouteObject[] = [
         // tabs land (`open-artifact`, contract C9) and where a claim's preserved
         // source opens with its quotation marked.
         { path: "runs/:runId/files/*", element: <RunFilePage /> },
-        // 「知识库」: the list, with its scope, type and search in the address, and one document on a page of its own
-        // (`files/:sourceId`) — the original beside what it says. A link by `?source=<id>` is answered by the list, which
-        // sends it to the document's page.
-        { path: "files", element: <KnowledgePage /> },
+        // 「知识库」: every document once, each saying where it takes effect, with the chosen one read in the pane beside
+        // the list (`files/:sourceId`), or on a page of its own where there is no room for both. A link by `?source=<id>` is
+        // answered by the list.
         // A compiled file named by its place (a mark of the memory map, a link from outside): it goes to the document's page.
         { path: "files/open", element: <KnowledgeOpenPage /> },
-        { path: "files/:sourceId", element: <SourceReaderPage /> },
+        // One route for the list and a document in its pane, so choosing another document does not remount the list.
+        { path: "files/:sourceId?", element: <KnowledgePage /> },
         // 「定时任务」: the list at `/app/autopilot`, one task and its conversation at `/app/autopilot/:taskId`. One route, with or
         // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane
         // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
         { path: "autopilot/:taskId?", element: <AutopilotPage /> },
+        { path: "active-research", element: <ActiveResearchPage /> },
         { path: "memory", element: <MemoryHubPage /> },
-        // 「记忆地图」: the explorable picture of the memory page's contents, a data page of its own (DESIGN.md 「页面结构」).
-        { path: "memory/map", element: <MemoryMapPage /> },
-        // 「总览」: the capsule as six parts of one picture, where `/app/memory` lands and each card drills into the map from (DESIGN.md 「页面结构」).
+        // 「记忆地图」 was a tab until 2026-10-27, and is part of 总览 now: an old address goes there with what it can carry over.
+        { path: "memory/map", element: <MemoryMapRedirect /> },
+        // 「总览」: the capsule as one data page, where `/app/memory` lands (DESIGN.md 「页面结构」).
         { path: "memory/overview", element: <MemoryOverviewPage /> },
         // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
         { path: "memory/shared/:token", element: <SharedCapsulePage /> },

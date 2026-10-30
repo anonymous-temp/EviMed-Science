@@ -1,0 +1,71 @@
+{
+ "case": "html-list/cn-js-mpa-dt",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-26T13:06:17+00:00",
+ "note": null,
+ "source": {
+  "id": "cn-js-mpa-dt",
+  "name": "江苏省药品监督管理局 省局信息",
+  "homepage": "https://da.jiangsu.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "江苏省药品监督管理局",
+  "launch_tier": "P2",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://da.jiangsu.gov.cn/col/col84602/index.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "da.jiangsu.gov.cn"
+   ],
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "a.bt_link",
+    "title": ".",
+    "link": "@href",
+    "date": "@href"
+   },
+   "date_regex": "/art/(\\d{4}/\\d{1,2}/\\d{1,2})/",
+   "date_format": "%Y/%m/%d",
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-26T13:06:16+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://da.jiangsu.gov.cn/col/col84602/index.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://da.jiangsu.gov.cn/col/col84602/index.html",
+   "headers": {
+    "content-type": "text/html",
+    "last-modified": "Mon, 26 Oct 2026 10:17:27 GMT",
+    "etag": "W/\"6adf28b7-fa0c\""
+   },
+   "fetched_at": "2026-10-26T13:06:17+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 64012,
+   "sha256": "f27ed50f3f3e068ba14419455a534971482c48e63473b8e09c7f73dc848c60fd"
+  }
+ ]
+}

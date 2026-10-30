@@ -6,7 +6,7 @@
  * kernel's own custom properties, and that is the whole of how the frame comes
  * to look like EviMed. `packages/harness-port/src/runtimeUiTheme.mjs` owns the
  * seam; this module owns the values, so the shell and the conversation cannot
- * disagree about what blue is.
+ * disagree about their palette.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client, and the reason this
  * is a hand-written mapping rather than a loop over `COLOR_ROLES`:
@@ -25,7 +25,7 @@
  *  - The send button's glyph is a hard-coded `#fff` on
  *    `--dsw-alias-button-info-fill`, so that fill must carry white in BOTH
  *    schemes. Upstream's blue carried it at 4.23:1 light and 2.7:1 dark; the
- *    brand's 600 step is 6.24:1 in both.
+ *    action ramp's 600 step is measured to carry white in both.
  *  - The menu surfaces derive from `bg-layer-3` upstream; left there they turn
  *    grey, so they are set to the popover surface, as in the shell.
  *
@@ -56,13 +56,14 @@ export function kernelThemeTokens() {
     // lightness shimmer between the quiet text colour and the loud one, no hue.
     '--dsw-static-deepseek-500': role('text-3'),
     '--dsw-static-deepseek-200': role('text'),
-    // 450: the running dot. A graphic needs 3:1 and brand-500 is 4.29 on the
-    // canvas, so the brand carries it now that the brand is blue.
+    // 450: the running dot. Its semantic role is measured at 3:1 in both themes.
     '--dsw-static-deepseek-450': role('dot-running'),
     // No direct reader left; the brand steps, for anything added later.
     '--dsw-static-deepseek-50': both(brand[50]),
     '--dsw-static-deepseek-100': both(brand[100]),
     '--dsw-static-deepseek-400': both(brand[400]),
+    // The EviMed identity is separate from action colour.
+    '--dsw-specific-brand-ink': role('brand-ink'),
     // Accents.
     '--dsw-alias-button-info-fill': both(brand[600]),
     '--dsw-alias-button-info-hover': both(brand[700]),
@@ -91,7 +92,7 @@ export function kernelThemeTokens() {
     '--dsw-specific-sidebar-nav-item-hover': role('surface-2'),
     // Its one reader is the 「推荐」 badge of a question card, whose text is
     // the send button's fill; a light chip is the only ground that carries it
-    // in both schemes (5.29:1).
+    // in both schemes; the frame contract suite measures the pair.
     '--dsw-specific-sidebar-nav-item-active-accent': both(brand[100]),
     // Text. Secondary and tertiary each sit one step darker than the kernel's
     // own reading of them, so every text token but the caption clears 4.5:1 on

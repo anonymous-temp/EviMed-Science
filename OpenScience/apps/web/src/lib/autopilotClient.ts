@@ -32,7 +32,17 @@ export interface ResearchState {
   found: Array<{ statement: string; check: "reproduced" | "stands" | "refuted"; sources: number; date: string }>;
   /** `not_rechecked`: no independent check will be made of it, for the `reason` (`VERIFICATION_UNSCHEDULED_REASONS`). */
   unresolved: Array<{ kind: "unchecked" | "check_unavailable" | "not_rechecked" | "weakened" | "question" | "not_run"; text?: string; date?: string; reason?: string }>;
-  materials: Array<{ sourceId: string; name: string; addedAt: string; state: "reading" | "ready" | "attention" | "unavailable" }>;
+  materials: Array<{ sourceId: string; name: string; addedAt: string; state: "reading" | "ready" | "attention" | "unavailable"; import?: ResearchMaterialImport }>;
+}
+/**
+ * What the service says of a material that is a table imported from the researcher's own database: whether the file is the whole
+ * table (`partial`: rows stopped, cells were left out or columns were not read) and the counts behind it. Absent for any other material.
+ */
+export interface ResearchMaterialImport {
+  fromDatabase: true; partial: boolean; truncated: boolean; rowCount: number | null; totalRows: number | null; totalRowsExact: boolean;
+  withheldCells: number; droppedColumnCount: number;
+  /** The runtime path of the import's sidecar file, which a run opens. */
+  details?: string;
 }
 export interface AutopilotArtifactRef { projectId: string; runId: string; sessionId: string; path: string; role?: string }
 export interface DigestClaim { id: string; statement: string;

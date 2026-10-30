@@ -72,3 +72,27 @@ test("a forged, malformed or expired token is counted as the token, and an unrea
   assert.deepEqual(await refused(manager, current), { status: 401, code: "evimed_workload_token_invalid" });
   assert.equal(manager.workloadTokenRefusals.unreadable, 1);
 });
+
+test("a kernel that is still starting is accepted on the token file it was given, only while its start lasts, and never in place of a registered runtime", async (t) => {
+  const { manager, file, rewrite } = await fixture(t);
+  manager.runtimes.delete("u1:p1");
+  const booting = mint("jwt_boot");
+  await rewrite(booting);
+  // Launched, not yet registered: the memory plugin's MCP client connects now (2026-10-27: two to five 401s a start).
+  assert.deepEqual(await refused(manager, booting), { status: 401, code: "evimed_workload_token_invalid" }, "no start, no acceptance");
+  manager.starts.set("u1:p1", Promise.resolve());
+  manager.startingWorkloads.set("u1:p1", { workloadTokenFile: file });
+  const accepted = await manager.assertActiveEviMedWorkloadToken(booting);
+  assert.deepEqual([accepted.userId, accepted.projectId, accepted.runtimeGeneration], ["u1", "p1", null]);
+  await rewrite(mint("jwt_other"));
+  assert.deepEqual(await refused(manager, booting), { status: 401, code: "evimed_workload_token_invalid" }, "the file's token, as for a registered runtime");
+  await rewrite(booting);
+  // The start ended (registered or failed): the pending record no longer speaks for it.
+  manager.starts.delete("u1:p1");
+  assert.deepEqual(await refused(manager, booting), { status: 401, code: "evimed_workload_token_invalid" });
+  // A registered runtime is judged as itself, whatever a pending record says.
+  manager.starts.set("u1:p1", Promise.resolve());
+  manager.runtimes.set("u1:p1", { workloadTokenFile: file, closedByManager: true, exitedAt: null, modelGatewayTokenJti: "jwt_runtime" });
+  assert.deepEqual(await refused(manager, booting), { status: 401, code: "evimed_workload_token_invalid" }, "a runtime going down is not rescued by a pending start");
+  assert.equal(manager.workloadTokenRefusals.runtime, 3);
+});

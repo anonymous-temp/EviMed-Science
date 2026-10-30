@@ -98,7 +98,7 @@ function faithEditor(behaviour) {
   return {
     owner, available: true, timeZone: "Asia/Shanghai", model: "deepseek-flash", counts,
     async writeJson(/** @type {string} */ instructions, /** @type {string} */ _input, /** @type {number} */ _max, /** @type {any} */ opts) {
-      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: { insight_zh: null }, error: null };
+      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: {}, error: null };
       const checked = opts.verify({ lead_zh: behaviour.lead });
       return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };
     },

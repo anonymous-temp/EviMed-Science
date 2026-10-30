@@ -42,7 +42,19 @@ const requireValue = (ok, code) => { if (!ok) throw new Error(code); };
  * @typedef {{ methods: string[], anchors: string[] }} MethodReference
  * @type {Record<string, MethodReference>}
  */
+export const REQUIRED_CURRENT_REFERENCES = {
+  'design.analytic': ['N53a', 'N53c', 'N53e'],
+  'model.survival_fit': ['N52a', 'N52b', 'N52k'],
+  'model.prognostic_apply': ['N52d'],
+};
 export const NUMERIC_REFERENCES = {
+  N53e: { methods: ['design.analytic'], anchors: ['Independently integrate arm event probabilities', 'abs(at$y-checked)<1e-10'] },
+  N52b: { methods: ['model.survival_fit'], anchors: ['Independent likelihood optimized from base-R density/survival functions', 'reference$convergence != 0', 'all(errors < 2e-4)'] },
+  N52k: { methods: ['model.survival_fit'], anchors: ['Mandatory locked flexsurv oracle: transformations, median, survival, AIC and delta spread.', 'flexsurv::flexsurvreg', 'numDeriv::grad', 'all(errors < 2e-3)'] },
+  N53a: { methods: ['design.analytic'], anchors: ['Reference: noncentral t, not the normal quantiles', 'abs(basis$powerAtAllocatedN - exact_t) < 1e-12'] },
+  N53c: { methods: ['design.analytic'], anchors: ['Independent pooled-null / alternative-variance normal formula.', 'vcr_measure_value(r,"required_total")==nt+nc'] },
+  N52a: { methods: ['model.survival_fit'], anchors: ['Censored exponential MLE: events / total time at risk.', 'delta < 1e-8'] },
+  N52d: { methods: ['model.prognostic_apply'], anchors: ['mean(1 - 0.8^exp(c(-0.5,0.5)))', 'delta < 1e-12'] },
   // --- the first fifteen: reviewed against a numerical comparison in the case body ---
   N01b: { methods: ['design.analytic'], anchors: ['rpact::getDesignGroupSequential(', 'd_rp < 1e-4 && d_g4 < 1e-4'] },
   N06b: { methods: ['design.analytic'], anchors: ['Required patients (Lachin-Foulkes) against rpact', 'rpact::getSampleSizeSurvival(', 'abs(r$events - r$want_events) < 1e-3'] },
@@ -167,6 +179,9 @@ export function methodsWithoutReference(methodIds, definitions) {
 export function referenceProblems(methodIds, definitions) {
   const known = new Set(methodIds);
   const problems = [];
+  for (const [method, cases] of Object.entries(REQUIRED_CURRENT_REFERENCES)) {
+    if (known.has(method)) for (const caseId of cases) if (!definitions.has(caseId)) problems.push({caseId, problem: `${method} requires its current-version numerical reference`});
+  }
   for (const [caseId, spec] of Object.entries(NUMERIC_REFERENCES)) {
     const definition = definitions.get(caseId);
     if (!definition) continue;

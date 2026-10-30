@@ -136,7 +136,7 @@ test("the study list is the browser's own row: the seven steps, a tier, a conclu
   assert.match(marked.attention.find((entry) => entry.kind === "stale").text, /1 个结果已过期：假设卡已变更/);
 });
 
-test("every one of the seven tabs answers the page shape, and says plainly what is not composed here", options, async () => {
+test("every result destination answers the page shape, and says plainly what is not composed here", options, async () => {
   const { study } = await furnish("tabs");
   for (const tab of VCR_TABS) {
     const view = await service.tab({ id: study.userId }, study.id, tab);
@@ -151,7 +151,7 @@ test("every one of the seven tabs answers the page shape, and says plainly what 
   assert.equal(population.stale, null);
 
   const comparator = await service.tab({ id: study.userId }, study.id, "comparator");
-  assert.equal(comparator.routes.length, 4, "the model comparator is not offered: nothing here computes it");
+  assert.equal(comparator.routes.length, 5, "the supported routes include a scoped model prediction benchmark");
   assert.deepEqual(comparator.routes.filter((route) => route.state === "not_applicable").map((route) => route.route),
     ["prognostic_adjustment", "external_control"], "the routes the data tier cannot reach say so");
   assert.equal(comparator.dimensions.length, 10);
@@ -193,7 +193,11 @@ test("the overview carries the counts, the results with their staleness, and the
 test("every runtime read answers, and the ones whose package is absent say so by name", options, async () => {
   const { study } = await furnish("runtime");
   for (const what of VCR_READ_WHATS) {
-    const answer = await service.runtimeRead(study, what, { limit: 5 });
+    if (what === "model_source") {
+      await assert.rejects(service.runtimeRead(study, what, { sourceId: "src_fixture" }), { status: 503, code: "vcr_unavailable" });
+      continue;
+    }
+    const answer = await service.runtimeRead(study, what, { limit: 5, ...(what === "generated_records" ? { id: "res_fixture" } : {}) });
     assert.ok(answer && typeof answer === "object", what);
     if (["precedents", "matching", "snapshot_profile", "trial_registry_record"].includes(what)) {
       assert.equal(answer.available, false, what);

@@ -257,6 +257,7 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   // way by the wiki's contents, a page, the graph (model-chosen, never forced).
   'kb_browse',
   'research_calculate',
+  'vcr_read', 'vcr_write', 'vcr_simulate',
   // "每周五帮我看看……" is said in any conversation, and "改到每周一 8 点" in a task's own
   // conversation: a tool the root is not shown would fail exactly the sentence it exists for (model-chosen, never forced).
   'schedule_task',

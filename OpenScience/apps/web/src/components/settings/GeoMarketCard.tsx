@@ -10,7 +10,7 @@ import { Panel, PanelRow } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { IconButton } from "@/components/ui/IconButton";
-import { Tabs } from "@/components/ui/Tabs";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { DataTable } from "@/components/ui/DataTable";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -155,7 +155,7 @@ export function GeoMarketCard() {
       onClick={() => setConfirmation({ title: "恢复新订单", body: "确认已核对账目差异后恢复投放。", run: () => mutate("stop", () => clearGeoMarketStop("Operator reviewed reconciliation in GEO operations."), (result) => result.cleared ? "已解除对账暂停" : "本次未解除暂停，请重新核对。") })}>恢复新订单</Button>} />}
     {overview.reconciliation && <PanelRow label={`最近对账 · ${overview.reconciliation.day}`} control={overview.reconciliation.status === "mismatch" ? `差额 ${money(overview.reconciliation.diff)}` : "已核对"} />}
     <div className="p-4">
-      {tabs.length > 1 && <Tabs label="循证 GEO 投放管理" value={view} onChange={changeView} items={tabs} />}
+      {tabs.length > 1 && <Toolbar label="循证 GEO 投放管理" views={{ label: "循证 GEO 投放管理", items: tabs, value: view, onChange: (next) => changeView(next as View) }} />}
       {notice && <p role="status" className="mt-3 text-caption text-text-2">{notice}</p>}
       {actionError && <p role="alert" className="mt-3 text-caption text-error">{actionError}</p>}
       {view === "settlement" && <div className="mt-4 flex items-end gap-4"><Input label="结算月份" type="month" value={month} onChange={(event) => { setMonth(event.target.value); setCursor(null); }} />

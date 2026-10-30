@@ -5,7 +5,10 @@ import {
 } from "./nativeMemoryPersistence.mjs";
 import { platformSessionOf } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
-import { OPENVIKING_MEMORY_TYPES, userRootUri } from './openVikingLayout.mjs';
+
+/** The catch-all project: it has no single subject, so its files are no project's (`residentProfile.mjs` names it the same). */
+const CATCH_ALL_PROJECT_ID = "default";
+import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES, userRootUri } from './openVikingLayout.mjs';
 
 /**
  * The overlay store of the native memory engine (`nativeMemoryPersistence.mjs` says what it holds and why).
@@ -811,6 +814,22 @@ export class NativeMemoryOverlay {
     const result = await this.#query("SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND sensitive ORDER BY uri LIMIT $2",
       [owner(userId), bound + 1]);
     if (result.rows.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete sensitive-file set exceeds its safe recall bound.");
+    return result.rows.map((/** @type {any} */ row) => String(row.uri));
+  }
+
+  /**
+   * The files of a project type (card, decisions, working facts, open items, recent work) that belong to a named project other than
+   * `projectId`: what a conversation of `projectId` does not read (a project's rules and facts are its own, 2026-10-27). The catch-all
+   * project's files are no project's and stay readable everywhere; a conversation in the catch-all reads no named project's.
+   * @param {string} userId @param {string} projectId @param {number} [limit]
+   * @returns {Promise<string[]>}
+   */
+  async otherProjectUris(userId, projectId, limit = 10000) {
+    const bound = Math.max(1, Math.min(10000, Math.trunc(Number(limit)) || 10000));
+    const result = await this.#query(`SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND memory_type=ANY($2::text[])
+      AND project_id IS NOT NULL AND project_id<>$3 AND project_id<>$4 ORDER BY uri LIMIT $5`,
+    [owner(userId), [...OPENVIKING_PROJECT_MEMORY_TYPES], String(projectId ?? ""), CATCH_ALL_PROJECT_ID, bound + 1]);
+    if (result.rows.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete set of other projects' files exceeds its safe recall bound.");
     return result.rows.map((/** @type {any} */ row) => String(row.uri));
   }
 

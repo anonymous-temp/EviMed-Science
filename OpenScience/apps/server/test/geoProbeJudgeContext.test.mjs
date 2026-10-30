@@ -9,7 +9,7 @@ async function probe(project) {
   const store = {
     ready: async () => {},
     withProbeLock: async (work) => ({ acquired: true, value: await work() }),
-    recoverExpiredLeases: async () => {}, recentProbeStatuses: async () => [],
+    recoverExpiredLeases: async () => {}, recentProbeStatuses: async () => [], heldJobsToPoll: async () => [], enginesHoldingTasks: async () => [],
     leaseNextJob: async () => job, startRound: async () => {},
     questions: async () => [{ text: "A public measurement question" }],
     project: async (id) => { projectReads.push(id); if (project instanceof Error) throw project; return project; },
@@ -21,7 +21,7 @@ async function probe(project) {
     store: /** @type {any} */ (store),
     config: { geoProbeUrl: "https://probe.example.com", operatorUsers: ["wrong-operator"] },
     now: () => new Date("2026-10-07T12:00:00Z"),
-    upstream: /** @type {any} */ ({ ask: async () => ({
+    upstream: /** @type {any} */ ({ submit: async () => ({
       results: [{ status: "ok", answer: "抱歉，我无法提供医疗建议，请咨询专业医生。", answerDigest: null }],
       raw: [{ status: "ok" }], integrity: { transport: "tls", signed: true, responseDigest: "test" },
     }) }),

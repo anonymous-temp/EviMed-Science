@@ -293,7 +293,7 @@ export class ReviewService {
    *   notifications?: any, imService?: any, webReader?: any, fetchImpl?: typeof fetch, referenceResolver?: any,
    *   assertModelAccess?: ((caller:any, body:any)=>Promise<void>) | null,
    *   report?: (code: string, detail?: string) => void, now?: () => Date, retryDelayMs?: number, evolutionSignals?:any,
-   *   vcrFacts?: ((identity: { userId: string, projectId: string }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null,
+   *   vcrFacts?: ((identity: { userId: string, projectId: string, runId:string,sessionId:string,studyId:string,turnSeq:number|null }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null,
    * }} deps
    */
   constructor({ config, database, jobs = null, usageLedger = null, judgeService = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
@@ -303,7 +303,7 @@ export class ReviewService {
     /**
      * What a 虚拟临床研究 study's conversation is checked against: `(userId, projectId) → { studyId, results, inputs, executions } | null`
      * (`VcrService.replyCheckFacts`). Null where the module is not composed, and the check is not made.
-     * @type {((identity: { userId: string, projectId: string }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null}
+     * @type {((identity: { userId: string, projectId: string, runId:string,sessionId:string,studyId:string,turnSeq:number|null }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null}
      */
     this.vcrFacts = vcrFacts;
     this.evolutionSignals = evolutionSignals;
@@ -1035,7 +1035,7 @@ export class ReviewService {
   async #checkVcrNumbers(row) {
     const sentences = replyNumberSentences(row.reply_text);
     if (!sentences.length) return { verdicts: [], cost: 0, model: null };
-    const facts = await this.vcrFacts?.({ userId: row.user_id, projectId: row.project_id });
+    const facts = await this.vcrFacts?.({ userId: row.user_id, projectId: row.project_id,runId:row.run_id,sessionId:row.session_id,studyId:row.study_id,turnSeq:row.turn_seq });
     if (!facts || facts.studyId !== row.study_id) return { verdicts: [], cost: 0, model: null };
     const ledger = { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl, assertModelAccess: this.assertModelAccess };
     const answer = await callReviewModel(ledger, {

@@ -45,7 +45,7 @@ from typing import Any, Iterable
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 
 from dateutil import tz as dateutil_tz
-from selectolax.parser import HTMLParser
+from selectolax.parser import HTMLParser, Node
 
 from ..model import NOTICE_UPDATE_KINDS, SUMMARY_MAX, TITLE_MAX, FetchError, FetchResult, NormalizedEntry
 
@@ -77,6 +77,31 @@ def load_json(result: FetchResult, upstream: str) -> Any:
 # ---------------------------------------------------------------------------------------------
 # Text
 # ---------------------------------------------------------------------------------------------
+
+def decompose_all(nodes: Iterable[Node]) -> int:
+    """Take every node of one ``css()`` result out of its tree, each subtree once; returns how many were listed.
+
+    ``css()`` lists a node and the nodes inside it side by side (in the order of the selectors, not of the document).
+    ``decompose()`` of the outer one frees the inner ones, and ``decompose()`` of an inner one afterwards frees it a second
+    time: lexbor's allocator then hands the same memory to two later allocations. A text inserted in front of a block
+    shows up four times, and ``Node.text()`` can walk a cycle for ever, appending to its result some 35 MB a second until
+    the container is killed. A 丁香园消化时间 article of 2026-10-26 (17 ``<svg>``, some inside others, and 3 ``<iframe>``) did
+    that to the knowledge plugin once a minute for hours (393 restarts by the time it was found). So the nodes that sit
+    inside another listed node are worked out first, while every parent pointer is still good, and only the outermost ones
+    are decomposed. Every ``decompose()`` of a ``css()`` result goes through here.
+    """
+    listed = {node.mem_id: node for node in nodes}
+    outermost = []
+    for node in listed.values():
+        parent = node.parent
+        while parent is not None and parent.mem_id not in listed:
+            parent = parent.parent
+        if parent is None:
+            outermost.append(node)
+    for node in outermost:
+        node.decompose()
+    return len(listed)
+
 
 _WS = re.compile(r"[ \t\r\f\v\u00a0\u2000-\u200a\u202f\u205f\u3000]+")
 _MANY_NEWLINES = re.compile(r"\n\s*\n+")
@@ -115,8 +140,7 @@ def clean_markup(value: Any, *, keep_paragraphs: bool = False) -> str:
         text = _JATS_TAG.sub(lambda m: f"<{m.group(1)}{_JATS_HTML.get(m.group(2).lower(), 'span')}", text)
     if _TAGGY.search(text) or "&" in text:
         tree = HTMLParser(f"<div>{text}</div>")
-        for node in tree.css(",".join(_DROP_TAGS)):
-            node.decompose()
+        decompose_all(tree.css(",".join(_DROP_TAGS)))
         if keep_paragraphs:
             for node in tree.css(",".join(_BLOCK_TAGS)):
                 node.insert_before("\n")
@@ -277,6 +301,10 @@ _SLASHED = re.compile(r"^(\d{4})[/.](\d{1,2})[/.](\d{1,2})(?:[ T](\d{1,2}):(\d{2
 _COMPACT = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
 _US = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
 _CN = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日(?:\s*(\d{1,2})[:：](\d{2}))?")
+# A month written as its Chinese name, day and year after it ("十月 15, 2026": 清华大学医学院's cards). The closed set of the twelve
+# names; a form without a year is no date (the year is never guessed).
+_ZH_MONTHS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12}
+_CN_MONTH_NAME = re.compile(r"(?<![一二三四五六七八九十])(十[一二]?|[一二三四五六七八九])\s*月\s*(\d{1,2})\s*日?\s*[,，]?\s*(\d{4})(?!\d)")
 _EMBEDDED = re.compile(r"(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?(?:\s+(\d{1,2}):(\d{2}))?")
 
 
@@ -308,7 +336,7 @@ def parse_date(value: Any, *, naive_zone: tzinfo = UTC, date_format: str | None 
 
     Handled: ISO 8601 with or without time and zone; RFC 822 (feeds); ``YYYY/MM/DD[ HH:MM]``
     (PubMed); ``YYYYMMDD`` (openFDA); ``MM/DD/YYYY`` (openFDA shortages); ``2026年9月22日``;
-    an explicit ``date_format`` (strptime) first when the registry names one. A date without a
+    a Chinese month name with day and year (``十月 15, 2026``); an explicit ``date_format`` (strptime) first when the registry names one. A date without a
     time is returned at 00:00 UTC with precision ``day`` — the calendar day as the source wrote it.
     """
     if value is None:
@@ -356,6 +384,11 @@ def parse_date(value: Any, *, naive_zone: tzinfo = UTC, date_format: str | None 
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=naive_zone)
             return parsed.astimezone(UTC), "instant"
+    match = _CN_MONTH_NAME.search(text)
+    if match:
+        built = _build((match.group(3), _ZH_MONTHS[match.group(1)], match.group(2)), naive_zone)
+        if built:
+            return built
     match = _CN.search(text) or _EMBEDDED.search(text)
     if match:
         built = _build(match.groups(), naive_zone)

@@ -3,6 +3,7 @@ records a run keeps, each abstract preserved so a claim can quote it."""
 
 import hashlib
 import importlib.util
+import json
 import os
 import pathlib
 import sys
@@ -55,6 +56,28 @@ EFETCH_XML = """<?xml version="1.0"?>
   </PubmedArticle>
 </PubmedArticleSet>
 """
+
+
+def many_records_xml(pmids, abstract_chars=2000, headings=24):
+    """A realistic batch: long titles, an abstract of about two thousand characters and a full MeSH list on each record."""
+    articles = []
+    for pmid in pmids:
+        words = ("Outcome of therapy %s in adults with chronic disease: a multicentre randomised study. " % pmid) * 2
+        abstract = ("Result sentence for record %s reports an effect with a confidence interval. " % pmid) * (abstract_chars // 70)
+        mesh = "".join(
+            '<MeshHeading><DescriptorName MajorTopicYN="N">Descriptor %s number %d</DescriptorName></MeshHeading>' % (pmid, index)
+            for index in range(headings)
+        )
+        articles.append(
+            "<PubmedArticle><MedlineCitation><PMID>%s</PMID><Article>"
+            "<Journal><JournalIssue><PubDate><Year>2020</Year></PubDate></JournalIssue><Title>Journal of Long Titles</Title></Journal>"
+            "<ArticleTitle>%s</ArticleTitle><Abstract><AbstractText Label=\"RESULTS\">%s</AbstractText></Abstract>"
+            "<PublicationTypeList><PublicationType>Journal Article</PublicationType><PublicationType>Randomized Controlled Trial</PublicationType></PublicationTypeList>"
+            "</Article><MeshHeadingList>%s</MeshHeadingList></MedlineCitation>"
+            "<PubmedData><ArticleIdList><ArticleId IdType=\"doi\">10.1000/study.%s</ArticleId></ArticleIdList></PubmedData></PubmedArticle>"
+            % (pmid, words, abstract, mesh, pmid)
+        )
+    return '<?xml version="1.0"?><PubmedArticleSet>%s</PubmedArticleSet>' % "".join(articles)
 
 
 def load_server():
@@ -112,6 +135,92 @@ class PubmedAbstractTests(unittest.TestCase):
         warnings = " ".join(result["warnings"])
         self.assertIn("99999999", warnings)
         self.assertIn("no abstract for PMID 11111111", warnings)
+
+    def test_past_the_inline_budget_an_abstract_is_named_by_its_preserved_file(self):
+        # An answer too large is cut by the kernel and stops being JSON, and then no file in it reads as preserved
+        # (live check 2026-10-28): past the budget the item carries its path and the text stays on disk.
+        with mock.patch.object(sources, "PUBMED_INLINE_ABSTRACT_BUDGET", 10), \
+             mock.patch.object(sources, "_get_text", return_value=EFETCH_XML):
+            result = sources.literature({"pmids": ["30221597"]})
+        item = result["data"]["items"][0]
+        self.assertNotIn("abstract", item)
+        self.assertNotIn("meshHeadings", item)
+        self.assertIs(item["abstractInline"], False)
+        self.assertEqual(item["evidenceLevel"], "abstract")
+        path = item["artifactPath"]
+        self.assertIn("RESULTS: The rate of the composite", (self.workspace / path).read_text("utf-8"))
+        self.assertEqual(result["artifacts"], [path])
+        self.assertIn(path, result["data"]["artifactSha256s"])
+        self.assertTrue(any("30221597" in action and "artifactPath" in action for action in result["next_actions"]))
+
+    def test_the_whole_answer_stays_under_what_the_kernel_cuts(self):
+        # The first guard budgeted the abstract text alone. A record also carries its metadata and its path four times over, so
+        # sixty ids came to about 70,000 characters against a cut at about 50,000 (review of 2026-10-28). The answer is the
+        # budget now, and a record that does not fit even leanly is left out and named, never listed without being written.
+        pmids = [str(30000000 + index) for index in range(60)]
+        with mock.patch.object(sources, "_get_text", return_value=many_records_xml(pmids)):
+            result = sources.literature({"pmids": pmids})
+        body = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        self.assertLessEqual(len(body), sources.PUBMED_ANSWER_BUDGET, "one answer, never cut")
+        listed = [item["pmid"] for item in result["data"]["items"]]
+        deferred = result["data"]["deferred"]
+        self.assertTrue(listed and deferred, "some records fit and some do not")
+        self.assertEqual(listed + deferred, pmids, "every requested record is either listed or named, in order")
+        # What is listed was written, and what was written is listed: paths, digests, sources and items agree.
+        paths = [item["artifactPath"] for item in result["data"]["items"]]
+        self.assertEqual(result["artifacts"], paths)
+        self.assertEqual(sorted(result["data"]["artifactSha256s"]), sorted(paths))
+        self.assertEqual([source["artifactPath"] for source in result["sources"]], paths)
+        for path in paths:
+            self.assertTrue((self.workspace / path).is_file(), path)
+        # A record left out is not in the workspace, and the answer says how to get it.
+        pubmed_directory = self.workspace / ".evimed-sources" / "pubmed"
+        self.assertEqual(sorted(entry.name for entry in pubmed_directory.iterdir()), sorted("PMID%s" % pmid for pmid in listed))
+        self.assertEqual(result["status"], "warning")
+        self.assertTrue(any("did not fit one answer" in warning and deferred[0] in warning for warning in result["warnings"]))
+        self.assertTrue(any(deferred[-1] in action and "following call" in action for action in result["next_actions"]))
+        # Asking for the rest completes the batch.
+        with mock.patch.object(sources, "_get_text", return_value=many_records_xml(deferred)):
+            rest = sources.literature({"pmids": deferred})
+        self.assertEqual([item["pmid"] for item in rest["data"]["items"]] + rest["data"].get("deferred", []), deferred)
+
+    def test_records_are_read_in_full_while_the_room_lasts_and_then_name_their_file(self):
+        pmids = [str(30000000 + index) for index in range(10)]
+        with mock.patch.object(sources, "_get_text", return_value=many_records_xml(pmids)):
+            result = sources.literature({"pmids": pmids})
+        self.assertNotIn("deferred", result["data"])
+        items = result["data"]["items"]
+        self.assertEqual([item["pmid"] for item in items], pmids)
+        self.assertIn("abstract", items[0])
+        self.assertIs(items[-1].get("abstractInline"), False)
+        self.assertNotIn("abstract", items[-1])
+        self.assertLessEqual(len(json.dumps(result, ensure_ascii=False, separators=(",", ":"))), sources.PUBMED_ANSWER_BUDGET)
+        # Every record, read in full or not, was preserved and listed once.
+        self.assertEqual(sorted(result["artifacts"]), sorted(item["artifactPath"] for item in items))
+
+    def test_a_batch_that_fits_is_answered_whole_and_unchanged(self):
+        pmids = ["30221597"]
+        with mock.patch.object(sources, "_get_text", return_value=EFETCH_XML):
+            result = sources.literature({"pmids": pmids})
+        self.assertNotIn("deferred", result["data"])
+        self.assertIn("abstract", result["data"]["items"][0])
+
+    def test_an_abstract_that_could_not_be_saved_is_never_said_to_be_saved(self):
+        # The note used to list every abstract left out of the answer as "preserved at its artifactPath", whether or not the
+        # write had worked; a run sent to read a file that was never written.
+        pmids = ["30221597"]
+        with mock.patch.object(sources, "PUBMED_INLINE_ABSTRACT_BUDGET", 10), \
+             mock.patch.object(sources, "_preserve_pubmed_abstract", return_value=None), \
+             mock.patch.object(sources, "_get_text", return_value=EFETCH_XML):
+            result = sources.literature({"pmids": pmids})
+        item = result["data"]["items"][0]
+        self.assertNotIn("artifactPath", item)
+        self.assertNotIn("abstract", item)
+        self.assertEqual(result["artifacts"], [])
+        text = " ".join(result["warnings"]) + " " + " ".join(result["next_actions"])
+        self.assertIn("could not be preserved", text)
+        self.assertIn("ask for it again on its own", text)
+        self.assertNotIn("Each is preserved at its artifactPath", text)
 
     def test_fetching_the_same_record_again_reuses_its_capture(self):
         with mock.patch.object(sources, "_get_text", return_value=EFETCH_XML):

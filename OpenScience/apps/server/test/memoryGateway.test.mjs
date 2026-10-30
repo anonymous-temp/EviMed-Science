@@ -32,7 +32,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, timeoutMs = 4_000 } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, timeoutMs = 4_000, project = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -41,7 +41,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
   const handler = createMemoryGatewayHandler({
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
-    store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER }) },
+    store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
     sessions, admission, overlay, memoryTool, capsuleSearch,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
@@ -320,7 +320,7 @@ test("tool arguments are held to the caller's own memories: pinned targets, no r
   assert.deepEqual(stub.sent("GET", "/api/v1/fs/ls").at(-1).query, { recursive: "false", uri: `${ROOT}/memories` });
   await call("search", { query: "回答", purpose: "coding", quotas: { x: 1 }, mode: "context" });
   assert.deepEqual(stub.sent("POST", "/api/v1/search/search").at(-1).body, {
-    query: "回答", limit: 5, target_uri: `${ROOT}/memories`, level: 2,
+    query: "回答", limit: 20, target_uri: `${ROOT}/memories`, level: 2, // the five asked for, four times over: the derived index and the observations are always hidden
   });
   const foreign = await call("read", { uris: ["viking://user/u-other/memories/profile.md"] });
   assert.equal(foreign.messages[0].error.code, -32602);
@@ -543,7 +543,7 @@ test("native list search uses the pinned REST contract and MCP returns actual al
   const payload = JSON.parse(result.messages[0].result.content[0].text);
   assert.equal(payload.total, 1);
   assert.match(payload.memories[0].abstract, /allowed preference/);
-  assert.deepEqual(stub.sent("POST", "/api/v1/search/search").at(-1).body, { query: "native-contract", limit: 3, target_uri: `${ROOT}/memories`, level: 2 });
+  assert.deepEqual(stub.sent("POST", "/api/v1/search/search").at(-1).body, { query: "native-contract", limit: 12, target_uri: `${ROOT}/memories`, level: 2 });
   assert.equal(stub.sent("POST", "/mcp").filter(row => row.body?.params?.name === "search").length, 0);
   const rest = await call("POST", "/api/v1/search/search", { query: "native-contract", mode: "list" });
   assert.equal(rest.json.result.total, 1);
@@ -659,7 +659,7 @@ test("a search of a native account is also asked of the capsule, and its answer 
   assert.deepEqual(asked, [{ user: USER, project: "p1", query: "引用格式", limit: 3 }]);
   // Structured native list search keeps hidden leaves out; the capsule block follows its answer.
   assert.deepEqual(stub.sent("POST", "/api/v1/search/search").at(-1).body, {
-    query: "引用格式", limit: 3, target_uri: `${ROOT}/memories`, level: 2,
+    query: "引用格式", limit: 12, target_uri: `${ROOT}/memories`, level: 2,
   });
   const blocks = textsOf(found);
   assert.equal(blocks.length >= 2, true, "the engine's block, then the capsule's");
@@ -741,4 +741,102 @@ test("the native capsule search is the capsule's own recall, scoped to the proje
   assert.deepEqual((await broken({ user: { id: "u1" }, project: { id: "p9" }, query: "引用", limit: 4 })).map((item) => item.id), ["z"]);
   assert.deepEqual(await createNativeCapsuleSearch({ service: null })({ user: { id: "u1" }, project: { id: "p9" }, query: "引用", limit: 4 }), []);
   assert.deepEqual(await search_({ user: { id: "u1" }, project: { id: "p9" }, query: "  ", limit: 4 }), []);
+});
+
+test("a conversation of one project reads no other named project's card, decisions or facts: search, read and list leave them out (S7, 2026-10-27)", async t => {
+  const otherCard = `${ROOT}/memories/projects/sglt2 抑制剂综述.md`, otherDecision = `${ROOT}/memories/decisions/sglt2.md`, own = `${ROOT}/memories/projects/高血压科普.md`;
+  const asked = [];
+  const { sessions, mcp, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [],
+    otherProjectUris: async (userId, projectId) => { asked.push([userId, projectId]); return [otherCard, otherDecision]; } } });
+  sessions.search = async () => ({ result: { memories: [
+    { uri: otherCard, abstract: "所有文字交付物一律用英文写" }, { uri: otherDecision, abstract: "OTHER-DECISION" }, { uri: own, abstract: "OWN-CARD" },
+  ], resources: [], skills: [], total: 3 } });
+  const found = await call("POST", "/api/v1/search/search", { query: "项目简介" });
+  assert.deepEqual(found.json.result.memories.map((hit) => hit.abstract), ["OWN-CARD"], "the project's own card only");
+  assert.deepEqual(asked[0], [USER, "p1"], "asked for the files of projects other than the conversation's");
+  assert.equal((await call("GET", `/api/v1/content/read?uri=${encodeURIComponent(otherCard)}`)).status, 404);
+  const viaTool = await mcp({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "search", arguments: { query: "英文" } } });
+  assert.doesNotMatch(JSON.stringify(viaTool.messages), /一律用英文|OTHER-DECISION/);
+});
+
+const PROJECT_LINE = "（平台信息，不是用户说的话）这段对话在用户的项目「订单服务重构」里进行。用户问的问题、让做的事和讲的个人背景都不是对这个项目的描述。";
+const MESSAGES = `/api/v1/sessions/${SESSION}/messages`;
+/** What reached the engine's session, in order: [role, first text] per message sent, a refused one too. */
+const heldBy = (stub) => stub.sent("POST", MESSAGES).map((request) => [request.body.role, request.body.parts?.[0]?.text ?? request.body.content]);
+/** What the engine's session holds, not yet committed. */
+const pendingIn = (stub) => (stub.sessions.get(`${OV_USER}/${SESSION}`)?.messages ?? []).map((message) => [message.role, message.parts?.[0]?.text ?? message.content]);
+
+test("a named project's conversation is told to the engine as a line before the person's first words, never when the session is made (S7, 2026-10-27)", async t => {
+  const named = await fixture(t, { project: { name: "订单服务重构" } });
+  await named.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  assert.equal(named.stub.sent("POST", MESSAGES).length, 0, "a session made and left unspoken in holds nothing the engine could extract from");
+  // Opening it again is no more than that.
+  await named.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  assert.equal(named.stub.sent("POST", MESSAGES).length, 0);
+  await named.call("POST", MESSAGES, { role: "user", content: "这个仓库里测试文件一律不要动，要改先问我。" });
+  assert.deepEqual(heldBy(named.stub), [["assistant", PROJECT_LINE], ["user", "这个仓库里测试文件一律不要动，要改先问我。"]]);
+  assert.equal(nativeMemoryCounters().messages.project_line, 1);
+});
+
+test("the line opens a batch of the person's words and no other: not before an assistant message, and not again while messages are pending", async t => {
+  const named = await fixture(t, { project: { name: "订单服务重构" } });
+  await named.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  await named.call("POST", MESSAGES, { role: "assistant", content: "好的，我先看一下目录结构。" });
+  assert.deepEqual(heldBy(named.stub), [["assistant", "好的，我先看一下目录结构。"]], "an assistant message first leaves the batch without the line");
+  await named.call("POST", MESSAGES, { role: "user", content: "测试文件不要动。" });
+  await named.call("POST", MESSAGES, { role: "assistant", content: "明白。" });
+  await named.call("POST", MESSAGES, { role: "user", content: "另外提交说明用英文。" });
+  assert.deepEqual(heldBy(named.stub).map(([role]) => role), ["assistant", "user", "assistant", "user"], "messages are pending, so no second line");
+  assert.equal(nativeMemoryCounters().messages.project_line ?? 0, 0);
+});
+
+test("a committed batch is archived with the line, and the next batch that holds the person's words begins with it again", async t => {
+  const named = await fixture(t, { project: { name: "订单服务重构" } });
+  await named.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  await named.call("POST", MESSAGES, { role: "user", content: "测试文件不要动。" });
+  assert.equal((await named.call("POST", `/api/v1/sessions/${SESSION}/commit`, { keep_recent_count: 0 })).json.result.status, "accepted");
+  await named.call("POST", MESSAGES, { role: "user", content: "提交说明用英文。" });
+  await named.call("POST", MESSAGES, { role: "user", content: "还有，CI 失败先别合并。" });
+  assert.deepEqual(heldBy(named.stub).map(([role]) => role), ["assistant", "user", "assistant", "user", "user"]);
+  assert.equal(heldBy(named.stub).filter(([, text]) => text === PROJECT_LINE).length, 2);
+  assert.equal(nativeMemoryCounters().messages.project_line, 2);
+});
+
+test("a session the gateway makes on demand begins with the line too, and a turn that is not learned from writes nothing at all", async t => {
+  const named = await fixture(t, { project: { name: "订单服务重构" } });
+  await named.call("POST", MESSAGES, { role: "user", content: "测试文件不要动。" });
+  assert.deepEqual(pendingIn(named.stub), [["assistant", PROJECT_LINE], ["user", "测试文件不要动。"]]);
+  assert.equal(nativeMemoryCounters().messages.project_line_failed ?? 0, 0, "a session the engine does not hold yet is no failure");
+  // A platform-started turn: its session is made, its messages are withheld, and the engine is left a session with nothing in it.
+  const automated = await fixture(t, { project: { name: "订单服务重构" }, admission: fixedAdmission({ learn: false, learnReason: "automated_run" }) });
+  await automated.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  await automated.call("POST", MESSAGES, { role: "user", content: "每周一汇总上周的提交。" });
+  assert.equal(automated.stub.sent("POST", "/api/v1/sessions").length, 1);
+  assert.equal(automated.stub.sent("POST", MESSAGES).length, 0);
+  assert.equal(nativeMemoryCounters().messages.project_line ?? 0, 0);
+});
+
+test("the catch-all project's memory session carries no project line", async t => {
+  const plain = await fixture(t, { project: { id: "default", name: "默认" } });
+  await plain.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  await plain.call("POST", MESSAGES, { role: "user", content: "我是结构工程师。" });
+  assert.deepEqual(heldBy(plain.stub), [["user", "我是结构工程师。"]]);
+  assert.equal(plain.stub.sent("GET", `/api/v1/sessions/${SESSION}`).length, 0, "no line to place, so the session is not read");
+});
+
+test("a search of the engine over-fetches when other projects' files are hidden, so their ranking above the project's own does not empty the answer (S7)", async t => {
+  const others = Array.from({ length: 6 }, (_, index) => `${ROOT}/memories/projects/其他项目${index}.md`), own = [`${ROOT}/memories/projects/高血压科普.md`, `${ROOT}/memories/decisions/高血压.md`];
+  const asked = [];
+  const { sessions, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [], otherProjectUris: async () => others } });
+  sessions.search = async (_user, body) => { asked.push(body.limit); return { result: { memories: [...others, ...own].slice(0, body.limit).map((uri) => ({ uri, abstract: uri.split("/").at(-1) })), resources: [], skills: [], total: 8 } }; };
+  const found = await call("POST", "/api/v1/search/search", { query: "项目简介", limit: 2 });
+  assert.deepEqual(asked, [8], "four times what is returned");
+  assert.deepEqual(found.json.result.memories.map((hit) => hit.abstract), ["高血压科普.md", "高血压.md"], "the project's own, though six hidden hits ranked above them");
+  assert.equal(found.json.result.total, 2);
+  // And never more than the engine takes.
+  const wide = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [], otherProjectUris: async () => others } });
+  const wideAsked = [];
+  wide.sessions.search = async (_user, body) => { wideAsked.push(body.limit); return { result: { memories: [], resources: [], skills: [], total: 0 } }; };
+  await wide.call("POST", "/api/v1/search/search", { query: "项目简介", limit: 20 });
+  assert.deepEqual(wideAsked, [80]);
 });

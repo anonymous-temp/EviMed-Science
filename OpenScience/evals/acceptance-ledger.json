@@ -91,7 +91,7 @@
       "id": "clinical-evidence-synthesis",
       "visibility": "public",
       "evalHarness": "evals/clinical-review-quality",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/clinical-review-quality/results/2026-09-28-review-001-empa-kidney-report-family/run.json",
@@ -471,7 +471,7 @@
       "id": "statistical-analysis",
       "visibility": "public",
       "evalHarness": "evals/statistical-analysis",
-      "briefCount": 3,
+      "briefCount": 8,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/run.json",
@@ -481,9 +481,11 @@
       "relatedEvidence": [
         "evals/statistical-analysis/fixtures/source-manifest.json",
         "evals/statistical-analysis/expected.json",
-        "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/scientific-review.txt"
+        "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/scientific-review.txt",
+        "evals/statistical-analysis/results/2026-10-26-multi-turn/README.md",
+        "evals/statistical-analysis/results/2026-10-26-multi-turn/acceptance.json"
       ],
-      "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress."
+      "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress. 2026-10-26: three additional goal-driven agent briefs cover autonomous comparison, leakage-aware prediction and a unit-correction follow-up. They are unrun; the September delivery remains the only capability-level acceptance linked here. 2026-10-26 follow-through: an auxiliary natural multi-turn suite completed five candidate-local real DeepSeek/DSH cases (11 turns), 83 independent numerical checks and isolated saved-model replay. Later real cases close initial over-recomputation and report-population findings. Two briefs (statistics-007 and 008, cached-state resume and report-population reconciliation) specify those two follow-through cases and stay unrun as canonical briefs. These auxiliary cases do not relabel the canonical briefs or the existing production-delivery record; source/evaluator/state evidence and remaining deployment limits are recorded in the linked report."
     },
     {
       "id": "tool-builder",
@@ -539,7 +541,7 @@
       "id": "vcr-matching",
       "visibility": "public",
       "evalHarness": "evals/vcr-matching",
-      "briefCount": 7,
+      "briefCount": 6,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
@@ -665,6 +667,19 @@
       },
       "command": "node evals/follow-up-judge/run.mjs --key-file <path> [--embed-key-file <path>] [--no-examples] [--instructions-file <txt>]",
       "note": "Not a capability: the calibration set of the follow-up judge (apps/server/src/learningEvidence.mjs): labelled next-messages in Chinese and English over correction, preference, rejection, accept, none and adopt, read by the module's own readFollowUp (nearest examples, FollowUpJudge, a second reading of every adopt, followUpVerdictFrom). Split once in split.json: the train part is the judge's example bank (packages/domain/src/follow-up-examples.json), the held-out part is what is scored. Reports per-class precision and recall, the confusion matrix, quotation validity and the precision of adopt on its own, because adopt makes a method out of one conversation. Fifteen cases are marked ambiguous with the labeller's reason for the controller to review."
+    },
+    {
+      "id": "rsi-campaigns",
+      "evalHarness": "evals/rsi-campaigns",
+      "caseCount": 0,
+      "command": "pnpm test:rsi",
+      "note": "Offline platform experiments: the monthly frontier-selection campaign (production export of whole days with the mix taken back, day-unit superiority statistics v5, a calibrated two-pass Qwen label jury, an evaluator that recomputes and signs, signed monthly report, file-signed finalization of a qualified campaign) on the Alibaba lab host, timer 1st 02:00 Asia/Shanghai, production push 00:30. A lab rehearsal on 2026-10-26 (October windows, rehearsal-only weight) ran every step and ended inconclusive below 25 groups; that is plumbing evidence, not a delivery. The first real campaign runs 2026-11-01; no bundle is imported into production in this phase. The 248-row human anchor calibrates the jury (even half) and is never a confirmation corpus.",
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      }
     }
   ]
 }

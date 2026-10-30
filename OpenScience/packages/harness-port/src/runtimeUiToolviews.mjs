@@ -29,6 +29,10 @@
  * Two tools are drawn as a card and not a line: the ones that make and change a scheduled task (`schedule_task`, `update_task`; the
  * phrase's `card: 'task'`). The card is the task's name, when it runs and 「打开」, read from the tool's own answer (N-13).
  *
+ * A row is a step of the process view and is drawn as one (2026-10-27): the plain line the kernel draws for its own 「思考」 and
+ * 「读取」 rows -- the frame styles' `step`, the name at 400 and the count or state a grey `tag` beside it -- not a bordered card
+ * with a 600 title. The cards that remain are the plan and the scheduled task, which a reader opens or acts on.
+ *
  * The words are data, not code: `FRAME_VOCABULARY.toolViews`, built from
  * `@evimed/domain`'s `toolViewPhraseTable()` over its own tool list. Nothing
  * here names a tool; a tool added to the domain either arrives with words or
@@ -166,6 +170,34 @@ export function liveChild(live, match) {
 }
 
 /**
+ * The deliverable the run is working on in its own session, or '' when none is.
+ *
+ * A deliverable leaves `planned` only when it is delegated or submitted, so one the root works on
+ * itself -- the common case since delegation became on demand -- read 「待开始」 for the whole run:
+ * 34 minutes and 206 tool calls on 2026-10-27 under a card that said the work had not begun. While
+ * the run works and no piece is delegated, submitted or under repair, the first piece still
+ * planned is the one being worked on.
+ *
+ * "Works" is the model's turn being under way: the ledger status is `running` and the phase, when
+ * the shell sends one, is `running` too. A run that has not started (`reserved`, `dispatched`), whose
+ * turn has ended and is being delivered (`delivering`, a ledger status that still reads `running`),
+ * or that is waiting for a repair (`repairing`) is working on no planned piece, so a piece it left
+ * planned is not drawn as in progress for the rest of the run.
+ * @param {any} live
+ * @returns {string}
+ */
+export function workingDeliverable(live) {
+  if (!live) return '';
+  const state = String(live.state ?? '');
+  const phase = typeof live.phase === 'string' ? live.phase : '';
+  if ((phase || state) !== 'running' || (state && state !== 'running')) return '';
+  const list = live.progress && Array.isArray(live.progress.deliverables) ? live.progress.deliverables : [];
+  if (list.some((/** @type {any} */ entry) => entry && ['queued', 'delegated', 'submitted', 'rejected'].includes(entry.status))) return '';
+  const next = list.find((/** @type {any} */ entry) => entry && entry.status === 'planned');
+  return next && typeof next.id === 'string' ? next.id : '';
+}
+
+/**
  * The plan call: what the run will hand back, and where each piece stands.
  *
  * Statuses come from the live run only. The plan's own result is a snapshot
@@ -181,11 +213,12 @@ export function planView(block, live, kit, known = new Map()) {
   const args = call.args ?? {};
   const action = typeof args.action === 'string' ? args.action : kit.partialArgField(call.argsRaw, 'action');
   const statusWords = toolviewText().status;
+  const working = workingDeliverable(live);
   /** @param {any} item */
   const row = (item) => {
     const id = String(item?.id ?? '');
     const liveItem = liveDeliverable(live, id);
-    const status = liveItem?.status;
+    const status = id && id === working ? 'delegated' : liveItem?.status;
     return {
       id,
       title: String(item?.title || liveItem?.title || known.get(id) || id),
@@ -476,7 +509,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   /** @type {Map<string, string>} */
   const known = new Map();
 
-  const { card, line, title, tone, tag, quiet, button } = frameStyles();
+  const { card, line, title, tone, tag, quiet, button, step, stepTitle } = frameStyles();
 
   /** The run state for the conversation on screen, or null. */
   function useLive() {
@@ -495,7 +528,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   }
 
   /** @param {{ label: string }} props */
-  const PlainRow = ({ label }) => h('div', { style: line, 'data-evimed-toolview': 'plain' }, h('span', { style: title }, label));
+  const PlainRow = ({ label }) => h('div', { style: step, 'data-evimed-toolview': 'plain' }, h('span', { style: stepTitle }, label));
 
   /** @param {{ title?: string | null, text: string }} props */
   const RefusalRow = ({ title: name, text }) => h('div', { style: { ...line, color: tone('warn') }, 'data-evimed-toolview': 'refused' },
@@ -527,8 +560,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const model = modelOf('delegate', () => delegateView(block, live, kit, known));
     if (!model) return h(PlainRow, { label: '子任务' });
     if (model.state === 'refused') return h(RefusalRow, { title: model.title, text: model.stateText });
-    return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'delegate', 'data-state': model.state },
-      h('span', { style: { ...title, flex: '0 1 auto' } }, model.title),
+    return h('div', { style: step, 'data-evimed-toolview': 'delegate', 'data-state': model.state },
+      h('span', { style: stepTitle }, model.title),
       h('span', { style: tag }, model.stateText),
       model.childSessionId ? h(ChildLink, { childSessionId: model.childSessionId, title: model.title }) : null);
   }
@@ -560,8 +593,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return function ToolRow({ block }) {
       const model = modelOf(phrase.verb, () => toolLineView(block, phrase, kit));
       if (!model) return h(PlainRow, { label: phrase.verb });
-      return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'tool' },
-        h('span', { style: { ...title, flex: '0 1 auto' } }, model.label),
+      return h('div', { style: step, 'data-evimed-toolview': 'tool' },
+        h('span', { style: stepTitle }, model.label),
         model.outcome ? h('span', { style: tag }, model.outcome) : null);
     };
   }
@@ -577,8 +610,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const model = modelOf(phrase.verb, () => taskCardView(block, phrase, kit));
       if (!model) return h(PlainRow, { label: phrase.verb });
       if (model.kind === 'line') {
-        return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'tool' },
-          h('span', { style: { ...title, flex: '0 1 auto' } }, model.label),
+        return h('div', { style: step, 'data-evimed-toolview': 'tool' },
+          h('span', { style: stepTitle }, model.label),
           model.outcome ? h('span', { style: tag }, model.outcome) : null);
       }
       const open = () => {
@@ -628,5 +661,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'toolviews',
   inject,
-  parts: Object.freeze([frameStyles, mainViewSession, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, taskCardView, childLinkFor, apply]),
+  parts: Object.freeze([frameStyles, mainViewSession, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, workingDeliverable, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, taskCardView, childLinkFor, apply]),
 });

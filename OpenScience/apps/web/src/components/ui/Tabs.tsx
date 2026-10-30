@@ -3,17 +3,16 @@ import { cn } from "@/lib/cn";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
- * A page's views: one row of underlined tabs over a hairline (2026-09-23 plan
- * §4). The one way a page switches between views of itself — the frontier's
- * 精选 / 热榜 / 日报 / 全部 / 与我相关 — where there used to be five kinds:
- * segmented controls, pill groups, underlined tabs and eight mini segments in
- * the file viewers (inventory §2.4).
- *
- * A tab list: arrow keys move between tabs and select them, Home and End
- * jump; only the selected tab is in the tab order. The panel is the page's
- * own content below, labelled by the selected tab when `panelId` is given.
- * A row too wide for its box scrolls sideways and fades at the end that has
- * more tabs.
+ * Component: Tabs; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: underlined scrolling tablist with optional trailing actions.
+ * Variants: automatic or manual activation; semantic stage dots.
+ * States: selection and stage state remain independent.
+ * Hit area: 40px row buttons.
+ * Keyboard: arrows/Home/End focus; manual Enter/Space activates.
+ * Long content: horizontal scroll retains full labels.
+ * Theme: semantic text and independent status tokens.
+ * Responsive: overflow scroll with edge fade.
+ * Verification: Tabs.test.tsx; keyboard/browser/AT remain separate.
  */
 export interface TabItem<V extends string = string> {
   value: V;
@@ -32,8 +31,8 @@ export interface TabItem<V extends string = string> {
 }
 
 /**
- * The state a tab's dot says, three ways — shape, colour and words (spec: every status is said three times): `done` a filled blue
- * circle, `active` a blue ring (work under way, and only that), `partial` the same ring with a pale blue fill (some of the stage is
+ * The state a tab's dot says, three ways — shape, colour and words (spec: every status is said three times): `done` a filled green
+ * circle, `active` a navy information ring (work under way, and only that), `partial` the same ring with a pale information fill (some of the stage is
  * done and nothing is running now), `attention` an amber diamond (stale, or not finished), `todo` a small grey dot.
  */
 export type TabDot = "done" | "active" | "partial" | "attention" | "todo";
@@ -41,9 +40,9 @@ export type TabDot = "done" | "active" | "partial" | "attention" | "todo";
 export const DOT_WORDS: Record<TabDot, string> = { done: "已完成", active: "进行中", partial: "部分完成", attention: "需要留意", todo: "未开始" };
 
 const DOT_CLASSES: Record<TabDot, string> = {
-  done: "h-2 w-2 rounded-full bg-accent",
-  active: "h-2 w-2 rounded-full bg-surface ring-2 ring-accent",
-  partial: "h-2 w-2 rounded-full bg-accent-soft ring-2 ring-accent",
+  done: "h-2 w-2 rounded-full bg-ok",
+  active: "h-2 w-2 rounded-full bg-surface ring-2 ring-info",
+  partial: "h-2 w-2 rounded-full bg-info-soft ring-2 ring-info",
   attention: "h-2 w-2 rotate-45 bg-warn",
   todo: "h-1.5 w-1.5 rounded-full bg-surface-2 ring-1 ring-border-control",
 };
@@ -64,6 +63,7 @@ export function Tabs<V extends string>({
   onChange,
   panelId,
   trailing,
+  activation = "automatic",
   className,
   animatedIndicator = false,
 }: {
@@ -73,12 +73,15 @@ export function Tabs<V extends string>({
   value: V;
   onChange: (value: V) => void;
   panelId?: string;
+  activation?: "automatic" | "manual";
   /** Controls at the row's end; they sit on the same hairline as the tabs. */
   trailing?: ReactNode;
   className?: string;
   /** One moving accent underline; the standard page tabs keep their static rule. */
   animatedIndicator?: boolean;
 }) {
+  const [focused, setFocused] = useState(value);
+  useLayoutEffect(() => { setFocused(value); }, [value]);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const listRef = useRef<HTMLDivElement>(null);
   // True while the row has tabs scrolled out of sight at its end.
@@ -148,7 +151,8 @@ export function Tabs<V extends string>({
     };
   }, [animatedIndicator, items, value]);
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const at = items.findIndex((item) => item.value === value);
+    const at = items.some(item => item.value === value) || activation === "manual" ? refs.current.indexOf(event.currentTarget) : -1;
+    if (!items.length) return;
     const next = event.key === "ArrowRight" ? (at + 1) % items.length
       : event.key === "ArrowLeft" ? (at - 1 + items.length) % items.length
         : event.key === "Home" ? 0
@@ -156,11 +160,12 @@ export function Tabs<V extends string>({
             : null;
     if (next === null) return;
     event.preventDefault();
-    onChange(items[next].value);
+    if (activation === "automatic") onChange(items[next].value);
     refs.current[next]?.focus();
   };
   // A view that is not one of the tabs (a study's conversation, which is a view of the page and not a tab) leaves none selected: the
   // first one stays in the tab order, so the row can be reached from the keyboard.
+  const anyFocused = items.some((item) => item.value === focused);
   const anySelected = items.some((item) => item.value === value);
   const list = (
     <div
@@ -188,7 +193,16 @@ export function Tabs<V extends string>({
             id={panelId ? `${panelId}-tab-${item.value}` : undefined}
             aria-selected={selected}
             aria-controls={panelId}
-            tabIndex={selected || (!anySelected && index === 0) ? 0 : -1}
+            tabIndex={item.value === focused || (!anyFocused && index === 0) ? 0 : -1}
+            onFocus={() => {
+              setFocused(item.value);
+              const list = listRef.current, tab = refs.current[index];
+              if (!list || !tab) return;
+              const row = list.getBoundingClientRect(), box = tab.getBoundingClientRect();
+              const end = row.right - (index === items.length - 1 ? 0 : 32);
+              const delta = box.left < row.left ? box.left - row.left : box.right > end ? box.right - end : 0;
+              if (delta) list.scrollBy?.({ left: delta });
+            }}
             onClick={() => onChange(item.value)}
             onKeyDown={onKeyDown}
             className={cn(

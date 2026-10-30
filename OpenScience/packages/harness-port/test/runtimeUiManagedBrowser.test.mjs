@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';import test from 'node:test';
-import {managedBrowserTarget,createManagedBrowserTransport,createManagedBrowserController} from '../src/runtimeUiManagedBrowser.mjs';
+import {managedBrowserError,managedBrowserTarget,createManagedBrowserTransport,createManagedBrowserController} from '../src/runtimeUiManagedBrowser.mjs';
 const target={kind:'https',url:'https://example.org/',title:'example.org'};
 test('managed transport uses only fixed same-origin routes and closed scoped payloads',async()=>{
  /** @type {any[]} */const calls=[];const request=createManagedBrowserTransport({prefix:'/__evimed/f/'+'a'.repeat(32)+'/'},async(/** @type {any} */ url,/** @type {any} */ options)=>{calls.push({url,options});return{ok:true,text:async()=>JSON.stringify({data:{id:'opaque',sequence:0,state:{}}})};});
@@ -68,4 +68,54 @@ test('concurrent presentation snapshots coalesce so toolbar actions cannot silen
  /** @type {string[]} */
  const sent=[];const c=createManagedBrowserController({sessionId:'s',tabId:'t',available:true,actions:{},request:async(/** @type {string} */ method,/** @type {any} */ body)=>{sent.push(method==='command'?body.command.type:method);if(method==='open')return{id:'owned',sequence:0,state:{url:'about:blank'}};if(method==='snapshot')await new Promise(resolve=>{release=resolve;});return{sequence:method==='command'?(sequence=body.sequence):sequence,state:{url:target.url,title:'Observed'}};}});
  await c.navigate(target.url);const polls=Array.from({length:12},()=>c.snapshot());await new Promise(resolve=>setTimeout(resolve,0));const back=c.command({type:'back'});release();assert.equal(await back,true);assert.equal(sent.filter(value=>value==='snapshot').length,1);assert(sent.includes('back'));await Promise.all(polls);
+});
+test('the address the person asked for survives the blank open reply and a navigation that did not load, so Reload and the system browser still have it',async()=>{
+ // 2026-10-27: the open reply is always about:blank and so is the reply of a navigation that never committed; both used to clear the
+ // target, and with no target the chrome showed its empty prompt over the address and disabled 「在系统浏览器中打开」.
+ /** @type {any[]} */const seen=[];
+ /** @type {(body: any) => any} */let reply=()=>({});
+ /** @type {any} */let c=null;
+ c=createManagedBrowserController({sessionId:'s',tabId:'t',available:true,actions:{replace:()=>{}},request:async(/** @type {string} */ method,/** @type {any} */ body)=>{
+  if(method==='open')return{id:'owned',sequence:0,state:{url:'about:blank'}};
+  if(method==='close')return{closed:true};
+  seen.push({type:body.command.type,target:c.getSnapshot().frame.target?.url,address:c.getSnapshot().frame.address});
+  return{sequence:body.sequence,state:reply(body)};
+ }});
+ reply=()=>({url:'https://untrusted.example/',title:'',loading:false,error:{code:'managed_browser_page_failed'},viewport:{width:800,height:600}});
+ await c.navigate('https://untrusted.example/');
+ assert.deepEqual(seen,[{type:'navigate',target:'https://untrusted.example/',address:'requested'}],'the blank open reply left the requested target in place');
+ let frame=c.getSnapshot().frame;
+ assert.equal(frame.target.url,'https://untrusted.example/');assert.equal(frame.error.description,'页面无法打开，可在系统浏览器中打开。');assert.equal(frame.loading,false);
+ // Reload on the failed page asks for the same address again, on a fresh page.
+ reply=()=>({url:'https://untrusted.example/',title:'Back',loading:false,viewport:{width:800,height:600}});
+ await c.reload();
+ assert.equal(seen.at(-1)?.type,'navigate','a retired page is replaced by navigating to the saved address');assert.equal(c.getSnapshot().frame.error,undefined);
+ // An older answer that reports only a blank page and the reason keeps the address too.
+ reply=()=>({url:'about:blank',title:'',loading:false,error:{code:'managed_browser_page_failed'},viewport:{width:800,height:600}});
+ await c.navigate('https://another.example/');frame=c.getSnapshot().frame;
+ assert.equal(frame.target.url,'https://another.example/');assert.equal(frame.address,'requested');assert.equal(frame.error.description,'页面无法打开，可在系统浏览器中打开。');
+ await c.dispose();
+});
+test('a code the page does not know is still the generic unavailable copy, and the new one has its own',()=>{
+ assert.equal(managedBrowserError('managed_browser_page_failed').code,'managed_browser_page_failed');
+ assert.equal(managedBrowserError('managed_browser_page_failed').message,'页面无法打开，可在系统浏览器中打开。');
+ assert.equal(managedBrowserError('something_new').code,'managed_browser_unavailable');
+});
+test('the viewport draws no image until the server has sent a frame, and none again when it takes the frame away',async()=>{
+ // 2026-10-27: an <img> with no source is drawn as a broken-image icon at full size over the chrome's own empty-page words.
+ const {mountManagedBrowserViewport}=await import('../src/runtimeUiManagedBrowser.mjs'),{createRequire}=await import('node:module'),require=createRequire(new URL('../../../apps/web/package.json',import.meta.url)),{JSDOM}=require('js'+'dom');
+ const dom=new JSDOM('<div id="owned"></div>'),win=/** @type {any} */(dom.window);Object.defineProperty(win.document,'hidden',{value:false});
+ /** @type {Array<()=>void>} */const queue=[];win.setTimeout=(/** @type {()=>void} */ fn)=>{queue.push(fn);return queue.length;};win.clearTimeout=()=>{};
+ /** @type {any} */let frame=null;
+ const hide=mountManagedBrowserViewport({snapshot:async()=>true,frame:()=>frame,command:async()=>true},win,{viewportId:'owned'});
+ const image=/** @type {any} */(win.document.querySelector('#owned img'));
+ const settle=async()=>{for(let i=0;i<5;i++)await Promise.resolve();};
+ const state=()=>({hidden:image.hidden,display:image.style.display,src:image.getAttribute('src')});
+ assert.deepEqual(state(),{hidden:true,display:'none',src:null},'hidden from the moment it is mounted');
+ await settle();assert.deepEqual(state(),{hidden:true,display:'none',src:null},'the first poll found no frame');
+ frame={width:800,height:600,mimeType:'image/jpeg',dataBase64:'/9j/4AAQ'};queue.shift()?.();await settle();
+ assert.equal(state().hidden,false);assert.equal(state().display,'block');assert.match(state().src??'',/^data:image\/jpeg;base64,/);
+ frame=null;queue.shift()?.();await settle();
+ assert.deepEqual(state(),{hidden:true,display:'none',src:null},'a page that has lost its frame is not drawn from the last one');
+ hide();dom.window.close();
 });

@@ -249,6 +249,7 @@ export {
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
   EVIDENCE_PLATFORM_ERROR_CODES,
   EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
+  RESEARCH_DB_ERROR_MESSAGES_ZH,
   EVIDENCE_PROGRAMME_ERROR_CODES,
   EVIDENCE_PUBLIC_ERROR_CODES,
   GEO_MEDIA_MARKET_ERROR_CODES,
@@ -763,11 +764,15 @@ export {
   validateAgendaClaim,
 } from './src/agenda.mjs'
 
-// runtimeUiSurface — 12 exports
+// runtimeUiSurface — 16 exports
 export {
   RUNTIME_UI_MUX_RESPONSE_MAX_BYTES,
   RUNTIME_UI_ANSWERED_HOST_ROUTES,
   RUNTIME_UI_ANSWERED_METHODS,
+  RUNTIME_UI_READABLE_SETTINGS,
+  RUNTIME_UI_SETTINGS_READ,
+  isRuntimeUiSettingsRead,
+  runtimeUiSettingsAnswer,
   RUNTIME_UI_DENIED_HOST_ROUTES,
   RUNTIME_UI_DENIED_METHODS,
   RUNTIME_UI_DENIED_NAMESPACES,
@@ -1248,11 +1253,12 @@ export {
   sourceMaterialsCoverage,
   sourceMaterialsCoverageIssues,
 } from './src/sourceMaterialsLocate.mjs'
-// memoryVocabulary — 9 exports: the tags the platform writes into a
+// memoryVocabulary — 10 exports: the tags the platform writes into a
 // conversation, the identifiers it calls its own machinery by, the words
 // and shapes a run uses to talk about its own bookkeeping, and the shapes of
 // credentials and personal identifiers no memory may hold — what a memory
-// write is checked against in code.
+// write is checked against in code — and the one line that tells the engine
+// which named project a conversation is held in.
 export {
   PLATFORM_CONTEXT_TAGS,
   PLATFORM_JARGON_ZH,
@@ -1261,6 +1267,7 @@ export {
   runBookkeepingIn,
   identifierShapesIn,
   maskIdentifiers,
+  projectContextLine,
   stripPlatformTags,
   unwrapUserWrappers,
 } from './src/memoryVocabulary.mjs'
@@ -1381,18 +1388,25 @@ export {
   isFrontierInteractionType,
 } from './src/frontierInteractions.mjs'
 /** @typedef {import('./src/frontierInteractions.mjs').FrontierInteraction} FrontierInteraction */
-// frontierGenres — 9 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
-// the genres code is sure of, and code's fallback and decision over the editor model's genre.
+// frontierGenres — 15 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
+// the genres code is sure of, and code's fallback and decision over the editor model's genre; and the six kinds of 行业动态
+// (交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线, 其他) with the one check of the model's answer.
 export {
   FRONTIER_CODE_GENRES,
   FRONTIER_GENRE_BASES,
   FRONTIER_GENRE_LABELS_ZH,
   FRONTIER_GENRES,
+  FRONTIER_INDUSTRY_KIND_LABELS_ZH,
+  FRONTIER_INDUSTRY_KINDS,
   frontierGenreDecision,
   frontierGenreFallback,
+  frontierIndustryKindDecision,
   frontierItemGenre,
+  frontierItemIndustryKind,
   isFrontierGenre,
+  isFrontierIndustryKind,
 } from './src/frontierGenres.mjs'
+/** @typedef {import('./src/frontierGenres.mjs').FrontierIndustryKind} FrontierIndustryKind */
 // frontierMix — 24 exports: the mix of 精选 by genre group (the owner's share ranges of 2026-10-24, the Chinese target of
 // 30 %), the merge rules (a roundup never; a news rewrite or an X post of a paper never over it; a Chinese 解读 beside
 // it), the pure selection of a day's 精选 from its scored candidates (a floor place asks its genre's own bar,
@@ -1778,7 +1792,6 @@ export {
   VCR_COMPARATOR_ROUTE_LABELS_ZH,
   VCR_CONCLUSIONS,
   VCR_CONCLUSION_LABELS_ZH,
-  VCR_CONTACT_STATES,
   VCR_COUNT_KEYS,
   VCR_COUNT_LABELS_ZH,
   VCR_COX_FEW_EVENTS,
@@ -1820,6 +1833,7 @@ export {
   VCR_MAP_CONFLICT_BOUND,
   VCR_MEMBER_ROLES,
   VCR_MEMBER_ROLE_LABELS_ZH,
+  VCR_RETIRED_MEMBER_ROLE_LABELS_ZH,
   VCR_MIN_CELL_SIZE,
   VCR_MISSING_REASONS,
   VCR_MISSING_REASON_LABELS_ZH,
@@ -1855,8 +1869,6 @@ export {
   VCR_QUALITY_CATEGORY_LABELS_ZH,
   VCR_REAL_PATIENT_SOURCES,
   VCR_RECONSTRUCTION_TOLERANCE,
-  VCR_REFERRAL_STATES,
-  VCR_REFERRAL_STATE_LABELS_ZH,
   VCR_REGISTRY_ALLOCATION_LABELS_ZH,
   VCR_REGISTRY_MASKING_LABELS_ZH,
   VCR_REGISTRY_PHASE_LABELS_ZH,
@@ -2274,7 +2286,7 @@ export {
 } from './src/resultPackage.mjs'
 
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
-export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
+export { RESULT_R_REPLAY_METHOD_KINDS, RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
 export { RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT, RESEARCH_BILLING_VERSIONS, WALLET_CONTRACT_WHOLE_CREDIT, WALLET_CONTRACT_EXACT, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, creditUnitsOrNull, formatCredits, estimateRunCostUnits, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
 
 // creditLots — 灵豆 held as lots: the two kinds, where a gift comes from, and the Asia/Shanghai calendar of expiry and monthly dates.
@@ -2579,6 +2591,11 @@ export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricI
   continuousBaselines, ipcwBrier, evaluateForecast, compareForecasts, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
 
 export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
+export { VCR_OBJECT_REFERENCE_KINDS, vcrObjectReference } from './src/vcrObjectReference.mjs';
+export { VCR_PREDICTION_LIMIT_LABELS_ZH, vcrPredictionLimit } from './src/vcrPredictionLimits.mjs';
 export { previewGeoQuestionImport, validateGeoMeasurementContract } from './src/geoQuestionImport.mjs'
 
 export { geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessmentIdentity, geoClaimForStatement, geoEnrichStatementIdentity } from './src/geoClaimAssessment.mjs'
+
+export { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SCHEMA_VERSION, RSI_CAMPAIGN_CLAIMS, RSI_CAMPAIGN_SURFACES,
+  rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth } from './src/rsiCampaign.mjs'

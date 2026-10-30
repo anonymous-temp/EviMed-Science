@@ -184,6 +184,20 @@ test("a conversation is put away or removed by a flag on the ledger, and the lis
   });
 });
 
+test("a notice that carries a kind of work from the retired classifier still reads, and the label is no longer kept", async () => {
+  await withStore(async ({ store, project, binding }) => {
+    const { appendFile } = await import("node:fs/promises");
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "typed_1", question: "整理一份周报" }, async () => ({ accepted: true }));
+    await appendFile(path.join(project.metaDir, "runs.jsonl"), `${JSON.stringify({ event: "notice", id: run.id, at: "2026-10-13T08:00:00.000Z", qualityNotices: [], taskType: "writing" })}\n`, "utf8");
+    const listed = (await store.list(project)).find((item) => item.id === run.id);
+    assert.deepEqual([listed.id, listed.question, listed.title], [run.id, "整理一份周报", run.title]);
+    assert.equal("taskType" in listed, false);
+    // The run is still labelled the ordinary ways after such a row, and a task type is no label any more.
+    assert.equal((await store.recordRunLabels(project, run.id, { title: "周报", titleSource: "user" })).title, "周报");
+    assert.equal((await store.recordRunLabels(project, run.id, { taskType: "code" })).taskType, undefined);
+  });
+});
+
 test("the run routes take archived or deleted one at a time, and the desk and the shelf list different runs", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-shelf-route-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });

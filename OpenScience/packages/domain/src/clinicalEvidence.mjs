@@ -9,6 +9,13 @@ import { normalizeWorkspacePath } from "./workspaceLayout.mjs";
 import { isPlatformCardAddress, platformCardCitationMessage, platformCardCitationsByLine } from "./citedSources.mjs";
 import { deriveMarkdownStructure } from "./sourceMaterials.mjs";
 import { locateQuoteInText } from "./sourceMaterialsLocate.mjs";
+import {
+  englishConditionedEmergencyTriggers,
+  englishEmergencyDispatchPattern,
+  englishExclusiveSafetyPattern,
+  ruleLanguages,
+  rulesNotChecked,
+} from "./clinicalSafetyLanguage.mjs";
 
 const claimFields = Object.freeze([
   "claimId",
@@ -66,6 +73,12 @@ const operationalFailurePattern = /(?:Transport error|Runtime configuration boot
 // Open-language register is judged after delivery by J4, never by preflight.
 const runtimeLeakagePattern = /(?:clinical-evidence-synthesis|\bmcp__evimed__[a-z_]+\b|\bevimed_[a-z_]+\b|\.evimed-sources\/)/i;
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
+/** A claim that tells the reader to call for emergency help, in either language (the English phrases are the rules file's).
+ *  @param {unknown} claim @returns {boolean} */
+function isEmergencyCallClaim(claim) {
+  const text = String(claim ?? "");
+  return emergencyCallClaimPattern.test(text) || englishEmergencyDispatchPattern.test(text);
+}
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
 // Generic (non-drug-specific) safety rule. Drug- and scenario-specific rules
 // live in clinical-safety-rules.json so pharmacists can maintain them as data.
@@ -76,8 +89,65 @@ const exclusiveSafetyPattern = /(?:(?:唯一(?:的)?(?:(?:(?:且|并且|同时)?
 // matching would take those checks with it silently — the section would simply
 // be "not present" and nothing in it would be audited. Both names, and the
 // shapes runs have used in between, resolve to the same section.
-const practicalSectionHeading = "安全优先的实际处置|实际处置|实用回答|临床实践要点|临床要点|实用|怎么办|Practical";
+//
+// An English report names it in English (2026-10-28). Only `Practical` was
+// here, so an English review headed `## Practice points` — the name English
+// journals give this section — had no practical section as far as every safety
+// check below was concerned: the derived-result ban, the action-line anchors and
+// the pharmacist's rules all ran over an empty string. Matched case-insensitively
+// wherever the heading is read. A bare `Key points` is not on the list: that is
+// the summary box some journals open with, not the reader's actions.
+const practicalSectionHeadingZh = "安全优先的实际处置|实际处置|实用回答|临床实践要点|临床要点|实用|怎么办";
+const practicalSectionHeadingEn = "Practice points|Clinical practice points|Key points for practice|Implications for practice|Practical answer|Practical";
+const practicalSectionHeading = `${practicalSectionHeadingZh}|${practicalSectionHeadingEn}`;
 const practicalHeadingLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${practicalSectionHeading})[^\\n]*$`, "im");
+const practicalHeadingEnPattern = new RegExp(practicalSectionHeadingEn, "i");
+const practicalHeadingEnLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${practicalSectionHeadingEn})[^\\n]*$`, "im");
+// The methods section under the names a report gives it. `Search` stands on a
+// word boundary because `Research agenda` is a topic section, not a search.
+const methodsSectionHeading = "检索|方法|Methods?|\\bSearch\\b";
+const abstractSectionHeading = "摘要|Abstract";
+const conclusionSectionHeading = "结论|Conclusions?";
+// The reference list's heading. The Chinese names match anywhere in a heading, as
+// they always did. The English one is anchored to the whole heading: a bare
+// `References?` matched inside "p-references", so a GRADE outline's 「Values and
+// preferences」 section was read as the reference list, every claim citing a
+// source "had no entry in it", and each synthesized claim failed the blocking
+// check (2026-10-28). It matches `References`, `References list`, a number or
+// emphasis in front, and a qualifier after a bracket, colon or dash — and not
+// "Reference standard" (QUADAS-2), "Cross-references" or "Selected references".
+// Written with a lookbehind so the same string serves a heading line (`## …`) and a
+// heading's own text.
+const referencesHeadingEn = "(?<=(?:^|\\n)(?:##[ \\t]+)?(?:[0-9]{1,2}[.)][ \\t]+)?(?:\\*\\*|__)?)References?(?:[ \\t]+list)?(?=(?:\\*\\*|__)?[ \\t]*(?:[(（:：/—–-][^\\n]*)?(?:\\n|$))";
+const referencesSectionHeading = `参考文献|参考来源|${referencesHeadingEn}`;
+/** A heading's own text (no `##`) names the reference list. */
+const referencesHeadingNamePattern = new RegExp(referencesSectionHeading, "i");
+/** A level-two heading line that names the reference list. */
+const referencesHeadingLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${referencesSectionHeading})[^\\n]*$`, "im");
+// The headings a manuscript has whatever its subject, in either language. A
+// level-two section outside this vocabulary is a topic section — 「## 机制」,
+// 「## Assessment」 — and a review whose body is made of them follows the
+// person's outline rather than Results and Discussion (topicOrganisedReport).
+const manuscriptHeadingPattern = new RegExp([
+  "摘要|Abstract|关键词|Key\\s?words|Key points",
+  "引言|前言|背景|Introduction|Background",
+  methodsSectionHeading,
+  "资料",
+  "结果|\\bResults?\\b|讨论|Discussion",
+  "局限|Limitations?|结论|Conclusions?",
+  practicalSectionHeading,
+  referencesSectionHeading,
+  "致谢|Acknowledg|利益冲突|Conflicts? of interest|Funding|资助|附录|Appendix",
+].join("|"), "i");
+// How many topic sections make an outline. One or two sections of the report's
+// own sit inside an IMRaD manuscript as a matter of course (the repository
+// fixture carries 「## 诊断与鉴别」 beside 结果 and 讨论); an outline — mechanism,
+// phenotype, assessment, management — is several.
+const topicSectionsForOutline = 3;
+// A Results and a Discussion heading: what the deep-research check asks an IMRaD
+// report for, and what a review organised by topic has neither of.
+const resultsHeadingPattern = /(?:^|\n)##\s+.*(?:结果|Results?)/i;
+const discussionHeadingPattern = /(?:^|\n)##\s+.*(?:讨论|Discussion)/i;
 // --- Emergency dispatch is never conditioned on a medicine's effect --------
 // Inside the practical section an emergency-call instruction states its trigger
 // in symptoms and signs. A trigger phrased as "the drug did not work" —
@@ -382,6 +452,15 @@ export const clinicalEvidenceCheckIds = Object.freeze([
 ]);
 
 /**
+ * How many distinct preserved sources of one package the control plane reads back (the completion check, the run's claim
+ * count, `claim_verification`). It was 48: a comprehensive review the owner asked for cited 55 documents on the live check
+ * of 2026-10-28, one canonical file each, and the eight past the 48th were reported as unreadable — the review delivered
+ * `unverified` for quotes that were all verbatim. A limit protects the reads (each file is one bounded read); 400 covers a
+ * review of a few hundred references.
+ */
+export const PACKAGE_SOURCE_ARTIFACT_LIMIT = 400;
+
+/**
  * What a finding of each check does to a package (2026-09-17).
  *
  * Until now the rule was "everything blocks unless its sentence is on a
@@ -469,11 +548,18 @@ function lastClauseBoundary(passage) {
 }
 
 /** Every emergency-call sentence in the practical section whose trigger is how
- *  a self-administered medicine performed.
+ *  a self-administered medicine performed. An English report is read by the
+ *  English wording (closed phrase lists in the rules file), a Chinese one by
+ *  the morphology below; neither reads the other's prose.
  *  @param {any} practical
+ *  @param {"zh" | "en"} [language]
  *  @returns {{ line: number, span: string, sentence: string }[]}
  */
-function medicationConditionedEmergencyTriggers(practical) {
+function medicationConditionedEmergencyTriggers(practical, language = "zh") {
+  if (language === "en") {
+    return englishConditionedEmergencyTriggers(normalizedPracticalText(practical))
+      .map((trigger) => ({ ...trigger, sentence: excerpt(trigger.sentence) }));
+  }
   const found = [];
   for (const [lineIndex, rawLine] of normalizedPracticalText(practical).split("\n").entries()) {
     let medicationStated = false;
@@ -674,11 +760,20 @@ const gradeClauseSplit = /[，,；;：:、。！？\n]/;
  *  writes `## 2 资料与方法`), plus the abstract's 方法 field, with emphasis
  *  markers stripped — one delivery writes 评为**低确定性**, and the markers
  *  would break level parsing.
+ *
+ *  An English report is read the same way (2026-10-28): its abstract's
+ *  **Methods** field, and its practice points in the tail. A review organised
+ *  by topic has no 结果 or 讨论 to be the body — its topic sections are — so
+ *  there every section that is not one of the manuscript's own is the body;
+ *  read as before, an instrument applied under 「## Assessment」 was reported as
+ *  never applied, and the run was told to write a Results section to apply it in.
  *  @param {any} reportText
  */
 function appraisalSections(reportText) {
   const text = String(reportText ?? "");
-  const abstractMethods = /\*\*方法\*\*(.*?)(?=\n?\*\*(?:结果|结论)|$)/s.exec(reportSection(text, "摘要|Abstract"))?.[1] ?? "";
+  const abstractMethods = /\*\*(?:方法|Methods?|METHODS?)[:：]?\*\*(.*?)(?=\n?\*\*(?:结果|结论|Results?|RESULTS?|Conclusions?|CONCLUSIONS?)|$)/s
+    .exec(reportSection(text, abstractSectionHeading))?.[1] ?? "";
+  const topical = topicOrganisedReport(text);
   /** @type {Record<'methods'|'body'|'tail', string[]>} */
   const buckets = { methods: [abstractMethods.replace(/\*\*|__/g, "")], body: [], tail: [] };
   /** @type {'methods'|'body'|'tail'|null} */
@@ -687,10 +782,11 @@ function appraisalSections(reportText) {
     const heading = /^##\s+(.+)$/.exec(line);
     if (heading) {
       const name = heading[1];
-      if (/参考文献|参考来源|References?/i.test(name)) current = null;
+      if (referencesHeadingNamePattern.test(name)) current = null;
       else if (/资料|材料|方法|Methods/i.test(name)) current = "methods";
       else if (/结果|讨论|Results?|Discussion/i.test(name)) current = "body";
-      else if (/局限|结论|临床实践要点|Limitations?|Conclusion/i.test(name)) current = "tail";
+      else if (/局限|结论|临床实践要点|Limitations?|Conclusion/i.test(name) || practicalHeadingEnPattern.test(name)) current = "tail";
+      else if (topical && !manuscriptHeadingPattern.test(name)) current = "body";
       else current = null;
       continue;
     }
@@ -822,7 +918,7 @@ const bareCitationNumberList = /^\s*\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*\s
 const bracketSpanPattern = /\[([^[\]\n]{1,200})\]/g;
 // Every reference heading. One literal for the closure check and for
 // `referenceListBounds`, so the two cut the list at the same line.
-const referenceHeadingPattern = /(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*/gi;
+const referenceHeadingPattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${referencesSectionHeading})[^\\n]*`, "gi");
 // A bibliographic identifier occupying the citation slot resolves to nothing a
 // reader can follow and to no claim. Identifiers in running prose or in
 // （full-width parens） are untouched — a trial registration named in a sentence
@@ -1096,9 +1192,14 @@ function referenceIdentityFindings(reportText, claims) {
     const claimId = String(claim.claimId ?? "");
     const claimed = referenceIdentifiers([claim.identifier, claim.sourceUrl].filter((part) => typeof part === "string").join(" "));
     const listed = referenceIdentifiers(entry);
-    if (claimed.size && listed.size) {
-      if ([...claimed].some((identifier) => listed.has(identifier))) continue;
-      findings.push({ claimId, number, expected: [...claimed].sort().join(" / "), entry: excerpt(entry) });
+    // Identifiers disagree only within a kind: a PMCID and a DOI of one paper are not a mismatch. A claim naming its full text
+    // by PMCID beside an entry carrying the paper's DOI was reported as a different source (live check, 2026-10-28); with no
+    // kind in common the title decides, as it does when neither side carries an identifier.
+    const kinds = new Set([...listed].map((identifier) => identifier.split(":")[0]));
+    const comparable = [...claimed].filter((identifier) => kinds.has(identifier.split(":")[0]));
+    if (comparable.length) {
+      if (comparable.some((identifier) => listed.has(identifier))) continue;
+      findings.push({ claimId, number, expected: comparable.sort().join(" / "), entry: excerpt(entry) });
       continue;
     }
     const title = comparableTitle(claim.sourceTitle);
@@ -1441,7 +1542,7 @@ function claimSourceTuples(claim) {
  */
 function regulatoryArticleIssues(reportText, claims, successfulArtifacts) {
   const text = String(reportText ?? "");
-  const referencesAt = text.search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
+  const referencesAt = text.search(referencesHeadingLinePattern);
   const body = referencesAt < 0 ? text : text.slice(0, referencesAt);
   const byReference = new Map();
   const byId = new Map();
@@ -1587,6 +1688,78 @@ const permittedQuotedWords = 20;
 // pasted source sentences in the report that prompted this rule ran 15 words or
 // longer, so 12 clears the names with margin and catches the prose.
 const untranslatedProseWords = 12;
+// --- The report's language ---------------------------------------------------
+// A report is written in the language the person asked for, and the gate used
+// to assume it was Chinese (2026-10-28). An English review requested in English
+// was told on every English paragraph that "the body states each finding in
+// Chinese" and to "restate the passage in Chinese", and every piece of section
+// advice named 摘要 / 引言 / 资料与方法 only — so the run that obeyed delivered
+// English prose under Chinese headings, Chinese abstract labels and partly
+// Chinese bullets and tables: one document in two languages, which nobody asked
+// for. The untranslated-prose rule now applies to a Chinese report; an English
+// report is held to the mirror of it, Chinese runs in its prose; and advice that
+// sends the run to a section names the section in the report's language.
+//
+// Which language a report is in is a property of its characters, never a
+// judgement over its words: Han characters against Latin letters, counted in
+// the prose a reader reads. Left out of the count are the reference list (in
+// the sources' languages by definition), code, tables (which often carry a
+// source's own terms), HTML comments (the claim markers), link targets, URLs and
+// DOIs.
+//
+// A Han character carries about what three or four Latin letters do — a
+// thousand English words, some five to six thousand letters, come to fifteen to
+// eighteen hundred characters in Chinese — so Han characters at a fifth of the
+// letters is roughly half of the text in Chinese. At or above it the report is
+// Chinese. The tie leans Chinese, and so does a report with no letters at all,
+// because Chinese is the platform's default language. The production report that
+// prompted this — English prose with Chinese headings, labels and some bullets —
+// counts well under a tenth.
+const chineseReportHanShare = 0.2;
+const hanCharacterPattern = /\p{Script=Han}/gu;
+const latinLetterPattern = /[A-Za-z]/g;
+// An English report carrying Chinese. Two Han characters make a run: every
+// heading and label of the production defect was two characters long (摘要,
+// 引言, 目的, 方法, 结果, 结论), and one character is too little to be a word in
+// a sentence of another language. A quotation inside quotation marks stays, and
+// so does a name glossed in its original script in parentheses after its English
+// form, which is how an English paper gives one — Suxiao Jiuxin Wan followed by
+// its characters in parentheses is a name, not a sentence.
+const chineseRunCharacters = 2;
+const chineseRunPattern = new RegExp(`\\p{Script=Han}{${chineseRunCharacters},}`, "u");
+const quotedOrGlossedSpanPattern = /[“"「『‘][^”"」』’\n]*[”"」』’]|[（(][^）)\n]*[）)]/g;
+// The manuscript's sections by the name a report in each language gives them.
+// Advice that sends the run to a section names it in the report's own language:
+// naming 资料与方法 to an English report is how a run came to put Chinese
+// headings over English prose.
+const manuscriptSectionNames = Object.freeze({
+  zh: Object.freeze({
+    language: "Chinese",
+    abstract: "摘要",
+    introduction: "引言",
+    methods: "资料与方法",
+    results: "结果",
+    discussion: "讨论",
+    limitations: "局限性",
+    conclusions: "结论",
+    practice: "临床实践要点",
+    references: "参考文献",
+  }),
+  en: Object.freeze({
+    language: "English",
+    abstract: "Abstract",
+    introduction: "Introduction",
+    methods: "Methods",
+    results: "Results",
+    discussion: "Discussion",
+    limitations: "Limitations",
+    conclusions: "Conclusions",
+    practice: "Practice points",
+    references: "References",
+  }),
+});
+/** @typedef {"zh" | "en"} ReportLanguage */
+/** @typedef {Readonly<Record<"language" | "abstract" | "introduction" | "methods" | "results" | "discussion" | "limitations" | "conclusions" | "practice" | "references", string>>} ManuscriptSectionNames */
 // Absent evidence is a gap, not a counter-finding. "No directly applicable study
 // was retrieved" is insufficient evidence to judge; it may never be summarised
 // into evidence of no effect. The three parts are required in this order and in
@@ -1704,8 +1877,10 @@ const bookkeepingIssuePatterns = Object.freeze([
   // 结果 or 讨论. Named for the reader because it is worth knowing, degradable
   // because "the stratum this instrument covers came back empty" and "the
   // appraisal was skipped" are the same sentence in prose — see the note above
-  // appraisalInstruments.
+  // appraisalInstruments. The same finding in an English report says it in
+  // English (2026-10-28).
   /^资料与方法声明了 /,
+  /^The Methods declare /,
 ]);
 
 // Which run-level error code a rejected package earns. Every one of these is a
@@ -1752,9 +1927,17 @@ const hiddenClaimMarkerPattern = /<!--\s*claim:(CLM-[0-9]{3,6})\s*-->/g;
  *  Nullable here because that is what the JSON may literally contain;
  *  `loadClinicalSafetyRules` is what refuses a rule that leaves a required one
  *  out, so everything downstream of the load may treat them as present.
+ *
+ *  A rule is written in Chinese (its own `pattern`), and may carry an English
+ *  wording as closed phrase lists (`en`, see `clinicalSafetyLanguage.mjs`) or
+ *  declare `languages: ["zh", "en"]` when its one pattern reads both. `zh` says
+ *  whether the pattern above is the rule's Chinese wording; `english` is the
+ *  English one, `"same"` for the rule's own pattern, null for none.
  *  @returns {{ id: string, kind: string, message: string, pattern: RegExp | null,
- *    triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[] }} */
+ *    triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[],
+ *    zh: boolean, english: { pattern: RegExp, triggerPattern: RegExp | null } | "same" | null }} */
 export function compileClinicalSafetyRule(rule) {
+  const languages = ruleLanguages(rule);
   return {
     id: rule.id,
     kind: rule.kind,
@@ -1764,6 +1947,8 @@ export function compileClinicalSafetyRule(rule) {
     substitutions: Array.isArray(rule.reportSubstitutions)
       ? rule.reportSubstitutions.map((entry) => ({ find: new RegExp(entry.find, entry.flags ?? "g"), replace: String(entry.replace ?? "") }))
       : [],
+    zh: languages.zh,
+    english: languages.en,
   };
 }
 
@@ -1800,6 +1985,8 @@ export function validateLoadedSafetyRules(rules) {
       !rule.message && "message",
       !rule.pattern && "pattern",
       rule.kind === "practical_required_when_report_matches" && !rule.triggerPattern && "triggerPattern",
+      // An English wording of a rule that fires on an absence needs its own trigger: the Chinese one cannot see English prose.
+      rule.kind === "practical_required_when_report_matches" && rule.english && rule.english !== "same" && !rule.english.triggerPattern && "en.triggerPhrases",
     ].filter(Boolean);
     if (missing.length) {
       throw new Error(`clinical-safety-rules.json: rule "${rule.id || "(unnamed)"}" is missing ${missing.join(", ")}.`);
@@ -1807,7 +1994,7 @@ export function validateLoadedSafetyRules(rules) {
   }
 }
 
-/** @type {readonly { id: string, kind: string, message: string, pattern: RegExp, triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[] }[]} */
+/** @type {readonly { id: string, kind: string, message: string, pattern: RegExp, triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[], zh: boolean, english: { pattern: RegExp, triggerPattern: RegExp | null } | "same" | null }[]} */
 const clinicalSafetyRules = /** @type {any} */ (loadClinicalSafetyRules());
 
 /**
@@ -1851,12 +2038,18 @@ checkedBy(evaluateClinicalSafetyRules, "clinical-safety-rules");
  * practical section: the only line it can point at is where its trigger matched
  * the report, and `where: "trigger"` says so rather than letting the number be
  * read as the offending line.
- * @param {{ reportText?: unknown, practical?: unknown, question?: unknown }} input
+ * @param {{ reportText?: unknown, practical?: unknown, question?: unknown, language?: "zh" | "en" }} input `language` is the report's own (`reportLanguage`) unless a caller that already knows it says so
  * @returns {{ ruleId: string, message: string, line: number | null, where: string, match: string | null }[]}
  */
-export function clinicalSafetyRuleHits({ reportText, practical, question }) {
+export function clinicalSafetyRuleHits({ reportText, practical, question, language = undefined }) {
   const report = String(reportText ?? "");
   const practicalText = String(practical ?? "");
+  // The rule that applies is the one in the report's own language. A rule has no
+  // wording in a language it was never written for, and then it is not checked
+  // (`clinicalSafetyRulesNotChecked`), which is different from passing: the
+  // Chinese trigger 速效救心丸 found the gloss of an English report's
+  // "Suxiao Jiuxin Wan (速效救心丸)" and then asked for a Chinese sentence.
+  const reportIn = language ?? reportLanguage(report);
   /** @type {{ ruleId: string, message: string, line: number | null, where: string, match: string | null }[]} */
   const found = [];
   /** A rule's pattern may carry `g`, and `.test()` on a global regex advances
@@ -1871,31 +2064,54 @@ export function clinicalSafetyRuleHits({ reportText, practical, question }) {
     const located = firstMatchingLine(text, new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, "")));
     return { line: located?.line ?? null, where, match: located?.match ?? null };
   };
-  for (const rule of clinicalSafetyRules) {
-    if (rule.kind === "report_forbidden") {
+  for (const compiled of clinicalSafetyRules) {
+    /** @type {{ pattern: RegExp, triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[] } | null} */
+    let rule;
+    if (reportIn === "en") {
+      rule = compiled.english === "same" ? compiled : compiled.english ? { ...compiled.english, substitutions: [] } : null;
+    } else {
+      rule = compiled.zh ? compiled : null;
+    }
+    if (rule === null) continue;
+    const { id, kind, message } = compiled;
+    if (kind === "report_forbidden") {
       let text = report;
       for (const substitution of rule.substitutions) text = text.replace(substitution.find, substitution.replace);
       // Located in the substituted text because that is the text that was
       // tested. The substitutions replace in place and introduce no newlines,
       // so the number still indexes the report as the author wrote it.
-      if (rule.pattern.test(text)) found.push({ ruleId: rule.id, message: rule.message, ...locate(text, rule.pattern, "report") });
-    } else if (rule.kind === "practical_forbidden") {
-      if (rule.pattern.test(practicalText)) found.push({ ruleId: rule.id, message: rule.message, ...locate(practicalText, rule.pattern, "practical") });
-    } else if (rule.kind === "entity_requires_question_mention") {
+      if (rule.pattern.test(text)) found.push({ ruleId: id, message, ...locate(text, rule.pattern, "report") });
+    } else if (kind === "practical_forbidden") {
+      if (rule.pattern.test(practicalText)) found.push({ ruleId: id, message, ...locate(practicalText, rule.pattern, "practical") });
+    } else if (kind === "entity_requires_question_mention") {
       if (nonEmpty(question) && !rule.pattern.test(String(question)) && rule.pattern.test(report)) {
-        found.push({ ruleId: rule.id, message: rule.message, ...locate(report, rule.pattern, "report") });
+        found.push({ ruleId: id, message, ...locate(report, rule.pattern, "report") });
       }
-    } else if (rule.kind === "practical_required_when_report_matches") {
+    } else if (kind === "practical_required_when_report_matches") {
       // `triggerPattern` is required for this kind and checked at load.
       const trigger = /** @type {RegExp} */ (rule.triggerPattern);
       if (trigger.test(report) && !rule.pattern.test(practicalText)) {
-        found.push({ ruleId: rule.id, message: rule.message, ...locate(report, trigger, "trigger") });
+        found.push({ ruleId: id, message, ...locate(report, trigger, "trigger") });
       }
     }
   }
   return found;
 }
 checkedBy(clinicalSafetyRuleHits, "clinical-safety-rules");
+
+/**
+ * The rules this report was not checked against: those with no wording in the
+ * report's language. "Not checked" is not "passed" — a report of a language a
+ * rule was never written for gets no verdict from it, and says so. The rules
+ * file is the pharmacist's: a rule added in Chinese alone shows up here for
+ * every English report until its English wording is written.
+ * @param {unknown} reportText
+ * @param {"zh" | "en"} [language] the report's own (`reportLanguage`) unless given
+ * @returns {string[]} rule ids
+ */
+export function clinicalSafetyRulesNotChecked(reportText, language = undefined) {
+  return rulesNotChecked(clinicalSafetyRulesData.rules, language ?? reportLanguage(reportText));
+}
 
 /** @param {unknown} value @param {number} [minimum] @returns {boolean} */
 function nonEmpty(value, minimum = 1) {
@@ -2767,7 +2983,7 @@ function referenceYear(text) {
  *  @param {unknown} reportText @returns {string[]} */
 export function citationIntegrityIssues(reportText) {
   const text = String(reportText ?? "");
-  const section = reportSection(text, "参考文献|参考来源|References?");
+  const section = reportSection(text, referencesSectionHeading);
   const prose = section ? text.slice(0, text.indexOf(section)) : text;
 
   const entries = new Map();
@@ -2856,7 +3072,7 @@ const sourceIdentifier = /\b(?:10\.\d{4,9}\/\S+|pmid:?\s*\d+|https?:\/\/\S+)/i;
 // would find it. Two production reports were marked unverified for that.
 /** @param {unknown} reportText @returns {Set<number>} */
 export function numberedReferenceNumbers(reportText) {
-  const references = reportSection(reportText, "参考文献|参考来源|References?");
+  const references = reportSection(reportText, referencesSectionHeading);
   const numbers = new Set();
   for (const line of references.split("\n")) {
     const match = /^\s*(\d+)[.、]\s+\S/.exec(line);
@@ -2867,7 +3083,7 @@ export function numberedReferenceNumbers(reportText) {
 
 /** @param {unknown} reportText @returns {number} */
 export function numberedReferenceCount(reportText) {
-  const references = reportSection(reportText, "参考文献|参考来源|References?");
+  const references = reportSection(reportText, referencesSectionHeading);
   const entries = references.split("\n").filter((line) => /^\s*\d+[.、]\s+\S/.test(line));
   const distinct = new Set();
   let counted = 0;
@@ -2901,7 +3117,7 @@ function recordIdentifiersInReport(reportText) {
   const found = new Set();
   // Only the analysis body. Article numbers like BMJ's e004216 are letters and
   // digits too, and the reference list is exactly where they belong.
-  const text = withoutReportSections(String(reportText ?? ""), "参考文献|参考来源|References?");
+  const text = withoutReportSections(String(reportText ?? ""), referencesSectionHeading);
   for (const match of text.matchAll(/([A-Za-z]{1,6})[-_]?(\d{6,})/g)) {
     const [whole, scheme] = match;
     if (bibliographicIdentifierScheme.test(scheme)) continue;
@@ -2925,6 +3141,60 @@ function reportSection(reportText, headingPattern) {
     new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i"),
   );
   return match?.[1] ?? "";
+}
+
+/** Every section whose heading matches — not the first only — as the report's own
+ *  lines: the matching sections' bodies stay where they are and every other line is
+ *  blank, so a line number in the result is a line number of the report and the text
+ *  is as long as the report is.
+ *
+ *  A requested outline may carry a heading that holds a practice-points word
+ *  (「## Practical management」) before the section the skill names
+ *  (「## Practice points」). Reading the first heading only audited the outline's
+ *  section and left the real practice points without the derived-result ban, the
+ *  action-line anchors and the pharmacist's rules (2026-10-28); every section the
+ *  expression finds is advice a reader may act on, so every one is read.
+ *  @param {unknown} reportText @param {string} headingPattern
+ *  @returns {{ text: string, lines: Set<number>, sections: number }}
+ */
+function reportSectionsInPlace(reportText, headingPattern) {
+  const source = String(reportText ?? "");
+  const rows = source.split("\n").map(() => "");
+  const original = source.split("\n");
+  /** @type {Set<number>} */
+  const lines = new Set();
+  let sections = 0;
+  const pattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "gi");
+  for (const match of source.matchAll(pattern)) {
+    sections += 1;
+    const bodyStart = match.index + match[0].length - match[1].length;
+    const first = source.slice(0, bodyStart).split("\n").length - 1;
+    const count = match[1].split("\n").length;
+    for (let at = first; at < first + count && at < rows.length; at += 1) {
+      rows[at] = original[at];
+      lines.add(at + 1);
+    }
+  }
+  return { text: rows.join("\n"), lines, sections };
+}
+
+/** Whether a review is organised by topic: no Results and no Discussion
+ *  heading, and at least `topicSectionsForOutline` level-two sections of its
+ *  own. A narrative review written to the person's outline (mechanism →
+ *  phenotype → assessment → management → research agenda) is a manuscript
+ *  without being IMRaD, and asking it for Results and Discussion headings asks
+ *  it to give up the outline it was commissioned with (2026-10-28).
+ *
+ *  Read from the report's shape, because nothing else here says it: the review
+ *  design (`reviewType`) is an input of the brief, not a field of the package
+ *  this validator is handed.
+ *  @param {unknown} reportText
+ */
+function topicOrganisedReport(reportText) {
+  const text = String(reportText ?? "");
+  if (resultsHeadingPattern.test(text) || discussionHeadingPattern.test(text)) return false;
+  const headings = [...text.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => match[1].replace(/\*\*|__/g, ""));
+  return headings.filter((name) => !manuscriptHeadingPattern.test(name)).length >= topicSectionsForOutline;
 }
 
 // Blanked, not deleted. The numeric audit reports the line it is unhappy with,
@@ -3001,14 +3271,71 @@ function readsAsDatabaseQuery(segment) {
   return databaseFieldTagPattern.test(segment) || (segment.match(booleanOperatorPattern)?.length ?? 0) >= 2;
 }
 
+/** One line with what is not prose taken out — HTML comments (the claim
+ *  markers), inline code, link targets (the link text stays), URLs and DOIs —
+ *  each replaced by `cut`, so the text on either side of a removal never joins.
+ *  @param {unknown} line @param {string} cut
+ */
+function proseWithoutAddresses(line, cut) {
+  return String(line ?? "")
+    .replace(/<!--[\s\S]*?-->/g, cut)
+    .replace(/`[^`]*`/g, cut)
+    .replace(/!?\[([^\]\n]*)\]\([^)\s]*\)/g, `$1${cut}`)
+    .replace(/https?:\/\/\S+|www\.[A-Za-z0-9.-]+\S*/gi, cut)
+    .replace(/\b10\.\d{4,9}\/\S+/g, cut);
+}
+
+/** The language a report's prose is written in: `zh` when Han characters are
+ *  at least `chineseReportHanShare` of its letters, `en` otherwise. Counted
+ *  outside the reference list, code fences, tables, HTML comments, link
+ *  targets, URLs and DOIs (see the note above `chineseReportHanShare`).
+ *  @param {unknown} reportText
+ *  @returns {ReportLanguage}
+ */
+export function reportLanguage(reportText) {
+  const prose = withoutReportSections(String(reportText ?? "").replace(/<!--[\s\S]*?-->/g, " "), referencesSectionHeading);
+  let han = 0;
+  let latin = 0;
+  let insideCodeFence = false;
+  for (const line of prose.split("\n")) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      insideCodeFence = !insideCodeFence;
+      continue;
+    }
+    if (insideCodeFence || /^\s*\|/.test(line)) continue;
+    const text = proseWithoutAddresses(line, " ");
+    han += text.match(hanCharacterPattern)?.length ?? 0;
+    latin += text.match(latinLetterPattern)?.length ?? 0;
+  }
+  return han + latin === 0 || han / (han + latin) >= chineseReportHanShare ? "zh" : "en";
+}
+
+/** The section names a report in this language uses.
+ *  @param {ReportLanguage} language @returns {ManuscriptSectionNames} */
+function sectionNames(language) {
+  return language === "en" ? manuscriptSectionNames.en : manuscriptSectionNames.zh;
+}
+
+/** The first run of Chinese on one line of an English report, or "" when the
+ *  line's Han characters are all inside quotation marks or a parenthesised
+ *  gloss of a name.
+ *  @param {string} line
+ */
+function chineseRun(line) {
+  const text = proseWithoutAddresses(line, " ").replace(quotedOrGlossedSpanPattern, " ");
+  return chineseRunPattern.exec(text)?.[0] ?? "";
+}
+
 /** A run of untranslated source prose on one line of the body, or "" when the
  *  line's Latin script is names, identifiers, units, statistics, or a short
- *  quoted phrase carried inside a Chinese sentence.
+ *  quoted phrase carried inside a Chinese sentence. Read in a Chinese report
+ *  only (see `reportLanguage`): in an English one, the same words are the
+ *  report's own prose.
  *
- *  The report states its findings in Chinese with numbered citations; a reader
- *  who wants the original wording follows the citation and an auditor reads the
- *  matrix. A paragraph of source sentences in the body is the traceability
- *  device pasted where nothing checks it.
+ *  A Chinese report states its findings in Chinese with numbered citations; a
+ *  reader who wants the original wording follows the citation and an auditor
+ *  reads the matrix. A paragraph of source sentences in the body is the
+ *  traceability device pasted where nothing checks it.
  *  @param {string} line
  *  @returns {{ words: number, text: string } | null}
  */
@@ -3016,12 +3343,7 @@ function untranslatedProseRun(line) {
   // Anything removed rather than measured leaves a break behind it, so two
   // separate Latin fragments never merge into one run.
   const cut = "\u0000";
-  const text = String(line ?? "")
-    .replace(/<!--[\s\S]*?-->/g, cut)
-    .replace(/`[^`]*`/g, cut)
-    .replace(/!?\[([^\]\n]*)\]\([^)\s]*\)/g, `$1${cut}`)
-    .replace(/https?:\/\/\S+|www\.[A-Za-z0-9.-]+\S*/gi, cut)
-    .replace(/\b10\.\d{4,9}\/\S+/g, cut)
+  const text = proseWithoutAddresses(line, cut)
     // A short direct quotation is allowed: the exact wording is sometimes itself
     // the object of analysis — an indication clause, a recommendation class, a
     // contested definition. Past a sentence it is no longer a short quotation,
@@ -3064,21 +3386,30 @@ function absentEvidenceAsCounterFinding(line) {
 }
 
 /** Commissioning vocabulary, acceptance-specification structure,
- *  self-referential narration, pasted source quotations, and a gap written as a
- *  counter-finding — the ways a manuscript stops reading like one. Read outside
- *  the reference list, where a cited title may legitimately carry any of these
- *  words and is untranslated by definition.
- *  @param {any} reportText
+ *  self-referential narration, pasted source quotations, a gap written as a
+ *  counter-finding, and prose in a second language — the ways a manuscript
+ *  stops reading like one. Read outside the reference list, where a cited title
+ *  may legitimately carry any of these words and is untranslated by definition.
+ *
+ *  The language is the report's own (`reportLanguage`): untranslated source
+ *  prose is a finding in a Chinese report and Chinese runs are one in an English
+ *  report, and every section this advice sends the run to is named in that
+ *  language.
+ *  @param {any} reportText @param {ReportLanguage} [language]
  */
-function manuscriptRegisterIssues(reportText) {
+function manuscriptRegisterIssues(reportText, language = reportLanguage(reportText)) {
   const issues = [];
-  const body = withoutReportSections(reportText, "参考文献|参考来源|References?");
-  // A database search strategy is written in the source language by design and
-  // belongs in 资料与方法, so the untranslated-prose rule alone reads a copy with
-  // that section blanked. Line numbers survive the blanking, as everywhere else.
-  const proseLines = withoutReportSections(body, "检索|方法|Methods?").split("\n");
+  const names = sectionNames(language);
+  const body = withoutReportSections(reportText, referencesSectionHeading);
+  // A database search strategy is written in the database's language by design
+  // and belongs in the methods, so the two language rules read a copy with that
+  // section blanked: an English report searches CNKI and Wanfang in Chinese.
+  // Line numbers survive the blanking, as everywhere else.
+  const proseLines = withoutReportSections(body, methodsSectionHeading).split("\n");
   const namedTerms = new Set();
   const propositionLines = [];
+  /** @type {{ lineNumber: number, line: string }[]} */
+  const chineseLines = [];
   let propositionSample = "";
   let headings = 0;
   let verdicts = 0;
@@ -3098,7 +3429,9 @@ function manuscriptRegisterIssues(reportText) {
         `The academic report line ${lineNumber} uses commissioning vocabulary ${JSON.stringify(term)}: ${excerpt(line)}. `
         + "A paper never names the brief it was written for, the item bank the question came from, the metrics it was scored against, or the answer that was expected. "
         + "Restate the underlying clinical proposition in the literature's own words and evaluate that instead — "
-        + '例如把"题库目标答案X无证据支持"改写为"对于X这一说法，未检索到以临床结局为终点的研究"。',
+        + (language === "en"
+          ? 'e.g. rewrite "the item bank\'s target answer X is unsupported" as "for the claim X, no study with a clinical endpoint was retrieved".'
+          : '例如把"题库目标答案X无证据支持"改写为"对于X这一说法，未检索到以临床结局为终点的研究"。'),
       );
     }
     if (headings < 4 && acceptanceConditionHeadingPattern.test(line)) {
@@ -3106,8 +3439,8 @@ function manuscriptRegisterIssues(reportText) {
       issues.push(
         `The academic report line ${lineNumber} names a section after an acceptance condition: ${excerpt(line)}. `
         + "A reader judges what kind of document this is from the section names, and 判定条件 announces a reviewer's checklist. "
-        + "Use the manuscript sections (摘要 / 引言 / 资料与方法 / 结果 / 讨论 / 局限性 / 结论 / 临床实践要点 / 参考文献): "
-        + "state the question and the objective in 引言, and write the evidence bar as the evidence-appraisal criteria in 资料与方法.",
+        + `Use the manuscript sections (${[names.abstract, names.introduction, names.methods, names.results, names.discussion, names.limitations, names.conclusions, names.practice, names.references].join(" / ")}): `
+        + `state the question and the objective in ${names.introduction}, and write the evidence bar as the evidence-appraisal criteria in ${names.methods}.`,
       );
     }
     if (letteredPropositionPattern.test(line)) {
@@ -3129,8 +3462,8 @@ function manuscriptRegisterIssues(reportText) {
       issues.push(
         `The academic report line ${lineNumber} writes about itself rather than about the evidence: ${excerpt(line)}. `
         + "The paper describes evidence and reasoning, never what this report is, what it refuses to do, or what it was checked against. "
-        + "State the objective plainly in 引言 (本文旨在评价……) and delete the rest; if a scientific question is buried in the sentence, ask it scientifically. "
-        + "A paper never announces whom it is written for: state in 资料与方法 which population and care setting the evidence applies to, and discuss extrapolation in 讨论.",
+        + `State the objective plainly in ${names.introduction} (${language === "en" ? "This review evaluates …" : "本文旨在评价……"}) and delete the rest; if a scientific question is buried in the sentence, ask it scientifically. `
+        + `A paper never announces whom it is written for: state in ${names.methods} which population and care setting the evidence applies to, and discuss extrapolation in ${names.discussion}.`,
       );
     }
     if (quotations < 4 && pastedSourceQuotePattern.test(line)) {
@@ -3139,21 +3472,32 @@ function manuscriptRegisterIssues(reportText) {
         `The academic report line ${lineNumber} pastes a source quotation into the body behind a 原文： label: ${excerpt(line)}. `
         + "A verbatim quote is a traceability device: it lives in the evidence matrix's supportQuote field, "
         + "where it is checked against the preserved artifact — in the body it is checked by nobody and adds no verifiability. "
-        + "State the finding in Chinese in the paper's own voice with its numbered citation, and where the exact wording is itself the object of analysis, "
-        + 'quote a short phrase inside quotation marks, grammatically inside the Chinese sentence (该说明书将适应症限定为"气滞血瘀型冠心病心绞痛"[7]).',
+        + `State the finding in ${names.language} in the paper's own voice with its numbered citation, and where the exact wording is itself the object of analysis, `
+        + (language === "en"
+          ? 'quote a short phrase inside quotation marks, grammatically inside the sentence (the label restricts the indication to "angina pectoris due to coronary artery disease" [7]).'
+          : 'quote a short phrase inside quotation marks, grammatically inside the Chinese sentence (该说明书将适应症限定为"气滞血瘀型冠心病心绞痛"[7]).'),
       );
     }
-    const foreign = untranslated < 4 && !insideCodeFence && !fence && !/^\s*\|/.test(line)
-      ? untranslatedProseRun(proseLines[index] ?? "")
-      : null;
-    if (foreign) {
-      untranslated += 1;
-      issues.push(
-        `The academic report line ${lineNumber} carries ${foreign.words} consecutive words of untranslated source prose: ${foreign.text}. `
-        + "The body states each finding in Chinese with its numbered citation; a reader who wants the original wording follows the citation and an auditor reads the matrix. "
-        + "Restate the passage in Chinese with its citation, and keep any genuinely necessary quotation to a short phrase inside quotation marks — "
-        + "names, identifiers, units and statistics (ALDH2、rs671、GRADE、Naranjo、P < 0.01、RR 0.82) are unaffected.",
-      );
+    if (language === "zh") {
+      const foreign = untranslated < 4 && !insideCodeFence && !fence && !/^\s*\|/.test(line)
+        ? untranslatedProseRun(proseLines[index] ?? "")
+        : null;
+      if (foreign) {
+        untranslated += 1;
+        issues.push(
+          `The academic report line ${lineNumber} carries ${foreign.words} consecutive words of untranslated source prose: ${foreign.text}. `
+          + "This report is written in Chinese, so it states each finding in Chinese with its numbered citation; a reader who wants the original wording follows the citation and an auditor reads the matrix. "
+          + "Restate the passage in Chinese with its citation, and keep any genuinely necessary quotation to a short phrase inside quotation marks — "
+          + "names, identifiers, units and statistics (ALDH2、rs671、GRADE、Naranjo、P < 0.01、RR 0.82) are unaffected. "
+          + "If the person asked for the report in another language, write the whole of it in that language instead.",
+        );
+      }
+    } else if (!insideCodeFence && !fence) {
+      // A heading is read where it stands, the methods heading included; a line
+      // of the methods section is read off the blanked copy. Tables are read:
+      // a table header in Chinese is part of the defect this exists for.
+      const run = chineseRun(/^\s*#{1,6}\s/.test(line) ? line : proseLines[index] ?? "");
+      if (run) chineseLines.push({ lineNumber, line });
     }
     const counterFinding = counterFindings < 4 ? absentEvidenceAsCounterFinding(line) : "";
     if (counterFinding) {
@@ -3171,7 +3515,24 @@ function manuscriptRegisterIssues(reportText) {
     issues.push(
       `The academic report states lettered propositions with their own pass/fail conditions at lines ${propositionLines.slice(0, 8).join(", ")}: ${propositionSample}. `
       + "That is the reviewer's acceptance form printed inside the manuscript. Dissolve it: what evidence a conclusion of each kind must rest on belongs in "
-      + "资料与方法 as continuous methods prose, and what each line of evidence established belongs in 结果 and 讨论 as a finding — never carried forward as a per-proposition verdict.",
+      + `${names.methods} as continuous methods prose, and what each line of evidence established belongs in ${names.results} and ${names.discussion} as a finding — never carried forward as a per-proposition verdict.`,
+    );
+  }
+  // Capped like every rule here, and the rest counted rather than dropped: a
+  // report whose every heading and label is Chinese is one defect, and the run
+  // needs to know how far it reaches, not seventy notices of it.
+  for (const { lineNumber, line } of chineseLines.slice(0, 4)) {
+    issues.push(
+      `The report is written in English; line ${lineNumber} carries Chinese text: ${excerpt(line)}. `
+      + "Write the whole deliverable in one language, the one the person asked for — headings, abstract labels, list items and table cells included. "
+      + "A name may keep its original script inside quotation marks or in parentheses after its English form.",
+    );
+  }
+  if (chineseLines.length > 4) {
+    const further = chineseLines.slice(4).map((entry) => entry.lineNumber);
+    issues.push(
+      `The report is written in English, and ${further.length} more lines carry Chinese text `
+      + `(lines ${further.slice(0, 12).join(", ")}${further.length > 12 ? ", …" : ""}). Write the whole deliverable in one language.`,
     );
   }
   return issues;
@@ -3353,7 +3714,7 @@ function validateSynthesizedClaim(
     }
   }
   if (
-    emergencyCallClaimPattern.test(value.claim ?? "")
+    isEmergencyCallClaim(value.claim)
     && !sources.some((source) => emergencyCallSupportPattern.test(source?.supportQuote ?? ""))
   ) {
     issues.push(`${label}.emergency-call action is not present in its direct support.`);
@@ -3556,7 +3917,7 @@ function auditClaimEvidence(value, label, context) {
   issues.region("claim-support-quote");
   if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
   issues.region("claim-emergency-support");
-  if (emergencyCallClaimPattern.test(value.claim ?? "")
+  if (isEmergencyCallClaim(value.claim)
     && !emergencyCallSupportPattern.test(value.supportQuote ?? "")) {
     issues.push(`${label}.emergency-call action is not present in its direct support.`);
   }
@@ -3780,12 +4141,36 @@ export function validateClinicalEvidencePackage({
   const reportReferenceCount = numberedReferenceCount(reportText);
   const reportReferenceNumbers = numberedReferenceNumbers(reportText);
 
+  // The language the report is written in decides the language every section
+  // named below is named in, and which of the two language rules applies
+  // (2026-10-28; see the note above `chineseReportHanShare`). A review written
+  // to the person's outline has topic sections where an IMRaD manuscript has
+  // Results and Discussion, and is asked for neither heading.
+  const language = reportLanguage(reportText);
+  const names = sectionNames(language);
+  const topical = topicOrganisedReport(reportText);
+
   issues.region("report-sections");
   if (!nonEmpty(reportText)) issues.push("clinical-evidence-report.md must contain academic analysis.");
   const title = typeof reportText === "string" ? reportText.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "" : "";
-  if (!title) issues.push("The academic title must be present.");
-  for (const section of [/(?:^|\n)##\s+(?:摘要|Abstract)/i, /(?:^|\n)##\s+.*(?:临床|证据|Evidence|Clinical)/i, /(?:^|\n)##\s+.*(?:局限|Limitations?)/i, /(?:^|\n)##\s+.*(?:结论|Conclusion)/i]) {
-    if (!section.test(reportText ?? "")) issues.push(`The academic report is missing a required section matching ${section}.`);
+  // Present, and in the report's own language: nothing here asks an English
+  // report for a Chinese title or a Chinese report for an English one.
+  if (!title) issues.push(`The academic title must be present: one level-one heading (# …), written in ${names.language} like the rest of the report.`);
+  // The clinical or evidence section is the body. A Chinese report's practical
+  // heading 临床实践要点 carries 临床 and so has always satisfied it; an English
+  // report's practice points count the same way, and a review organised by
+  // topic has its topic sections for a body.
+  const requiredSections = [
+    { pattern: /(?:^|\n)##\s+(?:摘要|Abstract)/i, body: false, zh: ["摘要", "摘要"], en: ["Abstract", "Abstract"] },
+    { pattern: /(?:^|\n)##\s+.*(?:临床|证据|Evidence|Clinical)/i, body: true, zh: ["临床证据", "临床 or 证据"], en: ["Clinical evidence", "Clinical or Evidence"] },
+    { pattern: /(?:^|\n)##\s+.*(?:局限|Limitations?)/i, body: false, zh: ["局限性", "局限"], en: ["Limitations", "Limitation"] },
+    { pattern: /(?:^|\n)##\s+.*(?:结论|Conclusion)/i, body: false, zh: ["结论", "结论"], en: ["Conclusions", "Conclusion"] },
+  ];
+  for (const section of requiredSections) {
+    if (section.body && (topical || practicalHeadingEnLinePattern.test(reportText ?? ""))) continue;
+    if (section.pattern.test(reportText ?? "")) continue;
+    const [name, words] = section[language];
+    issues.push(`The academic report is missing a required section matching ## ${name}: a level-two heading that contains ${words}.`);
   }
   // The practical section is required by the same expression that finds it, and
   // by that expression alone. It used to be admitted by a second, wider
@@ -3798,13 +4183,15 @@ export function validateClinicalEvidencePackage({
   // and "the section that gets audited" the same section by construction.
   // 结论 and 临床实践要点 stay two sections: the conclusion requirement above no
   // longer accepts a practical heading in its place, and this one does not
-  // accept a conclusion heading.
+  // accept a conclusion heading. The same holds in English: no practice-points
+  // name contains "Conclusion", and "Conclusion" contains none of them.
   issues.region("practical-section");
-  const practicalSection = reportSection(reportText, practicalSectionHeading);
+  const practicalSections = reportSectionsInPlace(reportText, practicalSectionHeading);
+  const practicalSection = practicalSections.text;
   if (!practicalHeadingLinePattern.test(reportText ?? "")) {
     issues.push(
       "The academic report is missing the safety-first practical-answer section. "
-      + `Head it with one of: ${practicalSectionHeading.split("|").join(" / ")} — `
+      + `Head it with one of: ${(language === "en" ? practicalSectionHeadingEn : practicalSectionHeadingZh).split("|").join(" / ")} — `
       + "every safety check on practical advice locates that section by its heading, "
       + "so a heading outside this set means the section is never audited.",
     );
@@ -3817,20 +4204,41 @@ export function validateClinicalEvidencePackage({
   // Every package of this contract is a deep-research report. That used to be
   // switched by a `reportProfile` the run typed into its own receipt, so a run
   // that skipped the receipt skipped these checks too.
+  //
+  // A review organised by topic (2026-10-28) owes a methods statement in any
+  // form — a heading or a subsection — and no Results or Discussion heading; the
+  // limitations, conclusions, practice points and references it owes are
+  // required of every report, above and below.
   issues.region("deep-research-sections");
-  for (const section of [
-    /(?:^|\n)##\s+.*(?:检索|方法|Methods?)/i,
-    /(?:^|\n)##\s+.*(?:结果|Results?)/i,
-    /(?:^|\n)##\s+.*(?:讨论|Discussion)/i,
-  ]) {
-    if (!section.test(reportText ?? "")) {
-      issues.push(`The deep-research report is missing a required academic section matching ${section}.`);
-    }
+  const deepResearchSections = topical
+    ? [{
+      pattern: new RegExp(`(?:^|\\n)#{2,4}\\s+.*(?:${methodsSectionHeading})`, "i"),
+      zh: ["资料与方法", "a heading or subsection containing 检索 or 方法"],
+      en: ["Methods", "a heading or subsection containing Methods or Search"],
+    }]
+    : [
+      {
+        pattern: /(?:^|\n)##\s+.*(?:检索|方法|Methods?|\bSearch\b)/i,
+        zh: ["资料与方法", "a level-two heading that contains 检索 or 方法"],
+        en: ["Methods", "a level-two heading that contains Methods or Search"],
+      },
+      { pattern: resultsHeadingPattern, zh: ["结果", "a level-two heading that contains 结果"], en: ["Results", "a level-two heading that contains Results"] },
+      { pattern: discussionHeadingPattern, zh: ["讨论", "a level-two heading that contains 讨论"], en: ["Discussion", "a level-two heading that contains Discussion"] },
+    ];
+  for (const section of deepResearchSections) {
+    if (section.pattern.test(reportText ?? "")) continue;
+    const [name, shape] = section[language];
+    // A methods section written to answer this notice described steps the run never took ("reference lists were mined",
+    // "English-only") on the live check of 2026-10-28: the notice says that only what was done may be reported.
+    const honest = section === deepResearchSections[0]
+      ? " Describe only what this run actually did — the sources it searched, the dates, the queries as sent, the counts — never a step it did not take."
+      : "";
+    issues.push(`The deep-research report is missing a required academic section matching ## ${name}: ${shape}.${honest}`);
   }
   // Presence is required of every report above; here only the order matters.
   issues.region("reference-list-order");
   const practicalHeading = String(reportText ?? "").search(practicalHeadingLinePattern);
-  const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
+  const referencesHeading = String(reportText ?? "").search(referencesHeadingLinePattern);
   if (referencesHeading < 0 || (practicalHeading >= 0 && referencesHeading < practicalHeading)) {
     issues.push("The numbered reference list must follow the safety-first practical-answer section.");
   }
@@ -3841,7 +4249,7 @@ export function validateClinicalEvidencePackage({
   visibleClaimMarkerPattern.lastIndex = 0;
   issues.region("operational-failure-prose");
   if (operationalFailurePattern.test(reportText ?? "")) {
-    issues.push("The academic report contains operational failure prose. A tool or source that failed is not a finding: leave it out of the report, and state a missing source as a limitation of the evidence in 局限性 if it matters.");
+    issues.push(`The academic report contains operational failure prose. A tool or source that failed is not a finding: leave it out of the report, and state a missing source as a limitation of the evidence in ${names.limitations} if it matters.`);
   }
   issues.region("runtime-leakage");
   const leakageLine = firstMatchingLine(reportText, runtimeLeakagePattern);
@@ -3862,12 +4270,38 @@ export function validateClinicalEvidencePackage({
       );
       continue;
     }
-    const opening = `资料与方法声明了 ${finding.instrument}，但结果与讨论中没有一处用它给出评级：`
+    // Named in the report's language, and where the body is: a review organised
+    // by topic applies its instruments in its topic sections.
+    if (language === "en") {
+      const where = topical ? "the body sections" : "the Results or Discussion";
+      const opening = `The Methods declare ${finding.instrument}, but no passage of ${where} uses it to give a rating: line ${finding.line} reads ${finding.text}. `;
+      if (finding.branch === "hedged-declaration") {
+        issues.push(
+          `${opening}The line names ${finding.instrument} only as an approach or a point of reference, which is the same as not using it. `
+          + `Delete the instrument's name and state what you actually did, or apply it once to a specific study in ${where}.`,
+        );
+      } else if (finding.branch === "appraisal-tail-only") {
+        issues.push(
+          `${opening}${finding.instrument} appears only in the Limitations or Conclusions. `
+          + "A certainty level is stated beside the body of evidence it rates, and the Limitations never apologise for a methodological step the body does not contain.",
+        );
+      } else {
+        issues.push(
+          `${opening}Naming an instrument is a promise, not a qualification: apply it once to a specific study in ${where} `
+          + '(in the paragraph that cites the study, e.g. "by QUADAS-2, the study\'s exclusion of … carries a risk of selection bias [6]"), '
+          + `or state there that no study could be rated with it, or remove ${finding.instrument} from the Methods.`,
+        );
+      }
+      continue;
+    }
+    const where = topical ? "正文各节" : "结果与讨论";
+    const within = topical ? "正文" : "结果或讨论";
+    const opening = `资料与方法声明了 ${finding.instrument}，但${where}中没有一处用它给出评级：`
       + `第 ${finding.line} 行写「${finding.text}」。`;
     if (finding.branch === "hedged-declaration") {
       issues.push(
         `${opening}该行以「思路/精神/理念/参照…要点」提及 ${finding.instrument}，等同于未使用。`
-        + "删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+        + `删除工具名并直接写你实际做了什么，或在${within}里对具体一篇文献用它评一次。`,
       );
     } else if (finding.branch === "appraisal-tail-only") {
       issues.push(
@@ -3876,13 +4310,13 @@ export function validateClinicalEvidencePackage({
       );
     } else {
       issues.push(
-        `${opening}工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次`
+        `${opening}工具名是承诺，不是资格声明——要么在${within}里对具体一篇文献用它评一次`
         + "（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），"
-        + `要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ${finding.instrument} 从方法里删掉。`,
+        + `要么在${topical ? "正文" : "结果"}里写明「未检索到可用该工具评定的研究」，要么把 ${finding.instrument} 从方法里删掉。`,
       );
     }
   }
-  issues.push(...issues.from(manuscriptRegisterIssues, reportText));
+  issues.push(...issues.from(manuscriptRegisterIssues, reportText, language));
   issues.region("claim-marker-format");
   if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
     issues.push("Each claim marker must contain exactly one claim ID.");
@@ -3898,7 +4332,7 @@ export function validateClinicalEvidencePackage({
     issues.pushAttributed({ text: found.message, line: found.line });
   }
   issues.region("exclusive-safety");
-  if (exclusiveSafetyPattern.test(reportText ?? "")) {
+  if ((language === "en" ? englishExclusiveSafetyPattern : exclusiveSafetyPattern).test(reportText ?? "")) {
     issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
   }
 
@@ -4001,15 +4435,15 @@ export function validateClinicalEvidencePackage({
       const cited = reportClaimIds(rawLine).filter((id) => derivedIds.has(id));
       if (cited.length && !derivedReportLabelPattern.test(rawLine)) {
         issues.push(
-          `Report line ${lineIndex + 1} states derived result ${cited.join(", ")} without marking it as derived. Label it 〔推导〕 so it is not read as a measurement.`,
+          `Report line ${lineIndex + 1} states derived result ${cited.join(", ")} without marking it as derived. Label it ${language === "en" ? "[derived]" : "〔推导〕"} so it is not read as a measurement.`,
         );
       }
     }
   }
 
   const reportForNumericAudit = withoutReportSections(
-    withoutReportSections(reportText, "参考文献|参考来源|References?"),
-    "检索|方法|Methods?",
+    withoutReportSections(reportText, referencesSectionHeading),
+    methodsSectionHeading,
   );
   for (const [lineIndex, rawLine] of reportForNumericAudit.split("\n").entries()) {
     if (/^\s*#{1,6}\s+/.test(rawLine)) continue;
@@ -4024,22 +4458,23 @@ export function validateClinicalEvidencePackage({
     issues.region("report-number-unanchored");
     if (!referencedIds.length) {
       issues.push(
-        `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.`,
+        `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them — never by deleting a sourced number or writing it out in words; only a number no source states is corrected or removed.`,
       );
       continue;
     }
     issues.region("report-number-unsupported");
     const supportedNumbers = new Set(referencedIds.flatMap((claimId) => {
       const claim = claimsById.get(claimId);
+      const support = claimEvidenceText(claim);
       // Arabic numbers in support match by value; conclusoryQuantities resolves
       // conclusory Chinese and English numerals in the support to the same
       // canonical value symmetrically, so 15 / 十五 / "fifteen trials" agree.
-      return [...supportNumericTokens(claimEvidenceText(claim)), ...conclusoryQuantities(claimEvidenceText(claim))];
+      return [...supportNumericTokens(support), ...conclusoryQuantities(support)];
     }));
     const unsupportedNumbers = [...reportNumbers].filter((token) => !supportedNumbers.has(token));
     if (unsupportedNumbers.length) {
       issues.push(
-        `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.`,
+        `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them — never by deleting a sourced number or writing it out in words; only a number no source states is corrected or removed.`,
       );
     }
   }
@@ -4096,15 +4531,16 @@ export function validateClinicalEvidencePackage({
   if (practicalActionLines.some((line) => !hasClaimMarker(line))) {
     issues.push("Every practical-action step or bullet must cite at least one evidence-matrix claim.");
   }
-  // The practical section's first line inside the report, so the notice names
-  // the line the author will find rather than an offset into a section.
-  const practicalOffset = practical ? String(reportText ?? "").indexOf(practical) : -1;
-  const practicalFirstLine = practicalOffset >= 0
-    ? String(reportText ?? "").slice(0, practicalOffset).split("\n").length
-    : 1;
-  for (const trigger of issues.from(medicationConditionedEmergencyTriggers, practical)) {
-    issues.push(
-      `临床实践要点第 ${practicalFirstLine + trigger.line - 1} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
+  // `practical` holds the report's own lines (everything outside the practical
+  // sections blank), so a line number here is the line the author will find.
+  for (const trigger of issues.from(medicationConditionedEmergencyTriggers, practical, language)) {
+    issues.push(language === "en"
+      ? `Practice points, report line ${trigger.line}, makes calling emergency services conditional on how the medicine performed (“${trigger.span}”): “${trigger.sentence}”. `
+        + "An emergency call is triggered by symptoms and signs, never by whether a self-administered medicine worked — not relieved after the dose, no effect, "
+        + "or waiting a set time to see all count. The one wording this section may use is: call emergency services whether or not the medicine was taken and "
+        + "whether or not it helped. If the same section says that taking a medicine is not a reason to wait, this line contradicts it, and a reader cannot follow both. "
+        + "If a source (guideline text) really gives the condition, restate it under Results as the source words it, with its citation, and keep the practice point unconditional."
+      : `临床实践要点第 ${trigger.line} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
       + "急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——"
       + "本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。"
       + "同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。"
@@ -4128,38 +4564,49 @@ export function validateClinicalEvidencePackage({
   if (unresolved.length) {
     issues.push(`The numbered reference list has no entry for reference ${unresolved.join(", ")}.`);
   }
+  // The reference list and the body named in the report's language, like every
+  // section above: these are the findings an English report draws as often as a
+  // Chinese one, because they read numbers and not words.
   for (const finding of issues.from(referenceIdentityFindings, reportText, claims)) {
-    issues.push(
-      `结论 ${finding.claimId} 引的是参考文献 [${finding.number}]，但该条目是另一篇来源：`
-      + `账本记的是「${excerpt(finding.expected)}」，表里第 ${finding.number} 条写的是「${finding.entry}」。`
-      + "这通常是手工重排编号留下的整体错位。用 evimed_render_report 按正文首次出现重排并重建编号表，"
-      + "或把该结论的 referenceNumber 改成这篇来源实际所在的编号。",
-    );
+    issues.push(language === "en"
+      ? `Claim ${finding.claimId} cites reference [${finding.number}], but that entry is a different source: `
+        + `the ledger records ${JSON.stringify(excerpt(finding.expected))}, and entry ${finding.number} of the list reads ${JSON.stringify(finding.entry)}. `
+        + "This is usually the shift a hand renumbering leaves behind. Use evimed_render_report to renumber by first appearance in the body and rebuild the list, "
+        + "or change the claim's referenceNumber to the number this source actually has."
+      : `结论 ${finding.claimId} 引的是参考文献 [${finding.number}]，但该条目是另一篇来源：`
+        + `账本记的是「${excerpt(finding.expected)}」，表里第 ${finding.number} 条写的是「${finding.entry}」。`
+        + "这通常是手工重排编号留下的整体错位。用 evimed_render_report 按正文首次出现重排并重建编号表，"
+        + "或把该结论的 referenceNumber 改成这篇来源实际所在的编号。");
   }
   // The practical section's line range, so a mispaired anchor there is
   // blocking: that section is already the one place the gate refuses derived
   // claims and requires a marker on every action line.
-  const practicalLastLine = practical ? practicalFirstLine + practical.split("\n").length - 1 : 0;
   for (const finding of issues.from(citationClosureFindings, reportText, claimsById)) {
     if (finding.clause === "A") {
-      issues.push(
-        `参考文献 [${finding.number}] 在正文中从未被引用：「${finding.body}」。`
-        + "已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它从编号表中移除并重新编号。",
-      );
+      issues.push(language === "en"
+        ? `Reference [${finding.number}] is never cited in the body: ${JSON.stringify(finding.body)}. `
+          + "A source that was searched but not included stays out of the numbered list — cite it where it supports a sentence, or remove it from the list and renumber."
+        : `参考文献 [${finding.number}] 在正文中从未被引用：「${finding.body}」。`
+          + "已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它从编号表中移除并重新编号。");
     } else if (finding.clause === "B") {
-      issues.push(
-        `正文引用 [${finding.number}] 在参考文献表中没有对应条目：补上该条目，或改引真正支持这句话的编号。`,
-      );
+      issues.push(language === "en"
+        ? `Citation [${finding.number}] in the body has no entry in the reference list: add the entry, or cite the number that actually supports the sentence.`
+        : `正文引用 [${finding.number}] 在参考文献表中没有对应条目：补上该条目，或改引真正支持这句话的编号。`);
     } else if (finding.clause === "C") {
-      issues.push(
-        `报告第 ${finding.line} 行把书目标识符放进了引用位：「${finding.bracket}」。`
-        + "行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或把它从这句话里删去。",
-      );
+      issues.push(language === "en"
+        ? `Report line ${finding.line} puts a bibliographic identifier in the citation slot: ${JSON.stringify(finding.bracket)}. `
+          + "An inline PMID or DOI is not a numbered citation — give the source a reference number and a claim, or remove it from the sentence."
+        : `报告第 ${finding.line} 行把书目标识符放进了引用位：「${finding.bracket}」。`
+          + "行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或把它从这句话里删去。");
     } else if (finding.clause === "D") {
-      const detail = `${finding.claimId}，但该行只引用了 [${finding.cited.join(", ") || "无"}]，`
-        + `而 ${finding.claimId} 的 referenceNumber 是 ${finding.allowed.join(", ")}。`
-        + "把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。";
-      issues.push(finding.line >= practicalFirstLine && finding.line <= practicalLastLine
+      const detail = language === "en"
+        ? `${finding.claimId}, but the line cites only [${finding.cited.join(", ") || "none"}], `
+          + `while the referenceNumber of ${finding.claimId} is ${finding.allowed.join(", ")}. `
+          + "Cite the right number on this line, or a claim that actually supports the sentence; the same claim paired correctly elsewhere does not exempt this line."
+        : `${finding.claimId}，但该行只引用了 [${finding.cited.join(", ") || "无"}]，`
+          + `而 ${finding.claimId} 的 referenceNumber 是 ${finding.allowed.join(", ")}。`
+          + "把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。";
+      issues.push(practicalSections.lines.has(finding.line)
         ? `The practical section's report line ${finding.line} anchors claim ${detail}`
         : `Report line ${finding.line} anchors claim ${detail}`);
     }
@@ -4278,6 +4725,18 @@ export function verificationGateMetrics({ matrix, citationLedgerText = "", stale
 // and the run and the server say the same words.
 
 const abstractPurposePattern = /目的[:：]?\s*([\s\S]*?)(?=(?:方法|资料|材料|结果|结论)\s*[:：]|$)/;
+// The same fields of an English abstract (2026-10-28). An English label is
+// capitalised and closed by a colon or by emphasis — Objective: / **Objective**
+// / OBJECTIVE: — because "aim" and "results" are also ordinary words of the
+// prose around it. Background stands in for the objective only where the
+// abstract states none.
+/** @param {string} words */
+const englishAbstractLabel = (words) => `(?<![A-Za-z])(?:\\*\\*|__)?(?:${words})(?:\\*\\*|__)?\\s*[:：]|(?:\\*\\*|__)(?:${words})(?:\\*\\*|__)`;
+const englishAbstractFieldEnd = englishAbstractLabel("Methods?|METHODS?|Results?|RESULTS?|Conclusions?|CONCLUSIONS?");
+const englishAbstractPurposePatterns = [
+  new RegExp(`(?:${englishAbstractLabel("Objectives?|OBJECTIVES?|Aims?|AIMS?|Purpose|PURPOSE")})\\s*([\\s\\S]*?)(?=${englishAbstractFieldEnd}|$)`),
+  new RegExp(`(?:${englishAbstractLabel("Background|BACKGROUND")})\\s*([\\s\\S]*?)(?=${englishAbstractFieldEnd}|$)`),
+];
 const cjkOrdinals = "一二三四五六七八九十";
 const circledDigits = "①②③④⑤⑥⑦⑧⑨⑩";
 // A cross-arm blanket negation ("两药……均缺乏证据") is the shape a merged PICO
@@ -4335,25 +4794,43 @@ export function clinicalEvidenceAdvisoryNotes(reportText) {
   /** @type {string[]} */
   const notes = [];
   const body = withoutReportSections(
-    withoutReportSections(report, "参考文献|参考来源|References?"),
-    "检索|方法|Methods?",
+    withoutReportSections(report, referencesSectionHeading),
+    methodsSectionHeading,
   );
+  // Read and named in the report's own language (2026-10-28): an English
+  // report's Abstract, Objective and Conclusions are the same fields.
+  const language = reportLanguage(report);
+  const names = sectionNames(language);
+
+  // A safety rule with no wording in this report's language did not look at it. Said, not passed over.
+  const unchecked = clinicalSafetyRulesNotChecked(report, language);
+  if (unchecked.length) {
+    notes.push(language === "en"
+      ? `clinical-evidence-report.md: the clinical safety rule${unchecked.length > 1 ? "s" : ""} ${unchecked.join(", ")} ${unchecked.length > 1 ? "have" : "has"} no English wording yet, so this English report was not checked against ${unchecked.length > 1 ? "them" : "it"}. Read the practice points against the medicine rules yourself.`
+      : `clinical-evidence-report.md: 临床安全规则 ${unchecked.join("、")} 没有适用于本报告语言的写法，本报告未按这些规则检查。`);
+  }
 
   // 摘要 目的 lists the research questions and 结论 answers them one for one;
   // when both are enumerated the counts are comparable. Only then — a prose
   // 结论 may answer three questions in three sentences, and no count can say
   // whether it did.
-  const purpose = abstractPurposePattern.exec(reportSection(report, "摘要"));
+  const abstract = reportSection(report, abstractSectionHeading);
+  let purpose = abstractPurposePattern.exec(abstract);
+  for (const pattern of englishAbstractPurposePatterns) purpose ??= pattern.exec(abstract);
   const questions = purpose ? enumeratedCount(purpose[1]) : 0;
-  const answers = enumeratedCount(reportSection(report, "结论"));
+  const answers = enumeratedCount(reportSection(report, conclusionSectionHeading));
   if (questions >= 2 && answers >= 2 && questions !== answers) {
-    notes.push(
-      `clinical-evidence-report.md: 摘要 目的 lists ${questions} research questions and 结论 gives ${answers} numbered answers. `
-      + "结论 answers the questions of 目的 in the same order, one answer per question. A question with no answer was either "
-      + "unanswerable — write it as a gap, with the study that would close it — or was dropped, which is a restatement and is "
-      + "declared: say which question was asked, what in it does not survive contact with the evidence, what replaces it, and "
-      + "what the replacement can settle. An answer matching no question in 目的 is the object of study drifting toward an easier question.",
-    );
+    notes.push(language === "en"
+      ? `clinical-evidence-report.md: the Abstract's Objective lists ${questions} research questions and the Conclusions give ${answers} numbered answers. `
+        + "The Conclusions answer the questions of the Objective in the same order, one answer per question. A question with no answer was either "
+        + "unanswerable — write it as a gap, with the study that would close it — or was dropped, which is a restatement and is "
+        + "declared: say which question was asked, what in it does not survive contact with the evidence, what replaces it, and "
+        + "what the replacement can settle. An answer matching no question in the Objective is the object of study drifting toward an easier question."
+      : `clinical-evidence-report.md: 摘要 目的 lists ${questions} research questions and 结论 gives ${answers} numbered answers. `
+        + "结论 answers the questions of 目的 in the same order, one answer per question. A question with no answer was either "
+        + "unanswerable — write it as a gap, with the study that would close it — or was dropped, which is a restatement and is "
+        + "declared: say which question was asked, what in it does not survive contact with the evidence, what replaces it, and "
+        + "what the replacement can settle. An answer matching no question in 目的 is the object of study drifting toward an easier question.");
   }
 
   // A verdict given for every arm at once, in a report that names no stratum
@@ -4384,7 +4861,7 @@ export function clinicalEvidenceAdvisoryNotes(reportText) {
         `clinical-evidence-report.md line ${index + 1}: one arm is concluded to take the other's place or to beat it `
         + `(${conclusion}), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 `
         + "axis either way — head-to-head evidence with its citation, or 未检索到 with what was searched — and if there is none, "
-        + "list the links the chain needs one per line in 讨论 marked 已建立 or 未建立, and stop the conclusion at the last "
+        + `list the links the chain needs one per line in ${names.discussion} marked 已建立 or 未建立, and stop the conclusion at the last `
         + "established link. 可能 does not close an open link: a speculative recommendation still reads to the reader as a "
         + "substitution conclusion.",
       );
@@ -4392,7 +4869,7 @@ export function clinicalEvidenceAdvisoryNotes(reportText) {
     }
   }
 
-  notes.push(...appraisalSymmetryNotes(report));
+  notes.push(...appraisalSymmetryNotes(report, names));
   return notes;
 }
 // Attribution: read by the contract registry, which raises these as advisory notices.
@@ -4409,16 +4886,16 @@ checkedBy(clinicalEvidenceAdvisoryNotes, "advisory-notes");
  * Which nouns in a sentence are the compared arms is not decidable from the
  * text — the two vocabularies can also belong to one arm across two indications,
  * which is correct writing. So this is advice.
- * @param {string} report @returns {string[]}
+ * @param {string} report @param {ManuscriptSectionNames} names @returns {string[]}
  */
-function appraisalSymmetryNotes(report) {
+function appraisalSymmetryNotes(report, names) {
   const title = /^#\s+(.+)$/m.exec(report)?.[1] ?? "";
-  const abstract = reportSection(report, "摘要");
-  const conclusion = reportSection(report, "结论");
+  const abstract = reportSection(report, abstractSectionHeading);
+  const conclusion = reportSection(report, conclusionSectionHeading);
   if (!comparisonQuestionPattern.test([title, abstract, conclusion].join("\n"))) return [];
   /** @type {string[]} */
   const notes = [];
-  for (const [name, text] of [["摘要", abstract], ["结论", conclusion]]) {
+  for (const [name, text] of [[names.abstract, abstract], [names.conclusions, conclusion]]) {
     const sentences = splitSentences(text);
     const graded = sentences.filter((line) => certaintyAppraisalPattern.test(line));
     const vouched = sentences.filter((line) => traditionAppraisalPattern.test(line) && !certaintyAppraisalPattern.test(line));
@@ -4449,7 +4926,7 @@ function appraisalSymmetryNotes(report) {
  * @returns {Record<string, number>}
  */
 export function reportSectionShares(reportText) {
-  const body = withoutReportSections(String(reportText ?? ""), "参考文献|参考来源|References?");
+  const body = withoutReportSections(String(reportText ?? ""), referencesSectionHeading);
   /** @type {[string, number][]} */
   const sections = [];
   let heading = "";

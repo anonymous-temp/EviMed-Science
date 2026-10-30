@@ -150,6 +150,27 @@ describe("WebReadinessCard", () => {
     expect(screen.queryByText("未配置")).not.toBeInTheDocument();
   });
 
+  it("names the research-database connector and reads its keyring warning as the registry's sentence for the operator", async () => {
+    mocks.fetchWebReadiness.mockResolvedValue({
+      ok: true,
+      checks: { researchDb: { ok: true, required: false, enabled: true, warning: "research_db_keyring_incomplete" } },
+    });
+    render(<WebReadinessCard />);
+    expect(await screen.findByText("研究数据库导入")).toBeInTheDocument();
+    expect(screen.getByText("需要留意")).toBeInTheDocument();
+    expect(screen.getByText(/连接功能暂停。请联系平台管理员补回密钥/)).toBeInTheDocument();
+    codeOnlyInTooltip("research_db_keyring_incomplete");
+    expect(visibleText()).not.toContain("researchDb");
+  });
+
+  it("shows the research-database connector as not running when the deployment has no keyring", async () => {
+    mocks.fetchWebReadiness.mockResolvedValue({ ok: true, checks: { researchDb: { ok: true, required: false, enabled: false } } });
+    render(<WebReadinessCard />);
+    expect(await screen.findByText("研究数据库导入")).toBeInTheDocument();
+    expect(screen.getByText("未启用")).toBeInTheDocument();
+    expect(screen.getByText("没有启用这项功能")).toBeInTheDocument();
+  });
+
   it("has a name for every check the server reports, so none prints its own camelCase key", async () => {
     const server = fs.readFileSync(path.resolve(__dirname, "../../../../server/src/server.mjs"), "utf8");
     const body = server.slice(server.indexOf("async function readinessStatus("));

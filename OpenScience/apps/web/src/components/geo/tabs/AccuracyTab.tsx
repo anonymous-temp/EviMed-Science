@@ -1,4 +1,5 @@
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { safetyReading } from "../geoOverviewModel";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { useMemo, useState } from "react";
 import {
   readGeoCell,
@@ -25,7 +26,7 @@ import { engineName, GEO_ERROR_TYPE_WORDS, groupName } from "../geoText";
 import { GEO_VIEW_PARAM, geoSectionId } from "../geoTabs";
 import { ClaimRow } from "../spine/ClaimRow";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
-import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
 import { GeoErrorGroupDrawer } from "../GeoErrorGroupDrawer";
 import {
   claimRows,
@@ -70,7 +71,7 @@ import { ShowMore, useShowMore } from "./showMore";
  * data page's first screen holds twenty (the walk's `rows-ceiling`). The five most serious come first, as the list is sorted; the
  * heading says how many there are.
  */
-const FIRST_SHOWN = 5;
+const FIRST_SHOWN = 3;
 const PAGE = 10;
 const SAFETY_METRICS: ReadonlyArray<{ ids: readonly string[]; polarity: "up" | "down" }> = [
   { ids: ["M-11"], polarity: "up" },
@@ -94,7 +95,7 @@ export function AccuracyTab({ geoId, project }: { geoId: string; project: GeoPro
   if (diagnosis.state.kind === "loading") return <TabSkeleton />;
   if (diagnosis.state.kind === "error") return <TabError message={diagnosis.state.message} onRetry={refresh} />;
   const diag = diagnosis.state.data;
-  return <><Accuracy geoId={geoId} project={project} diagnosis={diag} refresh={refresh} /><GeoAnalysisWorkbench embedded geoId={geoId} project={project} initialView="V12"/></>;
+  return <><Accuracy geoId={geoId} project={project} diagnosis={diag} refresh={refresh} /><GeoAnalysisEntry embedded geoId={geoId} project={project} initialView="V12"/></>;
 }
 
 function Accuracy({
@@ -124,6 +125,7 @@ function Accuracy({
   const unknown = readGeoCell(modes?.unknown);
   const refused = readGeoCell(modes?.refused);
 
+  const severeReading = safetyReading(diagnosis);
   const tiles = [
     {
       key: "accuracy",
@@ -140,7 +142,9 @@ function Accuracy({
     {
       key: "severe",
       label: "严重讲错",
-      value: String(counts.severe),
+      // The label already says 「严重讲错」: the unit beside the figure is 「条」, not the overview tile's 「条严重讲错」 repeated after it.
+      reading: severeReading.kind === "measured" ? { ...severeReading, unit: "条" } : severeReading,
+      value: severeReading.kind === "measured" ? String(counts.severe) : "未测",
       unit: "条" as string | undefined,
       placeholder: false,
       hint: undefined as string | undefined,
@@ -187,7 +191,7 @@ function Accuracy({
   const [clusterParam, setClusterParam] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
   const [showParam, setShowParam] = useGeoSearchParam("show");
   const [viewParam, setViewParam] = useGeoSearchParam(GEO_VIEW_PARAM);
-  const change = useGeoSearchChange();
+  const resetFilters = useGeoFilterReset([GEO_ENGINE_PARAM, TYPE_PARAM, TRACE_PARAM, GEO_CLUSTER_FILTER_PARAM, "show"]);
   const [query, setQuery] = useState("");
   const drawer = useGeoDrawerAddress();
   const handoff = useCorrectionHandoff(geoId, project);
@@ -206,7 +210,9 @@ function Accuracy({
     { value: "all", label: "全部", count: sizes.all },
   ];
   const wanted = ERROR_SHOWS.find((key) => key === showParam);
-  const show: ErrorShow = wanted && showOptions.some((option) => option.value === wanted) ? wanted : counts.severe > 0 ? "severe" : "all";
+  // What 处置状态 shows when nothing is chosen: it is the chips' neutral value, so the page opens with nothing counted as narrowed.
+  const defaultShow: ErrorShow = counts.severe > 0 ? "severe" : "all";
+  const show: ErrorShow = wanted && showOptions.some((option) => option.value === wanted) ? wanted : defaultShow;
 
   const engines = diagnosis.selection?.engines ?? project.engines;
   const engine = engineParam && engines.includes(engineParam) ? engineParam : null;
@@ -237,14 +243,14 @@ function Accuracy({
   const { visible, remaining, more } = useShowMore(flat, { first: FIRST_SHOWN, step: PAGE, resetKey: `${view}|${show}|${engine}|${type}|${trace}|${cluster}|${query.trim()}` });
 
   const clearAll = () => {
-    change({ [GEO_ENGINE_PARAM]: null, [TYPE_PARAM]: null, [TRACE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null });
+    resetFilters();
     setQuery("");
   };
   const hasErrors = counts.total > 0 || errors.length > 0;
   useGeoToolbar(hasErrors ? {
+    navigation: [{ kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => setViewParam(value === "claims" ? null : value) }],
     filters: [
-      { kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => setViewParam(value === "claims" ? null : value) },
-      { kind: "chips", label: "处置状态", options: showOptions, value: show, onChange: (value) => setShowParam(value) },
+      { kind: "chips", label: "处置状态", options: showOptions, value: show, neutral: defaultShow, onChange: (value) => setShowParam(value) },
       ...(engines.length > 1 ? [{
         kind: "select" as const,
         label: "引擎",
@@ -265,7 +271,7 @@ function Accuracy({
       ...(trace ? [{ kind: "toggle" as const, label: `出处：${ERROR_TRACE_WORDS[trace]} ×`, pressed: true, onChange: () => setTraceParam(null) }] : []),
     ],
     search: { label: "搜索说法", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
-    onClear: narrowed ? clearAll : undefined,
+    onClear: clearAll,
     summary: total == null ? "正在读取讲错清单" : `共 ${total} 条讲错 · 已读取 ${filtered.length} 条，归为 ${claims.length} 条说法`,
   } : null);
 
@@ -299,12 +305,11 @@ function Accuracy({
           <StatTile
             key={tile.key}
             label={tile.label}
-            value={tile.value}
-            unit={tile.unit}
+            reading={tile.reading}
+            renderMeasured={() => tile.value}
             hint={tile.hint}
             lead={tile.lead}
             tone={tile.tone}
-            placeholder={tile.placeholder}
             delta={<Delta value={tile.delta} unit="point" polarity={tile.polarity} tone={tile.tone === "safety" ? "safety" : "default"} />}
             note={tile.note}
           />

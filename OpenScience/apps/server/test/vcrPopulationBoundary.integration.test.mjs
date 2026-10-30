@@ -22,7 +22,8 @@ before(async()=>{
   const config={vcrEnabled:true,vcrAudience:'all',vcrJobCpuSeconds:60,vcrStudyCpuBudget:1200,vcrMaxConcurrentJobs:1,modelGatewayInternalUrl:'http://127.0.0.1/internal/models/v1'};
   const service=new VcrService({store,config});
   const jobs=new VcrJobs({store,config,engine:{configured:()=>true}});
-  handler=createVcrGatewayHandler(config,{assertActiveModelGatewayToken:()=>({userId:'alice',projectId:'boundary'})},{vcr:{store,service,jobs}});
+  await store.query("INSERT INTO evimed_vcr.schedule_marks (study_id,key,user_id,kind,state,dispatch_id) VALUES ($1,'boundary-dispatch','alice','run','running','population-boundary-dispatch')",[study.id]);
+  handler=createVcrGatewayHandler(config,{boundedRuntimeScope:()=>({runId:'population-boundary-dispatch'}),assertActiveModelGatewayToken:()=>({userId:'alice',projectId:'boundary'})},{vcr:{store,service,jobs}});
 });
 after(async()=>{await database?.close();await isolated?.drop();});
 async function ask(scenario,inputs=[]){

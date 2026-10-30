@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
@@ -127,6 +128,7 @@ describe("no title over an empty box", () => {
     installVcrServer(network.productRequest, { [tab("population")]: raw, "GET /vcr/definitions": { definitions: [{ id: "dfn_1", name: "成人 ECOG 0-1", versions: 1, uses: 1, latest: { text: "年龄不小于 18 岁" } }] } });
     const view = await drawTab(<PopulationTab studyId={STUDY_ID} study={study()} />);
     expect(await view.findByRole("heading", { name: "定义库" })).toBeInTheDocument();
+    await userEvent.click(view.getByText("管理定义与版本"));
     expect(view.getByRole("button", { name: "存入定义库" })).toBeInTheDocument();
     expect(view.getByLabelText("用定义库里的定义")).toBeInTheDocument();
   });
@@ -192,14 +194,14 @@ describe("no title over an empty box", () => {
     const raw = fixture("ev201/matching.json");
     // The study keeps its protocol version (the fixture's own): a protocol with nothing evaluated yet is the case this guards, and
     // clearing `protocols` in the fixture, as 2026-10-10 did to keep the test green, removed the case instead of the toolbar.
-    Object.assign(raw, { candidates: [], comparisons: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+    Object.assign(raw, { selected: null, timeline: [], candidateRoster: ["P-0201"], candidates: [], comparisons: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
     expect(raw.protocols).toHaveLength(1);
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/matching`]: raw });
     const view = await drawTab(<MatchingTab studyId={STUDY_ID} study={study((rawStudy) => { rawStudy.steps.matching = { status: "none", requested: false }; })} />);
-    expect(view.container.querySelector("[data-vcr-step-empty='matching']")).not.toBeNull();
-    expect(view.container.querySelector("[data-page-chrome]")).toBeNull();
-    expect(view.queryByRole("button", { name: "查看方案" })).toBeNull();
-    expect(view.getAllByRole("button")).toHaveLength(1);
+    expect(view.getByText("尚未生成匹配评估")).toBeInTheDocument();
+    expect(view.getAllByRole("button", { name: "开始评估" })).toHaveLength(1);
+    expect(view.getByRole("group", { name: "匹配方向" })).toBeInTheDocument();
+    expect(view.queryByRole("button", { name: "确认后联系" })).toBeNull();
     expect(emptyTitles(view.container)).toEqual([]);
   });
 

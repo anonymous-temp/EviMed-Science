@@ -116,6 +116,17 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(client.disableCapsule).toHaveBeenCalledWith("pack-1");
   });
 
+  // Review R2 P2-1: the act reloads the shelf, and the switch used to read the same list again — two reads for one write.
+  it("reads the shelf once after a switch, not once for the page and again for the switch", async () => {
+    client.fetchReceivedCapsules.mockResolvedValueOnce([structuredClone(pack)]).mockResolvedValue([{ ...structuredClone(pack), enabled: true }]);
+    client.enableReceivedCapsule.mockResolvedValue({ ...pack, enabled: true });
+    shelf();
+    await userEvent.click(await screen.findByRole("switch", { name: "启用“李主任的工作方式”" }));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toHaveAttribute("aria-checked", "true"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(client.fetchReceivedCapsules).toHaveBeenCalledTimes(2);
+  });
+
   // 2026-10-24: a person has one capsule, and a pack is in force for the account. It could be put in force for one project alone until then.
   it("offers no way to put a pack in force for one project: the switch is the account's, and the row's 「⋯」 holds only the trial", async () => {
     client.fetchReceivedCapsules.mockResolvedValue([structuredClone(pack)]);

@@ -359,7 +359,7 @@ test("three actual Python engines complete native gateway jobs and public reruns
   }
 });
 
-test("two actual R engines complete durable initial capture and rerun with separately verified receipts", {
+test("six actual R aggregate methods complete durable capture and same-seed rerun with verified receipts", {
   ...options, timeout: 90000, skip: !databaseUrl || !process.env.VCR_R_LIBS ? "PostgreSQL and VCR_R_LIBS are required" : false,
 }, async t => {
   const { spawn, execFile } = await import("node:child_process");
@@ -488,9 +488,13 @@ test("two actual R engines complete durable initial capture and rerun with separ
     { method: "design.analytic", scenario: { design: { kind: "two_arm_fixed" }, endpoint: { type: "time_to_event" },
       truth: { hazardRatio: .7, controlMedian: 12 }, analysis: { alpha: .025, sided: 1, power: .9 } } },
     { method: "comparator.evalue", scenario: { riskRatio: 3.9, confidenceLimit: 1.8, scale: "risk_ratio" } },
+    { method:'design.simulate',scenario:{design:{kind:'two_arm_fixed',nTreat:100,nControl:100},endpoint:{type:'binary'},truth:{controlRate:0.3,treatmentRate:0.5},analysis:{method:'logistic'}},seeded:true },
+    { method:'design.assurance',scenario:{design:{allocation:0.5,events:300},endpoint:{type:'time_to_event'},designPrior:{mean:-0.3,sd:0.15},analysis:{alpha:0.025,sided:1}},seeded:true },
+    { method:'accrual.poisson_gamma',scenario:{sites:[{id:'a',alpha:2,beta:4,startTime:0}],target:120,byTimes:[6,12,18]},seeded:true },
+    { method:'comparator.map_prior',scenario:{historical:{events:[12,15,9],n:[60,70,50]},tauPrior:{kind:'half_normal',scale:0.5},components:2,robustWeight:0.2},seeded:true },
   ];
   for (const [index, item] of fixtures.entries()) await t.test(item.method, async () => {
-    const inputPath = `vcr-${index}.json`; await writeFile(path.join(f.project.workspaceDir, inputPath), JSON.stringify({ scenario: item.scenario, seed: 331331 }));
+    const inputPath = `vcr-${index}.json`; await writeFile(path.join(f.project.workspaceDir, inputPath), JSON.stringify({ scenario: item.scenario, seed: 331331,replicates:300 }));
     const initial = await f.service.calculate(f.user.id, f.project, { method: item.method, inputPath, parameters: {} },
       { kind: "engine", sessionId: "vcr-session", callId: `vcr-${index}` });
     await worker.tick(); const completed = await f.service.status(f.user.id, f.project.id, initial.id);
@@ -498,9 +502,10 @@ test("two actual R engines complete durable initial capture and rerun with separ
     const selected = await f.results.raw(f.user.id, f.project.id, completed.resultVersionId);
     const values = Object.fromEntries(selected.version.machineValues.map(value => [value.key, value.value]));
     if (item.method === "design.analytic") assert.equal(values.required_events, 331);
-    else { assert.ok(Math.abs(values.e_value - (3.9 + Math.sqrt(3.9 * 2.9))) < 1e-12); assert.equal(values.e_value_confidence_limit, 3); }
+    else if(item.method==="comparator.evalue") { assert.ok(Math.abs(values.e_value - (3.9 + Math.sqrt(3.9 * 2.9))) < 1e-12); assert.equal(values.e_value_confidence_limit, 3); }
+    else {assert.ok(Object.keys(values).length>0);assert.equal(selected.version.method.seeded,true);assert.equal(selected.version.method.seed,331331);}
     t.diagnostic(item.method === "design.analytic" ? `Actual required_events_exact=${values.required_events_exact}; required_events=${values.required_events}`
-      : `Actual e_value=${values.e_value}; e_value_confidence_limit=${values.e_value_confidence_limit}`);
+      : item.method==="comparator.evalue" ? `Actual e_value=${values.e_value}; e_value_confidence_limit=${values.e_value_confidence_limit}` : `${item.method}: ${Object.keys(values).length} genuine R values landed in the result ledger`);
     const receipt = JSON.parse(await readFile(path.join(f.project.workspaceDir, completed.artifacts.find(artifact => artifact.path.endsWith("/receipt.json")).path), "utf8"));
     assert.equal(receipt.signed, signedHttp, signedHttp ? "actual HTTP receipt verifies against the service-only key" : "transport fixture runs genuine R but does not qualify signed HTTP");
     await writeFile(path.join(f.project.workspaceDir, inputPath), '{"overwritten":true}');
@@ -508,7 +513,14 @@ test("two actual R engines complete durable initial capture and rerun with separ
       digest: selected.version.digest, requestId: `r-rerun-${index}` });
     await worker.tick(); const rerun = await f.service.status(f.user.id, f.project.id, replay.id);
     assert.equal(rerun.state, "succeeded", JSON.stringify(rerun)); assert.equal(rerun.comparison.numbers.status, "identical");
+    if(item.seeded) assert.equal(rerun.comparison.environment.status,"same");
     assert.equal((await f.results.raw(f.user.id, f.project.id, selected.version.versionId)).bytes.equals(selected.bytes), true);
     await recordNumericalEvidence(item.method, selected, rerun, receipt);
   });
+});
+test('a failed numerical execution keeps its engine code in owned status after confirmed cleanup',options,async t=>{
+ const f=await replayFixture(t),initial=await f.calculate('engine-failure-feedback'),job=await f.claim(),prepared=await f.service.prepare(job);await f.service.start(job,prepared);
+ f.engine.cancel=async scope=>({jobId:scope.jobId,recipeDigest:scope.recipeDigest,state:'failed',cleanup:'confirmed',resultError:'spawn_failed'});
+ await f.service.stop(job,prepared);await f.jobs.fail(f.user.id,job.id,job.leaseToken,{code:'result_replay_failed',message:'Execution stopped.'},{retry:false});
+ const status=await f.service.status(f.user.id,f.project.id,initial.id);assert.equal(status.state,'failed');assert.equal(status.error.engineCode,'spawn_failed');
 });

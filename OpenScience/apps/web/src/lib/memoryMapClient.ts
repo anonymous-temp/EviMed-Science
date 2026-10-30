@@ -1,21 +1,11 @@
 /**
- * The memory map's client: the one document every view is drawn from (`GET /api/memory/map`), the topics the researcher edits, and
- * the links the memory drawer shows. Kept apart from `memoryClient.ts` so the map's calls change in one place.
+ * The memory map's client: the one document the dashboard (总览) is drawn from (`GET /api/memory/map`), the topics the researcher
+ * edits, and the links the memory drawer shows. Kept apart from `memoryClient.ts` so the map's calls change in one place.
  *
  * The document is derived on the server when read and writes nothing; the only calls here that change anything are the topic edits
  * and the request that asks for a regrouping.
  */
 import { productRequest } from "./productClient";
-
-export type MapView = "graph" | "topics" | "dims" | "time" | "activity";
-export const MAP_VIEWS: readonly MapView[] = ["graph", "topics", "dims", "time", "activity"];
-
-/**
- * The parts of a capsule the overview's cards drill into the map by: what is about the person, what is in a project, what was learned to do,
- * and what is known. 成长 is the time view and 收到的 is not on the map at all, so neither is a part.
- */
-export type MapPart = "you" | "project" | "method" | "knowledge";
-export const MAP_PARTS: readonly MapPart[] = ["you", "project", "method", "knowledge"];
 
 export type MapNodeType = "you" | "project" | "memory" | "document" | "reference" | "method" | "entity" | "page" | "cluster";
 export type MapState = "current" | "check" | "replaced";
@@ -59,24 +49,6 @@ export interface MapEdge {
   label?: string;
 }
 
-export interface MapAxis {
-  id: string;
-  label: string;
-  value: number;
-  previousValue: number;
-  count: number;
-  /** For the memory aspects: the kinds of memory the axis counts. */
-  kinds?: string[];
-}
-export interface MapDimension {
-  id: "work" | "memory";
-  title: string;
-  previous: string;
-  scale: "share" | "count";
-  total: number;
-  previousTotal: number;
-  axes: MapAxis[];
-}
 export interface MapTopic {
   id: string;
   label: string;
@@ -87,59 +59,36 @@ export interface MapTopic {
   /** Made by the page, not grouped by the model (`derivedTopics`): it cannot be renamed, merged or dismissed, and is gone once the model's grouping exists. */
   derived?: boolean;
 }
-export interface MapLaneSegment {
-  recordId: string;
-  text: string;
-  from: string | null;
-  to: string | null;
-  state: "current" | "replaced";
-  conflict: boolean;
-}
-export interface MapLane {
-  id: string;
-  label: string;
-  projectId: string | null;
-  segments: MapLaneSegment[];
-}
 export interface MapEvent {
   id: string;
   at: string;
-  type: "memory" | "method" | "feedback" | "run";
+  type: "memory" | "method";
   change: string;
   ref: string;
-  lane: string;
-  kind?: string;
   text?: string;
 }
 export interface MapDay {
   t: string;
-  memory: number;
-  run: number;
-  method: number;
-  feedback: number;
-  /** The documents added to the knowledge base that day (the newest the map read of each project); absent from a control plane older than the overview. */
-  document?: number;
+  /** The documents added to the knowledge base that day (the newest the map read of each project). */
+  document: number;
 }
 
 export interface MemoryMap {
   version: 1;
   scope: { projectId: string | null; range: { from: string | null; to: string; unit: "day" | "week" | "month" }; timeZone: string; focus: string | null; depth: number | null };
   status: { topics: "ready" | "stale" | "empty" | "off" };
-  summary: { memories: number; documents: number; methods: number; projects: number; needsLook: number; since: string | null };
+  summary: { memories: number; documents: number; needsLook: number; since: string | null };
   facets: {
     projects: Array<{ id: string; name: string; kind: string; memories: number; documents: number }>;
-    kinds: Array<{ id: string; label: string; count: number }>;
     /** The memories about the person by kind, counted before any is folded into a cluster; absent from a control plane older than the overview. */
     aboutYou?: Array<{ id: string; label: string; count: number }>;
     /** The knowledge base's own count of its documents by kind, compiled pages left out, whole and not the page of marks. */
     documentTypes?: Array<{ id: string; label: string; count: number }>;
     topics: MapTopic[];
-    dimensions: MapDimension[];
   };
   nodes: MapNode[];
   edges: MapEdge[];
   buckets: { unit: "day"; series: MapDay[] };
-  lanes: MapLane[];
   events: MapEvent[];
   truncated: { nodes: number; edges: number };
   missing: string[];
@@ -152,13 +101,11 @@ export interface MapQuery {
   depth: number;
 }
 
-/** Every block of the document: the views switch between them without asking again. */
-export const MAP_INCLUDE_ALL = "summary,facets,nodes,edges,buckets,lanes,events";
-/** What the overview reads: no lines and no lineages, which only the relation and time views draw. */
-export const MAP_INCLUDE_OVERVIEW = "summary,facets,nodes,buckets,events";
+/** What the dashboard reads: the counts, the marks, the lines of the relation graph and the events and days of the change chart. */
+export const MAP_INCLUDE_DASHBOARD = "summary,facets,nodes,edges,buckets,events";
 
-/** The whole document, every block: the views switch between them without asking again. The overview asks for the blocks it draws. */
-export function fetchMemoryMap(query: MapQuery, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone, include = MAP_INCLUDE_ALL): Promise<MemoryMap> {
+/** The whole document, as the dashboard reads it; a page may name fewer blocks. */
+export function fetchMemoryMap(query: MapQuery, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone, include = MAP_INCLUDE_DASHBOARD): Promise<MemoryMap> {
   const params = new URLSearchParams({ include, timeZone });
   if (query.projectId) params.set("projectId", query.projectId);
   if (query.range && query.range !== "all") params.set("range", query.range);

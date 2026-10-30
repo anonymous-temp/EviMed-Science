@@ -2,7 +2,7 @@
  * What the conversation frame's GEO chip draws, from a GEO project.
  *
  * Its own module, and loaded by `useFrameGeoOptions` only once a conversation
- * is bound to a GEO capability: the engines, the starters and the domain's
+ * has an explicit GEO scope or a GEO capability: the engines, the starters and the domain's
  * GEO vocabulary behind them were otherwise in the bundle every page loads
  * before its first paint.
  */
@@ -38,7 +38,7 @@ export function offeredEngines(project: GeoProjectSummary | GeoProject | null): 
 export function frameGeoOptions(sessionId: string, project: GeoProjectSummary | GeoProject | null): FrameGeoOptions {
   const offered = offeredEngines(project);
   const chosen = project?.engines.filter((engine) => offered.includes(engine)) ?? [];
-  const product = project?.product.brandName || project?.product.genericName || null;
+  const product = project?.product?.brandName || project?.product?.genericName || null;
   return {
     sessionId,
     controls: project !== null,

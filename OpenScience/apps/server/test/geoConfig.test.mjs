@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.mjs";
 import { MCP_TOOL_CALL_TIMEOUT_MS } from "../src/dshProfilePatch.mjs";
 import { GEO_PROBE_CALLS_PER_MINUTE } from "../src/geoProbeGateway.mjs";
-import { GEO_INCLUSION_MAX_HOLD_HOURS } from "../src/geoProbeQueue.mjs";
+import { GEO_INCLUSION_MAX_HOLD_HOURS, GEO_PROBE_TASK_MAX_AGE_MINUTES } from "../src/geoProbeQueue.mjs";
+import { GEO_PROBE_RESULT_KEEP_HOURS } from "../src/geoProbeRequests.mjs";
 import { geoAudienceAllows, geoMarketConfigured } from "../src/geoService.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -121,6 +122,19 @@ test("the inclusion check's age limit default is the config's, so the two cannot
   assert.equal(configUnder({}).geoInclusionMaxHoldHours, GEO_INCLUSION_MAX_HOLD_HOURS);
 });
 
+test("the probe task age limit and the accepted-request retention default to the code's constants, are levers, and are bounded", () => {
+  assert.equal(configUnder({}).geoProbeTaskMaxAgeMinutes, GEO_PROBE_TASK_MAX_AGE_MINUTES);
+  assert.equal(configUnder({}).geoProbeResultKeepHours, GEO_PROBE_RESULT_KEEP_HOURS);
+  const set = configUnder({ OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES: "90", OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS: "48" });
+  assert.deepEqual([set.geoProbeTaskMaxAgeMinutes, set.geoProbeResultKeepHours], [90, 48]);
+  for (const [name, value] of [
+    ["OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES", "4"], ["OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES", "1441"], ["OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES", "1.5"],
+    ["OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS", "0"], ["OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS", "169"], ["OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS", "a day"],
+  ]) {
+    assert.throws(() => configUnder({ [name]: value }), (error) => error instanceof Error && error.message.includes(name), `${name}=${value}`);
+  }
+});
+
 test("once on, the module is open to every account unless the deployment narrows it to operators and the preview list (G9)", () => {
   const stranger = { id: "any-account" };
   const open = configUnder({ OPEN_SCIENCE_GEO_ENABLED: "true" });
@@ -140,4 +154,25 @@ test("the audience is the module on, and either everyone or an operator or a pre
   assert.equal(geoAudienceAllows(on, { id: "" }), false);
   assert.equal(geoAudienceAllows({ ...on, geoAudience: "all" }, { id: "reader" }), true);
   assert.equal(geoAudienceAllows({ ...on, geoEnabled: false, geoAudience: "all" }, { id: "ops" }), false);
+});
+
+test("the social collector keeps only a key path and requires an explicit plaintext choice", () => {
+  const base = configUnder({});
+  assert.equal(base.geoSocialApiKeyFile, "");
+  assert.equal(base.geoSocialAllowPlaintext, false);
+  const configured = configUnder({ OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE: "/run/secrets/geo-social-api-key", OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT: "true" });
+  assert.equal(configured.geoSocialApiKeyFile, "/run/secrets/geo-social-api-key");
+  assert.equal(configured.geoSocialAllowPlaintext, true);
+  assert.equal(configured.geoSocialApiKey, undefined, "the configuration never loads the social key");
+  assert.throws(() => configUnder({ OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE: "relative/key" }), /OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE/);
+});
+
+test("a social search may name two platforms by default, and the bound is one to the vocabulary's size (the collector takes 30-120 s a platform, one at a time)", () => {
+  assert.equal(configUnder({}).geoSocialMaxPlatforms, 2);
+  assert.equal(configUnder({ OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS: "" }).geoSocialMaxPlatforms, 2, "an empty value reads as unset");
+  assert.equal(configUnder({ OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS: "1" }).geoSocialMaxPlatforms, 1);
+  assert.equal(configUnder({ OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS: "6" }).geoSocialMaxPlatforms, 6);
+  for (const value of ["0", "7", "1.5", "two"]) {
+    assert.throws(() => configUnder({ OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS: value }), (error) => error instanceof Error && error.message.includes("OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS"), value);
+  }
 });

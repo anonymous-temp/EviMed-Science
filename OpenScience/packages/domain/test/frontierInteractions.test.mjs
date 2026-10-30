@@ -65,6 +65,8 @@ test('a hide names a closed reason or none; a filter change names its control an
   assert.equal(check({ ...base, type: 'filter-change', surface: 'feed', detail: 'specialty' }).ok, true)
   // c3-track: the 追踪 view's agency filter is a control of its own, on its own surface.
   assert.equal(check({ ...base, type: 'filter-change', surface: 'track', detail: 'agency' }).ok, true)
+  // c5-biz: the kind of 行业动态 is a control of the feed's 「筛选」, on the feed's surface.
+  assert.equal(check({ ...base, type: 'filter-change', surface: 'feed', detail: 'kind' }).ok, true)
   assert.deepEqual(check({ ...base, type: 'filter-change', surface: 'feed', detail: 'cardiology' }), { ok: false, reason: 'bad-detail' })
   assert.deepEqual(check({ ...base, type: 'filter-change', surface: 'feed', detail: 'view', view: 'view_0000001' }), { ok: false, reason: 'bad-view' })
   assert.equal(check({ ...base, type: 'onboarding-skipped', surface: 'for-you', detail: 'specialties' }).ok, true)

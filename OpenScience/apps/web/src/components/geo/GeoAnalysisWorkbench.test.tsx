@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
+import { normalizeGeoAnalysisView } from '../../../../server/src/geoAnalysisRegistry.mjs';
 const read=vi.hoisted(()=>vi.fn());
 const memberRead=vi.hoisted(()=>vi.fn());
 const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn(),scope:vi.fn(),publication:vi.fn()}));
@@ -25,6 +26,20 @@ it('opens both history views and keeps metric selection on the business timeline
 });
 beforeEach(()=>{navigation.create.mockReset().mockImplementation(async(_geo,target)=>({projectId:'control',sessionId:target.sessionId??'created-session',scope:{kind:'geo',geoProjectId:'geo',sessionId:target.sessionId??'created-session'}}));});
 describe('selected analysis workbench',()=>{
+ it('labels missing observations and unjudged answers without printing an empty fraction, while retaining a measured zero',async()=>{
+  read.mockResolvedValue({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_empty'},digest:'empty',columns:[{key:'current',label:'所选实测'}],rows:[
+   {key:'empty',label:'尚无回答',metricId:'M-06',dimensions:{},values:{current:{value:null,state:'no_data',reason:'no_snapshots',numerator:0,denominator:0}}},
+   {key:'unjudged',label:'回答待判定',metricId:'M-06',dimensions:{},values:{current:{value:null,state:'no_data',reason:'not_adjudicated',numerator:0,denominator:0}}},
+   {key:'zero',label:'实测零值',metricId:'M-06',dimensions:{},values:{current:{value:0,state:'known',numerator:0,denominator:8}}},
+  ],page:{total:3,shown:3,nextOffset:null},availability:{status:'ready'}});
+  render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never}/></MemoryRouter>);
+  fireEvent.click(screen.getByText('所选数据分析'));
+  expect(await screen.findAllByText('尚无采样回答')).not.toHaveLength(0);
+  expect(screen.getAllByText('回答尚未判定')).not.toHaveLength(0);
+  expect(screen.queryByText(/0\s*\/\s*0/)).toBeNull();
+  expect(screen.getByText('0 / 8')).toBeVisible();
+  expect(screen.getByText('0%')).toBeVisible();
+ });
  it('retains exact selection through export and shows null distinct from zero',async()=>{
   read.mockResolvedValue({view:{viewId:'V01',metricId:null,dimension:'project'},selection:{reference:'gsel_old'},digest:'digest',columns:[{key:'current',label:'所选实测'},{key:'target',label:'当前目标'}],rows:[{key:'row',label:'品牌',metricId:'M-01S',dimensions:{},values:{current:{value:0,state:'known',metric:null,members:null},target:{value:null,state:'no_data',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
   render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never}/></MemoryRouter>);
@@ -307,8 +322,8 @@ describe('what the analysis says about its own availability', () => {
     read.mockReset().mockResolvedValue(ready({ availability: { status: 'ready', reasons: [] }, rows: [{ key: 'row', label: '品牌', metricId: null, dimensions: {}, values: {} }], page: { total: 1, shown: 1, nextOffset: null } }));
     const { container } = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} embedded /></MemoryRouter>);
     await screen.findByText('品牌');
-    // the row count is the only sentence on the page: no availability note, and no bare 0 where `reasons.length &&` would leave one
-    expect([...container.querySelectorAll('[data-note]')].map((note) => note.textContent)).toEqual(['共 1 行，当前显示 1 行。']);
+    // Reading guidance and row count remain; a complete view adds no availability warning or stray zero.
+    expect([...container.querySelectorAll('[data-note]')].map((note) => note.textContent)).toEqual(['实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。', '共 1 行，当前显示 1 行。']);
     expect(bareZeros(container)).toEqual([]);
   });
 
@@ -372,5 +387,32 @@ describe('the analysis rows carry words, not ids', () => {
     fireEvent.click(await screen.findByText('原始引用地址与所选轮次'));
     expect(screen.getByText('每周复测 · 2 个引用回答')).toBeVisible();
     expect(container.textContent).not.toContain('round_internal_9');
+  });
+});
+
+it('publishes main-area controls without mounting another global toolbar or disclosure', async () => {
+  read.mockResolvedValue({view:{viewId:'V26',strategyVersion:7},selection:{reference:'gsel_frozen'},digest:'frozen-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
+  const mounted = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} mainArea={{ descriptor: { viewId:'V26',strategyVersion:7,targetVersion:3 }, onChange: vi.fn() }} /></MemoryRouter>);
+  await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', {round:'old'}, {viewId:'V26',strategyVersion:7,targetVersion:3}, 0, undefined));
+  expect(mounted.container.querySelector('[data-toolbar]')).toBeNull();
+  expect(screen.queryByText('所选数据分析')).toBeNull();
+  expect(screen.getByTestId('export')).toHaveTextContent('gsel_frozen');
+});
+
+
+describe('the workbench\'s own view switch', () => {
+  it('asks the server only for fields the chosen view declares, whatever the previous view had filled in', async () => {
+    read.mockReset().mockImplementation(async (_geo, _scope, view) => {
+      normalizeGeoAnalysisView(view); // the server refuses a field the view does not declare, with 400 geo_read_filter_invalid
+      return { view, selection: { reference: 'gsel_switch' }, digest: 'd', columns: [], rows: [], page: { total: 0, shown: 0, nextOffset: null }, availability: { status: 'empty' } };
+    });
+    render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialDescriptor={{ viewId: 'V17', sourceType: 'official', sourceRelationship: 'wrong', topN: 30 }} /></MemoryRouter>);
+    fireEvent.click(screen.getByText('所选数据分析'));
+    await waitFor(() => expect(read).toHaveBeenCalledWith('geo', { round: 'old' }, expect.objectContaining({ viewId: 'V17', sourceType: 'official' }), 0, undefined));
+    fireEvent.click(screen.getByRole('button', { name: /^分析：/ })); fireEvent.click(screen.getByRole('menuitemradio', { name: '当前水平与目标' }));
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', { round: 'old' }, { viewId: 'V01', dimension: 'project' }, 0, undefined));
+    fireEvent.click(screen.getByRole('button', { name: /^分析：/ })); fireEvent.click(screen.getByRole('menuitemradio', { name: '平台指标比较' }));
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', { round: 'old' }, { viewId: 'V04', dimension: 'engine' }, 0, undefined));
+    expect(await screen.findByRole('button', { name: /^分析：平台指标比较/ })).toBeTruthy();
   });
 });

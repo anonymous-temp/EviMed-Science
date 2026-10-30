@@ -1,3 +1,4 @@
+import type { PageActionPlan } from "./HeaderActions";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PAGE_CHROME_VAR } from "@/components/layout/chrome";
@@ -57,20 +58,18 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  *  - `scope` (`ScopeMenuProps`) — whose things the page shows, after the title;
  *  - `titleVariant="document"` — the serif title of a reader;
  *  - `steps` (`StepRailProps`) — a module's program; present on **every** tab of
- *    the module and the same height on all of them;
+ *    the module with reachable destinations;
  *  - `activity` (`ActivityStripProps`) — while work is going. The one thing in the
  *    band whose presence changes its height, and it follows the module's state,
  *    never the tab;
  *  - `tabs` — the module's views (config of `Tabs`; the shell also makes the body
  *    its tab panel). A page has **one** view-switch row: `tabs`, or `toolbar.views`
  *    for a list page whose views and filters share one row — never both;
- *  - `toolbar` (`ToolbarProps`) — the one row of controls. **The band's height
- *    must not depend on the tab**, so a page whose tabs differ in having a
- *    toolbar passes `toolbar={null}` for the tabs without one: the row keeps its
- *    44 px, and the band does not jump. Omitted (`undefined`) means no tab of
- *    the page has a toolbar, and no row is reserved;
+ *  - `toolbar` (`ToolbarProps`) — scoped controls; null/undefined omit the row (DS22.4).
  *  - `headline` (`HeadlineProps`) — the one sentence over a data page's body;
  *  - `eyebrow` — a reading page's line over its title (who published the article, when);
+ *  - `underTitle` — a reading page's line directly under its title (the article's original title, 2026-10-27), before the band: what
+ *    belongs to the title stays with it, and the band's controls come after;
  *  - `aside` — a reading page's right column (the frontier reader's actions, 推荐理由, 专科, 标签 and contents, 2026-10-23): from
  *    `lg` a sticky column of 15.5 rem beside everything from the way back down, its top on the back row; below `lg` it follows the
  *    body. The title, the eyebrow and the text share the left column's edge.
@@ -150,7 +149,9 @@ export interface PageShellProps<V extends string = string> {
   /** A grey count or update time after the title. */
   meta?: ReactNode;
   /** The page's primary action and at most two icon buttons or a search box. */
+  /** @deprecated Migrate to actionPlan during DS22 adoption. */
   actions?: ReactNode;
+  actionPlan?: PageActionPlan;
   /** The way back, over the title (「‹ 前沿动态」): a page that is one step down from another. */
   back?: ReactNode;
   /** The browser tab's name, when it should differ from the heading. */
@@ -164,18 +165,22 @@ export interface PageShellProps<V extends string = string> {
   scope?: ScopeMenuProps;
   /** `document` is the reader's serif title. */
   titleVariant?: "page" | "document";
+  /** Useful task entry content, before the canonical list toolbar. */
+  introduction?: ReactNode;
   /** The module's program, on every tab. */
   steps?: StepRailProps;
   /** Work in progress, under the rail. */
   activity?: ActivityStripProps;
   /** The module's views. */
   tabs?: PageTabs<V>;
-  /** The one row of controls; `null` reserves its height on a tab that has none. */
+  /** The one row of controls; `null` omits the row on a tab that has no controls. */
   toolbar?: ToolbarProps | null;
   /** The one sentence over a data page's body. */
   headline?: HeadlineProps;
   /** A reading page's line over its title. */
   eyebrow?: ReactNode;
+  /** A reading page's line directly under its title (the original-language title), before the band. */
+  underTitle?: ReactNode;
   /** A reading page's right column, sticky beside the page from `lg`. */
   aside?: ReactNode;
   /** The right column's accessible name. */
@@ -186,11 +191,24 @@ export interface PageShellProps<V extends string = string> {
 /** A toolbar row: 28 px of controls between two 8 px paddings. Reserved as-is where a tab has none. */
 const TOOLBAR_ROW = "min-h-11";
 
+/**
+ * Component: PageShell; owner: H; rules: DS22/AT52–AT54.
+ * Anatomy: Header, optional sticky navigation/controls, headline and body.
+ * Variants: Read, page, wide, full and optional aside.
+ * States: Owner supplies content state; absent toolbar reserves no row.
+ * Hit area: Shared slot components own targets.
+ * Keyboard: Tabpanel labels and measured scroll padding preserve focus visibility.
+ * Long content: Bounded columns with independently measured chrome height.
+ * Theme: Semantic page ground and border roles.
+ * Responsive: Token gutters, optional aside and content-dependent chrome.
+ * Verification: PageShell.test.tsx; DS22.4/AT54; browser focus/anchor evidence remains page-specific.
+ */
 export function PageShell<V extends string = string>({
   title,
   headerVisibility = "visible",
   meta,
   actions,
+  actionPlan,
   back,
   documentTitle,
   width = "page",
@@ -199,11 +217,13 @@ export function PageShell<V extends string = string>({
   scope,
   titleVariant,
   steps,
+  introduction,
   activity,
   tabs,
   toolbar,
   headline,
   eyebrow,
+  underTitle,
   aside,
   asideLabel,
   children,
@@ -212,7 +232,7 @@ export function PageShell<V extends string = string>({
   const band = useRef<HTMLDivElement>(null);
   // The band has a hairline under it once the header has scrolled out from over it.
   const [stuck, setStuck] = useState(false);
-  const hasBand = Boolean(steps || activity || tabs || toolbar !== undefined);
+  const hasBand = Boolean(steps || activity || tabs || toolbar);
 
   useEffect(() => {
     const element = band.current;
@@ -248,7 +268,7 @@ export function PageShell<V extends string = string>({
   }
 
   // The tab list's own hairline closes the band when it is the last row; otherwise the band draws one once it is stuck.
-  const lastRowRuled = toolbar ? Boolean(toolbar.views) : toolbar === null ? false : Boolean(tabs);
+  const lastRowRuled = toolbar ? Boolean(toolbar.views) : Boolean(tabs);
   const panel = tabs ?? toolbar?.views;
 
   const page = (
@@ -260,10 +280,13 @@ export function PageShell<V extends string = string>({
         className={headerVisibility === "sr-only" ? "sr-only" : undefined}
         meta={meta}
         actions={actions}
+        actionPlan={actionPlan}
         scope={scope && <ScopeMenu {...scope} />}
         titleVariant={titleVariant}
         documentTitle={documentTitle}
       />
+      {underTitle && <div className="mt-1">{underTitle}</div>}
+      {introduction && <div data-page-introduction="" className="mt-6">{introduction}</div>}
       {hasBand && (
         <div
           ref={band}
@@ -278,7 +301,6 @@ export function PageShell<V extends string = string>({
           {steps && <StepRail {...steps} />}
           {activity && <div className="pb-2"><ActivityStrip {...activity} /></div>}
           {tabs && <Tabs label={tabs.label} items={tabs.items} value={tabs.value} onChange={tabs.onChange} panelId={tabs.panelId} />}
-          {toolbar === null && <div aria-hidden="true" className={TOOLBAR_ROW} />}
           {toolbar && <div className={toolbar.views ? undefined : cn(TOOLBAR_ROW, "py-2")}><Toolbar {...toolbar} inBand /></div>}
         </div>
       )}

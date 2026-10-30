@@ -44,7 +44,8 @@ function renderPlan(reload: () => void = () => undefined) {
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   open.mockReset().mockResolvedValue(true);
-  moduleSession.mockReset().mockImplementation(async(geoId,target)=>({projectId:project.projectId,sessionId:target.sessionId??"created-plan-session",scope:{kind:"geo",geoProjectId:geoId,sessionId:target.sessionId??"created-plan-session"}}));
+  // The module's open: a session by name, else the project's own primary (its kept session, or a new one when it has none).
+  moduleSession.mockReset().mockImplementation(async(geoId,target)=>{const sessionId=target.sessionId??(await client.getGeoProject(geoId)).sessionId??"created-plan-session";return {projectId:project.projectId,sessionId,scope:{kind:"geo",geoProjectId:geoId,sessionId}};});
   client.getGeoStrategy.mockResolvedValue(strategyFilled);
   client.getGeoProject.mockResolvedValue({...project,sessionId:"current-native-session"});
   client.stageGeoPlanContext.mockResolvedValue({referenceId:`gpc_${"a".repeat(64)}`,sessionId:"current-native-session",draft:"Selected plan draft"});
@@ -76,11 +77,12 @@ describe("方案: what it is", () => {
     expect(client.getGeoJourney).not.toHaveBeenCalled();
   });
 
-  it("keeps plan tier controls separate from its embedded selected-analysis toolbar", async () => {
+  it("offers frozen-plan analysis as an explicit main-area entry", async () => {
     const view = renderPlan();
     await screen.findByRole("heading", { name: "目标" });
     expect([...view.container.querySelectorAll("[role=tablist], [data-toolbar], [role=searchbox], input")].filter(node=>!node.closest("[data-geo-analysis]"))).toHaveLength(0);
-    expect(view.container.querySelector("[data-geo-analysis] [data-toolbar]")).toBeInTheDocument();
+    expect(view.container.querySelector("[data-toolbar]")).toBeNull();
+    expect(screen.getByRole("link", { name: "方案目标与实测分析" })).toHaveAttribute("href", expect.stringContaining("analysis=V26"));
     // The only controls on the page that can be pressed are 「选这一档」 buttons: none is a chip of a filter group.
     for (const group of view.container.querySelectorAll("[role=group]")) {
       expect(group.querySelectorAll("[aria-pressed]"), group.getAttribute("aria-label") ?? "").toHaveLength(0);
@@ -440,4 +442,23 @@ it("retains the source plan when an exact conversation is unavailable",async()=>
   renderPlan();await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
   await screen.findByText("方案暂时无法打开，请刷新后重试。");
   expect(client.stageGeoPlanContext).not.toHaveBeenCalled();expect(open).not.toHaveBeenCalled();
+});
+
+it("keeps source-embedded generation subordinate while preserving its source context", async () => {
+  client.getGeoStrategy.mockResolvedValue({ ...strategyFilled, version: null });
+  render(<MemoryRouter><GeoFrameHarness project={project} tab="sources"><PlanTab {...props} embedded sourceUrl="https://example.org/selected-page" /></GeoFrameHarness></MemoryRouter>);
+  const generate = await screen.findByRole("button", { name: "生成方案" });
+  expect(generate).toHaveClass("bg-surface-2");
+  expect(generate).not.toHaveClass("bg-accent");
+  expect(screen.getByRole("link", { name: "方案目标与实测分析" })).toHaveAttribute("href", expect.stringContaining("analysis=V26"));
+  await userEvent.click(generate);
+  await waitFor(() => expect(client.stageGeoPlanContext).toHaveBeenCalled());
+  expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({ mode: "strategy", url: "https://example.org/selected-page" });
+});
+
+it('reads the exact source plan URL identity and frozen version from the main-area address', async () => {
+  render(<MemoryRouter initialEntries={['/app/geo/geo_1/plan?planSource=source_exact&planUrl=https%3A%2F%2Fexample.org%2Fexact&selectionRef=gsel_exact&strategyVersion=7&session=s1']}><GeoFrameHarness project={project} tab="plan"><PlanTab {...props} /></GeoFrameHarness></MemoryRouter>);
+  await screen.findByRole('heading', {name:'实施方案'});
+  expect(client.getGeoStrategy).toHaveBeenCalledWith('geo_1', {sourceId:'source_exact',url:'https://example.org/exact',selectionRef:'gsel_exact',strategyVersion:7});
+  expect(screen.getByRole('link', {name:'方案目标与实测分析'})).toHaveAttribute('href', expect.stringContaining('strategyVersion='));
 });

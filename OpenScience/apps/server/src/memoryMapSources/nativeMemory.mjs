@@ -2,7 +2,7 @@
  * The map's memory source: the account's memory files in OpenViking's native engine.
  *
  * An account's memories are files, not rows: this source asks a reader for them in the one shape the memory page's store speaks
- * and hands them to `recordsContribution` (`records.mjs`), so the marks, the lines, the radar and the events cannot differ from what the
+ * and hands them to `recordsContribution` (`records.mjs`), so the marks, the lines and the events cannot differ from what the
  * page lists. (A PostgreSQL source over the legacy engine's `evimed_memory.records` stood beside it until that engine was deleted,
  * 2026-10-25.)
  *
@@ -61,7 +61,7 @@ export function createNativeMemorySource({ readMemories = null } = {}) {
       // A file of the engine has no importance and no use counter of its own (every one reads 0.5 and none is counted), so a mark's size
       // says what the engine can: how recently the file was written.
       return recordsContribution(records, { sources: held?.sources ?? [], conflicts: held?.conflicts ?? [], usage: held?.usage ?? {} },
-        { now: request.now, timeZone: request.timeZone, weigh: (record) => recencyWeight(record.updatedAt ?? record.createdAt ?? null, request.now) });
+        { now: request.now, weigh: (record) => recencyWeight(record.updatedAt ?? record.createdAt ?? null, request.now) });
     },
   };
 }

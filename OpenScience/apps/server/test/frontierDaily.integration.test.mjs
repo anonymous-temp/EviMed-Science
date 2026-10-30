@@ -222,6 +222,21 @@ test("an issue knows the issues on either side of it: the nearest, since a quiet
   assert.deepEqual([(await reader.read("2026-09-18")).previousDay, (await reader.read("2026-09-22")).nextDay], [null, null]);
 });
 
+test("the archive is read a page at a time: the issues before a day, newest first, and everything when no day is named", options, async () => {
+  for (const day of ["2026-08-30", "2026-09-02", "2026-09-18", "2026-09-20", "2026-09-22"]) {
+    await database.query(`INSERT INTO evimed_frontier.dailies (day, window_start, window_end, lead, sections, safety, markdown, item_ids, model)
+      VALUES ($1::date, now(), now(), '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '# 日报', '{}', 'deepseek-flash')`, [day]);
+  }
+  const reader = daily();
+  const days = async (...args) => (await reader.list(...args)).map((entry) => entry.day);
+  assert.deepEqual(await days(60), ["2026-09-22", "2026-09-20", "2026-09-18", "2026-09-02", "2026-08-30"]);
+  assert.deepEqual(await days(2), ["2026-09-22", "2026-09-20"]);
+  assert.deepEqual(await days(2, "2026-09-18"), ["2026-09-02", "2026-08-30"], "the cursor day itself is not in its page");
+  assert.deepEqual(await days(60, "2026-09-18"), ["2026-09-02", "2026-08-30"]);
+  assert.deepEqual(await days(60, "2026-08-30"), []);
+  assert.deepEqual(await days(60, "not-a-day"), ["2026-09-22", "2026-09-20", "2026-09-18", "2026-09-02", "2026-08-30"], "a cursor that is not a day reads the first page");
+});
+
 test("a day with nothing to publish is no issue and no alert; a failed one is retried and, past 07:45, an alert", options, async () => {
   const quiet = daily();
   assert.deepEqual(await quiet.runDue(), { day: DAY, ran: true, empty: true });

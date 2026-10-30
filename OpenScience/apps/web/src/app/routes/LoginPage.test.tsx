@@ -85,6 +85,17 @@ describe("LoginPage", () => {
     mocks.registerWeb.mockResolvedValue(undefined);
   });
 
+  it("puts the cursor in the account field once the form is there, and in no field where the deployment signs in elsewhere", async () => {
+    renderLogin();
+    const account = await screen.findByLabelText("账号");
+    await waitFor(() => expect(account).toHaveFocus());
+    cleanup();
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "oidc", oidc: { label: "统一身份登录" } });
+    renderLogin();
+    expect(await screen.findByRole("link", { name: /统一身份登录/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
+  });
+
   // Audit B01: a six-character minimum typed blind on a phone. The field's own button shows it, and hides it again.
   it("shows the password only when asked, keeps what was typed, and hides it again", async () => {
     renderLogin();

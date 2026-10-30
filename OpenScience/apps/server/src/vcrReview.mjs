@@ -34,7 +34,7 @@ export function vcrIsNumberlessVerdict(result) {
 }
 
 /** @param {any} input */
-export function buildVcrReviewInput({ model, results, executions, evidence, reports, forModel }) {
+export function buildVcrReviewInput({ model, results, executions, evidence, reports, forModel, verifiedLiteratureIds = new Set() }) {
   const nodes = [...results.map(row => `result:${row.id}@${row.version}`),
     ...(model.assumptions ?? []).map(row => `assumption:${row.key}@${row.version}`),
     ...(model.definition?.id ? [`study_definition:${model.definition.id}@${model.definition.version}`] : []),
@@ -54,7 +54,9 @@ export function buildVcrReviewInput({ model, results, executions, evidence, repo
   }
   const referenced = new Set((model.assumptions ?? []).flatMap(row => [...(row.evidenceIds ?? []), ...(row.sources ?? [])].map(source => String(source.id ?? source.evidenceId ?? source))));
   for (const id of referenced) {
-    if (!evidence.some(row => row.id === id && row.locator?.verification === 'verified' && row.quote && row.record_text?.includes(row.quote) && row.record_hash === createHash('sha256').update(row.record_text).digest('hex'))) findings.push({ kind: 'reference_unresolvable', location: `evidence:${id}`,
+    if (!evidence.some(row => row.id === id && row.locator?.verification === 'verified' && row.quote
+      && (row.locator.kind === 'literature_text' ? verifiedLiteratureIds.has(id)
+        : row.record_text?.includes(row.quote) && row.record_hash === createHash('sha256').update(row.record_text).digest('hex')))) findings.push({ kind: 'reference_unresolvable', location: `evidence:${id}`,
       evidence: '', message: 'The assumption source has no verified preserved quotation.', fix: '补充可核验的来源，或保留为明确声明的假设。' });
   }
   // Never pass the exact render model: suppression applies before template binding.
@@ -147,8 +149,9 @@ export function createVcrReviewAdapter({ vcr, reviewService }) {
         const results = (await Promise.all(ids.map(id => snapshot.result(studyId, id)))).filter(Boolean);
         const executions = await snapshot.rows('SELECT id,output_hash,method,method_version,environment,receipt FROM evimed_vcr.executions WHERE study_id=$1 AND id=ANY($2::text[])', [studyId, results.map(row => row.executionId).filter(Boolean)]);
         const evidence = await snapshot.rows('SELECT e.id,e.quote,e.source_ref,e.parameter,e.value,e.unit,e.locator,p.record_text,p.record_hash FROM evimed_vcr.evidence_items e LEFT JOIN evimed_vcr.precedents p ON p.id=e.precedent_id AND p.user_id=e.user_id WHERE e.study_id=$1 AND e.user_id=$2 ORDER BY e.created_at DESC LIMIT 2000', [studyId, study.userId]);
+        const verifiedLiteratureIds = new Set(await vcr.evidence?.verifyPreservedItems?.({ userId: study.userId, projectId: study.projectId, items: evidence }) ?? []);
         const reports = exported?.cover?.reports ?? (exported?.cover?.report ? [exported.cover.report] : []);
-        return { study, reportRevision: exported ? vcrReportReviewRevision(exported.cover) : null, ...buildVcrReviewInput({ model, results, executions, evidence, reports, forModel: value => vcr.service.forModel(value) }) };
+        return { study, reportRevision: exported ? vcrReportReviewRevision(exported.cover) : null, ...buildVcrReviewInput({ model, results, executions, evidence, reports, verifiedLiteratureIds, forModel: value => vcr.service.forModel(value) }) };
       });
       if (!frozen.nodes.length) return [];
       const records = [];

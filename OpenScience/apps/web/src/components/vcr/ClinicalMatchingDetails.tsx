@@ -270,7 +270,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
 
   const actions: VcrToolbarAction[] = [];
   // The view's main action is the contact confirmation below; starting an evaluation is the quieter one next to the protocol it is for.
-  if (canRun && protocols.length > 0 && !needsPatient) {
+  if (canRun && protocols.length > 0 && roster.length > 0 && !needsPatient) {
     actions.push({
       key: 'evaluate', label: '开始评估', loading: evaluation.busy || settling,
       onSelect: () => { if (!evaluation.busy && !settling) void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, ...scope }); },

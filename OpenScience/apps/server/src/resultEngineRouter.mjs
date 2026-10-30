@@ -1,10 +1,11 @@
+import { RESULT_R_REPLAY_METHOD_KINDS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** Aggregate R methods remain on the existing VCR engine; Python recipes use
  * the fixed numerical adapter. No generic script engine is introduced. */
 export class ResultEngineRouter {
   constructor({ python, vcr = null }) { this.python = python; this.vcr = vcr; }
-  select(method) { return ["design.analytic", "comparator.evalue"].includes(method) ? this.vcr : this.python; }
+  select(method) { return Object.hasOwn(RESULT_R_REPLAY_METHOD_KINDS,method) ? this.vcr : this.python; }
   configured(method) { return this.select(method)?.configured(method) === true; }
   required(scope) {
     const engine = this.select(scope.method);

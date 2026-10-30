@@ -103,3 +103,20 @@ test('a reviewer verdict stands only on words of the source; an unreadable sourc
   ], 'an unlocated contradiction never reaches an inbox')
   assert.deepEqual(replyCheckCounts(verdicts), { supported: 1, partial: 0, unsupported: 0, unresolvable: 1, uncertain: 1, contradictedSafety: 0 })
 })
+
+test("a reply's reference list is found under its own heading, not under a heading that only contains the word", () => {
+  const answer = [
+    "Statins lower LDL [1].",
+    "",
+    "## References",
+    "1. Example trial. doi:10.1000/abc",
+    "",
+    "## Values and preferences",
+    "Patients weigh pill burden differently.",
+    "",
+    "## Resources",
+    "A patient leaflet.",
+  ].join("\n")
+  const { references } = replyCitedSentences(answer)
+  assert.deepEqual(references.map((reference) => reference.number), [1], "「Values and preferences」 and 「Resources」 are not the list")
+})

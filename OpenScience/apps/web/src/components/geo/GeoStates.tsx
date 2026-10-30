@@ -1,3 +1,4 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { Radar } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
@@ -22,34 +23,47 @@ function Bar({ className }: { className: string }) {
   return <div className={`rounded bg-surface-2 ${className}`} />;
 }
 
-/** The home list's first paint: rows shaped like the projects they stand in for. */
+/** The home list's first paint: rows shaped like the projects they stand in for — a name, a line under it and one number. */
 export function GeoListSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true">
-      {["w-1/3", "w-1/4", "w-2/5"].map((width) => (
-        <div key={width} className="flex h-16 items-center gap-6 border-b border-border px-2">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true">
+      {["w-2/3", "w-1/2", "w-3/5"].map((width) => (
+        <div key={width} className="flex h-16 items-center gap-3 px-2">
           <div className="flex flex-1 flex-col gap-2">
             <Bar className={`h-3.5 ${width}`} />
-            <Bar className="h-3 w-1/5" />
+            <Bar className="h-3 w-1/3" />
           </div>
-          <Bar className="h-4 w-40" />
-          <Bar className="h-4 w-16" />
+          <Bar className="h-4 w-10" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
+  );
+}
+
+/** The preview's first paint, beside the list: a name, the two figures and the steps. */
+export function GeoPreviewSkeleton() {
+  return (
+    <PendingFeedback><div className="animate-pulse space-y-6" aria-hidden="true">
+      <Bar className="h-6 w-1/3" />
+      <div className="grid grid-cols-2 gap-3">
+        <Bar className="h-28 rounded-card" />
+        <Bar className="h-28 rounded-card" />
+      </div>
+      <Bar className="h-20 rounded-card" />
+    </div></PendingFeedback>
   );
 }
 
 /** A project page's first paint: the tab row and four metric blocks. */
 export function GeoProjectSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true">
       <div className="flex h-10 items-end gap-6 border-b border-border">
         {Array.from({ length: 9 }, (_, index) => <Bar key={index} className="mb-3 h-3.5 w-8" />)}
       </div>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => <Bar key={index} className="h-36 rounded-card" />)}
       </div>
-    </div>
+    </div></PendingFeedback>
   );
 }

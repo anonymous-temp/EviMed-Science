@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { inputClasses } from "@/components/ui/Input";
 import { SourceUpdateBadges } from "@/components/markdown-viewer/SourceUpdateBadges";
-import { tagClasses } from "@/components/ui/Tag";
+import { Tag } from "@/components/ui/Tag";
 import { listAgendas, type AgendaRecord } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { checkResultSourceUpdates, continueResultImpact, listResultImpacts, type ResultImpact, type ResultImpactAffected, type ResultSourceCheck } from "@/lib/resultImpactClient";
@@ -108,7 +108,7 @@ function ImpactItem({ impact, projectId, onUpdate, onRefresh }: { impact: Result
   const replaced = status.updates.some(update => update.kind === "replaced");
   return <section aria-label={`来源更新 ${impact.payload.source.id}`} className="space-y-2 rounded-card border border-border p-3">
     <p className="break-all text-caption">{impact.payload.continuation.status === "unavailable" ? "原来源已不可用" : replaced ? "资料库中的文件" : impact.payload.source.doi ?? impact.payload.source.id}</p>
-    {replaced ? <span className={tagClasses({ tone: "warn" })}>资料库文件已有新版本</span> : <SourceUpdateBadges updates={status.updates} updateStatus={status} />}
+    {replaced ? <Tag tone="warn">资料库文件已有新版本</Tag> : <SourceUpdateBadges updates={status.updates} updateStatus={status} />}
     <p className="text-caption text-muted">{status.state === "changed" ? "来源有了变化，依赖它的部分值得核对。这不说明原来的结论有误，尚未重新计算。" : "来源更新情况无法确认，不能据此判断结论已改变。"} 历史结果已保留。</p>
     {impact.payload.claimIds.length > 0 && <p className="text-caption">涉及 {impact.payload.claimIds.length} 处结论</p>}
     {impact.payload.affected && impact.payload.continuation.status !== "unavailable" && <ul aria-label="依赖该来源的内容" className="list-disc space-y-1 pl-5 text-caption">

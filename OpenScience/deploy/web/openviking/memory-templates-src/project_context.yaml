@@ -19,6 +19,14 @@ description: |
 
   The card has up to six sections and every one is optional: write a section only when the
   user stated something for it, and never fill one from the topic of a question.
+  The platform may begin a conversation with one line of its own naming the project the
+  conversation is held in ("（平台信息，不是用户说的话）这段对话在用户的项目「…」里进行。"). That line tells you
+  which project a rule or a fact the user states belongs to, and is the card's name when you write
+  one; it is not something the user said, and on its own it never creates a card, fills a section or
+  makes a question, a request or the user's general background ("我主要做房颤研究") into a
+  description of the project — even when the project's name sounds like that background. What a
+  question asks about ("帮我看看利伐沙班在 75 岁以上患者中的大出血风险证据") fills no section, not even as
+  an example ("如…").
   - 目标: what the work is meant to find out, build or deliver.
   - 范围或对象: what the work is about or aimed at: the subject, case, product, system,
     audience or population it covers, and what the user said is outside it; the people who

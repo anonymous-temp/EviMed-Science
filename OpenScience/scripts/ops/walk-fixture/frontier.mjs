@@ -42,6 +42,10 @@ const ITEMS = [
   ["example-journal-cardiology", 27, "evidence", "rct", ["cardiology"], true, false, "NCT90000002", "钠-葡萄糖协同转运蛋白 2 抑制剂降低射血分数保留心衰的住院风险", "试验随访 26 个月，心衰住院或心血管死亡的复合结局风险比 0.79。"],
   ["example-health-news", 25, "evidence", "rct", ["cardiology"], false, false, "NCT90000002", "射血分数保留的心衰有了新选择：一项大型试验的要点", "要点梳理：风险比 0.79，获益主要来自住院减少。"],
   ["example-health-news", 22, "evidence", "rct", ["cardiology"], false, false, "NCT90000002", "心衰新药试验：哪些患者获益更大", "亚组分析提示合并糖尿病的患者获益更明显。"],
+  // A preview two days before the paper and a follow-up after it: the story's reports span Beijing days whatever the hour the fixture is made
+  // at (48 hours between them are always two calendar days at the least), so the event page's 报道时间线 draws more than one day.
+  ["example-health-news", 50, "evidence", "rct", ["cardiology"], false, false, "NCT90000002", "射血分数保留心衰的大型试验即将公布结果：业内关注什么", "业内预计试验将回答住院风险是否下降。"],
+  ["example-health-news", 2, "evidence", "rct", ["cardiology"], false, false, "NCT90000002", "心衰门诊开始讨论新药的处方路径", "多家医院的心衰门诊开始讨论新药的处方路径与随访安排。"],
   ["example-journal-oncology", 31, "evidence", "rct", ["oncology"], true, false, "NCT90000003", "免疫联合化疗一线治疗晚期肺癌：总生存延长 4.1 个月", "中位总生存 19.6 个月对 15.5 个月，三级以上不良事件发生率相近。"],
   ["example-health-news", 29, "evidence", "rct", ["oncology"], false, false, "NCT90000003", "晚期肺癌一线联合方案的最新生存数据", "报道称联合组中位总生存延长 4.1 个月。"],
   ["example-journal-medicine", 36, "evidence", "rct", ["neurology"], true, false, "NCT90000004", "早期阿尔茨海默病抗体治疗 18 个月：认知下降减缓 27%", "试验纳入 1,800 名早期患者，认知量表评分下降幅度减少 27%，影像异常的发生率增加。"],
@@ -85,6 +89,66 @@ const ITEMS = [
   ["example-health-news", 35, "evidence", "rct", ["oncology"], false, false, "NCT90000013", "乳腺癌新辅助新方案的病理缓解数据", "报道援引试验，病理完全缓解率提高 13 个百分点。"],
 ];
 
+/** The items the fixture publishes, for the test that holds what the walk draws from them. */
+export const FIXTURE_ITEMS = ITEMS;
+
+/**
+ * The days the fixture's archive holds besides the ones the composer writes, for a Beijing `today` (`YYYY-MM-DD`): a few from this month
+ * and last month's last days, the middle of last month and one from the month before, so the archive column of 日报 is drawn with
+ * months and not as one list. Every day is before `today`, unique and newest first. A day that would fall in the future of the calendar
+ * of the month it is named for (the 30th of a 28-day month) is not made.
+ * @param {string} today
+ * @returns {string[]}
+ */
+export function fixtureArchiveDays(today) {
+  const [year, month, day] = today.split("-").map(Number);
+  const dayOf = (/** @type {number} */ y, /** @type {number} */ m, /** @type {number} */ d) => new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10);
+  // Day 0 of a month is the last day of the one before.
+  const lastOfPrevious = new Date(Date.UTC(year, month - 1, 0)).getUTCDate();
+  const offsets = [3, 4, 6, 9].map((back) => dayOf(year, month, day - back));
+  const previous = [0, 2, 7, 14].map((back) => dayOf(year, month - 1, lastOfPrevious - back));
+  const older = [dayOf(year, month - 2, 20)];
+  return [...new Set([...offsets, ...previous, ...older])].filter((candidate) => candidate < today).sort().reverse();
+}
+
+/**
+ * 日报's archive: the issues of the days before the one the composer wrote, so the archive by month, the stamp of an issue and 「先看三件事」
+ * are drawn on more than today's. The days the fixture's items cover are composed by the module itself (its window, its ranking); the
+ * days before them are that newest issue again, with fewer rows in each lane so the numbers differ, written as the job writes an issue
+ * (07:31 in Beijing on its day) and never over a day that has one.
+ * @param {any} database @param {any} daily the composer's daily @param {(line: string) => void} log
+ */
+export async function furnishArchive(database, daily, log) {
+  const { frontierDayIn } = await import("@evimed/domain");
+  const today = frontierDayIn(new Date());
+  const shift = (/** @type {string} */ day, /** @type {number} */ days) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  const generated = (/** @type {string} */ day) => new Date(Date.parse(`${day}T07:31:00+08:00`));
+  const insert = (/** @type {string} */ day, /** @type {any} */ issue) => database.query(`INSERT INTO evimed_frontier.dailies (day, window_start, window_end, lead, sections, safety,
+      ai_minute, markdown, item_ids, model, cost_cny, generated_at, finalized_at)
+    VALUES ($1::date, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9::bigint[], $10, NULL, $11, $11) ON CONFLICT (day) DO NOTHING`,
+  [day, issue.window.start, issue.window.end, JSON.stringify(issue.lead), JSON.stringify(issue.sections), JSON.stringify(issue.safety), issue.aiMinute,
+    issue.markdown, issue.itemIds, issue.model, generated(day)]);
+  let composed = 0;
+  for (const back of [1, 2, 3]) {
+    const day = shift(today, -back);
+    const issue = await daily.compose(day).catch((/** @type {any} */ error) => { log(`frontier: archive ${day} — ${String(error?.code ?? error?.message ?? error).slice(0, 120)}`); return null; });
+    if (issue) { await insert(day, issue); composed += 1; }
+  }
+  const template = (await database.query(`SELECT window_start, window_end, lead, sections, safety, ai_minute, markdown, item_ids, model
+    FROM evimed_frontier.dailies ORDER BY day DESC LIMIT 1`)).rows[0];
+  if (!template) { log(`frontier: archive — ${composed} composed, no issue to copy from`); return; }
+  let copied = 0;
+  for (const [at, day] of fixtureArchiveDays(today).entries()) {
+    const sections = (Array.isArray(template.sections) ? template.sections : []).map((/** @type {any} */ section) => ({ ...section, itemIds: (section.itemIds ?? []).slice(0, 1 + ((at + 1) % 4)) }));
+    // The archive counts an issue by the items it holds: the copy holds as many as its rows.
+    const held = (template.lead ? 1 : 0) + (template.safety?.length ?? 0) + sections.reduce((sum, /** @type {any} */ section) => sum + section.itemIds.length, 0);
+    await insert(day, { window: { start: template.window_start, end: template.window_end }, lead: template.lead, sections, safety: template.safety, aiMinute: template.ai_minute,
+      markdown: template.markdown, itemIds: (template.item_ids ?? []).slice(0, held), model: template.model });
+    copied += 1;
+  }
+  log(`frontier: archive — ${composed} composed, ${copied} copied (${fixtureArchiveDays(today).join(", ")})`);
+}
+
 /**
  * 追踪 (c3-track): the regulator's approvals and the evidence body's guidelines carry the records the track step extracts (written as
  * it writes them), and the congress on now — or, between meetings, the one that ended last — has three reports naming it inside its
@@ -115,6 +179,19 @@ async function furnishTrack(database, insertComposedItem, { hoursAgo, log }) {
       [row.id, facts({ kind: "guideline", body: { text: "示例循证医学协会", quote: "示例循证医学协会" }, scope: { text: "2 型糖尿病诊疗", quote: "诊疗指南" },
         recommendations: [{ text: "把体重管理写入起始治疗目标", grade: "strong", quote: "体重管理" }, { text: "起始治疗即考虑心肾保护", grade: null, quote: "心肾保护" }] }),
       FRONTIER_TRACK_FACTS_VERSION]);
+    // The reader opens its 「AI 要点」 panel with every kind of field and the source's own words at its end (2026-10-27): a
+    // production guideline drew the panel's dividers and its quote, which the fixture's items had none of, and the walk counted
+    // their border kinds only on production.
+    await database.query("UPDATE evimed_frontier.items SET brief = $2::jsonb WHERE id = $1", [row.id, JSON.stringify({
+      genre: "guideline",
+      points: [
+        { key: "issuer", text: "示例循证医学协会，2026 年版" },
+        { key: "population", text: "成人 2 型糖尿病的诊疗，含合并肥胖与慢性肾病者" },
+        { key: "changes", items: ["把体重管理写入起始治疗目标（强推荐，中等质量证据）", "起始治疗即考虑心肾保护（弱推荐）"] },
+        { key: "basis", text: "多项随机对照试验与系统评价" },
+      ],
+      quote: { text: "Weight management should be a primary treatment goal.", zh: "体重管理应成为首要治疗目标。" },
+    })]);
   }
   const today = frontierDayIn(new Date());
   const congress = FRONTIER_CONGRESSES.find((entry) => frontierCongressStatus(entry, today) === "ongoing")
@@ -153,6 +230,42 @@ async function furnishTrack(database, insertComposedItem, { hoursAgo, log }) {
   log(`frontier: ${approvals.length} approvals and ${guidelines.length} guidelines tracked; congress ${congress.id} (${frontierCongressStatus(congress, today)}) with ${ids.length} reports`);
 }
 
+/** Furnish one wholly synthetic outside-event topic through the current topic pipeline and its validators. */
+export async function furnishTopic(database, log) {
+  const { FrontierTopics, FRONTIER_TOPIC_WRITE_INSTRUCTIONS } = await load("src", "frontierTopics.mjs");
+  const { migrateFrontierLeads } = await load("src", "frontierLeads.mjs");
+  await migrateFrontierLeads(database);
+  const title = "示例城市跑步活动后的运动风险讨论";
+  const snapshots = [20, 5].map(minutes => ({ board: "weibo", fetchedAt: new Date(Date.now() - minutes * 60000).toISOString(),
+    entries: [{ title, rank: 1, heat: 999, desc: "示例城市举办跑步活动，参与者讨论运动前健康评估。全部内容为界面测试合成。", url: "https://synthetic-topic.example.org/running" }] }));
+  const topic = { title: "跑步前需要做哪些健康评估？", question: "健康成年人参加跑步活动前，需要关注哪些风险因素，什么情况下应先咨询医生？", peg: "", peg_entry: null,
+    entities: { diseases: [], drugs: [] }, queries: { zh_reports: ["跑步 运动前健康评估"], zh_evidence: ["运动前健康评估 指南"], en_evidence: ["preparticipation screening exercise guideline"], stats: [] } };
+  const topics = new FrontierTopics({ database, plugin: { configured: true, hotLists: async () => ({ boards: snapshots }) },
+    editor: { callJson: async () => ({ groups: [{ members: [1], medical_members: [1], domain: "society", medical: true, needs_private_health: false, subject_names: [], question: topic.question, same_as: null, confidence: 1 }] }),
+      writeJson: async (instructions, _input, _max, { verify }) => {
+        const checked = verify(instructions === FRONTIER_TOPIC_WRITE_INSTRUCTIONS ? topic : { overview_zh: "" });
+        return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, issues: checked.issues };
+      } }, config: { frontierOutsideEventEnabled: true } });
+  const result = await topics.tick();
+  log(`frontier: synthetic outside-event topic ${JSON.stringify(result)}`);
+  if (!result.accepted) throw new Error("The synthetic outside-event fixture topic did not pass the current pipeline.");
+}
+
+/** Deterministic stand-in for the current grouping wire: only identical synthetic registry IDs may join. */
+export function fixtureGroupAnswer(messages) {
+  const input = String(messages.at(-1)?.content ?? "");
+  const registries = text => new Set(text.match(/NCT9\d{7}/gu) ?? []);
+  const same = (left, right) => [...registries(left)].some(id => registries(right).has(id));
+  if (input.includes("【报道 A】")) {
+    const [left, right = ""] = input.split("【报道 B】");
+    return { relation: same(left, right) ? "SAME_OCCURRENCE" : "UNRELATED", confidence: 1, difference: "Synthetic fixture registry identity" };
+  }
+  const [report, ...candidates] = input.split(/【候选 C\d+】/u);
+  return { query: "Synthetic fixture registry identity", decisions: candidates.map((candidate, index) => ({ id: `C${index + 1}`,
+    relation: same(report, candidate.split("【已入选】")[0]) ? "SAME_OCCURRENCE" : "UNRELATED", confidence: 1, note: "Synthetic fixture registry identity" })),
+    selection: { addsValue: true, reason: "Synthetic companion report" } };
+}
+
 /**
  * @param {any} app @param {any} user the fixture account
  * @param {{ log: (line: string) => void }} context
@@ -175,11 +288,12 @@ export async function furnishFrontier(app, user, { log }) {
     app.frontier.editor.owner = await ensureFrontierProject({ store: app.store, config: app.config });
     composer.events.editor = {
       available: true, model: "walk-fixture",
-      judgeSameEvent: async (/** @type {{ candidates: unknown[] }} */ input) => ({ verdicts: input.candidates.map(() => "yes"), error: null, attempts: 1 }),
-      writeEventDigest: async (/** @type {{ reports: any[] }} */ input) => {
-        const first = input.reports[0] ?? {};
-        const title = String(first.titleZh ?? first.title_zh ?? first.title ?? "这件事");
-        return { verification: "passed", digestZh: `${title}。共有 ${input.reports.length} 家机构报道，一手材料与转述报道各自的要点见下。`, latestZh: String(input.reports.at(-1)?.titleZh ?? title), error: null };
+      callJson: async (messages) => fixtureGroupAnswer(messages),
+      writeJson: async (_instructions, input, _max, { verify }) => {
+        const summary = input.match(/^导读：(.+)$/mu)?.[1] ?? "同一合成事件的报道与原始资料供界面测试读取。";
+        const title = input.match(/^中文标题：(.+)$/mu)?.[1] ?? "合成测试事件的报道与原始资料";
+        const checked = verify({ title, digest: `${summary}以上均为界面测试的合成资料，不代表真实研究或真实事件。` });
+        return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, issues: checked.issues };
       },
     };
     composer.daily.editor = { available: true, model: "walk-fixture", writeDaily: async () => ({ verification: "passed", aiMinuteZh: "今天与临床相关的 AI 进展有 3 条，其中一条是前瞻性评估。", error: null }) };
@@ -224,6 +338,7 @@ export async function furnishFrontier(app, user, { log }) {
       log(`frontier: composer tick ${round + 1} — ${JSON.stringify(ticked).slice(0, 400)}`);
     }
     log(`frontier: daily ${JSON.stringify(await composer.daily.runDue().catch((/** @type {any} */ error) => ({ failed: String(error?.code ?? error?.message ?? error) })))} ${JSON.stringify(composer.daily.status?.() ?? null).slice(0, 400)}`);
+    await furnishArchive(database, composer.daily, log).catch((/** @type {any} */ error) => log(`frontier: archive — ${String(error?.message ?? error).slice(0, 200)}`));
     composer.events.editor = editors.events;
     composer.daily.editor = editors.daily;
     await furnishHotHistory(database, log);
@@ -234,6 +349,7 @@ export async function furnishFrontier(app, user, { log }) {
     log(`frontier: ${events} events, ${hot} hot snapshot(s), ${dailies} daily issue(s)`);
   } else log("frontier: no composer — the events, the hot list and the daily were not made");
   await furnishTrack(database, insertComposedItem, { hoursAgo, log });
+  await furnishTopic(database, log);
 
   return furnishZones(app, user, { log });
 }

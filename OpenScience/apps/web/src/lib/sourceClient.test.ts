@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
+import { removeDocument, getProjectLibraryLoss, setSourceProjects, getOpenListStatus, addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
 
 const request = vi.hoisted(() => vi.fn());
 const command = vi.hoisted(() => vi.fn());
@@ -41,10 +41,26 @@ describe("the knowledge base's list", () => {
     expect(request).toHaveBeenLastCalledWith("/sources?projectId=project-one&status=failed");
   });
 
-  it("lists the shared documents without naming a project", async () => {
+  it("lists every document of the account once each, without naming a project", async () => {
     request.mockResolvedValue({ items: [], nextCursor: null, counts: {} });
-    await listSources({ kind: "shared" }, { kind: "table" });
-    expect(request).toHaveBeenLastCalledWith("/sources?scope=shared&kind=table");
+    await listSources({ kind: "all" }, { kind: "table" });
+    expect(request).toHaveBeenLastCalledWith("/sources?scope=all&kind=table");
+  });
+});
+
+describe("deleting a document", () => {
+  beforeEach(() => { request.mockReset(); });
+
+  it("asks the server to remove the file everywhere — every copy of the bytes the account holds — in one request", async () => {
+    request.mockResolvedValue({ source: {}, copies: [] });
+    await removeDocument("src/one", 4);
+    expect(request).toHaveBeenLastCalledWith("/sources/src%2Fone", "DELETE", { expectedRevision: 4, everywhere: true });
+  });
+
+  it("asks what deleting a project takes from the others, by the project's id", async () => {
+    request.mockResolvedValue({ items: [] });
+    await getProjectLibraryLoss("paper 1");
+    expect(request).toHaveBeenLastCalledWith("/library/project-loss?projectId=paper%201");
   });
 });
 
@@ -85,4 +101,26 @@ it("sends the addressed output revision on both reader reload and save", async (
   const input = {sourceId:"same-source",markdown:"changed alias",baseSha256:"b".repeat(64),address};
   await saveKnowledgePage(input);
   expect(request).toHaveBeenLastCalledWith("/knowledge-pages/page","PUT",input);
+});
+
+describe("personal library contracts", () => {
+ beforeEach(() => request.mockReset());
+ it("keeps all-owned separate from a project literally named all", async () => {
+  await listSources({ kind: "all" }, { q: "notes", cursor: "next", kind: "note" });
+  expect(request).toHaveBeenLastCalledWith("/sources?scope=all&kind=note&q=notes&cursor=next");
+  await listSources({ kind: "project", projectId: "all" });
+  expect(request).toHaveBeenLastCalledWith("/sources?projectId=all");
+ });
+ it("creates personal notes and links without any implicit current project", async () => {
+  await addSourceLink(null, "https://example.org/paper"); expect(request).toHaveBeenLastCalledWith("/library/links", "POST", { url: "https://example.org/paper" });
+  await addSourceNote(null, { title: "My note", body: "text" }); expect(request).toHaveBeenLastCalledWith("/library/notes", "POST", { title: "My note", body: "text" });
+ });
+});
+
+it("says where a document takes effect with one PUT: every project, or a list", async () => {
+ await setSourceProjects("src_one", "all");
+ expect(request).toHaveBeenLastCalledWith("/library/src_one", "PUT", { projects: "all" });
+ await setSourceProjects("src_one", ["project-one", "project-two"]);
+ expect(request).toHaveBeenLastCalledWith("/library/src_one", "PUT", { projects: ["project-one", "project-two"] });
+ await getOpenListStatus(); expect(request).toHaveBeenLastCalledWith("/sources/openlist/status");
 });

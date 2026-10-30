@@ -327,6 +327,18 @@ async function geoSchemaExists(client) {
   return found.rows[0]?.present === true;
 }
 
+/** Whether the social job table exists yet: a schema made before it was added is only completed when the module next starts. @param {any} client */
+async function socialJobsTableExists(client) {
+  const found = await client.query(`SELECT to_regclass('${GEO_SCHEMA}.social_jobs') IS NOT NULL AS present`);
+  return found.rows[0]?.present === true;
+}
+
+/** Whether the probe request table exists yet: a schema made before it was added is only completed when the module next starts. @param {any} client */
+async function probeRequestsTableExists(client) {
+  const found = await client.query(`SELECT to_regclass('${GEO_SCHEMA}.probe_requests') IS NOT NULL AS present`);
+  return found.rows[0]?.present === true;
+}
+
 /**
  * The screenshots of the snapshots about to be deleted, and — once they are —
  * which of those no other snapshot references any more (screenshots are
@@ -355,6 +367,10 @@ async function orphanedScreenshots(client, candidates) {
  */
 export async function deleteGeoProjectRows(client, userId, projectId) {
   if (!client || !(await geoSchemaExists(client))) return { projects: 0, screenshots: [] };
+  // The probe tasks a project's runtime asked for are kept by control-plane project, whether or not it is a GEO project.
+  if (await probeRequestsTableExists(client)) await client.query(`DELETE FROM evimed_geo.probe_requests WHERE user_id = $1 AND project_id = $2`, [userId, projectId]);
+  // The social search answers in a conversation with no GEO project too, so its job ids are the control-plane project's, not a GEO project's.
+  if (await socialJobsTableExists(client)) await client.query(`DELETE FROM evimed_geo.social_jobs WHERE user_id = $1 AND project_id = $2`, [userId, projectId]);
   const found = await client.query(`SELECT id FROM evimed_geo.projects WHERE user_id = $1 AND project_id = $2`, [userId, projectId]);
   const ids = found.rows.map((/** @type {any} */ row) => String(row.id));
   if (!ids.length) return { projects: 0, screenshots: [] };
@@ -374,6 +390,8 @@ export async function deleteGeoProjectRows(client, userId, projectId) {
  */
 export async function deleteGeoUserRows(client, userId) {
   if (!client || !(await geoSchemaExists(client))) return { projects: 0, screenshots: [] };
+  if (await probeRequestsTableExists(client)) await client.query(`DELETE FROM evimed_geo.probe_requests WHERE user_id = $1`, [userId]);
+  if (await socialJobsTableExists(client)) await client.query(`DELETE FROM evimed_geo.social_jobs WHERE user_id = $1`, [userId]);
   const candidates = await screenshotsOf(client, "user_id = $1", [userId]);
   for (const table of OWNED_TABLES) {
     await client.query(`DELETE FROM evimed_geo.${table} WHERE user_id = $1`, [userId]);

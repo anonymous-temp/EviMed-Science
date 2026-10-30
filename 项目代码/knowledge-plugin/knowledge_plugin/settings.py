@@ -137,6 +137,8 @@ class Settings:
     socialdata_daily_usd: float = 5.0                # the day's cap (Asia/Shanghai day), objects × US$0.0002
     dajiala_daily_cny: float = 90.0                  # the day's cap, Dajiala's own cost_money (owner, 2026-10-24)
     social_crawl_url: str | None = None              # GEO's six-platform crawler (OPEN_SCIENCE_GEO_SOCIAL_URL); unset = off
+    social_crawl_key_file: str | None = None
+    social_crawl_allow_plaintext: bool = False
     social_crawl_daily: int = 120                    # requests a day, spread over the day
     social_crawl_timeout_s: float = 150.0
     social_registry_path: str | None = None          # default: social-sources.json beside the registry file
@@ -212,6 +214,8 @@ class Settings:
             socialdata_daily_usd=_float(env, "KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD", 5.0, 0.0, 1000.0),
             dajiala_daily_cny=_float(env, "KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY", 90.0, 0.0, 10000.0),
             social_crawl_url=_crawl_url(env),
+            social_crawl_key_file=_path(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_KEY_FILE"),
+            social_crawl_allow_plaintext=_bool(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_ALLOW_PLAINTEXT", False),
             social_crawl_daily=_int(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY", 120, 0, 5000),
             social_crawl_timeout_s=_float(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S", 150.0, 10.0, 600.0),
             social_registry_path=_path(env, "KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY"),
@@ -255,6 +259,7 @@ class Settings:
             "edge_proxy_credentials": self.edge_proxy_credentials_file,
             "socialdata_key": self.socialdata_key_file,
             "dajiala_key": self.dajiala_key_file,
+            "social_crawl_key": self.social_crawl_key_file,
         }[name]
         return read_secret_file(path)
 

@@ -1,15 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
 import { drawStudy } from "./studyPageHarness";
 
 /**
- * Starting work does not take the person away (R19, plan §2.2 rule 6; audit B §2.1, §5). Every button of the module that starts a step
- * is pressed here, in the state it is offered in — empty, failed, the header's next, an attention line, an export — and what is
- * asserted is what the owner reported as broken: the request is made, the page is where it was, no conversation is opened and no
- * project is switched, and the strip that says what is going on appears by itself.
+ * Task starts and continuations open the study's existing conversation without submitting a programme step (VCR reset,
+ * 2026-10-25/26). Export remains an explicit operation whose activity appears on the current result page.
  */
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock("@/lib/productClient", () => network);
@@ -59,17 +57,6 @@ function serve(patch: (raw: any) => void, tabs: Record<string, unknown> = {}) {
 
 const posts = (server: ReturnType<typeof installVcrServer>, suffix: string) => server.calls.filter((call) => call.method === "POST" && call.path.endsWith(suffix));
 
-/** The page is where it was, nobody was sent to a conversation, and the strip says what is going on. */
-async function expectStarted(server: ReturnType<typeof installVcrServer>, at: string, body: unknown) {
-  await waitFor(() => expect(posts(server, "/run")).toHaveLength(1));
-  expect(posts(server, "/run")[0].body).toEqual(body);
-  await waitFor(() => expect(document.querySelector("[data-activity='strip']")).not.toBeNull());
-  expect(screen.getByTestId("where")).toHaveTextContent(at);
-  expect(shell.select).not.toHaveBeenCalled();
-  expect(frame.registered).toHaveLength(0);
-  expect(document.querySelector("[data-activity='strip']")).toHaveTextContent("正在生成虚拟患者");
-}
-
 beforeEach(() => {
   forgetStudies();
   me.fetchWebMe.mockReset();
@@ -77,7 +64,6 @@ beforeEach(() => {
   shell.select.mockClear();
   frame.registered.length = 0;
 });
-afterEach(() => undefined);
 
 const EMPTY_TABS = ["population", "patients", "comparator", "trial"] as const;
 const BUTTON: Record<string, [string, string]> = {
@@ -87,7 +73,7 @@ const BUTTON: Record<string, [string, string]> = {
   trial: ["模拟试验方案", "trial"],
 };
 
-describe("a step that has not begun is started from its empty tab, in place", () => {
+describe("a task that has not begun opens the existing native conversation", () => {
   it.each(EMPTY_TABS)("%s: the recipe's button asks for the step and the tab stays", async (tab) => {
     const [label, step] = BUTTON[tab];
     const server = serve((raw) => {
@@ -96,12 +82,10 @@ describe("a step that has not begun is started from its empty tab, in place", ()
     }, { [`GET /vcr/studies/${STUDY_ID}/${tab}`]: fixture(`empty/${tab}.json`) });
     drawStudy(`/app/virtual-research/${STUDY_ID}/${tab}`);
     await userEvent.click(await screen.findByRole("button", { name: label }));
-    await waitFor(() => expect(posts(server, "/run")).toHaveLength(1));
-    expect(posts(server, "/run")[0].body).toEqual({ step });
-    await waitFor(() => expect(document.querySelector("[data-activity='strip']")).not.toBeNull());
-    expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/${tab}`);
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
+    expect(posts(server, "/run")).toHaveLength(0);
     expect(shell.select).not.toHaveBeenCalled();
-    expect(frame.registered).toHaveLength(0);
+    expect(screen.getByRole("region", { name: "研究对话" })).toBeInTheDocument();
   });
 
   it("the evidence step: 找证据、整理假设卡 on 定义与证据", async () => {
@@ -111,26 +95,25 @@ describe("a step that has not begun is started from its empty tab, in place", ()
     }, { [`GET /vcr/studies/${STUDY_ID}/data`]: fixture("empty/data.json") });
     drawStudy(`/app/virtual-research/${STUDY_ID}/data`);
     await userEvent.click(await screen.findByRole("button", { name: "找证据、整理假设卡" }));
-    await waitFor(() => expect(posts(server, "/run")).toHaveLength(1));
-    expect(posts(server, "/run")[0].body).toEqual({ step: "evidence" });
-    expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/data`);
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
+    expect(posts(server, "/run")).toHaveLength(0);
     expect(shell.select).not.toHaveBeenCalled();
   });
 });
 
-describe("the header's next step is pressed on any tab, and the page does not move", () => {
-  it.each(["", "/trial", "/matching"])("on %s", async (suffix) => {
+describe("task navigation does not enforce a programme", () => {
+  it.each(["", "/trial", "/matching"])("has no mandatory next-step action on %s", async suffix => {
     const server = serve(() => undefined);
     drawStudy(`/app/virtual-research/${STUDY_ID}${suffix}`);
-    await userEvent.click(await screen.findByRole("button", { name: "接着做：生成虚拟患者" }));
-    await expectStarted(server, `/app/virtual-research/${STUDY_ID}${suffix}`, { step: "patients" });
-    // And the header offers no next step any more, because the strip says what is being done.
-    expect(within(document.querySelector("[data-page-header]") as HTMLElement).queryByRole("button", { name: /^(下一步|接着做|重新做)/ })).toBeNull();
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByRole("button", { name: /^(下一步|接着做：|重新做：)/ })).toBeNull();
+    expect(document.querySelector("[data-step-rail]")).toBeNull();
+    expect(posts(server, "/run")).toHaveLength(0);
   });
 });
 
-describe("a step that did not finish is gone on from where it stopped, in place", () => {
-  it("接着做 on 虚拟患者, and on 总览's attention line", async () => {
+describe("unfinished work continues in the existing native conversation", () => {
+  it("opens the conversation from a failed virtual-patient result without submitting a run", async () => {
     const server = serve(() => undefined);
     drawStudy(`/app/virtual-research/${STUDY_ID}/patients`);
     const failed = await waitFor(() => {
@@ -138,11 +121,14 @@ describe("a step that did not finish is gone on from where it stopped, in place"
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
-    await userEvent.click(within(failed).getByRole("button", { name: "接着做" }));
-    await expectStarted(server, `/app/virtual-research/${STUDY_ID}/patients`, { step: "patients" });
+    await userEvent.click(within(failed).getByRole("button", { name: "在对话中继续" }));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
+    expect(screen.getByRole("region", { name: "研究对话" })).toBeInTheDocument();
+    expect(posts(server, "/run")).toHaveLength(0);
+    expect(shell.select).not.toHaveBeenCalled();
   });
 
-  it("the overview's attention line for the failed step asks for it again and stays", async () => {
+  it("opens the same conversation from the overview's failed-step attention line", async () => {
     const server = serve((raw) => { raw.next = null; });
     drawStudy(`/app/virtual-research/${STUDY_ID}`);
     const attention = await waitFor(() => {
@@ -150,8 +136,11 @@ describe("a step that did not finish is gone on from where it stopped, in place"
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
-    await userEvent.click(within(attention).getByRole("button", { name: "接着做" }));
-    await expectStarted(server, `/app/virtual-research/${STUDY_ID}`, { step: "patients" });
+    await userEvent.click(within(attention).getByRole("button", { name: "在对话中继续" }));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
+    expect(screen.getByRole("region", { name: "研究对话" })).toBeInTheDocument();
+    expect(posts(server, "/run")).toHaveLength(0);
+    expect(shell.select).not.toHaveBeenCalled();
   });
 });
 

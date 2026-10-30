@@ -343,6 +343,55 @@ test('draft replacement, another session, cancellation and navigation clearing c
 });
 function settleTransport() { return new Promise(resolve => setImmediate(resolve)); }
 
+test('a research object remains hidden metadata on the exact native request over HTTP and mux', async () => {
+  const { target, calls, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const reference = { studyId: 'std_a', kind: 'population', objectId: 'pop_a', version: 2, resultId: 'res_a' };
+  const request = { sessionId: 'session-a', requestId: 'request-a', content: [{ type: 'text', text: 'Compare saved population versions.' }] };
+  target.__EVIMED_VCR_SELECTION__.stage({ sessionId: 'session-a', reference, draft: 'Compare saved population versions.' });
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request } } }) });
+  assert.deepEqual(JSON.parse(calls[0][1].body).payload.args.request.evimedVcrReference, reference);
+  assert.equal(request.content[0].text, 'Compare saved population versions.');
+  const stream = hooks.openStream('session/prompt', { args: { request } }, new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = stream.next(); sockets[0].open(); await settleTransport();
+  const open = sockets[0].sent[0]; assert.deepEqual(open.payload.args.request.evimedVcrReference, reference);
+  sockets[0].message({ type: 'end', streamId: open.streamId }); await pending;
+  target.__EVIMED_VCR_SELECTION__.stage({ sessionId: 'session-a', reference, draft: 'Selected version' });
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request: { ...request, requestId: 'other', content: [{ type: 'text', text: 'Unrelated message' }] } } } }) });
+  assert.deepEqual(JSON.parse(calls[1][1].body).payload.args.request.evimedVcrReference, reference, 'the explicit selection is context even when the researcher rewrites the whole instruction');
+  hooks.dispose();
+});
+
+
+test('ordinary edits preserve exact selected versions without interpreting the new instruction', async () => {
+  const selection = { studyId: 'std_a', kind: 'population', objectId: 'pop_a', version: 2, resultId: 'res_a', compareTo: { objectId: 'pop_b', version: 1, resultId: 'res_b' } };
+  for (const text of ['Please focus on inclusion criteria. Compare saved versions.', 'Compare their inclusion criteria and explain unknown fields.', 'Do not compare or run anything; explain the first selected population.']) {
+    const { target, calls, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+    target.__EVIMED_VCR_SELECTION__.stage({ sessionId: 'session-a', reference: selection, draft: 'Compare saved versions.' });
+    const request = { sessionId: 'session-a', requestId: 'edited', content: [{ type: 'text', text }] };
+    await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request } } }) });
+    const forwarded = JSON.parse(calls[0][1].body).payload.args.request;
+    assert.equal(forwarded.content[0].text, text);
+    assert.deepEqual(forwarded.evimedVcrReference, selection);
+    const stream = hooks.openStream('session/prompt', { args: { request } }, new AbortController().signal)[Symbol.asyncIterator]();
+    const pending = stream.next(); sockets[0].open(); await settleTransport();
+    const open = sockets[0].sent[0]; assert.deepEqual(open.payload.args.request.evimedVcrReference, selection);
+    sockets[0].message({ type: 'end', streamId: open.streamId }); await pending;
+    hooks.dispose();
+  }
+});
+
+test('explicit selection clear, cancel and other-session isolation remove selected context', async () => {
+  const { target, calls } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const reference = { kind: 'model', objectId: 'model_a', version: '1.0.0' };
+  const stage = () => target.__EVIMED_VCR_SELECTION__.stage({ sessionId: 'session-a', reference, draft: 'Use this model.' });
+  const submit = (/** @type {string} */ sessionId) => hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request: { sessionId, requestId: Math.random().toString(), content: [{ type: 'text', text: 'Edited request' }] } } } }) });
+  stage(); target.__EVIMED_VCR_SELECTION__.clear(); await submit('session-a');
+  stage(); await hooks.fetch(new URL('https://app.example:8443/api/remote/session/cancel'), {}); await submit('session-a');
+  stage(); await submit('session-b');
+  for (const call of calls.filter(row => typeof row[1]?.body === 'string')) assert.equal(JSON.parse(call[1].body).payload.args.request.evimedVcrReference, undefined);
+  hooks.dispose();
+});
+
 test('whole-file optional context uses the native words with no required draft prefix', async () => {
   const { target, calls } = browser(); const hooks = installRuntimeUiTransport(frame, target);
   const referenceId = `rr_${'c'.repeat(64)}`;

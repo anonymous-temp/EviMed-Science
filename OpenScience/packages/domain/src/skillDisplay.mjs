@@ -12,13 +12,14 @@
  * to the shipped set: a skill added without its row, or a row left behind by a
  * deleted skill, fails there rather than showing a bare identifier.
  *
- * Kept out of the domain's root export, like the package table: only the
- * control plane reads it, through `@evimed/domain/skill-display`.
+ * Kept out of the domain's root export, like the package table: the
+ * control plane and the host display fallback read it, through `@evimed/domain/skill-display`.
  *
  * @module @evimed/domain/src/skillDisplay
  */
 
 import table from './skill-display-zh.json' with { type: 'json' }
+import geoTitles from './geo-skill-titles-zh.json' with { type: 'json' }
 
 /**
  * @typedef {object} SkillDisplay
@@ -52,4 +53,21 @@ export const SKILL_DISPLAY = Object.freeze(Object.fromEntries(
 export function skillDisplay(name) {
   const key = String(name ?? '')
   return Object.hasOwn(SKILL_DISPLAY, key) ? SKILL_DISPLAY[key] : null
+}
+
+/** Display metadata only, derived from each known GEO skill's frontmatter description.
+ * The proprietary instructions are never part of this table.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const GEO_SKILL_TITLES = Object.freeze({ ...geoTitles.titles })
+
+/** Prefer an existing Chinese metadata title, then the reviewed GEO task name.
+ * Unknown names keep their supplied title; this is not a translation service.
+ * @param {string} name
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function geoSkillDisplayTitle(name, fallback) {
+  if (/[㐀-鿿]/u.test(fallback)) return fallback
+  return Object.hasOwn(GEO_SKILL_TITLES, name) ? GEO_SKILL_TITLES[name] : fallback
 }

@@ -84,3 +84,55 @@ test("the documents kind and the feedback vocabularies are brought up to date th
     for (const word of words) assert.ok(held.includes(`'${word}'`), `${name} holds ${word}`);
   }
 });
+
+const RSI_KINDS = ["rsi-incident-export", "rsi-bundle-poll"];
+const kindCheckState = async () => (await database.query(`SELECT convalidated, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+  WHERE conrelid='evimed_product.jobs'::regclass AND conname='product_jobs_kind_check'`)).rows[0];
+/** The table as it was before the two kinds: their rows (written by the tests above) are removed so the older list holds for every row. */
+const withoutRsiKinds = async () => {
+  await database.query("DELETE FROM evimed_product.jobs WHERE kind = ANY($1::text[])", [RSI_KINDS]);
+  await database.query(`ALTER TABLE evimed_product.jobs DROP CONSTRAINT product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${list(PRODUCT_JOB_KINDS.filter((kind) => !RSI_KINDS.includes(kind)))}))`);
+};
+
+test("the RSI job kinds rebuild the kind check NOT VALID in the migration and validate it after the commit, harmlessly twice", options, async () => {
+  await withoutRsiKinds();
+  assert.equal((await kindCheckState()).convalidated, true);
+  // The migration is the wrapper's first transaction and the validation its second: what the table holds in between is the point.
+  const between = [];
+  let transactions = 0;
+  const watched = { transaction: async (/** @type {any} */ operation) => {
+    const result = await database.transaction(operation);
+    transactions += 1;
+    if (transactions === 1) between.push(await kindCheckState());
+    return result;
+  } };
+  await migrateProductStore(watched);
+  assert.equal(transactions, 2, "the migration, then the validation in a transaction of its own");
+  assert.equal(between[0].convalidated, false, "the DDL adds the new check NOT VALID, so its exclusive lock lasts a moment");
+  for (const kind of RSI_KINDS) assert.match(between[0].definition, new RegExp(`'${kind}'`), "and it already guards new rows with the full list");
+  assert.equal((await kindCheckState()).convalidated, true, "the old rows are checked once the migration has committed");
+  for (const kind of RSI_KINDS) assert.equal((await jobs.enqueue(owner, kind, { fixture: kind }, { idempotencyKey: `rsi-${kind}-${randomUUID()}` })).kind, kind);
+  // Already current: nothing to rebuild and nothing to validate.
+  transactions = 0;
+  await migrateProductStore(watched);
+  assert.equal((await kindCheckState()).convalidated, true);
+  await assert.rejects(database.query("INSERT INTO evimed_product.jobs(id,user_id,kind,idempotency_key,payload) VALUES($1,$2,'not-a-kind',$1,'{}')", [`unknown-${randomUUID()}`, owner]),
+    /product_jobs_kind_check/, "still a closed vocabulary");
+});
+
+test("the rebuild gives up on a locked jobs table after seconds instead of queueing every statement behind it", options, async () => {
+  await withoutRsiKinds();
+  const holder = await database.pool.connect();
+  try {
+    await holder.query("BEGIN");
+    await holder.query("LOCK TABLE evimed_product.jobs IN ACCESS SHARE MODE");
+    const started = Date.now();
+    await assert.rejects(migrateProductStore({ transaction: (/** @type {any} */ operation) => database.transaction(operation) }), (error) => /** @type {any} */ (error)?.code === "55P03");
+    assert.ok(Date.now() - started < 20_000, "bounded by the lock timeout");
+    assert.equal((await kindCheckState()).definition.includes("rsi-bundle-poll"), false, "nothing was half-applied");
+  } finally { await holder.query("ROLLBACK"); holder.release(); }
+  await freshMigration();
+  assert.equal((await kindCheckState()).convalidated, true);
+  assert.match((await kindCheckState()).definition, /rsi-bundle-poll/);
+});

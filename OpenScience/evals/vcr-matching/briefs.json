@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "note": "Real briefs, not smoke tests: each is a pre-screening or recruitment job somebody actually brings to 「虚拟临床研究」, chosen for the specific way matching goes wrong while looking finished — a washout satisfied by a chart that never mentions the drug, a laboratory value that is not in the sentence it cites, a historical replay that quietly uses next week's CT report, a patient contacted because a list was approved rather than a person. mustDo / mustNotDo are the rubric; the deterministic half (the four states, the span re-read, the as-of filter, the summary rule) is computed by apps/server/src/vcrMatching.mjs and is not the run's to decide. The labelled sample set beside this file (matching-eval-sample.json) is synthetic and says so; the AC-36 baseline is measured on a partner's real charts with two physicians reading independently.",
+  "note": "Patient-matching evaluation briefs, not measured clinical results. They test missingness, quoted evidence, time visibility and the distinction between screening and enrolment. OA recruitment, contact and center-forecast operations were retired in the 2026-10-25 reset. The adjacent sample set is synthetic; real partner-chart validation with independent clinicians remains a separate, uncompleted gate.",
   "briefs": [
     {
       "id": "vcr-matching-001-nsclc-prescreen",
@@ -38,7 +38,9 @@
       "inputs": {
         "studyId": "std-gastric-panel",
         "direction": "patient_to_trial",
-        "subjectKeys": ["P-2026-0914"],
+        "subjectKeys": [
+          "P-2026-0914"
+        ],
         "asOf": "2026-09-28T00:00:00Z"
       },
       "mustDo": [
@@ -106,33 +108,6 @@
         "Drop the cases where the two readers disagreed — those are the measurement."
       ],
       "gradedOn": "Whether the report would let a medical director decide how much pre-screening work to hand the tool, and whether every number in it has a denominator."
-    },
-    {
-      "id": "vcr-matching-005-accrual-forecast-backtest",
-      "title": "九家中心的入组预测，并用合作方历史漏斗按时间切片回测",
-      "why": "AC-37, and the brief that keeps the forecast honest. The inputs are assembled from the ledger — each site's own open months, its own screen-failure rate, its planned versus actual activation — and the answer is a distribution. The failure is presenting it as a date, or as a vendor-style confidence: what is reportable is the measured coverage of our own 80% prediction intervals on forecasts that were registered before the enrolments that score them.",
-      "inputs": {
-        "studyId": "std-accrual-nine-sites",
-        "asOf": "2026-09-28T00:00:00Z",
-        "direction": "trial_to_patient",
-        "draftMaterials": false
-      },
-      "mustDo": [
-        "Assemble one Gamma prior per site from that site's own enrolments over its own open months, and say which sites had no history and are running on the prior alone.",
-        "Carry the screen-failure rate as an input to the process, per site where the ledger supports one.",
-        "Keep planned and actual activation dates in separate fields and show the gap.",
-        "Report the last-patient-in date as a distribution with a named prediction interval, and state that 激进 / 平衡 / 保守 selects a quantile of that same distribution.",
-        "Backtest on time slices and report the actual coverage of the 80% intervals with its Wilson bounds and the number of slices behind it.",
-        "Name which sites the forecast is most sensitive to."
-      ],
-      "mustNotDo": [
-        "Report a single completion date, or a 「置信度」 with no denominator.",
-        "Fit a site's rate on the study's elapsed months instead of that site's open months.",
-        "Score a forecast against enrolments that predate it.",
-        "Treat a 30% screen-failure rate as a 30% shift of the completion date.",
-        "Claim a coverage figure from fewer than ten slices without saying so."
-      ],
-      "gradedOn": "Whether the coverage figure, its interval and its slice count would survive a statistician asking where each of the three came from."
     },
     {
       "id": "vcr-matching-006-registry-trials-for-a-patient",

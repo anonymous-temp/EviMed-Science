@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { FrontierHotBoard, FrontierHotWindow } from "@/lib/frontierClient";
-import { Button } from "@/components/ui/Button";
 import type { TabItem } from "@/components/ui/Tabs";
+import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import type { ToolbarAction, ToolbarFilter, ToolbarProps, ToolbarSearch, ToolbarToken } from "@/components/ui/Toolbar";
 import { feedFilters, tagToken, type ChosenTag, type FrontierFilterValue, type HotTags } from "./FrontierFilters";
 import { hotWindowFilter } from "./FrontierHot";
@@ -26,6 +26,15 @@ export const FRONTIER_VIEWS: readonly TabItem<PageView>[] = [
   { value: "zones", label: "证据专区" },
 ];
 
+/**
+ * The page's own action: only 证据专区 has one, 「新建专区」 for a reader who may make a zone. It is the header's primary and not the
+ * toolbar's (DESIGN.md 「页面结构」 rule 3): on a phone the toolbar is under the title, and the walk read it there as a second
+ * primary below the header's row.
+ */
+export function frontierHeaderActions(view: PageView, onCreate: (() => void) | null): PageActionPlan | undefined {
+  return view === "zones" && onCreate ? { primary: { id: "create-zone", label: "新建专区", onSelect: onCreate } } : undefined;
+}
+
 /** What the 关注 view has open: the ranked 与我相关, the whole of the follows, one follow (its id) or one followed zone. */
 export type FollowChoice = { kind: "foryou" } | { kind: "all" } | { kind: "follow"; id: string } | { kind: "zone"; id: string };
 
@@ -38,8 +47,8 @@ export type FollowChoice = { kind: "foryou" } | { kind: "all" } | { kind: "follo
  *  - 热榜: 当前 · 本周 · 本月 and when the ranking was taken;
  *  - 简报: 日报 · 周报, and the issue's own 分类, 往期 and 复制 (`issue`);
  *  - 追踪 (c3-track): 审批 · 指南 · 会议 and, where it fits, one filter (the agency, the specialty) — `trackControls`;
- *  - 证据专区: the scope menu (全部专区 · 我创建的 · 我关注的), the count of a search's matches and, for a reader who may make one,
- *    「新建专区」 (`zones`).
+ *  - 证据专区: the scope menu (全部专区 · 我创建的 · 我关注的) and the count of a search's matches (`zones`); 「新建专区」, for a reader
+ *    who may make one, is the page's action in its header (`frontierHeaderActions`), at every width.
  *
  * The followed things are 关注's own column on a wide screen; on a phone they are the first section of the 「筛选」 sheet
  * (`followList`), and the one follow the list is narrowed to is a token (「只看：肿瘤」). On a phone the views scroll beside the
@@ -80,8 +89,8 @@ export function frontierToolbar({
   };
   /** The issue on screen's own controls (`dailyControls`), for the 简报 tab. */
   issue: { filters: ToolbarFilter[]; actions: ReactNode };
-  /** The directory's own controls (`zoneDirectoryControls`) and 「新建专区」, for the 证据专区 tab. */
-  zones: { filters: ToolbarFilter[]; summary: string | undefined; onCreate: (() => void) | null };
+  /** The directory's own controls (`zoneDirectoryControls`), for the 证据专区 tab. 「新建专区」 is the page's action (`frontierHeaderActions`). */
+  zones: { filters: ToolbarFilter[]; summary: string | undefined };
   /** The 追踪 tab's controls (`trackControls`): its segment and the one filter of that segment. */
   track: { filters: ToolbarFilter[] };
   /** Lets go of the feed's filters and the search. */
@@ -92,6 +101,7 @@ export function frontierToolbar({
   const feed = feedFilters({ value: filters, showWindow, searching, onChange: onFilters, hotTags, specialtyFollow });
   const chosenTag = tag ? [tagToken(tag, () => onFilters({ tag: "" }))] : [];
   let controls: ToolbarFilter[] = [];
+  let navigation: NonNullable<ToolbarProps["navigation"]> = [];
   let tokens: ToolbarToken[] = [];
   let actions: ReactNode;
   let summary: string | undefined;
@@ -118,19 +128,21 @@ export function frontierToolbar({
       break;
     case "daily":
     case "weekly":
-      controls = [
+      navigation = [
         { kind: "chips", label: "简报周期", pinned: true, options: [{ value: "daily", label: "日报" }, { value: "weekly", label: "周报" }], value: view, onChange: (next) => onView(next as PageView) },
-        ...issue.filters,
       ];
+      controls = issue.filters;
       actions = issue.actions;
       break;
     case "track":
-      controls = track.filters;
+      if (track.filters[0]?.kind === "chips") {
+        navigation = [track.filters[0]];
+        controls = track.filters.slice(1);
+      } else controls = track.filters;
       break;
     case "zones":
       controls = zones.filters;
       summary = zones.summary;
-      if (zones.onCreate) actions = <Button variant="text" size="sm" onClick={zones.onCreate}>新建专区</Button>;
       break;
     default:
       break;
@@ -146,6 +158,7 @@ export function frontierToolbar({
       panelId: "frontier-view",
     },
     filters: controls,
+    navigation,
     tokens,
     sheetLead,
     onClear: clearable ? onClear : undefined,

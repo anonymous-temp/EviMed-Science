@@ -155,6 +155,7 @@ export function accountExportTables(source = queries) {
 export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_control.auth_sessions": "browser sessions: an exported session hash and CSRF token are credentials, not content, and the rows expire on their own",
   "evimed_product.jobs": "queue bookkeeping for work whose result is the exported documents; a queued or failed job is the platform's state, not the researcher's",
+  "evimed_product.prompt_stop_intents": "operational run/session cancellation receipts; opaque internal identifiers suppress unsent automation and are not portable customer content or permission",
   "evimed_product.plugin_prompt_admissions": "one row recording that a project was offered a plugin prompt; it holds nothing the customer wrote",
   "evimed_product.plugin_application_state": "the runtime's view of a plugin document that is itself exported, and stale the moment it leaves this deployment",
   "evimed_product.source_uses": "a pointer from a document to the conversations that consulted it (a search hit or a read of its parsed text), derived from run transcripts the archive does not carry and rebuilt by use; the documents and the conversations themselves are what the archive holds",

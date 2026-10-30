@@ -86,6 +86,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE` | unset | WeChat official accounts through Dajiala (its `key` query parameter, added by the transport); unset = no WeChat |
 | `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `90` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL` | unset | the GEO module's six-platform crawler (production: the platform's `OPEN_SCIENCE_GEO_SOCIAL_URL`); unset = no monitoring |
+| `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_KEY_FILE` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_ALLOW_PLAINTEXT` | unset / `false` | rotating Bearer key file for `/api/jobs`; explicitly enable plaintext only for an approved HTTP collector endpoint |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S` | `120` / `150` | crawler requests a day, spread evenly; one request's deadline |
 | `KNOWLEDGE_PLUGIN_MEDIA_DIR` / `KNOWLEDGE_PLUGIN_MEDIA_CAP_MB` | unset / `3072` | the media store's writable volume and its cap (least recently served evicted first); unset = no images stored |
 | `KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY` | `social-sources.json` beside the registry | the social sources' registry file |
@@ -156,6 +157,17 @@ in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days
 - **A source whose pages never read is `degraded`.** When at least 90 % of the last 20 page reads of a source's entries failed
   (and at least 10 were made) its health is `degraded` although its feed polls cleanly (`policy.text_failing`, from each poll and
   the hourly re-check); it clears itself when newer pages read. A page that failed but whose feed text stood in is neither.
+- **A read the process does not come back from is not started again at once.** A polled source is leased for its read
+  (`lease_owner`, `lease_until`), and so is a WeChat account (`social/collector.py` `_lease`); every way a read ends clears
+  the lease. A lease still held when the process starts again is a read that killed it (the clean stop releases its own):
+  the source is marked failed (`last_error_code` `worker_died`) and waits the failure backoff of `policy.failure_delay_s` —
+  up to 30 minutes at the first death, doubling to six hours — instead of being read first after every restart
+  (2026-10-27: one account's articles sent the plugin out of memory about once a minute for five hours, buying the same
+  posts again at ¥0.26 a time).
+- **Markup is taken out of a parsed page once.** `adapters/common.decompose_all` decomposes only the outermost of the nodes a
+  `css()` lists; selectolax freed a node twice when an `<svg>` or `<noscript>` held another one, which left lexbor's tree
+  looping (`Node.text()` appended about 35 MB a second) or empty (the text of the whole page gone). No code calls
+  `decompose()` on a `css()` result any other way (`tests/test_markup_decompose.py`).
 - **One failing platform never holds the other five of the six-platform monitor** (`social/crawl.py`): a crawl that fails
   records the attempt for that term and platform and parks the platform for three hours (doubled for every failure in a row, at
   most twelve), so the round robin goes on to the platforms it has not asked; a busy answer from GEO parks nobody, and a
@@ -294,6 +306,18 @@ Conference pages and inline changelogs may be monitored as one canonical documen
 body text; meeting dates remain context, never fabricated publication timestamps. CSS, scripts,
 templates and other nonvisible markup are excluded from extracted text.
 
+c5-sources (2026-10-26) added 71 verified rows (21 provincial drug regulators, 17 European national medicine regulators, 23
+university and medical-school newsrooms, 10 deals-and-financing media; the Danish Medicines Agency and pharmaphorum feeds were read
+and left out because production's discovery already polls them), recorded in
+`registry/research/source-expansion-2026-10-26.json` and each switched on by an `overrides.json` `enabled` that says why; the same
+change retired `36kr-medical` (its channel answers 404: the probe row is `egress: none`, so the build no longer loads it and the
+plugin retires the stored row) and left `hopkins-medicine-newsroom` and `mayo-clinic-news` off as `probe_cloudflare`. Three
+readings in the html-list adapter came with it: a list marker in front of the link text (`· `) is not part of the title; a title
+the page cut with `…` or `...` is read whole from the `title` attribute of the node, its link or its item when that attribute
+continues the visible text; and a date written with a Chinese month name (`十月 15, 2026`) is a date. Every row of the batch is
+`egress: direct`, which for the foreign sites is an assumption until `python -m knowledge_plugin.probe --egress direct --source <id>`
+has been run from the Beijing host; one that cannot be reached there is switched to `relay` by an override.
+
 FDA tables without detail URLs can set `link_to_source_page: true`, an actual `selectors.id`, and
 an `identity_prefix` such as `fda:novel-approvals`. This mode is restricted to FDA regulator pages.
 The real page URL remains the link, while a canonical-page/row digest uses the existing FDA event
@@ -308,3 +332,11 @@ QuoteMedia ticker streams are media sources; distributors and truncated excerpts
 on `KNOWLEDGE_PLUGIN_TEST_DATABASE_URL` (default `postgresql://postgres@127.0.0.1:55433`) and are
 skipped when no server answers. Adapters are tested against recorded real responses in
 `tests/fixtures/` (`tests/adapters/`, `tests/enrich/`).
+
+The asynchronous social collector reads its Bearer key for every HTTP request. In Compose, set
+`KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_KEY_HOST_FILE` to a separate copy readable by UID 10002 (for example,
+owned by 10002 with mode 0600). The control plane's `OPEN_SCIENCE_GEO_SOCIAL_API_KEY_HOST_FILE`
+remains owner-only for its own process; do not weaken that file's permissions to share it across users.
+Both services use the same provider credential, but mount independently owned files. Set
+`KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_ALLOW_PLAINTEXT=true` only when intentionally using the approved HTTP
+collector endpoint. A submitted job is polled under its original deadline; a poll failure never re-POSTs it.

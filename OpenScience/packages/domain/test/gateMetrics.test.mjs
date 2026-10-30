@@ -171,4 +171,12 @@ test("a claim whose reference number names a different source is reported, and c
   // And an entry that does name the claim's source says nothing.
   const agreeing = report.replace("1. Beta et al. A different paper entirely. Journal B. 2023. PMID: 22222222", "1. Alpha et al. The paper the claim names. Journal A. 2024. PMID: 11111111");
   assert.equal(verificationGateMetrics({ matrix: { claims }, reportText: agreeing }).referenceIdentityMismatches, 0);
+
+  // A claim that names the paper by its PMCID (the full text it read) beside an entry carrying the paper's DOI is the same
+  // source (live check, 2026-10-28): identifiers disagree only within a kind, and with none in common the title decides.
+  const byPmcid = [{ ...claims[0], identifier: "pmcid:PMC6215213", sourceUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC6215213/" }];
+  const doiEntry = report.replace("1. Beta et al. A different paper entirely. Journal B. 2023. PMID: 22222222", "1. Alpha et al. The paper the claim names. Journal A. 2024. doi:10.1000/alpha.2024");
+  assert.equal(verificationGateMetrics({ matrix: { claims: byPmcid }, reportText: doiEntry }).referenceIdentityMismatches, 0);
+  const otherTitle = report.replace("1. Beta et al. A different paper entirely. Journal B. 2023. PMID: 22222222", "1. Beta et al. A different paper entirely. Journal B. 2023. doi:10.1000/beta.2023");
+  assert.equal(verificationGateMetrics({ matrix: { claims: byPmcid }, reportText: otherTitle }).referenceIdentityMismatches, 1, "the title still tells a different paper apart");
 });

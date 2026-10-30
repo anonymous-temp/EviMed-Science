@@ -1,5 +1,5 @@
 /**
- * The frame's palette and type: 循证蓝 and the shell's font stack, laid
+ * The frame's warm palette, ink field focus and the shell's font stack, laid
  * over the kernel's own theme through its documented override.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client (`dsh-client-ui-theme`
@@ -94,6 +94,27 @@ export function evimedFontFaces(vocabulary) {
 
 
 /**
+ * Owned field-only focus decoration in the optional theme body. The native
+ * field's border and shadow remain its own, including validation errors. The
+ * ink is the identity ink; with the theme body off or a kernel that does not
+ * define it, the native primary text colour, and `Highlight` last, so the ring
+ * is never an invalid (and so invisible) declaration.
+ * Buttons and non-text input controls retain their native action focus.
+ * @returns {string}
+ */
+export function fieldFocusStylesheet() {
+  const fields = 'body :is(input:not([type]), input[type="text"], input[type="number"], input[type="date"], input[type="datetime-local"], input[type="month"], input[type="week"], input[type="time"], input[type="email"], input[type="search"], input[type="url"], input[type="tel"], input[type="password"], select, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]):focus-visible';
+  return `${fields} {
+  outline: 2px solid var(--dsw-specific-brand-ink, var(--dsw-alias-label-primary, Highlight)) !important;
+  outline-offset: 2px !important;
+}
+@media (forced-colors: active) {
+  ${fields} { outline-color: Highlight !important; }
+}`;
+}
+
+
+/**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
  * @param {any} target Browser global.
@@ -119,6 +140,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const probe = '--dsw-static-deepseek-500';
   kit.withServices(['theme'], (/** @type {any} */ scope) => {
     const theme = scope.theme;
+    scope.effect(() => {
+      if (!doc?.head || typeof doc.createElement !== 'function') return;
+      const style = doc.createElement('style');
+      style.setAttribute('data-evimed-field-focus', '');
+      style.textContent = fieldFocusStylesheet();
+      doc.head.appendChild(style);
+      return () => { style.remove(); };
+    }, 'evimed-theme: field focus');
     /** @type {(() => void) | null} */
     let release = null;
     let live = true;
@@ -154,4 +183,4 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 }
 
 /** The body as the socket's build composes it. */
-export const BODY = Object.freeze({ name: 'theme', inject, parts: Object.freeze([evimedThemeTokens, evimedFontFaces, apply]) });
+export const BODY = Object.freeze({ name: 'theme', inject, parts: Object.freeze([evimedThemeTokens, evimedFontFaces, fieldFocusStylesheet, apply]) });

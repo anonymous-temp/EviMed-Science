@@ -30,7 +30,7 @@ ALTER TABLE evimed_vcr.document_projections ADD COLUMN IF NOT EXISTS purged_at t
 ALTER TABLE evimed_vcr.matching_facts ADD COLUMN IF NOT EXISTS withdrawn jsonb;
 ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS withdrawn jsonb;
 
--- A subject whose consent was withdrawn: no longer a candidate, no longer a referral, whatever else the study holds of them.
+-- A withdrawn subject is absent from candidate reads and future archives; legacy open referrals are terminally withdrawn while present.
 CREATE TABLE IF NOT EXISTS evimed_vcr.subject_withdrawals (
   study_id     text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
   subject_key  text NOT NULL,
@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.subject_withdrawals (
   detail       jsonb NOT NULL DEFAULT '{}'::jsonb,
   withdrawn_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (study_id, subject_key)
+);
+
+-- Hash-only footprints survive OA table retirement. No contact data or account identifier is retained here.
+CREATE TABLE IF NOT EXISTS evimed_vcr.retired_recruitment_subjects (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  subject_hash text NOT NULL CHECK (subject_hash ~ '^[a-f0-9]{64}$'),
+  PRIMARY KEY (study_id, subject_hash)
+);
+-- No account FK: a deleted account must remain absent when an old archive is later re-sealed/restored.
+CREATE TABLE IF NOT EXISTS evimed_vcr.retirement_erased_accounts (
+  user_hash text PRIMARY KEY CHECK (user_hash ~ '^[a-f0-9]{64}$'),
+  erased_at timestamptz NOT NULL DEFAULT now()
 );
 
 -- Derived from a basis that has since changed. The strongest cause stays (a withdrawal over a change).

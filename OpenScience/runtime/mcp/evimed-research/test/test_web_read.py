@@ -57,7 +57,21 @@ class Gateway(http.server.BaseHTTPRequestHandler):
         return
 
 
-class WebReadTests(unittest.TestCase):
+def long_article(sections=8, paragraphs=6):
+    """Markdown-shaped text (what the gateway's extractor writes) of ~50,000 characters: an H1, then sections of H2/H3."""
+    parts = ["# A long review article", "Abstract. " + "Background and aim of the review. " * 8]
+    for section in range(1, sections + 1):
+        parts.append("## Section %d" % section)
+        for paragraph in range(1, paragraphs + 1):
+            if paragraph == 4:
+                parts.append("### Section %d detail" % section)
+            parts.append("Paragraph %d.%d. %s" % (section, paragraph, "The effect was consistent across the subgroups studied. " * 20))
+    return "\n\n".join(parts)
+
+
+class GatewayCase(unittest.TestCase):
+    """The gateway played by a local server, and a workspace of its own for each test."""
+
     @classmethod
     def setUpClass(cls):
         cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
@@ -95,6 +109,8 @@ class WebReadTests(unittest.TestCase):
                 os.environ[name] = value
         self.temp.cleanup()
 
+
+class WebReadTests(GatewayCase):
     def test_a_page_is_read_through_the_gateway_and_preserved_with_its_receipt(self):
         url = "https://www.nmpa.gov.cn/xxgk/ggtg/index.html"
         text = "\n\n".join("- 国家药监局关于第%d号的公告 2026-09-%02d" % (index, index % 28 + 1) for index in range(1, 30))
@@ -143,6 +159,13 @@ class WebReadTests(unittest.TestCase):
                 self.assertEqual(result["sources"][0]["source"], "web-page")
                 self.assertTrue(result["sources"][0]["artifactPath"].startswith(".evimed-sources/web-pages/"))
                 self.assertEqual("title" in result["sources"][0], bool(title))
+        # A long page adds an outline and a next action to a success; the contract admits both.
+        web_read._SNAPSHOTS.clear()
+        Gateway.answers[url] = (200, {"receipt": receipt(url, sha), "text": long_article(), "links": []})
+        long_result = server.call_tool("web_read", {"url": url})
+        self.assertEqual(long_result["status"], "success", long_result)
+        self.assertTrue(long_result["data"]["outline"])
+        self.assertTrue(long_result["next_actions"])
 
     def test_long_text_is_paged_from_one_snapshot(self):
         url = "https://www.escardio.org/Guidelines/hf.pdf"
@@ -152,6 +175,7 @@ class WebReadTests(unittest.TestCase):
         first = web_read.read({"url": url})
         self.assertGreater(first["data"]["pages"], 2)
         self.assertEqual(first["data"]["nextPage"], 2)
+        # Page 1 of a long text shows its opening only (see LongPageReadingMapTests) and page 2 continues where it ends.
         joined = [first["data"]["content"]]
         for page in range(2, first["data"]["pages"] + 1):
             result = web_read.read({"url": url, "page": page})
@@ -159,7 +183,7 @@ class WebReadTests(unittest.TestCase):
             self.assertLessEqual(len(result["data"]["content"]), web_read.PAGE_CHARS)
             joined.append(result["data"]["content"])
         self.assertIsNone(result["data"]["nextPage"])
-        self.assertEqual("\n\n".join(joined), text, "pages are the text, split at paragraph boundaries and nothing lost")
+        self.assertEqual("\n\n".join(joined), text, "pages are the text, split at paragraph boundaries and nothing lost, the opening included")
         self.assertEqual(len(Gateway.requests), 1, "later pages come from the snapshot, not from the site again")
         beyond = web_read.read({"url": url, "page": first["data"]["pages"] + 1})
         self.assertEqual(beyond["error"]["code"], "web_read_page_out_of_range")
@@ -262,6 +286,150 @@ class WebReadTests(unittest.TestCase):
                 os.environ.pop("EVIMED_DISABLED_TOOLS", None)
             else:
                 os.environ["EVIMED_DISABLED_TOOLS"] = previous
+
+
+class LongPageReadingMapTests(GatewayCase):
+    """A text longer than one page does not flood the context on its first read (2026-10-28: ~44,000 characters of a PMC page).
+
+    Page 1 carries the opening (HEAD_CHARS, cut at a paragraph) and an outline of the preserved file; the preserved
+    snapshot, the digest, the sources and `page=N` are what they were.
+    """
+
+    URL = "https://pmc.example.org/articles/PMC123/"
+
+    def read_long(self, text=None, **extra):
+        text = long_article() if text is None else text
+        Gateway.answers[self.URL] = (200, {"receipt": receipt(self.URL, "f" * 64, official=False), "text": text, **extra})
+        return text, web_read.read({"url": self.URL})
+
+    def test_the_first_page_is_the_opening_and_an_outline_of_the_saved_file(self):
+        text, result = self.read_long()
+        self.assertGreater(len(text), 3 * web_read.PAGE_CHARS)
+        data = result["data"]
+        self.assertEqual(result["status"], "success")
+        # The opening: at most 6,000 characters of the text, ending where a paragraph ends.
+        self.assertLessEqual(len(data["content"]), web_read.HEAD_CHARS)
+        self.assertGreater(len(data["content"]), web_read.HEAD_CHARS // 2)
+        self.assertTrue(text.startswith(data["content"] + "\n\n"), "cut at a paragraph boundary")
+        # The outline points into the preserved file: `read` with offset=line finds the heading there.
+        file_lines = (self.workspace / data["markdownPath"]).read_text(encoding="utf-8").split("\n")
+        self.assertEqual(data["fileLines"], len(file_lines))
+        headings = [entry["heading"] for entry in data["outline"]]
+        self.assertEqual(headings[:3], ["公告通告", "A long review article", "Section 1"], "the file's own title line, then the text's headings")
+        for entry in data["outline"]:
+            self.assertEqual(file_lines[entry["line"] - 1].lstrip("# ").strip(), entry["heading"])
+            self.assertGreaterEqual(entry["lines"], 1)
+        self.assertEqual([entry["level"] for entry in data["outline"] if entry["heading"].startswith("Section 1")], [2, 3])
+        # A section's length is what its lines add up to, so a run can size a read before making it.
+        section = next(entry for entry in data["outline"] if entry["heading"] == "Section 2")
+        at = data["outline"].index(section)
+        self.assertEqual(section["line"] + section["lines"], data["outline"][at + 1]["line"], "a section runs to the next heading")
+        self.assertEqual(section["characters"], sum(len(line) + 1 for line in file_lines[section["line"] - 1:section["line"] - 1 + section["lines"]]))
+        # What the model is told to do next.
+        self.assertEqual(len(result["next_actions"]), 1)
+        advice = result["next_actions"][0]
+        for needle in (data["markdownPath"], "read", "offset", "locate_quote", "page=2", "where this opening ends", str(web_read.PAGE_CHARS)):
+            self.assertIn(needle, advice)
+        self.assertIn("first %d" % len(data["content"]), result["summary"])
+        self.assertNotIn("warnings", result)
+
+    def test_the_preserved_record_the_digest_and_the_sources_are_what_they_were(self):
+        text, result = self.read_long(links=[{"text": "Next", "url": "https://pmc.example.org/next"}])
+        data = result["data"]
+        path = data["markdownPath"]
+        snapshot = (self.workspace / path).read_bytes()
+        self.assertIn(text.encode("utf-8"), snapshot, "the whole text is preserved, whatever the result shows")
+        self.assertEqual(data["artifactSha256s"], {path: hashlib.sha256(snapshot).hexdigest()})
+        self.assertEqual((data["sha256"], data["sourceId"]), ("f" * 64, "web-page:" + "f" * 16))
+        self.assertEqual(data["characters"], len(text))
+        self.assertEqual(result["artifacts"], [path])
+        self.assertEqual(result["sources"][0]["artifactPath"], path)
+        self.assertEqual(result["sources"][0]["id"], "web-page:" + "f" * 16)
+        self.assertEqual(data["links"], [{"text": "Next", "url": "https://pmc.example.org/next"}])
+        pages = web_read.reading_pages(text)
+        self.assertEqual((data["page"], data["pages"], data["nextPage"]), (1, len(pages), 2))
+
+    def test_page_2_starts_where_the_opening_ended_and_no_text_goes_unreturned(self):
+        # Page 1 showed the opening (as little as ~3,000 characters) while page 2 started at the 12,000th: the text between was
+        # in no page at all, and the run was told page 2 was the continuation (review of 2026-10-28).
+        text, first = self.read_long()
+        opening = first["data"]["content"]
+        self.assertLess(len(opening), web_read.PAGE_CHARS // 2)
+        second = web_read.read({"url": self.URL, "page": 2})
+        self.assertTrue(text.startswith(opening + "\n\n" + second["data"]["content"][:200]), "page 2 begins right after the opening")
+        contents = [opening, second["data"]["content"]]
+        for page in range(3, first["data"]["pages"] + 1):
+            contents.append(web_read.read({"url": self.URL, "page": page})["data"]["content"])
+        for content in contents[1:]:
+            self.assertLessEqual(len(content), web_read.PAGE_CHARS)
+        collapse = lambda value: "".join(value.split())
+        self.assertEqual(collapse("".join(contents)), collapse(text), "every character of the text is returned by exactly one page")
+        # The gap itself: the first paragraph past the opening is in page 2, not skipped.
+        paragraph = text[len(opening):].lstrip("\n").split("\n\n")[0]
+        self.assertIn(paragraph, second["data"]["content"])
+        self.assertEqual(len(Gateway.requests), 1, "from the snapshot, not the site again")
+
+    def test_page_n_returns_slices_of_the_rest_without_an_outline(self):
+        text, first = self.read_long()
+        pages = web_read.reading_pages(text)
+        self.assertEqual(pages[0], first["data"]["content"])
+        second = web_read.read({"url": self.URL, "page": 2})
+        self.assertEqual(second["data"]["content"], pages[1])
+        self.assertNotIn("outline", second["data"])
+        self.assertNotIn("next_actions", second)
+        self.assertEqual(second["data"]["markdownPath"], first["data"]["markdownPath"])
+        self.assertEqual(len(Gateway.requests), 1, "from the snapshot, not the site again")
+
+    def test_a_text_that_fits_one_page_is_unchanged(self):
+        for size in (web_read.PAGE_CHARS - 1, web_read.PAGE_CHARS):
+            with self.subTest(size=size):
+                text = ("# Short\n\n" + "x" * size)[:size]
+                _text, result = self.read_long(text)
+                data = result["data"]
+                self.assertEqual((data["content"], data["pages"], data["nextPage"]), (text, 1, None))
+                for key in ("outline", "fileLines", "outlineHeadings"):
+                    self.assertNotIn(key, data)
+                self.assertNotIn("next_actions", result)
+                self.assertNotIn("first", result["summary"])
+        _text, result = self.read_long("y" * (web_read.PAGE_CHARS + 1))
+        self.assertIn("outline", result["data"], "one character past a page is a long text")
+
+    def test_a_long_text_without_headings_still_says_how_to_read_it(self):
+        text = "\n".join("Line %d of a long run of plain text without a heading in it." % index for index in range(1, 600))
+        _text, result = self.read_long(text)
+        data = result["data"]
+        self.assertEqual([entry["heading"] for entry in data["outline"]], ["公告通告"])
+        self.assertEqual(len(data["outline"]), 1, "only the file's own title line")
+        self.assertGreater(data["fileLines"], 600)
+        self.assertLessEqual(len(data["content"]), web_read.HEAD_CHARS)
+        self.assertTrue(text.startswith(data["content"]), "cut at a line when there is no paragraph break")
+        self.assertIn(data["markdownPath"], result["next_actions"][0])
+
+    def test_the_outline_is_a_table_of_contents_and_says_when_it_is_cut(self):
+        text = "\n\n".join("## Heading %03d\n\nSome text under it. " % index + "More. " * 30 for index in range(1, 101))
+        _text, result = self.read_long(text)
+        data = result["data"]
+        self.assertEqual(len(data["outline"]), web_read.MAX_OUTLINE_ENTRIES)
+        self.assertEqual(data["outlineHeadings"], 101, "the 100 headings and the file's title line")
+        self.assertEqual(data["outline"][1]["heading"], "Heading 001")
+
+    def test_an_incomplete_page_notice_and_the_reading_advice_both_arrive(self):
+        _text, result = self.read_long(notice="this text may be incomplete")
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["warnings"], ["this text may be incomplete"])
+        self.assertEqual(len(result["next_actions"]), 2)
+        self.assertIn("locate_quote", result["next_actions"][0])
+        self.assertEqual(result["next_actions"][1], "Prefer another source for anything the page may have left out.")
+
+    def test_head_of_cuts_at_a_paragraph_then_a_line_then_hard_and_never_leaves_a_stub(self):
+        paragraphs = "\n\n".join(["p" * 2000] * 5)
+        self.assertEqual(web_read.head_of(paragraphs, 6000), "\n\n".join(["p" * 2000] * 2), "the last whole paragraph inside the limit")
+        self.assertEqual(web_read.head_of("short", 6000), "short")
+        lines = "\n".join(["l" * 100] * 100)
+        self.assertEqual(web_read.head_of(lines, 6000), "\n".join(["l" * 100] * 59))
+        stub = "a" * 100 + "\n\n" + "b" * 10_000
+        self.assertEqual(len(web_read.head_of(stub, 6000)), 6000, "a boundary in the first half would leave a stub")
+        self.assertEqual(web_read.head_of("z" * 20_000, 6000), "z" * 6000)
 
 
 if __name__ == "__main__":

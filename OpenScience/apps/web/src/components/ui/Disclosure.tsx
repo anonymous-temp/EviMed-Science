@@ -9,6 +9,18 @@ import { cn } from "@/lib/cn";
  * that each page got slightly wrong. The chevron turns with the state and is
  * decoration; the summary text is the control's name.
  */
+/**
+ * Component: Disclosure; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Native details/summary with decorative rotating chevron and body.
+ * Variants: Initial open flag and optional toggle callback.
+ * States: Browser open state drives display and callback.
+ * Hit area: Summary min-h-sm; caller may extend summary classes.
+ * Keyboard: Native summary Enter/Space and Tab behavior.
+ * Long content: Summary/body retained; no imposed height limit.
+ * Theme: Muted/text roles; chevron transition uses shared motion policy.
+ * Responsive: Block body fits parent; child overflow remains caller-owned.
+ * Verification: Primitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Disclosure({
   summary,
   children,

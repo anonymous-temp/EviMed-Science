@@ -9,8 +9,8 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input } from "@/components/ui/Input";
 import { StateScreen } from "@/components/ui/StateScreen";
-import { workStyle } from "@/components/memory/overview/memoryOverviewModel";
-import { WorkStyleCard } from "@/components/memory/overview/WorkStyleCard";
+import { workStyle } from "@/components/memory/handover";
+import { WorkStyleCard } from "@/components/memory/WorkStyleCard";
 import {
   declineDelivery, importDelivery, importShareLink, openDelivery, openShareLink, type SharedPreview,
 } from "@/lib/capsuleShareClient";

@@ -1,3 +1,12 @@
+import { vi } from "vitest";
+
+// jsdom has no layout boxes. This bypass is test-only; CSS display/geometry
+// visibility must be verified separately in Chromium, not inferred from it.
+vi.mock("tabbable", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("tabbable")>();
+  return { ...actual, tabbable: (node: Parameters<typeof actual.tabbable>[0], options?: Parameters<typeof actual.tabbable>[1]) => actual.tabbable(node, { ...options, displayCheck: "none" }) };
+});
+
 import "@testing-library/jest-dom/vitest";
 
 // DOM stubs — only in a browser-like (jsdom) environment. The node-env tests

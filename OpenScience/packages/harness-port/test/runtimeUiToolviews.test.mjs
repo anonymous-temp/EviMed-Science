@@ -12,7 +12,7 @@ import test from 'node:test';
 
 import { MCP_TOOL_NAMES } from '@evimed/domain';
 import {
-  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, refusalOf, taskCardView, toolLineView, toolResultCount, toolSubjectHost,
+  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, workingDeliverable, refusalOf, taskCardView, toolLineView, toolResultCount, toolSubjectHost,
 } from '../src/runtimeUiToolviews.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -90,6 +90,41 @@ test('a plan is what will be handed back and where each piece stands — no revi
   assert.deepEqual(done.deliverables.map((/** @type {any} */ item) => item.status), ['已完成', '未完成']);
   // A read-back is the run checking itself.
   assert.equal(planView(settled('evimed_plan', { action: 'status' }, ok({ items: [{ id: 'evidence', status: 'accepted' }] })), null, kit()).kind, 'status');
+});
+
+test('a piece the run works on itself reads in progress, not 「待开始」, for as long as the run works', () => {
+  const single = { runId: 'run-1', sessionId: 'session-a', state: 'running', progress: { deliverables: [{ id: 'evidence', status: 'planned', attempts: 0 }] } };
+  const args = { action: 'write', deliverables: [{ id: 'evidence', title: '慢性肾脏病凝血综述' }] };
+  const result = ok({ deliverables: [{ id: 'evidence', title: '慢性肾脏病凝血综述', status: 'planned' }] });
+  assert.equal(workingDeliverable(single), 'evidence');
+  assert.deepEqual(planView(settled('evimed_plan', args, result), single, kit()).deliverables.map((/** @type {any} */ item) => item.status), ['进行中']);
+  // Two pieces, nothing delegated: the first planned one is the one in hand, the second waits.
+  const two = { ...single, progress: { deliverables: [{ id: 'a', status: 'planned' }, { id: 'b', status: 'planned' }] } };
+  assert.equal(workingDeliverable(two), 'a');
+  // A delegated or repaired piece is what the run is on; the planned one after it has not begun.
+  assert.equal(workingDeliverable(LIVE), '');
+  // A run that has ended is working on nothing.
+  assert.equal(workingDeliverable({ ...single, state: 'accepted' }), '');
+  assert.equal(workingDeliverable(null), '');
+});
+
+test('a piece the run left planned is in progress only while its turn is under way', () => {
+  const piece = { deliverables: [{ id: 'evidence', status: 'planned', attempts: 0 }] };
+  // The ledger status stays `running` while the finished turn is delivered; the phase says the model is no longer at work.
+  assert.equal(workingDeliverable({ runId: 'run-1', state: 'running', phase: 'running', progress: piece }), 'evidence');
+  assert.equal(workingDeliverable({ runId: 'run-1', state: 'running', progress: piece }), 'evidence', 'with no phase sent the status alone decides');
+  for (const phase of ['reserved', 'dispatched', 'delivering', 'repairing']) {
+    assert.equal(workingDeliverable({ runId: 'run-1', state: 'running', phase, progress: piece }), '', `${phase} is not the model at work`);
+  }
+  for (const state of ['queued', 'delivering', 'dispatched', 'reserved', 'repairing', 'succeeded', 'failed', 'canceled']) {
+    assert.equal(workingDeliverable({ runId: 'run-1', state, progress: piece }), '', `a run whose state is ${state} works on nothing`);
+  }
+  // The card says so: the skipped piece reads 待开始 once the run is delivering, 进行中 while it works.
+  const args = { action: 'write', deliverables: [{ id: 'evidence', title: '综述' }] };
+  const result = ok({ deliverables: [{ id: 'evidence', title: '综述', status: 'planned' }] });
+  const statusOf = (/** @type {any} */ live) => planView(settled('evimed_plan', args, result), live, kit()).deliverables.map((/** @type {any} */ item) => item.status);
+  assert.deepEqual(statusOf({ runId: 'run-1', state: 'running', phase: 'running', progress: piece }), ['进行中']);
+  assert.deepEqual(statusOf({ runId: 'run-1', state: 'running', phase: 'delivering', progress: piece }), ['待开始']);
 });
 
 test('a plan still streaming shows what is written so far, and a refused one says so in Chinese', () => {
@@ -215,6 +250,40 @@ test('a research call reads as a verb and its subject, never as a tool name; the
   assert.match(failed, /检索指南 · 房颤/);
   assert.match(failed, /未取到/);
   assert.doesNotMatch(failed, /upstream|refused/);
+});
+
+test('a tool row is a step of the process view -- a plain line, the name at 400, the count a grey chip at 12 px -- and the cards are only the plan and the task', () => {
+  // 2026-10-27: the kernel's own 「思考」 and 「读取」 rows are plain lines at the content size; ours were bordered cards
+  // with a 600 title beside them, so one finished turn showed two sizes of row.
+  const f = frame();
+  const rows = {
+    shell: renderStatic(f.view('bash'), { block: settled('bash', { command: 'python3 count.py' }, 'ok') }),
+    frontier: renderStatic(f.view('mcp__evimed__frontier_search'), {
+      block: settled('mcp__evimed__frontier_search', { query: '司美格鲁肽' }, JSON.stringify({ status: 'success', summary: 'ok', data: { items: Array.from({ length: 20 }, (_, index) => index) } })),
+    }),
+    plain: renderStatic(f.view('evimed_delegate'), { block: { get kind() { throw new Error('a shape from a newer kernel'); } } }),
+    delegate: renderStatic(f.view('evimed_delegate'), { block: settled('evimed_delegate', { deliverableId: 'evidence' }, ok({ handle: 'h-1', deliverableId: 'evidence', childSessionId: 'child-1', status: 'started' })) }),
+  };
+  assert.match(rows.shell, /运行脚本/);
+  assert.match(rows.frontier, /20 条/);
+  assert.match(rows.plain, /data-evimed-toolview="plain"/);
+  assert.match(rows.delegate, /data-evimed-toolview="delegate"/);
+  for (const [name, html] of Object.entries(rows)) {
+    const row = /^<div style="([^"]*)"/.exec(html)?.[1] ?? '';
+    assert.doesNotMatch(row, /border|padding/, `${name}: the row is a line, not a card`);
+    assert.match(row, /font-size:var\(--dsh-content-font-size, 14px\)/, `${name}: the row follows the content size the kernel's own rows follow`);
+    const title = /<span style="([^"]*)"/.exec(html)?.[1] ?? '';
+    assert.match(title, /font-weight:400/, `${name}: the name is not a heading`);
+    assert.doesNotMatch(html, /font-weight:600/, `${name}: nothing in a step is bold`);
+  }
+  for (const html of [rows.shell, rows.frontier, rows.delegate]) {
+    const chip = /<span style="([^"]*background:[^"]*)"/.exec(html)?.[1] ?? '';
+    assert.match(chip, /font-size:12px/, 'the count is a chip at the caption size');
+    assert.match(chip, /height:20px/);
+    assert.match(chip, /line-height:20px/);
+  }
+  // What stays a card: the plan, which is a list to read, and the scheduled task, which carries a button.
+  assert.match(renderStatic(f.view('evimed_plan'), { block: settled('evimed_plan', PLAN_ARGS, PLAN_RESULT) }), /border:1px solid/);
 });
 
 test('an outcome is counted from the result, and a quotation check says what it found', () => {

@@ -12,12 +12,17 @@ const correction = { kind: "correction", noticeDoi: "10.1016/s0140-6736(04)15715
 describe("retraction and correction notices on a cited source", () => {
   it("says what happened to the work, when, who recorded it, and links the notice", () => {
     render(<SourceUpdateBadges updates={[retraction, correction]} />);
+    // The tag is a label; the notice it names is a link of its own beside it.
     const retracted = screen.getByRole("link", { name: /该文献已撤稿（2010-02-06），据 Retraction Watch 记录/ });
-    expect(retracted).toHaveTextContent("已撤稿 · 2010-02-06");
+    expect(retracted).toHaveTextContent("查看声明");
     expect(retracted).toHaveAttribute("href", "https://doi.org/10.1016/s0140-6736(10)60175-4");
-    expect(retracted.className).toMatch(/bg-danger-soft/);
+    const retractedTag = screen.getByText("已撤稿 · 2010-02-06");
+    expect(retractedTag).toHaveAttribute("data-tag");
+    expect(retractedTag.className).toMatch(/bg-danger-soft/);
+    expect(retractedTag.closest("a")).toBeNull();
     const corrected = screen.getByRole("link", { name: /该文献有更正（2004-03-06），据出版方记录/ });
-    expect(corrected.className).toMatch(/bg-warn-soft/);
+    expect(corrected).toHaveAttribute("href", "https://doi.org/10.1016/s0140-6736(04)15715-2");
+    expect(screen.getByText("有更正 · 2004-03-06").className).toMatch(/bg-warn-soft/);
   });
 
   it("shows nothing for a work with no notices, or a kind it does not know", () => {

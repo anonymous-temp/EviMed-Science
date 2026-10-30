@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
-import { budgetBlocks, executionLabel, executionsOf, inLingdou, lingdou, RECOMMENDATIONS, RUN_STATES, rowLine, runState, scheduleLine, TASK_TYPES, taskGroupOf, whenText } from "./taskPresentation";
+import { budgetBlocks, executionLabel, executionsOf, firstTaskOf, inLingdou, lingdou, recommendationById, RECOMMENDATIONS, RUN_STATES, rowLine, runState, scheduleLine, sortGroup, TASK_TYPES, taskGroupOf, whenText } from "./taskPresentation";
 
 // Thursday 1 October 2026, 10:00 in Beijing.
 const NOW = new Date("2026-10-01T02:00:00Z");
@@ -65,6 +65,18 @@ describe("how a task says when", () => {
     expect(taskGroupOf(agenda({ scheduleState: "completed" }))).toBe("completed");
   });
 
+  it("orders a group as the list draws it, and names the task a bare address opens beside the list: the first of the first group", () => {
+    const later = agenda({ nextRunAt: "2026-10-05T01:00:00Z", title: "乙" }); const sooner = { ...agenda({ nextRunAt: "2026-10-02T01:00:00Z", title: "丙" }), id: "sooner" };
+    const stopped = { ...agenda({ enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null, title: "甲" }), id: "stopped" };
+    expect(sortGroup("upcoming", [later, sooner]).map(item => item.id)).toEqual(["sooner", "agenda-1"]);
+    expect(sortGroup("paused", [{ ...stopped, payload: { ...stopped.payload, title: "戊" } }, stopped]).map(item => item.payload.title)).toEqual(["甲", "戊"]);
+    expect(firstTaskOf([stopped, later, sooner])?.id).toBe("sooner");
+    expect(firstTaskOf([stopped])?.id).toBe("stopped");
+    // A deleted task is not in the list, so it is never the one opened; no task, none.
+    expect(firstTaskOf([{ ...sooner, payload: { ...sooner.payload, archivedAt: "2026-09-30T00:00:00Z" } }])).toBeNull();
+    expect(firstTaskOf([])).toBeNull();
+  });
+
   it("sorts history and keeps labels stable when earlier pages are absent", () => {
     const list = executionsOf("agenda-1", [episode("c", { createdAt: "2026-10-01T01:00:00Z" }), episode("a", { createdAt: "2026-09-22T00:00:00Z" }), episode("x", { agendaId: "other" }), episode("b", { createdAt: "2026-09-30T00:00:00Z" })]);
     expect(list.map(item => item.id)).toEqual(["a", "b", "c"]);
@@ -125,5 +137,11 @@ describe("an ordinary job is not research", () => {
     expect(RECOMMENDATIONS.slice(0, 3).every(item => item.taskTypes.join() === "routine")).toBe(true);
     expect(RECOMMENDATIONS.slice(3).every(item => !item.taskTypes.includes("routine"))).toBe(true);
     expect(RECOMMENDATIONS.length).toBe(9);
+  });
+
+  it("names each template by an id the address can carry, once", () => {
+    expect(new Set(RECOMMENDATIONS.map(item => item.id)).size).toBe(RECOMMENDATIONS.length);
+    for (const item of RECOMMENDATIONS) { expect(item.id).toMatch(/^[a-z-]+$/); expect(recommendationById(item.id)).toBe(item); }
+    expect(recommendationById("nope")).toBeUndefined(); expect(recommendationById(null)).toBeUndefined();
   });
 });

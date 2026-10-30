@@ -248,7 +248,8 @@ vcr_case("N06b", c("AC-30", "AC-29"), function() {
     list(drop = drop, events = ev, want_events = x$maxNumberOfEvents, n = ev / pev, want_n = x$maxNumberOfSubjects,
          control_only = ev / p0, req = vcr_measure_value(r, "required_patients"))
   })
-  ok <- all(vapply(rows, function(r) abs(r$events - r$want_events) < 1e-3 && abs(r$n - r$want_n) < 1e-3 && r$req == ceiling(r$want_n), logical(1))) &&
+  # Version 1.2 rounds each balanced arm, while the rpact oracle remains unrounded.
+  ok <- all(vapply(rows, function(r) abs(r$events - r$want_events) < 1e-3 && abs(r$n - r$want_n) < 1e-3 && r$req == 2 * ceiling(r$want_n / 2), logical(1))) &&
     rows[[2]]$n > rows[[1]]$n && rows[[2]]$control_only < rows[[2]]$n - 20
   # the same dropout key reaches the simulator: a scenario with 30% annual dropout
   # loses events, in the same proportion the analytic event probability predicts
@@ -465,7 +466,7 @@ vcr_case("N06f", c("AC-30", "AC-29"), function() {
     ev <- vcr_measure_value(r, "required_events_exact")
     list(id = s$id, status = r$status, route = r$diagnostics$eventProbability$route %||% "none", p0 = p0, p1 = p1, ref0 = ref0, ref1 = ref1,
          d_ref = max(abs(p0 - ref0), abs(p1 - ref1)), z_mc = max(abs(p0 - mc0) / se(p0), abs(p1 - mc1) / se(p1)),
-         pev = vcr_measure_value(r, "event_probability"), req = vcr_measure_value(r, "required_patients"), want_req = ceiling(ev / ((ref0 + ref1) / 2)))
+         pev = vcr_measure_value(r, "event_probability"), req = vcr_measure_value(r, "required_patients"), want_req = 2 * ceiling(ev / (ref0 + ref1)))
   })
   ok_rows <- all(vapply(rows, function(x) identical(x$status, "succeeded") && identical(x$route, "numerical_integration") &&
     x$d_ref < 1e-8 && x$z_mc < 4.5 && x$req == x$want_req && abs(x$pev - (x$ref0 + x$ref1) / 2) < 1e-8, logical(1)))

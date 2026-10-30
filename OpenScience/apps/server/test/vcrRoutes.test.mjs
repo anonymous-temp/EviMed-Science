@@ -119,6 +119,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
     isOperator: (/** @type {any} */ user) => operators.includes(String(user?.id)),
     async listStudies() { calls.push(["list"]); return { studies: [] }; },
+    async followupHistory() { return {available:true,readOnly:true,episodes:[],page:{limit:50,offset:0,nextOffset:null}}; },
     async requireStudy(/** @type {any} */ user, /** @type {string} */ id) {
       // The service resolves the account's own study, or a study it is a member of.
       const member = String(user.id) === study.userId || (roles[String(user.id)] ?? []).length > 0;
@@ -351,9 +352,6 @@ test("an action whose worker is not composed answers 503 by name, not 500", asyn
     ["POST", "/api/vcr/studies/std_1/export", { kind: "study_package" }],
     ["POST", "/api/vcr/studies/std_1/members", { userId: "u2", role: "viewer" }],
     ["DELETE", "/api/vcr/studies/std_1/members/u2", undefined],
-    ["GET", "/api/vcr/studies/std_1/referrals", undefined],
-    ["POST", "/api/vcr/studies/std_1/referrals/ref_1/transition", { to: "contactable" }],
-    ["POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", { note: "" }],
   ]) {
     await assert.rejects(routes(request(String(method), String(path), body), response()),
       { status: 503, code: "vcr_unavailable" }, `${method} ${path}`);
@@ -470,6 +468,7 @@ test("the study lead holds review_any: it countersigns every kind, which no othe
  * @type {Record<string, [string, string, any]>}
  */
 const REQUESTS = {
+  "GET /studies/:id/followup-history": ["GET", "/api/vcr/studies/std_1/followup-history", undefined],
   "GET /studies/:id/longitudinal": ["GET", "/api/vcr/studies/std_1/longitudinal", undefined],
   "POST /studies/:id/longitudinal/histories": ["POST", "/api/vcr/studies/std_1/longitudinal/histories", {}],
   "POST /studies/:id/longitudinal/predictions": ["POST", "/api/vcr/studies/std_1/longitudinal/predictions", {}],
@@ -520,9 +519,6 @@ const REQUESTS = {
   "GET /studies/:id/members": ["GET", "/api/vcr/studies/std_1/members", undefined],
   "POST /studies/:id/members": ["POST", "/api/vcr/studies/std_1/members", { userId: "newcomer", role: "viewer" }],
   "DELETE /studies/:id/members/:user": ["DELETE", "/api/vcr/studies/std_1/members/newcomer", undefined],
-  "GET /studies/:id/referrals": ["GET", "/api/vcr/studies/std_1/referrals", undefined],
-  "POST /studies/:id/referrals/:referral/transition": ["POST", "/api/vcr/studies/std_1/referrals/ref_1/transition", { to: "contactable" }],
-  "POST /studies/:id/referrals/:referral/contact": ["POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", {}],
   "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_1/override", { state: "not_satisfied" }],
   "POST /studies/:id/assessments/:assessment/review": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}],
   "POST /studies/:id/pack": ["POST", "/api/vcr/studies/std_1/pack", { use: "nsclc" }],
@@ -720,16 +716,9 @@ test("a computation queued from the page names the object it is for: the id is c
   assert.equal(queued.length, 1);
 });
 
-test("a site reads no page of the study: its referrals are its own, and the study list does not name it", async () => {
-  const { routes, as } = fixture({ roles: { siteuser: ["site"] }, overrides: composedHooks() });
-  as("siteuser");
-  for (const path of ["/api/vcr/studies/std_1", "/api/vcr/studies/std_1/overview", "/api/vcr/studies/std_1/matching", "/api/vcr/studies/std_1/members",
-    "/api/vcr/studies/std_1/jobs", "/api/vcr/studies/std_1/export/exp_1"]) {
-    await assert.rejects(routes(request("GET", path), response()), { status: 403, code: "vcr_forbidden" }, path);
-  }
-  const referrals = response();
-  assert.equal(await routes(request("GET", "/api/vcr/studies/std_1/referrals"), referrals), true);
-  assert.equal(referrals.status, 200);
+test("a retired site role grants no active study or recruitment route ability",async()=>{
+ const {routes,as}=fixture({roles:{siteuser:["site"]},overrides:composedHooks()});as("siteuser");
+ for(const route of ["overview","matching","referrals"])await assert.rejects(routes(request("GET",`/api/vcr/studies/std_1/${route}`),response()),{status:403,code:"vcr_forbidden"});
 });
 
 test("CS-49 renaming is a writer's, changing what the study is is the lead's, and a data manager who tries is told which ability is missing", async () => {
@@ -762,7 +751,7 @@ test("a study's page tells the caller what it may do, from the roles it holds no
   const recruiter = response();
   await routes(request("GET", "/api/vcr/studies/std_1"), recruiter);
   assert.deepEqual(recruiter.json().data.roles, ["recruiter", "viewer"]);
-  assert.ok(recruiter.json().data.abilities.includes("contact_patients"));
+  assert.equal(recruiter.json().data.abilities.includes("contact_patients"),false);
   assert.equal(recruiter.json().data.abilities.includes("run"), false);
   assert.equal(recruiter.json().data.abilities.includes("manage_study"), false);
 });
@@ -786,11 +775,11 @@ test("CW-3 members are added and removed through the members service in its own 
     },
   });
   const added = response();
-  await routes(request("POST", "/api/vcr/studies/std_1/members", { userId: "u_new", role: "site", detail: { siteId: "ste_1", note: "n" } }), added);
+  await routes(request("POST", "/api/vcr/studies/std_1/members", { userId: "u_new", role: "viewer", detail: { note: "n" } }), added);
   assert.equal(added.status, 201);
-  assert.deepEqual(seen[0], ["add", { actor: OWNER, studyId: "std_1", userId: "u_new", role: "site", detail: { siteId: "ste_1", note: "n" } }]);
+  assert.deepEqual(seen[0], ["add", { actor: OWNER, studyId: "std_1", userId: "u_new", role: "viewer", detail: { note: "n" } }]);
   await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/members", { userId: "u_new", role: "site" }), response()),
-    { status: 400, code: "vcr_payload_invalid" }, "a site member names its site");
+    { status: 400, code: "vcr_member_role_invalid" }, "retired site memberships cannot be added");
   await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/members", { userId: "u_new", role: "viewer", detail: { secret: "x" } }), response()),
     { status: 400, code: "vcr_payload_invalid" }, "a membership carries a site and a note and nothing else");
 
@@ -817,35 +806,11 @@ test("removing a member without naming a role takes every role that account hold
 
 // ------------------------------------------------------------- the first human stop
 
-test("PA-11 the contact route audits what happened: a confirmation, a stop that held, and a failure are three lines", async () => {
-  const outcomes = [/** @type {any} */ ({ referral: { id: "ref_1", state: "contacted" }, alreadyContacted: false }),
-    new HttpError(409, "vcr_referral_transition_invalid", "cannot"), new HttpError(403, "vcr_contact_role_forbidden", "no"),
-    new Error("the database went away")];
-  /** @type {any[]} */
-  const asked = [];
-  const { routes, audits } = fixture({
-    overrides: { matching: { async contactReferral(/** @type {any} */ user, /** @type {any} */ target, /** @type {string} */ id, /** @type {any} */ input) {
-      asked.push([user.id, target.id, id, input]);
-      const next = outcomes.shift();
-      if (next instanceof Error) throw next;
-      return next;
-    } } },
-  });
-  const first = response();
-  await routes(request("POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", { note: "已核对", reason: "符合" }), first);
-  assert.equal(first.status, 200);
-  assert.deepEqual(asked[0], [OWNER, "std_1", "ref_1", { note: "已核对", reason: "符合" }], "the caller is the session's account; the body carries a note and a reason and nothing else");
-  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", {}), response()), { status: 409 });
-  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", {}), response()), { status: 403 });
-  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", {}), response()), { message: "the database went away" });
-  assert.deepEqual(audits.filter((entry) => entry[0] === "vcr.referral.contact").map((entry) => [entry[1], entry[2]]), [
-    ["completed", "ref_1"], ["refused", "vcr_referral_transition_invalid"], ["refused", "vcr_contact_role_forbidden"], ["failed", "Error"],
-  ]);
-  // The approver is never a field of the request.
-  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", { approvedBy: "someone-else" }), response()),
-    { status: 400, code: "vcr_payload_invalid" });
-  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", { contactApprovedBy: "someone-else" }), response()),
-    { status: 400, code: "vcr_payload_invalid" });
+test("retired recruitment URLs return explicit 410 without calling operational hooks",async()=>{
+ let calls=0;const {routes}=fixture({overrides:{matching:{async contactReferral(){calls++;},async transitionReferral(){calls++;},async listReferrals(){calls++;}}}});
+ for(const [method,route] of [["GET","referrals"],["POST","referrals/ref_1/contact"],["POST","referrals/ref_1/transition"],["POST","sites"],["POST","followup"]])
+  await assert.rejects(routes(request(method,`/api/vcr/studies/std_1/${route}`,{}),response()),{status:410,code:"vcr_recruitment_retired"});
+ assert.equal(calls,0);
 });
 
 // ------------------------------------------------------------- creation
@@ -916,7 +881,7 @@ test("every code these routes emit is one this module declares", async () => {
   // are declared here because this is the list the page reads and the domain's
   // registry takes verbatim. Naming them keeps that true: a declared code that
   // nobody raises is dropped, not left as decoration.
-  const fromElsewhere = ["vcr_conversation_busy", "vcr_conversation_unavailable", "vcr_calculation_research_required", "vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
+  const fromElsewhere = ["vcr_conversation_busy", "vcr_conversation_unavailable", "vcr_calculation_research_required", "vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_model_exists", "vcr_export_not_found",
     "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid",
     "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data", "vcr_pack_not_curated",
     "vcr_prediction_number_refused", "vcr_prediction_scenario_not_found", "vcr_prediction_not_from_engine", "vcr_prediction_unreadable",

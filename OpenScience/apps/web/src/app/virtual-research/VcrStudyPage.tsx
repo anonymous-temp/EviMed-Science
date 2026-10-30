@@ -16,7 +16,7 @@ import { useProjectStore } from "@/lib/projects";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { announceOpenStudy } from "@/lib/studyPresence";
 import { toast } from "@/lib/toast";
-import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import type { RuntimeUiIntent, VcrObjectSelection } from "@/lib/runtimeUiNavigation";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -33,8 +33,6 @@ import { VcrExportDialog, VcrRenameDialog } from "@/components/vcr/VcrStudyDialo
 import { VcrIntakeDrawer } from "@/components/vcr/VcrIntakeDrawer";
 import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
 import { StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
-import { VcrStudyMethods } from "@/components/vcr/VcrStudyMethods";
-import { VcrStudyBrief } from "@/components/vcr/VcrStudyBrief";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { StudyPane } from "@/components/vcr/StudyPane";
 import { useStudy } from "@/components/vcr/useStudy";
@@ -42,7 +40,7 @@ import { useVcrRun } from "@/components/vcr/useVcrRun";
 import { announceVcrStudiesChanged } from "@/components/vcr/useVcrProjectIds";
 import { VcrTabBoundary } from "@/components/vcr/vcrTabKit";
 import { OverviewTab } from "@/components/vcr/tabs/OverviewTab";
-import { PopulationTab } from "@/components/vcr/tabs/PopulationTab";
+import { PopulationPatientsTab } from "@/components/vcr/tabs/PopulationPatientsTab";
 import { PatientsTab } from "@/components/vcr/tabs/PatientsTab";
 import { ComparatorTab } from "@/components/vcr/tabs/ComparatorTab";
 import { TrialTab } from "@/components/vcr/tabs/TrialTab";
@@ -65,7 +63,7 @@ type TabComponent = ComponentType<VcrTabProps>;
 
 const TABS: Record<VcrTabKey, TabComponent> = {
   overview: OverviewTab,
-  population: PopulationTab,
+  population: PopulationPatientsTab,
   patients: PatientsTab,
   comparator: ComparatorTab,
   trial: TrialTab,
@@ -105,8 +103,13 @@ export function VcrStudyPage() {
   useEffect(() => {
     // An address that named a step is rewritten to the tab that holds it, in
     // place, so a reader who came in on a step link leaves with a tab link.
+    if (tabParam === "patients" && studyId) {
+      const next = new URLSearchParams(query); next.set("level", "individual");
+      navigate(`${vcrTabPath(studyId, "population")}?${next}`, { replace: true });
+      return;
+    }
     if (moved && studyId) navigate(tabParam === "definition" || tabParam === "evidence" ? vcrStepPath(studyId, tabParam) : vcrTabPath(studyId, tab), { replace: true });
-  }, [moved, studyId, tab, tabParam, navigate]);
+  }, [moved, studyId, tab, tabParam, navigate, query]);
 
   if (feature === "off" || loaded.kind === "off") return <VcrOffPage />;
   if (loaded.kind === "missing") {
@@ -148,9 +151,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   const [panel, setPanel] = useState<Panel>(() => params.get("intake") === "1" ? "intake" : null);
   const [deleting, setDeleting] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const packageId = params.get("package");
-  const methodsOpen = params.get("methods") === "1";
   const Tab = TABS[tab];
   // What this reader may do here, from the roles the server says they hold:
   // the menu offers only the actions that will not be refused (the routes
@@ -173,7 +174,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   // The sidebar is told which study is open and which conversation is its own, so that conversation's row opens this page's view of
   // it — and has a row before its first sentence.
   const heldSession = study.conversation.sessionId;
-  useEffect(() => announceOpenStudy({ studyId, projectId: study.projectId, sessionId: heldSession }), [studyId, study.projectId, heldSession]);
+  useEffect(() => study.purpose === "task" ? undefined : announceOpenStudy({ studyId, projectId: study.projectId, sessionId: heldSession }), [studyId, study.projectId, heldSession, study.purpose]);
 
   // --- a study named in its conversation: the project list and the sidebar are told -----------------------------------
   const seen = useRef({ name: study.name, status: study.status });
@@ -243,14 +244,29 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
 
   // --- the way into the conversation, and out of it ------------------------------------------------------------------
   const sessionId = study.conversation.sessionId;
-  const openChat = useCallback((draft?: string) => {
+  const pendingChat = useRef<{ draft: string; reference?: VcrObjectSelection } | null>(null);
+  const [waitingDraft, setWaitingDraft] = useState(false);
+  const openChat = useCallback((draft?: string, reference?: VcrObjectSelection, restoreDraft = false) => {
+    if (draft && !sessionId) { pendingChat.current = { draft, reference }; setWaitingDraft(true); }
     // A draft waits in the composer of the study's own conversation and is never sent; with no conversation yet there is no
     // composer to hold it, and the view says so.
     const intent: RuntimeUiIntent | null = draft && sessionId
-      ? { kind: "open", projectId: study.projectId, requestId: crypto.randomUUID(), sessionId, draft }
+      ? { kind: "open", projectId: study.projectId, requestId: crypto.randomUUID(), sessionId, draft, ...(restoreDraft ? { restoreDraft: true } : {}), ...(reference ? { vcrReference: reference } : {}) }
       : null;
     navigate(vcrChatPath(studyId), intent ? { state: { runtimeUiIntent: intent } } : undefined);
   }, [navigate, sessionId, study.projectId, studyId]);
+  useEffect(() => {
+    if (!sessionId || !pendingChat.current) return;
+    const saved = pendingChat.current;
+    pendingChat.current = null; setWaitingDraft(false);
+    openChat(saved.draft, saved.reference);
+  }, [sessionId, openChat]);
+  const restoredRemoteDraft = useRef<string | null>(null);
+  useEffect(() => {
+    if (view !== "chat" || study.status !== "draft" || !study.question || !sessionId || restoredRemoteDraft.current === studyId) return;
+    restoredRemoteDraft.current = studyId;
+    openChat(study.question, undefined, true);
+  }, [view, study.status, study.question, sessionId, studyId, openChat]);
   const openView = useCallback((next: StudyView) => {
     if (next === "chat") openChat();
     else navigate(study.purpose === "calculation" ? `${vcrCalculationPath(studyId)}/${next}` : vcrTabPath(studyId, next));
@@ -277,14 +293,15 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   ), [Tab, tab, studyId, study, reload]);
 
   return (
-    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView} methodsOpen={methodsOpen} onMethods={() => setParams(current => { const next = new URLSearchParams(current); if (methodsOpen) next.delete("methods"); else next.set("methods", "1"); return next; })}>
+    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
+      {waitingDraft && !sessionId && <Note action={<Button size="sm" variant="text" onClick={reload}>重试连接研究对话</Button>}>请求已保留。研究对话连接后会恢复到输入框，由你发送。</Note>}
       {view === "chat" ? (
-        study.status === "draft" && !submitted && !study.conversation.submitted && !study.activity?.run && !study.activity?.last ? <VcrStudyBrief study={study} onStarted={async (_remote, _answer, isCurrent) => { if (!isCurrent()) return false; setSubmitted(true); reload(); return true; }} onDataRequested={async (_remote, isCurrent) => { if (!isCurrent()) return false; setPanel("intake"); navigate(`${vcrTabPath(studyId, "data")}?intake=1`); return true; }} /> : <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
+        <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
       ) : (
         <>
           {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
           {budgetNote}
-          {methodsOpen ? <VcrStudyMethods key={tab} studyId={studyId} tab={tab} /> : packageId ? (
+          {packageId ? (
             <VcrPackageReader
               studyId={studyId}
               exportId={packageId}

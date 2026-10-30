@@ -72,19 +72,8 @@ export function evolutionDeterministicChecks(candidate, baselines) {
   return { ran: true, candidate: candidateShare, baseline: baselineShare, delta, nonInferior: !regressed, regressed };
 }
 
-/** Only a trusted execution receipt can establish a repair's observed baseline failure. @param {any} payload */
-export function evolutionFailureReproductionHash(payload){
-  return digest(Object.fromEntries(Object.entries(payload).filter(([key])=>!['recordType','receiptHash'].includes(key))));
-}
-/** The kinds of module observation whose verdict is a deterministic check of the production pipeline on a public input (a frontier edit's numbers, units, links and
- * language, decided by code, never by a model), and so a failure the platform itself observed and could decide again: the basis of a receipt written by code from the
- * observation (`basis: 'platform-observation'`) when no public development case fails on the baseline. A model-judged observation is not among them. */
-export const EVOLUTION_OBSERVED_FAILURE_KINDS = Object.freeze(['edit-verification']);
-/** @param {any} payload @param {any} identity */
-export function validEvolutionFailureReproduction(payload,identity){
-  if(payload?.basis!==undefined&&!(payload.basis==='executed-baseline'||payload.basis==='platform-observation'&&EVOLUTION_OBSERVED_FAILURE_KINDS.includes(payload.observationKind)&&Array.isArray(payload.observationIds)&&payload.observationIds.length>0))return false;
-  return payload?.recordType==='evolution-failure-reproduction'&&payload.missionId===identity.missionId&&payload.moduleId===identity.moduleId&&payload.baselineHash===digest(identity.baseline??{})&&['public','generated'].includes(payload.scope)&&payload.independent===true&&payload.executed===true&&payload.baselineFailed===true&&payload.referenceVerified===true&&typeof payload.taskId==='string'&&typeof payload.sourceRoot==='string'&&/^[a-f0-9]{64}$/.test(payload.sourceHash??'')&&/^[a-f0-9]{64}$/.test(payload.executionReceiptHash??'')&&payload.receiptHash===evolutionFailureReproductionHash(payload);
-}
+export { evolutionFailureReproductionHash, validEvolutionFailureReproduction, EVOLUTION_OBSERVED_FAILURE_KINDS } from './evolutionServingEvidence.mjs';
+import { validEvolutionFailureReproduction } from './evolutionServingEvidence.mjs';
 /** Exact frozen unit identities, source versions and equivalent variants must all be measured once. @param {any[]} batch @param {any} measurement */
 export function validateEvolutionMeasurements(batch,measurement){
   const expected=new Map(batch.flatMap(item=>[{id:item.id,sourceHash:item.sourceHash,groupId:item.id},...(item.equivalentVariant?[{id:`${item.id}:equivalent`,sourceHash:item.sourceHash,groupId:item.id}]:[])].map(unit=>[unit.id,unit])));

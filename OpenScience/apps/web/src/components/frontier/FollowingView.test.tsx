@@ -161,7 +161,7 @@ describe("the view", () => {
   it("is a skeleton while reading, and an error with 「重试」 where it could not read", async () => {
     const retry = vi.fn();
     const { container, unmount } = show(state({ loading: true }));
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     expect(screen.queryByText("添加关注")).not.toBeInTheDocument();
     unmount();
     show(state({ error: "暂时读不到。", retry }));

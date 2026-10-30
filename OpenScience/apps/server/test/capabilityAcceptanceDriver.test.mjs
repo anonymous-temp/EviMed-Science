@@ -14,7 +14,7 @@ const helper = fileURLToPath(new URL("../../../scripts/ops/throwaway-account.mjs
 const originalRun = { id: "run-fixture", sessionId: "real-session", status: "running", effectiveAgentId: "meta-analysis", startedAt: "2026-09-29T01:00:00Z", artifacts: [] };
 async function fixture(fn, { deleteStatus = 200, dispatchStatus = 202 } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "evimed-acceptance-driver-"));
-  const requests = []; let current = { ...originalRun }; let pollFailure = false; let pollTransport = null; let artifactHang = false;
+  const requests = []; let current = { ...originalRun }; let pollFailure = false; let pollTransport = null; let artifactHang = false; let dispatchCount = 0;
   const server = createServer(async (request, response) => {
     let raw = ""; for await (const chunk of request) raw += chunk;
     requests.push({ method: request.method, url: request.url, cookie: request.headers.cookie ?? null, csrf: request.headers["x-open-science-csrf"] ?? null, body: raw ? JSON.parse(raw) : null });
@@ -31,7 +31,7 @@ async function fixture(fn, { deleteStatus = 200, dispatchStatus = 202 } = {}) {
       if (pollFailure) status = 503;
       else data = [current, { id: "another-run", status: "running", sessionId: "another-session" }];
     } else if (request.url?.startsWith("/api/research-sessions/")) data = {};
-    else if (request.url === "/api/agent-runs/dispatch") { status = dispatchStatus; data = current; }
+    else if (request.url === "/api/agent-runs/dispatch") { dispatchCount += 1; status = dispatchStatus; data = { ...current, id: dispatchCount === 1 ? current.id : `${current.id}-turn${dispatchCount}` }; }
     else if (request.url === `/api/agent-runs/${originalRun.id}/cancel`) data = { run: { ...current, status: "canceled" } };
     else if (request.url === "/api/commands/read_artifact") { if (artifactHang) return; data = { encoding: "utf8", data: "Preserved useful partial results." }; }
     else if (request.url === "/api/commands/stop_runtime") data = {};
@@ -207,4 +207,83 @@ test("PICO brief dispatch preserves supplied studies and source notes without ev
   assert.ok(prompt.includes(source.inputs.question));
   assert.doesNotMatch(prompt, /EVALUATOR_ONLY/);
   assert.equal(f.requests.find(request => request.url === "/api/agent-runs/dispatch").body.automated, true, "the run is marked automated: it teaches the platform nothing");
+}));
+
+
+test("brief follow-ups run sequentially in the same session and each turn is captured before the next", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: ["Reuse it in centimetres.", "Explain the change."],
+    gradedOn: "EVALUATOR_ONLY", mustDo: ["EVALUATOR_ONLY"],
+  }] }));
+  f.setRun({ ...originalRun, status: "succeeded", artifacts: ["results.json"] });
+  const result = await f.run({ extra: ["--dispatch-id", "fixed-acceptance"] });
+  assert.equal(result.code, 0, result.stderr + result.stdout);
+  const dispatches = f.requests.filter(r => r.url === "/api/agent-runs/dispatch");
+  assert.equal(dispatches.length, 3);
+  assert.deepEqual(dispatches.slice(1).map(r => r.body.text), ["Reuse it in centimetres.", "Explain the change."]);
+  assert.ok(dispatches.every(r => r.body.automated === true && !r.body.text.includes("EVALUATOR_ONLY")));
+  assert.ok(dispatches.slice(1).every(r => r.body.sessionId === "real-session"));
+  assert.equal(new Set(dispatches.map(r => r.body.dispatchId)).size, 3);
+  const records = (await f.records()).sort((a, b) => a.record.turn - b.record.turn);
+  assert.equal(records.length, 3);
+  assert.deepEqual(records.map(r => r.record.turn), [1, 2, 3]);
+  assert.equal(records[1].record.previousRunId, records[0].record.runId);
+  assert.equal(records[2].record.previousRunId, records[1].record.runId);
+  for (const { directory } of records) assert.equal(await fs.readFile(path.join(directory, "deliverable/results.json"), "utf8"), "Preserved useful partial results.");
+  const flow = f.requests.filter(r => ["/api/agent-runs/dispatch", "/api/commands/read_artifact"].includes(r.url)).map(r => r.url);
+  assert.deepEqual(flow, Array.from({ length: 3 }, () => ["/api/agent-runs/dispatch", "/api/commands/read_artifact"]).flat());
+  assert.equal(f.requests.filter(r => r.url === "/api/auth/register").length, 1);
+  assert.equal(f.requests.at(-1).url, "/api/account");
+}));
+
+test("a failed first turn prevents dependent follow-ups", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: ["Do not run after failure."],
+  }] }));
+  f.setRun({ ...originalRun, status: "failed" });
+  assert.equal((await f.run()).code, 1);
+  assert.equal(f.requests.filter(r => r.url === "/api/agent-runs/dispatch").length, 1);
+  assert.equal(f.requests.at(-1).url, "/api/account");
+}));
+
+
+test("invalid follow-ups are rejected before creating an account", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: [""],
+  }] }));
+  const result = await f.run();
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /followUps must/);
+  assert.equal(f.requests.length, 0);
+}));
+
+test("a custom prompt does not inherit the original brief's follow-ups", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: ["Do not inherit me."],
+  }] }));
+  const prompt = path.join(f.root, "custom.txt");
+  await fs.writeFile(prompt, "Custom analysis.");
+  f.setRun({ ...originalRun, status: "succeeded" });
+  assert.equal((await f.run({ extra: ["--prompt-file", prompt] })).code, 0);
+  const sent = f.requests.filter(r => r.url === "/api/agent-runs/dispatch");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.text, "Custom analysis.");
+}));
+
+test("an incomplete artifact snapshot stops follow-ups and is recorded before account cleanup", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: ["Would overwrite results."],
+  }] }));
+  f.setRun({ ...originalRun, status: "succeeded", artifacts: ["results.json", "results.json"] });
+  f.hangArtifacts();
+  const result = await f.run({ artifactTimeout: 40 });
+  assert.equal(result.code, 2);
+  assert.equal(f.requests.filter(r => r.url === "/api/agent-runs/dispatch").length, 1);
+  const [{ record }] = await f.records();
+  assert.equal(record.outcome.status, "succeeded", "capture failure does not rewrite the product verdict");
+  assert.equal(record.artifactCapture.complete, false);
+  assert.deepEqual(record.artifactCapture.saved, []);
+  assert.equal(record.artifactCapture.failed.length, 1, "duplicate paths are captured only once");
+  assert.equal(record.artifactCapture.failed[0].path, "results.json");
+  assert.equal(f.requests.at(-1).url, "/api/account");
 }));

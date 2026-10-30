@@ -429,8 +429,10 @@ export function CongressesBody({ state }: { state: CongressesState & { retry: ()
 }
 
 /**
- * 热榜's line while a congress is on (「ESMO 2026 进行中 · 57 条」): the congress on now with the most items, opening its hub.
- * Nothing while none is on or none has an item, or where the route does not exist.
+ * 热榜's line while a congress is on (owner, 2026-10-27: 「ESMO 2026 进行中 · 624 条」 told nobody what it was for): the congress on now
+ * with the most items, said as what it is — 「会议专题」, the congress by its code and its name, 「进行中」, and what its page holds,
+ * 「每日 AI 速递 · 收录 624 条」 (the day's AI summary and the congress's items; the number is the hub's own) — one line, wrapping on a
+ * phone, the whole of it opening the hub. Nothing while none is on or none has an item, or where the route does not exist.
  */
 export function CongressNowLine() {
   const state = useFrontierCongresses(true);
@@ -438,15 +440,18 @@ export function CongressNowLine() {
   if (state.kind !== "ready") return null;
   const now = state.congresses.filter((congress) => congress.status === "ongoing" && congress.itemCount > 0).sort((a, b) => b.itemCount - a.itemCount)[0];
   if (!now) return null;
+  const title = now.name && now.name !== now.code ? `${now.code} · ${now.name}` : now.code;
   return (
     <Link to={congressPath(now.id)} state={origin} onClick={rememberFrontierPosition}
-      className="mb-6 flex min-h-control items-center gap-2 rounded text-ui text-text hover:text-accent">
+      className="mb-6 flex min-h-control flex-wrap items-center gap-x-2 gap-y-0.5 rounded py-1 text-ui text-text hover:text-accent">
       <CalendarDays size={16} className="shrink-0 text-text-3" aria-hidden="true" />
-      <span className="font-semibold">{now.code}</span>
+      <span className="text-caption text-text-3">会议专题</span>
+      <span className="min-w-0 font-semibold">{title}</span>
       <span>进行中</span>
-      <span aria-hidden="true" className="text-text-3">·</span>
-      <span className="tabular-nums">{now.itemCount} 条</span>
-      <ChevronRight size={16} className="shrink-0 text-text-3" aria-hidden="true" />
+      <span className="inline-flex items-center gap-1 text-text-2">
+        <span>每日 AI 速递 · 收录 <span className="tabular-nums">{now.itemCount}</span> 条</span>
+        <ChevronRight size={16} className="shrink-0 text-text-3" aria-hidden="true" />
+      </span>
     </Link>
   );
 }

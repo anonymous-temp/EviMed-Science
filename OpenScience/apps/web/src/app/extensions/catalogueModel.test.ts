@@ -82,3 +82,22 @@ it("an upstream skill the platform edited is told apart from one it ships unedit
   expect(skillAdapted({ provenance: { kind: "upstream" } } as PlatformSkill)).toBe(false);
   expect(skillAdapted({} as PlatformSkill)).toBe(false);
 });
+
+it("prefers real Chinese display metadata and preserves unknown author-supplied names", async () => {
+  const { skillDisplayName } = await import("./catalogueModel");
+  expect(skillDisplayName({ id: "community:paper-search", title: "文献检索" })).toBe("文献检索");
+  expect(skillDisplayName({ id: "community:paper-search", title: "community:paper-search" })).toBe("community:paper-search");
+});
+
+it("localizes every reviewed GEO task while preserving Chinese overrides and unrelated third-party titles", async () => {
+  const { skillDisplayName } = await import("./catalogueModel");
+  const { GEO_SKILL_TITLES } = await import("@evimed/domain/skill-display");
+  for (const [name, title] of Object.entries(GEO_SKILL_TITLES)) {
+    expect(skillDisplayName({ id: `geo-private:${name}`, title: name })).toBe(title);
+    expect(title).toMatch(/[㐀-鿿]/u);
+  }
+  expect(skillDisplayName({ id: "geo-private:geo-care-nodes", title: "已有的中文任务名" })).toBe("已有的中文任务名");
+  expect(skillDisplayName({ id: "community:research-paper", title: "Research Paper Toolkit" })).toBe("Research Paper Toolkit");
+  expect(skillDisplayName({ id: "personal:geo-care-nodes", title: "My Care Workflow" })).toBe("My Care Workflow");
+  expect(skillDisplayName({ id: "geo-private:unreviewed", title: "Future Method" })).toBe("Future Method");
+});

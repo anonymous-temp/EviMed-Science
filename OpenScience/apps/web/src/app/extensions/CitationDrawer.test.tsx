@@ -37,7 +37,7 @@ beforeEach(() => {
 
 it("opens on the switch for this project, what the plugin does and the tools it brings — in sentences, never names", async () => {
   const drawer = await show();
-  await waitFor(() => expect(within(drawer).getByRole("switch", { name: "在“我的研究”里使用" })).toBeChecked());
+  await waitFor(() => expect(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ })).toBeChecked());
   expect(within(drawer).getByText(/按 DOI、PMID 查回原始书目记录/)).toBeInTheDocument();
   const tools = within(drawer).getByText("提供的工具").parentElement!;
   expect(within(tools).getAllByRole("listitem").map(item => item.textContent)).toEqual(["按标题、DOI 或 PMID 查找文献书目", "导出 BibTeX"]);
@@ -48,12 +48,12 @@ it("flipping the switch saves for this project against the saved state, and a wa
   api.saveWebPlugin.mockResolvedValue(plugin({ desired: { revision: 3, enabled: false, settings: { timeoutMs: 15000 } }, effective: null, phase: "pending" }));
   const drawer = await show();
   expect(within(drawer).queryByText("保存后在下次对话生效")).not.toBeInTheDocument();
-  const toggle = await within(drawer).findByRole("switch", { name: "在“我的研究”里使用" });
+  const toggle = await within(drawer).findByRole("switch", { name: /在“我的研究”里使用/ });
   await waitFor(() => expect(toggle).toBeEnabled());
   await userEvent.click(toggle);
   await waitFor(() => expect(api.saveWebPlugin).toHaveBeenCalledWith("project-1", "dsh-cite", { expectedRevision: 2, enabled: false, settings: { timeoutMs: 15000 } }, expect.anything()));
   expect(await within(drawer).findByText("保存后在下次对话生效")).toBeInTheDocument();
-  expect(within(drawer).getByRole("switch", { name: "在“我的研究”里使用" })).not.toBeChecked();
+  expect(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ })).not.toBeChecked();
 });
 
 it("the timeout is set in seconds under 高级设置 and saved as the milliseconds the plugin takes; a value out of range is not sent", async () => {
@@ -96,17 +96,36 @@ it("a setting that did not take says so once and offers to try again", async () 
 it("a change made elsewhere first is not overwritten: the state is read again and the reader is told", async () => {
   api.saveWebPlugin.mockRejectedValue(new WebApiError("conflict", { status: 409 }));
   const drawer = await show();
-  const toggle = await within(drawer).findByRole("switch", { name: "在“我的研究”里使用" });
+  const toggle = await within(drawer).findByRole("switch", { name: /在“我的研究”里使用/ });
   await waitFor(() => expect(toggle).toBeEnabled());
   api.listWebPlugins.mockResolvedValue([plugin({ desired: { revision: 3, enabled: false, settings: { timeoutMs: 15000 } } })]);
   await userEvent.click(toggle);
   expect(await within(drawer).findByRole("alert")).toHaveTextContent("刚在别处改过");
-  await waitFor(() => expect(within(drawer).getByRole("switch", { name: "在“我的研究”里使用" })).not.toBeChecked());
+  await waitFor(() => expect(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ })).not.toBeChecked());
 });
 
 it("a plugin that cannot be read leaves the switch off and says why, once", async () => {
   api.listWebPlugins.mockRejectedValue(new Error("down"));
   const drawer = await show();
   expect(await within(drawer).findByRole("alert")).toHaveTextContent("插件状态暂时读不到");
-  expect(within(drawer).getByRole("switch", { name: "在“我的研究”里使用" })).toBeDisabled();
+  expect(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ })).toBeDisabled();
+});
+
+it("keeps an edited timeout through failed saves and asks before closing, then resets after a confirmed save", async () => {
+  api.saveWebPlugin.mockRejectedValueOnce(new Error("offline"));
+  const drawer = await show();
+  const field = await within(drawer).findByRole("spinbutton", { name: "请求超时（秒）" });
+  await userEvent.clear(field); await userEvent.type(field, "8");
+  await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
+  await within(drawer).findByText("操作没有完成，请重试。");
+  expect(field).toHaveValue(8);
+  await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(field).toHaveValue(8);
+  api.saveWebPlugin.mockResolvedValue(plugin({ desired: { revision: 3, enabled: true, settings: { timeoutMs: 8000 } } }));
+  await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(within(drawer).getByRole("button", { name: "保存" })).toBeDisabled());
+  await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 });

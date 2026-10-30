@@ -1,0 +1,8 @@
+[Unit]
+Description=Monthly offline RSI campaign: the 1st at 02:00 Asia/Shanghai, after production's 00:30 export push
+[Timer]
+OnCalendar=*-*-01 02:00:00 Asia/Shanghai
+Persistent=true
+Unit=evimed-rsi-campaign.service
+[Install]
+WantedBy=timers.target

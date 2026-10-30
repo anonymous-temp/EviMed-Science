@@ -1,4 +1,5 @@
 import { getVcrPatientRecord, type VcrPatientRecord, type VcrRecordFact, type VcrRecordPosition } from "@/lib/vcrRowsClient";
+import { DataTable } from "@/components/ui/DataTable";
 import { Drawer } from "@/components/ui/Drawer";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Note, type NotePart, type NoteResult } from "@/components/ui/Note";
@@ -51,24 +52,29 @@ function Record({ record, labels }: { record: VcrPatientRecord; labels: Readonly
   const position = positionResult(record.position);
   return (
     <div className="flex flex-col gap-6">
+      {record.source === "predicted" && <p><Tag>{record.targetClass === "synthetic" ? "合成人群的模型预测" : "模型预测"}</Tag></p>}
       {record.arm && <p><Tag tone="accent">{record.arm.label}</Tag></p>}
       {baseline.length > 0 && (
         <Section title="基线" level="sub"><FactList rows={baseline} /></Section>
       )}
       {outcome.length > 0 && (
-        <Section title="结局" level="sub"><FactList rows={outcome} /></Section>
+        <Section title={record.source === "predicted" ? "预测值" : "结局"} level="sub"><FactList rows={outcome} /></Section>
       )}
+      {(record.observations?.length ?? 0) > 0 && <Section title="纵向记录" level="sub"><DataTable label="该患者的全部纵向记录" rowKey={row => `${row.visit}:${row.time}`} columns={[
+        { key: "visit", header: "访视", cell: row => row.visit ?? "—" },
+        { key: "time", header: "时间", cell: row => row.time ?? "—" },
+        { key: "y", header: "记录值", cell: row => row.y ?? "—" },
+      ]} rows={record.observations ?? []} /></Section>}
       {position && (
         <Section title="在本组中的位置" level="sub"><Note result={position} /></Section>
       )}
       {record.trajectories && record.trajectories.length > 0 && (
         <Section title="两种假设下" level="sub">
-          <FactList
-            rows={record.trajectories.map((entry) => ({
-              label: entry.label,
-              value: Object.entries(entry.values).map(([key, value]) => `${labels[key] ?? key} ${value === null ? "—" : numberText(value)}`).join(" · "),
-            }))}
-          />
+          {record.trajectories.map(entry => entry.series?.length ? <DataTable key={entry.arm} label={`${entry.label}的完整轨迹`} rowKey={row => `${row.visit}:${row.time}`} columns={[
+            { key: "visit", header: "访视", cell: row => row.visit ?? "—" },
+            { key: "time", header: "时间", cell: row => row.time ?? "—" },
+            { key: "y", header: "假设下的取值", cell: row => row.y ?? "—" },
+          ]} rows={entry.series} /> : <FactList key={entry.arm} rows={[{ label: entry.label, value: Object.entries(entry.values).map(([key, value]) => `${labels[key] ?? key} ${value === null ? "—" : numberText(value)}`).join(" · ") }]} />)}
         </Section>
       )}
     </div>

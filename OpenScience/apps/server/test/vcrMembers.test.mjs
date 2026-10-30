@@ -177,30 +177,30 @@ test("AC-17 adding refuses an unknown role, a missing account and the owner", as
 
 test("AC-17 one person holds several roles and adding one twice is idempotent", async () => {
   const { store, members } = scene();
-  await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "site" });
+  await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "data_manager" });
   await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "clinical_reviewer" });
-  await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "site", detail: { site: "华西" } });
+  await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "data_manager", detail: { site: "华西" } });
   assert.equal(store.members.filter((row) => row.userId === "doctor").length, 2);
   const people = await members.list({ actor: "owner", studyId: "std_1" });
   const doctor = people.find((person) => person.userId === "doctor");
-  assert.deepEqual(doctor.roles, ["clinical_reviewer", "site"]);
-  assert.deepEqual(doctor.roleLabels, ["临床复核", "中心"]);
+  assert.deepEqual(doctor.roles, ["clinical_reviewer", "data_manager"]);
+  assert.deepEqual(doctor.roleLabels, ["临床复核", "数据管理"]);
   assert.equal(doctor.owner, false);
   // The union of what the two roles allow, from the domain — never a second table.
-  assert.deepEqual(doctor.abilities, abilitiesOfRoles(["clinical_reviewer", "site"]));
-  assert.ok(doctor.abilities.includes("review_clinical") && doctor.abilities.includes("write_referrals"));
+  assert.deepEqual(doctor.abilities, abilitiesOfRoles(["clinical_reviewer", "data_manager"]));
+  assert.ok(doctor.abilities.includes("review_clinical") && doctor.abilities.includes("manage_data"));
   assert.ok(!doctor.abilities.includes("manage_members"));
 });
 
 test("AC-17 removing a role takes only that role and is recorded", async () => {
   const { store, members } = scene();
-  await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "site" });
+  await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "data_manager" });
   await members.add({ actor: "owner", studyId: "std_1", userId: "doctor", role: "clinical_reviewer" });
-  const result = await members.remove({ actor: "owner", studyId: "std_1", userId: "doctor", role: "site" });
+  const result = await members.remove({ actor: "owner", studyId: "std_1", userId: "doctor", role: "data_manager" });
   assert.equal(result.removed, true);
   assert.deepEqual(await store.rolesOf("std_1", "doctor"), ["clinical_reviewer"]);
   assert.equal(store.auditRows.filter((row) => row.action === "member.remove").length, 1);
-  assert.equal((await members.remove({ actor: "owner", studyId: "std_1", userId: "doctor", role: "site" })).removed,
+  assert.equal((await members.remove({ actor: "owner", studyId: "std_1", userId: "doctor", role: "data_manager" })).removed,
     false, "removing a role nobody holds changes nothing and says so");
 });
 
@@ -227,11 +227,7 @@ test("AC-17 abilities of a non-member are empty rather than an error", async () 
   const owner = await members.abilitiesOf({ studyId: "std_1", userId: "owner" });
   assert.deepEqual(owner.roles, ["lead"]);
   assert.deepEqual(owner.abilities, abilitiesOfRoles(["lead"]));
-  await members.add({ actor: "owner", studyId: "std_1", userId: "rec", role: "recruiter" });
-  const recruiter = await members.abilitiesOf({ studyId: "std_1", userId: "rec" });
-  assert.ok(recruiter.abilities.includes("contact_patients"));
-  assert.ok(!recruiter.abilities.includes("read_patient_level"),
-    "a coordinator contacts people; reading their rows is a different ability");
+  for(const role of ["recruiter","site"])await assert.rejects(()=>members.add({actor:"owner",studyId:"std_1",userId:"rec",role}),{status:400,code:VCR_MEMBER_CODES.roleUnknown});
 });
 
 test("abilitiesOfRoles is the union of the domain's table and nothing else", () => {
@@ -240,4 +236,17 @@ test("abilitiesOfRoles is the union of the domain's table and nothing else", () 
   assert.deepEqual(abilitiesOfRoles(["viewer"]), ["read"]);
   const both = abilitiesOfRoles(["viewer", "recruiter"]);
   assert.deepEqual(both, [...new Set([...abilitiesOfRoles(["viewer"]), ...abilitiesOfRoles(["recruiter"])])].sort());
+});
+
+test('legacy roles can be read and individually revoked, mixed with viewer, but never granted',async()=>{
+ const {store,members}=scene();
+ for(const role of ['recruiter','site','viewer'])store.members.push({studyId:'std_1',userId:'legacy',role});
+ const shown=(await members.list({actor:'owner',studyId:'std_1'})).find(row=>row.userId==='legacy');
+ assert.deepEqual(shown.roleLabels,['旧版协调角色（已停用）','旧版中心角色（已停用）','只读查看者']);
+ for(const role of ['recruiter','site'])await assert.rejects(members.add({actor:'owner',studyId:'std_1',userId:'legacy',role}),{code:VCR_MEMBER_CODES.roleUnknown});
+ await members.remove({actor:'owner',studyId:'std_1',userId:'legacy',role:'site'});
+ assert.deepEqual(await store.rolesOf('std_1','legacy'),['recruiter','viewer']);
+ for(const role of await store.rolesOf('std_1','legacy'))await members.remove({actor:'owner',studyId:'std_1',userId:'legacy',role});
+ assert.deepEqual(await store.rolesOf('std_1','legacy'),[]);
+ assert.equal(store.auditRows.filter(row=>row.action==='member.remove').length,3);
 });

@@ -1,8 +1,9 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CircleDashed, History, MessageSquare, TriangleAlert, UsersRound } from "lucide-react";
 import { VCR_STEP_NEEDS } from "@evimed/domain";
-import { cancelVcrStudy, runVcrStep, type VcrActivity, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
+import { cancelVcrStudy, type VcrActivity, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -13,10 +14,10 @@ import { StepState, type StepInput } from "@/components/ui/StepState";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { useStudyFrame } from "./studyFrameContext";
-import { useVcrRun } from "./useVcrRun";
+import { resumeVcrStep } from "./vcrConversationActions";
 import { leadJob, runDetailLine, stepAction, stepName } from "./vcrActivity";
 import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_GIVES, VCR_STEP_NOUNS } from "./vcrText";
-import { hasDefinition, VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
+import { VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
 
 /**
  * The states every 「虚拟临床研究」 surface shares.
@@ -59,28 +60,27 @@ function Bar({ className }: { className: string }) {
   return <div className={cn("rounded bg-surface-2", className)} />;
 }
 
-/** The home list's first paint: rows shaped like the studies they stand in for. */
+/** The home list's first paint: rows shaped like the studies they stand in for — a name, a line under it and a time. */
 export function VcrListSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true" data-vcr-loading="home">
-      {["w-2/5", "w-1/3", "w-1/2"].map((width) => (
-        <div key={width} className="flex items-start gap-6 border-b border-border px-2 py-5">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true" data-vcr-loading="home">
+      {["w-4/5", "w-3/5", "w-2/3"].map((width) => (
+        <div key={width} className="flex items-start gap-3 px-2 py-3">
           <div className="flex flex-1 flex-col gap-2">
             <Bar className={`h-4 ${width}`} />
-            <Bar className="h-3 w-1/3" />
-            <Bar className="h-3 w-3/5" />
+            <Bar className="h-3 w-1/2" />
           </div>
-          <Bar className="h-4 w-24" />
+          <Bar className="h-3 w-12" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 
 /** A study page's first paint: the tab row and a conclusion with the table under it. */
 export function VcrStudySkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true" data-vcr-loading="study">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true" data-vcr-loading="study">
       <div className="flex h-10 items-end gap-6 border-b border-border">
         {Array.from({ length: 7 }, (_, index) => <Bar key={index} className="mb-3 h-3.5 w-14" />)}
       </div>
@@ -88,14 +88,14 @@ export function VcrStudySkeleton() {
       <div className="mt-4 flex flex-col gap-px rounded-panel border border-border bg-border">
         {Array.from({ length: 4 }, (_, index) => <Bar key={index} className="h-12 rounded-none" />)}
       </div>
-    </div>
+    </div></PendingFeedback>
   );
 }
 
 /** A tab's first paint. */
 export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div data-vcr-loading="tab" className="animate-pulse" aria-hidden="true">
+    <PendingFeedback><div data-vcr-loading="tab" className="animate-pulse" aria-hidden="true">
       <Bar className="h-sm w-48 rounded-full" />
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className="mt-4 flex flex-col gap-2 border-b border-faint pb-4">
@@ -103,7 +103,7 @@ export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
           <Bar className="h-3 w-1/4" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 
@@ -128,10 +128,9 @@ function activityOfStep(activity: VcrActivity | null | undefined, step: VcrStepK
  * not run; **where it waits** when it is in line; **what is being done, for how long, and 停止** while it runs; and the way to the
  * allowance when that is what it waits for. A step that failed with nothing to show is `VcrStepFailed`'s.
  *
- * The button starts the step and **takes nobody anywhere**: the page's strip says what happens next, and this tab is the step's
- * state, so it is a recipe, then a run, then — when the page has read the study again — the result.
+ * The action drafts a request in the existing conversation. Nothing runs until the researcher sends it.
  */
-export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
+export function VcrStepPending({ studyId, study, step, hint, blocked }: {
   studyId: string;
   study: VcrStudy;
   step: VcrStepKey;
@@ -139,17 +138,15 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
   hint?: string;
   /** Why the step cannot start on this deployment (the evidence library is not connected): said in the button's place, which is not drawn. */
   blocked?: string | null;
-  /** Where the step can be started directly (an evaluation of protocol versions that already exist), this is the one button instead. */
-  start?: VcrStepStart;
 }) {
   const frame = useStudyFrame();
-  const { run, busy } = useVcrRun(study);
   const state = study.steps[step];
   const mayRun = study.abilities.includes("run");
   const activity = study.activity ?? frame?.activity ?? null;
   const here = activityOfStep(activity, step);
   const action = stepAction(step);
   const cancel = () => { void cancelVcrStudy(studyId).then(() => frame?.refresh()).catch(() => undefined); };
+
 
   // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
   const allowanceWait = stepAllowanceWait(state);
@@ -183,8 +180,10 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
     );
   }
   if (state?.status === "failed") return <VcrStepFailed studyId={studyId} study={study} step={step} />;
+  // Legacy draft rows requested every workflow step before the first question existed.
+  // They describe no active work and must not claim to be queued.
+  if (!study.question?.trim() && !study.definition && !activity) return <VcrNoDefinition study={study} />;
   // Nothing waits in a queue for a study nobody has described: the one thing missing is the first sentence, and it is said that way.
-  if (!hasDefinition(study)) return <VcrNoDefinition study={study} />;
   // Asked for and not started by the programme yet: it is in line, whatever the strip has not heard of. A step a cancel held is not in
   // line — it was stopped, and nothing starts it but a person's press — so it offers its start like a step never asked for.
   if (state?.status === "none" && state.requested === true && state.held !== true) {
@@ -200,36 +199,26 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
   const needs = (VCR_STEP_NEEDS as Record<string, readonly string[]>)[step] ?? [];
   for (const need of needs) {
     const key = need as VcrStepKey;
+    if (key === "definition" && !study.definition) continue;
     const note = study.stepSummaries[key]?.note;
     uses.push({ label: `${key === "definition" ? "研究定义" : stepName(key)}${note ? ` ${note}` : ""}`, to: vcrTabPath(studyId, VCR_STEP_TABS[key]) });
   }
   const cards = study.stepSummaries.evidence?.note;
   if (cards && step !== "evidence" && step !== "definition") uses.push({ label: cards, to: vcrTabPath(studyId, "data") });
-  const startHere = blocked ? undefined : start ? start.onStart : mayRun ? () => { void run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。"); } : undefined;
+  const startHere = blocked ? undefined : mayRun && frame ? () => frame.openChat(`请根据已有资料完成${stepName(step)}，先说明还缺哪些输入，再调用适用工具。`, { kind: "step", studyId, objectId: step }) : undefined;
   return (
     <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4">
       <StepState
         phase="empty"
-        step={start?.label ?? action}
+        step={action}
         noun={VCR_STEP_NOUNS[step]}
         uses={uses}
         gives={hint ?? VCR_STEP_GIVES[step]}
         onStart={startHere}
-        starting={start ? start.busy : busy}
         reason={startHere ? undefined : blocked || "需要有运行权限的成员来开始这一步。"}
       />
-      {start?.note}
     </div>
   );
-}
-
-/** A step started directly rather than by the programme: the button's name, whether it is working, and what it said last. */
-export interface VcrStepStart {
-  label: string;
-  busy: boolean;
-  onStart: () => void;
-  /** What came of the last press, under the button. */
-  note?: ReactNode;
 }
 
 /**
@@ -264,7 +253,7 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
   step: VcrStepKey;
   partial?: VcrPartial | null;
 }) {
-  const { run, busy } = useVcrRun(study);
+  const frame = useStudyFrame();
   const note = study.steps[step]?.note;
   const Heading = `h${useBlockHeadingLevel()}` as "h2" | "h3" | "h4";
   return (
@@ -278,8 +267,8 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
       {partial && <PartialResultNote sentence={partial.sentence} className="mt-3" />}
       {study.abilities.includes("run") && (
         <div className="mt-3">
-          <Button variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>
-            接着做
+          <Button variant="secondary" onClick={() => resumeVcrStep(frame, studyId, step)}>
+            在对话中继续
           </Button>
         </div>
       )}
@@ -399,12 +388,12 @@ export function PartialResultNote({ sentence, resume, className }: {
 
 /** 「续算」: the step asked for again — the failed marks are cleared and the computation goes on from its checkpoint; the page stays and the strip says so. */
 function ResumeStep({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
-  const { run, busy } = useVcrRun(study);
+  const frame = useStudyFrame();
   const status = study.steps[step]?.status;
   // A step already running or queued is going on by itself, and a reader who may not run steps is not offered a button that is refused.
   if (!study.abilities.includes("run") || status === "running" || status === "queued") return null;
   return (
-    <Button size="sm" variant="text" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>续算</Button>
+    <Button size="sm" variant="text" onClick={() => resumeVcrStep(frame, studyId, step)}>在对话中继续</Button>
   );
 }
 

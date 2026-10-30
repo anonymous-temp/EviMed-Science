@@ -334,7 +334,7 @@ test("the page's 对话 is the study's own conversation: the one recorded when i
   assert.ok(["missing", "wired", "answering", "not_answering"].includes(view.body.engine), "the page's one line at the top reads this");
   // The read model says what is going on and what is next, and a fresh study is doing nothing.
   assert.equal(view.body.activity, null);
-  assert.deepEqual(view.body.next && [view.body.next.step, view.body.next.label], ["definition", "整理研究定义"]);
+  assert.equal(Object.hasOwn(view.body,"next"),false,"the canonical conversation is the action entry; retired next-step recommendations are absent");
   assert.deepEqual(Object.keys(view.body.stepSummaries), [], "nothing has been found yet");
 
   // A study made before the conversation was recorded, and nothing to resolve it from: no id — never "the oldest session of the

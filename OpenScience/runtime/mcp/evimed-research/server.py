@@ -359,14 +359,14 @@ TOOL_DEFINITIONS = [
         "description": (
             "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and "
             "preserve it in the workspace as a snapshot with a sha256 receipt. The page itself can be the primary "
-            "source: an official site, documentation, a release note, a policy text. Long text comes in pages: pass "
-            "page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and "
-            "trial registries are marked official."
+            "source: an official site, documentation, a release note, a policy text. A long page returns its opening "
+            "and an outline of the saved file (read sections of it by line range); page=N pages through the text. "
+            "Pages from regulators, guideline bodies and trial registries are marked official."
         ),
         "inputSchema": object_schema(
             {
                 "url": {"type": "string", "minLength": 1, "maxLength": 2048},
-                "page": {"type": "integer", "minimum": 1, "maximum": 1000},
+                "page": {"type": "integer", "minimum": 1, "maximum": 1000, "description": "Default 1. A long page's page 1 is its opening and an outline; page N returns the N-th 12,000-character slice of the text."},
             },
             ("url",),
         ),
@@ -396,12 +396,14 @@ TOOL_DEFINITIONS = [
             "Ask the consumer LLM front-ends (DeepSeek, Doubao, Kimi, Qianwen, Yuanbao) a question the way a patient would, "
             "and record what they answer. This is a measurement with a denominator, not a retrieval: a vendor that failed to "
             "answer is not a vendor that did not mention the product, and a vendor that is not logged in was never asked. "
-            "Use op=providers before a batch, op=ask per question, op=screenshot to retrieve the evidence image by name."
+            "Use op=providers before a batch, op=ask per question, op=screenshot to retrieve the evidence image by name. "
+            "An ask still being answered returns pending with a requestId: read it later with op=result, never ask again."
         ),
         "inputSchema": object_schema(
             {
-                "op": {"type": "string", "enum": ["providers", "ask", "screenshot"]},
+                "op": {"type": "string", "enum": ["providers", "ask", "result", "screenshot"]},
                 "question": {"type": "string", "minLength": 1, "maxLength": 2000},
+                "requestId": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
                 "providers": {
                     "type": "array",
                     "minItems": 1,
@@ -409,7 +411,7 @@ TOOL_DEFINITIONS = [
                     "items": {"type": "string", "enum": ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"]},
                 },
                 "deep": {"type": "integer", "enum": [0, 1]},
-                "newChat": {"type": "integer", "enum": [0, 1]},
+                "newChat": {"type": "integer", "enum": [1]},
                 "name": {"type": "string", "minLength": 1, "maxLength": 160},
             },
             ("op",),
@@ -419,7 +421,10 @@ TOOL_DEFINITIONS = [
         "name": "open_access_full_text",
         "description": (
             "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, "
-            "else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what "
+            "else the open-access PDF) with its tables as cells, its PMC version and its license. When Europe PMC is "
+            "unavailable (an error status or no answer in time) NCBI PMC serves the same JATS instead and the result "
+            "says so (data.route ncbi-pmc-xml, data.fallbackFrom); a refusal such as not open access is never retried "
+            "elsewhere. data.contentLevel says what "
             "the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, "
             "checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps "
             "the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. "
@@ -504,7 +509,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "literature_search",
-        "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+        "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. By default the answer leads with PubMed's Best Match records and adds the EviMed index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary); `databases` [\"pubmed\"] asks PubMed alone and [\"internal\"] asks the EviMed index alone with its full abstracts and AI summaries. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
@@ -543,6 +548,7 @@ TOOL_DEFINITIONS = [
                     "type": "array",
                     "maxItems": 8,
                     "items": {"type": "string", "enum": ["internal", "pubmed", "crossref"]},
+                    "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only, full abstracts and AI summaries. [\"crossref\"]: Crossref.",
                 },
             },
         ),
@@ -1904,7 +1910,7 @@ def _managed_status_with_wait(status_call, arguments):
 # wrapper (packages/harness-port/src/engineContext.mjs) attaches it to exactly
 # these, replacing anything a model wrote under that name;
 # apps/server/test/engineToolContract.test.mjs holds the two rosters equal.
-ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", "kb_search", "kb_browse", *specialist_jobs.SPECS})
+ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", "kb_search", "kb_browse", "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", *specialist_jobs.SPECS})
 
 
 def call_tool(name, arguments):
@@ -2273,18 +2279,19 @@ def _dispatch(name, arguments, execution_context=None):
         return result
     if name in ("vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"):
         try:
-            if name == "vcr_read":
-                result = vcr_platform.read(arguments)
-            elif name == "vcr_write":
-                result = vcr_platform.write(arguments)
-            elif name == "vcr_simulate":
-                result = vcr_platform.simulate(arguments)
-            elif name == "trial_registry_record":
-                result = vcr_platform.registry_record(arguments)
-            elif name == "curve_digitize":
-                result = vcr_platform.digitize(arguments)
-            else:
-                result = vcr_platform.evidence_pool(arguments)
+            with vcr_platform.invocation(execution_context):
+                if name == "vcr_read":
+                    result = vcr_platform.read(arguments)
+                elif name == "vcr_write":
+                    result = vcr_platform.write(arguments)
+                elif name == "vcr_simulate":
+                    result = vcr_platform.simulate(arguments)
+                elif name == "trial_registry_record":
+                    result = vcr_platform.registry_record(arguments)
+                elif name == "curve_digitize":
+                    result = vcr_platform.digitize(arguments)
+                else:
+                    result = vcr_platform.evidence_pool(arguments)
         except vcr_platform.VcrPlatformError as error:
             # The same three next steps as GEO's, for the same reasons: a
             # malformed call is the run's to fix, an outage may pass, and a

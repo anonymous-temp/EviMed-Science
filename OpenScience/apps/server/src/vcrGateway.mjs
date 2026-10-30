@@ -63,7 +63,7 @@ import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/dom
 
 import {
   VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
-  VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
+  VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
   isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse, VCR_SOA_LIMITS,
@@ -74,10 +74,10 @@ import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } 
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
-import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION, storedExclusion } from "./vcrMatching.mjs";
-import { VCR_RECONSTRUCTION_REFERENCE } from "./vcrJobs.mjs";
-import { resolveJobSubject } from "./vcrSubjects.mjs";
+import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor } from "./vcrJobs.mjs";
+import { resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
+import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
@@ -98,7 +98,7 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "query"]);
+const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -117,8 +117,9 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   ...VCR_LONGITUDINAL_ERROR_CODES,
   "vcr_disabled", "vcr_no_study", "vcr_gateway_token_missing", "vcr_gateway_token_invalid", "vcr_gateway_rate_limited",
   "vcr_gateway_timeout", "vcr_gateway_unavailable", "vcr_request_invalid", "vcr_request_too_large",
-  "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
+  "vcr_model_version_changed", "vcr_task_context_deleted", "vcr_invocation_unavailable", "vcr_patient_context_invalid", "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
   "vcr_curve_provenance_unavailable", "vcr_curve_provenance_invalid", "vcr_curve_source_changed",
+  "source_changed",
   "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
   "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
   "vcr_job_not_found", "registry_unavailable",
@@ -234,6 +235,10 @@ function readRequest(body) {
     }
     filter.limit = raw.limit;
   }
+  if (raw.beforeSeq != null) {
+    if (!Number.isSafeInteger(raw.beforeSeq) || raw.beforeSeq < 0) throw gatewayError(400,'vcr_read_filter_invalid','filter.beforeSeq must be a nonnegative sequence.');
+    filter.beforeSeq=raw.beforeSeq;
+  }
   if (raw.offset != null) {
     if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > (body.what === "subject_document" ? 1_048_576 : 10_000)) {
       throw gatewayError(400, "vcr_read_filter_invalid", "filter.offset must be a whole number from 0 to 10000.");
@@ -245,6 +250,7 @@ function readRequest(body) {
 
 /** @param {Record<string, any>} body */
 function writeRequest(body) {
+  if (["site", "followup"].includes(String(body.what))) throw gatewayError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
   onlyFields(body, ["what", "items", "data"]);
   if (typeof body.what !== "string" || !VCR_WRITE_WHATS.includes(body.what)) {
     throw gatewayError(400, "vcr_write_what_invalid", `what must be one of: ${VCR_WRITE_WHATS.join(", ")}.`);
@@ -265,11 +271,10 @@ function writeRequest(body) {
  */
 const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 /** The keys an accrual request may carry: the target and horizon are the study's to state; the sites' rates come from the ledger. */
-const ACCRUAL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.accrual_forecast;
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
-  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection"]);
+  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion"]);
   const action = body.action ?? "start";
   if (!["start", "status", "cancel"].includes(action)) {
     throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status or cancel.");
@@ -286,15 +291,19 @@ function simulateRequest(body) {
     }
     // A time-to-event MAIC's comparator is a reconstruction RESULT of this study, named by its id; the rows are the platform's.
     if (body.reconstructionResultId != null) {
-      if (body.kind !== VCR_RECONSTRUCTION_REFERENCE.kind) {
-        throw gatewayError(400, "vcr_simulate_payload_invalid", `reconstructionResultId 只用于 ${VCR_RECONSTRUCTION_REFERENCE.kind}：它指向一次生存曲线重建的结果。`);
+      if (!vcrReconstructionReferenceFor(body.kind)) {
+        throw gatewayError(400, "vcr_simulate_payload_invalid", "重建结果只用于事件时间比较或参数生存基线拟合。");
       }
       if (typeof body.reconstructionResultId !== "string" || !ID.test(body.reconstructionResultId)) {
         throw gatewayError(400, "vcr_simulate_payload_invalid", "reconstructionResultId 是本研究一次曲线重建结果的 id。");
       }
     }
+    if (body.modelId != null && (typeof body.modelId !== 'string' || !ID.test(body.modelId) || typeof body.modelVersion !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.+-]{0,127}$/.test(body.modelVersion))) {
+      throw gatewayError(400,'vcr_simulate_payload_invalid','modelId requires its immutable modelVersion.');
+    }
+    if (body.modelVersion != null && body.modelId == null) throw gatewayError(400,'vcr_simulate_payload_invalid','modelVersion requires modelId.');
     if (body.selection != null && body.kind !== 'match_criteria') throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
-    return { action, kind: body.kind, selection: body.selection == null ? null : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
+    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
       reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
@@ -879,6 +888,9 @@ const WRITERS = {
       }
       if (cited.length !== 1) return void item.bad("evidenceIds", "直接取值只引用一条证据；多项证据用 fromPooling 交给引擎合并。");
       const [row] = await evidenceStore.verifiedItemsById({ userId: study.userId, studyId: study.id, ids: cited });
+      if (row.detail?.verificationScope === "quoted_inputs_only") {
+        return void item.bad("evidenceIds", "这条记录只核对了派生输入，不能冒充已发表的直接数值；请先保存实际计算的结果，或明确作为假设。", "vcr_evidence_unverified");
+      }
       // The arm the parameter is a quantity of, the same rule the pool takes its
       // studies by: a control-arm median is not the treatment arm's, and a card
       // built from the wrong arm's row would carry a true number for the wrong thing.
@@ -890,7 +902,7 @@ const WRITERS = {
       const saved = await evidenceStore.saveAssumption({ userId: study.userId, studyId: study.id, card: {
         key, name, endpoint, unit, pointValue: Number(row.value),
         distribution: { family: "point", params: { point: Number(row.value) }, range },
-        sensitivity: { range, calibres: [] }, sourceKind: "external_evidence", valueSource: "extracted", poolingMethod: "single_study",
+        sensitivity: { range, calibres: [] }, sourceKind: "external_evidence", valueSource: row.value_source, poolingMethod: "single_study",
         pooling: { k: 1, note: "单项研究直接取值，没有预测区间" }, evidenceIds: cited, applicability, reviewState: "ai_set", note, afterFreeze,
       } });
       noteChange(saved);
@@ -1026,9 +1038,16 @@ const WRITERS = {
   async evidence_item(item, { evidence, study, service }, extra) {
     if (!item.only(["registry", "registryId", "parameter", "arm", "armRole", "value", "valueText", "unit", "ciLow", "ciHigh", "sampleSize",
       "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note",
-      "source", "candidateFrom", "timepoint"])) return null;
+      "source", "candidateFrom", "timepoint", "literatureSource", "evidenceKind", "trialIdentity"])) return null;
+    const literatureSource = item.obj("literatureSource", { bytes: 1024 });
+    if (item.row.literatureSource != null && (!literatureSource || Object.keys(literatureSource).some(key => !["sourceId", "generation", "textSha256"].includes(key))
+      || typeof literatureSource.sourceId !== "string" || !literatureSource.sourceId || !Number.isSafeInteger(literatureSource.generation)
+      || literatureSource.generation < 1 || !/^[a-f0-9]{64}$/.test(String(literatureSource.textSha256)))) item.bad("literatureSource", "Name one preserved source with its exact generation and textSha256.");
+    if (literatureSource && (item.row.registry != null || item.row.registryId != null)) item.bad("registryId", "Choose one preserved literature source or one registry record.");
+    const trialIdentity = item.obj("trialIdentity", { bytes: 1024 });
+    const evidenceKind = item.choice("evidenceKind", ["baseline", "outcome", "design"], { fallback: "outcome" });
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
-    const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: true });
+    const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: !literatureSource });
     const parameter = item.str("parameter", { max: 120, required: true });
     const arm = item.str("arm", { max: 200 });
     const armRole = item.choice("armRole", EVIDENCE_ARM_ROLES, { required: true });
@@ -1062,10 +1081,10 @@ const WRITERS = {
     const candidateFrom = item.row.candidateFrom == null ? undefined : candidateOf(item);
     if (!item.ok) return null;
     if (!evidence?.addEvidenceItem) return void item.bad("registryId", "证据参数化未接入本部署。", "vcr_write_refused");
-    const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, item: {
+    const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, projectId: study.projectId, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
-      timepoint: item.row.timepoint, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
+      trialIdentity, timepoint: item.row.timepoint, ...(literatureSource ? { literatureSource } : {}), evidenceKind, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
     } });
     if (written.status !== "ok") return void item.bad(written.code === "vcr_precedent_not_in_study" ? "registryId" : "quote", written.message ?? "没有写入。",
       written.code === "vcr_precedent_not_in_study" ? "vcr_write_value_invalid" : "vcr_evidence_unverified");
@@ -1073,7 +1092,7 @@ const WRITERS = {
     extra.results.push({ index: item.index, id: written.id, verified, state: written.state });
     if (!verified) {
       item.issues.push(issue(item.index, "quote", "vcr_evidence_unverified",
-        `已记录，但没有通过原文核对（${written.state}），不会进入假设卡：引文要逐字出现在登记记录里，值、区间和样本量都要出现在引文里。`));
+        `已记录，但没有通过原文核对（${written.state}），不会进入假设卡：引文要逐字出现在保全原文里，值、区间和样本量都要出现在引文里。`));
     }
     return written.id;
   },
@@ -1628,87 +1647,6 @@ const WRITERS = {
     return saved.id;
   },
 
-  async site(item, { matchStore, study }) {
-    if (!item.only(["id", "name", "capability", "capacity", "competing", "contacts", "activatedOn", "accrualPrior"])) return null;
-    const id = item.token("id", ID, "已有中心的 id（新建时不写）");
-    const name = item.str("name", { max: 120, required: true });
-    const capability = item.obj("capability") ?? {};
-    const capacity = item.obj("capacity") ?? {};
-    const competing = item.arr("competing", { max: 30 }) ?? [];
-    const contacts = item.arr("contacts", { max: 20 }) ?? [];
-    const activatedOn = item.iso("activatedOn");
-    const prior = item.obj("accrualPrior", { bytes: 2048 }) ?? {};
-    for (const key of Object.keys(prior)) if (!["alpha", "beta", "screenFailureRate"].includes(key)) item.bad(`accrualPrior.${key}`, "accrualPrior 只写 alpha、beta、screenFailureRate；历史入组数由台账算出，不可手填。", "vcr_write_field_forbidden");
-    for (const key of ["alpha", "beta"]) if (prior[key] != null && !(Number.isFinite(prior[key]) && prior[key] > 0)) item.bad(`accrualPrior.${key}`, `${key} 是大于 0 的数。`);
-    if (prior.screenFailureRate != null && !(Number.isFinite(prior.screenFailureRate) && prior.screenFailureRate >= 0 && prior.screenFailureRate < 1)) item.bad("accrualPrior.screenFailureRate", "screenFailureRate 是 0 到 1 之间的数。");
-    if (!item.ok) return null;
-    if (!matchStore?.upsertSite) return void item.bad("name", "匹配与招募未接入本部署。", "vcr_write_refused");
-    // An id names a site this study already has; a run does not choose the id of a new one.
-    if (id && !(await matchStore.getSite(id, study.id))) return void item.bad("id", "这个中心不属于本研究：新建中心不写 id。");
-    // A run never says a site was verified: 「最后核实时间」 is a person's, and
-    // a profile with none makes no capacity claim (plan §7.2).
-    const saved = await matchStore.upsertSite({ userId: study.userId, site: {
-      id: id ?? undefined, studyId: study.id, name, capability, capacity, competing, contacts, activatedOn: activatedOn ?? null,
-      accrualPrior: prior, verifiedAt: null,
-    } });
-    if (!saved) return void item.bad("id", "这个中心不属于本研究。");
-    return saved.id;
-  },
-
-  async followup(item, { matchStore, study }) {
-    if (!item.only(["subjectKey", "kind", "windowStart", "windowEnd", "observations", "exitDate", "exitReason"])) return null;
-    const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号", { required: true });
-    const kind = item.choice("kind", VCR_FOLLOWUP_KINDS, { required: true });
-    const windowStart = item.iso("windowStart");
-    const windowEnd = item.iso("windowEnd");
-    const exitDate = item.iso("exitDate");
-    const exitReason = item.str("exitReason", { max: 300 });
-    const observations = item.arr("observations", { max: 50 }) ?? [];
-    for (const [at, entry] of observations.entries()) {
-      const row = object(entry);
-      if (Object.keys(row).some((key) => !["variable", "value", "unit", "at"].includes(key))) item.bad(`observations[${at}]`, "观察写成 { variable, value, unit, at }。");
-      else if (typeof row.variable !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(row.variable)) item.bad(`observations[${at}].variable`, "variable 是小写英文变量名。");
-      else if (kind === "study_specific" && VCR_TRIAL_RESTRICTED_FIELDS.includes(row.variable)) {
-        // An observation of a field the partner cannot see is an exit turned into a trial fact.
-        const refusal = deriveFromExit({ field: row.variable });
-        item.bad(`observations[${at}].variable`, refusal.message, refusal.code);
-      }
-    }
-    if (kind === "study_specific" && (!exitDate || !exitReason)) item.bad("exitDate", "试验期间的片段要写出组日期 exitDate 和原因 exitReason，照原样，不转换。");
-    // The trial-period window ends on the exit date: a different end would leave the exit date recorded nowhere.
-    if (kind === "study_specific" && exitDate && windowEnd && new Date(windowEnd).getTime() !== new Date(exitDate).getTime()) {
-      item.bad("windowEnd", "试验期间的片段在出组日结束：windowEnd 不写，或与 exitDate 相同。");
-    }
-    if (kind === "post_exit" && !windowStart) item.bad("windowStart", "出组后观察要写起点 windowStart。");
-    if (!item.ok) return null;
-    if (!matchStore?.saveFollowupEpisode) return void item.bad("subjectKey", "匹配与招募未接入本部署。", "vcr_write_refused");
-    /** @type {Record<string, any>} */
-    const episode = kind === "study_specific"
-      ? trialPeriodEpisode({ studyId: study.id, subjectKey: String(subjectKey), exitDate: String(exitDate), exitReason: String(exitReason), observations, windowStart: windowStart ?? null, windowEnd: windowEnd ?? null })
-      : kind === "post_exit"
-        ? postExitEpisode({ studyId: study.id, subjectKey: String(subjectKey), from: String(windowStart), to: windowEnd ?? null, observations })
-        : { studyId: study.id, subjectKey: String(subjectKey), kind, windowStart: windowStart ?? null, windowEnd: windowEnd ?? null, observations, restricted: {}, exitReason: exitReason ?? null };
-    // The exit stands as first recorded: what this subject's trial-period episode already says, read back,
-    // is what the new exit is held to. A different one is appended and reported, never written over.
-    const recorded = kind === "study_specific"
-      ? matchStore.firstTrialExit ? await matchStore.firstTrialExit({ studyId: study.id, subjectKey: String(subjectKey) })
-        : matchStore.listFollowupEpisodes ? (await matchStore.listFollowupEpisodes({ studyId: study.id, subjectKey: String(subjectKey) })).find((/** @type {any} */ row) => row.kind === "study_specific") ?? null : null
-      : null;
-    const saved = await matchStore.saveFollowupEpisode({ userId: study.userId, episode });
-    if (recorded) {
-      /** @param {unknown} value */
-      const instant = (value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : "");
-      // A date-only source is a calendar date, not local midnight interpreted
-      // in whichever timezone this Node process or PostgreSQL happens to use.
-      const recordedDate = recorded.exitDate ?? (/^\d{4}-\d{2}-\d{2}$/.test(String(exitDate)) ? recorded.legacyExitDate : null) ?? recorded.windowEnd;
-      for (const finding of followupFidelityFindings({ ...recorded, exitDate: instant(recordedDate) }, { exitDate: instant(exitDate), exitReason: exitReason ?? "" })) {
-        item.issues.push(issue(item.index, finding.code === "vcr_exit_date_rewritten" ? "exitDate" : finding.code === "vcr_exit_reason_rewritten" ? "exitReason" : "kind",
-          finding.code, finding.message));
-      }
-    }
-    return saved.id;
-  },
-
   /**
    * The words of a report, with `{{n:…}}` references in them: the platform
    * renders every number from the study's own results and stores the rendered
@@ -1795,6 +1733,7 @@ const WRITERS = {
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
   matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null }) {
+  if (["site", "followup"].includes(what)) throw gatewayError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
   /** @type {string[]} */
   const ids = [];
   /** @type {Array<Record<string, any>>} */
@@ -2111,10 +2050,10 @@ function poolingSummary(result, about) {
 /**
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any } | null,
- *   report?: (code: string) => void, budgetMs?: number, attributeRun?: ((caller:any)=>Promise<string|null>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
+ *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any } | null,
+ *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
  */
-export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, attributeRun = null }) {
+export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null }) {
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   const registryDeadline = Number(config?.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : REGISTRY_DEADLINE_MS;
@@ -2146,15 +2085,36 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         throw gatewayError(429, "vcr_gateway_rate_limited", "Too many 虚拟临床研究 calls in a minute.");
       }
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
-      const study = await vcr.store.studyByControlProject(String(identity.userId), String(identity.projectId));
-      if (!study) {
-        throw gatewayError(404, "vcr_no_study",
-          "This conversation is not in a 虚拟临床研究 study; open the study's own conversation to read or write its data.");
+      const nativeHeader = req.headers?.['x-evimed-execution-context'];
+      if (nativeHeader && !resolveInvocation) throw gatewayError(403,'vcr_invocation_unavailable','The native invocation cannot be verified.');
+      // Transcript paging belongs to the request's bounded proof work.
+      let proofTimer;
+      const origin = nativeHeader ? await Promise.race([
+        resolveInvocation(identity,nativeHeader,operation,body),
+        new Promise((_,reject)=>{proofTimer=setTimeout(()=>reject(gatewayError(504,'vcr_gateway_timeout','The native call proof timed out.')),budgetMs);proofTimer.unref?.();}),
+      ]).finally(()=>clearTimeout(proofTimer)) : null;
+      if(origin && (origin.userId!==String(identity.userId) || origin.projectId!==String(identity.projectId))) throw gatewayError(403,'vcr_invocation_unavailable','The native research scope changed.');
+      const boundedScope = origin ? null : runtimeManager.boundedRuntimeScope?.({userId:String(identity.userId),id:String(identity.projectId)});
+      const programmeDispatch = origin?.programme ? origin.dispatchId : boundedScope?.runId;
+      const programmeStudy = programmeDispatch && vcr.store.studyByRuntimeDispatch
+        ? await vcr.store.studyByRuntimeDispatch(String(identity.userId),String(identity.projectId),programmeDispatch) : null;
+      if ((!origin || origin.programme) && !programmeStudy) throw gatewayError(403,'vcr_invocation_unavailable','A current native research call or exact study dispatch is required.');
+      let study = programmeStudy ?? await vcr.store.studyByControlProject(String(identity.userId),String(identity.projectId));
+      if (origin && !programmeStudy && study && !study.conversationSessionId && resolveStudyConversation) {
+        const legacy=await resolveStudyConversation(study,{create:false});
+        if (legacy?.sessionId) { await vcr.store.setConversationSession(study.id,legacy.sessionId); study={...study,conversationSessionId:legacy.sessionId}; }
       }
-
-      const scopedRunId = runtimeManager.boundedRuntimeScope?.({ userId: String(identity.userId), id: String(identity.projectId) })?.runId
-        ?? (attributeRun ? await attributeRun(identity) : null);
-      if (readProducerRun && ['read','write'].includes(operation) && ['subject_document','matching','fact','language_judgment'].includes(body.what)) {
+      if (origin && !programmeStudy && (!study || study.conversationSessionId!==origin.rootSessionId)) {
+        const create=operation==='write' || operation==='digitize' || operation==='simulate' && (body.action ?? 'start')==='start';
+        study=await vcr.store.taskContext(origin,{create}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};
+      }
+      if (!study) throw gatewayError(403,'vcr_invocation_unavailable','Use this research tool from the current conversation.');
+      study.executionOrigin = origin;
+      study.completionOrigin = origin && !origin.programme ? origin : null;
+      // A dedicated runtime has an exclusive dispatch. Shared runtimes need transcript proof;
+      // the sole running project run is never attribution for patient evidence.
+      const scopedRunId = origin?.runId ?? boundedScope?.runId ?? null;
+      if (readProducerRun && ['read','write'].includes(operation) && ['subject_document','matching','candidate_trials','fact','language_judgment','patient_context'].includes(body.what)) {
         const receipt = scopedRunId ? await readProducerRun(study, scopedRunId) : null;
         if (!receipt?.sessionId) throw gatewayError(403, 'vcr_cloud_run_unattributed', 'Start a study conversation before reading patient evidence.');
         study.cloudContext = { runId: scopedRunId, sessionId: receipt.sessionId };
@@ -2168,13 +2128,21 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         // A registry read waits on a registry: its budget is its client's deadline
         // and a margin, so the gateway never gives up before the client does.
         if (request.what === "trial_registry_record") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
-        work = async () => ({ what: request.what, ...(await vcr.service.runtimeRead(study, request.what, request.filter)) });
+        work = async () => ({ what: request.what, ...(request.what==='patient_context'
+          ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter) : {candidates:[],nextBeforeSeq:null}
+          : await vcr.service.runtimeRead(study, request.what, request.filter)) });
       } else if (operation === "write") {
         const request = writeRequest(body);
         // The token names the runtime, and a runtime reserved for one dispatch names that dispatch: with the
         // study's own run slot, that is which run is calling — nothing the run sends says so.
         const runtimeRunId = scopedRunId;
         work = async () => {
+          if (request.what === 'task_context') return { what: request.what, ok: true, ids: [study.id], issues: [], studyId: study.id,
+            scope: study.scope, conversationSessionId: study.conversationSessionId };
+          if (request.what === 'patient_context') {
+            if (!origin || !vcr.patientContext) throw gatewayError(403, 'vcr_invocation_unavailable', 'A native patient message or owned attachment is required.');
+            return { what: request.what, ...await vcr.patientContext(study, request.data, origin) };
+          }
           const clinicalWrite = ["fact", "language_judgment"].includes(request.what);
           const runReceipt = clinicalWrite && runtimeRunId && readProducerRun ? await readProducerRun(study, runtimeRunId).catch(() => null) : null;
           const result = await vcrRuntimeWrite({
@@ -2213,7 +2181,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           }
           if (request.action === "start") return startJob(vcr, study, /** @type {any} */ (request));
           if (request.action === "cancel") {
-            const result = await vcr.jobs.cancel(study.id, request.jobId, { actor: "runtime" });
+            const result = await vcr.jobs.cancel(study.id, request.jobId, { actor: "runtime",rootSessionId:origin?.rootSessionId ?? null });
             return { action: "cancel", jobId: request.jobId, state: result.job?.state ?? "canceled", canceled: result.canceled };
           }
           // A service without the boundary is a wiring fault, and the raw
@@ -2226,7 +2194,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           // The result this job produced, found through the execution it wrote
           // — never 「the newest result of this study」, which would hand a run
           // somebody else's numbers under its own job id.
-          const execution = job.state === "succeeded" || job.state === "failed"
+          const execution = ["succeeded","failed","canceled"].includes(job.state)
             ? await vcr.store.one("SELECT id FROM evimed_vcr.executions WHERE job_id = $1 ORDER BY created_at DESC LIMIT 1", [job.id])
             : null;
           const result = execution
@@ -2239,7 +2207,11 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
-          return vcr.service.forModel(answer, { projection: "job_result" });
+          const safe = await vcr.service.forModel(answer, { projection: "job_result" });
+          if (origin && ["succeeded","failed","canceled"].includes(job.state)) await vcr.store.query(`UPDATE evimed_vcr.jobs
+            SET checkpoint=checkpoint || jsonb_build_object('originTerminalObservation',$4::jsonb) WHERE id=$1
+            AND checkpoint->'conversationOrigin'->>'runId'=$2 AND checkpoint->'conversationOrigin'->>'rootSessionId'=$3`,[job.id,origin.runId,origin.rootSessionId,JSON.stringify({runId:origin.runId,rootSessionId:origin.rootSessionId,callId:origin.callId,state:job.state,resultKey:result ? `${result.id}:${result.version}` : 'none'})]);
+          return safe;
         };
       }
 
@@ -2292,12 +2264,12 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
  *
  * @param {any} vcr @param {any} study
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
- *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any }} request
+ *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null }} request
  */
 async function startJob(vcr, study, request) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
     if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
-    const {job} = await vcr.longitudinal.prepare(study,request,study.userId);
+    const {job} = await vcr.longitudinal.prepare(study,request,study.userId,{ detail: study.completionOrigin ? { conversationOrigin:study.completionOrigin } : {} });
     return {action:'start',jobId:job.id,state:job.state,progress:job.progress};
   }
   if (request.kind === "pool_evidence") {
@@ -2324,6 +2296,7 @@ async function startJob(vcr, study, request) {
       userId: study.userId, studyId: study.id, parameter: scenario.parameter.trim(), endpointKey: scenario.endpointKey,
       armRole: scenario.armRole ?? "", target: poolTargetOf(scenario.target), poolingMethod: scenario.method ?? "random_effects_reml",
       calibres: scenario.calibres ?? null,
+      conversationOrigin: study.completionOrigin ?? null,
     });
     const started = list(pooled.jobs).filter((/** @type {any} */ job) => job.jobId);
     // Every study the pool left out, with why: the list is as long as the pool can be (a run that
@@ -2342,6 +2315,12 @@ async function startJob(vcr, study, request) {
   let inputs = request.inputs;
   /** @type {Record<string, any>} */
   let detail = { subjectId: request.subjectId, origin: "runtime" };
+  if (request.kind === "apply_prognostic_model" && !request.modelId) throw gatewayError(400, "vcr_model_invalid", "Select an immutable source-bound prognostic model before applying it.");
+  if (request.modelId) {
+    const sourceModel = await vcr.service.modelExecution({id:study.userId},study,request.modelId,request.kind,request.scenario);
+    if (sourceModel.version !== request.modelVersion) throw gatewayError(409,'vcr_model_version_changed','The selected source model version changed.');
+    detail = {...detail,sourceModel};
+  }
   /** @type {Record<string, any> | null} */
   let notes = null;
   if (request.kind === "match_criteria") {
@@ -2358,27 +2337,16 @@ async function startJob(vcr, study, request) {
     scenario = built.scenario;
     inputs = built.inputs;
     detail = { ...detail, protocolVersionId: built.protocolVersionId };
-  } else if (request.kind === "accrual_forecast") {
-    if (!vcr.matching?.accrualScenario) throw gatewayError(503, "vcr_gateway_unavailable", "入组预测未接入本部署：这一步暂不可用。");
-    const unknown = Object.keys(request.scenario).filter((key) => !ACCRUAL_REQUEST_FIELDS.includes(key));
-    if (unknown.length || request.inputs.length) {
-      throw gatewayError(400, "vcr_simulate_payload_invalid", `入组预测只写 ${ACCRUAL_REQUEST_FIELDS.join("、")}：各中心的入组率来自台账和中心档案。`);
-    }
-    const built = await vcr.matching.accrualScenario(study, request.scenario);
-    if (!built.ok) throw gatewayError(400, "vcr_simulate_payload_invalid", built.message);
-    scenario = built.scenario;
-    notes = built.notes ?? null;
-    // The table the probability curve is drawn from is kept in the data plane.
-    detail = { ...detail, keepTables: ["probability_by_month"] };
   }
+  if (request.kind === "accrual_forecast") detail = { ...detail, keepTables: ["probability_by_month"] };
   if (request.kind === VCR_RECONSTRUCTION_REFERENCE.kind && !request.reconstructionResultId) {
     throw gatewayError(400, "vcr_simulate_payload_invalid",
       "事件时间终点的匹配调整间接比较要比较臂的伪个体数据：用 reconstructionResultId 指向本研究一次曲线重建的结果，不要自己写数据行。");
   }
   // The reference rides beside the scenario: the queue resolves it through the data plane and writes the comparator's
   // input id into the scenario itself, so it is part of what makes the same request the same job.
-  const derived = request.reconstructionResultId
-    ? [{ resultId: request.reconstructionResultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo }] : [];
+  let derived = request.reconstructionResultId
+    ? [{ resultId: request.reconstructionResultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: vcrReconstructionReferenceFor(request.kind)?.bindTo }] : [];
   // A cohort asked for with no scenario is the real population's own: its rules (from the protocol's criteria, or the ones the run wrote)
   // on the snapshot it names — the one step 「从方案出发查覆盖」 is: write the population, then ask for the cohort.
   if (request.kind === "build_cohort" && !Object.keys(scenario).length) {
@@ -2400,11 +2368,15 @@ async function startJob(vcr, study, request) {
       detail = { ...detail, timeUnitBasis: { ...times.timeUnit } };
     }
   }
-  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
   // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier
   // results. The id the run gave is checked against the study; with none, the one object the scenario fits is taken, and several
   // (or none) are refused by name with what the study holds.
   const subject = await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: request.subjectId, scenario });
+  const population = await prepareVcrSubjectPopulation({ store: vcr.store, study, kind: request.kind, subject, scenario,
+    inputs: /** @type {any[]} */ (inputs), sourceModel: detail.sourceModel });
+  const designBinding = await prepareVcrModelDesign({ store: vcr.store, study, subject, scenario: population.scenario, inputs: population.inputs });
+  scenario = designBinding.scenario; inputs = designBinding.inputs; derived = [...derived, ...population.derived];
+  detail = { ...detail, ...population.detail, ...designBinding.detail };
   if (subject) {
     detail = { ...detail, ...subject.detail };
     const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
@@ -2414,12 +2386,15 @@ async function startJob(vcr, study, request) {
         message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };
     }
   }
+  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
   const { job } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
+    ...(population.derived.length ? { internal: true } : {}),
     seed: request.seed, replicates: request.replicates, cpuSecondsLimit: request.cpuSecondsLimit,
     // The same frozen scenario asked for twice is the same job; a changed one is not.
     idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${subject?.row.id ?? request.subjectId ?? ""}:${scenarioHash}`,
-    detail,
+    runId: study.executionOrigin?.runId ?? null,
+    detail: { ...detail, ...(study.completionOrigin ? { conversationOrigin: study.completionOrigin } : {}) },
   }).catch(error => {
     if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
       'generate_patients', 'generate_patients_continuous', 'generate_patients_binary', 'generate_patients_longitudinal'].includes(request.kind)) {

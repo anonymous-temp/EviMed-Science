@@ -116,6 +116,9 @@ export const CONTRAST_RULES = Object.freeze([
   { fg: 'text-2', bg: 'surface-3', min: 4.5, what: 'secondary text on an inset track' },
   { fg: 'title-ink', bg: 'bg', min: 4.5, what: 'a list title on the canvas' },
   { fg: 'title-ink', bg: 'surface-2', min: 4.5, what: 'a list title on a hovered row' },
+  ...['bg', 'surface', 'surface-1'].map((bg) => ({ fg: 'brand-ink', bg, min: 4.5, what: `the identity mark on ${bg}` })),
+  { fg: 'info', bg: 'info-soft', min: 4.5, what: 'text in an information notice' },
+  { fg: 'accent-fg', bg: 'accent-pressed', min: 4.5, what: 'the pressed primary button label' },
   { fg: 'accent', bg: 'bg', min: 4.5, what: 'a link on the canvas' },
   { fg: 'accent', bg: 'surface', min: 4.5, what: 'a link on a card' },
   { fg: 'accent-fg', bg: 'accent', min: 4.5, what: 'the primary button label' },
@@ -134,6 +137,7 @@ export const CONTRAST_RULES = Object.freeze([
   { fg: 'text', bg: 'highlight', min: 4.5, what: 'body text under the highlighter' },
   { fg: 'border-control', bg: 'bg', min: 3, what: 'the edge of an input on the canvas' },
   { fg: 'border-control', bg: 'surface-1', min: 3, what: 'the edge of an input on the sidebar' },
+  ...['bg', 'surface', 'surface-1'].map((bg) => ({ fg: 'focus-input', bg, min: 3, what: 'the ink field focus ring' })),
   { fg: 'focus', bg: 'bg', min: 3, what: 'the focus ring' },
   ...DOT_RULES,
   { fg: 'text-graphic', bg: 'bg', min: 2.5, what: 'a decorative icon or rule on the canvas — never text, never a status' },
@@ -164,6 +168,7 @@ export const DATA_CONTRAST_RULES = Object.freeze([
       ['bg', 'light'],
       ['surface', 'light'],
       ['bg', 'dark'],
+      ['surface', 'dark'],
     ]).map(([bg, scheme]) => ({
       name: `chart-rival-${index + 1}`,
       color,
@@ -316,4 +321,32 @@ export function measuredNote(role) {
   if (!COLOR_ROLES[role]) return undefined
   const ratio = contrastRatio(resolveColor(colorRole(role, 'light')), resolveColor(colorRole('bg', 'light')))
   return `${ratio.toFixed(2)} on the page`
+}
+
+/**
+ * CIE76 distance in CIELAB, sRGB decoded against the D65 reference white.
+ * Measures identity separation independently from luminance contrast.
+ * @param {string} first Opaque six-digit sRGB hex.
+ * @param {string} second Opaque six-digit sRGB hex.
+ * @returns {number}
+ */
+export function cie76(first, second) {
+  /** @param {string} hex @returns {number[]} */
+  const lab = (hex) => {
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) throw new Error(`cie76: invalid sRGB colour: ${hex}`)
+    const rgb = [1, 3, 5].map((offset) => {
+      const channel = parseInt(hex.slice(offset, offset + 2), 16) / 255
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+    })
+    const [r, g, b] = rgb
+    const xyz = [
+      (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047,
+      0.2126729 * r + 0.7151522 * g + 0.0721750 * b,
+      (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883,
+    ].map((value) => value > (6 / 29) ** 3 ? Math.cbrt(value) : value / (3 * (6 / 29) ** 2) + 4 / 29)
+    return [116 * xyz[1] - 16, 500 * (xyz[0] - xyz[1]), 200 * (xyz[1] - xyz[2])]
+  }
+  const a = lab(first)
+  const b = lab(second)
+  return Math.hypot(...a.map((value, index) => value - b[index]))
 }

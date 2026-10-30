@@ -12,6 +12,7 @@ import {
   Search,
   Settings,
   SquarePen,
+  Telescope,
   UsersRound,
   Wrench,
 } from "lucide-react";
@@ -66,6 +67,7 @@ const NAV: NavItem[] = [
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
   { to: "/app/extensions/discover", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
+  { to: "/app/active-research", label: "主动科研", icon: <Telescope size={16} aria-hidden="true" /> },
 ];
 
 /**

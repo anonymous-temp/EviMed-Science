@@ -1,10 +1,13 @@
 /* global WebSocket */
+import { loopbackOrigin } from "./config.mjs";
+const shellOrigin = loopbackOrigin(process.env.EVIMED_ACCEPTANCE_SHELL_ORIGIN);
+const uiOrigin = loopbackOrigin(process.env.EVIMED_ACCEPTANCE_UI_ORIGIN);
 /** CDP evaluation restricted to this disposable loopback acceptance browser. */
 const [selector, expression, surface = "native"] = process.argv.slice(2);
 const port = Number(process.env.EVIMED_ACCEPTANCE_CDP_PORT);
-if (!Number.isInteger(port) || port < 1024) throw new Error("A local acceptance CDP port is required.");
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("A local acceptance CDP port is required.");
 const tabs = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-const tab = tabs.find(value => value.url.startsWith("http://127.0.0.1:17879/") && value.url.includes(selector));
+const tab = tabs.find(value => value.url.startsWith(`${shellOrigin}/`) && value.url.includes(selector));
 if (!tab) throw new Error("No matching local acceptance tab.");
 const ws = new WebSocket(tab.webSocketDebuggerUrl);
 await new Promise(resolve => ws.addEventListener("open", resolve, { once: true }));
@@ -26,7 +29,7 @@ const call = (method, params = {}) => new Promise(resolve => {
 await call("Runtime.enable");
 if (expression === "__offline_navigation__") {
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(surface)) throw new Error("Invalid acceptance session identity.");
-  const main = contexts.find(value => value.origin === "http://127.0.0.1:17879" && value.auxData?.isDefault);
+  const main = contexts.find(value => value.origin === shellOrigin && value.auxData?.isDefault);
   await call("Network.enable");
   await call("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
   await new Promise(resolve => setTimeout(resolve, 1000));
@@ -41,7 +44,7 @@ if (expression === "__offline_navigation__") {
   ws.close();
   process.exit(0);
 }
-const origin = surface === "native" ? "http://127.0.0.1:18443" : "http://127.0.0.1:17879";
+const origin = surface === "native" ? uiOrigin : shellOrigin;
 const context = contexts.find(value => value.origin === origin && value.auxData?.isDefault);
 if (!context) { ws.close(); throw new Error("Acceptance execution context is unavailable."); }
 const result = await call("Runtime.evaluate", { contextId: context.id, expression, returnByValue: true, awaitPromise: true });

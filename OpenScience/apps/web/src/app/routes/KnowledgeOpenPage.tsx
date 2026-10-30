@@ -30,8 +30,8 @@ export function KnowledgeOpenPage() {
       try {
         const page = await getKnowledgePageAt(address.projectId, address.tree, address.path);
         if (!active) return;
-        const scope = address.projectId === getWebProjectId() ? null : address.projectId;
-        navigate(readerPath(page.sourceId, { scope: scope === SHARED_SCOPE ? null : scope, kind: "wiki", q: "" }, { tab: null, page: null, ...(page.address ? { knowledge: page.address } : {}) }), { replace: true });
+        // The project is always in the address: without a scope the list is the account's materials, which has no pages to go back to.
+        navigate(readerPath(page.sourceId, { scope: address.projectId === SHARED_SCOPE ? null : address.projectId, kind: "wiki", q: "" }, { tab: null, page: null, ...(page.address ? { knowledge: page.address } : {}) }), { replace: true });
       } catch (failure) {
         if (!active) return;
         if (failure instanceof WebApiError && (failure.status === 404 || failure.status === 400)) setState({ phase: "missing" });
@@ -40,7 +40,7 @@ export function KnowledgeOpenPage() {
     })();
     return () => { active = false; };
   }, [address, attempt, navigate]);
-  const pages = address && address.projectId !== getWebProjectId() ? `/app/files?scope=${encodeURIComponent(address.projectId)}&kind=wiki` : "/app/files?kind=wiki";
+  const pages = `/app/files?scope=${encodeURIComponent(address?.projectId || getWebProjectId())}&kind=wiki`;
   return (
     <PageShell title="知识页">
       {state.phase === "loading" && <p role="status" className="text-ui text-text-3">正在打开</p>}

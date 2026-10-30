@@ -1,7 +1,9 @@
+import { LIBRARY_PROJECT_ID, ownedSourceProjectSql } from "./internalProjects.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { HttpError } from "./security.mjs";
+import { effectiveProjects, libraryRecordCovers, libraryRecordProjects, ordinaryHolderProjects } from "./libraryScope.mjs";
 import { withdrawDerivedMemory, withdrawOrphanedDerivedMemory } from "./derivedMemory.mjs";
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
 import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput,
@@ -62,6 +64,18 @@ export function sourceReadable(payload) {
   if (status === "complete" || status === "needs_attention") return true;
   return (status === "parsing" || status === "failed") && typeof payload?.analysis?.readAt === "string"
     && payload.analysis.generation === payload.generation;
+}
+
+/**
+ * Whether a source is a table imported from the researcher's own database (`knowledge-base/databases/`). It is data the
+ * project's runs read -- `kb_search`, `kb_browse` and the dataset tools -- and it is kept OUT of the knowledge engine and
+ * out of the compiled wiki and graph: rows of a patient table are not for retrieval across the account, and a wiki page
+ * quoting them would carry them to where the table's access rules do not reach. Read off where the file lives, like a
+ * compiled page (`isCompiledPage`), never off its name.
+ * @param {any} source a source record
+ */
+export function isResearchDatabaseSource(source) {
+  return (Array.isArray(source?.payload?.paths) ? source.payload.paths : []).some((/** @type {string} */ file) => sourceOriginOf({ path: file }) === "database");
 }
 
 /**
@@ -167,7 +181,7 @@ export function projectSourceManifestRecord(row) {
   // `display` is what a row says about its document (`sourceDisplayOf`), worked out here so the page computes nothing about
   // content. `shared` is the list query's own column (whether the account library holds the document), not part of the record.
   const { shared = null, ...record } = row;
-  return { ...record, readable: sourceReadable(row.payload), display: sourceDisplayOf(row, { shared }), payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
+  return { ...record, personal: row.projectId === LIBRARY_PROJECT_ID, readable: sourceReadable(row.payload), display: sourceDisplayOf(row, { shared }), payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
     generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
     ...(Number.isSafeInteger(analysis.pageCount) ? { pageCount: analysis.pageCount } : {}),
     run: projectRun(analysis.run),
@@ -541,18 +555,33 @@ function retiredSourceRun(payload) {
 }
 
 /**
+ * What a table imported from the researcher's own database says about how much of the table the file holds
+ * (`researchDbImport.mjs`, `researchDbSourceFacts`): kept on the source as `payload.snapshot`, read by the knowledge base's
+ * page, the study's material entry and the engine's exclusion (`isResearchDatabaseSource`). Bounded, and a plain copy.
+ * @param {unknown} value @returns {Record<string, any>}
+ */
+function snapshotFacts(value) {
+  const facts = /** @type {any} */ (value);
+  if (!facts || typeof facts !== "object" || Array.isArray(facts) || facts.kind !== "research-database-snapshot" || Buffer.byteLength(JSON.stringify(facts)) > 16_384) {
+    throw new HttpError(400, "source_payload_invalid", "Source import facts are invalid.");
+  }
+  return JSON.parse(JSON.stringify(facts));
+}
+
+/**
  * What a link or a note says about its source beyond the bytes: the title the researcher gave a note or the page gave
  * itself, and where a snapshot was read from and when. Stored on the source row, so a row can say 「网页 · nmpa.gov.cn · 链接」
  * and a refresh knows which address to read again; the bytes stay the snapshot's own.
  * @param {Record<string,any>} input
- * @returns {{ title: string | null, link: null | { url: string, finalUrl: string, site: string, fetchedAt: string, rendered: boolean, original: string | null } }}
+ * @returns {{ title: string | null, snapshot: Record<string, any> | null, link: null | { url: string, finalUrl: string, site: string, fetchedAt: string, rendered: boolean, original: string | null } }}
  */
 function registrationFacts(input) {
   const title = input.title == null || input.title === "" ? null : text(input.title, "source title", 300);
-  if (input.link == null) return { title, link: null };
+  const snapshot = input.snapshot == null ? null : snapshotFacts(input.snapshot);
+  if (input.link == null) return { title, link: null, snapshot };
   const link = input.link;
   if (typeof link !== "object" || Array.isArray(link)) throw new HttpError(400, "source_payload_invalid", "Source link is invalid.");
-  return { title, link: {
+  return { title, snapshot, link: {
     url: text(link.url, "link url", 2048),
     finalUrl: text(link.finalUrl ?? link.url, "link final url", 2048),
     site: text(link.site, "link site", 255),
@@ -572,9 +601,10 @@ export class SourceService {
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
    * `afterRemove` is told once a document is recorded as going, so what rests on it can be labelled.
-   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
+   * @param {{measurementAccounts?:string[],extractorVersion?:string,now?:()=>Date,beforeRemove?:((event:any)=>Promise<any>)|null,beforeReplace?:((event:any)=>Promise<any>)|null,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
+  constructor(documents, jobs, { measurementAccounts = [], extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, beforeRemove = null, beforeReplace = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
+    this.measurementAccounts = measurementAccounts;
     this.judgeService = judgeService;
     this.documents = documents;
     this.jobs = jobs;
@@ -582,6 +612,8 @@ export class SourceService {
     this.now = now;
     this.afterReplace = afterReplace;
     this.afterRemove = afterRemove;
+    this.beforeRemove = beforeRemove;
+    this.beforeReplace = beforeReplace;
     this.prepareRegistration = prepareRegistration;
     this.report = report;
     this.evolutionSignals = evolutionSignals;
@@ -635,7 +667,8 @@ export class SourceService {
     const legacyPaths = legacy?.payload.paths ?? [];
     const unambiguousLegacy = legacy?.payload.logicalPath === logicalPath || (legacyPaths.includes(logicalPath)
       && legacyPaths.filter(entry => sourceOriginOf({ connectorType: sourceConnector.type, path: entry }) === "note").length === 1);
-    const sourceId = note && !unambiguousLegacy
+    const independentSnapshot = logicalPath.startsWith("knowledge-base/imports/");
+    const sourceId = (note && !unambiguousLegacy) || independentSnapshot
       ? sourceIdFor(projectId, digest(`${logicalPath}\0${sha256}`)) : legacyId;
     const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${logicalPath}`).slice(0, 32)}`;
     return this.withRegistrationLocks([`publication:${userId}:${projectId}`, `source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
@@ -685,7 +718,7 @@ export class SourceService {
           familyId, version: publicationRevision, generation: tombstone ? Number(tombstone.payload.generation) + 1 : 1,
           ...(tombstone ? { deletion: null } : {}), docType, depth, valueVector: defaultValueVector(docType), reasons: [reason],
           status: "queued", extractorVersion: this.extractorVersion, coverage: null, outputs: {}, override: null,
-          ...(facts.title ? { title: facts.title } : {}), ...(facts.link ? { link: facts.link } : {}), createdAt: now, updatedAt: now,
+          ...(facts.title ? { title: facts.title } : {}), ...(facts.link ? { link: facts.link } : {}), ...(facts.snapshot ? { snapshot: facts.snapshot } : {}), createdAt: now, updatedAt: now,
           publication: { current: true, bindings: { [familyId]: { logicalPath, current: true, publicationRevision } } } };
         exact = await this.documents.put(userId, "source", sourceId, payload,
           { expectedRevision: tombstone?.revision ?? 0, projectId, restoreDeleted: Boolean(tombstone) });
@@ -696,6 +729,7 @@ export class SourceService {
         const previousBindings = sourcePublicationBindings(previous);
         const nextBindings = { ...previousBindings, [familyId]: { ...previousBindings[familyId], current: false } };
         const current = previous.payload.publication?.legacyAmbiguous === true || Object.values(nextBindings).some(binding => binding.current);
+        await this.beforeReplace?.({ userId, projectId });
         const previousPayload = { ...previous.payload, publication: { ...previous.payload.publication, current, bindings: nextBindings },
           ...(!current ? { generation: (Number(previous.payload.generation) || 1) + 1, ...retiredSourceRun(previous.payload) } : {}),
           updatedAt: this.now().toISOString() };
@@ -741,10 +775,11 @@ export class SourceService {
     const stored = source.payload;
     const linkChanged = facts.link && (stored.link?.fetchedAt !== facts.link.fetchedAt || stored.link?.url !== facts.link.url);
     const titleChanged = facts.title && stored.title !== facts.title;
-    if (!linkChanged && !titleChanged) return source;
+    const snapshotChanged = facts.snapshot && JSON.stringify(stored.snapshot ?? null) !== JSON.stringify(facts.snapshot);
+    if (!linkChanged && !titleChanged && !snapshotChanged) return source;
     try {
       return await this.documents.put(userId, "source", source.id, { ...stored,
-        ...(titleChanged ? { title: facts.title } : {}), ...(linkChanged ? { link: facts.link } : {}), updatedAt: this.now().toISOString() },
+        ...(titleChanged ? { title: facts.title } : {}), ...(linkChanged ? { link: facts.link } : {}), ...(snapshotChanged ? { snapshot: facts.snapshot } : {}), updatedAt: this.now().toISOString() },
       { expectedRevision: source.revision, projectId: source.projectId });
     } catch (error) {
       if (!isConflict(error)) throw error;
@@ -1396,9 +1431,15 @@ export class SourceService {
    * for the page and not for the chosen chip — so the chips are an inventory that does not move as one is chosen.
    * Without a database (`status` or `familyId` asked, or none is configured) it is the plain list and has no counts.
    * `bodyShas` are the documents the knowledge-base index matched the search in, beside what the document is called and says.
-   * @param {string} userId @param {{projectId?:string|null,shared?:boolean,status?:string|null,state?:string|null,kind?:string|null,q?:string|null,bodyShas?:string[],familyId?:string|null,limit?:number,cursor?:string|null}} options
+   *
+   * `all` is every document of the account once: one row per file hash, however many projects hold the bytes (the record's
+   * own source stands for it while it lives, else the newest), each with `holders` (the ordinary projects that hold the file,
+   * by id), `libraryProjects` (what its library record says — `"all"`, a list of project ids, or null for no record) and
+   * `appliesTo` (`"all"`, or every project it is read in). With a `projectId` it is the documents that apply to that project,
+   * each marked `viaLibrary` when the project does not hold the file itself.
+   * @param {string} userId @param {{projectId?:string|null,shared?:boolean,all?:boolean,status?:string|null,state?:string|null,kind?:string|null,q?:string|null,bodyShas?:string[],familyId?:string|null,limit?:number,cursor?:string|null}} options
    */
-  async list(userId, { projectId = null, shared = false, status = null, state = null, kind = null, q = null, bodyShas = [], familyId = null, limit = 50, cursor = null }) {
+  async list(userId, { projectId = null, shared = false, all = false, status = null, state = null, kind = null, q = null, bodyShas = [], familyId = null, limit = 50, cursor = null }) {
     const wantsState = state != null && state !== "";
     const wantsStatus = (status != null && status !== "") || (familyId != null && familyId !== "");
     if (wantsState) {
@@ -1410,13 +1451,14 @@ export class SourceService {
     const needle = q == null ? "" : String(q).trim();
     if (needle.length > 200) throw new HttpError(400, "source_payload_invalid", "The search is too long.");
     if (shared && wantsStatus) throw new HttpError(400, "source_payload_invalid", "The shared documents are not filtered by status.");
-    if (!wantsStatus) {
-      if (!shared) text(projectId, "project id", 160);
-      const bodies = [...new Set((Array.isArray(bodyShas) ? bodyShas : []).filter((sha) => typeof sha === "string" && /^[a-f0-9]{64}$/.test(sha)))].slice(0, 500);
-      return this.listPage(userId, { projectId, shared, state: wantsState ? String(state) : null, kind: wantsKind ? String(kind) : null, q: needle, bodyShas: needle ? bodies : [], limit, cursor });
-    }
     const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
     const selectedFamily = familyId == null || familyId === "" ? null : text(familyId, "family id", 80);
+    if (!wantsStatus || all) {
+      if (!shared && !all) text(projectId, "project id", 160);
+      if (all && projectId != null) text(projectId, "project id", 160);
+      const bodies = [...new Set((Array.isArray(bodyShas) ? bodyShas : []).filter((sha) => typeof sha === "string" && /^[a-f0-9]{64}$/.test(sha)))].slice(0, 500);
+      return this.listPage(userId, { projectId, shared, all, status: selectedStatus, familyId: selectedFamily, state: wantsState ? String(state) : null, kind: wantsKind ? String(kind) : null, q: needle, bodyShas: needle ? bodies : [], limit, cursor });
+    }
     const page = await this.documents.list(userId, "source", {
       projectId: text(projectId, "project id", 160), limit, cursor,
       filter: { ...(selectedStatus ? { status: selectedStatus } : {}), ...(selectedFamily ? { familyId: selectedFamily } : {}) },
@@ -1427,9 +1469,9 @@ export class SourceService {
   /**
    * The database half of `list`: the scope (a project's sources, or one source per document the account library holds),
    * the filters as predicates over the record, the page with its cursor and the chip counts.
-   * @param {string} userId @param {{projectId:string|null,shared:boolean,state:string|null,kind:string|null,q:string,bodyShas?:string[],limit:number,cursor:string|null}} options
+   * @param {string} userId @param {{projectId:string|null,shared:boolean,all?:boolean,status?:string|null,familyId?:string|null,state:string|null,kind:string|null,q:string,bodyShas?:string[],limit:number,cursor:string|null}} options
    */
-  async listPage(userId, { projectId, shared, state, kind, q, bodyShas = [], limit, cursor }) {
+  async listPage(userId, { projectId, shared, all = false, status = null, familyId = null, state, kind, q, bodyShas = [], limit, cursor }) {
     const database = this.documents.database;
     if (!database) throw new HttpError(503, "source_state_unavailable", "Listing sources requires durable shared storage.");
     const bounded = productInteger(limit, 1, 100);
@@ -1453,14 +1495,38 @@ export class SourceService {
       const user = bind(userId);
       // The shared scope is one source per document the account library holds: the one the entry was added from while it
       // lives, else any other project's copy of the same bytes.
+      // The `all` scope is one source per document too, but over every current document the account holds (a project's, or
+      // personal storage's), the record's own source standing for it while it lives, else the newest. A document with no
+      // fingerprint is its own group.
       const from = shared
         ? `(SELECT DISTINCT ON (s.payload->'fingerprint'->>'sha256') s.* FROM evimed_product.documents s
             JOIN evimed_product.documents l ON l.user_id=s.user_id AND l.kind='preferences' AND l.deleted_at IS NULL
               AND l.id='library:'||(s.payload->'fingerprint'->>'sha256') AND l.payload->>'recordType'='library-item'
             WHERE s.user_id=${user} AND s.kind='source' AND s.deleted_at IS NULL
             ORDER BY s.payload->'fingerprint'->>'sha256', (s.id=l.payload->>'sourceId') DESC, s.created_at DESC, s.id DESC) d`
-        : "evimed_product.documents d";
-      const where = ["coalesce(d.payload->'publication'->>'current','true') <> 'false'", shared ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=${bind(projectId)}`];
+        : all
+          ? `(SELECT DISTINCT ON (coalesce(s.payload->'fingerprint'->>'sha256', s.id)) s.* FROM evimed_product.documents s
+              LEFT JOIN evimed_product.documents l ON l.user_id=s.user_id AND l.kind='preferences' AND l.deleted_at IS NULL
+                AND l.id='library:'||(s.payload->'fingerprint'->>'sha256') AND l.payload->>'recordType'='library-item'
+              WHERE s.user_id=${user} AND s.kind='source' AND s.deleted_at IS NULL AND ${ownedSourceProjectSql('s', this.measurementAccounts.includes(userId))}
+                AND coalesce(s.payload->'publication'->>'current','true') <> 'false'
+              ORDER BY coalesce(s.payload->'fingerprint'->>'sha256', s.id), (s.id=l.payload->>'sourceId') DESC, s.created_at DESC, s.id DESC) d`
+          : "evimed_product.documents d";
+      const where = [shared || all ? "TRUE" : "coalesce(d.payload->'publication'->>'current','true') <> 'false'", shared || all ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=${bind(projectId)}`];
+      // The documents that apply to one project: it holds the file, or its record says "all" (or has no `projects`, which is
+      // what a record written before the field meant) or names it.
+      if (all && projectId) {
+        const project = bind(projectId);
+        where.push(`(d.project_id=${project} OR EXISTS (SELECT 1 FROM evimed_product.documents h WHERE h.user_id=d.user_id AND h.kind='source'
+            AND h.deleted_at IS NULL AND h.project_id=${project} AND coalesce(h.payload->'publication'->>'current','true') <> 'false'
+            AND h.payload->'fingerprint'->>'sha256'=d.payload->'fingerprint'->>'sha256')
+          OR EXISTS (SELECT 1 FROM evimed_product.documents l WHERE l.user_id=d.user_id AND l.kind='preferences' AND l.deleted_at IS NULL
+            AND l.id='library:'||(d.payload->'fingerprint'->>'sha256') AND l.payload->>'recordType'='library-item'
+            AND (NOT (l.payload ? 'projects') OR l.payload->'projects'='"all"'::jsonb
+              OR (jsonb_typeof(l.payload->'projects')='array' AND l.payload->'projects' ? ${project}))))`);
+      }
+      if (status) where.push(`d.payload->>'status'=${bind(status)}`);
+      if (familyId) where.push(`d.payload->>'familyId'=${bind(familyId)}`);
       if (state) where.push(SOURCE_STATE_SQL[state]);
       if (q) where.push(`(${searchSql(bind(q), bodyShas.length ? bind(bodyShas) : null)})`);
       if (withKind && kind) where.push(`${KIND_SQL}=${bind(kind)}`);
@@ -1476,10 +1542,61 @@ export class SourceService {
         AND l.deleted_at IS NULL AND l.id='library:'||(d.payload->'fingerprint'->>'sha256') AND l.payload->>'recordType'='library-item') AS shared
       FROM ${paging.from} WHERE ${paging.where.join(" AND ")}${afterSql}
       ORDER BY d.created_at DESC, d.id DESC LIMIT ${paging.bind(bounded + 1)}`, paging.values);
-    const items = result.rows.slice(0, bounded).map((row) => ({ ...sourceRecord(row), shared: row.shared }));
+    let items = result.rows.slice(0, bounded).map((row) => ({ ...sourceRecord(row), shared: row.shared }));
+    if (all) items = await this.withApplicability(userId, items, projectId);
     const last = items.at(-1);
     return { items, counts, nextCursor: result.rows.length > bounded && last
       ? Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url") : null };
+  }
+
+  /**
+   * What each document of an `all` page says of where it applies (`list`): the ordinary projects holding its bytes, what its
+   * library record says, and what that makes of it. Two reads for the whole page, keyed by file hash, after one that says which of
+   * the items are the account's own: the answer is made from the account's own rows (their project, their bytes), never from the
+   * item a caller holds, and an item that is not the account's gets no answer (`holders: []`, `appliesTo: []`).
+   * @param {string} userId @param {any[]} items @param {string | null} [projectId] the project the page was asked for, when it was
+   */
+  async withApplicability(userId, items, projectId = null) {
+    const database = this.documents.database;
+    /** @type {Map<string, { projectId: string, sha: string | null }>} */
+    const owned = new Map();
+    if (!database) {
+      for (const item of items) {
+        const own = await this.#owned(userId, item);
+        if (own) owned.set(own.id, { projectId: own.projectId, sha: null });
+      }
+    } else {
+      const ids = [...new Set(items.map((item) => item?.id).filter((id) => typeof id === "string"))];
+      if (ids.length) {
+        for (const row of (await database.query(`SELECT id, project_id, payload->'fingerprint'->>'sha256' AS sha FROM evimed_product.documents
+            WHERE user_id=$1 AND kind='source' AND deleted_at IS NULL AND id=ANY($2::text[])`, [userId, ids])).rows) {
+          owned.set(row.id, { projectId: row.project_id, sha: row.sha ?? null });
+        }
+      }
+    }
+    const shas = [...new Set([...owned.values()].map((entry) => entry.sha).filter((sha) => typeof sha === "string" && sha))];
+    /** @type {Map<string, string[]>} */
+    const held = new Map();
+    /** @type {Map<string, any>} */
+    const records = new Map();
+    if (shas.length) {
+      for (const row of (await database.query(`SELECT h.payload->'fingerprint'->>'sha256' AS sha, array_agg(DISTINCT h.project_id) AS projects
+          FROM evimed_product.documents h WHERE h.user_id=$1 AND h.kind='source' AND h.deleted_at IS NULL
+            AND coalesce(h.payload->'publication'->>'current','true') <> 'false' AND ${ownedSourceProjectSql('h', this.measurementAccounts.includes(userId))}
+            AND h.payload->'fingerprint'->>'sha256'=ANY($2::text[]) GROUP BY 1`, [userId, shas])).rows) held.set(row.sha, row.projects);
+      for (const row of (await database.query(`SELECT l.id, l.payload FROM evimed_product.documents l WHERE l.user_id=$1 AND l.kind='preferences'
+          AND l.deleted_at IS NULL AND l.payload->>'recordType'='library-item' AND l.id=ANY($2::text[])`,
+      [userId, shas.map((sha) => `library:${sha}`)])).rows) records.set(String(row.id).slice("library:".length), row.payload);
+    }
+    return items.map((item) => {
+      const own = owned.get(item?.id);
+      if (!own) return { ...item, holders: [], libraryProjects: null, appliesTo: [] };
+      const holders = ordinaryHolderProjects((own.sha ? held.get(own.sha) : null) ?? [own.projectId]);
+      const record = own.sha ? records.get(own.sha) ?? null : null;
+      return { ...item, holders, libraryProjects: record ? libraryRecordProjects(record) : null,
+        appliesTo: effectiveProjects({ holders, record }),
+        ...(projectId ? { viaLibrary: !holders.includes(projectId) } : {}) };
+    });
   }
 
   /**
@@ -1549,18 +1666,55 @@ export class SourceService {
   async get(userId, sourceId, options = {}) { return this.requireSource(userId, sourceId, options); }
 
   /**
-   * Whether the account library holds this document's bytes: what a list query answers per row (`shared`) and a single
-   * read did not, so the reader page could not tell 「设为所有项目可用」 from 「改为仅本项目」. Null where there is nothing to
-   * look up (no durable store, or a document with no fingerprint).
-   * @param {string} userId @param {{ payload?: any }} source @returns {Promise<boolean | null>}
+   * The account's own live record of a source, read under the account — never the object a caller holds. The scope helpers below
+   * answer from this record's project and bytes: project ids repeat across accounts (every account has a "default"), so a document
+   * is not this account's because its `projectId` looks right, and a document whose owner cannot be shown is nobody's.
+   * @param {string} userId @param {{ id?: unknown } | null | undefined} source
+   * @returns {Promise<any | null>}
    */
-  async isShared(userId, source) {
+  async #owned(userId, source) {
+    if (typeof userId !== "string" || !userId || typeof source?.id !== "string" || !/^src_[a-f0-9]{32}$/.test(source.id)) return null;
+    const record = await this.documents.get(userId, "source", source.id);
+    return record && record.kind === "source" && !record.deletedAt ? record : null;
+  }
+
+  /**
+   * What the account library says of this document's bytes: `{ record: false }` where it holds none, else `{ record: true,
+   * projects }` — `"all"` or the list of project ids (`libraryScope.mjs`). Null where there is nothing to look up: no durable
+   * store, no fingerprint, or a document that is not this account's own (nothing of another account's library is answered).
+   * What a list query answers per row (`shared`, `libraryProjects`) and a single read did not, so the reader page could not tell
+   * 「所有项目可用」 from 「仅本项目」.
+   * @param {string} userId @param {{ id?: unknown }} source
+   * @returns {Promise<{ record: false } | { record: true, projects: "all" | string[] } | null>}
+   */
+  async libraryApplicability(userId, source) {
     const database = this.documents.database;
-    const sha256 = source.payload?.fingerprint?.sha256;
+    const own = await this.#owned(userId, source);
+    const sha256 = own?.payload?.fingerprint?.sha256;
     if (!database || typeof sha256 !== "string" || !sha256) return null;
-    const result = await database.query(`SELECT EXISTS (SELECT 1 FROM evimed_product.documents l WHERE l.user_id=$1 AND l.kind='preferences'
-        AND l.deleted_at IS NULL AND l.id='library:'||$2::text AND l.payload->>'recordType'='library-item') AS shared`, [userId, sha256]);
-    return result.rows[0]?.shared === true;
+    const result = await database.query(`SELECT l.payload FROM evimed_product.documents l WHERE l.user_id=$1 AND l.kind='preferences'
+        AND l.deleted_at IS NULL AND l.id='library:'||$2::text AND l.payload->>'recordType'='library-item'`, [userId, sha256]);
+    return result.rows[0] ? { record: true, projects: libraryRecordProjects(result.rows[0].payload) } : { record: false };
+  }
+
+  /**
+   * Whether a document applies to a project — the one check every scope asks (`libraryScope.mjs`): the project holds it, or its
+   * library record says "all" (or has no `projects`) or names the project. The document is read again under the account first:
+   * what answers is the account's own record of it, and one that is not the account's, is gone, or cannot be read as the account's
+   * applies to nothing. The caller's object is only a name for the document.
+   * @param {string} userId @param {{ id?: unknown }} source @param {string} projectId
+   */
+  async appliesTo(userId, source, projectId) {
+    if (typeof projectId !== "string" || !projectId) return false;
+    const own = await this.#owned(userId, source);
+    if (!own) return false;
+    if (own.projectId === projectId) return true;
+    const database = this.documents.database;
+    const sha256 = own.payload?.fingerprint?.sha256;
+    if (!database || typeof sha256 !== "string" || !sha256) return false;
+    const result = await database.query(`SELECT l.payload FROM evimed_product.documents l WHERE l.user_id=$1 AND l.kind='preferences'
+        AND l.deleted_at IS NULL AND l.id='library:'||$2::text AND l.payload->>'recordType'='library-item'`, [userId, sha256]);
+    return result.rows[0] ? libraryRecordCovers(result.rows[0].payload, projectId) : false;
   }
 
   // ---------------------------------------------------------------------------
@@ -1936,12 +2090,60 @@ export class SourceService {
    * @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input
    */
   async remove(userId, sourceId, input) {
+    const source = await this.documents.get(userId, "source", sourceId);
+    if (source) await this.beforeRemove?.({ userId, projectId: source.projectId });
     const removed = await this.#remove(userId, sourceId, input);
     if (this.afterRemove && removed?.projectId) {
       try { await this.afterRemove({ userId, projectId: removed.projectId, sourceId, source: removed }); }
       catch (error) { this.report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "source_removal_unrecorded"); }
     }
     return removed;
+  }
+
+  /**
+   * Remove a document: this source and every other current copy the account holds of the same bytes — the same file in other
+   * projects and in personal storage — which is what the knowledge base's one row per file stands for. The library entry of
+   * those bytes goes with the last copy (`#remove`), so nothing is left that another project could still read or cite.
+   *
+   * The named source is removed first, against the revision the caller read: a stale row is refused before anything is
+   * changed. The other copies are read fresh (the row never showed their revisions). Each removal is its own transaction, so a
+   * failure part-way leaves some copies removed and the call repeatable — the named source, already removed, is taken as it is,
+   * and the copies that remain are removed on the repeat. Copies in the platform's own projects and knowledge pages (a page
+   * belongs to its project) are not the account's documents and are left alone; a document with no content digest is its own
+   * and has no other copies.
+   * @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input
+   * @returns {Promise<{ source: any, copies: { id: string, projectId: string }[] }>} the named source's record, and every copy removed
+   */
+  async removeDocument(userId, sourceId, input) {
+    const database = this.documents.database;
+    if (!database) throw new HttpError(503, "source_state_unavailable", "Source deletion requires durable shared storage.");
+    const target = await this.documents.get(userId, "source", sourceId, { includeDeleted: true });
+    if (!target) throw new HttpError(404, "source_not_found", "The source is unavailable.");
+    const isPage = (/** @type {any} */ row) => sourceOriginOf({ connectorType: row.payload.connector?.type, path: row.payload.paths?.[0] }) === "wiki";
+    const sha256 = target.payload.fingerprint?.sha256;
+    /** @type {{ id: string, revision: number, projectId: string }[]} */
+    let others = [];
+    if (typeof sha256 === "string" && sha256 && !isPage(target)) {
+      await migrateProductStore(database);
+      others = (await database.query(`SELECT s.id, s.revision, s.project_id, s.payload FROM evimed_product.documents s
+          WHERE s.user_id=$1 AND s.kind='source' AND s.deleted_at IS NULL AND s.id<>$2 AND s.payload->'fingerprint'->>'sha256'=$3
+            AND coalesce(s.payload->'publication'->>'current','true') <> 'false' AND ${ownedSourceProjectSql('s', this.measurementAccounts.includes(userId))}
+          ORDER BY s.created_at, s.id`, [userId, sourceId, sha256])).rows
+        .filter((/** @type {any} */ row) => !isPage({ payload: row.payload }))
+        .map((/** @type {any} */ row) => ({ id: row.id, revision: row.revision, projectId: row.project_id }));
+    }
+    const source = await this.remove(userId, sourceId, input);
+    /** @type {{ id: string, projectId: string }[]} */
+    const copies = [{ id: sourceId, projectId: String(target.projectId) }];
+    for (const other of others) {
+      // Read again just before: a copy changed since the list above is removed at the revision it has now, and one that is
+      // already gone (a concurrent delete) is done.
+      const current = await this.documents.get(userId, "source", other.id).catch(() => null);
+      if (!current) continue;
+      await this.remove(userId, other.id, { expectedRevision: current.revision, accountCreatedAt: input.accountCreatedAt });
+      copies.push({ id: other.id, projectId: other.projectId });
+    }
+    return { source, copies };
   }
 
   /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input */
@@ -1992,6 +2194,26 @@ export class SourceService {
       const updated = await client.query(`UPDATE evimed_product.documents SET payload=$3::jsonb,deleted_at=coalesce(deleted_at,clock_timestamp()),
         revision=revision+1,updated_at=clock_timestamp() WHERE user_id=$1 AND kind='source' AND id=$2 RETURNING *`, [userId, sourceId, JSON.stringify(payload)]);
       await recordRevision(client, updated.rows[0]);
+      if (current.project_id === LIBRARY_PROJECT_ID) {
+        await client.query(`WITH removed AS (UPDATE evimed_product.documents SET
+          payload=jsonb_set(payload,'{personalSourceIds}',coalesce(payload->'personalSourceIds','[]'::jsonb)-$3::text),
+          deleted_at=CASE WHEN payload->>'explicitRetention'='false'
+            AND jsonb_array_length(coalesce(payload->'personalSourceIds','[]'::jsonb)-$3::text)=0 THEN clock_timestamp() ELSE NULL END,
+          updated_at=clock_timestamp(),revision=revision+1 WHERE user_id=$1 AND kind='preferences' AND deleted_at IS NULL
+          AND id='library:'||$2::text AND payload->>'recordType'='library-item' RETURNING user_id,kind,id,revision,payload,deleted_at)
+          INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM removed`,
+        [userId, current.payload.fingerprint?.sha256 ?? "", sourceId]);
+      }
+      // The library entry of a document goes with the last document that holds its bytes (2026-10-28): an entry no project and
+      // no personal storage holds lists nowhere and could be neither seen nor changed, yet would go on putting its copy in
+      // the projects it names. Another project's copy of the same bytes keeps it.
+      await client.query(`WITH removed AS (UPDATE evimed_product.documents l SET deleted_at=clock_timestamp(),updated_at=clock_timestamp(),revision=revision+1
+          WHERE l.user_id=$1 AND l.kind='preferences' AND l.deleted_at IS NULL AND l.id='library:'||$2::text AND l.payload->>'recordType'='library-item'
+            AND NOT EXISTS (SELECT 1 FROM evimed_product.documents s WHERE s.user_id=l.user_id AND s.kind='source' AND s.deleted_at IS NULL
+              AND s.id<>$3::text AND coalesce(s.payload->'publication'->>'current','true') <> 'false' AND s.payload->'fingerprint'->>'sha256'=$2::text)
+          RETURNING user_id,kind,id,revision,payload,deleted_at)
+        INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM removed`,
+      [userId, current.payload.fingerprint?.sha256 ?? "", sourceId]);
       await client.query(`UPDATE evimed_product.jobs SET status='canceled',finished_at=clock_timestamp(),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
         WHERE user_id=$1 AND kind='ingest' AND payload->>'sourceId'=$2 AND payload->>'action' IS DISTINCT FROM 'source-delete' AND status IN ('queued','running')`, [userId, sourceId]);
       // Which conversations used the document is the account's record about a document that is going: it goes with it.

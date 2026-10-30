@@ -37,6 +37,9 @@ export const LEARNING_PROJECT_NAME = "EviMed 学习";
 /** Where the understanding runs of uploaded documents happen, one per account. */
 export const SOURCES_PROJECT_ID = "evimed-sources";
 
+/** Account-owned source storage, never an interactive or Compile project. */
+export const LIBRARY_PROJECT_ID = "evimed-library";
+
 /** What that project is called where an operator lists everything. */
 export const SOURCES_PROJECT_NAME = "EviMed 资料";
 
@@ -127,10 +130,21 @@ export function isSelfMeasurementProject(projectId) {
   return SELF_MEASUREMENT_PROJECT.test(String(projectId ?? ""));
 }
 
+/**
+ * Whether a project is where an account keeps its own materials (personal storage), as opposed to where the platform does
+ * background work. Both are internal — hidden from the project list and never an interactive runtime — but the materials in
+ * the first are the person's: readers of what the person has (the memory map's documents, 「与你相关」) include it and stay
+ * away from every other internal project.
+ * @param {unknown} projectId @returns {boolean}
+ */
+export function isAccountStorageProject(projectId) {
+  return String(projectId ?? "") === LIBRARY_PROJECT_ID;
+}
+
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
-  return /^eval-paper-[a-zA-Z0-9_-]+$/.test(id) || id === EVOLUTION_PROJECT_ID || /^evolution-eval-[a-z0-9-]+$/.test(id) || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
+  return /^eval-paper-[a-zA-Z0-9_-]+$/.test(id) || id === EVOLUTION_PROJECT_ID || /^evolution-eval-[a-z0-9-]+$/.test(id) || id === LIBRARY_PROJECT_ID || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
     || id === OPENVIKING_PROJECT_ID
     || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id)
     || SELF_MEASUREMENT_PROJECT.test(id);
@@ -181,7 +195,7 @@ export function isInternalProjectOf(config, userId, projectId) {
  */
 export function isReservedProjectId(projectId) {
   const id = String(projectId ?? "");
-  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
+  return id === LIBRARY_PROJECT_ID || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
     || id === OPENVIKING_PROJECT_ID || EVALUATION_CELL_PROJECT.test(id);
 }
 
@@ -281,4 +295,22 @@ export async function ensureOpenVikingProject(store) {
     }
   }
   return { userId: user.id, projectId: OPENVIKING_PROJECT_ID };
+}
+
+/** Ensure the account's private source-storage project.
+ * @param {any} store @param {any} user */
+export async function ensureLibraryProject(store, user) {
+  try { return await store.requireProject(user, LIBRARY_PROJECT_ID); }
+  catch (error) {
+    if (error?.code !== "project_not_found" && error?.status !== 404) throw error;
+    try { await store.createProject(user, LIBRARY_PROJECT_ID, "My materials"); }
+    catch (conflict) { if (conflict?.code !== "project_exists") throw conflict; }
+    return store.requireProject(user, LIBRARY_PROJECT_ID);
+  }
+}
+
+/** SQL inventory boundary; storage is visible while background execution projects are not.
+ * The alias is a module-owned SQL identifier. @param {string} alias @param {boolean} [measurement] */
+export function ownedSourceProjectSql(alias, measurement = false) {
+  return `(${alias}.project_id='${LIBRARY_PROJECT_ID}' OR ${alias}.project_id !~ '^(evimed-(evolution|learning|sources|frontier|evidence|openviking)|eval-paper-.+|evolution-eval-.+|methodeval-[a-f0-9]{24}${measurement ? '|acceptance-.+|audit-.+|eval-method-.+' : ''})$')`;
 }

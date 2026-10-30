@@ -163,9 +163,10 @@ export async function prepareCompletionStudy({ app, state, owner, lead, viewer, 
   requireControl(new Set(actors.map(actor => actor.id)).size === 5, 'completion_distinct_actors_required');
   const project = await app.store.createProject(actors[0], 'completion-' + randomUUID(), 'Synthetic extension permission study');
   const study = await app.vcr.store.createStudy({ userId: actors[0].id, projectId: project.id, name: 'Synthetic extension permission study' });
-  for (const [index, role] of [[1, 'lead'], [2, 'viewer'], [3, 'data_manager'], [4, 'site']]) {
-    await app.vcr.members.add({ actor: actors[0].id, studyId: study.id, userId: actors[index].id, role,
-      detail: role === 'site' ? { siteId: 'completion-synthetic-site' } : {} });
+  // The fifth actor stays outside the study: the recruitment-era `site` role it held before the 2026-10-25 VCR reset can no
+  // longer be granted, and a person with no current role reads nothing of the study (asserted in runStudyRoleControls).
+  for (const [index, role] of [[1, 'lead'], [2, 'viewer'], [3, 'data_manager']]) {
+    await app.vcr.members.add({ actor: actors[0].id, studyId: study.id, userId: actors[index].id, role, detail: {} });
   }
   return { ownerId: actors[0].id, projectId: project.id, studyId: study.id, actorIds: actors.map(actor => actor.id) };
 }
@@ -221,7 +222,7 @@ export async function runStudyRoleControls({ app, state, baseUrl, fixture, owner
   return { caseId: 'SAAS-03', scope: 'actual-current-http-study-membership-consumer',
     expected: 'Ordinary viewer reads remain usable, manage/source-write requests refuse, and current study abilities remain distinct.',
     actual: { studyId: study.id, ownerId: project.userId, projectId: project.id, viewerRead: true, leadManage: true, dataManagerWrite: true,
-      dataManagerManage: false, siteRead: false, createdForbiddenJobs: 0, requests: receipts, refusalCodes: denied,
+      dataManagerManage: false, nonMemberRead: false, createdForbiddenJobs: 0, requests: receipts, refusalCodes: denied,
       artifactDigest: state.descriptor.artifactDigest,
       connectionSurface: 'Cowork has no connection consumer; viewer connection-management inventory is refused, no external call is fabricated.' } };
 }

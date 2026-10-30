@@ -91,7 +91,7 @@ test("the map reads an account's memory files, what they rest on and how they ch
   assert.equal((await fetch(`${base}/api/memory/records/${encodeURIComponent(edited.id)}`, { method: "PATCH", headers,
     body: JSON.stringify({ value: "outpatient and inpatient clinics", expectedVersion: edited.version }) })).status, 200);
 
-  const { status, body } = await get(base, headers, "/api/memory/map?include=summary,facets,nodes,edges,buckets,lanes,events");
+  const { status, body } = await get(base, headers, "/api/memory/map?include=summary,facets,nodes,edges,buckets,events");
   assert.equal(status, 200);
   const map = body.data;
   const idOf = async (uri) => (await recordOf(base, headers, uri))?.id;
@@ -116,9 +116,10 @@ test("the map reads an account's memory files, what they rest on and how they ch
   assert.ok(edge(`memory:${habitId}`, "you:account", "belongs-to"));
   assert.ok(edge(`memory:${plainId}`, "project:default", "belongs-to"));
   assert.equal(map.nodes.find((entry) => entry.id === `document:${SOURCE}`).label, "一份资料", "a document the knowledge base does not have keeps a plain name");
-  assert.deepEqual(map.lanes ?? [], [], "a memory file has no earlier versions of itself to lay out as a lineage");
-  assert.ok(map.events.some((event) => event.ref === `memory:${plainId}` && event.change === "updated") && map.events.every((event) => /^memory:/u.test(event.ref) && event.lane));
-  assert.ok(map.buckets.series.length >= 1 && map.buckets.series[0].memory > 0);
+  assert.equal(map.lanes, undefined, "the lineages are not part of the document");
+  assert.ok(map.events.some((event) => event.ref === `memory:${plainId}` && event.change === "updated") && map.events.every((event) => /^memory:/u.test(event.ref)));
+  assert.deepEqual(map.buckets.series, [], "a day counts the documents added, and this account has none");
+  assert.equal(map.facets.dimensions, undefined, "the radars are not part of the document");
   assert.deepEqual(map.missing, [], "nothing this deployment has failed to read");
 
   // Another account sees its own map and none of this.
@@ -148,13 +149,12 @@ test("the notes of the account's own capsule are marks of the map and the overvi
   await app.capsuleService.updateEntry(user.id, capsule.id, gone.id, { status: "retired", expectedRevision: gone.revision });
   const projectNote = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "project_fact", layer: "knowledge", content: "Adults only." });
 
-  // What the overview asks for: no lines and no lineages.
+  // What the overview asks for, less the lines.
   const { status, body } = await get(base, headers, "/api/memory/map?include=summary,facets,nodes,buckets,events");
   assert.equal(status, 200);
   const map = body.data;
   assert.equal("engine" in map, false, "one engine: the document says nothing of which");
   assert.equal(map.edges, undefined);
-  assert.equal(map.lanes, undefined);
   const marks = map.nodes.filter((entry) => entry.type === "memory");
   const styleId = (await recordOf(base, headers, style)).id;
   assert.deepEqual(marks.map((entry) => entry.id).sort(), [`memory:entry:${note.id}`, `memory:entry:${projectNote.id}`, `memory:${styleId}`].sort(),
@@ -166,9 +166,8 @@ test("the notes of the account's own capsule are marks of the map and the overvi
   // What is about the person, by kind, counted before anything is folded: a project's kind is not.
   assert.deepEqual(map.facets.aboutYou.map((kind) => [kind.id, kind.count]).sort(), [["preference", 1], ["writing_style", 1]]);
   assert.ok(map.events.some((event) => event.ref === `memory:entry:${note.id}` && event.change === "created"), "a note is a gain on the growth strip");
-  assert.ok(map.buckets.series.every((day) => typeof day.document === "number"), "a day counts the documents added as well");
+  assert.ok(map.buckets.series.every((day) => typeof day.document === "number"), "a day counts the documents added");
   assert.deepEqual(map.facets.documentTypes, [], "no document in this account's knowledge base");
-  assert.equal(map.facets.dimensions.find((dimension) => dimension.id === "memory").axes.find((axis) => axis.id === "aspect:habit").count, 1, "a writing style is a habit in the radar");
   assert.deepEqual(map.missing, []);
   // Another account has none of it.
   const theirs = (await get(base, otherHeaders, "/api/memory/map?include=summary,nodes")).body.data;

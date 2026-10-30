@@ -307,7 +307,7 @@ export function manuscriptSectionFindings(input) {
     for (const entry of unmarked.slice(0, 5)) {
       issues.push(issue(
         'manuscript_derived_unmarked',
-        `section line ${entry.line} states derived result ${entry.ids.join(', ')} without marking it as derived. Label it 〔推导〕 on that sentence so it is not read as a measurement.`,
+        `section line ${entry.line} states derived result ${entry.ids.join(', ')} without marking it as derived. Label it on that sentence (〔推导〕 in Chinese, [derived] in English) so it is not read as a measurement.`,
         { severity: 'advisory', path: SECTION_FILE, line: entry.line },
       ))
     }

@@ -36,6 +36,7 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 from selectolax.parser import HTMLParser
 
 from ..adapters.base import decode_body
+from ..adapters.common import decompose_all
 from ..model import NEUTRAL_DETAILS, FetchError
 from .article_html import ArticlePage, read_article_page
 from .common import Attempt, Endpoints, Trace, get
@@ -134,8 +135,7 @@ def _is_shell(page: ArticlePage, html_text: str) -> bool:
     if page.is_article or page.abstract or page.excerpt or page.body_text:
         return False
     tree = HTMLParser(html_text)
-    for node in tree.css("script, style, noscript, template"):
-        node.decompose()
+    decompose_all(tree.css("script, style, noscript, template"))
     body = tree.body
     return len((body.text(separator=" ", strip=True) if body is not None else "")) < MIN_ARTICLE_CHARS
 

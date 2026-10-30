@@ -208,21 +208,35 @@ export class SkillLibraryService {
   }
   /** Explicit owned import resolves bytes through the artifact boundary, never a submitted host path. @param {any} user @param {any} body */
   async import(user, body) {
-    const input = exact(body, ["resourceId", "title"]);
+    const input = exact(body, Object.hasOwn(body ?? {}, "idempotencyKey") ? ["resourceId", "title", "idempotencyKey"] : ["resourceId", "title"]);
+    if (input.idempotencyKey !== undefined) productId(input.idempotencyKey);
     productId(input.resourceId);
     if (typeof input.title !== "string" || !input.title.trim() || Buffer.byteLength(input.title) > 240) {
       throw new HttpError(400, "extension_contract_invalid", "Invalid skill title.");
     }
     if (!this.artifacts) throw new HttpError(503, "product_state_unavailable", "Skill preparation is unavailable.");
-    return this.withLibraryAccount(user, async () => {
+    return this.withLibraryAccount(user, async client => {
+      const operationId = input.idempotencyKey ? `skill-import:${sha256(input.idempotencyKey)}` : null;
+      const requestDigest = sha256(canonicalJson({ resourceId: input.resourceId, title: input.title }));
+      if (operationId && client) await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`skill-library-account:${user.id}`]);
+      if (operationId) {
+        const previous = await this.documents.get(user.id, "extension-resource", operationId);
+        if (previous) {
+          if (previous.payload.requestDigest !== requestDigest) throw new HttpError(409, "product_job_idempotency_conflict", "This import request already names different content.");
+          return this.get(user, previous.payload.skillId);
+        }
+      }
       const skillId = `skill:${randomUUID()}`;
       const nativeName = personalSkillName(user.id, skillId, sha256);
       const imported = await this.artifacts.import(user, { resourceId: input.resourceId, skillId, nativeName });
       const content = writeRequest({ expectedRevision: 0, title: input.title,
         description: imported.description, instructions: imported.instructions });
       const source = await this.importSource(user, input.resourceId, imported);
-      return this.saveContent(user, skillId, content, imported.resources, { ...imported, provenance: { source, baseline: contentDigests(imported) } },
+      const row = await this.saveContent(user, skillId, content, imported.resources, { ...imported, provenance: { source, baseline: contentDigests(imported) } },
         () => this.artifacts.verifyUpload(user, input.resourceId));
+      if (operationId) await this.documents.put(user.id, "extension-resource", operationId,
+        { schemaVersion: 1, kind: "skill-import", requestDigest, skillId: row.id }, { expectedRevision: 0, transactionClient: client });
+      return row;
     });
   }
   /**

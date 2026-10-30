@@ -18,7 +18,8 @@
  *   by its title and the summary its understanding run stored), the keys that recur most are turned into the names
  *   a reader knows them by, and they join the profile as phrases beside the model's. No model reads them: a key is a
  *   glossary lookup, so a reader who follows a zone and has asked nothing yet is a profile at last. Only the
- *   reader's own rows are read, and a paused or internal project's documents stay out as its memories do. A phrase
+ *   reader's own rows are read, and a paused or internal project's documents stay out as its memories do (personal storage is
+ *   internal by name and is the reader's own library, so it is read). A phrase
  *   from a zone says 「因为你关注的专区涉及」 and one from the library 「因为你的知识库里有」; neither is ever a
  *   fact written anywhere, only the heading of a group of news items.
  * - **What the reader shows interest in, three ways.** Their memory — the lines of the memory files that say who they are, how they
@@ -108,7 +109,7 @@ import { migrateFrontier } from "./frontierPersistence.mjs";
 import { frontierSelectThreshold } from "./frontierPipeline.mjs";
 import { HttpError } from "./security.mjs";
 import { createHash } from "node:crypto";
-import { isInternalProject } from "./internalProjects.mjs";
+import { isAccountStorageProject, isInternalProject } from "./internalProjects.mjs";
 import { tsqueryLiteral } from "./kbChunker.mjs";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import { SOURCE_LABEL_PREFIX } from "./nativeMemoryStore.mjs";
@@ -857,8 +858,8 @@ export class FrontierProfiles {
 
   /**
    * What the reader's followed zones and their own library are about (flywheel F11), as phrases: the keys that recur
-   * most, named as a reader knows them. Their own rows only; a paused or internal project's documents are left out,
-   * and a vocabulary that cannot tag leaves the signal out (counted, never faked). The two signals fail apart: a
+   * most, named as a reader knows them. Their own rows only; a paused or internal project's documents are left out
+   * (personal storage, the reader's own materials, is not left out), and a vocabulary that cannot tag leaves the signal out (counted, never faked). The two signals fail apart: a
    * library that cannot be read costs the zones nothing.
    * @param {string} userId @param {string[]} pausedProjects
    * @returns {Promise<Array<{ text: string, source: "zone" | "library", memoryId: string, kind: "zone" | "library", entityKeys: string[] }>>}
@@ -902,7 +903,8 @@ export class FrontierProfiles {
         ORDER BY d.updated_at DESC LIMIT ${FRONTIER_PROFILE_ENTITY_LIMITS.documents}`, [userId])).rows ?? [];
       const paused = new Set(pausedProjects.map(String));
       for (const document of documents) {
-        if (document.project_id && (paused.has(String(document.project_id)) || isInternalProject(document.project_id))) continue;
+        // Personal storage is internal by name and still the reader's own library; every other internal project is the platform's work.
+        if (document.project_id && (paused.has(String(document.project_id)) || (isInternalProject(document.project_id) && !isAccountStorageProject(document.project_id)))) continue;
         records.push(await vocabulary.keysForText({ texts: [String(document.title ?? ""), String(document.summary ?? "")] }));
       }
       return records;

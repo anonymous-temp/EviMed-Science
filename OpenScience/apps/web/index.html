@@ -9,14 +9,13 @@
     <meta name="renderer" content="webkit" />
     <link rel="icon" type="image/svg+xml" href="/src/assets/evimed-mark.svg" />
     <meta name="application-name" content="EviMed Science" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafbfc" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1318" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f5ef" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171512" />
     <!-- Add to a phone's home screen (public/manifest.json; no service worker).
-         Unhashed, so cached for a year like theme-init.js: bump ?v= on a change.
-         v=2: the icons are the EviMed molecule mark in brand blue (audit F-G8).
-         Manifest v=3: use the full EviMed Science product name. -->
-    <link rel="manifest" href="/manifest.json?v=3" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=2" />
+         Unhashed by the build, so cached for a year like theme-init.js: each ?v= below is a hash of the file it names, written by
+         `pnpm tokens:css`, so a changed manifest or icon is a new URL and an installed client picks it up. -->
+    <link rel="manifest" href="/manifest.json?v=16c9bc0c" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=b37a45c1" />
     <meta name="apple-mobile-web-app-title" content="EviMed Science" />
     <title>EviMed Science</title>
     <!-- Before first paint (public/theme-init.js). Not hashed by the build, and

@@ -6,13 +6,14 @@ import { deriveEvolutionCapabilityMap } from '../src/evolutionCapabilityMap.mjs'
 import { loadConfig } from '../src/config.mjs';
 import { validateEvolutionConfiguration } from '../src/evolutionConfiguration.mjs';
 
-// Researchers are counted five at a time, always; an operator's own account is counted on its own against a floor that defaults to one
-// (review D-E12: with a handful of accounts every user-originated signal sat below five for ever).
-test('the floors are five for researchers and the configured number, one to five, for operators', () => {
-  assert.deepEqual(evolutionAccountFloors({}), { user: 5, operator: 1 });
-  assert.deepEqual(evolutionAccountFloors({ evolutionOperatorSignalFloor: 3 }), { user: 5, operator: 3 });
-  assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: 9 }).operator, 5, 'an operator never needs more than a researcher');
-  for (const bad of [0, -2, Number.NaN, 'x', null, undefined]) assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: bad }).operator, 1, String(bad));
+// A single researcher signal is useful; operator tuning remains independently bounded.
+test('one researcher qualifies while operator floor retains its independent one-to-five range', () => {
+  assert.deepEqual(evolutionAccountFloors({}), { user: 1, operator: 1 });
+  assert.deepEqual(evolutionAccountFloors({ evolutionOperatorSignalFloor: 3 }), { user: 1, operator: 3 });
+  assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: 9 }).operator, 5, 'operator tuning remains capped independently of the user floor');
+  for (const unset of [null, undefined]) assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: unset }).operator, 1, String(unset));
+  // Not a whole number of accounts: refused by name, never read as another number (2.5 used to become 1 in silence).
+  for (const bad of [2.5, 1.5, 0, -2, Number.NaN, Number.POSITIVE_INFINITY, 'x', '3']) assert.throws(() => evolutionAccountFloors({ evolutionOperatorSignalFloor: bad }), { code: 'evolution_setting_invalid' }, String(bad));
   assert.deepEqual(['operator', 'user', undefined, 'other'].map(evolutionAccountClass), ['operator', 'user', 'user', 'user']);
 });
 test('the setting is read from the environment and held to one to five', () => {
@@ -23,22 +24,22 @@ test('the setting is read from the environment and held to one to five', () => {
     for (const bad of ['0', '6', '1.5']) { process.env[name] = bad; assert.ok(validateEvolutionConfiguration(loadConfig()).some(issue => issue.key === 'evolutionOperatorSignalFloor'), bad); }
   } finally { if (prior === undefined) delete process.env[name]; else process.env[name] = prior; }
 });
-test('demand scores once the account count reaches the floor the opportunity carries, and five otherwise', () => {
-  assert.equal(evolutionPriorityBreakdown({ distinctAccounts: 1 }).demand, 0, 'one researcher is below five');
-  assert.equal(evolutionPriorityBreakdown({ distinctAccounts: 4 }).demand, 0);
+test('demand scores once the account count reaches the floor the opportunity carries, and one otherwise', () => {
+  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 1 }).demand > 0);
+  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 4 }).demand > 0);
   assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 5 }).demand > 0);
   assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 1, demandFloor: 1 }).demand > 0, 'one operator account meets the operator floor');
   assert.equal(evolutionPriorityBreakdown({ distinctAccounts: 1, demandFloor: 2 }).demand, 0);
   assert.equal(evolutionPriorityBreakdown({ distinctAccounts: 3, demandFloor: 99 }).demand, 0, 'a carried floor is held to one to five');
-  assert.equal(evolutionPriorityBreakdown({ distinctAccounts: 1, demandFloor: 0 }).demand, 0, 'a floor of nothing falls back to five');
+  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 1, demandFloor: 0 }).demand > 0, 'invalid floor falls back to one');
 });
-test('the capability map shows operator demand at its floor and researcher demand only from five', () => {
+test('the capability map counts either account class at its own floor', () => {
   const codes = { capability: 'statistical-analysis', operation: 'transform', dataShape: 'table', reason: 'missing-tool' };
   const registry = [{ id: 'statistical-analysis', visibility: 'public' }];
   const signal = (patch) => ({ id: `s-${patch.distinctAccounts}-${patch.accountClass ?? 'user'}`, payload: { kind: 'unmet-demand', codes, occurrences: 3, scope: 'platform-aggregate', ...patch } });
   const demand = (signals) => deriveEvolutionCapabilityMap({ registry, methods: {}, signals, now: new Date('2026-10-10') }).cells.find(cell => cell.version === 'unavailable')?.demand?.distinctAccounts ?? null;
-  assert.equal(demand([signal({ distinctAccounts: 4 })]), null, 'four researchers are below five');
+  assert.equal(demand([signal({ distinctAccounts: 4 })]), 4);
   assert.equal(demand([signal({ distinctAccounts: 5 })]), 5);
   assert.equal(demand([signal({ distinctAccounts: 1, accountClass: 'operator' })]), 1, 'one operator account meets the operator floor');
-  assert.equal(demand([signal({ distinctAccounts: 1, accountClass: 'user' })]), null);
+  assert.equal(demand([signal({ distinctAccounts: 1, accountClass: 'user' })]), 1);
 });

@@ -64,7 +64,8 @@ describe("Button", () => {
     render(<Button loading>保存中</Button>);
     const btn = screen.getByRole("button", { name: "保存中" });
     // disabled is what blocks clicks — native button semantics, no JS needed.
-    expect(btn).toBeDisabled();
+    expect(btn).not.toBeDisabled();
+    expect(btn).toHaveAttribute("aria-disabled", "true");
     expect(btn).toHaveAttribute("aria-busy", "true");
     expect(btn.querySelector(".animate-spin")).not.toBeNull();
   });
@@ -87,4 +88,30 @@ describe("buttonClasses", () => {
     // 44 px is a form's primary action and nothing else.
     expect(buttonClasses({ size: "lg" })).toContain("h-form-primary");
   });
+});
+
+it("guards busy mouse, keyboard and submit activation while preserving focus and name", async () => {
+ const click=vi.fn(),submit=vi.fn(e=>e.preventDefault());
+ const view=render(<form onSubmit={submit}><Button type="submit" onClick={click}>Save</Button></form>);
+ const button=screen.getByRole("button",{name:"Save"});button.focus();
+ view.rerender(<form onSubmit={submit}><Button type="submit" loading onClick={click}>Save</Button></form>);
+ expect(button).toHaveFocus();await userEvent.click(button);await userEvent.keyboard("{Enter} ");
+ expect(click).not.toHaveBeenCalled();expect(submit).not.toHaveBeenCalled();
+});
+
+it("draws the spinner's room only while it spins, keeps a long label visible beside it, and leaves a resting button centred",()=>{
+ const label="Save this deliberately long action label";const view=render(<Button loading>{label}</Button>);
+ const button=screen.getByRole('button',{name:label});expect(button).toHaveTextContent(label);expect(button.querySelector('.invisible')).toBeNull();
+ expect(button.querySelector('.w-4 .animate-spin')).not.toBeNull();
+ // At rest — whether `loading` is false or absent — there is no empty slot pushing the label off centre.
+ view.rerender(<Button loading={false}>{label}</Button>);expect(button.querySelector('.w-4')).toBeNull();expect(button.querySelector('svg')).toBeNull();
+ view.rerender(<Button>{label}</Button>);expect(button.querySelector('.w-4')).toBeNull();
+});
+
+it("loading takes temporary disabled ownership for legacy disabled=busy callers",async()=>{
+ const click=vi.fn();const view=render(<Button loading={false} disabled={false} onClick={click}>Save</Button>);
+ const button=screen.getByRole('button',{name:'Save'});button.focus();view.rerender(<Button loading disabled onClick={click}>Save</Button>);
+ expect(button).toHaveFocus();expect(button).not.toBeDisabled();expect(button).toHaveAttribute('aria-disabled','true');
+ await userEvent.click(button);await userEvent.keyboard('{Enter} ');expect(click).not.toHaveBeenCalled();
+ view.rerender(<Button loading={false} disabled onClick={click}>Save</Button>);expect(button).toBeDisabled();
 });

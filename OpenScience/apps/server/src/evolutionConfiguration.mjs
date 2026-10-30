@@ -52,6 +52,7 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
 export function validateEvolutionConfiguration(config){
   const issues=[];
   if(config.evolutionSearchPaused!==undefined&&typeof config.evolutionSearchPaused!=='boolean')issues.push({code:'evolution_setting_invalid',key:'evolutionSearchPaused'});
+  if(config.evolutionServingOnly!==undefined&&typeof config.evolutionServingOnly!=='boolean')issues.push({code:'evolution_setting_invalid',key:'evolutionServingOnly'});
   if(config.evolutionEnabled!==undefined&&typeof config.evolutionEnabled!=='boolean')issues.push({code:'evolution_setting_invalid',key:'evolutionEnabled'});
   if(config.evolutionEvaluationNetwork!==undefined&&(typeof config.evolutionEvaluationNetwork!=='string'||config.evolutionEvaluationNetwork!==''&&!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(config.evolutionEvaluationNetwork)))issues.push({code:'evolution_setting_invalid',key:'evolutionEvaluationNetwork'});
   for(const [key,field]of Object.entries(EVOLUTION_CONFIG_SCHEMA)){

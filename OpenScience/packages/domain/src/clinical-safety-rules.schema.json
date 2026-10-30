@@ -48,6 +48,40 @@
         "$ref": "#/$defs/patternRule"
       }
     },
+    "genericSafetyVocabulariesNote": {
+      "type": "string"
+    },
+    "genericSafetyVocabularies": {
+      "description": "Closed English phrase lists for the generic safety checks in clinicalEvidence.mjs.",
+      "type": "object",
+      "properties": {
+        "emergencyTriggerConditioned": {
+          "type": "object",
+          "properties": {
+            "en": {
+              "$ref": "#/$defs/englishEmergencyVocabulary"
+            }
+          },
+          "required": [
+            "en"
+          ],
+          "additionalProperties": false
+        },
+        "exclusiveSafety": {
+          "type": "object",
+          "properties": {
+            "en": {
+              "$ref": "#/$defs/phraseVariant"
+            }
+          },
+          "required": [
+            "en"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "cautionVocabulariesNote": {
       "type": "string"
     },
@@ -313,6 +347,22 @@
         "message": {
           "type": "string",
           "minLength": 1
+        },
+        "languages": {
+          "description": "The languages the rule's own pattern reads. Absent means Chinese only; [\"zh\", \"en\"] declares that one pattern reads both.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "zh",
+              "en"
+            ]
+          }
+        },
+        "en": {
+          "description": "The rule's English wording, as closed phrase lists.",
+          "$ref": "#/$defs/phraseVariant"
         }
       },
       "additionalProperties": false
@@ -371,6 +421,87 @@
           "items": {
             "$ref": "#/$defs/evidence"
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "phraseForm": {
+      "description": "A sequence of closed phrase lists: the form matches when one phrase of each part follows the previous part's, at most maxGap characters apart and never across a sentence end.",
+      "type": "object",
+      "required": [
+        "parts"
+      ],
+      "properties": {
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/termList"
+          }
+        },
+        "maxGap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 400
+        }
+      },
+      "additionalProperties": false
+    },
+    "phraseVariant": {
+      "description": "A rule's wording in one language as closed phrase lists. A negator inside a gap, or within 30 characters in front of the first part, voids a match. triggerPhrases is the trigger of a practical_required_when_report_matches rule.",
+      "type": "object",
+      "required": [
+        "forms"
+      ],
+      "properties": {
+        "triggerPhrases": {
+          "$ref": "#/$defs/termList"
+        },
+        "negators": {
+          "$ref": "#/$defs/termList"
+        },
+        "forms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/phraseForm"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "englishEmergencyVocabulary": {
+      "type": "object",
+      "required": [
+        "dispatch",
+        "medication",
+        "relief",
+        "efficacy",
+        "anaphora",
+        "conditionals",
+        "reject"
+      ],
+      "properties": {
+        "dispatch": {
+          "$ref": "#/$defs/termList"
+        },
+        "medication": {
+          "$ref": "#/$defs/termList"
+        },
+        "relief": {
+          "$ref": "#/$defs/termList"
+        },
+        "efficacy": {
+          "$ref": "#/$defs/termList"
+        },
+        "anaphora": {
+          "$ref": "#/$defs/termList"
+        },
+        "conditionals": {
+          "$ref": "#/$defs/termList"
+        },
+        "reject": {
+          "$ref": "#/$defs/termList"
         }
       },
       "additionalProperties": false

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { isMacPlatform } from "@/lib/platform";
-import { trapTab } from "@/lib/focusTrap";
+import { isTopFocusLayer, registerFocusLayer, trapTab } from "@/lib/focusTrap";
 import { useUiStore } from "@/lib/store";
 import { IconButton } from "@/components/ui/IconButton";
 
@@ -17,6 +17,18 @@ export const SHORTCUT_HELP_TOGGLE_EVENT = "evimed:shortcut-help-toggle";
  *  WCAG 2.2 SC 2.1.4): off, the key is left alone — it types, and it is not
  *  swallowed. The conversation frame's forwarded `?` is held to the same
  *  switch where it is received (`RuntimeUiFrame`). */
+/**
+ * Component: ShortcutHelp; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Host shortcut dialog with close icon and key list.
+ * Variants: Platform-specific modifier text.
+ * States: Local open state via enabled ? shortcut or toggle event.
+ * Hit area: Close uses small IconButton; backdrop dismisses.
+ * Keyboard: ? ignores text editors/modifiers; Escape closes; Tab trapped; prior focus restored.
+ * Long content: Short fixed key rows; browser zoom/long translation requires manual review.
+ * Theme: Surface, scrim, border and muted text.
+ * Responsive: Centered max-width-md panel; no scientific/native composer ownership.
+ * Verification: ShortcutHelp.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ShortcutHelp() {
   const [open, setOpen] = useState(false);
   // Mirror for the one-time global listener below (avoids re-binding per open).
@@ -39,7 +51,7 @@ export function ShortcutHelp() {
       }
       // Consume Esc only while the panel is open — a marked-handled Esc must
       // not also interrupt a running agent turn (LiveSessionPage listens too).
-      if (e.key === "Escape" && openRef.current) {
+      if (e.key === "Escape" && openRef.current && isTopFocusLayer(panelRef.current)) {
         e.preventDefault();
         setOpen(false);
       }
@@ -54,6 +66,9 @@ export function ShortcutHelp() {
       window.removeEventListener(SHORTCUT_HELP_TOGGLE_EVENT, onToggle);
     };
   }, []);
+
+  // While open it is a modal layer: a drawer or dialog beneath it must leave Tab and Escape to it.
+  useEffect(() => (open ? registerFocusLayer(panelRef.current) : undefined), [open]);
 
   // Focus the panel on open; hand focus back to the previously focused element
   // on close so keyboard users land where they were.

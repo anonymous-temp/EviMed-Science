@@ -41,6 +41,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
   const [zones, setZones] = useState<EvidenceZone[] | null>(null);
   const [zonesError, setZonesError] = useState<string | null>(null);
   const [zoneChoice, setZoneChoice] = useState<string>(NEW_ZONE);
+  const [initialZone, setInitialZone] = useState(NEW_ZONE);
   const [title, setTitle] = useState("我的证据卡");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +54,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
       .then((list) => {
         if (!active) return;
         setZones(list);
-        setZoneChoice(list[0]?.id ?? NEW_ZONE);
+        setZoneChoice(list[0]?.id ?? NEW_ZONE); setInitialZone(list[0]?.id ?? NEW_ZONE);
       })
       .catch((reason) => { if (active) setZonesError(evidenceErrorMessage(reason)); });
     return () => { active = false; };
@@ -62,7 +63,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
   const listed = claims.length > 0;
   const ready = zones !== null && (zoneChoice !== NEW_ZONE || title.trim().length > 0) && (!listed || selected.length > 0);
   const toggle = (claimId: string) => setSelected((current) => (current.includes(claimId) ? current.filter((id) => id !== claimId) : [...current, claimId]));
-  const submit = async () => {
+  const submit = async (markSaved: () => void) => {
     setBusy(true);
     setError(null);
     try {
@@ -71,6 +72,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
         ...(zoneChoice === NEW_ZONE ? { newZone: { title: title.trim() } } : { zoneId: zoneChoice }),
         ...(listed ? { claimIds: selected } : {}),
       });
+      markSaved();
       navigate(`/app/frontier/zones/${encodeURIComponent(answer.evidence.zoneId)}/evidence/${encodeURIComponent(answer.evidence.id)}?edit=1`);
     } catch (reason) {
       setError(evidenceErrorMessage(reason));
@@ -78,8 +80,8 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
     }
   };
   return (
-    <FormDialog title="发布为证据卡" onClose={onClose} busy={busy}>
-      <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (ready) void submit(); }}>
+    <FormDialog title="发布为证据卡" onClose={onClose} busy={busy} dirty={title !== "我的证据卡" || zoneChoice !== initialZone || JSON.stringify([...selected].sort()) !== JSON.stringify(defaultClaimSelection(claims).sort())}>
+      {(requestClose, markSaved) => <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (ready) void submit(markSaved); }}>
         <fieldset className="space-y-2">
           <legend className="mb-1 text-ui text-text">结论</legend>
           {listed ? (
@@ -126,10 +128,10 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
         {error && <p role="alert" className="text-ui text-error">{error}</p>}
         <p className="text-caption text-text-3">生成的是草稿，发布由你自己决定。</p>
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>取消</Button>
+          <Button type="button" variant="secondary" onClick={requestClose} disabled={busy}>取消</Button>
           <Button type="submit" loading={busy} disabled={!ready}>生成证据卡草稿</Button>
         </div>
-      </form>
+      </form>}
     </FormDialog>
   );
 }

@@ -1,15 +1,23 @@
+import { Button } from "@/components/ui/Button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { parseFits, pixelToWorld, type FitsImage, type FitsResult } from "@/lib/fits";
 import { cn } from "@/lib/cn";
+import { NumberField } from "@/components/ui/NumberField";
+import { parseQuantity } from "@/lib/quantity";
+import { viewerKey } from "./viewerKeyboard";
 import { parseFailureMessage } from "@/lib/errorText";
 
 /**
- * Native FITS viewer for astronomy (P1-3): renders a 2-D image HDU to a canvas
- * with a scientific colormap and a choice of stretch, or a 1-D spectrum as a
- * line chart — offline, from the file bytes alone. Chatbots can't depict these;
- * a real renderer is the differentiator. Theme-independent like the molecule /
- * mesh viewers (an astronomical image reads the same in light or dark).
+ * Anatomy: named viewer/content region, local controls and decoded readout.
+ * Variants: file-format branches retain the source's scientific meaning.
+ * States: setup, readable content, empty/invalid input and selected value.
+ * Hit area: native controls; the drawing surface accepts pointer input.
+ * Keyboard: native controls; focused drawing shortcuts never intercept editors.
+ * Long content: bounded content scrolls; scientific units remain visible.
+ * Theme: app chrome follows tokens; fixed scientific stages retain their palette.
+ * Responsive behavior: drawing coordinates track the available container.
+ * Verification: adjacent tests and ScientificViewerGallery; physical AT/touch unverified.
  */
 
 type Cmap = "magma" | "viridis" | "gray";
@@ -79,6 +87,24 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
   const [cmap, setCmap] = useState<Cmap>("magma");
   const [stretch, setStretch] = useState<Stretch>("linear");
   const [hover, setHover] = useState<{ x: number; y: number; v: number } | null>(null);
+  // Drafts are independent of the last inspected pixel: invalid edits must not
+  // index typed arrays, silently clamp, or turn an empty string into zero.
+  const selectionLocked = useRef(false);
+  const [xDraft, setXDraft] = useState<number | string>(0);
+  const [yDraft, setYDraft] = useState<number | string>(0);
+  const xPolicy = useMemo(() => ({ scale: "scalar" as const, integer: true, unit: "像素", min: 0, max: img.width - 1 }), [img.width]);
+  const yPolicy = useMemo(() => ({ scale: "scalar" as const, integer: true, unit: "像素", min: 0, max: img.height - 1 }), [img.height]);
+  const parsedX = parseQuantity(String(xDraft), xPolicy);
+  const parsedY = parseQuantity(String(yDraft), yPolicy);
+  const readPixel = (x: number, y: number, syncDraft = true, explicit = true) => {
+    if (!Number.isFinite(x) || !Number.isInteger(x) || x < 0 || x >= img.width ||
+        !Number.isFinite(y) || !Number.isInteger(y) || y < 0 || y >= img.height) return;
+    selectionLocked.current = explicit;
+    setHover({ x, y, v: img.data[y * img.width + x] });
+    if (syncDraft) { setXDraft(x); setYDraft(y); }
+  };
+  useEffect(() => { selectionLocked.current = false; setHover(null); setXDraft(0); setYDraft(0); }, [img]);
+
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -112,7 +138,8 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
     ctx.putImageData(image, 0, 0);
   }, [img, cmap, stretch]);
 
-  const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const onMove = (e: React.PointerEvent<HTMLCanvasElement> | React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.type !== "click" && selectionLocked.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -123,7 +150,7 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
       setHover(null);
       return;
     }
-    setHover({ x: col, y: fitsY, v: img.data[fitsY * img.width + col] });
+    readPixel(col, fitsY, true, e.type === "click");
   };
 
   const world = hover ? pixelToWorld(img.wcs, hover.x, hover.y) : null;
@@ -132,7 +159,7 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
     <div className="flex h-full flex-col bg-[#0f0f14]">
       <Toolbar
         left={
-          <span className="truncate font-mono text-caption text-white/50">
+          <span className="truncate font-mono text-caption text-white/70">
             {filename} · {img.width}×{img.height}
             {img.bunit ? ` · ${img.bunit}` : ""}
           </span>
@@ -146,11 +173,25 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
         <Segmented value={cmap} onChange={(v) => setCmap(v as Cmap)} options={["magma", "viridis", "gray"]} />
       </Toolbar>
 
+      <div className="flex flex-wrap items-start gap-2 bg-surface px-3 py-2 text-caption text-text">
+        <NumberField label="像素 X" aria-label="像素 X" value={xDraft} onValueChange={next => setXDraft(next ?? "")} policy={xPolicy} example="0" required className="w-24" />
+        <NumberField label="像素 Y" aria-label="像素 Y" value={yDraft} onValueChange={next => setYDraft(next ?? "")} policy={yPolicy} example="0" required className="w-24" />
+        <Button variant="secondary" size="md" type="button" disabled={!parsedX.ok || !parsedY.ok} onClick={() => { if (parsedX.ok && parsedY.ok) readPixel(parsedX.value, parsedY.value, false); }}>读取像素</Button>
+      </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
         <canvas
           ref={canvasRef}
-          onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
+          {...{ tabIndex: 0, role: "region", "aria-label": "FITS 像素视图" }}
+          onKeyDown={(e) => {
+            if (!viewerKey(e) || e.shiftKey) return;
+            if (e.key === "Escape") { selectionLocked.current = false; setHover(null); e.preventDefault(); return; }
+            let x = hover?.x ?? 0, y = hover?.y ?? 0;
+            if (e.key === "ArrowLeft") x--; else if (e.key === "ArrowRight") x++; else if (e.key === "ArrowUp") y++; else if (e.key === "ArrowDown") y--; else if (e.key === "0") { x = 0; y = 0; } else if (e.key !== "Enter") return;
+            x = Math.max(0, Math.min(img.width - 1, x)); y = Math.max(0, Math.min(img.height - 1, y));
+            readPixel(x, y); e.preventDefault();
+          }}
+          onPointerMove={onMove}
+          onClick={onMove}
           className="max-h-full max-w-full object-contain ring-1 ring-border"
           style={{ imageRendering: "pixelated", aspectRatio: `${img.width} / ${img.height}` }}
         />
@@ -158,16 +199,16 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
 
       <div className="flex items-center gap-3 border-t border-white/10 px-3 py-2">
         <Colorbar cmap={cmap} stretch={stretch} lo={img.lo} hi={img.hi} unit={img.bunit} />
-        <div className="ml-auto min-h-[2.25rem] text-right font-mono text-caption text-white/70">
+        <div role="status" className="ml-auto min-h-[2.25rem] text-right font-mono text-caption text-white/70">
           {hover ? (
             <>
               <div>
-                像素 ({hover.x}, {hover.y}) = {hover.v.toPrecision(5)}
+                像素 ({hover.x}, {hover.y}) = {Number.isFinite(hover.v) ? hover.v.toPrecision(5) : "无数据"}
               </div>
-              {world && <div className="text-white/45">{fmtCoord(world.lon, world.lat)}</div>}
+              {world && <div className="text-white/70">{fmtCoord(world.lon, world.lat)}</div>}
             </>
           ) : (
-            <span className="text-white/30">悬停查看像素值与天球坐标</span>
+            <span className="text-white/70">方向键选择像素，Enter 读取；也可点击或输入坐标</span>
           )}
         </div>
       </div>
@@ -212,9 +253,9 @@ function Colorbar({
   }, [cmap, stretch]);
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-caption text-white/50">{lo.toPrecision(3)}</span>
+      <span className="font-mono text-caption text-white/70">{lo.toPrecision(3)}</span>
       <canvas ref={ref} className="h-2.5 w-40 rounded-sm ring-1 ring-white/15" />
-      <span className="font-mono text-caption text-white/50">
+      <span className="font-mono text-caption text-white/70">
         {hi.toPrecision(3)}
         {unit ? ` ${unit}` : ""}
       </span>
@@ -255,12 +296,12 @@ function SpectrumView({ filename, spec }: { filename: string; spec: import("@/li
           </span>
         }
       />
+      <label className="px-3 text-caption">采样点 <input aria-label="光谱采样点" type="range" min={0} max={length - 1} value={hover?.i ?? 0} onChange={(e) => setHover({ i: Number(e.target.value) })} /><Button variant="secondary" size="md" type="button" onClick={() => setHover({ i: hover?.i ?? 0 })}>读取样本</Button></label>
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="h-auto max-h-full w-full max-w-read"
           onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
         >
           {[0, 0.25, 0.5, 0.75, 1].map((f) => {
             const v = yMin + f * ySpan;
@@ -323,16 +364,17 @@ function Segmented({
   return (
     <div className="flex overflow-hidden rounded-md ring-1 ring-white/15">
       {options.map((o) => (
-        <button
+        <Button variant="secondary" size="md"
           key={o}
+          aria-pressed={value === o}
           onClick={() => onChange(o)}
           className={cn(
             "px-2 py-1 text-caption capitalize transition-colors",
-            value === o ? "bg-white/20 text-white" : "bg-transparent text-white/50 hover:text-white/80",
+            value === o ? "bg-white/20 text-white" : "bg-transparent text-white/70 hover:text-white/80",
           )}
         >
           {o}
-        </button>
+        </Button>
       ))}
     </div>
   );

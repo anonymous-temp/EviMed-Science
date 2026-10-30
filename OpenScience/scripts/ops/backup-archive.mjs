@@ -138,6 +138,7 @@ const vcrPartialFile = /\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
  *
  *  Volatile control state is excluded by rule, so it can never fail a backup:
  *  - runtime control sockets (`.runtime-sockets`, `*.sock`);
+ *  - an account's library views (`users/<id>/library-views`), derived copies rebuilt at launch;
  *  - the specialist slot directory (`.openscience/specialist-slots`): `flock`
  *    files that exist while a job holds or waits for a slot and are deleted
  *    with it, created and removed on every job on every engine container;
@@ -163,6 +164,10 @@ function excludedFromBackup(parts) {
   if (parts.length === 4 && parts[0] === "users" && parts[2] === "projects" && isInternalProject(parts[3])) return true;
   if (!managedRuntimeDecision(parts).included) return true;
   if (parts[0] === ".openscience" && parts[1] === "specialist-slots") return true;
+  // An account's library views (`users/<id>/library-views/<projectId>/…`, libraryScope.mjs) are copies of its library entries made for
+  // the projects that have a runtime, rebuilt from the records at the next launch: archiving them stored every document once per
+  // project again (2026-10-28).
+  if (parts.length === 3 && parts[0] === "users" && parts[2] === "library-views") return true;
   const name = parts.at(-1) ?? "";
   if (parts[0] === "studies" && (parts[2] === ".intake" || vcrPartialFile.test(name))) return true;
   return !isBelowWorkspace(parts)

@@ -100,6 +100,18 @@ export function useOutline(
   return { entries, active, select };
 }
 
+/**
+ * Component: Outline; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named list of section buttons with optional disclosure or sticky aside.
+ * Variants: column/folded/inline.
+ * States: Empty entries hide; controlled active id sets aria-current.
+ * Hit area: Full-width 28px-line section buttons; top action min-h-6.
+ * Keyboard: Native buttons; selection calls onSelect without moving heading focus.
+ * Long content: Truncated labels expose full text through Tooltip; column scrolls vertically.
+ * Theme: Current accent-soft ground; semantic text.
+ * Responsive: Caller chooses layout; column width 14rem with chrome-aware sticky bounds.
+ * Verification: Outline.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Outline({ entries, active, onSelect, layout, onTop, label = "目录", className }: {
   entries: readonly OutlineEntry[];
   /** The id of the section being read. */

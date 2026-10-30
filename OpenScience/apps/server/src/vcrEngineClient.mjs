@@ -150,6 +150,18 @@ export function verifyVcrReceipt(result, receiptKey) {
   return { signed: true, ok, reason: ok ? "ok" : "signature_mismatch", outputHash: computed };
 }
 
+/** Accept only verifier-origin execution proof. A bare result or manifest hash is never proof.
+ * Legacy signed receipts were persisted only after successful verification.
+ * @param {any} execution
+ */
+export function vcrExecutionReceiptVerified(execution) {
+  const receipt = execution?.receipt;
+  if (!receipt || receipt.ok === false || receipt.signatureVerified === false) return false;
+  const hash = execution.outputHash ?? execution.output_hash;
+  if (receipt.signed === true && receipt.hashVerified !== true && receipt.outputHash == null) return true;
+  return (receipt.signed === true || receipt.hashVerified === true) && /^[a-f0-9]{64}$/.test(receipt.outputHash ?? "") && receipt.outputHash === hash;
+}
+
 /**
  * How a result differs from the job it answers: the fields an engine echoes
  * (`method`, `methodVersion`, `scenarioHash`, `seed`, `replicates`) held

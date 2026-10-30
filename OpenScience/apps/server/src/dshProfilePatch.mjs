@@ -76,6 +76,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} model                  the certified model id
  * @property {string} [reasoningEffort]      off | low | high | max; initial default for unconfigured sessions
  * @property {number} contextWindow
+ * @property {number} [maxOutputTokens]    what the kernel reserves for one model answer; the compaction trigger is contextWindow - this - 65,536
  * @property {string} sessionsDir            absolute path inside the container
  * @property {string} mcpServerPath          absolute path to the MCP server entrypoint
  * @property {Record<string, string>} mcpEnvironment
@@ -134,6 +135,30 @@ export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
  */
 export const IMAGE_INPUT_MODELS = Object.freeze(new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp"]));
 
+/**
+ * The kernel chat's presentation, set on its `ui-chat` row (2026-10-28).
+ *
+ * `transcriptView` is the chat's "work details" mode. The web client defaults
+ * to `detailed`, whose step grouping is `history`: nothing is grouped while a
+ * turn is open, so a long run is a flat list of 「思考 · …」 and tool rows —
+ * some 200 of them in the 34-minute run the owner asked about that day.
+ * `standard` (the Desktop client's default) groups the steps while the turn
+ * runs, under a title that names the step under way, and folds the turn when
+ * it ends; seen side by side on a live 0.2.1-rc.2 kernel the same day.
+ * `compact` would also drop that live title and the reasoning preview.
+ *
+ * `linkOpening: new-tab` is the owner's 2026-10-27 ruling in the kernel's own
+ * terms: a link in the chat opens in the reader's tab, not in the sidebar
+ * browser. The shell's capture listener (`runtimeUiShell.mjs`) still answers
+ * answer prose first; it stays until a hosted page has been seen to open them
+ * through this preference with the managed browser's tab present, which the
+ * bare kernel probe could not show (it has no such tab).
+ *
+ * Both reach the page only because the proxy forwards one settings read,
+ * narrowed to this namespace (`RUNTIME_UI_SETTINGS_READ` in `@evimed/domain`).
+ */
+export const CHAT_PRESENTATION = Object.freeze({ transcriptView: "standard", linkOpening: "new-tab" });
+
 /** What a researcher sees where the kernel names the model (its /model popup); the catalogue id is not shown. */
 export const MODEL_DISPLAY_NAME = "DeepSeek";
 
@@ -179,6 +204,9 @@ export function renderProfilePatch(input) {
     `    apiKeyEnv: ${yamlScalar(WORKLOAD_TOKEN_REF)}`,
     "    thinking: enabled",
     `    reasoningEffort: ${yamlScalar(input.reasoningEffort || "high")}`,
+    // The adapter reserves 256,000 output tokens per request unless told, and 0.2.1 compacts at
+    // contextWindow - maxTokens - 65,536: about 78,000 tokens of input on a 400,000 window (live check, 2026-10-28).
+    `    maxTokens: ${Math.max(1024, Math.trunc(Number(input.maxOutputTokens) || 65_536))}`,
     "    models:",
     `      - id: ${yamlScalar(input.model)}`,
     // Shown by a name, never by its id (owner ruling 8, 2026-10-10): the kernel's /model popup lists this entry, and an entry
@@ -257,6 +285,17 @@ export function renderProfilePatch(input) {
     "# alone.",
     "- id: open-in-app",
     "  disabled: true",
+    "",
+    "# The conversation's presentation, in the kernel chat's own settings namespace.",
+    "# `standard` folds a running turn's steps into one work group whose title is",
+    "# the step under way, where the web client's default (`detailed`) lists every",
+    "# reasoning and tool row flat until the turn ends. Links in the chat open in",
+    "# the reader's own tab. The page reads these through the one settings read",
+    "# the hosted proxy forwards, narrowed to this namespace; writes stay refused.",
+    "- id: ui-chat",
+    "  config:",
+    `    transcriptView: ${CHAT_PRESENTATION.transcriptView}`,
+    `    linkOpening: ${CHAT_PRESENTATION.linkOpening}`,
     "",
     "# The preset a session gets when it names none. Since DSH 0.1.7 a preset is",
     "# a row of the composition -- the socket ships `evimed-universal` in its own",

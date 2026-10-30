@@ -1,0 +1,9 @@
+[Unit]
+Description=Offline RSI campaign (frontier selection), monthly, on the lab host
+After=docker.service network-online.target
+Requires=docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/evimed-rsi/rsi-lab-monthly.sh
+TimeoutStartSec=12h
+Nice=10

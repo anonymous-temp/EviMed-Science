@@ -22,7 +22,8 @@
  * nothing protects nothing, and the way that stays invisible is by not being
  * written down. `settings/describe` is worth singling out — it answered `ok`,
  * so before this list a hosted page could read the deployment's own
- * configuration document.
+ * configuration document. Since 2026-10-28 that read is forwarded again, but
+ * only as a projection onto the chat's presentation (`RUNTIME_UI_SETTINGS_READ`).
  *
  * It is a deny list, not an allow list, and that is a deliberate,
  * time-boxed choice. Enumerating what the application legitimately calls means
@@ -48,7 +49,9 @@ export const RUNTIME_UI_MUX_RESPONSE_MAX_BYTES = 32 * 1024 * 1024;
  *
  * Each one is a durable change to the deployment or a way out of the project:
  *
- * - `settings`   the runtime's own configuration document
+ * - `settings`   the runtime's own configuration document (one read is
+ *                forwarded narrowed to the chat's presentation:
+ *                `RUNTIME_UI_SETTINGS_READ`; every write stays here)
  * - `credentials`model provider keys — hosted runtimes hold none, and this is
  *                how they would start to
  * - `llm`        provider discovery and configuration; the model a run uses is
@@ -337,6 +340,129 @@ export const RUNTIME_UI_DENIED_METHODS = Object.freeze([
 export const RUNTIME_UI_ANSWERED_METHODS = Object.freeze({
   "workspace/initializeDefault": Object.freeze({ ok: true }),
 });
+
+/**
+ * The one denied method the control plane forwards, with the kernel's answer
+ * narrowed to what a hosted page may read (2026-10-28).
+ *
+ * The kernel's chat keeps its presentation in the `ui-chat` settings
+ * namespace: `transcriptView` (compact | standard | detailed | verbose) and
+ * `linkOpening` (sidebar | new-tab). The page reads them through the generic
+ * settings mirror, whose only read is `settings/describe`, and with `settings`
+ * denied that read always failed, so a hosted conversation always drew the
+ * web client's own default, `detailed`: no step grouping while a turn is open,
+ * so a 34-minute run showed some 200 flat 「思考 · …」 and tool rows instead
+ * of one folded work group with a live status line (the owner's question
+ * that day). `standard` is the kernel's own answer to that, chosen by the
+ * profile (`dshProfilePatch.mjs`), and this is how the page gets to read it.
+ *
+ * The rest of the namespace stays denied, and so does the rest of the read:
+ * `settings/describe` answers one view per configurable row of the whole
+ * composition (the model provider's endpoint, the sandbox's limits, the
+ * permission table...), which before 2026-09-04 a hosted page could read in
+ * full. So the answer is projected field by field onto the namespaces named
+ * here, says the document is not writable and has no local file, and any
+ * answer that is not a well-formed success is refused rather than forwarded.
+ * Only the HTTP transport carries it — the page calls a unary method over
+ * `fetch` (seen on a live 0.2.1-rc.2 page) — so `isDeniedRuntimeUiMethod`
+ * still says yes and the multiplexed socket keeps refusing it.
+ *
+ * Measured against a live `@deepseek-ai/dsh@0.2.1-rc.2` on 2026-10-28: the
+ * page posts `{ type: "client-request", rpcId, method: "settings/describe",
+ * payload: { args: {} } }`, and the kernel refuses any other payload; a
+ * `ui-chat` row's config in the `--patch` overlay arrives in the view's
+ * `value` (neither `base` nor `user`), which is the field the chat adopts.
+ * The recorded answer is `packages/contracts/dsh/fixtures/settings-describe.json`.
+ */
+export const RUNTIME_UI_SETTINGS_READ = "settings/describe";
+
+/** The settings namespaces a hosted page may read: the chat's presentation, nothing else. */
+export const RUNTIME_UI_READABLE_SETTINGS = Object.freeze(["ui-chat"]);
+
+const readableSettings = new Set(RUNTIME_UI_READABLE_SETTINGS);
+
+/** @param {unknown} value @returns {value is Record<string, any>} */
+const isPlainRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** @param {unknown} value @param {readonly string[]} fields */
+const hasExactly = (value, fields) => isPlainRecord(value)
+  && Object.keys(value).length === fields.length && fields.every((field) => Object.hasOwn(value, field));
+
+/**
+ * Whether a call is the settings read the page makes, exactly: no other
+ * envelope field and no argument, because the kernel's read takes none.
+ *
+ * @param {unknown} call the parsed request body
+ * @returns {boolean}
+ */
+export function isRuntimeUiSettingsRead(call) {
+  return hasExactly(call, ["type", "rpcId", "method", "payload"])
+    && /** @type {any} */ (call).type === "client-request"
+    && /** @type {any} */ (call).method === RUNTIME_UI_SETTINGS_READ
+    && typeof (/** @type {any} */ (call).rpcId) === "string"
+    && /** @type {any} */ (call).rpcId.length > 0 && /** @type {any} */ (call).rpcId.length <= 128
+    && hasExactly(/** @type {any} */ (call).payload, ["args"])
+    && hasExactly(/** @type {any} */ (call).payload.args, []);
+}
+
+/**
+ * One readable namespace view, rebuilt field by field, or `null` when it is
+ * not the shape the kernel's settings controller answers.
+ * @param {Record<string, any>} view
+ */
+function readableSettingsView(view) {
+  const { ns, autoGenerate, schema, value, base, user, applies, secrets, revision } = view;
+  if (typeof ns !== "string" || typeof autoGenerate !== "boolean" || !isPlainRecord(schema) || !isPlainRecord(value)
+    || (base !== undefined && !isPlainRecord(base)) || (user !== undefined && !isPlainRecord(user))
+    || applies !== "live" || !Number.isFinite(revision) || !Array.isArray(secrets)
+    || !secrets.every((secret) => isPlainRecord(secret) && typeof secret.set === "boolean"
+      && Array.isArray(secret.path) && secret.path.every((/** @type {unknown} */ part) => typeof part === "string"))) return null;
+  return {
+    ns, autoGenerate, schema, value,
+    ...(base === undefined ? {} : { base }),
+    ...(user === undefined ? {} : { user }),
+    applies,
+    secrets: secrets.map((/** @type {any} */ secret) => ({ path: [...secret.path], set: secret.set })),
+    revision,
+  };
+}
+
+/**
+ * The kernel's answer to {@link RUNTIME_UI_SETTINGS_READ}, narrowed to
+ * {@link RUNTIME_UI_READABLE_SETTINGS}, as the body to send the page — or
+ * `null` when the answer must be refused instead: not a 200 JSON reply to this
+ * call, a failure, a document of another shape, or a readable namespace whose
+ * view is malformed or repeated. Never the kernel's document as it came.
+ *
+ * @param {{ rpcId: string }} call the request {@link isRuntimeUiSettingsRead} accepted
+ * @param {{ body: Uint8Array | string, status: number, contentType: string }} response
+ * @returns {string | null}
+ */
+export function runtimeUiSettingsAnswer(call, response) {
+  if (response?.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(String(response.contentType ?? "").trim())) return null;
+  /** @type {any} */ let answer;
+  try {
+    answer = JSON.parse(typeof response.body === "string" ? response.body : new TextDecoder().decode(response.body));
+  } catch { return null; }
+  if (answer?.type !== "server-response" || answer.rpcId !== call?.rpcId || answer.result?.ok !== true
+    || !isPlainRecord(answer.result.value) || !Array.isArray(answer.result.value.namespaces)) return null;
+  const namespaces = [];
+  const seen = new Set();
+  for (const view of answer.result.value.namespaces) {
+    if (!isPlainRecord(view) || !readableSettings.has(view.ns)) continue;
+    if (seen.has(view.ns)) return null;
+    seen.add(view.ns);
+    const readable = readableSettingsView(view);
+    if (!readable) return null;
+    namespaces.push(readable);
+  }
+  return JSON.stringify({
+    type: "server-response",
+    rpcId: call.rpcId,
+    // Writes stay refused and the profile's document is not the page's to open, and the page is told both.
+    result: { ok: true, value: { writable: false, hasDocument: false, namespaces } },
+  });
+}
 
 /**
  * Kernel HTTP routes this surface answers itself, by method and exact path.

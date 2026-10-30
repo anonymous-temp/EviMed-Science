@@ -372,7 +372,7 @@ export class AutopilotPlanner {
       throw plannerError("autopilot_planner_circuit_open", "The next-action planner is resting after repeated failures.");
     }
     this.counters.decisions += 1;
-    const policy = await this.policies.resolve("autopilot", { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS });
+    const policy = await this.policies.resolve("autopilot", { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS }, { userId, projectId, runId: episodeId });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {

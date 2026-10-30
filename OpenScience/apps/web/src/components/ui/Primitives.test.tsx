@@ -153,6 +153,28 @@ describe("Tabs", () => {
 });
 
 describe("ListRow", () => {
+  // 2026-10-27: the mark at a row's end says where its press goes — › here, ↗ out of the section the list is in, an outside address included.
+  it("marks a route that leaves the section ↗, as an outside address, and a route that stays › ", () => {
+    render(
+      <MemoryRouter>
+        <List>
+          <ListRow title="这里" to="/app/memory?tab=self" />
+          <ListRow title="那里" to="/app/files/src_1" leaves />
+          <ListRow title="外面" href="https://example.org/" />
+          <ListRow title="没有去处" />
+        </List>
+      </MemoryRouter>,
+    );
+    const mark = (title: string) => screen.getByText(title).closest("li")!.querySelector("svg")?.getAttribute("class") ?? null;
+    expect(mark("这里")).toContain("lucide-chevron-right");
+    expect(mark("那里")).toContain("lucide-arrow-up-right");
+    expect(mark("外面")).toContain("lucide-arrow-up-right");
+    // A row that cannot be pressed has neither a mark nor the ground of one that can.
+    expect(mark("没有去处")).toBeNull();
+    expect(screen.getByText("没有去处").closest("li")!.className).not.toContain("hover:bg-surface-2");
+    expect(screen.getByText("这里").closest("li")!.className).toContain("hover:bg-surface-2");
+  });
+
   // Appendix E #27: 500 renders as 400 in Microsoft YaHei, so unread was
   // invisible on Windows. Unread is 600.
   it("sets an unread title in 600, a weight every Chinese face has", () => {
@@ -255,6 +277,69 @@ describe("ListRow", () => {
     expect(onSwitch).toHaveBeenCalledOnce();
     expect(onAction).toHaveBeenCalledOnce();
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  // R23 asked for an identifier a person can copy; the review (R1 P1-2) found the whole second line had become a dead zone on every
+  // row that opens something. The line lets the press through to the row, a control inside it keeps its own, and a row that carries
+  // an identifier says so (`metaSelectable`).
+  it("lets a press on the second line open the row, and keeps a control inside it pressable", async () => {
+    const onOpen = vi.fn();
+    const onRetry = vi.fn();
+    render(
+      <List label="资料">
+        <ListRow title="论文.pdf" onOpen={onOpen} meta={<><span>3 小时前 · 12 条</span><button type="button" onClick={onRetry}>重试</button></>} />
+      </List>,
+    );
+    const line = screen.getByText("3 小时前 · 12 条").parentElement as HTMLElement;
+    // Raised over the stretched title so a control stays above it, but transparent to the pointer itself: the text's press falls
+    // through to the title's layer, which opens the row.
+    expect(line).toHaveClass("relative", "pointer-events-none");
+    expect(line.className).toMatch(/\[&_:is\(a,button,/);
+    expect(line.className).not.toMatch(/(^|\s)(select-text|pointer-events-auto)(\s|$)/);
+    expect(line).not.toHaveAttribute("data-row-selectable");
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("takes the pointer for a second line that carries an identifier to copy, and opens nothing from it", () => {
+    render(
+      <List label="资料">
+        <ListRow title="论文.pdf" onOpen={() => {}} metaSelectable meta="src_9f2c41" />
+      </List>,
+    );
+    const line = screen.getByText("src_9f2c41");
+    expect(line).toHaveClass("pointer-events-auto", "select-text");
+    expect(line).toHaveAttribute("data-row-selectable");
+  });
+
+  it("leaves the second line of a row that opens nothing alone", () => {
+    render(<List label="资料"><ListRow title="只是一行" meta="随便选中" /></List>);
+    const line = screen.getByText("随便选中");
+    expect(line.className).not.toMatch(/pointer-events|relative/);
+  });
+
+  it("keeps a selection control in the leading slot above the row's target, and lets a plain mark through", async () => {
+    const onOpen = vi.fn();
+    const onToggle = vi.fn();
+    render(
+      <List label="通知">
+        <ListRow title="研究已完成" onOpen={onOpen} leading={<label><input type="checkbox" aria-label="选择：研究已完成" onChange={onToggle} /></label>} />
+        <ListRow title="已读的通知" onOpen={onOpen} leading={<span aria-hidden="true">·</span>} />
+      </List>,
+    );
+    const lead = screen.getByLabelText("选择：研究已完成").closest("[data-row-leading]") as HTMLElement;
+    // Above the stretched title (`::after`, positioned, z auto) and transparent itself; the control re-enables the pointer.
+    expect(lead).toHaveClass("relative", "z-sticky", "pointer-events-none");
+    expect(lead.className).toMatch(/\[&_:is\(a,button,input,select,textarea,label,/);
+    await userEvent.click(screen.getByLabelText("选择：研究已完成"));
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("leaves the leading slot of a row that opens nothing as it was", () => {
+    render(<List label="项"><ListRow title="只是一行" leading={<span>·</span>} /></List>);
+    expect(screen.getByText("·").closest("[data-row-leading]")?.className).not.toMatch(/pointer-events|relative/);
   });
 
   it("aligns numeric columns under a header that sorts: a cell is text, or a button of its own that opens what it counts", async () => {

@@ -2,13 +2,14 @@ import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { METHOD_RECORDS } from "@evimed/domain/method-records";
 import { HttpError } from "./security.mjs";
+import { EVOLUTION_DEMAND_MIN_ACCOUNTS } from "./evolutionAccountClasses.mjs";
 
 /** A score uses measured counts, never a model's claimed overall importance. @param {any} features */
 export function evolutionPriorityBreakdown(features = {}, weights = {}) {
   const count = key => Math.max(0, Math.min(10_000, Number(features[key]) || 0));
   const w = { demand: 4, unlock: 3, reuse: 2, progress: 2, exploration: 1.5, cost: .2, ...weights };
-  // Demand counts once enough different accounts show it: five researchers, or the floor an operator-class summary carries in its features.
-  const demandFloor = Math.min(5, Math.max(1, Math.trunc(Number(features.demandFloor)) || 5));
+  // A single authorized researcher incident counts; an operator may retain its independently configured operational floor.
+  const demandFloor = Math.min(5, Math.max(1, Math.trunc(Number(features.demandFloor)) || EVOLUTION_DEMAND_MIN_ACCOUNTS));
   return { literature: 3 * Math.log1p(count("literature24Months")), failure: 4 * Math.log1p(count("runtimeFailures")),
     waiting: 5 * Math.log1p(count("waitingAgendas")), reference: 2 * Number(features.referenceCode === true),
     data: 2 * Number(features.reachableData === true), examples: Math.min(count("publishedExamples"), 5),

@@ -27,8 +27,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import ipaddress
+import re
+from uuid import uuid4
 from dataclasses import dataclass
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -50,8 +53,12 @@ DAJIALA_RATE_LIMITED = -1
 DAJIALA_BALANCE = 20001
 DAJIALA_GONE = (101, 104, 107)       # 107: measured 2026-10-24 on a nickname no account answers to (¥0.02)
 DAJIALA_RETRY = (2003, 2005, 20002, 50000)    # 20002: module docstring
-CRAWL_PATH = "/api/crawl"
+CRAWL_PATH = "/api/jobs"
 CRAWL_MAX_BYTES = 8 * 1024 * 1024
+# A poll of an accepted job that met a busy answer (429/503) or a dropped connection is asked again, at most this many times and
+# within the crawl's one deadline: the job is running there, and one blip must not end it. The platform's own client retries twice.
+CRAWL_POLL_RETRY_DELAYS_S = (0.5, 2.0)
+CRAWL_MAX_RETRY_AFTER_S = 30.0
 
 
 class ProviderError(Exception):
@@ -65,6 +72,15 @@ class ProviderError(Exception):
         self.kind = kind
         self.detail = detail[:200]
         self.retry_after_s = retry_after_s
+
+
+def _retry_after_s(headers, fallback: float) -> float:
+    """``Retry-After`` in seconds when the collector gave a number, capped; otherwise the retry's own delay."""
+    try:
+        seconds = float(headers.get("retry-after", ""))
+    except (TypeError, ValueError):
+        return fallback
+    return min(CRAWL_MAX_RETRY_AFTER_S, max(0.0, seconds)) if seconds == seconds else fallback
 
 
 def _ledger_outcome(kind: str) -> str:
@@ -239,65 +255,172 @@ class DajialaClient:
 # ------------------------------------------------------------------------------------ the GEO module's crawler
 
 class CrawlClient:
-    """``POST {url}/api/crawl`` — the same request shape as the platform's ``socialCrawlClient.mjs``."""
+    """One authenticated asynchronous job; polling never submits another crawl."""
 
-    def __init__(self, ledger: ProviderLedger, settings, clock, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(self, ledger: ProviderLedger, settings, clock, *, transport: httpx.AsyncBaseTransport | None = None,
+                 poll_interval_s: float = 1.0, poll_retry_delays_s: tuple[float, ...] = CRAWL_POLL_RETRY_DELAYS_S) -> None:
         self._ledger = ledger
         self._settings = settings
         self._clock = clock
         self._transport = transport
+        self._poll_interval_s = max(0.001, poll_interval_s)
+        self._poll_retry_delays_s = poll_retry_delays_s
         self.calls = 0
 
     @property
     def configured(self) -> bool:
-        return bool(self._settings.social_crawl_url)
+        return bool(self._settings.social_crawl_url and self._settings.secret("social_crawl_key"))
 
     @property
     def cap(self) -> Cap:
         return Cap(SOCIAL_CRAWL, float(self._settings.social_crawl_daily))
 
+    def _headers(self, idempotency_key: str | None = None) -> dict:
+        key = self._settings.secret("social_crawl_key")
+        if not key or any(ord(char) < 33 or ord(char) > 126 for char in key):
+            raise ProviderError(SOCIAL_CRAWL, "refused", "credential_unavailable")
+        headers = {"Accept": "application/json", "Authorization": f"Bearer {key}"}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        return headers
+
+    def _endpoint(self) -> str:
+        origin = self._settings.social_crawl_url or ""
+        parsed = urlsplit(origin)
+        host = parsed.hostname or ""
+        try:
+            private = ipaddress.ip_address(host).is_private
+        except ValueError:
+            private = "." not in host or host.endswith((".internal", ".localhost", ".local"))
+        if not origin or (parsed.scheme == "http" and not private and not self._settings.social_crawl_allow_plaintext):
+            raise ProviderError(SOCIAL_CRAWL, "refused", "endpoint_unavailable")
+        return origin
+
     async def crawl(self, query: str, platform: str, *, detail_posts: int = 5) -> dict:
-        """One platform's latest posts for one query. Raises ``ProviderError`` (``rate-limited`` on 429/503: GEO is busy)."""
+        """Keep a single deadline and one ledger charge for submit plus all polling reads."""
+        if not isinstance(query, str) or not 1 <= len(query.strip()) <= 256 or platform not in (
+                "xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels"):
+            raise ProviderError(SOCIAL_CRAWL, "bad-request", "invalid_input")
+        origin = self._endpoint()
+        self._headers()
         await self._ledger.check(self.cap, 1)
         self.calls += 1
-        body = {"query": query, "platform": platform, "sort_type": "latest", "page": 1, "minimum_detail_posts": detail_posts,
-                "minimum_comments_per_post": 0, "include_provider_raw": False}
+        # `platforms`, as the platform's own client sends it: the collector's job takes a list, one name for this crawl.
+        body = {"query": query, "platforms": [platform], "sort_type": "latest", "page": 1,
+                "minimum_detail_posts": max(0, min(50, detail_posts)), "minimum_comments_per_post": 0,
+                "collect_comments": False, "include_provider_raw": False}
+        accepted = False
+        outcome, detail, objects = "failed", "request_failed", 0
         try:
-            async with httpx.AsyncClient(transport=self._transport, timeout=self._settings.social_crawl_timeout_s,
-                                         follow_redirects=False) as client:
-                async with client.stream("POST", self._settings.social_crawl_url + CRAWL_PATH, json=body,
-                                         headers={"Accept": "application/json"}) as response:
-                    if response.status_code in (429, 503):
-                        await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome="rate-limited", amount=1,
-                                                  error=f"http_{response.status_code}")
-                        raise ProviderError(SOCIAL_CRAWL, "rate-limited", f"http_{response.status_code}")
-                    if response.status_code != 200:
-                        await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome="failed", amount=1,
-                                                  error=f"http_{response.status_code}")
-                        raise ProviderError(SOCIAL_CRAWL, "failed", f"http_{response.status_code}")
-                    chunks, size = [], 0
-                    async for chunk in response.aiter_bytes():
-                        size += len(chunk)
-                        if size > CRAWL_MAX_BYTES:
-                            raise ProviderError(SOCIAL_CRAWL, "failed", "response_too_large")
-                        chunks.append(chunk)
-        except ProviderError:
+            async with asyncio.timeout(self._settings.social_crawl_timeout_s):
+                async with httpx.AsyncClient(transport=self._transport, timeout=self._settings.social_crawl_timeout_s,
+                                             follow_redirects=False) as client:
+                    async def request(method, path, *, payload=None, idempotency_key=None):
+                        nonlocal accepted
+                        # Only a poll is asked again: a submit that met a busy answer was not accepted and is the caller's to retry later.
+                        delays = self._poll_retry_delays_s if method == "GET" else ()
+                        for attempt in range(len(delays) + 1):
+                            wait = None
+                            try:
+                                async with client.stream(method, origin + path, json=payload,
+                                                         headers=self._headers(idempotency_key)) as response:
+                                    # 202: a job started; 200: a job the collector already held under the key. Both are accepted.
+                                    if method == "POST" and response.status_code in (200, 202):
+                                        accepted = True
+                                    if response.status_code in (429, 503):
+                                        if not accepted:
+                                            raise ProviderError(SOCIAL_CRAWL, "rate-limited", f"http_{response.status_code}")
+                                        if attempt >= len(delays):
+                                            raise ProviderError(SOCIAL_CRAWL, "failed", "accepted_result_unavailable")
+                                        wait = _retry_after_s(response.headers, delays[attempt])
+                                    elif response.status_code not in (200, 202):
+                                        raise ProviderError(SOCIAL_CRAWL, "failed", "accepted_result_unavailable" if accepted else f"http_{response.status_code}")
+                                    else:
+                                        chunks, size = [], 0
+                                        async for chunk in response.aiter_bytes():
+                                            size += len(chunk)
+                                            if size > CRAWL_MAX_BYTES:
+                                                raise ProviderError(SOCIAL_CRAWL, "failed", "response_too_large")
+                                            chunks.append(chunk)
+                                        value = json.loads(b"".join(chunks))
+                                        if not isinstance(value, dict):
+                                            raise ValueError("not an object")
+                                        return value
+                            except httpx.TransportError:
+                                if attempt >= len(delays):
+                                    raise
+                                wait = delays[attempt]
+                            await asyncio.sleep(wait)
+
+                    snapshot = await request("POST", CRAWL_PATH, payload=body, idempotency_key=uuid4().hex)
+                    job_id = snapshot.get("job_id")
+                    if not isinstance(job_id, str) or not re.fullmatch(r"[a-fA-F0-9]{32}", job_id):
+                        raise ProviderError(SOCIAL_CRAWL, "failed", "invalid_job")
+                    while True:
+                        if snapshot.get("job_id") != job_id or snapshot.get("query", query) != query or snapshot.get("platforms", [platform]) != [platform]:
+                            raise ProviderError(SOCIAL_CRAWL, "failed", "job_identity_mismatch")
+                        state = snapshot.get("job_status")
+                        if state in ("done", "partial", "failed"):
+                            break
+                        if state not in ("waiting", "queued", "running"):
+                            raise ProviderError(SOCIAL_CRAWL, "failed", "invalid_job_status")
+                        await asyncio.sleep(self._poll_interval_s)
+                        snapshot = await request("GET", f"{CRAWL_PATH}/{job_id}")
+                    answer = snapshot.get("result")
+                    # A job of one platform may answer as the platform's own result or inside the multi-platform envelope
+                    # (`results`, with `progress` and `errors` by platform), as the platform's client reads both.
+                    progress, platform_errored = [], False
+                    if isinstance(answer, dict) and isinstance(answer.get("results"), dict):
+                        envelope = answer
+                        if (envelope.get("job_id", job_id) != job_id or envelope.get("query", query) != query
+                                or any(name != platform for name in envelope["results"])):
+                            raise ProviderError(SOCIAL_CRAWL, "failed", "invalid_result")
+                        answer = envelope["results"].get(platform)
+                        if not isinstance(answer, dict):
+                            raise ProviderError(SOCIAL_CRAWL, "failed", "missing_platform")
+                        answer = {**answer, "platform": answer.get("platform", platform)}
+                        for source in (envelope.get("progress"), snapshot.get("progress")):
+                            entry = source.get(platform) if isinstance(source, dict) else None
+                            if isinstance(entry, dict):
+                                progress.append(entry)
+                        errors = envelope.get("errors")
+                        platform_errored = isinstance(errors, dict) and platform in errors
+                    if not isinstance(answer, dict) or answer.get("platform") != platform or answer.get("question", query) != query:
+                        raise ProviderError(SOCIAL_CRAWL, "failed", "invalid_result")
+                    meta = answer.get("meta") if isinstance(answer.get("meta"), dict) else {}
+                    status = meta.get("collection_status")
+                    posts = answer.get("posts") if isinstance(answer.get("posts"), list) else []
+                    # What went wrong (errored) is not what is short (unmet): `requirements_met: false` is a platform that had fewer
+                    # posts than the five asked for, which is what a quiet term on a quiet platform looks like.
+                    evidence = (snapshot, answer, meta, *progress)
+                    unmet = any(item.get("requirements_met") is False for item in evidence)
+                    errored = (state != "done" or status in ("partial_collected", "failed") or platform_errored
+                               or any(item.get("has_errors") is True for item in evidence)
+                               or any(item.get("status") in ("error", "partial") for item in progress)
+                               or bool(meta.get("error_details_total")))
+                    stages = [meta.get("detail"), meta.get("comments")]
+                    stages.extend((meta.get("stage_completeness") or {}).values() if isinstance(meta.get("stage_completeness"), dict) else [])
+                    errored = errored or any(
+                        isinstance(stage, dict) and stage.get("enabled") is not False
+                        and (stage.get("complete") is False or stage.get("status") in ("failed", "partial")
+                             or isinstance(stage.get("failed"), (int, float)) and stage["failed"] > 0) for stage in stages)
+                    if status not in ("collected", "no_results", "partial_collected", "failed") or (errored and not posts):
+                        raise ProviderError(SOCIAL_CRAWL, "failed", "collection_incomplete")
+                    # Usable posts that are not the whole of what was asked for are kept and said to be partial; no posts and nothing
+                    # wrong is an empty read.
+                    incomplete = errored or (unmet and bool(posts))
+                    # The collector's build_entry keeps only public post excerpts and stated counts.
+                    answer = {"platform": platform, "posts": posts, "meta": {"collection_status": "partial_collected" if incomplete else status}}
+                    outcome, detail, objects = ("failed" if incomplete else "ok"), ("collection_incomplete" if incomplete else ""), len(posts)
+                    return answer
+        except ProviderError as error:
+            outcome, detail = _ledger_outcome(error.kind), error.detail
             raise
-        except (httpx.HTTPError, OSError) as error:
-            await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome="failed", amount=1,
-                                      error="timeout" if isinstance(error, httpx.TimeoutException) else type(error).__name__)
-            raise ProviderError(SOCIAL_CRAWL, "failed", type(error).__name__) from None
-        try:
-            answer = json.loads(b"".join(chunks))
-        except ValueError:
-            await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome="failed", amount=1, error="invalid_json")
-            raise ProviderError(SOCIAL_CRAWL, "failed", "invalid_json") from None
-        if not isinstance(answer, dict):
-            await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome="failed", amount=1, error="invalid_json")
-            raise ProviderError(SOCIAL_CRAWL, "failed", "invalid_json")
-        posts = answer.get("posts") if isinstance(answer.get("posts"), list) else []
-        await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome="ok", objects=len(posts), amount=1)
-        return answer
+        except (httpx.HTTPError, OSError, ValueError, TimeoutError) as error:
+            detail = "accepted_result_unavailable" if accepted else "timeout" if isinstance(error, (TimeoutError, httpx.TimeoutException)) else "invalid_response"
+            raise ProviderError(SOCIAL_CRAWL, "failed", detail) from None
+        finally:
+            await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome=outcome, objects=objects, amount=1, error=detail or None)
 
 
 def _int(value) -> int | None:

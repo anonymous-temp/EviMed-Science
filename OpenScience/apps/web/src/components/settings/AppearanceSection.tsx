@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import { Panel, PanelRow } from "@/components/ui/Panel";
 import { Switch } from "@/components/ui/Switch";
-import { tagClasses } from "@/components/ui/Tag";
+import { Tag } from "@/components/ui/Tag";
 
 const THEMES = [
   { value: "light", label: "浅色" },
@@ -51,7 +51,7 @@ export function AppearanceSection() {
       </Panel>
       <Panel title="快捷键">
         {shortcuts().map((row) => {
-          const key = <kbd className={tagClasses({ className: "font-mono" })}>{row.keys}</kbd>;
+          const key = <kbd className="inline-flex"><Tag className="font-mono">{row.keys}</Tag></kbd>;
           return row.keys === "?" ? (
             <PanelRow
               key={row.keys}

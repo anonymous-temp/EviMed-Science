@@ -14,7 +14,7 @@ function hub(over: Partial<FrontierCongressHub> = {}): FrontierCongressHub {
   return {
     congress: { id: "esmo-2026", code: "ESMO 2026", name: "欧洲肿瘤内科学会年会", nameEn: "ESMO Congress 2026", start: "2026-10-23", end: "2026-10-27", city: "Madrid",
       specialty: "oncology", specialtyLabel: "肿瘤学", status: "ongoing", sourceUrl: "https://www.esmo.org/meetings/esmo-congress-2026", abstractsAt: null },
-    itemCount: 3,
+    itemCount: 3, listedCount: 3,
     days: [
       { day: "2026-10-24", recap: { text: "药物 A 在随机对照试验中延长了生存期[1]。药物 B 的早期数据属非随机研究[2]。[9]不是引用。", at: "2026-10-24T10:00:00Z",
         refs: [{ n: 1, itemId: "i1", title: "药物 A 三期试验", sourceName: "医脉通" }, { n: 2, itemId: "i2", title: "药物 B 早期数据", sourceName: "OncLive" }] },
@@ -47,6 +47,13 @@ beforeEach(() => {
 });
 
 describe("a congress's hub", () => {
+  it("says what the congress holds, as its list line does, and how many the days list where it lists fewer (owner, 2026-10-27)", async () => {
+    client.fetchFrontierCongress.mockResolvedValue(hub({ itemCount: 624, listedCount: 400 }));
+    renderHub();
+    expect(await screen.findByText("收录 624 条，显示最新 400 条")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("收录 400 条");
+  });
+
   it("heads the page with the congress, its status, dates, place, specialty and count, and a link to the organiser", async () => {
     renderHub();
     expect(await screen.findByRole("heading", { level: 1, name: "ESMO 2026 · 欧洲肿瘤内科学会年会" })).toBeInTheDocument();
@@ -55,6 +62,7 @@ describe("a congress's hub", () => {
     expect(document.body).toHaveTextContent("Madrid");
     expect(document.body).toHaveTextContent("肿瘤学");
     expect(document.body).toHaveTextContent("收录 3 条");
+    expect(document.body).not.toHaveTextContent("显示最新");
     expect(screen.getByRole("link", { name: /会议信息/ })).toHaveAttribute("href", "https://www.esmo.org/meetings/esmo-congress-2026");
     expect(screen.getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier?view=track&segment=congresses");
   });

@@ -122,3 +122,17 @@ test('pinned native tool runtime dispatch carries store-owned child scope as its
   assert.equal(received, parent.id)
   unregister(); dispose()
 })
+
+for (const name of ['vcr_read','vcr_write','vcr_simulate','trial_registry_record','curve_digitize','evidence_pool']) {
+  test(`native ${name} gets its own immutable invocation context`,async()=>{
+    /** @type {{ __evimed_execution_context: { sessionId: string, callId: string } } | undefined} */
+    let forwarded;
+    const definition={name:`mcp__evimed__${name}`,execute:async (/** @type {any} */ args, /** @type {unknown} */ _execution)=>{forwarded=args;}};
+    const dispose=port.decorateEngineToolContext({tools:{get:(/** @type {string} */ key)=>key===definition.name ? definition : null},on:()=>()=>{}});
+    const args=Object.freeze({what:'study',__evimed_execution_context:{sessionId:'forged'}});
+    await definition.execute(args,{callId:'native-call',agent:{session:{id:'native-child',requestHeader:()=>({config:{provider:'deepseek-official',model:'deepseek-v4-pro'}})}}});
+    assert.ok(forwarded);
+    assert.equal(forwarded.__evimed_execution_context.sessionId,'native-child');assert.equal(forwarded.__evimed_execution_context.callId,'native-call');
+    assert.equal(args.__evimed_execution_context.sessionId,'forged');dispose();
+  });
+}

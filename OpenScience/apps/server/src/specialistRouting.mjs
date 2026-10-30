@@ -137,6 +137,7 @@ export function routeSafetyMedicine(query, agents) {
 export async function routeOpenDomain({ query, agents, classifier = null, consultModel = true, trace = {}, owner = null }) {
   const structured = routeSlashCommand(query, agents);
   if (structured) return { specialist: structured, decidedBy: "named", modelConsulted: false };
+  agents = agents.filter(agent => agent.listed !== false);
   const modelConsulted = consultModel && classifier != null;
   if (modelConsulted) {
     let verdict = null;

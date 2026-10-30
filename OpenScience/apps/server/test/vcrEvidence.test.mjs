@@ -355,7 +355,7 @@ test("E-10 one Chinese site among thirty countries is a multinational trial that
 });
 
 test("pooling eligibility refuses a planned figure, an unverified quote and a different endpoint", () => {
-  const verified = { locator: { verification: "verified" } };
+  const verified = { locator: { verification: "verified" }, source_ref: "ctgov:NCT00000001" };
   const { eligible, refused } = poolEligibility({
     items: [
       { id: "a", value: 0.3, ...verified, applicability: { endpointKey: "pfs-blinded" }, historicalBaseline: true },
@@ -376,7 +376,7 @@ test("pooling eligibility refuses a planned figure, an unverified quote and a di
 });
 
 test("CS-26 pooling needs an endpoint key, the arm role being pooled, and a stated baseline", () => {
-  const verified = { locator: { verification: "verified" }, value: 0.3 };
+  const verified = { locator: { verification: "verified" }, value: 0.3, source_ref: "ctgov:NCT00000001" };
   const base = { ...verified, endpoint_key: "pfs-blinded", arm_role: "control", historical_baseline: true };
   const asked = { endpointKey: "pfs-blinded", armRole: "control" };
   assert.equal(poolEligibility({ items: [{ id: "a", ...base }], ...asked }).eligible.length, 1);
@@ -481,11 +481,12 @@ test("D12 the hazard ratios a ClinicalTrials.gov analysis states pool: its perce
   assert.equal(queued.status, "queued");
   assert.equal(queued.armRole, "contrast");
   const overall = queued.jobs.find((entry) => entry.calibre === "overall");
-  assert.equal(overall.studies, 2, "both analyses reach the pool");
+  assert.equal(overall.studies, 1, "two analyses from one trial are not two independent trials");
+  assert.ok(queued.refused.some(entry => entry.reasons.includes("duplicate_trial")));
   assert.deepEqual(overall.excluded, [], "none is left out for its confidence level");
   const scenario = jobs.enqueued.find((entry) => entry.detail.calibre === "overall").scenario;
   assert.equal(scenario.scale, "log");
-  assert.equal(scenario.studies.length, 2);
+  assert.equal(scenario.studies.length, 1);
   assert.ok(scenario.studies.every((study) => Number.isFinite(study.se) && study.se > 0 && study.se < 0.5), JSON.stringify(scenario.studies));
 });
 
@@ -493,7 +494,7 @@ test("a pool job is exactly the engine's contract: { studyId, estimate, se } on 
   const items = [
     { id: "evd_0001", value: 31, ci_low: 25, ci_high: 38, unit: "%", sample_size: 277, events: 86, arm: "SoC", source_ref: "ctgov:NCT02296125" },
     { id: "evd_0002", value: 28, ci_low: 20, ci_high: 37, unit: "%", sample_size: 180, events: 50, arm: "SoC", source_ref: "ctgov:NCT01802632" },
-    { id: "evd_0003", value: 0.4, unit: "%", arm: "SoC" },
+    { id: "evd_0003", value: 0.4, unit: "%", arm: "SoC", source_ref: "ctgov:NCT00000003" },
   ];
   const built = poolJob({ studyId: "std_1", parameter: "control_event_rate", endpointKey: "orr-recist", armRole: "control", calibre: "closest", items });
   assert.equal(built.valid, true, JSON.stringify(built.issues));
@@ -522,13 +523,13 @@ test("a pool job is exactly the engine's contract: { studyId, estimate, se } on 
   assert.notEqual(poolJob({ studyId: "std_1", parameter: "control_event_rate", endpointKey: "orr-recist", calibre: "closest", items: items.slice(0, 2), scale: "identity" }).job.seed, built.job.seed);
 
   const hazard = poolJob({ studyId: "std_1", parameter: "hazard_ratio", calibre: "overall",
-    items: [{ id: "h1", value: 0.46, ci_low: 0.37, ci_high: 0.57 }, { id: "h2", value: 0.6, ci_low: 0.45, ci_high: 0.8 }] });
+    items: [{ id: "h1", detail: { trialIdentity: "trial:hazard-one" }, value: 0.46, ci_low: 0.37, ci_high: 0.57 }, { id: "h2", detail: { trialIdentity: "trial:hazard-two" }, value: 0.6, ci_low: 0.45, ci_high: 0.8 }] });
   assert.equal(hazard.job.scenario.scale, "log");
   assert.equal(hazard.valid, true, JSON.stringify(hazard.issues));
-  const invalid = poolJob({ studyId: "", parameter: "hazard_ratio", calibre: "overall", items: [{ id: "h1", value: 0.46, ci_low: 0.37, ci_high: 0.57 }] });
+  const invalid = poolJob({ studyId: "", parameter: "hazard_ratio", calibre: "overall", items: [{ id: "h1", detail: { trialIdentity: "trial:hazard-one" }, value: 0.46, ci_low: 0.37, ci_high: 0.57 }] });
   assert.equal(invalid.valid, false);
   assert.ok(invalid.issues.some((issue) => issue.field === "studyId"));
-  const none = poolJob({ studyId: "std_1", parameter: "hazard_ratio", calibre: "overall", items: [{ id: "h1", value: 0.46 }] });
+  const none = poolJob({ studyId: "std_1", parameter: "hazard_ratio", calibre: "overall", items: [{ id: "h1", detail: { trialIdentity: "trial:hazard-one" }, value: 0.46 }] });
   assert.equal(none.valid, false);
   assert.equal(none.issues[0].code, "no_poolable_study");
 });
@@ -1152,7 +1153,7 @@ test("every column the evidence store writes exists in the migration that create
 test("times in months, weeks and years are converted to one unit before they are pooled, not pooled as if they were one (D1)", () => {
   // Three medians that all mean about a year: 12 months, 52 weeks, 1 year. Pooled raw they were estimates 12, 52 and 1.
   const item = (/** @type {string} */ id, /** @type {number} */ value, /** @type {string} */ unit, /** @type {any} */ extra = {}) =>
-    ({ id, value, unit, ci_low: value * 0.8, ci_high: value * 1.25, arm: "SoC", ...extra });
+    ({ id, detail: { trialIdentity: `trial:${id}` }, value, unit, ci_low: value * 0.8, ci_high: value * 1.25, arm: "SoC", ...extra });
   const items = [item("evd_m", 12, "Months"), item("evd_w", 52, "Weeks"), item("evd_y", 1, "Year"), item("evd_c", 12, "cycles"), item("evd_u", 12, ""), item("evd_cn", 365.25 / 30.4375, "个月")];
   const built = poolJob({ studyId: "std_1", parameter: "median_time", endpointKey: "os", armRole: "control", calibre: "overall", items });
   assert.equal(built.about.scale, "log");
@@ -1175,7 +1176,7 @@ test("times in months, weeks and years are converted to one unit before they are
   // A parameter named in months is in months when the item names no unit, and a quantity that is not a time is never converted.
   const named = poolJob({ studyId: "std_1", parameter: "median_survival_months", endpointKey: "os", armRole: "control", calibre: "overall", items: [item("evd_n", 14, "")] });
   assert.deepEqual(named.about.timeUnit, { unit: "months", converted: 0, assumed: 0 }, "the parameter's own name is the unit it states");
-  const rate = poolJob({ studyId: "std_1", parameter: "control_event_rate", endpointKey: "orr", armRole: "control", calibre: "overall", items: [{ id: "evd_r", value: 31, ci_low: 25, ci_high: 38, unit: "%", arm: "SoC" }] });
+  const rate = poolJob({ studyId: "std_1", parameter: "control_event_rate", endpointKey: "orr", armRole: "control", calibre: "overall", items: [{ id: "evd_r", detail: { trialIdentity: "trial:response" }, value: 31, ci_low: 25, ci_high: 38, unit: "%", arm: "SoC" }] });
   assert.equal(rate.about.timeUnit, undefined, "no unit is said of a proportion");
   assert.equal(rate.excluded.length, 0);
 

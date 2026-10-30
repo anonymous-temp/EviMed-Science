@@ -11,6 +11,7 @@ import { clinicalSafetyCautionNotice } from "../src/runNotices.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 import { productPayload } from "../src/productPersistence.mjs";
 import { ResultCaptureRepairService } from "../src/resultCaptureRepair.mjs";
+import { PACKAGE_SOURCE_ARTIFACT_LIMIT } from "@evimed/domain/clinical-evidence";
 
 const sha = value => createHash("sha256").update(value).digest("hex");
 const QUOTE = "The observed reduction was 20 percent in the selected study.";
@@ -124,6 +125,37 @@ test("compact review reads reauthorize sources and projects, reject reference co
   await rm(snapshot);
   await symlink(path.join(f.project.workspaceDir, f.sourcePath), snapshot);
   assert.equal((await f.results.get("owner", "p", report.versionId)).review.status, "unknown");
+});
+
+/** Preserved sources beyond the fixture's first one: each its own document, one claim apiece, written as the preserving tool does. */
+async function addSources(f, count) {
+  for (let index = 0; index < count; index += 1) {
+    const text = `# Study ${index}\n\n- DOI: 10.9999/extra-${index}\n\n${QUOTE}\n`;
+    const version = sha(JSON.stringify({ "fulltext.md": sha(text) }));
+    const relative = `.evimed-sources/extra-${index}/${version}/fulltext.md`;
+    const directory = path.dirname(path.join(f.project.workspaceDir, relative));
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(f.project.workspaceDir, relative), text);
+    await writeFile(path.join(directory, "capture.json"), JSON.stringify({ schemaVersion: 1, version, artifacts: { "fulltext.md": sha(text) } }));
+    f.matrix.claims.push({ claimId: `CLM-${String(100 + index).padStart(3, "0")}`, claimType: "direct", identifier: `10.9999/extra-${index}`, artifactPath: relative, supportQuote: QUOTE, accessLevel: "full_text" });
+  }
+  await f.writeOutputs();
+}
+
+test("a 55-document review is captured whole: delivery capture and capture repair read the gate's own source bound, not a private 48", async t => {
+  assert.ok(PACKAGE_SOURCE_ARTIFACT_LIMIT >= 55, "the gate's bound covers the review of 2026-10-28");
+  const f = await fixture(t);
+  await addSources(f, 54);
+  const reply = await captureResultDelivery(f);
+  assert.deepEqual(reply.failures, []);
+  assert.equal(reply.sourceItems.length, 55);
+  const report = reply.items.find(item => item.path === f.reportPath);
+  assert.equal(report.review.status, "available");
+  assert.equal(report.review.verification.claims.filter(claim => claim.status === "verified").length, 55);
+  const run = { ...f.run, status: "succeeded" };
+  const service = new ResultCaptureRepairService({ results: f.results, runs: { list: async () => [run] } });
+  const plan = await service.plan({ userId: "owner", projectId: "p", runId: "run" });
+  assert.equal(plan.sources.length, 55);
 });
 
 test("capture-repair planning refuses a changed source, a linked output and another run's receipt before capture", async t => {

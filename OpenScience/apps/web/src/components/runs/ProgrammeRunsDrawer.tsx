@@ -1,3 +1,4 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { safeWorkspacePath } from "@/lib/claimCitations";
@@ -125,11 +126,11 @@ export function ProgrammeRunsDrawer({ projectId, load, loadMore, version = null,
 
 function RunsSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true" data-programme-runs-loading="">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true" data-programme-runs-loading="">
       {["w-2/3", "w-1/2", "w-3/5"].map((width) => (
         <div key={width} className="flex h-9 items-center px-2"><div className={cn("h-3.5 rounded bg-surface-2", width)} /></div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 

@@ -11,7 +11,7 @@ import { after, before, test } from "node:test";
 import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
-import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
+import { GEO_PROBE_BREAK_AFTER, enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
 import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
 import { errorFingerprint, noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
@@ -152,11 +152,12 @@ const judgeAnswers = (/** @type {{ answer: string, claimAlias: (fragment: string
 /**
  * Everything one scenario needs: the fake probe, the clock, the recorded
  * hooks, and the deps each tick takes.
- * @param {{ answers?: Function, clock?: string, config?: Record<string, unknown>, inclusion?: any, providers?: () => Record<string, string> }} [setup]
+ * @param {{ answers?: Function, clock?: string, config?: Record<string, unknown>, inclusion?: any, providers?: () => Record<string, any>,
+ *   async?: { hold?: boolean, source?: string } }} [setup]  `async`: the probe host takes asks as tasks (see `startFakeProbe`)
  */
 async function harness(setup = {}) {
   const script = { ask: setup.answers ?? baselineAnswers };
-  const probe = await startFakeProbe({ ask: (request) => script.ask(request), providers: setup.providers });
+  const probe = await startFakeProbe({ ask: (request) => script.ask(request), providers: setup.providers, async: setup.async });
   const clock = testClock(setup.clock ?? "2026-09-25T15:00:00Z"); // 23:00 in Shanghai: inside the night window
   const model = fakeModel(judgeAnswers);
   /** @type {any[]} */
@@ -1445,10 +1446,10 @@ test("the queue leases for its own 360 s probe timeout plus the screenshot and a
   const real = probe.probeUpstream(h.config);
   const upstream = {
     ...real,
-    ask: async (/** @type {any} */ request) => {
+    submit: async (/** @type {any} */ request) => {
       const [leased] = await rows(`SELECT lease_until FROM evimed_geo.probe_jobs WHERE status = 'leased'`);
       leases.push(new Date(leased.lease_until).getTime() - h.clock.now().getTime());
-      return real.ask(request);
+      return real.submit(request);
     },
   };
   try {
@@ -1780,4 +1781,317 @@ test("a wrong statement no single source can be pinned on gets its default dispo
   } finally {
     await h.probe.close();
   }
+});
+
+test("an accepted asynchronous result failure ends a recurring job without submitting it again", options, async () => {
+  await reset();
+  await seed("geo_async", { engines: ["deepseek"] });
+  const h = await harness();
+  let asks = 0;
+  const upstream = {
+    providers: async () => ({ providers: [{ provider: "deepseek", ready: true }], ready: ["deepseek"] }),
+    submit: async () => { asks++; throw Object.assign(new Error("accepted result unavailable"), { code: "geo_probe_result_unavailable" }); },
+  };
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_async", kind: "sentinel", questionIds: ["geo_async_q1"] });
+    await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    const [job] = await rows("SELECT status, error_code FROM evimed_geo.probe_jobs WHERE round_id = $1", [round.roundId]);
+    assert.deepEqual({ ...job }, { status: "failed", error_code: "geo_probe_result_unavailable" });
+    h.clock.advance(10 * 60_000);
+    await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    assert.equal(asks, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("a collector inclusion fallback cannot be rescued by raw ok status into a measured answer", options, async () => {
+  await reset();
+  await seed("geo_fallback", { engines: ["deepseek"] });
+  const h = await harness();
+  const upstream = {
+    providers: async () => ({ providers: [{ provider: "deepseek", ready: true }], ready: ["deepseek"] }),
+    submit: async () => ({ results: [{ status: "failed", inDenominator: false, answer: "", answerDigest: "", error: "consumer_answer_unavailable" }],
+      raw: [{ provider: "deepseek", status: "ok", source: "geo_fallback", answer: A_RIGHT }], integrity: { transport: "tls", signed: false, responseDigest: "test" } }),
+  };
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_fallback", kind: "sentinel", questionIds: ["geo_fallback_q1"] });
+    await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    const [snapshot] = await rows("SELECT status, answer_text FROM evimed_geo.snapshots");
+    assert.equal(snapshot.status, "failed");
+    assert.equal(snapshot.answer_text, null);
+  } finally { await h.probe.close(); }
+});
+
+// ──────────────────────────── a task the host accepted is held, read later and never asked again ────────────────────────────
+//
+// The probe host takes an ask as a task and answers it minutes later (a five-engine task measured 487 s). The queue used to wait for
+// the answer under the global lock without recording the task, so a restart asked again, a task finishing after 360 s was lost, and
+// five of those in a row paused the whole host though it had answered every one.
+
+/** One engine, one question, as many repeats as asked: a sentinel round with that many jobs. @param {any} h @param {string} id @param {number} [repeat] */
+async function oneEngineRound(h, id, repeat = 1) {
+  return enqueueRound(h.deps, { geoProjectId: id, kind: "sentinel", questionIds: [`${id}_q1`], repeat });
+}
+const jobRows = (/** @type {string} */ roundId) => rows(`SELECT status, attempts, error_code, external_ref, submitted_at, lease_until FROM evimed_geo.probe_jobs WHERE round_id = $1 ORDER BY repeat_index`, [roundId]);
+
+test("an accepted task's id is on its job at once, nothing waits for the answer under the lock, and the task is read on later ticks", options, async () => {
+  await reset();
+  await seed("geo_t1", { engines: ["deepseek"] });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }) });
+  try {
+    const round = await oneEngineRound(h, "geo_t1");
+    const first = await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.deepEqual([first.asked, first.tasks.held], [0, 1], "accepted, not answered");
+    assert.equal(h.probe.asks.length, 1);
+    assert.equal(h.probe.runReads.count, 0);
+    const [taken] = await jobRows(round.roundId);
+    assert.equal(taken.status, "leased");
+    assert.equal(taken.external_ref, [...h.probe.tasks.keys()][0], "the host's request id is the job's external_ref");
+    assert.ok(taken.submitted_at);
+    assert.deepEqual({ ...h.state.probeTotals }, { accepted: 1 });
+
+    // Not due for ten seconds: the next tick neither reads it nor asks again (one task in flight per engine).
+    h.clock.advance(5_000);
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.deepEqual([h.probe.runReads.count, h.probe.asks.length], [0, 1]);
+    h.clock.advance(6_000);
+    const reading = await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.deepEqual([reading.tasks.polled, reading.tasks.finished, h.probe.runReads.count], [1, 0, 1], "still running: held again");
+    assert.equal((await jobRows(round.roundId))[0].status, "leased");
+
+    h.probe.release();
+    h.clock.advance(11_000);
+    const done = await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.deepEqual([done.tasks.finished, done.valid, done.roundsFinished], [1, 1, 1]);
+    const [job] = await jobRows(round.roundId);
+    assert.deepEqual({ status: job.status, attempts: job.attempts, error: job.error_code }, { status: "done", attempts: 1, error: null });
+    const [snapshot] = await rows("SELECT status, answer_text FROM evimed_geo.snapshots");
+    assert.deepEqual({ ...snapshot }, { status: "valid", answer_text: A_RIGHT });
+    assert.equal(h.probe.asks.length, 1, "asked once, ever");
+    assert.deepEqual({ ...h.state.probeTotals }, { accepted: 1, completed: 1 });
+  } finally { await h.probe.close(); }
+});
+
+test("a restart or a lapsed lease under an accepted task reads it instead of asking again", options, async () => {
+  await reset();
+  await seed("geo_t2", { engines: ["deepseek"] });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }) });
+  try {
+    const round = await oneEngineRound(h, "geo_t2");
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.equal(h.probe.asks.length, 1);
+    // The worker died: its lease ran out hours ago, and a new process (a fresh state) takes over.
+    await database.query(`UPDATE evimed_geo.probe_jobs SET lease_until = $1 WHERE round_id = $2`, [new Date(h.clock.now().getTime() - 3_600_000).toISOString(), round.roundId]);
+    h.probe.release();
+    h.clock.advance(11_000);
+    const restarted = geoMeasureState();
+    const after = await tickProbe({ ...h.deps, state: restarted, maxAsks: 1 });
+    assert.equal(h.probe.asks.length, 1, "the accepted task is not asked a second time");
+    assert.deepEqual([after.valid, after.tasks.finished], [1, 1]);
+    assert.equal((await jobRows(round.roundId))[0].status, "done");
+    assert.equal(restarted.probeTotals.resubmit_prevented, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("a task unfinished past the age limit fails its job as accepted_result_unavailable, is never asked again, and is not the host going down", options, async () => {
+  await reset();
+  await seed("geo_t3", { engines: ["deepseek"] });
+  const repeat = GEO_PROBE_BREAK_AFTER + 2;
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }), config: { geoProbeTaskMaxAgeMinutes: 30 } });
+  try {
+    const round = await oneEngineRound(h, "geo_t3", repeat);
+    await tickProbe({ ...h.deps, maxAsks: 5 });
+    assert.equal(h.probe.asks.length, 1, "one task in flight on the engine");
+    // Not yet old enough: it is read and held, never failed.
+    h.clock.advance(29 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 5 });
+    assert.equal((await jobRows(round.roundId))[0].status, "leased");
+    // Each task in turn outlives the limit: more of them than the host breaker's threshold.
+    for (let task = 0; task < repeat; task += 1) {
+      h.clock.advance(31 * 60_000);
+      await tickProbe({ ...h.deps, maxAsks: 5 });
+    }
+    const jobs = await jobRows(round.roundId);
+    assert.ok(jobs.slice(0, repeat).every((job) => job.status === "failed" && job.error_code === "accepted_result_unavailable"), JSON.stringify(jobs.map((job) => [job.status, job.error_code])));
+    assert.equal(h.probe.asks.length, repeat, "each job was asked exactly once");
+    assert.equal(h.state.probeTotals.accepted_result_unavailable, repeat);
+    assert.equal(h.state.hostFailures, 0);
+    assert.equal(h.state.hostPausedUntil, 0, "the host answered every ask: it is not down");
+    assert.deepEqual(h.state.breaker.paused(), []);
+    assert.equal(h.alerts.some((event) => event.kind === "geo_probe_host_down"), false);
+    const snapshots = await rows("SELECT status, warnings FROM evimed_geo.snapshots ORDER BY asked_at");
+    assert.ok(snapshots.every((snapshot) => snapshot.status === "failed" && snapshot.warnings.includes("probe_error:accepted_result_unavailable")));
+    // Later ticks never ask them again.
+    h.clock.advance(60 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 5 });
+    assert.equal(h.probe.asks.length, repeat);
+  } finally { await h.probe.close(); }
+});
+
+test("a one-shot cell whose accepted task is never read says its delivery is unknown, and is not asked again", options, async () => {
+  await reset();
+  await seed("geo_t4", { engines: ["deepseek"] });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }), config: { geoProbeTaskMaxAgeMinutes: 10 } });
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_t4", kind: "single_step", questionIds: ["geo_t4_q1"], requestKey: "once",
+      contract: { samplingMode: "one_shot", engines: ["deepseek"], repeats: 1, questionVersion: 1 } });
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    h.clock.advance(11 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    const [job] = await jobRows(round.roundId);
+    assert.deepEqual({ status: job.status, error: job.error_code }, { status: "failed", error: "delivery_unknown_no_automatic_retry" });
+    assert.equal(h.probe.asks.length, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("a host that cannot be reached while a task runs only holds the job again; one that lost the task fails it for good", options, async () => {
+  await reset();
+  await seed("geo_t5", { engines: ["deepseek"] });
+  let reachable = true;
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }) });
+  /** @type {typeof fetch} */
+  const flaky = async (url, init) => {
+    if (!reachable && String(url).includes("/runs/")) throw new TypeError("fetch failed");
+    return fetch(url, init);
+  };
+  try {
+    const round = await oneEngineRound(h, "geo_t5", 2);
+    const deps = { ...h.deps, fetchImpl: flaky, maxAsks: 1 };
+    await tickProbe(deps);
+    reachable = false;
+    for (let tick = 0; tick < 4; tick += 1) {
+      h.clock.advance(31_000);
+      await tickProbe(deps);
+    }
+    assert.equal((await jobRows(round.roundId))[0].status, "leased", "an unreachable host is not a lost task");
+    assert.equal(h.state.hostFailures, 0);
+    assert.equal(h.state.hostPausedUntil, 0);
+    reachable = true;
+    // The host comes back without the task (a restart): that is final, and the task is not asked again.
+    h.probe.forget([...h.probe.tasks.keys()][0]);
+    h.clock.advance(31_000);
+    await tickProbe(deps);
+    const [lost] = await jobRows(round.roundId);
+    assert.deepEqual({ status: lost.status, error: lost.error_code }, { status: "failed", error: "accepted_result_unavailable" });
+    assert.equal(h.probe.asks.length, 2, "the first task was asked once; the second job is now the engine's one in flight");
+    assert.equal(h.probe.asks.filter((ask) => ask.question === Q1).length, 2);
+    assert.equal(h.state.probeTotals.accepted_result_unavailable, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("an engine the host reports with no idle slot is asked nothing: the job waits with its attempt refunded, and no alert is raised", options, async () => {
+  await reset();
+  await seed("geo_t6", { engines: ["deepseek"] });
+  let idle = 0;
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }), providers: () => ({ deepseek: { total: 1, idle, busy: 1 - idle, quarantined: 0 } }) });
+  try {
+    const round = await oneEngineRound(h, "geo_t6");
+    for (let tick = 0; tick < 3; tick += 1) {
+      const counts = await tickProbe({ ...h.deps, maxAsks: 5 });
+      assert.equal(counts.asked, 0);
+      h.clock.advance(20_000);
+    }
+    assert.equal(h.probe.asks.length, 0, "nothing was put to the host");
+    const [waiting] = await jobRows(round.roundId);
+    assert.deepEqual({ status: waiting.status, attempts: waiting.attempts }, { status: "queued", attempts: 0 });
+    assert.ok(h.state.probeTotals.capacity_wait >= 1);
+    assert.equal(h.alerts.length, 0);
+    // A slot frees: the next tick asks.
+    idle = 1;
+    h.clock.advance(20_000);
+    const counts = await tickProbe({ ...h.deps, maxAsks: 5 });
+    assert.deepEqual([counts.asked, counts.valid], [1, 1]);
+  } finally { await h.probe.close(); }
+});
+
+test("one task in flight per engine: a second job of that engine waits for the first to be read, other engines go on", options, async () => {
+  await reset();
+  await seed("geo_t7", { engines: ["deepseek", "doubao"] });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_t7", kind: "sentinel", questionIds: ["geo_t7_q1"], repeat: 2 });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.deepEqual(h.probe.asks.map((ask) => ask.engine).sort(), ["deepseek", "doubao"], "one each, though four jobs were due");
+    h.probe.release();
+    h.clock.advance(11_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(h.probe.asks.length, 4, "the finished tasks free their engines");
+  } finally { await h.probe.close(); }
+});
+
+test("an answer from the paid fallback is failed once: not retried, and not counted toward an engine's pause", options, async () => {
+  await reset();
+  await seed("geo_t8", { engines: ["deepseek"] });
+  const repeat = GEO_PROBE_BREAK_AFTER + 2;
+  const h = await harness({ async: { source: "geo_fallback" }, answers: () => ({ answer: A_RIGHT }) });
+  try {
+    const round = await oneEngineRound(h, "geo_t8", repeat);
+    for (let tick = 0; tick < repeat * 2 + 2; tick += 1) {
+      await tickProbe({ ...h.deps, maxAsks: 5 });
+      h.clock.advance(11_000);
+    }
+    const jobs = await jobRows(round.roundId);
+    assert.ok(jobs.every((job) => job.status === "failed" && job.error_code === "consumer_answer_unavailable" && job.attempts === 1), JSON.stringify(jobs));
+    assert.equal(h.probe.asks.length, repeat, "each fallback answer was bought once, not three times");
+    assert.deepEqual(h.state.breaker.paused(), [], "not a login page or an empty shell: the engine is not paused");
+    assert.equal(h.alerts.some((event) => event.kind === "geo_probe_engine_paused" || event.kind === "geo_probe_suspect"), false);
+    const snapshots = await rows("SELECT status, answer_text, warnings FROM evimed_geo.snapshots");
+    assert.ok(snapshots.every((snapshot) => snapshot.status === "failed" && snapshot.answer_text === null && snapshot.warnings.includes("probe_error:consumer_answer_unavailable")));
+  } finally { await h.probe.close(); }
+});
+
+test("a host that names its screenshot by its bind address still has it stored, by name from the configured origin", options, async () => {
+  await reset();
+  await seed("geo_t9", { engines: ["deepseek"] });
+  const h = await harness({ async: {}, answers: () => ({ answer: A_RIGHT, screenshot: "bind-1.png" }) });
+  try {
+    const round = await oneEngineRound(h, "geo_t9");
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    h.clock.advance(11_000);
+    const counts = await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.deepEqual([counts.valid, counts.screenshotsStored, h.probe.screenshotCalls.count], [1, 1, 1]);
+    const [snapshot] = await rows("SELECT screenshot_sha256, warnings FROM evimed_geo.snapshots WHERE round_id = $1", [round.roundId]);
+    assert.ok(snapshot.screenshot_sha256);
+    assert.deepEqual(snapshot.warnings.filter((/** @type {string} */ warning) => warning.startsWith("screenshot_")), []);
+  } finally { await h.probe.close(); }
+});
+
+test("a screenshot that cannot be fetched is a warning on the answer, which stands", options, async () => {
+  await reset();
+  await seed("geo_t10", { engines: ["deepseek"] });
+  const h = await harness({ answers: () => ({ answer: A_RIGHT, screenshot: "gone-1.png" }) });
+  /** @type {typeof fetch} */
+  const noScreenshots = async (url, init) => (String(url).includes("/screenshots/") ? new Response("{}", { status: 404 }) : fetch(url, init));
+  try {
+    await oneEngineRound(h, "geo_t10");
+    const counts = await tickProbe({ ...h.deps, fetchImpl: noScreenshots, maxAsks: 1 });
+    assert.deepEqual([counts.valid, counts.screenshotsStored], [1, 0]);
+    const [snapshot] = await rows("SELECT status, screenshot_sha256, warnings FROM evimed_geo.snapshots");
+    assert.deepEqual({ ...snapshot, warnings: snapshot.warnings.filter((/** @type {string} */ warning) => warning.startsWith("screenshot_")) },
+      { status: "valid", screenshot_sha256: null, warnings: ["screenshot_unavailable:geo_probe_not_found"] });
+  } finally { await h.probe.close(); }
+});
+
+test("a task whose id could not be recorded on its job ends as an unreadable task and is not submitted again", options, async () => {
+  await reset();
+  await seed("geo_t11", { engines: ["deepseek"] });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }) });
+  let writes = 0;
+  // The store keeps private fields: a proxy that answers one method differently, and binds every other to the real store.
+  const failing = new Proxy(store, { get: (target, name) => {
+    if (name === "holdJob") return async () => { writes += 1; throw new Error("database write failed"); };
+    const value = Reflect.get(target, name, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+  try {
+    const round = await oneEngineRound(h, "geo_t11");
+    const counts = await tickProbe({ ...h.deps, store: failing, maxAsks: 1 });
+    assert.equal(writes, 3, "the write is tried a few times");
+    assert.deepEqual([counts.failed, h.probe.asks.length], [1, 1]);
+    const [job] = await jobRows(round.roundId);
+    assert.deepEqual({ status: job.status, error: job.error_code }, { status: "failed", error: "geo_probe_result_unavailable" });
+    h.clock.advance(60 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.equal(h.probe.asks.length, 1);
+    assert.equal(h.state.hostFailures, 0, "the host answered: this is not it failing");
+  } finally { await h.probe.close(); }
 });

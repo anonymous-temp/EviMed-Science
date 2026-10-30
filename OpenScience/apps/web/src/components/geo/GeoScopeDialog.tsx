@@ -1,3 +1,4 @@
+import { DateRange } from "@/components/ui/DateField";
 import { useState, type FormEvent } from "react";
 import { getGeoQuestions, type GeoProject } from "@/lib/geoClient";
 import { geoReadScopeQuery, type GeoReadScope } from "@/lib/geoReadScope";
@@ -34,21 +35,18 @@ export function GeoScopeDialog({ geoId, project, initial = {}, onApply, onClose 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (scope.from && scope.to && scope.from > scope.to || scope.compareFrom && scope.compareTo && scope.compareFrom > scope.compareTo) {
-      setError("开始日期不能晚于结束日期。"); return;
+      return;
     }
-    if (Boolean(scope.compareFrom) !== Boolean(scope.compareTo)) { setError("请填写完整的对比区间。 "); return; }
+    if (Boolean(scope.compareFrom) !== Boolean(scope.compareTo)) return;
     try { new Intl.DateTimeFormat("zh-CN", { timeZone: scope.timeZone || "Asia/Shanghai" }); }
     catch { setError("请填写有效时区，例如 Asia/Shanghai。"); return; }
     onApply({ ...scope, selectionRef: undefined });
   };
-  return <FormDialog title="分析范围" onClose={onClose}>
-    <form className="flex flex-col gap-4" onSubmit={submit}>
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="回答开始日期" type="date" value={scope.from ?? ""} onChange={event => field("from", event.target.value)} />
-        <Input label="回答结束日期" type="date" value={scope.to ?? ""} onChange={event => field("to", event.target.value)} />
-        <Input label="对比开始日期" type="date" value={scope.compareFrom ?? ""} onChange={event => field("compareFrom", event.target.value)} />
-        <Input label="对比结束日期" type="date" value={scope.compareTo ?? ""} onChange={event => field("compareTo", event.target.value)} />
-      </div>
+  return <FormDialog title="分析范围" onClose={onClose} dirty={JSON.stringify(scope) !== JSON.stringify(initial)}>
+    {requestClose => <form className="flex flex-col gap-4" onSubmit={submit}>
+      <DateRange label="回答" start={scope.from ?? ""} end={scope.to ?? ""} onChange={(from, to) => { field("from", from); field("to", to); }} />
+      <DateRange label="对比" start={scope.compareFrom ?? ""} end={scope.compareTo ?? ""} allowOpen={false} onChange={(from, to) => { field("compareFrom", from); field("compareTo", to); }} />
+
       {(scope.compareFrom || scope.compareTo) && <Select label="对比方式" value={scope.comparisonMode ?? "common"}
         onChange={event => setScope(current => ({ ...current, comparisonMode: event.target.value as "common" | "separate" }))}>
         <option value="common">同一批问题与平台</option><option value="separate">分别查看两个区间</option>
@@ -74,8 +72,8 @@ export function GeoScopeDialog({ geoId, project, initial = {}, onApply, onClose 
       {error && <p role="alert" className="text-ui text-error">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button variant="text" onClick={() => onApply({})}>重置范围</Button>
-        <Button variant="secondary" onClick={onClose}>取消</Button><Button type="submit">应用范围</Button>
+        <Button variant="secondary" onClick={requestClose}>取消</Button><Button type="submit">应用范围</Button>
       </div>
-    </form>
+    </form>}
   </FormDialog>;
 }

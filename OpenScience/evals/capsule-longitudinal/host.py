@@ -152,7 +152,13 @@ class Host:
                 account.login()
             me = account.api("GET", "/api/me").data or {}
             uid = (me.get("user") or {}).get("id") or me.get("id") or account.username
-            account.api("DELETE", "/api/account", {"confirm": uid, "password": account.password})
+            # A 503 is the memory engine still finishing the account's last extraction or its own deletion: asked again, a few
+            # times, before the account is called a leak (2026-10-27: three accounts read as leaks after one attempt each).
+            for attempt in range(6):
+                reply = account.api("DELETE", "/api/account", {"confirm": uid, "password": account.password})
+                if reply.status != 503:
+                    break
+                time.sleep(20)
         except Exception:  # noqa: BLE001
             pass
         try:

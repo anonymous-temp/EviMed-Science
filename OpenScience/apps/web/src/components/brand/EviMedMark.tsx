@@ -7,9 +7,8 @@ import { cn } from "@/lib/cn";
  * retired (audit F-G8), and `brandMark.test.tsx` fails if its geometry or its
  * colours come back.
  *
- * Inline rather than an <img>, so it takes the theme's own accent:
- * `currentColor` is `--accent` — brand-600 in the light theme, brand-400 in
- * the dark one — the same blue as the primary button and the verified mark.
+ * Inline rather than an <img>, so currentColor follows the independent
+ * brand-ink token: warm black on paper, light ink on dark surfaces.
  * The mark never changes colour on hover (§3.2).
  */
 export const EVIMED_MARK_PATH =
@@ -17,7 +16,7 @@ export const EVIMED_MARK_PATH =
 
 export function EviMedMark({ className, label = "EviMed Science" }: { className?: string; label?: string }) {
   return (
-    <svg viewBox="0 0 32 32" role="img" aria-label={label} className={cn("text-accent", className)}>
+    <svg viewBox="0 0 32 32" role="img" aria-label={label} className={cn("text-brand-ink", className)}>
       <path transform="translate(1 0)" fill="currentColor" d={EVIMED_MARK_PATH} />
     </svg>
   );

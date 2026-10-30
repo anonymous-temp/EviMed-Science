@@ -91,7 +91,7 @@ export function publicRuntimeGatewayUrls(config) {
     // The same `kb` name, so the prefix already maps it: `/runtime-gateway/kb/v1/browse`.
     kbBrowse: kbBrowseGatewayProviderUrl(config) ? `${base}/kb/v1/browse` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",
-    // 循证 GEO's three operations sit under one base (`geo_platform.py` appends them).
+    // 循证 GEO's operations (read, write, social, social_job) sit under one base (`geo_platform.py` appends them).
     geo: geoGatewayProviderUrl(config) ? `${base}/geo/v1` : "",
     // 「虚拟临床研究」's read / write / simulate operations, under one base likewise
     // (`vcr_platform.py`); a runtime outside this host without it could never

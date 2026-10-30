@@ -12,7 +12,7 @@ export const MEMORY_GATEWAY_ROUTES = Object.freeze([
  *  learned from, refused, or failed upstream. */
 export const MEMORY_GATEWAY_OUTCOMES = Object.freeze(["forwarded", "local", "withheld", "refused", "failed"]);
 /** What became of one captured message. */
-export const MEMORY_GATEWAY_MESSAGE_OUTCOMES = Object.freeze(["forwarded", "platform_context", "no_text", "not_learning", "invalid"]);
+export const MEMORY_GATEWAY_MESSAGE_OUTCOMES = Object.freeze(["forwarded", "platform_context", "no_text", "not_learning", "invalid", "project_line", "project_line_failed"]);
 /** What became of one commit. */
 export const MEMORY_GATEWAY_COMMIT_OUTCOMES = Object.freeze(["accepted", "nothing_pending", "not_learning", "rate_limited", "failed"]);
 /** Why a caller's conversation is not learned from or read (`memoryAdmission`). */
@@ -26,10 +26,11 @@ export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
   "memory_gateway_disabled", "memory_scope_denied",
 ]);
 /** What became of the end of an attended turn (`nativeTurnCommit.mjs`): armed, folded into a later one (debounced), turned away
- *  (dropped at the bound, a platform-started turn, an attended turn already running again), or what the commit did. */
+ *  (dropped at the bound, a platform-started turn, an attended turn already running again, an account being deleted), or what the
+ *  commit did. */
 export const NATIVE_TURN_COMMIT_OUTCOMES = Object.freeze([
   "scheduled", "debounced", "dropped", "platform_started", "conversation_running",
-  "committed", "nothing_pending", "not_learning", "before_reset", "rate_limited", "failed",
+  "committed", "nothing_pending", "not_learning", "before_reset", "rate_limited", "failed", "account_deleted",
 ]);
 /** What the worker did with a commit. */
 export const NATIVE_COMMIT_OUTCOMES = Object.freeze(["ingested", "empty", "failed", "replayed", "abandoned", "found_by_scan", "before_reset"]);

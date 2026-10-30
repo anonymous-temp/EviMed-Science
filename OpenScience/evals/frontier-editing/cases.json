@@ -1,5 +1,5 @@
 {
- "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication. Three evidence-type cases were added on 2026-10-10 (D-04 of the frontier review): each is authored evaluation input modelled on a production incident, not an upstream publication, and expects the evidence type `other` for a design the vocabulary has no key for (run them with --kind evidence-type). Six more were added the same day (F12a, the owner's ruling that an economic evaluation or a decision analysis is `other`, never the nearest design): a budget impact analysis, a discrete-event simulation and two models built on a trial's curves and a registry's rates expect `other`, and two controls, a prospective cohort and a randomised trial, must keep `observational` and `rct` (also --kind evidence-type). Six flag cases were added on 2026-10-10 (F12c): the editor may propose the flag `boxed-warning` on a safety notice that adds or strengthens a Boxed Warning, and these hold the judgement both ways (run them with --kind flags).",
+ "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication. Three evidence-type cases were added on 2026-10-10 (D-04 of the frontier review): each is authored evaluation input modelled on a production incident, not an upstream publication, and expects the evidence type `other` for a design the vocabulary has no key for (run them with --kind evidence-type). Six more were added the same day (F12a, the owner's ruling that an economic evaluation or a decision analysis is `other`, never the nearest design): a budget impact analysis, a discrete-event simulation and two models built on a trial's curves and a registry's rates expect `other`, and two controls, a prospective cohort and a randomised trial, must keep `observational` and `rct` (also --kind evidence-type). Six flag cases were added on 2026-10-10 (F12c): the editor may propose the flag `boxed-warning` on a safety notice that adds or strengthens a Boxed Warning, and these hold the judgement both ways (run them with --kind flags). Sixteen kind cases were added on 2026-10-26 (c5-biz): each is authored evaluation input, not an upstream publication; the editor names the kind of an item of 行业动态 (deal, financing, people, operations, pipeline, other) and the last one is a control whose kind must be none (run them with --kind industry-kind).",
  "lane": [
   {
    "id": "food-recall-flour",
@@ -725,6 +725,280 @@
      "publishedAt": "2026-09-22T00:00:00Z"
     }
    ]
+  }
+ ],
+ "industry_kind": [
+  {
+   "id": "kind-deal-licence",
+   "expect": [
+    "deal"
+   ],
+   "why": "a licence with an upfront payment and milestones is a deal, whoever the company is",
+   "edit": {
+    "titleRaw": "Meridian Bio grants Northgate Pharma ex-China rights to its oral GLP-1 candidate for $200 million upfront",
+    "sourceName": "Meridian Bio newsroom (synthetic)",
+    "sourceTypeLabel": "企业",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Meridian Bio will receive $200 million upfront and up to $1.1 billion in development and sales milestones. Northgate Pharma obtains exclusive rights outside Greater China to the oral GLP-1 candidate MB-101, now in Phase 2.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-deal-acquisition-zh",
+   "expect": [
+    "deal"
+   ],
+   "why": "an acquisition reported in Chinese trade media is a deal; the kind is judged by the event, not the language",
+   "edit": {
+    "titleRaw": "北辰制药拟以 18 亿元收购远山生物全部股权",
+    "sourceName": "医药观澜（合成）",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": true,
+    "summary": "合成样本。北辰制药公告，拟以 18 亿元现金收购远山生物 100% 股权，交易完成后远山生物的两个在研管线并入北辰制药，交易尚需股东大会和监管部门批准。",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-deal-codevelopment",
+   "expect": [
+    "deal"
+   ],
+   "why": "a co-development and commercialisation agreement is a deal, not pipeline progress",
+   "edit": {
+    "titleRaw": "Orion Therapeutics and Helix Medical sign co-development agreement for an antibody-drug conjugate",
+    "sourceName": "Fierce-like trade news (synthetic)",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Orion Therapeutics and Helix Medical signed a global co-development and commercialisation agreement for the ADC OT-22. The companies will share development costs equally and split profits in the United States.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-financing-series-b",
+   "expect": [
+    "financing"
+   ],
+   "why": "a venture round is financing",
+   "edit": {
+    "titleRaw": "Cellvance closes $120 million Series B to advance in vivo CAR-T programs",
+    "sourceName": "Trade news (synthetic)",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Cellvance closed a $120 million Series B financing led by two life-science funds. The proceeds will fund the Phase 1 trial of its in vivo CAR-T program and expansion of manufacturing.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-financing-ipo-zh",
+   "expect": [
+    "financing"
+   ],
+   "why": "a listing on an exchange is financing, even though it also says something about the pipeline",
+   "edit": {
+    "titleRaw": "合成生物制药在港交所挂牌上市，募资约 9 亿港元",
+    "sourceName": "医药观澜（合成）",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": true,
+    "summary": "合成样本。合成生物制药今日在香港联交所主板挂牌上市，全球发售募集资金净额约 9 亿港元，所得款项将主要用于核心产品的临床开发及商业化。",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-financing-notes",
+   "expect": [
+    "financing"
+   ],
+   "why": "a convertible note offering is financing",
+   "edit": {
+    "titleRaw": "Aster Medicines announces pricing of $350 million convertible senior notes offering",
+    "sourceName": "Aster Medicines newsroom (synthetic)",
+    "sourceTypeLabel": "企业",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Aster Medicines announced the pricing of its offering of $350 million aggregate principal amount of convertible senior notes due 2031. The company intends to use the net proceeds for general corporate purposes.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-people-ceo",
+   "expect": [
+    "people"
+   ],
+   "why": "a change of chief executive is people and organisation",
+   "edit": {
+    "titleRaw": "Valen Biosciences appoints Dr. Mira Okafor as chief executive officer",
+    "sourceName": "Valen Biosciences newsroom (synthetic)",
+    "sourceTypeLabel": "企业",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Valen Biosciences announced that Dr. Mira Okafor will become chief executive officer, effective November 1. She succeeds the company's co-founder, who will remain on the board as chair.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-people-reorg-zh",
+   "expect": [
+    "people"
+   ],
+   "why": "setting up or splitting an organisation is people and organisation, not operations",
+   "edit": {
+    "titleRaw": "云岭医药宣布拆分创新药事业部并设立独立研发公司",
+    "sourceName": "医药观澜（合成）",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": true,
+    "summary": "合成样本。云岭医药宣布将创新药事业部拆分，设立独立运营的研发公司，原事业部负责人出任新公司首席执行官，研发团队约 300 人整体转入。",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-operations-earnings",
+   "expect": [
+    "operations"
+   ],
+   "why": "quarterly results are company operations",
+   "edit": {
+    "titleRaw": "Corvane Pharma reports third-quarter revenue of $4.2 billion and raises full-year guidance",
+    "sourceName": "Corvane Pharma newsroom (synthetic)",
+    "sourceTypeLabel": "企业",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Corvane Pharma reported third-quarter revenue of $4.2 billion, up 9% year over year, and raised its full-year revenue guidance. Sales of its immunology franchise grew 14%.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-operations-layoffs",
+   "expect": [
+    "operations"
+   ],
+   "why": "layoffs and a plant closure are company operations",
+   "edit": {
+    "titleRaw": "Brightfield Therapeutics to cut 20% of staff and close its Boston site in restructuring",
+    "sourceName": "Trade news (synthetic)",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Brightfield Therapeutics will lay off about 20% of its workforce and close its Boston research site as part of a restructuring that extends its cash runway into 2028.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-operations-patent",
+   "expect": [
+    "operations"
+   ],
+   "why": "a patent dispute is company operations",
+   "edit": {
+    "titleRaw": "Lumen Biologics wins ruling in patent dispute over biosimilar of its blockbuster antibody",
+    "sourceName": "Trade news (synthetic)",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. A federal court ruled in favour of Lumen Biologics in its patent infringement case against a biosimilar developer, delaying the competitor's launch of a biosimilar to Lumen's best-selling antibody.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-pipeline-readout",
+   "expect": [
+    "pipeline"
+   ],
+   "why": "a company's announcement of a trial readout is pipeline progress",
+   "edit": {
+    "titleRaw": "Halcyon Bio announces positive topline results from Phase 3 trial of HB-301 in moderate-to-severe asthma",
+    "sourceName": "Halcyon Bio newsroom (synthetic)",
+    "sourceTypeLabel": "企业",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Halcyon Bio announced topline results from its Phase 3 trial of HB-301. The trial met its primary endpoint of annualised exacerbation rate. Detailed results will be presented at a future medical meeting.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-pipeline-submission-zh",
+   "expect": [
+    "pipeline"
+   ],
+   "why": "an accepted marketing application announced by the company is pipeline progress, not a regulator's approval",
+   "edit": {
+    "titleRaw": "晨星医药：一类新药 CX-08 上市申请获国家药监局受理",
+    "sourceName": "晨星医药公告（合成）",
+    "sourceTypeLabel": "企业",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": true,
+    "summary": "合成样本。晨星医药公告，公司自主研发的一类新药 CX-08 用于晚期肝细胞癌的上市许可申请已获国家药品监督管理局药品审评中心受理，并被纳入优先审评。",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-pipeline-discontinued",
+   "expect": [
+    "pipeline"
+   ],
+   "why": "stopping a development program is pipeline progress",
+   "edit": {
+    "titleRaw": "Evergreen Pharma discontinues development of EP-77 after interim futility analysis",
+    "sourceName": "Evergreen Pharma newsroom (synthetic)",
+    "sourceTypeLabel": "企业",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Evergreen Pharma will discontinue the development of EP-77 in idiopathic pulmonary fibrosis after an independent committee found that the Phase 2b trial was unlikely to meet its primary endpoint.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-main-event-deal-not-financing",
+   "expect": [
+    "deal"
+   ],
+   "why": "a deal that is paid for by a share purchase is still a deal when the message is mainly about the agreement (the main event decides)",
+   "edit": {
+    "titleRaw": "Aurelia Pharma licenses two neuroscience programs to Kestrel Therapeutics; Kestrel buys $30 million of Aurelia shares",
+    "sourceName": "Trade news (synthetic)",
+    "sourceTypeLabel": "媒体",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. Aurelia Pharma granted Kestrel Therapeutics exclusive worldwide licences to two preclinical neuroscience programs for $45 million upfront and milestones. As part of the agreement Kestrel also purchased $30 million of Aurelia's common stock.",
+    "glossary": []
+   }
+  },
+  {
+   "id": "kind-control-paper",
+   "expect": [
+    null
+   ],
+   "why": "a control: a published trial is not 行业动态, so it carries no kind",
+   "edit": {
+    "titleRaw": "Oral semaglutide and cardiovascular outcomes in adults with type 2 diabetes: a randomised trial",
+    "sourceName": "Synthetic Journal of Medicine",
+    "sourceTypeLabel": "期刊",
+    "publishedAt": "2026-10-20T08:00:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Synthetic fixture. In this double-blind trial, 9,650 adults with type 2 diabetes were randomly assigned to oral semaglutide or placebo. The primary outcome occurred in 6.1% and 7.0% (HR 0.86).",
+    "glossary": []
+   }
   }
  ]
 }

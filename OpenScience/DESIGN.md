@@ -8,9 +8,38 @@ other way around.
 **The table is `packages/design-tokens/src/index.mjs`, and nowhere else.** It became its own
 package (`@evimed/design-tokens`) on 2026-09-26, when the fusion gave it a consumer in another
 repository: the Vue shell of EviMed cannot import a module out of `@evimed/domain`'s source tree.
-The old `@evimed/domain/design-tokens` path is gone; import the package. The full design
-specification (v2.0, 2026-09-26) is the prose; this file is the engineering summary and defers to
-it and to the table.
+The old `@evimed/domain/design-tokens` path is gone; import the package. The full specification,
+[Frontend Design System v3.2](docs/FRONTEND_DESIGN_SYSTEM.md) (2026-10-27), owns the principles and
+the acceptance cases; this file holds the engineering rules and maps implementation and component
+adoption, and it defers to the specification and to the table. Component JSDoc plus the gallery and
+composition fixtures own each implemented component's details; module plans own evolving product
+scope; old audits remain dated evidence.
+
+## Product and brand
+
+EviMed Science is a general-purpose agent platform with a medical professional layer. General work
+stays general; the medical method and labels enhance relevant work and are never an entry
+requirement for other work. Preserve one native composer, project identity, existing permissions and
+usable results. No design rule introduces a clinical delivery veto or deletes usable research, and
+no ordinary task becomes subject to a clinical delivery gate because of this design language.
+
+The owner's October 26 direction supersedes the blue palette of 2.x: **warm paper, restrained
+terracotta, and an ink EviMed mark** (near-black in the light theme, light paper ink in the dark).
+The independent `brand-ink` role keeps an action-accent change from recolouring the logo. The
+reviewed decision fixes near-black for identity and adopts deep navy for information semantics, not
+for another general action accent.
+
+## Token authority and generated consumers
+
+Token package **3.0.0** is the implemented token set; the current specification is **3.2**
+(2026-10-27), whose DS22 adoption remains pending its execution receipts (the token package does
+not change for a composition-only revision). The 2.2.0 blue palette and the
+2.3.0 warm-brand candidate are historical baselines, not the current source identity. Moving the
+brand and the status roles is a major version; a compatible added role is a minor and a tuned value
+within a role a patch. The specification, this file, `AGENTS.md`, the token package and release
+metadata, the generated consumers, the brand assets and the consumer pins and readbacks reach a
+reviewed change together; publishing, merging to main and deploying are separate stages with their
+own receipts, and the external Vue shell adopts the new package and artifacts separately.
 
 Seven artifacts are generated from the table, and no consumer restates a value:
 
@@ -18,7 +47,7 @@ Seven artifacts are generated from the table, and no consumer restates a value:
 |---|---|---|
 | the block in `apps/web/src/index.css` (`pnpm tokens:css`) and `dist/tokens.css` | the React shell; the Vue shell links the file | `designTokens.test.ts` regenerates and compares byte for byte |
 | `dist/tailwind-preset.js` | both `tailwind.config.js` files extend it | the same test asserts each scale equals the table's |
-| `dist/element-plus.css` | the Vue shell, after Element Plus's own sheet | every derived `--el-color-primary-light-N` is written out, so no teal-adjacent shade survives |
+| `dist/element-plus.css` | the Vue shell, after Element Plus's own sheet | every derived `--el-color-primary-light-N` is written out, so no shade of the retired palettes survives |
 | `dist/echarts-theme.json` | both sides' charts | `chartPalette.test.ts` asserts the shared palette equals `CHART_SERIES` |
 | `dist/dsh-theme.json` | `kernelThemeTokens()` → `ctx.theme.overrideTokens` in the kernel frame | the test asserts the accent, the canvas and the sidebar grey |
 | `dist/figma-tokens.json` | the Figma library (Tokens Studio), until native import replaces it | generated like the rest |
@@ -31,7 +60,8 @@ values, and the forced-colours / more-contrast layer (see *Accessibility*).
 Changing a value means editing the table, running `pnpm tokens:build`, and committing the
 regenerated artifacts. Editing an artifact, the CSS or a Tailwind config instead is caught by
 `pnpm tokens:check`, which is the point: the shell and the frame were two hand-maintained tables,
-and "change it in both places" is an instruction, not a mechanism.
+and "change it in both places" is an instruction, not a mechanism. Never tune a generated consumer
+to adjust a colour; add a semantic role only for a real reusable purpose.
 
 **The version moves with the bytes.** `packages/design-tokens/src/release.json` records the digest
 of every artifact the current version shipped. When an artifact changes and the version does not,
@@ -39,16 +69,33 @@ of every artifact the current version shipped. When an artifact changes and the 
 together (a tuned value is a patch, a new token a minor, a removed or re-meant one a major), then
 run `pnpm --filter @evimed/design-tokens record-release`, which refuses to re-record an unchanged
 version. The Vue shell pins a version, and a pin that stays equal while values move cannot see
-drift (fusion audit F-G3).
+drift (fusion audit F-G3). Do not change the upstream kernel version merely because the token
+version changes.
+
+`scripts/build/brand-assets.mjs` derives the SVG identity, the PWA metadata and the serialized
+native mark identity from the token roles and the shared EviMedMark path;
+`scripts/build/rasterize-brand-icons.mjs` creates the installation PNGs from those SVGs. Keep the
+sources deterministic and record the actual rendering: a stale PNG is not fixed by updating its
+source alone, and a successful local build does not update an installed PWA, cached native
+resources or another repository's pinned theme.
+
+The native shell and its theme can be disabled independently. The mark must stay legible when the
+optional EviMed theme body is off, using the native primary-text colour as the fallback. Do not
+relax browser isolation to synchronise appearance.
 
 ---
 
 ## Colour
 
-One accent — **循证蓝 `#0a5dc1`** — one blue-grey neutral ramp, four semantic ramps, and a closed
-set of data colours. White on the accent is 6.27:1. The value is EviMed's live brand colour and is
-not ours to tune: the platform has users and a logo already, and 循证青 `#00756b` retired with the
-fusion (2026-09-26).
+**Warm paper, restrained terracotta, an ink mark** (token package 3.0.0). One action accent —
+**terracotta `#a34427`** in the light theme, `#d98c6b` in the dark — one warm-paper neutral ramp, a
+navy information family, four semantic ramps (danger, warn, ok, info) and a closed set of data
+colours. White on the accent is 6.15:1. The EviMed mark and wordmark wear their own `brand-ink` role
+(`#24211e` light, `#f7f5ef` dark), so the logo is never an action-accent badge. The 循证蓝 `#0a5dc1`
+of 2.x retired on 2026-10-26 (it had replaced 循证青 `#00756b` on 2026-09-26): blue now survives
+only where it is data — the scientific categorical series, the diverging scale, the study-type
+badges — and as the navy of information. A local build does not refresh cached native resources or
+installed icons; those need release verification.
 
 Every contrast figure below is **recomputed at build time** by
 `packages/design-tokens/src/contrast.mjs`, which fails the build on a shortfall — in both themes,
@@ -56,33 +103,42 @@ under the more-contrast layer too, and for the rival greys a chart draws. The co
 unrounded: a pair at 4.4995 does not pass a 4.5 floor. The notes used to be typed by hand and went
 stale silently; two of them were already fiction when the check first ran, and eight more by
 2026-10-08 — so the build now reads back every figure a note quotes ("N on the page", "N on the
-sidebar", "white on it N", "on <role>: N") and fails on a stale one. 49 rules × light / dark ×
-standard / more contrast.
+sidebar", "white on it N", "on <role>: N") and fails on a stale one. 57 role rules and 16 data
+rules, each × light / dark × standard / more contrast. Token validation does not cover every
+rendered page, fixed scientific canvas or overlay; a pass is not a claim that all of them pass.
 
 ### Roles
 
+Readback of the 3.0.0 table; `src/index.mjs` is the authority and this table is never a second source.
+
 | Role | Light | Dark | What it is |
 |---|---|---|---|
-| `bg` | `#fafbfc` | `#0f1318` | the page — a hair off white, so a card has an edge without a border |
-| `surface` | `#ffffff` | `#161b21` | card, dialog, menu, popover, the reading column |
-| `surface-1` | `#f5f7f9` | `#161b21` | the one grey step: sidebar, table header, inset track, code block |
-| `surface-2` | `#edf0f3` | `#1e242b` | hover, the neutral selected row, a skeleton bar |
-| `scrim` | `rgba(15, 19, 24, 0.32)` | `rgba(0, 0, 0, 0.56)` | behind a dialog or drawer |
-| `border-hairline` | `#e4e8ec` | `#262d35` | decoration: separators, a card's edge |
-| `border-faint` | `#edf0f3` | `#1e242b` | the quietest rule, inside a list |
-| `border-light` | `#d6dce2` | `#262d35` | a pill or segment whose ground already separates it |
-| `border-control` | `#858e97` | `#646e78` | the visible boundary of a control — 3.21:1, and 3.10:1 on the sidebar (WCAG 1.4.11) |
-| `text` | `#1a1f25` | `#eef1f4` | body and headings, 16.00:1 |
-| `text-2` | `#3e454d` | `#c3cad2` | secondary lines, 9.37:1 |
-| `text-3` | `#5f686f` | `#8d96a0` | metadata, 5.48:1 — **nothing lighter carries text** |
-| `title-ink` | `#0e305f` | `#dde9f9` | the title of a list row that opens a document (前沿动态's cards, 2026-10-23): the brand's deep blue (brand-900 / brand-100), not black and not the bright accent — 12.62:1, 11.43:1 on a hovered row. **List titles in title-ink; hover accent; read text-2** |
-| `text-graphic` | `#939ca6` | `#535b64` | icons and rules only, 2.69:1 — **never a word, and never a status** (a mark that says something wears a `dot-*` or `border-control` step; the build fails a `dot-*` that borrows this grey) |
-| `accent` | `#0a5dc1` | `#5f97e0` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
-| `accent-soft` | `#eef4fc` | `#0a1f3e` | selected row background, the verified chip. Never text |
-| `accent-pressed` | `#0a4da0` | `#8fb5ea` | the pressed state of an accent surface |
-| `accent-strong` | `#0c3e7f` | `#8fb5ea` | text on `accent-soft`, 9.44:1 — **not used for text in the shell since 2026-10-17**: text on a pale blue ground is the accent (5.67:1), one blue for every link, mark and state, because a page is held to seven text colours (the hot list's three rank tones are the one place it is still written) |
-| `ok` `warn` `error` | 600 step | 300 step | **status only**, always beside a shape and a word |
-| `member-from` / `member-to` | `#f6d58e` → `#fbe7be` | — | the membership card's one gradient |
+| `bg` | `#f7f5ef` | `#171512` | the page — warm paper; the card is lighter than the page, so it has an edge without a border |
+| `surface` | `#fffdf8` | `#211e1a` | card, dialog, menu, popover, the reading column |
+| `surface-1` | `#f2efe7` | `#211e1a` | the one grey step: sidebar, table header, inset track, code block |
+| `surface-2` | `#ebe7de` | `#2a2621` | hover, the neutral selected row, a skeleton bar, a secondary button |
+| `surface-3` | `#e3ded3` | `#342f29` | the hover and pressed step of something already on `surface-2`; the deepest paper surface |
+| `scrim` | `rgba(36, 33, 30, 0.32)` | `rgba(0, 0, 0, 0.56)` | behind a dialog or drawer |
+| `border-hairline` | `#e3ded3` | `#342f29` | decoration: separators, a card's edge |
+| `border-faint` | `#ebe7de` | `#2a2621` | the quietest rule, inside a list |
+| `border-light` | `#d6d0c4` | `#342f29` | a pill or segment whose ground already separates it |
+| `border-control` | `#8c8173` | `#81766a` | the visible boundary of a control — 3.50:1 on the page, 3.32:1 on the sidebar (WCAG 1.4.11). Quiet borders are decoration: 3:1 is asked of controls, not of every separator |
+| `text` | `#24211e` | `#f2eee6` | body and headings, 14.69:1 |
+| `text-2` | `#494239` | `#d1c8ba` | secondary lines, 9.08:1 |
+| `text-3` | `#686157` | `#a99e8f` | metadata, 5.61:1 (5.32:1 on the sidebar) — **nothing lighter carries text**, and a warm ground never excuses brown low-contrast metadata |
+| `title-ink` | `#24211e` | `#f2eee6` | the title of a list row that opens a document (前沿动态's cards): since 3.0.0 the full `text` role — ink, neither the accent nor a tint (read-state muting is separate: a read row steps down to `text-2`). **List titles in title-ink; hover accent; read text-2** |
+| `brand-ink` | `#24211e` | `#f7f5ef` | the EviMed mark and wordmark, 14.69:1 on the page; independent of the accent |
+| `text-graphic` | `#9b9387` | `#645c52` | icons and rules only, 2.78:1 — **never a word, and never a status** (a mark that says something wears a `dot-*` or `border-control` step; the build fails a `dot-*` that borrows this grey) |
+| `accent` | `#a34427` | `#d98c6b` | primary action, link, the focus ring of buttons and links, selected row, and "our" chart series — 5.64:1 on the page |
+| `accent-fg` | `#ffffff` | `#171512` | the label on an accent or error surface (`text-accent-fg` / `text-error-fg`) |
+| `accent-soft` | `#fbefe8` | `#321c16` | selected row background. Never text |
+| `accent-pressed` | `#8d3922` | `#e3a385` | the pressed state of an accent surface |
+| `accent-strong` | `#71301f` | `#e3a385` | text on `accent-soft`, 8.68:1 — **not used for text in the shell since 2026-10-17**: text on a pale ground is the accent (5.45:1), one accent for every link, mark and state, because a page is held to seven text colours (the hot list's three rank tones are the one place it is still written) |
+| `ok` `warn` `error` | 600 step: `#1a6f44` `#925100` `#ad2f45` | 300 step: `#7cc0a0` `#e0b169` `#e58b9c` | **status only**, always beside a shape and a word; `danger` is `error`'s ramp |
+| `info` · `info-soft` | `#18324d` · `#eaf0f5` | `#9bbbd5` · `#142330` | the navy information family: information notices and the running state. Never a second action accent |
+| `verify-ok` · `verify-pending` | `#1a6f44` · `#925100` | `#7cc0a0` · `#e0b169` | the ✓ of a verified claim (= `ok`) and "needs checking" (= `warn`) |
+| `focus` · `focus-input` | `#a34427` · `#24211e` | `#d98c6b` · `#f7f5ef` | the 2 px focus outline of a button or link (accent); of a text field (ink, = `brand-ink`) |
+| `member-from` / `member-to` | `#f6d58e` → `#fbe7be` | `#7a6329` → `#5c4a1d` | the membership card's one gradient |
 
 Every role has its `-soft` background; `danger`, `warn` and `accent` also have a `-strong` text
 colour for use on it. The retired names `border`, `border-strong` and `muted` are aliases of
@@ -91,22 +147,54 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
 ### Rules
 
 - **Red is for danger and unhandled work.** Clinical-safety findings, destructive actions,
-  errors, the unread badge. Nothing else.
+  errors, the unread badge. Nothing else. Its crimson (`danger`) is a ramp of its own, told from
+  terracotta by its word and icon as well as its hue; terracotta never stands for danger.
 - **"Needs checking" is amber, never red.** A claim awaiting verification is not a clinical alarm.
-- **`ok` is not the verified mark.** A verified claim is the brand colour, on purpose.
-- **One accent.** Links wear it too (2026-09-23): a second hue for links was an accent on every
-  screen. A primary button stands apart by being solid, not by hue.
-- **A comparison puts us in the brand and every rival in grey.** `CHART_OWN` is the brand per scheme (`#0a5dc1` light, brand-400 `#5f97e0` dark — one value for both was 2.76:1 on a dark card before 2.1.2, measured now in `contrast.mjs`);
-  `CHART_COLORS.rivals` is three greys, darkest for the highest rank — `#5a626b` / `#737c85` /
-  `#8a939c`, 6.19 / 4.24 / 3.12:1 on white, every one a graphic a reader can see (2.1; the third
-  was 1.92:1 before). At most one rival may take a colour, and only when the reader pins it. A
+  Amber means attention, not every paused or incomplete item.
+- **A verified claim is green, not the accent** (3.0.0, DS02.a). `verify-ok` is the `ok` green in
+  each theme; the ✓ means the named verification passed, never a general medical-safety guarantee.
+  AI importance is not evidence certainty, and unmeasured safety is not zero risk.
+- **One action accent.** Links wear it too (2026-09-23): a second hue for links was an accent on every
+  screen. A primary button stands apart by being solid, not by hue. Terracotta is for an action, a
+  link, a selected state or a focus ring — do not tint every title, badge or card with it.
+- **Navy is information, never an action.** `info` carries information notices and the running
+  state (`dot-running`), with a shape and words; it is not a second accent.
+- **A text field focuses in ink, a button or link in the accent** (DS02.e). Input, Textarea,
+  Select, SearchInput and editable field widgets use `focus-input`; the native frame's fields take it
+  through the kernel theme mapping where the kernel supports it, and an unsupported field is an
+  upstream gap reported through the seam, never a cross-origin patch. An error boundary and the
+  focus ring stay recognisable together.
+- **Popularity is neutral.** The frontier's new / rising tags are neutral ground and text with a
+  word and a glyph; accent, warn and safety tones are never spent on popularity (DS02.h).
+- **A comparison puts us in the brand and every rival in grey.** `CHART_OWN` is the accent per
+  scheme (`#a34427` light, `#d98c6b` dark); `CHART_COLORS.rivals` is three greys, darkest for the
+  highest rank — `#626a73` / `#737c85` / `#838c95`, 5.49 / 4.24 / 3.41:1 on white, every one a
+  graphic a reader can see, on the dark canvas too. The own colour is at least 15 CIE76 from every
+  rival in both themes (`cie76` in `contrast.mjs`, asserted by `chartPalette.test.ts` — computed, not
+  claimed in a comment). At most one rival may take a colour, and only when the reader pins it. A
   chart of eight rainbow brands tells a reader nothing about which one is theirs, and that is what
-  the GEO dashboard shipped. Our line is 2.5 px and every other 1.5 (`CHART_STROKES`).
+  the GEO dashboard shipped. Our line is 2.5 px and every other 1.5 (`CHART_STROKES`). `CHART_SERIES`
+  is a different contract — the scientific categorical palette — and never becomes the action
+  palette.
 - **Data with a midpoint is diverging**: `CHART_COLORS.diverging`, blue — light grey — orange,
   the two arms matched step for step in lightness, and `CHART_COLORS.missing` for a cell with no
   reading.
-- **Certainty is a single-hue scale, never a traffic light.** Four brand-blue steps. Low certainty
+- **Certainty is a single-hue scale, never a traffic light.** Four steps of one hue. Low certainty
   is not harm, and red is reserved for safety.
+- **Study types are a closed data exception.** `STUDY_TYPE_BADGES` (Meta 分析 / 系统综述, 随机对照
+  试验, 指南, 说明书, 其他研究) keep their categorical colours, the label is always printed, and each
+  foreground / background pair is measured; the blue of a synthesis names a study type, not
+  information, safety or strength (DS02.g). A topic colour never becomes a clinical grade.
+- **Accent text means one thing: it opens or does something** (the memory section's clickability grammar, owner 2026-10-27: 「分不出哪些可以点击
+  哪些不能」). Measured on these tokens the accent is 5.64:1 on the page but only 2.6:1 against `text` and 1.61:1 against `text-2`, so colour alone
+  cannot mark a link (WCAG G183). Hence: (1) a title, a name — a project's included —, a label or a number that opens nothing is ink (`text`,
+  `title-ink`, `text-2`, `text-3`), and a selection is a ground (`accent-soft`), never accent text; (2) a link inside a sentence is underlined,
+  always (`NoteParts`, a drawer's 「来源对话」); (3) a row or tile that goes to one place is pressed as a whole — hover `surface-2`, a focus ring and
+  its mark at the end, › opens here, ↗ leaves the section (`ListRow` `leaves`, `StatTile` `whole`) — with its title in ink, and a row that cannot
+  be pressed has neither the ground nor the mark; (4) a section's way out is one labelled link at the end of its header, accent, underlined,
+  with ›; (5) an action is a `Button`, `secondary` (the grey ground) in the memory section — never bare accent text; (6) a switch is the only
+  control of a row that is also pressed as a whole, and the two do not trigger each other. The marks of a picture (● ▲ ■ ◆ ✕) are graphics in the
+  data colour, not words. `clickabilityGrammar.test.ts` holds (1), (2) and the bare accent button in the memory section's sources.
 - **Restraint is the default; expression has a budget.** A reading page and a list page stay quiet.
   A page may spend **one brand moment** (a gradient, a serif headline, a hero), and charts and the
   32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO
@@ -118,33 +206,40 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   card's header. **What the capsule gained since its first day is the one chart that came back (2026-10-23), as the first card of 总览**
   (`/app/memory/overview`, a data page of its own): a dot for each gain up to thirty in a lane for each kind that has any (记下 ●, 学会 ▲,
   资料 ■, 收下 ◆), weekly counts after that, counting gains only — what was replaced or forgotten is the time view's — and `?tab=growth`
-  arrives at 总览. 总览 and 地图 are the memory page's two pictures; its three lists (关于你, 项目, 做法) are lists and nothing else; no peer's
-  memory page has a chart, so a chart on a list page needs an argument of this size. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
-  rule 1), reached from the memory page's last tab, 「地图」 (its page is drawn by the same `MemoryFrame` — one title, one column, the same four tabs in the sticky band — so the two read as one page: a map behind a menu item was not found, 2026-10-14; and its five views are one chip group of the one toolbar row, not a second row of tabs); it draws in the brand blue, the warn amber and one grey, tells a
-  mark's kind by shape and words, and prints a radar's numbers at its axes; the knowledge base's graph follows the same grammar.
+  arrives at 总览. **Since 2026-10-27 the map is no tab of its own** — it was a dashboard, and a dashboard that is not the landing is a page nobody
+  found: 总览 is the data page (template T4: toolbar, sentence, five tiles, 「变化」 — the chart above, now with 忘记 ✕ as its fifth lane —, 「关系与主题」
+  when there are at least twelve memories and three relations or a topic grouping, and the table behind the charts, 「最近变化」), `/app/memory/map` goes
+  to it with `explore=graph|topics`, `project`, `q`, `open`, `look`, `topic` and a 30- or 90-day `range` carried over, and its time, activity and dimension views
+  (the radar's angle and area read worst of all, NN/g) are gone: the chart and the table say what happened. 总览 is the memory page's one picture; its
+  four lists (关于你, 项目, 做法, 收到的) are lists and nothing else; no peer's memory page has a chart, so a chart on a list page needs an argument of this
+  size. The relation graph and the topics draw in the accent, the warn amber and one grey, tell a mark's kind by shape and words; the knowledge base's graph follows the same grammar.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
   function anywhere in `src/`, outside a named list of surfaces where colour is content (a
-  rendered Office document, a fixed-dark scientific canvas).
+  rendered Office document, a fixed-dark scientific canvas, the study-type badges). Paper and
+  figure previews and print output keep a meaningful light canvas even when the chrome around them
+  is dark.
 - **No opacity modifier on a token colour.** `bg-accent/10` generates no CSS at all — the tokens
   are `var()` colours. Use the `-soft` / `-strong` partner. ESLint rejects the modifier.
 
 ### Run states and charts
 
 Five run states, one rule (`runState`), one component (`RunStatusDot`): running (pulsing circle,
-brand — `dot-running`), finished (filled circle, **green** — `dot-done`), finished with something
+navy information ink — `dot-running`), finished (filled circle, **green** — `dot-done`), finished with something
 to check (diamond, amber), not finished (square, red), cancelled (hollow circle, grey). All ≥3:1
 as graphics — measured on the canvas, on a card and on the sidebar, in both themes — the word
-always printed beside them. The cancelled dot is `n-control` (light) / `n-500` (dark): it was
-`text-graphic`'s own grey (2.69:1) until 2.1.3.
+always printed beside them. The cancelled dot is `n-control` in both themes: it was
+`text-graphic`'s own grey until 2.1.3.
 
 Eight categorical chart slots in a fixed order, never cycled, shared with `@ai4s/shared`'s
 `CHART_PALETTE_*` and `runtime/skills/core/publication-figures/openscience.mplstyle`. **Change
 all three together and re-run the dataviz validator.** The order is the colour-vision mechanism.
 Three slots are under 3:1 on white — **orange (slot 2) 2.97, yellow (slot 6) 2.45, light grey
 (slot 8) 1.92** — so a chart using them carries direct labels or a table view; past three series
-in a scatter, fold to “其他” or facet. Gridlines are the hairline, axes the control border.
+in a scatter, fold to “其他” or facet. Gridlines are the hairline, axes the control border. The
+scientific categorical, diverging and heat scales keep their data meaning and did not move with the
+brand.
 
 ### Theme
 
@@ -152,7 +247,10 @@ Three-way (`light` / `dark` / `system`), as `data-theme` on `<html>`, set before
 by `public/theme-init.js` and kept live by `ThemeProvider`. Each block sets `color-scheme`, so
 scrollbars, a select's list and date pickers follow. The dark theme points the same role names at
 *different steps* — it is never the light set inverted. Never hardcode white on an accent
-surface: use `text-accent-fg` / `text-error-fg`.
+surface: use `text-accent-fg` / `text-error-fg`. Follow the system only in `system` mode — an
+explicit preference wins — and test a switch while a menu, a dialog, a table's overflow cue, a graph,
+a selected row and a scientific preview are open: a component never caches an absolute RGB that
+outlives the surface or theme that gave it meaning (overflow fades read the live semantic surface).
 
 ---
 
@@ -265,8 +363,15 @@ their grid (`text-spacing-trim: space-all`). Tables use tabular numbers.
 `ui-sm` is retired (13 and 13.5 px were one rung half a pixel apart) and renders as `ui`.
 
 A line of multi-line text is at most **40 CJK characters**: `max-w-measure` (560 at 14 px) and
-`max-w-measure-body` (640 at 16 px). No list is wide enough to lift it. Ranks, scores, heat and
-times are set in tabular numbers.
+`max-w-measure-body` (640 at 16 px) — a count of Chinese characters, not 40 Latin `ch` units. No list
+is wide enough to lift it. Ranks, scores, heat and times are set in tabular numbers.
+
+Operating screens do not borrow poster ratios: a title 2.5 times the body or a fixed 40 % whitespace
+quota are not acceptance rules. The per-template type budgets are guardrails, not a reason to erase
+a unit, a label or a line of useful guidance. A document's own title stays discoverable in full —
+a list's two-line truncation is not automatically the reader-title rule. Title, lead, added context
+and source each answer a different reader question; the same finding is not repeated in the title,
+the lead, the first fact row, the quotation and the interpretation without new value.
 
 ---
 
@@ -295,7 +400,8 @@ narrow, and a dashboard squeezed into a document column is the structural half o
 looked cheap. `max-w-full` is deliberately **not** a token — a blanket map of the container table
 would redefine Tailwind's own `max-w-full` as a pixel width.
 
-Sidebar 280, collapsed 56 — the kernel's constants.
+Sidebar 280, collapsed 56 — the kernel's constants. A saved user width of the sidebar or a panel is
+legitimate, not a defect, and is clamped to the current viewport.
 
 **Use `PageShell`** (`width` `read` · `page` · `wide` · `full`; the reading pages — the evidence card
 and the event — use `read`). It puts the title, the actions and the body inside the same box, because
@@ -331,7 +437,9 @@ height. Written in the scale on purpose: a menu item (`h-8`, 32), a tab (`h-10`,
 hand-drawn 1.4). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8); under a finger
 (`coarse:`, `pointer: coarse`) an `IconButton` and a filter chip widen their hit area to 40 with an invisible box and keep
 their drawn size. A table or grid that scrolls sideways (`DataTable`, `HeatGrid`, a Markdown table) freezes its row-header
-column and is a named, focusable region while it overflows (`ScrollRegion`).
+column and is a named, focusable region while it overflows (`ScrollRegion`). Validate the actual 24 px
+AA target or its exception; 44 px is a preferred touch target, never mislabelled a universal AA
+minimum, and a hover-only control also appears on focus and has a touch path.
 
 `Button` sizes map onto that: `sm` 28 with 14 px text (13 until R19.2), `md` 36 (the default), `lg` 44.
 `IconButton` is 28 in a row and 36 in a header. `Input`, `Textarea` and `SearchInput` are 36 (28
@@ -348,7 +456,7 @@ lift of one thing over its sibling inside a component. Opacity is spent on a dis
 colour role) and a dragged item (0.8), never on a colour's pale version. Tooltips show after
 300 ms (at once on keyboard focus) and hide 100 ms after the pointer leaves — `Tooltip` reads
 `TOOLTIP_DELAYS`; nothing uses the browser's `title` for an icon's name. Toasts stay 5 s, 10 s when they carry an action,
-and an error stays until it is closed (`TOAST_DURATIONS`).
+and an error stays until it is closed (`TOAST_DURATIONS`). Real progress is never animated from a timer.
 
 ### The component set (2026-09-23)
 
@@ -379,9 +487,18 @@ bordered pill or bordered `<button>` outside it:
 | `FactList` | the one key / value `dl`, eight rows and then 「全部 N 项」 |
 | `ChartGrid` | charts by rows; a row's cells share a height and its spans fill it, so a grid has no hole |
 | `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below, or the bare list (`inline`) in a column that already sticks (the frontier reader's 「本文目录」); read off the headings the page rendered |
-| `MasterDetail` | a list column (320–360 px) and one record; below the room for both, the record is a `Drawer` — or, for a conversation, replaces the list |
+| `MasterDetail` | a list column (300–400 px) and one record; the split is decided by the page's own room (`listWidth` + `detailMin`, the page's choice: a preview needs ~520–560 px, a conversation 640); below it, the record is a `Drawer` — or, for a conversation or a form, replaces the list |
 | `ScopeMenu` | whose things the page shows (a project, a kind of project, everyone's), in the header after the title or as a chip in a toolbar |
 | `StateScreen` | a whole page's failure or wrong address: an icon, one sentence, one action, 「回到原处」 |
+| `InlineAlert` | a persistent, scoped message with its recovery action (`error` · `warning` · `info`); a string child announces once, by event and entity identity. The place for a failure that outlives a toast: `LoadError`, `DataTable` and the field-adjacent mutation errors use it |
+| `Freshness` | the last successful read and the refresh that failed after it, with retry: an unknown time stays 「成功读取时间未知」, a failed refresh keeps the earlier value and its time |
+| `NumberField` | a number with a declared quantity, scale and unit; the raw draft is kept apart from the interpreted value (see 「Quantity and measurement boundaries」) |
+| `Checkbox` / `Radio` | native controls in a caller-owned fieldset with a linked label and feedback; `Checkbox` has a mixed state; the label is a 44 px target; consent is never pre-ticked |
+| `Combobox` | a controlled query beside the selected ID, a 250 ms debounce, an abort guard against a stale answer, loading / empty / failed rows, arrows / Enter / Escape, and no selection while an IME composes |
+| `DateField` / `DateRange` | a calendar date as `YYYY-MM-DD`, never converted to an instant; a range has inclusive ends, an order check and an optional open end |
+| `FileDrop` | the file picker and the drop surface share one validation; per file, transferring · transferred · processing · searchable · failed are different words, and a byte count appears only when it is measured |
+| `PendingFeedback` | the delayed read lifecycle: no skeleton before 300 ms, real elapsed time at 10 s, an explicit non-durable limit at 60 s; only the two milestones are announced |
+| `AsyncSwitch` | a `Switch` over a single optimistic transition with an inline rollback on a confirmed failure and a reconcile action when the outcome is unknown |
 
 Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, `Drawer`
 (its `footer` is the one bar stuck to the panel's bottom; `placement="bottom"` is the phone's sheet), `ConfirmDialog`, `FormDialog` (a form in a
@@ -401,18 +518,19 @@ pages after every release.
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
-   one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`), the 记忆总览 (`/app/memory/overview`: the capsule as six cards of one grammar — a sentence whose numbers
-   link to their parts, 成长 the page's only canvas, 关于你, 项目, 我的做法, 知识, 收到的 — each changing form with the amount it has to show: 0 a recipe with one button, 1–5 the
-   things themselves, 6–30 ranked bars or dots, 31 and more folded; held to two kinds of section and five size × weight pairs, of which four are used) and the knowledge base's graph
+   one kind. **The one exception is a data page** — the 记忆总览 (`/app/memory/overview`: the capsule as one data page — a toolbar of the range, only what needs a look and the search; a
+   sentence whose numbers each open the list they count; four tiles (关于你 — the memories that carry a project included —, 做法, 收到的, 知识) that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 when there is
+   enough to see; and the table behind the charts, 「最近变化」, whose rows open the same drawers the marks do — held to two kinds of section and five size × weight pairs) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
-   view at a time over one shared selection, switched by one row, with the same marks listed under the canvas, and
-   every mark opening the record's own drawer or the document's own page — so its three shapes (the sentence with
-   its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
+   shared selection narrowing the chart, the panel and the table together, and every mark and row opening the record's own drawer or the document's own page — so its shapes
+   (the numbers, the cards of charts and of the table) are its budget; the memory page and the knowledge base page
    themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2. A data
    page is also held to the data-page budget of controls — 10 kinds and 7 text colours, against a reading
-   page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget (and so does 总览; 2026-10-23, measured in Chromium on the pages' own fixtures with the walk's `measure`: a button the header or a recipe adds is a `text` button, the look of the sidebar's 28 px controls, because a filled one was the eleventh kind): the shell's three, the view
-   switch's two (the chosen view is a second kind), the chips, the search, the mark rows, the timeline
-   scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
+   page's 8 and 5 (`budgets.data` in the page table). 总览 measures **10 kinds of control, 6 text colours, 3 kinds of border, 5 size × weight pairs and 2 kinds of section** on the `rich` fixture
+   (2026-10-27, Chromium, the walk's own `measure`, at 1440 and at 390): the shell's four, the tabs, the quiet chips (range and the toggle) with the search, the headline's links, the tiles, the text of the
+   rows, and `记住这一条` — a secondary `Button` at the header's own height (36), which is the same look as the sidebar's current item, because at 28 it was an eleventh kind. What it spent the budget on, and what it did not
+   spend: its tiles are cards of the one frame the charts are (`StatBand separate`), not cells with hairlines (a fourth kind of border); the table behind the charts and the relation graph are cards of the kind the chart is (`ChartCard`),
+   not sections that hold cards (two more shapes); the switch between 关系 and 主题 is the underlined `Toolbar` `views` the band has (not a second look); and the relation graph has no replay slider. The count in a sentence wears the chips' look and is not a kind of its own.
 2. **A row opens by the nature of what it is** (long configuration/mapping uses the main area under the October 20 correction below) (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
    - a **record** — a memory entry, an inbox message, an evidence-matrix row, a GEO
@@ -422,7 +540,11 @@ pages after every release.
      with the list as a column inside the page (`/app/autopilot/:taskId`);
    - a **document** — a frontier article, a knowledge-base source, a compiled wiki page, a report, an event, a file the
      assistant made (a spreadsheet, a deck, a script, shown by the kernel's own preview) — opens on a page of
-     its own that has an address (`/app/files/:sourceId`), and going back restores the list as it was.
+     its own that has an address, and going back restores the list as it was; the knowledge base reads its
+     source in the pane beside its list where the page has room (`/app/files/:sourceId`, one route with the list).
+   - a **project of a module home** — a 循证 GEO project, a 虚拟临床研究 study — is previewed in the pane beside the
+     list (`?project=` / `?study=`, written by a press; the first one shown, not written, when none is chosen) and
+     opens its workspace from there (owner, 2026-10-28: no stacked pages).
    A drawer never holds a conversation and never holds a second input box (the kernel's composer is
    the only one).
 3. **The header is the title, the scope and at most one primary button** — and a search box. Two
@@ -435,7 +557,8 @@ pages after every release.
 6. **What looks clickable shows a result where the reader is looking.** A drawer, a new page, a
    tab or a row opened in place — never a change somewhere below the fold. What opens answers the
    number or state the row shows: a red count opens the items it counts. A row that can be pressed
-   says so (`ListRow`: hover `surface-2`, selected `accent-soft`, a quiet › ⌄ ↗ mark at its end).
+   says so (`ListRow`: hover `surface-2`, selected `accent-soft`, a quiet › ⌄ ↗ mark at its end; `StatTile whole` the same for a tile that is a door; ↗ also marks a route that leaves the section the list is in) — and it is the
+   whole row or tile that is pressed, with its title in ink: accent text is for a link inside a sentence, underlined (「Colour → Rules」).
    The walk clicks the first row of each list on the rebuilt pages and fails a click that shows
    nothing; what a row's content holds is for unit tests, not the walk.
 
@@ -453,13 +576,21 @@ page framework — the components above, `PageShell`'s slots, `layoutRules.test.
    heading; there is no grey line for how a thing was made, what it may be used for, what the engine
    did — those are the model's context, a log or an operator's view. `layoutRules.test.ts` counts the
    hand-written ones and lets the count only fall.
-9. **A module's step rail is on every tab and sticky.** The rail, the tabs and the toolbar row are one
+9. **A module that has a step rail shows it on every tab, sticky** (循证 GEO; 虚拟临床研究 has none since the
+   2026-10-25/26 reset). The rail, the tabs and the toolbar row are one
    band at the top whose height does not depend on the tab (a tab without a toolbar reserves its row);
    the steps the open tab is built from are underlined. The page never loses where the program is by
    switching a tab. A click on a step, and a to-do, goes to the step's block (`#geo-errors`): the page's
    own ground scrolls to it, 12 px under the band — never `scrollIntoView`, which also scrolls the app
    shell and carried the sidebar and the band off the screen — and the blocks a tab is promised are data
    (`GEO_TAB_SECTIONS`), which `pageComposition.test.tsx` renders against.
+   What stands over and in the band is the same on every tab too (the fixture walk of 2026-10-28 measured the band 10 to 36 px
+   taller on the tabs that had more): the way back is on every tab — 项目总览 from a step, 循证 GEO from the overview — as a block link, not an
+   inline one (which is a kind of control of its own); the open step's own action (加问, 选目标档, 让 AI 写下一批) is the toolbar's
+   `contextAction`, a quiet 28 px text button at the row's end and never a primary — the page's one primary is the header's 「对话」,
+   and a header button is exactly 36 px for a one-line label (`HeaderActions`), the look of every other 36 px button; and at a phone's
+   width the band's row, whose view and scope choices cannot fold into 「筛选」, is one line that scrolls sideways (`Toolbar`
+   `nowrap`), ending in the search, the count and the action.
 10. **Starting work never takes the person away.** The button starts the work; the page's
     `ActivityStrip` says what is happening and how far, and the page updates itself when it ends. The
     conversation is a view of the same page, not another place.
@@ -478,12 +609,20 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 
 | Template | For | Slots, top to bottom | One kind of body | A record opens |
 |---|---|---|---|---|
-| T1 列表页 | 前沿动态, 知识库, 记忆 (关于你 / 项目 / 做法), 收件箱, 科研工具, 插件与技能, the GEO and study homes | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
-| T2 主从页 | 定时任务, 方法库, 假设卡 | header · `MasterDetail` (list 320–360 px, the record beside it; below 1024 px a `Drawer`, or the page swaps for a conversation) | a list and one record | the right-hand column |
-| T3 模块页 | 循证 GEO, 虚拟临床研究 (and one GEO answer, read inside the band under 问题与回答) | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
-| T4 数据页 | 记忆总览, 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
+| T1 列表页 | 前沿动态, 收件箱, 科研工具, 插件与技能, the study home's library views | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
+| T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 循证 GEO and 虚拟临床研究 homes, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
+| T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
+| T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
+
+The specification names the same six templates List (T1), Master detail (T2), Workflow (T3), Data
+map (T4), Reader (T5) and Settings (T6), and adds the **connected workbench** — the October 20
+exception below: the related inputs, configuration, progress and results of one task in the main
+area, with responsive tabs where useful. It has no template key in `page-templates.json`; a
+measured, workbench-specific budget is a view's `budgetOverride` with a `budgetNote` that carries
+the live measurement, and it expresses the connected workflow — it never excuses unrelated stacked
+content.
 
 **What each template forbids.** The walk reads the components' markers (`data-toolbar`, `data-step-rail`,
 `data-note`, `data-tag`, `data-outline`, `data-empty`, `data-chart-grid` — listed in `PageShell.tsx`), not
@@ -497,13 +636,45 @@ warning; `layoutLint.test.ts` holds each number. Two more are counts that only f
 
 | | Required | Forbidden |
 |---|---|---|
-| every page | one `PageShell`; at most one primary action in the header; a sentence is a `Note`, `Headline`, `EmptyState` or heading | a hand-drawn `<h1>`, back arrow or search box; a grey sentence with no action or number; a `Tag` that is pressed or sits in a control; a status word drawn as a button; a filter whose count is 0 |
+| every page | one `PageShell`; at most one primary action in the header; a sentence is a `Note`, `Headline`, `EmptyState` or heading | a hand-drawn `<h1>`, back arrow or search box; a grey sentence with no action or number; a `Tag` that is pressed or sits in a control; a status word drawn as a button; a switch to an empty place that says nothing and offers no next step (the walk's `zero-count`; see the v3.1 rules below for what may stay) |
 | T1 | the toolbar above the list, views and filters in one row | a second tab list in the body; chips under the list; a hand-written `ul divide-y` (`List`, `ListRow`) |
-| T2 | the record in the right-hand column on a wide page | a record in a drawer beside a list that has room; a conversation in a drawer |
-| T3 | `StepRail` on every tab with the same steps; the toolbar row reserved on a tab without one; the open tab's steps underlined | the rail on one tab only; a button that carries the person to the conversation; two kinds of object in one tab; the primary action in the body |
+| T2 | the record in the right-hand column on a wide page; with no record, the column holds what starts one (the new-task form beside the examples, a module home's recipe) — the page stays split; creating is a form in the main area (`/…/new`), editing may be a dialog; a preview's actions are secondary, the one solid button is the list header's | a record in a drawer beside a list that has room; a conversation in a drawer; an empty state that collapses the page into one stacked column; a project picker above the list (a project is a label on a row, chosen per row) |
+| T3 | GEO: `StepRail` on every tab with the same steps; VCR: six result destinations without a step rail; the toolbar row reserved on a tab without one | the rail on one tab only; a button that carries the person to the conversation; two kinds of object in one tab; the primary action in the body |
 | T4 | a `Headline` whose numbers open what they count; a `ChartGrid` whose rows are full; legend and replay controls in the card's header | a placeholder tile; a hole in the grid; a control under the canvas it controls |
 | T5 | an `Outline` from four sections; the serif title | a page of many screens with no contents; the action under the title |
 | T6 | settings sections only in the left rail | a link to another page (插件, 技能, 运维) drawn as a section |
+
+**What v3.1 states over the older blanket wording (2026-10-26), as v3.2 amends it (2026-10-27).**
+DS22.1–DS22.8 in the canonical specification own the current-task modes, scoped header actions,
+workflow / view / filter distinctions, adaptive filters, shared emptiness, import / edit placement,
+meaningful density and whole-page verification. Local implementation and scoped page-state-width
+evidence are recorded in `../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`; AT51–AT58
+remain open where the ledger identifies missing routes, states or acceptance. Token package 3.0.0 is
+unchanged, the dated v3.1 ledger and its seven OPEN acceptance items stay separate, and this revision
+claims no deployment. These are the specification's page rules. The walk's budgets are unchanged: updating their semantic policy takes a focused test and
+observed evidence, and no budget is weakened, and no useful instruction deleted, just to obtain a
+green check. The walk's view inventory (`page-templates.json`) is an intended coverage map, not proof
+that every view was exercised.
+
+- One page serves a coherent task, not necessarily one data shape. Connected configuration and
+  results are allowed in the current mode; complete overview / list / edit / analysis workbenches are
+  not stacked by default, and unrelated metadata is not stacked beside them.
+- Helpful purpose, required inputs, units, prerequisites, limitations and recovery instructions are
+  allowed. Internal implementation narration belongs in diagnostics, and a grey-text counter cannot
+  decide language quality.
+- One dominant action per local action group, and a header default of at most one primary and two
+  common secondary actions, then labelled overflow; a read-only page may have no primary action. A
+  contextual action in a workbench is not forbidden simply because it is below the header.
+- One coherent view-navigation / control band. Workflow progress and result navigation have
+  different meanings: compacting them must not hide the process or force an unexplained second
+  vocabulary.
+- A static `Tag` does not act. Filters, tabs, links and buttons keep distinct semantics even when
+  their look is restrained.
+- An informative empty destination or a zero-count filter may stay when it preserves context or
+  explains a prerequisite, with a reset or a next step; a selected filter is never erased because a
+  refreshed count fell to zero.
+- A row's label predicts whether it filters, configures, opens a conversation or navigates, and a
+  press shows its result at the point of work.
 
 **One look for one job (2026-10-17, r19-guards3).** The walk counts a page's kinds of control by their look — height, size and
 weight of type, a frame, a ground, a corner — and holds a module page to ten, a reading page and a frontier list to nine or
@@ -528,9 +699,9 @@ identifier is a copy button and never page text, and a list that holds nothing i
 
 **前沿动态's list and reader (2026-10-23, the owner's screenshots; the band 2026-10-25: 「不要横着罗列着，顶上弄好几行」).** The band is
 one row on every view (`Toolbar` `oneRow`): six views — 精选 · 全部 · 关注 · 热榜 · 简报 · 证据专区 — at the left; at the right the
-open view's few controls (热榜 当前 | 本周 | 本月 and when it was taken; 简报 日报 | 周报, 分类, 往期, 复制; 证据专区 「全部专区 ▾」, the
+open view's few controls (热榜 当前 | 本周 | 本月 and when it was taken, in Beijing time, said once; 简报 日报 | 周报, 分类, 往期, 复制 — 往期 is the toolbar's only for the weekly, and for a daily on a phone, cut into 月份 and the month's issues; on a screen with the room it is a column of months beside the issue, the open one marked, and an issue opens with 「先看三件事」 (its lead and the two items its lanes score highest, each a title and its 导读 and nothing more; the lanes under it skip those three, and the 月份 menu names its oldest month without a count while older issues remain unread); 证据专区 「全部专区 ▾」, the
 count of a search, 新建专区), on 精选, 全部 and 关注 the applied tokens (the chosen tag keeps its 「关注」) and 「筛选」 — 栏目 (one
-choice), 专科 (the thirty in their five groups, several at once, each chosen one with 「关注」, then their 热门标签), 来源, 证据类型,
+choice) with 行业动态 beside it (the kinds of business news — 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线; one choice, said on the row as 「行业动态 · 融资与上市」; 「其他」 is a kind an item has and not one to ask for), 专科 (the thirty in their five groups, several at once, each chosen one with 「关注」, then their 热门标签), 来源, 证据类型,
 时间 (全部 only), 只看收藏 — and the search last. 只看未读 is a toggle at the right end of the list's first day heading. 与我相关 is
 关注's first entry (`?view=following&follow=foryou`; `?view=foryou` lands there): from 640 px 关注 is a column of the reader's places —
 与我相关, 全部关注, each followed specialty, tag, drug, topic, source, event and evidence zone, each an address, then 「添加关注 · 管理」 —
@@ -543,6 +714,8 @@ stays under the band; any other list says the date after the source. The reader 
 edge (back, byline, title, 导读, text) and a sticky column whose top is the back row's — 「打开原文 ↗」 with ☆ and ⋯, 「深入研究」,
 推荐理由 with the score's parts, 专科 and 标签 (one chip, every one a link) and 本文目录 at three sections; below 1024 px the notes
 follow the text and the actions are a bar at the window's bottom.
+
+**The event page's record and timeline (c5-reader, 2026-10-26).** An event is the list column (1040) from 1024 px with 「事件记录」 in the right column — its heat and 72-hour trend, then 最早报道 and 最近更新 (Beijing time, said once in the heading), how many reports and from how many sources, and whether first-hand material is among them — and the reading column (720) below it, where the record is the strip above the summary. The reports are 「一手材料」 (the parties' own texts) and 「报道时间线」, the rest cut into Beijing days, the newest day first (最早 reverses it), each row saying the clock it stands at; the page holds the same four size × weight pairs as before.
 
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`
@@ -573,6 +746,19 @@ icon tiles, no sparkles, no shimmer. A list beats a wall of cards.
 Six states on every interactive component: default, hover, active, focus-visible, disabled,
 loading. Four states on every list page and data page: loading skeleton, empty, error-with-retry, content; a data page with too little to draw says so in one sentence and shows the list.
 
+**State truth and recovery** (v3.1, DS09). Initial loading, first-use empty, filtered empty, failed
+first read, failed refresh, stale, partial, denied and cancelled are different states with their own
+words. Unknown is not zero: an unread resource is not 0 B or stopped, and unmeasured evidence is not a
+clean zero; a zero is shown with its scope, denominator and time. A failed refresh keeps the useful
+previous data with its time and a persistent retry beside the section it affects (`Freshness`,
+`InlineAlert`); a first-read failure leaves an explanation and a retry, never only a toast. A
+percentage appears only over a real measured denominator, and never on an agent run. An
+action-required count counts what the current person can do; automatic recovery is status, not a
+to-do. A busy control keeps its focus, label and width: `aria-disabled` and `aria-busy` need a real
+activation guard against a second effect, and native `disabled` stays for a genuinely unavailable
+prerequisite, which the control explains nearby (a missing permission, a missing configuration and
+no selection are different reasons).
+
 **Motion**: three durations — `duration-fast` 120 ms for a state change, `duration-base` 200 ms
 for a container, `duration-slow` 320 ms for a page-sized change — one easing in
 (`ease-standard`) and one out (`ease-exit`, 2.1). A drawer travels 24 px, a toast 8, a menu 4
@@ -599,6 +785,25 @@ fills. Under **`prefers-contrast: more`** secondary text and every rule move one
 text colour (`COLOR_ROLES_MORE_CONTRAST`, measured like the rest). Data colour that must survive
 forced colours opts out with `data-forced-colors="preserve"`.
 
+**Modal focus and keyboard** (v3.1, DS08). A modal has its role and name, background isolation,
+initial focus, a Tab cycle over actual Tab stops only and a focus return. Negative `tabindex`, hidden
+or inert ancestors, hidden inputs, CSS-hidden elements and native disabled semantics are excluded
+(the first legend of a disabled fieldset is a native exception and a radio group is one stop):
+`focusTrap.ts` takes the rule from `tabbable`, `checkVisibility()` carries explicit options and a
+fallback, and a selector match is never proof of a Tab stop. Enter activates the focused control or
+an explicit form submit, never a global destructive default; Escape closes the top eligible layer and
+returns focus, with unsaved work protected (`useUnsavedGuard`). A menu scrolls inside the viewport
+height that is left. Ordinary notifications are polite and never steal modal focus, and a stream does
+not announce every token. Single-character shortcuts are scoped or can be turned off; the kernel's
+composer keeps its own Enter, IME and stream-scroll behaviour, and the host never adds a second
+composer.
+
+**Verification.** The target is WCAG 2.2 A/AA across the applicable complete processes; token
+validation alone does not certify fixed scientific canvases or overlays. Test keyboard only,
+VoiceOver / Safari, NVDA / Chromium, touch and cancelled gestures, 320 px reflow, a 390 px phone,
+tablet and desktop, 200 % text size, forced colours and both themes, and label emulation as
+emulation. Public reports, screenshots and logs expose no secret and no unrelated user data.
+
 ### Embedded
 
 Inside the EviMed Vue shell (`?embed=1`, or the wujie container) the React shell renders its
@@ -619,6 +824,107 @@ text in the danger tone and is never folded; every other finding is a mark on it
 of 「依据」, and the header's “⚠ N 条待核对”), and the rest stay in the run record for operators.
 `lib/qualityNotices.ts` groups them for those two places; no validator sentence is ever primary text.
 
+### Component contract template
+
+The following nine fields, in this order, become the header contract when a component is implemented or next changed. Apply at public-export level where a module has multiple components. Write actual behavior; a pending requirement links to the adoption item instead of describing a nonexistent prop as present. The implementation inventory contains 53 non-test TSX modules in `components/ui/`, with multiple public exports; the contract inventory covers 72 public components.
+
+```text
+/**
+ * Component: <export>; owner: H/K/B; rules: <DS/AT identifiers>.
+ * Anatomy: <semantic parts and data/action boundaries>.
+ * Variants: <closed public variants and when to use each>.
+ * States: <applicable states, source of truth, transitions, retained data>.
+ * Hit area: <drawn geometry, actual target, coarse-pointer behavior>.
+ * Keyboard: <focus entry/exit, activation, traversal, Escape/IME behavior>.
+ * Long content: <wrap/truncation, selection/copy, large datasets/menus>.
+ * Theme: <semantic roles, forced colors, reduced motion if applicable>.
+ * Responsive: <narrow/intermediate/wide layout and overflow ownership>.
+ * Verification: <existing test names, gallery case, composition/walk case,
+ *                and manual evidence or explicit pending gaps>.
+ */
+```
+
+`/__gallery` shows the public variants/states in both themes; composition fixtures show realistic combinations and failure transitions. Fixture assertions cover behavior while images cover appearance. Update JSDoc, props, behavioral tests and fixtures together; the component-contract inventory verifies field presence but cannot prove their truth. Do not add another separately maintained component handbook.
+
+### Existing component adoption contracts
+
+The table records implemented behaviour and the acceptance each still needs. The public contracts live beside the exports (53 UI modules, 72 public components); the [execution ledger](../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) records proof and the remaining gates, and this table is not a declaration that every browser or manual scenario passed. Owner H unless separately assigned K.
+
+| Component / helper | Observed baseline and adopted change | Required acceptance |
+|---|---|---|
+| Button / buttonClasses | Implemented loading-only behavior uses guarded aria-disabled/busy, retain focus/name, draw the spinner's room only while it spins (a resting button has no empty slot) or preserve measured width; retain disabled for genuine prerequisites. CSS must cover aria-disabled and events must suppress mouse/keyboard/form activation. Focus loss is a browser risk to verify, not universal proof from the attribute. | T double click/Enter/form submit; G all sizes/long labels; W actual focus and width. AT35 |
+| Switch | Implemented controlled pending and AsyncSwitch producer adapter support a single optimistic transition; keep requested position while pending, inline confirmed-failure rollback, and unknown-outcome reconciliation. An invariant label names the setting. A setting that takes effect later (插件与技能) is still a labelled switch for what was saved, with the effective-time status line beside it; an action button is for a one-off apply, not for a standing preference. `onChange` of an AsyncSwitch resolves with the write's confirmed state and nothing is read back; the readback is the recovery for an unknown outcome only, and a refusal is said once, in the switch's own line. | T out-of-order response, rejection, timeout, scope change; G pending/error; W persistence. AT36 |
+| Input / Select / Textarea | FieldShell unifies Input/Select/Textarea label/hint/error IDs and slots. Distinguish decorative prefix/suffix/unit from a trailing actionable control and preserve text space/accessible description. | T descriptions/error precedence/IDs; G prefix/suffix/error/narrow; M AT. AT37 |
+| NumberField | Central quantity adapter (`lib/quantity.ts`; see below). Raw text stays separate from the interpreted value. Do not replace it with a bare native number input that silently guesses scale. | T parsing/conversion/round-trip/domain mapping; G; W form/result. AT08/37 |
+| FormDialog | Implemented bounded scroll body, footer and persistent linked error summary share useUnsavedGuard for close/backdrop/Escape/route. Busy must not blanket trap Tab on the panel and make retained help/errors unreachable. | T guard routes/save outcomes; G long body/summary/footer; W/M focus. AT13/38 |
+| Drawer | Existing layer handling/focus and the shared dirty guard are retained; keep view-only drawers light and immediately closable. | T common guard and nested layer; W return focus/blocked navigation. AT38/43 |
+| ConfirmDialog | Structured subject/count/consequences/recovery fields are implemented (optional extra readable content); safe initial focus, no global Enter destruction. Reversible operations use actual undo/history instead of an extra confirmation. | T irreversible/partial recovery semantics; G objects/counts; W actual restore path. AT39 |
+| focusTrap | Implemented tabbability handling covers native disabled/legend/radio, hidden/inert, visibility and zero-stop cases, without violating nested-layer ownership. checkVisibility options/fallback need actual browser coverage. | T all excluded/included cases; W/M keyboard in Chromium/WebKit/Firefox. AT13 |
+| Toaster / toast store / announce | Implemented pre-mounted host announcers, event-scoped short-window deduplication, tones and optional Undo. Actual screen-reader reliability remains a manual gate. Keep existing hover/focus timer pause. Persistent failures stay inline. | T queue/identity/dedup/priority; G long content; M real AT first/repeated announcements. AT40/41 |
+| Tabs | Implemented auto/manual activation; manual arrows/Home/End move focus only, Enter/Space activate; retain correct tab/panel identity and overflow. | T focus versus selected state, async loading and item removal; G/W. AT42 |
+| StatTile / StatBand | Implemented typed measurement boundary below; keep shared denominator visible/accessible at band level and retain precise drill-down scope. | T type negatives plus source adapter unknown/zero/stale/error cases; G/W real metric states. AT07/37 |
+| DataTable / LoadError | Existing inline failure styling is duplicated and LoadError uses the retained ghost alias. Route persistent feedback through InlineAlert and migrate ghost to secondary when touching the call site; preserve partial rows, sorting and retry. | T retained rows/retry, partial errors; G table overflow; W. AT40/48 |
+| ListRow | Stretched hit area is a conscious selection/copy tradeoff. Retain a semantic primary control, the second line (`meta`) and `leading` let the press through to the row and keep real nested controls (a retry button, a selection checkbox) above the stretched title; a row whose second line carries an identifier to copy sets `metaSelectable`, which makes that line selectable without opening the row. Essential full identity/copy remains available. | T primary/secondary events; W/M text selection on mouse/touch; G long names. AT19/44 |
+| SearchInput / submit hook | SearchInput owns clear/Escape today; Enter guards are scattered. Centralize host composition-safe submit while preserving caller callbacks, native form semantics and cancellation. A scoped lint rule follows adoption, not a blanket prohibition on Enter. | L scoped rule/exception tests; T IME sequence; W/M real IMEs. AT46 |
+| ScrollRegion / scientific views | Retain the audit's unclosed fade, initial-size, fixed-label contrast and keyboard findings. New helper contracts do not close those bugs without actual caller migration. | T regression probes; G/W/M actual files and themes. AT05/14/15/16/17 |
+
+### Quantity and measurement boundaries
+
+**NumberField** requires a declared quantity/unit, explicit scale (`scalar`, `percent` or `fraction` as appropriate), canonical representation, min/max in that representation, precision/rounding policy and an example when ambiguous. A field may be unitless, but it says so. Input values like empty text, a lone minus, malformed grouping, NaN, Infinity and out-of-range values do not become zero or silently clamp. Preserve invalid draft text with explanation. Parse on blur and submit; conversion occurs exactly once. Do not round scientific values merely because the display rounds.
+
+The shared quantity parser and formatter are `lib/quantity.ts` (`parseQuantity`, `formatQuantity`, `QuantityPolicy`; the general format helpers stay in `lib/format.ts`). Input preview, confirmation, saved configuration and displayed results use that contract, while the domain API keeps its declared units. An entered `20` in percent mode corresponds to `0.20` only when that is the declared canonical fraction; saved `0.20` must not be converted twice on reopening. Tests include negatives, scientific notation where allowed, locale separators, 0, 100%, missing data and historical versions.
+
+**StatTile** adopts a discriminated reading: Measured has a finite value, unit, scope and observation time/coverage; Unmeasured has a reason and no numeric value; Failed has an error/retry contract and optional previous Measured reading. Initial loading is an explicit read lifecycle, not a fake Unmeasured result. Type negatives prevent a numeric value on the Unmeasured branch. They cannot prove a caller did not lie by constructing Measured(0): adapter tests must preserve backend missingness, measurement existence, sample counts, denominator and time. Compile-time typing alone does not close audit A01. Preserve real zero and useful stale values; failed refresh must not erase an earlier measurement.
+
+### Shared primitive contracts and introduction order
+
+Every primitive below is implemented and has a real caller; "Where" names it. A new primitive arrives
+with its first real caller and fixture — no unused component catalogue. Native HTML or a page-specific
+instance may still exist beside one, and its absence from this list is not proof that the product lacks
+the capability. Owner H; native counterparts remain K.
+
+| Primitive | Adopted contract | Where | How to verify |
+|---|---|---|---|
+| InlineAlert | Semantic tone, title/body, scoped persistent recovery action, dismissal policy and announcement identity; shared by `LoadError`, `DataTable` and field-adjacent mutations | `components/ui/InlineAlert.tsx` | T persistent failure/retry/dedup; G all tones; AT40/41 |
+| Freshness | Last successful time, current refresh state and retry in a toolbar summary or headline; unknown time stays unknown | `components/ui/Freshness.tsx` | T failed refresh retains value/time; G narrow summary; AT40/45 |
+| announce() | Pre-mounted polite host queue and a limited assertive channel; event/entity identity, count and priority; no duplicate visible-and-spoken event | `lib/announce.tsx` | T queue/window/multiple tasks; M AT; AT41 |
+| NumberField | Explicit quantity/scale, raw draft versus parsed value, shared formatting and domain units | `components/ui/NumberField.tsx`, `lib/quantity.ts` | T boundary and round-trip; W meaningful form; AT37 |
+| Combobox | Controlled query versus selected ID, an optional domain threshold and a default 250 ms search debounce, an abort / stale-response guard, loading/empty/error, keyboard selection and clear; no free-text-as-ID unless the domain allows creation | `components/ui/Combobox.tsx` | T out-of-order/IME/abort/duplicate labels; G short/long list; W/M ARIA pattern; AT49 |
+| Checkbox / Radio | Labelled native controls in fieldsets; checkbox mixed state and radio-group arrow behaviour, errors/help and a large hit area; unselected consent by default where consent exists | `components/ui/Checkbox.tsx`, `Radio.tsx` | T mixed/disabled/group names; G/M keyboard and hit area; AT48/49 |
+| DateField / DateRange | Native calendar-date controls; date-only is distinct from an instant or a timezone, endpoints are inclusive, a range can be open, invalid order is refused; a custom picker only for a supported unmet need | `components/ui/DateField.tsx` | T leap day/timezone/range boundaries; W/M keyboard; AT45/49 |
+| FileDrop | Clickable file picker plus drop, the same validation and per-file status; real byte progress only when measured; transferred, parsing, searchable and failed are distinct; cancel/retry only where the API backs them | `components/ui/FileDrop.tsx` | T partial failure/abort/duplicate policy; G long filenames; W real safe fixture upload; AT23/49 |
+| Batch selection | An optional feature of eligible tables and lists on the shared Checkbox and one selection state, not a second catalogue; follows DS21.10 | `lib/batchSelection.ts` (the inbox) | T stable IDs/page-query scope/mixed results; W keyboard/touch; AT48 |
+
+`PendingFeedback` provides the shared host read lifecycle: no skeleton before 300 ms, real elapsed time
+at 10 s and an explicit non-durable limit at 60 s, announcing only the two milestones through the
+shared channel. Passive gallery specimens and inactive hidden readers use an explicit boundary
+(`PendingFeedbackBoundary`); native feedback and durable producer controls keep their own ownership.
+Publication and production adoption remain separate stages.
+
+### Coverage of the existing UI module inventory
+
+Each public export uses the same nine-field header; the table supplies the first applicable proof. Existing colocated tests/gallery fixtures may be extended; absent manual cases stay explicitly bounded in the execution ledger.
+
+| Modules | Primary behavior to document | How to verify |
+|---|---|---|
+| ActivityStrip, ProgressRail, StepRail, StepState | Producer-owned progress, waiting versus action, process navigation | T stage mappings; G all states; W narrow workflow |
+| Button, IconButton, Switch | Action/pending/disabled/focus/hit area | T activation; G variants; W/M keyboard/touch |
+| Input, SearchInput | Field shell, errors/hints/units/IME | T IDs/input sequences; G; W/M |
+| ConfirmDialog, FormDialog, Drawer | Layers, dirty work, structured consequence, focus lifecycle | T nested/dirty cases; G long form; W/M |
+| Card, Panel, Section, Headline | Semantic grouping, title rank, content density | T outline/composition; G templates; W narrow widths |
+| ChartCard, ChartGrid, Delta, StatTile | Real data/unknown/scale/provenance, accessible chart text | T data adapters and values; G themes; W/M reading |
+| DataTable, ListRow, MasterDetail | Sorting/selection/copy/detail/overflow/identity | T result/selection contracts; G dense and empty; W/M |
+| Disclosure, ShowMore, Outline | Expansion, current location and return/focus | T expanded/content relation; G long content; W/M |
+| FilterChips, ScopeMenu, Toolbar | Query versus scope, reset, IME, selection persistence | T scope/reset/overlay lifecycle; G; W |
+| Tabs, SegmentedControl | Focus versus selected view, activation mode, overflow | T auto/manual and disabled cases; G; W/M |
+| Menu, LazyMenu, Tooltip | Available viewport, delayed content, pointer/keyboard/focus ownership | T placement/async/layers; G 30/100 items; W/M |
+| Tag, SeverityBadge, Score, Note, FactList | Static semantics, safety versus importance, labeled facts | T no disguised action/valid state; G all meanings; W/M |
+| ScrollRegion, StateScreen | Reachable overflow, live theme and truthful load/empty/error | T cache/resize/state; G; W/M |
+| PendingFeedback, PendingFeedbackBoundary | Delayed initial reads, monotonic elapsed time, milestone-only announcements, passive/hidden contexts | T 300ms/10s/60s, fast completion, reset and actual Gallery; W slow reads |
+| Toaster, ShortcutHelp | Announcement priority, timer/Undo, context-safe discoverable keys | T queue/shortcut guard; G; M AT |
+
+The implemented inventory covers 53 non-test UI modules and 72 public component contracts. PageShell and card-state components outside this directory participate through composition fixtures. Header coverage does not establish that every manual or rendered scenario passed.
+
 ---
 
 ## Language and responsive behaviour
@@ -634,7 +940,8 @@ Breakpoints are Tailwind's (`sm 640` · `md 768` · `lg 1024` · `xl 1280` · `2
 (`PageShell`) and tables scroll horizontally with the first column frozen. No page may scroll horizontally at
 390 px. Figures inside a report keep a white background in both themes; printing mounts a print
 copy of the report re-scoped to the light tokens, so “打印 / 存为 PDF” gives the report and its
-facts on white paper, never the shell.
+facts on white paper, never the shell. Mobile navigation closes after a destination is selected, moves
+focus into it appropriately and names it; a long project name stays distinguishable without hover.
 
 ---
 
@@ -650,10 +957,22 @@ of it, in their words.
 an alarm · put a percentage or a progress bar on an agent run · use a gradient, a glow or a
 coloured shimmer · put an opacity modifier on a token colour · put a shadow on a static card ·
 let a badge cover the icon it sits on · render two adjacent rows with identical text · show raw
-validator strings, enum codes, run ids or model names in the body of the UI · rely on hover to
+validator strings, enum codes, run ids or model names in the body of the UI (the model a person
+chose in a picker is their choice, not provenance) · rely on hover to
 reveal anything a keyboard user needs · explain how the system works on the page (a subtitle, a
 hint under a card, “为什么入选”; this historical blanket wording is superseded for useful task guidance by the October 20 correction below) · show the back office as text: 已交付, 核对 N 条, 用过 N 次,
 起生效, token, 缓存命中, tok/s, an API's name, a project id.
+
+---
+
+## Conversation evidence and modules
+
+- Home/logo/new conversation opens the general assistant without inherited specialist context. Native progress, cancellation and LoopX goal controls keep their actual semantics. Normal menus use task language, not diagnostic command names.
+- Ordinary text/files can be delivered directly. Medical checks and claim labels enhance relevant work; do not revive whole-package withholding. Verification states name scope/version and never imply clinical certainty from a generic accepted state.
+- Frontier uses an editorial list, coherent summaries and distinct reader blocks. Keep original-source access predictable. Publication/discovery dates and AI importance/evidence quality stay distinguishable. The whole feed card opens its addressed reader; original-source access is separate, and long article text is not hidden behind retired reveal actions.
+- Knowledge distinguishes source/readiness/compiled page/graph/output. Reading preserves source location and jump-back. Fixed scientific canvases still need readable UI text and keyboard equivalents.
+- Memory uses the current native OpenViking engine and combines honest sparse visualizations with readable records and real source/scope; there is no retired records-engine fallback. One person has one capsule, and project is an entry label. Do not create visual links without evidence or mistake a membership star for semantic relationships.
+- GEO, VCR, schedules, extensions and settings/inbox product decisions are linked by the full specification DS15-DS17 and the adoption plan's module register. Do not duplicate their changing task scope here.
 
 ---
 
@@ -670,7 +989,8 @@ WCAG 2.1 relative-luminance formula. Re-measure, never estimate.
 
 **Three places at once**: the chart series (`@evimed/design-tokens`' `CHART_SERIES`,
 `packages/shared`'s `CHART_PALETTE_*`, `openscience.mplstyle`), with adjacent-pair ΔE re-measured
-(the floor is 15; the current order is ≥ 22 in both schemes).
+(CIE76, `cie76` in `contrast.mjs`; the floor is 15; the current order is ≥ 22 in both schemes), and
+the own-versus-rival distance of a comparison chart (`chartPalette.test.ts`, ≥ 15 in both themes).
 
 **With a picture**: a component's look. `/__gallery` draws every primitive in
 every state, overlays included; `pnpm gallery:shot` records it (`--theme dark`
@@ -684,7 +1004,19 @@ surprise three pages later.
 
 **One place, then regenerate**: everything else. Edit `packages/design-tokens/src/index.mjs`, run
 `pnpm tokens:build`, bump the version and `record-release` (see above), run `pnpm test:tokens`
-and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
+and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`. A change to the mark
+also regenerates the brand assets and rerasterizes the installation icons (see *Token authority*).
+
+**Local checks and release evidence.** Run the token build / check and the release recording when
+generated bytes change, then the focused token, web and native brand tests, lint and type checks and
+the build. For a component's look inspect both theme renderings and the gallery diffs under the
+documented CI font and browser environment; do not blindly rebaseline a picture. A production release
+additionally verifies the deployed source and image, host and native theme propagation, PWA cache
+behaviour and selected real user journeys; the external Vue repository adopts its package pin
+separately. LCP ≤ 2.5 s, INP ≤ 200 ms and CLS ≤ 0.1 at the 75th percentile, by device, are field
+goals, local runs are labelled local, and no telemetry the platform prohibits is enabled to obtain a
+metric.
+
 
 ## Known gaps
 
@@ -714,25 +1046,73 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 - ECharts does not read `prefers-reduced-motion`; the chart host has to set `animation: false`
   itself (spec §9.5).
 - The DTCG files are validated structurally by the package test, not yet against the official
-  2025.10 JSON Schema (it is not vendored, and CI does not fetch).
+  2025.10 JSON Schema (it is not vendored, and CI does not fetch; the optional check was skipped
+  locally because the external schema files were absent).
 - The reader's print copy is mounted on `beforeprint`; a headless PDF renderer that does not fire
   that event prints the shell unless the event is dispatched first.
+- The dated 2026-10-26 audit named pointer-only scientific-reader operations, canvas contrast hints,
+  an initial Genome width observation failure, stale `ScrollRegion` fades and incomplete focus
+  eligibility. The v3.1 implementation repairs these classes with keyboard / readout, resize, theme
+  and focus fixtures; the original findings stay as historical evidence, and the final browser retest,
+  the full dark routes, real assistive technology and the serving revision's adoption are distinct
+  gates. Historical baseline counts are not new defects. Primitive gallery rows do not cover every
+  scientific viewer, content length, page template or native frame.
 
 
 ### October 19 workflow correction
 
 The owner requires usable workflows and visible memory charts, not compliance with the older drawer/tree shape at their expense. The memory landing opens its map when available, with explicit list and record links preserved. One real node or topic is enough to visualize; sparse dimensions use honest bars rather than a misleading radar or a missing chart. No-data and failed-read states remain distinct, and no placeholder records are fabricated.
 
-Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「打开原文」) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Method libraries lead to configuration, existing versioned jobs and results. Refer to `docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
+Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「打开原文」) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Non-VCR method libraries retain configuration, versioned jobs and results; VCR methods are AI tools and its historical calculations are read-only (2026-10-25/26 reset). Refer to `../docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
+
 
 ## Workflow correction adopted 2026-10-20
 
 These presentation decisions supersede conflicting September 23, October 7/8 and October 14/19 rules precisely as described below. Earlier records remain historical; this is an acceptance target, not a claim that the implementation has passed. See `../docs/superpowers/plans/2026-10-19-workflow-rectification.md`, October 20 owner review.
 
-- Global home, logo and New Conversation open the general AI assistant without inherited GEO/study title, progress or specialist binding. Resume-project links are explicit; preserve history, drafts and native tabs. The VCR home lists studies and progress with one New Study action. Methods, reference search and population templates are contextual tools, not competing study-home tabs; retain compatible links and saved objects.
-- Keep the seven VCR and eight GEO steps reachable with visible current/completed/waiting state and next actions, including during conversation. The October 19 compact-control ruling removes redundant navigation, but a compact selector alone cannot be the only discoverable workflow. Use one conversation and one native composer; remove the redundant Chat button when it is open. Preserve project identity, results, actual run history and the native DSH right pane.
-- Research Tools is the existing shared discovery surface for task-oriented methods, visible on its initial screen and reused inside study steps. This supersedes the October 14 fixed catalogue inventory as a restriction on those method entries. Small calculations need not traverse a full study. Show a short purpose, required inputs, expected outputs and reachable next action; meaningful examples, missing prerequisites and remedies are explicitly permitted. The older blanket no-hint/no-purpose-text rule applies only to explanations of implementation, not useful task guidance.
-- Related inputs, configuration, progress and result tables/plots belong together in one analysis workbench in the main area, with responsive tabs where useful. This is an explicit exception to the older one-object/one-shape rule, not permission to stack unrelated metadata. Long method configuration and literature-to-parameter mapping use the main area; drawers hold only short previews or small edits. Do not repurpose the native right pane or add another file/browser system.
-- Share reference-trial search across global AI, Research Tools and the study evidence context, with Use in This Study. Distinguish live results from saved status and source failures. Literature parameters retain values, units, passages, missing fields and destination mapping; registration alone never claims executability. Retain configuration/source versions and immutable historical results.
-- The study population step owns criteria, source data, included/excluded/unknown counts, selected version and cohort results. Select account-level reusable template versions from that step, preserve Save as Template/Use Template and compatible links, and recalculate changed criteria as a new version without overwriting history.
+- Global home, logo and New Conversation open the general AI assistant without inherited GEO/study title, progress or specialist binding. Resume-project links are explicit; preserve history, drafts and native tabs. The VCR home offers four task intents in the existing native composer and resumable research. Results and historical links remain reachable; there is no mandatory New Study form or manual method entry journey (VCR reset, 2026-10-25/26).
+- Keep the eight GEO steps reachable with visible current/completed/waiting state and next actions, including during conversation. VCR instead has six result destinations (overview, matching, population/patients, comparator, trial, evidence/data), no mandatory step rail, and an optional full programme only when explicitly requested. The October 19 compact-control ruling removes redundant navigation, but a compact selector alone cannot be the only discoverable workflow. Use one conversation and one native composer; remove the redundant Chat button when it is open. Preserve project identity, results, actual run history and the native DSH right pane.
+- Research Tools remains the shared discovery surface for professional workflows and non-VCR task-oriented tools. VCR numerical methods are AI-callable tools, not calculator catalogue entries or manual parameter forms; reference-trial research is available from global AI and the study evidence context. This supersedes the October 14 fixed catalogue inventory as a restriction on those method entries. Small calculations need not traverse a full study. Show a short purpose, required inputs, expected outputs and reachable next action; meaningful examples, missing prerequisites and remedies are explicitly permitted. The older blanket no-hint/no-purpose-text rule applies only to explanations of implementation, not useful task guidance.
+- Related inputs, configuration, progress and result tables/plots belong together in one analysis workbench in the main area, with responsive tabs where useful. This is an explicit exception to the older one-object/one-shape rule, not permission to stack unrelated metadata. For VCR, the main area holds results, source-linked assumptions and comparisons; configuration and revisions use the native conversation, with only small structured edits in context. Other workbenches retain their existing configuration and literature-to-parameter mapping; drawers hold short previews or small edits. Do not repurpose the native right pane or add another file/browser system.
+- Share reference-trial search across global AI and the study evidence context, with contextual reuse in the current research. Distinguish live results from saved status and source failures. Literature parameters retain values, units, passages, missing fields and destination mapping; registration alone never claims executability. Retain configuration/source versions and immutable historical results.
+- The saved population object owns criteria, source data, included/excluded/unknown counts, selected version and cohort results. Select account-level reusable template versions in that context, preserve Save as Template/Use Template and compatible links, and recalculate changed criteria as a new version without overwriting history.
 - Keep design tokens, default Chinese UI, keyboard/mobile access, ordinary-account access and user/project/tenant boundaries. Technical implementation, source-proof machinery and operator jargon stay out of UI; scientific sources needed to judge or reuse parameters remain available in context. No added approval ceremony or clinical delivery gate. Preserve existing quality budgets and acceptance checks; do not weaken them merely to pass unusable UI. A measured workbench-specific template change must express this connected workflow, not excuse unrelated stacked content.
+
+
+## VCR conversation/result variant (2026-10-25/26)
+
+Last updated: 2026-10-26. This replaces the VCR seven-step, method-catalogue and manual-configuration portions of the older templates and workflow rulings. GEO keeps its eight-step workflow. See the [approved product reset](../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) and [review](../docs/superpowers/specs/2026-10-25-vcr-ai-native-reset-review.md).
+
+- The home presents four aligned task rows: matching, populations and virtual patients, comparators, trial-design simulation. A row fills an unsent draft in the existing native composer; it does not create a study, select a specialist or run a job. Each row visibly separates the task/action, expected result and minimum input requirement. Data labels are outside buttons, not hidden behind hover or mixed into button text. Existing research is resumable; calculation history is a quiet disclosure.
+- One native conversation performs the work and its revisions. The six saved-result destinations are overview, matching, population/patients, comparator, trial and evidence/data. Group/individual scale is explicit within population; existing patient URLs remain compatible. No mandatory seven-step rail, manual PICO form or replacement composer. The full programme is available only on explicit intent. Preserve native file/browser/right-pane controls and actual run history.
+- Results, source-linked assumptions, charts/tables and useful next actions share the main area. Adjust/compare sends the exact displayed object/version and result reference to the existing composer; a newer object never silently replaces the selected one. Historical configuration and numerical results are independently readable, with independent error/retry states and no new calculation action.
+- Input labels distinguish one original patient case, a real patient dataset, longitudinal outcomes, an executable model, and work that can start from published parameters/assumptions. Show current availability separately; connected inputs satisfy the requirement. Empty/error/unavailable states retain matching-direction and individual/forecast controls so an unavailable subview does not hide another usable path. Native longitudinal intake remains reachable.
+- A cohort view describes membership/distribution; an individual view describes a record and its complete supported observations or trajectory. Do not call every generated member a digital twin. Comparator views name the evidence route and preserve an explicit selected result. A prognostic benchmark is labeled as prediction, without treatment-effect, independent control-outcome or real/effective-N claims. Unknown values remain absent/unknown.
+- Trial-design views distinguish full-study mean duration (`duration_months`, Monte Carlo uncertainty) from last-patient-in accrual timing. Fitted survival curves and extrapolation use distinct rendering; fitted-median parameter quantiles do not become patient percentiles. Unsupported absolute risks or adapter paths stay unavailable rather than interpolated into a scientific claim.
+- Keep the v3.1 semantic tokens (warm paper and terracotta, above), typography, shared controls, Chinese baseline UI, mobile/keyboard access and the native frame. Huashu 3.0 informs conceptual hierarchy and purpose; Impeccable Operate/Read informs production interaction refinement. Neither authorizes a new brand world or prototype replacement.
+- Local synthetic browser inspection verifies layout/navigation/accessibility only. Actual DSH/model completion, numerical correctness, real-record matching validity, clinical validation and production acceptance need their own evidence. These boundaries do not add a new approval flow.
+
+## Implementation proof
+
+Last updated: 2026-10-26. The [execution ledger](../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) maps all 21 DS groups and 50 AT scenarios to proof families and unresolved boundaries. Numerical validation is local: the R 4.3.3 suite passed 222/222 across 34 methods with all 158 exact dependency locks. This does not establish production scientific acceptance. Web, server and browser results are recorded in the ledger, not here.
+
+The supported public native locale groups advanced commands under `command.section.commands` (高级命令与诊断). `loopx-init` remains its real command identifier. Theme-body focus lifecycle and identity with the optional theme off use supported seams; there is no private upstream command patch. Actual composer Enter, simulated composition events, reload without resubmission, stream selection/upward reading and theme on/off have local native-fixture evidence. Real hardware IME, screen readers, physical touch, LoopX execution absent from this fixture, external Vue adoption and installed production caches remain explicit boundaries.
+
+## 主动科研 observatory (owner, 2026-10-28)
+
+The owner asked that the process picture of 主动科研 be the page's core and land like a mission-control screen
+(「炫酷和科幻和赛博朋克一些，用户一看就有很好的冲击感」). It is the page's one brand moment, and an explicit exception to
+“flat, no glow, no shimmer” for that one surface only:
+
+- **A fixed dark scene in both themes** (`components/autopilot/ResearchObservatory.css`, named in `designTokens.test.ts`'s
+  exceptions): the research queue on top, then the status line, six counters, the research line (规划 → 检索 → 阅读 → 分析 →
+  核对 → 撰写 → 交付, the orchestrator above the stage of its last call and each delegated member below its own), the live
+  operations feed with the selected operation's input and result, and what the run handed over. Its neon colours are content;
+  every text colour on the scene is at least 5.5:1 on its ground. The page around it keeps the token roles.
+- **Truthful, not decorative.** A stage lights only when a call was observed in it (closed vocabulary: the tool's name, the
+  server's own phase label first), a count is never lower than the run's stored aggregate, and a count nothing reported reads
+  “—”, never 0. Members move to the stage of their last call; nothing is animated that did not happen.
+- **Motion has an off switch.** Flowing track, packets, rings, ripples, the sweep and blinking cursors stop under reduced
+  motion; positions still change, without travel. Under 760 px the line keeps its size and scrolls sideways.
+- **No back office on the page.** Tool names, route reasons, ledger caveats and “what was not observed” sentences stay out;
+  operations are named in the reader's words (`callLabel`), and a missing observation is simply absent.

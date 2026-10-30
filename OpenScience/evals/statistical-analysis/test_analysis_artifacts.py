@@ -61,7 +61,17 @@ def test_sequential_reference_recomputed_without_scaler_or_regression_library():
     assert train.tolist() == seq['train'] and test.tolist() == seq['test']
     # The reusable evaluator starts from raw data on every call, unlike the
     # upstream global-dataframe reference, whose transformations are sequential.
-    assert compute()['sequential'] == compute()['sequential'] == seq
+    # Two calls on one machine agree exactly; against the stored reference a float
+    # may differ in its last bit across BLAS builds (CI read -2.005886731830496 for
+    # ...495), so floats are held to 1e-12 and everything else exactly.
+    first, second = compute()['sequential'], compute()['sequential']
+    assert first == second
+    assert first.keys() == seq.keys()
+    for key, value in seq.items():
+        if isinstance(value, float):
+            np.testing.assert_allclose(first[key], value, atol=1e-12, rtol=0, err_msg=key)
+        else:
+            assert first[key] == value, key
 
 
 def test_native_r_reference_and_censoring():
@@ -75,12 +85,20 @@ def test_native_r_reference_and_censoring():
 
 def test_briefs_keep_goldens_outside_model_input():
     briefs = json.loads((HERE / 'briefs.json').read_text())['briefs']
-    assert len(briefs) == 3
+    assert {brief['id'] for brief in briefs} == {
+        'statistics-001-wdbc-group-comparison', 'statistics-002-wdbc-sequential-transform',
+        'statistics-003-lung-native-r', 'statistics-004-goal-driven-comparison',
+        'statistics-005-goal-driven-prediction', 'statistics-006-followup-unit-correction',
+        'statistics-007-resume-cached-analysis', 'statistics-008-report-population-reconciliation',
+    }
     for brief in briefs:
         assert set(['id', 'title', 'why', 'inputs', 'mustDo', 'mustNotDo', 'gradedOn']) <= brief.keys()
         for fixture in brief['fixtures']:
             assert (HERE / fixture['source']).is_file()
-            assert fixture['source'].endswith('.csv')
+            # Inputs only: a prior package or report is a model input, an answer key never is.
+            assert fixture['source'].startswith(('fixtures/', 'live/fixtures/'))
+            assert fixture['source'].endswith(('.csv', '.zip', '.md', '.json'))
+            assert 'expected' not in fixture['source'] and 'reference_values' not in fixture['source']
         assert 'expected.json' not in json.dumps(brief['inputs'])
         assert 'reference_values' not in json.dumps(brief['inputs'])
 

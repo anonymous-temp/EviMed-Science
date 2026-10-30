@@ -1168,28 +1168,24 @@ kernel PID only if the process command line still matches the configured kernel
 command. This is a cleanup aid, not a replacement for a
 container or worker sandbox.
 
-### The memory map (记忆地图)
+### The memory dashboard (记忆胶囊 总览)
 
-`/app/memory/map` draws what the platform remembers and knows about a researcher from one read-only document,
-`GET /api/memory/map`, derived when read from the memory store, the knowledge base, the run ledger and the learned methods; it
-writes nothing. It follows `OPEN_SCIENCE_MEMORY_ENABLED` unless `OPEN_SCIENCE_MEMORY_MAP_ENABLED` is set; off, its routes answer 503
-`memory_map_disabled` and the page is hidden. A source that cannot be read costs its own part of the map and is named in the
-document's `missing`.
+`/app/memory/overview` is where 记忆胶囊 lands: one data page of what the platform remembers and knows about a researcher — five
+counts (关于你, 项目, 做法, 收到的, 知识), a chart of what changed over time with the table of changes under it, and, when there is
+enough to see, the relation graph and the topics. The memory map's own address, `/app/memory/map`, only redirects to it. Everything
+the page draws of memory comes from one read-only document, `GET /api/memory/map?include=summary,facets,nodes,edges,buckets,events`,
+derived when read from the memory store, the knowledge base and the learned methods; it writes nothing, and it holds only what a
+card, the graph or the chart reads (no radar, no lineage and no activity calendar are computed). It follows
+`OPEN_SCIENCE_MEMORY_ENABLED` unless `OPEN_SCIENCE_MEMORY_MAP_ENABLED` is set; off, its routes answer 503 `memory_map_disabled` and
+the page is hidden. A source that cannot be read costs its own part of the document and is named in `missing`; the page then says
+that part was not read and never draws it as zero.
 
-Its 主题 view is the one part that calls a model: one Flash call (charged to the account as memory extraction, caps included)
+The topics are the one part that calls a model: one Flash call (charged to the account as memory extraction, caps included)
 groups the account's memories into topics when they changed. `OPEN_SCIENCE_MEMORY_TOPICS_ENABLED` switches that off,
 `OPEN_SCIENCE_MEMORY_TOPICS_DAILY_RUNS` (default 4) is the most groupings one account may have made in a day, and
 `OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES` (default 12) is how many memories there must be before there is anything to group. A
 researcher's rename, merge or dismissal of a topic costs no call and is kept through every regrouping; the grouping lives in
 `evimed_memory.topic_sets` and goes with the account and with a memory reset.
-
-Its 「在做什么」 radar (the first of the dimensions view) is drawn for any account, not only for those that used a named capability:
-when a researcher's conversation finishes, one Flash call (`task-type`, charged to the account like a run title, caps included)
-says which of a short fixed list of kinds of work it was — writing, documents and slides, spreadsheets and data analysis, code, web
-research, medical evidence, other — and code keeps the answer only if it is on the list. It is recorded once on the run ledger. A
-conversation older than that feature is judged lazily when the map is read, a few per read, and never delays the read or a run.
-`OPEN_SCIENCE_TASK_TYPE_ENABLED` (default on) switches it off, leaving the radar to the capability that answered;
-`OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS` (default 60) is the most such calls one account may have made in a day (0 stops the judging).
 
 ### OpenViking as an engine (v0.5.1.1)
 

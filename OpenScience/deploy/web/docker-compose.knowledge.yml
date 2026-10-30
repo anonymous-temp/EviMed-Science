@@ -109,6 +109,8 @@ services:
       KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD: ${KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD:-5}
       KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY: ${KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY:-90}
       KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL-${OPEN_SCIENCE_GEO_SOCIAL_URL:-}}
+      KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_KEY_FILE: /run/secrets/geo-social-api-key
+      KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_ALLOW_PLAINTEXT: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_ALLOW_PLAINTEXT:-false}
       KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY:-120}
       KNOWLEDGE_PLUGIN_MEDIA_DIR: /var/lib/knowledge-plugin/media
       KNOWLEDGE_PLUGIN_MEDIA_CAP_MB: ${KNOWLEDGE_PLUGIN_MEDIA_CAP_MB:-3072}
@@ -131,6 +133,10 @@ services:
       # deployment whose public evidence pages are still off answers the feed 404 by name, which the source reads as empty.
       EVIMED_EVIDENCE_FEED_URL: ${EVIMED_EVIDENCE_FEED_URL-${OPEN_SCIENCE_PUBLIC_URL:+${OPEN_SCIENCE_PUBLIC_URL}${OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH:-/evidence}/feed.json}}
     volumes:
+      - type: bind
+        source: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/geo-social-api-key
+        read_only: true
       - type: bind
         source: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_HOST_FILE:-/dev/null}
         target: /run/secrets/knowledge-plugin-token

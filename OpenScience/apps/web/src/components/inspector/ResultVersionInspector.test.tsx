@@ -12,11 +12,11 @@ vi.mock("@/lib/resultProvenance", async (original) => ({ ...await original<typeo
   requestResultRevision: api.revision, replayResult: api.replay, getResultReplay: api.progress, cancelResultReplay: api.cancel,
   exportResult: api.export, saveResultBlob: api.save,
 }));
-vi.mock("@/components/report/ReportReader", () => ({ ReportReader: ({ text, immutableVersion }: { text: string; immutableVersion: ResultVersion }) => <p data-version={immutableVersion.versionId}>{text}</p> }));
+vi.mock("@/components/report/ReportReader", () => ({ ReportReader: ({ text, immutableVersion, onDownload }: { text: string; immutableVersion: ResultVersion; onDownload?: () => void }) => <><p data-version={immutableVersion.versionId}>{text}</p>{onDownload && <button onClick={onDownload}>下载 Markdown</button>}</> }));
 vi.mock("./ResultImpactPanel", () => ({ ResultImpactPanel: ({ versionId }: { versionId: string }) => <p data-testid="impact" data-version={versionId} /> }));
 vi.mock("./ResultLineagePanel", () => ({ ResultLineagePanel: ({ version }: { version: ResultVersion }) => <p data-testid="lineage" data-version={version.versionId} /> }));
 vi.mock("./ResultCorrectionPanel", () => ({ ResultCorrectionPanel: ({ versionId }: { versionId: string }) => <p data-testid="corrections" data-version={versionId} /> }));
-vi.mock("@/components/document/DocumentExportActions", () => ({ DocumentExportActions: ({ source, groupLabel }: { source: unknown; groupLabel?: string }) => <p data-testid="export" data-source={JSON.stringify(source)} data-label={groupLabel} /> }));
+vi.mock("@/components/document/DocumentExportActions", () => ({ DocumentExportActions: ({ source, groupLabel, extraItems = [] }: { source: unknown; groupLabel?: string; extraItems?: { label: string; onSelect: () => void }[] }) => <div data-testid="export" data-source={JSON.stringify(source)} data-label={groupLabel}>{extraItems.map(item => <button key={item.label} onClick={item.onSelect}>{item.label}</button>)}</div> }));
 const old: ResultVersion = { artifactId: "a", versionId: "rv_old", projectId: "default", path: "report.md", digest: "a".repeat(64), size: 10, mimeType: "text/markdown", capturedAt: "2026-10-01T00:00:00Z",
   producer: { kind: "tool", sessionId: "ses_1", runId: "run_1" }, inputs: [], code: null, environment: null,
   findings: [{ id: "f_old", kind: "claim", status: "source_unavailable", message: "旧版本原文不可用" }], machineValues: [],
@@ -42,7 +42,7 @@ it('a scoped result exposes preview and exact-byte download without owner mutati
   const read = vi.fn().mockResolvedValue({ version: old, bytes });
   render(<MemoryRouter><ScopedResultVersionInspector path={old.path} runId="run_1" versionId={old.versionId} read={read} /></MemoryRouter>);
   expect(await screen.findByText('Scoped preserved text')).toBeTruthy();
-  await userEvent.click(screen.getByRole('button', { name: '下载此版本' }));
+  await userEvent.click(screen.getByRole('button', { name: '下载 Markdown' }));
   expect(api.save).toHaveBeenCalledWith(bytes, 'report.md');
   for (const method of [api.list, api.related, api.get, api.raw, api.revision, api.replay, api.export]) expect(method).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: '重算此结果' })).toBeNull(); expect(screen.queryByRole('button', { name: '发布为证据卡' })).toBeNull();
@@ -64,9 +64,10 @@ describe("publishing a clinical result as an evidence card", () => {
 });
 // Static review 2026-10-10 §2.3: both version lists named a version by the browser's own 12-digit date and the first eight characters of its digest.
 describe("naming a version", () => {
-  const year = new Date().getFullYear();
-  const first: ResultVersion = { ...old, versionId: "rv_first", capturedAt: `${year}-03-04T08:05:00`, digest: "c".repeat(64) };
-  const second: ResultVersion = { ...old, versionId: "rv_second", capturedAt: `${year}-03-05T09:30:00`, digest: "d".repeat(64), findings: [] };
+  // Days and clocks are Beijing's (AT45): the instants carry +08:00, and the year is Beijing's, whatever zone the machine runs in.
+  const year = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric" }).format(new Date()));
+  const first: ResultVersion = { ...old, versionId: "rv_first", capturedAt: `${year}-03-04T08:05:00+08:00`, digest: "c".repeat(64) };
+  const second: ResultVersion = { ...old, versionId: "rv_second", capturedAt: `${year}-03-05T09:30:00+08:00`, digest: "d".repeat(64), findings: [] };
   const labels = (name: string) => within(screen.getByRole("combobox", { name })).getAllByRole("option").map((option) => option.textContent);
   beforeEach(() => { api.get.mockImplementation(async (id: string) => (id === first.versionId ? first : second)); });
 
@@ -85,7 +86,7 @@ describe("naming a version", () => {
   });
 
   it("names a result of another file by that file, and numbers only this file's own versions", async () => {
-    const revised: ResultVersion = { ...second, versionId: "rv_revised", path: "artifacts/revised.md", supersedesVersionId: first.versionId, capturedAt: `${year}-03-06T10:00:00` };
+    const revised: ResultVersion = { ...second, versionId: "rv_revised", path: "artifacts/revised.md", supersedesVersionId: first.versionId, capturedAt: `${year}-03-06T10:00:00+08:00` };
     api.list.mockResolvedValue({ items: [second, first], nextCursor: null });
     api.related.mockResolvedValue({ items: [revised], nextCursor: null });
     mount(first.versionId); await screen.findByText("新结论");
@@ -118,7 +119,10 @@ describe("immutable result inspection", () => {
     const { container } = mount(old.versionId); await screen.findByText("旧结论");
     const shown = (testId: string) => container.querySelector(`[data-testid="${testId}"]`);
     expect(shown("export")).toHaveAttribute("data-source", JSON.stringify({ versionId: old.versionId }));
-    expect(shown("export")).toHaveAttribute("data-label", "导出此版本");
+    expect(shown("export")).toHaveAttribute("data-label", "导出与打印");
+    await userEvent.click(within(shown("export") as HTMLElement).getByRole("button", { name: "下载 Markdown" }));
+    expect(api.raw).toHaveBeenLastCalledWith(old);
+    await waitFor(() => expect(api.save).toHaveBeenCalled());
     expect(shown("corrections")).toHaveAttribute("data-version", old.versionId);
     await userEvent.selectOptions(within(container).getByRole("combobox", { name: "结果版本" }), latest.versionId);
     await within(container).findByText("新结论");

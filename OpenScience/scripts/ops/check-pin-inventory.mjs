@@ -66,7 +66,7 @@ export const RULES = [
   },
   {
     kind: "provenance",
-    where: /^OpenScience\/evals\/(method-quality|vcr-matching)\/(reports|results)\//,
+    where: /^OpenScience\/evals\/(method-quality|vcr-matching|statistical-analysis)\/(reports|results)\//,
     why: "an evaluation report records the kernel a measurement was taken on; re-dating it claims the number came from a version that never produced it",
   },
   {

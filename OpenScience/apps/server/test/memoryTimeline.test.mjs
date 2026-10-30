@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { dayOf, feedbackTimelineEvents, methodEvents, recordEvents, runEvents, timeZoneOrDefault } from "../src/memoryTimeline.mjs";
+import { dayOf, methodEvents, recordEvents, timeZoneOrDefault } from "../src/memoryTimeline.mjs";
 
 function record(overrides = {}) {
   return {
@@ -51,17 +51,7 @@ test("a memory's history is its writing, each revision with who made it, and 「
   assert.deepEqual(recordEvents(record({ kind: "run_summary" })), [], "a run summary is the run's event, not a memory's");
 });
 
-test("runs, methods and the researcher's own acts are events; the platform's own runs are not", () => {
-  assert.deepEqual(runEvents({ id: "run_1", status: "succeeded", title: "阿司匹林一级预防", finishedAt: "2026-09-18T02:00:00Z",
-    recalledMemories: [{ id: "a" }, { id: "b" }, { id: "c" }], methodsLoaded: [{ name: "m" }] }).map((event) => [event.title, event.recalled, event.methods]),
-  [["阿司匹林一级预防", 3, 1]]);
-  assert.deepEqual(runEvents({ id: "run_2", status: "succeeded", automated: true, finishedAt: "2026-09-18T02:00:00Z" }), []);
-  // A claim's independent re-check is the platform's, whichever programme dispatched it.
-  for (const effectiveRouteReason of ["autopilot-verify", "autopilot-verify:evidence"]) {
-    assert.deepEqual(runEvents({ id: "run_3", status: "succeeded", effectiveRouteReason, finishedAt: "2026-09-18T02:00:00Z" }), []);
-  }
-  assert.equal(runEvents({ id: "run_4", status: "succeeded", effectiveRouteReason: "autopilot:literature-sentinel", finishedAt: "2026-09-18T02:00:00Z" }).length, 1);
-
+test("a learned method is learned, and put in force or retired when its status moved, with the reason it stopped", () => {
   const method = { id: "mth_1", createdAt: "2026-09-10T00:00:00Z",
     payload: { status: "approved", statusChangedAt: "2026-09-16T00:00:00Z", frontmatter: { name: "证据矩阵先行" }, origin: "inferred" } };
   assert.deepEqual(methodEvents(method).map((event) => [event.change, event.name]), [["learned", "证据矩阵先行"], ["approved", "证据矩阵先行"]]);
@@ -70,13 +60,6 @@ test("runs, methods and the researcher's own acts are events; the platform's own
   const reasoned = (status, statusReason) => methodEvents({ ...method, payload: { ...method.payload, status, statusReason } }).at(-1).reason;
   assert.equal(reasoned("approved", "learned from the researcher’s own work: it takes effect immediately"), undefined);
   assert.equal(reasoned("retired", "用上它的 3 次研究里有 3 次交付被退回，明显多于平常，已先停用。"), "用上它的 3 次研究里有 3 次交付被退回，明显多于平常，已先停用。");
-
-  assert.deepEqual(feedbackTimelineEvents({ id: "f1", trigger: "memory-rejected", occurredAt: "2026-09-12T00:00:00Z", detail: { reason: "deleted", kind: "preference" } })
-    .map((event) => event.change), ["memory-deleted"]);
-  assert.deepEqual(feedbackTimelineEvents({ id: "f2", trigger: "memory-rejected", occurredAt: "2026-09-12T00:00:00Z", detail: { reason: "archived" } }), [],
-    "an archive is already a revision of the record");
-  assert.deepEqual(feedbackTimelineEvents({ id: "f3", trigger: "deliverable-adopted", occurredAt: "2026-09-12T00:00:00Z", runId: "run_1" })
-    .map((event) => event.change), ["deliverable-adopted"]);
 });
 
 test("a calendar day is the day in the researcher's zone, and a zone that does not exist is refused by name", () => {

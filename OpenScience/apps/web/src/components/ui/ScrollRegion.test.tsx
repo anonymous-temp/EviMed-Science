@@ -51,3 +51,12 @@ describe("ScrollRegion", () => {
     expect(screen.getByRole("region")).toHaveClass("overflow-x-auto", "rounded-input", "border");
   });
 });
+
+it("remeasures a changed ancestor surface rather than caching the first theme color", async () => {
+  measures({ scrollWidth: 576, clientWidth: 320 });
+  const { container } = render(<div style={{ backgroundColor: "rgb(255, 255, 255)" }}><ScrollRegion label="主题测试"><p>x</p></ScrollRegion></div>);
+  const cue = () => container.querySelector("[data-scroll-cue]") as HTMLElement;
+  expect(cue().style.backgroundImage).toContain("255, 255, 255");
+  await act(async () => { (container.firstElementChild as HTMLElement).style.backgroundColor = "rgb(20, 20, 20)"; });
+  expect(cue().style.backgroundImage).toContain("20, 20, 20");
+});

@@ -1,8 +1,10 @@
+import {withSessionPromptAdmission,runtimePromptAdmissionStatus} from './runtimePromptAdmission.mjs';
 import { contextGenerationPaths, prepareContextGeneration, verifyContextGeneration, remediateStartupContext } from './runtimeContextGeneration.mjs';
 import { contextPolicyIdentity, sameContextPolicy } from './geoContextItems.mjs';
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
+import { projectLibraryViewDir } from "./libraryScope.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
@@ -12,6 +14,7 @@ import { constants as fsConstants, lstatSync, readdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
 import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv, nativeInputText } from "@evimed/harness-port";
@@ -78,6 +81,7 @@ import {
   sendJson,
   writeFileAtomicNoFollow,
   writeJsonFileAtomicNoFollow,
+  withProjectStorageMutation,
 } from "./security.mjs";
 
 /**
@@ -225,13 +229,40 @@ function incomingResponseBody(response) {
   });
 }
 
+/**
+ * The kernel answers HTTP 401 from one place, its admission check (dsh-client-connection `admit`), before any handler has
+ * run, and it refuses a correctly signed cookie there while its Connection is being rebuilt, which happens in the first
+ * seconds after a cold start. Seen on 2026-10-27: CI's readiness passed on `session/list` and the next `session/create`
+ * answered 401 (a rerun passed); release walks: the frame's first document answered 401, then 「打开超时」. Nothing ran, so a
+ * request whose body can be sent again is sent again, twice at most, these pauses apart; a streamed body never is. A 401 that
+ * outlives them is a credential the kernel does not take, not a race (`kernelAdmissionRetries.persisted`).
+ */
+export const KERNEL_ADMISSION_RETRY_DELAYS_MS = Object.freeze([250, 750]);
+/** What the retries above came to, since this process started (`open_science_runtime_kernel_admission_retries_total`). */
+export const kernelAdmissionRetries = { recovered: 0, persisted: 0 };
+
+/** @param {any} runtime @param {any} target @param {Record<string, any>} [options] @param {{ retryDelaysMs?: readonly number[] }} [retry] */
+export async function requestRuntime(runtime, target, options = {}, { retryDelaysMs = KERNEL_ADMISSION_RETRY_DELAYS_MS } = {}) {
+  const body = options.body;
+  const replayable = body == null || Buffer.isBuffer(body) || typeof body === "string" || body instanceof Uint8Array;
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await requestRuntimeOnce(runtime, target, options);
+    if (response.status !== 401 || !replayable || attempt >= retryDelaysMs.length || options.signal?.aborted) {
+      if (attempt > 0) kernelAdmissionRetries[response.status === 401 ? "persisted" : "recovered"] += 1;
+      return response;
+    }
+    await response.body?.cancel().catch(() => {});
+    await delay(retryDelaysMs[attempt], undefined, options.signal ? { signal: options.signal } : undefined);
+  }
+}
+
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} runtime
  *  @param {any} target
  *  @param {Record<string, any>} options2
  */
-export function requestRuntime(runtime, target, { method = "GET", headers = {}, body, signal } = {}) {
+function requestRuntimeOnce(runtime, target, { method = "GET", headers = {}, body, signal } = {}) {
   const url = target instanceof URL ? target : new URL(target, runtime.url);
   if (url.protocol !== "http:") {
     return Promise.reject(new Error("Hosted runtime transport only supports HTTP."));
@@ -2172,6 +2203,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // send anyway; the gateway is the one that decides.
     reasoningEffort: String(config.deepseekReasoningEffort ?? "high"),
     contextWindow: Number(config.runtimeContextWindow) || Number(config.runMaxTokens) || 400_000,
+    maxOutputTokens: Number(config.runtimeMaxOutputTokens) || 65_536,
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
@@ -3108,24 +3140,13 @@ export function capsuleMethodsRuntimePath(plan) {
  *  where the source pipeline has always written it, but read-only. */
 export const RUNTIME_KNOWLEDGE_BASE_DIR = `/workspace/${KNOWLEDGE_BASE_DIR}`;
 
-/** Where a runtime sees its account's personal library (plan §3.2 #4). */
+/** Where a runtime sees the library entries that apply to its project (plan §3.2 #4). */
 export const RUNTIME_LIBRARY_DIR = "/workspace/library";
 
-/**
- * The host directory of an account's personal library, shared by every project
- * of the account and read-only in all of them.
- *
- * Derived from the data directory the same way the account's own root is
- * (`<dataDir>/users/<userId>`), because the library is the account's and not a
- * project's. The knowledge-base stream owns the library itself
- * (`libraryService.mjs`, `userLibraryDir`); this is the path the runtime side
- * mounts, and the two must name one directory.
- *
- * @param {Record<string, any>} config @param {string} userId
- */
-export function personalLibraryDir(config, userId) {
-  return path.join(config.dataDir, "users", safeId(String(userId), "user id"), "library");
-}
+// The host directory behind it is `projectLibraryViewDir` (`libraryScope.mjs`), which `libraryService.mjs` writes: a real copy of
+// exactly the entries that apply to the project, kept per project under the account's data directory. It is the project's, no
+// longer the account's — until 2026-10-28 the whole account folder was mounted, so a document limited to one project would have
+// been readable from every other project's workspace.
 
 /** A real directory, not a symlink to one: a mount source the run could have
  *  redirected would be a way out of the project. */
@@ -3151,20 +3172,20 @@ function realDirectory(target) {
  * sources, and `runtimeUploadRelativePath` maps an upload into this view the
  * same way).
  *
- * The library is mounted only once it exists; the knowledge-base stream creates
- * it with the first entry. A launch over a shared, sealed project context
- * (`projectOnly`, a 「循证 GEO」 project's context generation) never gets the
- * account-wide library. Both sides of the controller boundary decide from
+ * The library is the project's own view of it (`projectLibraryViewDir`), mounted when that directory exists; a launch makes it
+ * (`RuntimeManager.ensureLibraryView`), so one made empty is in front of a runtime that is already up when an entry later
+ * applies to the project. A launch over a shared, sealed project context
+ * (`projectOnly`, a 「循证 GEO」 project's context generation) never gets a library. Both sides of the controller boundary decide from
  * the filesystem, the way the capsule methods mount does, so the privileged
  * controller and the API build the same argv from the same facts.
  *
  * @param {Record<string, any>} config @param {Record<string, any>} project
- * @param {{projectOnly?:boolean}} [options] shared launches cannot add an account-wide library
+ * @param {{projectOnly?:boolean}} [options] shared launches cannot add a library
  * @returns {{ knowledgeBase: string | null, library: string | null }}
  */
 export function readOnlyWorkspaceViews(config, project, {projectOnly=false} = {}) {
   const knowledgeBase = project.baseDir ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
-  const library = !projectOnly && config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
+  const library = !projectOnly && config.dataDir && project.userId && project.id ? projectLibraryViewDir(config, project.userId, project.id) : null;
   return {
     knowledgeBase: knowledgeBase && realDirectory(knowledgeBase) ? knowledgeBase : null,
     library: library && realDirectory(library) ? library : null,
@@ -3337,6 +3358,9 @@ export class DockerRuntimeProvider {
     // exists, and a project whose first source arrives while its runtime runs
     // must not find it writable then.
     await manager.ensureKnowledgeBaseDir(project);
+    // The same for the project's directory of the library: brought to the entries that apply to it, and made if it is not there, so
+    // an entry that later applies reaches a runtime that is already up. A shared context never mounts one.
+    if (!contextGeneration) await manager.ensureLibraryView(project);
     if (extensionGeneration) await manager.prepareGeneration(project, extensionGeneration);
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
@@ -3545,6 +3569,7 @@ export class RuntimeManager {
     onRuntimeStop = async () => {},
     onRuntimeStopping = async () => {},
     onSessionAbort = async () => {},
+    readPromptStop = null,
     onRuntimeStart = () => {},
     hasRunningRuns = async () => false,
     runtimeCreationMutation = async operation => operation(),
@@ -3556,6 +3581,7 @@ export class RuntimeManager {
     this.recordRuntimeEgressDispatch = recordRuntimeEgressDispatch;
     this.readRuntimeEgressRun = readRuntimeEgressRun;
     /** @type {any} */ this.pluginService = null;
+    /** @type {any} Server-owned database for the short per-session prompt fence. */ this.promptAdmissionDatabase=null;
     /** @type {any} Immutable personal methods, assigned only by the composition root. */
     this.platformSkillSupply = null;
     this.platformSkillScopes = new Map();
@@ -3606,6 +3632,8 @@ export class RuntimeManager {
     this.learningService = null;
     /** How close a method is to a question (`methodSimilarity.mjs`), which the mount ranks the library by; assigned by the composition root. @type {{ nearest: Function, pairs: Function } | null} */
     this.methodSimilarity = null;
+    /** The personal library's per-project directories (`LibraryService.ensureProjectView`), assigned by the composition root; a launch asks for its project's. @type {{ ensure: (userId: string, projectId: string) => Promise<unknown> } | null} */
+    this.libraryViews = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
     this.learningMetrics = null;
     /**
@@ -3683,6 +3711,19 @@ export class RuntimeManager {
     // lists as mounted, instead of selecting every capsule again per read.
     this.lastMountedCapsuleMethods = new Map();
     this.starts = new Map();
+    /**
+     * A kernel between its launch and its registration, by project key: the token file it was given, so the plugins that call a gateway
+     * while the kernel boots (the memory plugin's MCP client connects as it is mounted) are not refused as a runtime nobody knows. Measured on
+     * 2026-10-27: every start drew two to five 401s (`open_science_workload_token_refusals_total{reason="runtime"}`) before the record existed.
+     * @type {Map<string, { workloadTokenFile: string | null }>}
+     */
+    this.startingWorkloads = new Map();
+    /**
+     * Accounts whose deletion has begun, by id, with when: no runtime of theirs starts, and one that was starting when the deletion began closes
+     * what it made instead of registering it (`retireOwner`). Kept for an hour, longer than any start.
+     * @type {Map<string, number>}
+     */
+    this.retiredOwners = new Map();
     /** Cold callers enroll before policy/database reads; every waiter reauthorizes its own result. */
     this.coldStartAttempts = new Map();
     /** @type {AsyncLocalStorage<{key:string,promise:Promise<any>|null,attempt:any,open:boolean}>} */
@@ -3707,6 +3748,7 @@ export class RuntimeManager {
     this.onRuntimeStopping = onRuntimeStopping;
     /** @type {(project: any, sessionId: any) => any} */
     this.onSessionAbort = onSessionAbort;
+    this.readPromptStop=readPromptStop;
     /** @type {(project: any, runtime: any) => any} */
     this.onRuntimeStart = onRuntimeStart;
     /**
@@ -4260,6 +4302,23 @@ export class RuntimeManager {
     this.workloadTokenRefusals[reason] = (this.workloadTokenRefusals[reason] ?? 0) + 1;
   }
 
+  /**
+   * An account's deletion has begun: from now on no runtime of it starts, and a start already under way closes its runtime instead of registering
+   * it. The deletion stops the runtimes it can see after this; `undo` takes it back when the deletion failed before the account was gone.
+   * @param {string} userId @param {{ undo?: boolean }} [options]
+   */
+  retireOwner(userId, { undo = false } = {}) {
+    if (undo) { this.retiredOwners.delete(String(userId)); return; }
+    const now = Date.now();
+    for (const [id, at] of this.retiredOwners) if (now - at > 3_600_000) this.retiredOwners.delete(id);
+    this.retiredOwners.set(String(userId), now);
+  }
+
+  /** @param {any} project */
+  assertOwnerNotRetired(project) {
+    if (this.retiredOwners.has(String(project?.userId ?? ""))) throw new HttpError(410, "account_deleted", "This account is being deleted; its runtime does not start.");
+  }
+
   /** Verify the current bounded token file and recheck liveness after I/O.
    * @param {unknown} token */
   async assertActiveEviMedWorkloadToken(token) {
@@ -4274,9 +4333,18 @@ export class RuntimeManager {
       const payload = verifyEviMedWorkloadToken(token, { secret: this.config.evimedWorkloadSigningSecret,
         userId: claims.userId, projectId: claims.projectId });
       const key = this.key({ userId: payload.userId, id: payload.projectId });
-      const runtime = this.runtimes.get(key);
+      const registered = this.runtimes.get(key);
       reason = "runtime";
-      if (!runtime?.workloadTokenFile || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      // A kernel still booting is the one its token file was written for: it is accepted on that file, for as long as its start lasts.
+      const starting = !registered && this.starts.has(key) ? this.startingWorkloads.get(key) ?? null : null;
+      /** @type {any} */
+      const runtime = registered ?? starting;
+      // An account whose deletion has begun is served no more: a kernel booting for it is closed when its start ends (`retireOwner`), and until
+      // then its token must not reach the gateways (memory, models, sources) that would write for an account on its way out.
+      const stillCurrent = () => !this.retiredOwners.has(String(payload.userId)) && (starting
+        ? this.starts.has(key) && this.startingWorkloads.get(key) === starting && !this.runtimes.has(key)
+        : this.runtimes.get(key) === runtime && !runtime.closedByManager && !runtime.exitedAt);
+      if (!runtime?.workloadTokenFile || !stillCurrent()) throw workloadTokenError();
       if (typeof this.provider.acceptedWorkloadTokens === "function") {
         reason = "superseded";
         // A remote runtime's token file is in its session, not on this host:
@@ -4288,7 +4356,7 @@ export class RuntimeManager {
             const expected = Buffer.from(String(candidate));
             return expected.length === actual.length && timingSafeEqual(expected, actual);
           });
-        if (!accepted || this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+        if (!accepted || !stillCurrent()) throw workloadTokenError();
         return {
           ...payload,
           runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
@@ -4312,7 +4380,7 @@ export class RuntimeManager {
       reason = "superseded";
       if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw workloadTokenError();
       reason = "runtime";
-      if (this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      if (!stillCurrent()) throw workloadTokenError();
       return {
         ...payload,
         runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
@@ -4720,9 +4788,20 @@ export class RuntimeManager {
     // when the project goes over, whoever wrote the bytes.
     if (existing && existing.workspaceDir === project.workspaceDir && !replaceRuntime) {
       if (contextPolicy.kind === "geo-project") await this.assertContextPolicyGeneration(project);
-      const warm = () => { this.scheduleIdleStop(project); return existing; };
+      // What is registered when the admission is granted, not what was read before it: the admission waits behind a plugin
+      // apply, and an apply replaces the runtime (`replacePluginRuntime`). The record read before the wait then names a kernel
+      // that is gone, and a request sent with its cookie reaches the new kernel on the same socket and is refused for good
+      // (2026-10-28: a new account's first frame document answered 401 for its whole minute, then 「打开超时」).
+      const warm = () => {
+        const current = this.runtimes.get(key);
+        if (current && current.workspaceDir === project.workspaceDir) { this.scheduleIdleStop(project); return current; }
+        const pending = this.starts.get(key);
+        if (pending) return pending;
+        throw new HttpError(409, "runtime_busy", "The runtime was replaced while this request waited; retry shortly.");
+      };
       return withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, warm) : warm();
     }
+    this.assertOwnerNotRetired(project);
     if (opening) this.openingStarts.add(key);
     if (dispatch) this.dispatchStarts.add(key);
     const pending = this.starts.get(key);
@@ -4758,10 +4837,15 @@ export class RuntimeManager {
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
-        const runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile);
+        let runtime;
+        try { runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile); }
+        finally { if (!runtime) this.startingWorkloads.delete(key); }
         if (attempt) { attempt.runtime = runtime; attempt.generation = typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null; }
         created = runtime;
         this.runtimes.set(key, runtime);
+        this.startingWorkloads.delete(key);
+        // The account's deletion began while this kernel booted: the start fails and its runtime is closed (`closeRejectedStart`).
+        this.assertOwnerNotRetired(project);
         this.yieldedRuntimes.delete(key);
         this.pendingModelGatewayScopes.delete(key);
         this.scheduleEviMedWorkloadRefresh(project, runtime);
@@ -5008,6 +5092,7 @@ export class RuntimeManager {
       // here. The retired kernel needed three copying passes at this point;
       // they are gone with it.
       const dshSync = await this.provider.bootstrap(project, plan, { budgetScope: modelGatewayScope });
+      if (dshSync.workloadTokenFile) this.startingWorkloads.set(key, { workloadTokenFile: dshSync.workloadTokenFile });
       mcpSync = {
         copied: 0,
         configured: dshSync.configured ? 1 : 0,
@@ -5367,6 +5452,17 @@ export class RuntimeManager {
     await opened?.handle.close();
   }
 
+  /**
+   * The project's directory of the library, made and brought to the entries that apply to it (`LibraryService.ensureProjectView`),
+   * so the launch can mount it read-only (`readOnlyWorkspaceViews`). Without the library (a deployment with no product
+   * store) there is none. A view that could not be brought right is removed there, and the launch goes ahead without it.
+   * @param {Record<string, any>} project
+   */
+  async ensureLibraryView(project) {
+    if (!this.libraryViews || !project?.userId || !project?.id) return;
+    await this.libraryViews.ensure(String(project.userId), String(project.id));
+  }
+
   async waitUntilReady(runtime) {
     // Not the per-call connect timeout: starting is not calling. See the note
     // on `runtimeReadyTimeoutMs` in config.mjs.
@@ -5685,7 +5781,7 @@ export class RuntimeManager {
    * delegated its full-text retrieval was refused for "a path no evidence tool
    * reported preserving" that a child had in fact preserved.
    */
-  async sessionTranscript(project, sessionId, { wake = true, address = null, parentSessionId = null } = {}) {
+  async sessionTranscript(project, sessionId, { wake = true, address = null, parentSessionId = null, currentTurn = false, maxPages = 200, beforeSeq: requestedBeforeSeq = undefined } = {}) {
     const runtime = wake ? await this.start(project) : this.runtimes.get(this.key(project));
     if (!runtime) {
       throw new HttpError(409, "runtime_not_running", "Runtime is not running for session history monitoring.");
@@ -5736,7 +5832,7 @@ export class RuntimeManager {
       /** @type {Record<string, any>[][]} */
       const pages = [];
       /** @type {number | undefined} */
-      let beforeSeq;
+      let beforeSeq = requestedBeforeSeq;
       // Whether the walk backwards reached the start of the session. See the
       // note on the adapter's copy: this is the only truthful truncation
       // signal, and deriving one by comparing sequence numbers instead
@@ -5744,7 +5840,7 @@ export class RuntimeManager {
       let exhausted = false;
       // 200 pages x 25 messages bounds a transcript at 5000 messages -- the
       // page shrink above must not quietly shrink the whole readable run.
-      for (let page = 0; page < 200; page += 1) {
+      for (let page = 0; page < Math.max(1, Math.min(200, currentTurn ? 20 : maxPages)); page += 1) {
         let value;
         try {
           value = await this.withRuntimeDeadline(
@@ -5786,6 +5882,13 @@ export class RuntimeManager {
         }
         const pageEntries = Array.isArray(value?.records) ? value.records : [];
         pages.unshift(pageEntries);
+        // Invocation proof needs only the open turn. Older history may be arbitrarily
+        // long; its absence is not truncation of this authenticated turn.
+        if (currentTurn && pageEntries.some(entry => entry?.event?.type === 'turn/start')) {
+          const normalized = normalizeTranscript(sessionId, pages.flat());
+          const turn = normalized.turns.at(-1);
+          if (turn) return { ...normalized, messages: normalized.messages.filter(message => message.turnStartSeq === turn.startSeq), turns: [turn], exhausted: false, truncated: false, currentTurn: true };
+        }
         if (!value?.hasMore || !pageEntries.length) { exhausted = true; break; }
         const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
         if (!Number.isFinite(firstSeq)) break;
@@ -5837,7 +5940,13 @@ export class RuntimeManager {
   async sessionInbox(project, sessionId) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) return null;
-    this.beginProxy(project);
+    // Worker observation is bounded by proxy capacity, but is not runtime use:
+    // preserve both lastUseAt and the already scheduled idle deadline.
+    this.enforceProxyCapacity(project);
+    const key=this.key(project);
+    const activity=this.runtimeActivity.get(key) ?? {activeProxies:0,idleTimer:null,lastUseAt:Date.parse(runtime.startedAt ?? '') || 0};
+    this.runtimeActivity.set(key,activity);
+    activity.passiveProxies=(activity.passiveProxies ?? 0)+1;
     try {
       const value = await this.withRuntimeDeadline(
         (signal) => this.callKernel(runtime, project, "session/list", { _request: {} }, signal),
@@ -5846,7 +5955,7 @@ export class RuntimeManager {
       );
       return sessionInboxOf(sessionListItems(value).find((item) => String(item?.sessionId) === String(sessionId)));
     } finally {
-      this.endProxy(project);
+      activity.passiveProxies=Math.max(0,activity.passiveProxies-1);
     }
   }
 
@@ -5921,7 +6030,7 @@ export class RuntimeManager {
    * or null when it was routed to none; the index states it, and that is where the runtime reads it. A dispatch that writes
    * no context (a steer) leaves it out, and the index keeps what the context on disk was routed to.
    *
-   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, unattended?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void> }} input
+   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, unattended?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void>, beforePrompt?: ((context?:{signal:AbortSignal})=>Promise<void>) | null }} input
    * `unattended`: whether nobody is in this turn to answer a question, signed into the turn's attendance receipt. Stated by every
    * caller from the same decision its research context gets (`attended`); a person-initiated path says `false`.
    * @returns {Promise<void>}
@@ -5954,7 +6063,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, unattended = undefined, mode = "queue", recordPromptActor = null }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, unattended = undefined, mode = "queue", recordPromptActor = null, beforePrompt = null }) {
     // Background work whose runtime a researcher's start just took says so, so
     // its owner waits and asks again instead of counting a failed attempt
     // (`RUNTIME_YIELDED_CODE`). Nothing was sent: the prompt is refused whole.
@@ -6045,17 +6154,41 @@ export class RuntimeManager {
         mode: mode === "steer" ? "steer" : "queue",
         content: [{ type: "text", text }],
       };
-      // The trusted caller binds the exact native request only after unsent
-      // admission failures, before the kernel can execute its tools.
-      if (recordPromptActor) await recordPromptActor(promptRequest);
-      if(runId&&this.config.evolutionEnabled===true&&isEvolutionProject(project.id)){
-        try{await this.recordRuntimeEgressDispatch?.(project,runId,new Date().toISOString());}catch{/* Without a durable dispatch cutoff exposure remains unknown. */}
+      let promptSent=false;
+      try {
+        await withSessionPromptAdmission(this,project,sessionId,async signal=>{
+          // Bind the authenticated actor under the same fence as native input.
+          if(recordPromptActor) await recordPromptActor(promptRequest);
+          if(runId && this.config.evolutionEnabled===true && isEvolutionProject(project.id)) {
+            try {await this.recordRuntimeEgressDispatch?.(project,runId,new Date().toISOString());}
+            catch {/* Without a durable dispatch cutoff exposure remains unknown. */}
+          }
+          signal.throwIfAborted();
+          await withProjectStorageMutation(project,async()=>{
+            signal.throwIfAborted();
+            // Proof reads precede the final ledger read. The project ledger and
+            // session admission stay excluded until this short RPC acknowledges.
+            if(runId && this.readPromptStop && await this.readPromptStop(project,sessionId,runId)) {
+              throw Object.assign(new HttpError(409,'runtime_prompt_rejected','The researcher stopped this pending input.'),{definitivelyRejected:true});
+            }
+            if(beforePrompt) {
+              try {await beforePrompt({signal});}
+              catch(error) {error.definitivelyRejected=true;throw error;}
+            }
+            signal.throwIfAborted();
+            promptSent=true;
+            await this.withRuntimeDeadline(
+              // main's guarded `send` keeps the context-policy generation check on the admitted path.
+              wireSignal=>send("session/prompt",{request:promptRequest},AbortSignal.any([wireSignal,signal])),
+              "runtime_prompt_acceptance_unknown",
+              "Runtime prompt acceptance could not be confirmed.",
+            );
+          });
+        });
+      } catch(error) {
+        if(!promptSent) error.definitivelyRejected=true;
+        throw error;
       }
-      await this.withRuntimeDeadline(
-        (signal) => send("session/prompt", { request: promptRequest }, signal),
-        "runtime_prompt_acceptance_unknown",
-        "Runtime prompt acceptance could not be confirmed.",
-      );
     } finally {
       this.endProxy(project);
     }
@@ -6454,6 +6587,7 @@ export class RuntimeManager {
       running: this.runtimes.size,
       starting: this.starts.size,
       proxy,
+      promptAdmissions:runtimePromptAdmissionStatus(this),
       quota: {
         monitored: this.runtimeQuotaMonitors.size,
         intervalMs: positiveLimit(this.config.runtimeQuotaCheckIntervalMs),
@@ -6466,6 +6600,7 @@ export class RuntimeManager {
       // it (running and starting), the share it may hold while nobody needs
       // the room, and how often a researcher's start took one back.
       workloadTokenRefusals: { ...this.workloadTokenRefusals },
+      kernelAdmissionRetries: { ...kernelAdmissionRetries },
       attendanceReceiptWriteFailures: { ...this.attendanceReceiptWriteFailures },
       background: {
         active: this.backgroundRuntimeCount(),
@@ -7911,7 +8046,7 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null,
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null, admissionSignal?: AbortSignal | null,
    *           observeResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<void>) | null,
    *           observeFailure?: ((input:{status:number|null,errorCode:string})=>Promise<void>) | null,
    *           transformResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<Buffer>) | null }} [options]
@@ -7921,7 +8056,7 @@ export class RuntimeManager {
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null, admissionSignal = null } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -7952,10 +8087,17 @@ export class RuntimeManager {
         sendJson(res, noWake.status, noWake.body);
         return;
       }
-      const runtime = await this.start(project);
+      let runtime = await this.start(project);
       if (revalidate) await revalidate();
       await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
       if (beforeForward) await beforeForward();
+      // The waits above can outlast the runtime they started from (a plugin apply replaces it): forwarded with the replaced
+      // runtime's cookie, the request reaches its successor on the same socket and is refused. The registered one is sent to.
+      const registered = this.runtimes.get(this.key(project));
+      if (registered && registered !== runtime && registered.workspaceDir === runtime.workspaceDir) {
+        runtime = registered;
+        await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
+      }
       const incoming = new URL(req.url ?? "/", "http://open-science.local");
       const upstream = new URL(`${runtime.url}${suffix}`);
       // UI suffix is the complete raw path and query, including native combo-bundle syntax.
@@ -8003,7 +8145,7 @@ export class RuntimeManager {
           method,
           headers,
           body,
-          signal: controller.signal,
+          signal: admissionSignal ? AbortSignal.any([controller.signal,admissionSignal]) : controller.signal,
         });
         clearTimeout(connectTimer);
       } catch (err) {
@@ -8019,6 +8161,7 @@ export class RuntimeManager {
         await this.onSessionAbort(project, abortedSessionId);
       }
       streaming = (upstreamRes.headers.get("content-type") ?? "").toLowerCase().includes("text/event-stream");
+      if(admissionSignal && streaming) throw new HttpError(502,"runtime_wire_protocol_mismatch","Prompt admission must return its bounded RPC acknowledgement.");
       if (streaming && transformResponse) throw new HttpError(403, "runtime_ui_method_denied", "This scoped frame uses the native multiplexed event stream.");
       const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, {
         surface,
@@ -8547,13 +8690,14 @@ export class RuntimeManager {
   activeProxyCount() {
     let count = 0;
     for (const activity of this.runtimeActivity.values()) {
-      count += activity.activeProxies ?? 0;
+      count += (activity.activeProxies ?? 0)+(activity.passiveProxies ?? 0);
     }
     return count;
   }
 
   activeProxyCountForProject(project) {
-    return this.runtimeActivity.get(this.key(project))?.activeProxies ?? 0;
+    const activity=this.runtimeActivity.get(this.key(project));
+    return (activity?.activeProxies ?? 0)+(activity?.passiveProxies ?? 0);
   }
 
   hasAttachedOrStartingRuntime(project) {
@@ -8622,8 +8766,15 @@ export class RuntimeManager {
       if (socket.destroyed) { release(); return; }
       await proxyRuntimeUiMux({
         req, socket, head, runtime,
+        acceptanceTimeoutMs:Number(this.config.runtimePromptAdmissionTimeoutMs ?? 30000),
         maxPayload: Math.max(1024, Number(this.config.maxJsonBytes) || 12 * 1024 * 1024),
         ...policy,
+        submit:(endpoint,operation,payload)=> {
+          if(!['session/prompt','session/cancel'].includes(endpoint)) return operation();
+          const sessionId=payload?.args?.request?.sessionId ?? payload?.args?.sessionId;
+          if(endpoint==='session/cancel' && typeof sessionId!=='string') return operation();
+          return withSessionPromptAdmission(this,project,sessionId,operation);
+        },
         admit: (endpoint, operation, payload) => {
           if (endpoint !== "session/prompt") return policy.admitOperation ? policy.admitOperation(endpoint, payload, operation) : policy.withAuthority ? policy.withAuthority(operation) : operation();
           const prompt = async () => {

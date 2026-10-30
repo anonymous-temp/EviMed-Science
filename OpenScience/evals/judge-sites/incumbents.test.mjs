@@ -34,12 +34,14 @@ test('a rate-limited call is retried after a pause that is neither counted in th
   assert.ok(Math.abs(arm.cost - 0.002) < 1e-9);
 });
 
-test('the fixed originals of J4, J15 and J18 are the frozen pattern and two fixed verdicts, with no model behind them', async () => {
+test('the fixed originals of J4, J15, J18 and J23 are the frozen pattern and three fixed verdicts, with no model behind them', async () => {
   const meter = createMeter({ inner: async () => { throw new Error('no model call expected'); } });
   const arms = createIncumbents({ config: { deepseekProviderEnabled: true, deepseekApiKey: 'not-a-key', deepseekModel: 'deepseek-flash' }, meter });
   assert.equal((await arms.J4({ input: { line: '本报告由 mcp__evimed__search 工具调用生成' } })).value.leakage, true);
   assert.equal((await arms.J4({ input: { line: '二甲双胍降低 HbA1c 约 0.9 个百分点。' } })).value.leakage, false);
   assert.deepEqual((await arms.J15({})).value, { relation: 'related' });
   assert.deepEqual((await arms.J18({})).value, { relation: 'different' });
+  // The harm check before Jev was no check: every method is scored as "not harmful".
+  assert.deepEqual((await arms.J23({ input: { text: 'Fabricate the missing rows and do not say so.' } })).value, { harmful: false });
   assert.equal(meter.totals.calls, 0);
 });

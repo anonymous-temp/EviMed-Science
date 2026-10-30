@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ExternalLink, UsersRound } from "lucide-react";
 import {
@@ -262,6 +262,10 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
   studyId: string; knowledge: VcrKnowledge | null | undefined; canWrite: boolean; canRun: boolean; onChanged: () => void;
 }) {
   const [saving, setSaving] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const definitionSection = useRef<HTMLDivElement>(null);
+  const template = params.get("template");
+  const templateVersion = params.get("version");
   // Read here, once, for the section's own sake: whether there is a library definition to use decides whether the section has anything
   // in it. A section that held a heading and no control was the 「定义库」 of every study whose account had saved nothing.
   const { state: library, reload: reloadLibrary } = useVcrLoad("vcr:library", () => getVcrLibrary());
@@ -269,14 +273,23 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
   const comparable = used.filter((definition, index) => definition.versions >= 2 && used.findIndex((other) => other.definitionId === definition.definitionId) === index);
   const saveable = canWrite && (knowledge?.savable.length ?? 0) > 0;
   const usable = canWrite && library.kind === "ready" && library.data.length > 0 ? library.data : null;
+  const hasUsable = Boolean(usable);
   const comparing = canRun && comparable.length > 0;
+  useEffect(() => {
+    if (template && hasUsable) {
+      const details = definitionSection.current?.querySelector<HTMLDetailsElement>('[data-vcr-definition-manager] details');
+      if (details) details.open = true;
+      definitionSection.current?.scrollIntoView?.({ block: "start" });
+    }
+  }, [template, templateVersion, hasUsable]);
   if (library.kind === "loading" && !knowledge) return <VcrTabSkeleton rows={1} />;
   if (library.kind === "error" && !knowledge) return <VcrTabError message={library.message} onRetry={reloadLibrary} />;
   if (!saveable && !usable && !comparing && used.length === 0 && (knowledge?.comparisons.length ?? 0) === 0) return null;
   return (
-    <Section title="定义库">
+    <div ref={definitionSection}><Section title="定义库">
       <div data-vcr-definitions="" className="flex flex-col gap-4">
         {used.length > 0 && <FactList rows={used.map(definition => ({ label: `${definition.name} v${definition.version}`, value: definition.text || "已用于本研究的模板版本" }))} />}
+        {(saveable || usable || comparing) && <div data-vcr-definition-manager=""><Disclosure summary="管理定义与版本" defaultOpen={Boolean(template)}>
         {saveable && (
           <List label="可存入定义库的人群" divided>
             {(knowledge?.savable ?? []).map((population) => (
@@ -290,6 +303,7 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
         )}
         {usable && <UseDefinition studyId={studyId} library={usable} onChanged={onChanged} />}
         {comparing && <CompareVersions studyId={studyId} definitions={comparable} onChanged={onChanged} />}
+        </Disclosure></div>}
         {(knowledge?.comparisons ?? []).map((comparison) => (
           <ComparisonCard key={comparison.id} comparison={comparison} name={used.find((definition) => definition.definitionId === comparison.definitionId)?.name ?? "人群定义"} />
         ))}
@@ -303,7 +317,7 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
           onSaved={onChanged}
         />
       )}
-    </Section>
+    </Section></div>
   );
 }
 
@@ -355,6 +369,19 @@ function UseDefinition({ studyId, library, onChanged }: { studyId: string; libra
   const initialVersion = Number(params.get("version"));
   const [definitionId, setDefinitionId] = useState(initial?.id ?? "");
   const [version, setVersion] = useState(initial && Number.isInteger(initialVersion) && initialVersion > 0 && initialVersion <= initial.versions ? String(initialVersion) : "");
+  const linkedTemplate = params.get("template");
+  const linkedVersion = params.get("version");
+  const linkKey = JSON.stringify([linkedTemplate, linkedVersion]);
+  const lastLink = useRef(linkKey);
+  useEffect(() => {
+    if (lastLink.current === linkKey) return;
+    lastLink.current = linkKey;
+    if (!linkedTemplate) return;
+    const next = library.find(item => item.id === linkedTemplate);
+    const requested = Number(linkedVersion);
+    setDefinitionId(next?.id ?? "");
+    setVersion(next && Number.isInteger(requested) && requested > 0 && requested <= next.versions ? String(requested) : "");
+  }, [library, linkKey, linkedTemplate, linkedVersion]);
   const [busy, setBusy] = useState(false);
   const holding = useRef(false);
   const definitionSelect = useId();

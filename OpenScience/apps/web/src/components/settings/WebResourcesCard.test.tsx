@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/apiClient", () => ({
   fetchWebMetrics: mocks.fetchWebMetrics,
+  webErrorMessage: (error: unknown) => String(error),
   startWebRuntime: mocks.startWebRuntime,
   restartWebRuntime: mocks.restartWebRuntime,
   stopWebRuntime: mocks.stopWebRuntime,
@@ -27,6 +28,26 @@ describe("WebResourcesCard", () => {
     mocks.startWebRuntime.mockResolvedValue("https://science.example/api/runtime");
     mocks.restartWebRuntime.mockResolvedValue("https://science.example/api/runtime");
     mocks.stopWebRuntime.mockResolvedValue(undefined);
+  });
+
+  it("keeps initial unknown distinct from zero and stopped, then offers persistent retry", async () => {
+    mocks.fetchWebMetrics.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(metricsFixture({ running: true }));
+    render(<WebResourcesCard />);
+    expect(screen.queryByText("已停止")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 个进行中")).not.toBeInTheDocument();
+    expect(await screen.findByRole("note")).toHaveTextContent("offline");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("运行中")).toBeInTheDocument();
+  });
+
+  it("preserves last successful values after refresh failure", async () => {
+    mocks.fetchWebMetrics.mockResolvedValueOnce(metricsFixture({ running: true })).mockRejectedValueOnce(new Error("offline"));
+    render(<WebResourcesCard />);
+    expect(await screen.findByText("运行中")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "刷新资源状态" }));
+    expect(await screen.findByRole("note")).toHaveTextContent("offline");
+    expect(screen.getByText("运行中")).toBeInTheDocument();
+    expect(screen.getByText(/上次成功读取/)).toBeInTheDocument();
   });
 
   it("renders hosted resource metrics", async () => {

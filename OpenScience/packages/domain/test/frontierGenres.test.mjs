@@ -5,9 +5,14 @@ import {
   FRONTIER_CODE_GENRES,
   FRONTIER_GENRES,
   FRONTIER_GENRE_LABELS_ZH,
+  FRONTIER_INDUSTRY_KIND_LABELS_ZH,
+  FRONTIER_INDUSTRY_KINDS,
   frontierGenreDecision,
   frontierGenreFallback,
+  frontierIndustryKindDecision,
+  frontierItemIndustryKind,
   isFrontierGenre,
+  isFrontierIndustryKind,
 } from '../src/frontierGenres.mjs'
 
 test('every genre has a Chinese label and the code genres are genres', () => {
@@ -52,4 +57,36 @@ test('the model refines a genre code is unsure of, never one it is sure of', () 
   assert.deepEqual(frontierGenreDecision({ safety_alert: true }, 'approval'), { genre: 'safety', basis: 'code' })
   assert.deepEqual(frontierGenreDecision({ source_type: 'media' }, 'safety'), { genre: 'news', basis: 'code' })
   assert.deepEqual(frontierGenreDecision({ source_type: 'media' }, 'nonsense'), { genre: 'news', basis: 'code' })
+})
+
+test('the kinds of 行业动态 are a closed list, each with its Chinese label', () => {
+  assert.deepEqual([...FRONTIER_INDUSTRY_KINDS], ['deal', 'financing', 'people', 'operations', 'pipeline', 'other'])
+  assert.deepEqual(Object.keys(FRONTIER_INDUSTRY_KIND_LABELS_ZH).sort(), [...FRONTIER_INDUSTRY_KINDS].sort())
+  assert.deepEqual(FRONTIER_INDUSTRY_KINDS.map((kind) => FRONTIER_INDUSTRY_KIND_LABELS_ZH[kind]),
+    ['交易与授权', '融资与上市', '人事与组织', '公司经营', '研发管线', '其他'])
+  for (const kind of FRONTIER_INDUSTRY_KINDS) assert.ok(isFrontierIndustryKind(kind), kind)
+  // The labels are not the keys, a nearby word is not a kind, and a non-string is none.
+  for (const word of ['交易与授权', 'Deal', 'merger', 'industry', '', ' deal', null, undefined, 3, ['deal']]) assert.equal(isFrontierIndustryKind(word), false, String(word))
+})
+
+test('a kind is the model\'s answer for an item of 行业动态 and nothing else; an unknown word is dropped, never guessed', () => {
+  assert.equal(frontierIndustryKindDecision('industry', 'financing'), 'financing')
+  assert.equal(frontierIndustryKindDecision('industry', 'other'), 'other')
+  assert.equal(frontierIndustryKindDecision('industry', 'merger'), null)
+  assert.equal(frontierIndustryKindDecision('industry', '融资与上市'), null)
+  assert.equal(frontierIndustryKindDecision('industry', null), null)
+  assert.equal(frontierIndustryKindDecision('industry', undefined), null)
+  // A kind belongs to the genre: any other genre has none, whatever was said.
+  for (const genre of FRONTIER_GENRES.filter((entry) => entry !== 'industry')) assert.equal(frontierIndustryKindDecision(genre, 'deal'), null, genre)
+  assert.equal(frontierIndustryKindDecision(null, 'deal'), null)
+})
+
+test('the one reading rule hides a kind written before the genre changed', () => {
+  assert.equal(frontierItemIndustryKind({ genre: 'industry', industry_kind: 'people' }), 'people')
+  assert.equal(frontierItemIndustryKind({ genre: 'industry', industryKind: 'pipeline' }), 'pipeline')
+  assert.equal(frontierItemIndustryKind({ genre: 'paper', industry_kind: 'people' }), null)
+  assert.equal(frontierItemIndustryKind({ genre: null, industry_kind: 'people' }), null)
+  assert.equal(frontierItemIndustryKind({ genre: 'industry', industry_kind: 'nonsense' }), null)
+  assert.equal(frontierItemIndustryKind({ genre: 'industry' }), null)
+  assert.equal(frontierItemIndustryKind(null), null)
 })

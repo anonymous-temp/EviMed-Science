@@ -342,6 +342,19 @@ test("M-06 counts only adjudicated answers; M-07 counts distinct wrong statement
   assert.equal(cellOf(none.cells, { metricId: "M-07", scope: "pool", pool: "P2" }).reason, "not_adjudicated", "not checked is not error-free");
 });
 
+test("M-06 and M-07 distinguish no snapshots from unjudged answers and preserve observed zero", () => {
+  const empty = computeGeoMetrics([], { owned: OWNED });
+  for (const metricId of ["M-06", "M-07"]) {
+    assert.equal(cellOf(empty.cells, { metricId, scope: "project" }).reason, "no_snapshots");
+    const unjudged = computeGeoMetrics([row({}, ours)], { owned: OWNED });
+    assert.equal(cellOf(unjudged.cells, { metricId, scope: "project" }).reason, "not_adjudicated");
+  }
+  const correct = computeGeoMetrics([row({}, { ...ours, statements: [{ text: "The original correct statement", verdict: "correct" }] })], { owned: OWNED });
+  assert.equal(cellOf(correct.cells, { metricId: "M-07", scope: "project" }).value, 0);
+  const wrong = computeGeoMetrics([row({}, { ...ours, statements: [{ text: "The original wrong statement", verdict: "wrong" }] })], { owned: OWNED });
+  assert.equal(cellOf(wrong.cells, { metricId: "M-06", scope: "project" }).value, 0);
+});
+
 test("M-12 without the safety-term extraction is not measurable, never 0%", () => {
   const rows = many(3, () => row({}, ours));
   for (const item of rows) delete item.facts.safetyTermsHit;

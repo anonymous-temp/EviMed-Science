@@ -7,8 +7,8 @@ import { safeWebHref } from "@/lib/readPages";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
-import { FactList } from "@/components/ui/FactList";
 import { Section } from "@/components/ui/Section";
+import { FactList } from "@/components/ui/FactList";
 import { Note } from "@/components/ui/Note";
 import { useGeoLoad } from "./geoProjectData";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
@@ -150,7 +150,7 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
       const current = await getGeoProject(geoId);
       const params = new URLSearchParams(location.search);
       const sessionId = await ensureGeoConversationSession(geoId, project.projectId,
-        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId);
+        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId, current.sessionId || project.sessionId);
       const selectionRef = project.selection?.reference ?? null;
       const focus = { sessionId, mode: "strategy" as const, ...(selectionRef ? { selectionRef } : {}),
         ...(linked.length ? { actionKeys: linked.map(item => item.key) } : {}) };

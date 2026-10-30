@@ -145,3 +145,51 @@ test("native import preview exposes resources and invocation policy without pers
   await assert.rejects(fs.stat(path.join(previewArtifacts.ownerRoot(owner), "packages")), { code: "ENOENT" });
   assert.deepEqual(await fs.readdir(path.join(previewArtifacts.ownerRoot(owner), "imports")), []);
 });
+
+test("owned import intent survives an ignored response and service reconstruction, serializes duplicate requests and rejects changed payloads", options, async () => {
+  uploadEntries = [{ type: "file", path: "SKILL.md", bytes: Buffer.from("---\nname: retry-import\ndescription: Retry import fixture\n---\n\nKeep this exact import.\n") }];
+  const request = { resourceId: "upload1", title: "Recoverable import", idempotencyKey: "ordinary-import-retry" };
+  const before = (await service.list(owner)).items.length;
+  // The first successful response is deliberately ignored by the caller.
+  const [first, concurrent] = await Promise.all([service.import(owner, request), service.import(owner, request)]);
+  assert.equal(first.id, concurrent.id);
+  const restarted = new SkillLibraryService(database, { artifacts });
+  const recovered = await restarted.import(owner, request);
+  assert.equal(recovered.id, first.id);
+  assert.equal(recovered.revision, 1);
+  const expiredArtifacts = Object.create(artifacts);
+  expiredArtifacts.import = async () => { throw new Error("The original upload has expired."); };
+  expiredArtifacts.verifyUpload = async () => { throw new Error("The original upload has expired."); };
+  assert.equal((await new SkillLibraryService(database, { artifacts: expiredArtifacts }).import(owner, request)).id, first.id);
+  assert.equal((await service.list(owner)).items.length, before + 1);
+  await assert.rejects(restarted.import(owner, { ...request, title: "A different import" }), { status: 409, code: "product_job_idempotency_conflict" });
+  await assert.rejects(restarted.import(owner, { ...request, resourceId: "a-different-upload" }), { status: 409 });
+  // A matching key never resolves another account's record pointer.
+  await assert.rejects(restarted.import(other, request), { status: 404 });
+  const otherService = new SkillLibraryService(database, { artifacts: new SkillLibraryArtifacts({ root, parseSkill: parsePersonalSkill }) });
+  const otherUpload = await otherService.upload(other, "skill", Buffer.from("---\nname: other-account-import\ndescription: Other account method\n---\n\nOther account data.\n"));
+  const otherImported = await otherService.import(other, { ...request, resourceId: otherUpload.resourceId });
+  assert.notEqual(otherImported.id, first.id);
+  assert.equal((await otherService.import(other, { ...request, resourceId: otherUpload.resourceId })).id, otherImported.id);
+  await assert.rejects(restarted.get(other, first.id), { status: 404 });
+  await assert.rejects(restarted.get(owner, otherImported.id), { status: 404 });
+  await service.remove(owner, first.id, { expectedRevision: first.revision });
+  await assert.rejects(restarted.import(owner, request), { status: 404 });
+});
+
+test("the import skill and its recovery receipt commit or roll back together", options, async () => {
+  const request = { resourceId: "upload1", title: "Atomic import", idempotencyKey: "ordinary-import-atomic" };
+  const before = (await service.list(owner)).items.length;
+  const documents = service.documents, original = documents.put;
+  let fail = true;
+  documents.put = async (...args) => {
+    if (fail && args[1] === "extension-resource" && args[2].startsWith("skill-import:")) { fail = false; throw new Error("receipt storage failure"); }
+    return original.apply(documents, args);
+  };
+  try { await assert.rejects(service.import(owner, request), /receipt storage failure/); }
+  finally { documents.put = original; }
+  assert.equal((await service.list(owner)).items.length, before);
+  const restored = await service.import(owner, request);
+  assert.equal((await service.list(owner)).items.length, before + 1);
+  assert.equal((await new SkillLibraryService(database, { artifacts }).import(owner, request)).id, restored.id);
+});

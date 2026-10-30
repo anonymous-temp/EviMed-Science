@@ -54,6 +54,8 @@ const MINUTE = 60_000;
  */
 export const VCR_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "jobs", package: "jobs", every: 0 }),
+  Object.freeze({ name: "localJobs", package: "jobs", every: 0, optional: true }),
+  Object.freeze({ name: "completions", package: "completions", every: 0, optional: true }),
   Object.freeze({ name: "orchestrator", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recompute", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recheck", package: "matching", every: 15 * MINUTE, leased: true }),
@@ -254,10 +256,35 @@ export class VcrWorker {
  * `server.mjs` composes a worker with one call and the loops' own logic stays
  * with the packages that own it.
  *
- * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any }} vcr
+ * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any, completions?: any }} vcr
  */
-export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null }) {
+export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null }) {
+  const jobLoop = lane => jobs ? async () => {
+    const claimed = await jobs.claim({ limit: lane === "local" ? Number(jobs.config?.vcrLocalConcurrency ?? 2) : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
+    const methods = Object.keys(jobs.localExecutors ?? {});
+    const running = await store.rows("SELECT id,method,kind FROM evimed_vcr.jobs WHERE state='running' AND lease_owner=$1 LIMIT 20",[jobs.owner]);
+    const selected = [...claimed,...running.filter(row => !claimed.some(job => job.id===String(row.id)) && methods.includes(row.method)===(lane==="local"))];
+    const settled = await Promise.allSettled(selected.map(job => jobs.advance(job)));
+    let finished = 0;
+    for (const result of settled) {
+      if (result.status === "rejected") { jobs.report?.(result.reason?.code ?? "vcr_job_advance_failed"); continue; }
+      if (result.value?.action === "finished") { finished++; if (orchestrator?.onJobFinished && !orchestrator.durableJobFinishes) await orchestrator.onJobFinished(result.value); }
+    }
+    const reaped = jobs.takeReaped?.() ?? [];
+    for (const job of reaped) {
+      if (orchestrator?.durableJobFinishes) await jobs.deliverFinishHooks(job.id);
+      else if (orchestrator?.onJobFinished) await orchestrator.onJobFinished({job,result:null});
+    }
+    const recovered = lane === "engine" ? await jobs.recoverCanceled?.() ?? [] : [];
+    for (const kept of recovered) {
+      if (orchestrator?.durableJobFinishes) await jobs.deliverFinishHooks(kept.job.id);
+      else if (orchestrator?.onJobFinished) await orchestrator.onJobFinished({...kept,partial:true});
+    }
+    return { claimed:claimed.length,advanced:selected.length,finished,failedForAttempts:reaped.length,recovered:recovered.length };
+  } : null;
   return {
+    localJobs: jobLoop("local"),
+    completions: completions ? () => completions.tick() : null,
     /**
      * Claim what is queued, then push everything this process holds one step.
      * Jobs that ended without this loop's help are folded in too: one that ran
@@ -265,42 +292,7 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
      * cancelled after the engine had already computed part of it (its partial
      * result is fetched and kept).
      */
-    jobs: jobs
-      ? async () => {
-        const claimed = await jobs.claim({ limit: Math.max(1, Number(jobs.maxConcurrent ?? 1)) });
-        let advanced = 0;
-        let finished = 0;
-        /** @param {any} outcome */
-        const told = async (outcome) => {
-          if (outcome?.action !== "finished") return;
-          finished += 1;
-          if (orchestrator?.onJobFinished) await orchestrator.onJobFinished(outcome).catch(() => null);
-        };
-        for (const job of claimed) {
-          advanced += 1;
-          await told(await jobs.advance(job));
-        }
-        // Jobs already out with this process's lease: read where they got to.
-        const running = await store.rows(
-          "SELECT id, study_id FROM evimed_vcr.jobs WHERE state = 'running' AND lease_owner = $1 LIMIT 20", [jobs.owner]);
-        for (const row of running) {
-          if (claimed.some((job) => job.id === String(row.id))) continue;
-          advanced += 1;
-          await told(await jobs.advance({ id: String(row.id) }));
-        }
-        let failedForAttempts = 0;
-        for (const job of jobs.takeReaped?.() ?? []) {
-          failedForAttempts += 1;
-          if (orchestrator?.onJobFinished) await orchestrator.onJobFinished({ job, result: null }).catch(() => null);
-        }
-        let recovered = 0;
-        for (const kept of (await jobs.recoverCanceled?.().catch(() => [])) ?? []) {
-          recovered += 1;
-          if (orchestrator?.onJobFinished) await orchestrator.onJobFinished({ job: kept.job, result: kept.result, partial: true }).catch(() => null);
-        }
-        return { claimed: claimed.length, advanced, finished, failedForAttempts, recovered };
-      }
-      : null,
+    jobs: jobLoop("engine"),
 
     /** Advance every active study once. */
     orchestrator: orchestrator ? () => orchestrator.tick() : null,

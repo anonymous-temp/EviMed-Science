@@ -43,6 +43,8 @@ import {
   FRONTIER_GENRE_LABELS_ZH,
   FRONTIER_GENRES,
   FRONTIER_HIDE_REASONS,
+  FRONTIER_INDUSTRY_KIND_LABELS_ZH,
+  FRONTIER_INDUSTRY_KINDS,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANE_LABELS_ZH,
   FRONTIER_LANES as LANE_KEYS,
@@ -92,6 +94,15 @@ export const FRONTIER_SPECIALTY_GROUPS: ReadonlyArray<{ key: string; label: stri
 /** The evidence types a reader filters by (「证据类型」), strongest forms first. */
 export const FRONTIER_EVIDENCE_TYPES: readonly FrontierLabelled[] = Object.freeze(
   EVIDENCE_TYPE_KEYS.map((key) => ({ key, label: FRONTIER_EVIDENCE_TYPE_LABELS_ZH[key] })),
+);
+
+/**
+ * The kinds of 行业动态 a reader filters by (c5-biz 2026-10-26: 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线, 其他) -
+ * `@evimed/domain`'s closed list, the one the server labels every item with and checks the filter against.
+ */
+export type FrontierIndustryKind = typeof FRONTIER_INDUSTRY_KINDS[number];
+export const FRONTIER_INDUSTRY_KIND_OPTIONS: ReadonlyArray<{ key: FrontierIndustryKind; label: string }> = Object.freeze(
+  FRONTIER_INDUSTRY_KINDS.map((key) => ({ key, label: FRONTIER_INDUSTRY_KIND_LABELS_ZH[key] })),
 );
 
 /**
@@ -199,6 +210,13 @@ export interface FrontierItem {
   genre: FrontierGenre;
   /** The genre in the reader's words (「研究论文」). */
   genreLabel: string;
+  /**
+   * What a piece of 行业动态 is about (c5-biz 2026-10-26: 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线, 其他): only an item
+   * whose genre is `industry` has one, and one the model has not named has none.
+   */
+  industryKind: FrontierIndustryKind | null;
+  /** The kind in the reader's words (「融资与上市」). */
+  industryKindLabel: string | null;
   /** What the card leads with: the Chinese title, else the original. */
   title: string;
   titleRaw: string;
@@ -323,25 +341,6 @@ export interface FrontierBody {
   source: FrontierBodySource | null;
 }
 
-/** A report 「AI 解读」 relies on: `[n]` in its text names it, and it opens as its own article (`publicId`). */
-export interface FrontierInsightRef {
-  n: number;
-  publicId: string;
-  title: string;
-  /** The institution or account that published it; empty where the server named none. */
-  source: string;
-  at: string | null;
-}
-
-/**
- * 「AI 解读」 (contract B `insight`): one paragraph on what the item means, for a selected item whose material supports one — most
- * items have none. A related report it relies on is marked `[n]` in the text and is the entry of `refs` with that `n`.
- */
-export interface FrontierInsight {
-  text: string;
-  refs: FrontierInsightRef[];
-}
-
 /** One typed field of 「AI 要点」: its label (per genre: 研究问题, 发文机关与文号 …) and a sentence, or a few one-sentence items. */
 export interface FrontierBriefPoint {
   key: string;
@@ -406,8 +405,6 @@ export interface FrontierItemDetail extends FrontierItem {
   lead: string | null;
   /** 「AI 要点」, for a selected, near-line or safety item whose source supported its fields; null otherwise. */
   brief: FrontierBrief | null;
-  /** 「AI 解读」, where the server wrote one; null for most items. */
-  insight: FrontierInsight | null;
   body: FrontierBody | null;
   media: FrontierMedia[];
   quoted: FrontierQuoted | null;
@@ -431,6 +428,8 @@ export interface FrontierItemsQuery {
   tag?: string | null;
   /** One evidence type (`FRONTIER_EVIDENCE_TYPES`). */
   evidence?: string | null;
+  /** One kind of 行业动态 (`FRONTIER_INDUSTRY_KIND_OPTIONS`); it implies the genre. */
+  industryKind?: FrontierIndustryKind | null;
   /** Only what this reader has not opened. */
   unread?: boolean;
   window?: FrontierWindow | null;
@@ -1031,10 +1030,14 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
   const flags = labelled(raw.flags, FLAG_LABELS);
   const genre = orNull(raw.genre, FRONTIER_GENRES) ?? frontierGenreFallback({ platform: text(raw.platform), channel: text(raw.channel),
     sourceType: text(raw.sourceType), evidenceType: text(raw.evidenceType), flags: flags.map((flag) => flag.key), safetyAlert: raw.safetyAlert === true, lane });
+  // A kind belongs to 行业动态: on any other genre, or outside the closed list, it is none.
+  const industryKind = genre === "industry" ? orNull(raw.industryKind, FRONTIER_INDUSTRY_KINDS) : null;
   return {
     id,
     genre,
     genreLabel: text(raw.genreLabel) ?? FRONTIER_GENRE_LABELS_ZH[genre],
+    industryKind,
+    industryKindLabel: industryKind ? text(raw.industryKindLabel) ?? FRONTIER_INDUSTRY_KIND_LABELS_ZH[industryKind] : null,
     title: text(raw.title) ?? titleZh ?? titleRaw,
     titleRaw,
     titleZh,
@@ -1099,33 +1102,6 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
 
 /** The longest body the plugin sends (contract A: ≤ 40 000 characters). */
 const BODY_MAX = 40_000;
-/** 「AI 解读」 is one paragraph of at most 360 characters (contract B); anything far past that is not one, and is cut, never shown whole. */
-const INSIGHT_MAX = 1_200;
-/** The most reports one 解读 cites, and the highest `[n]` it can name. */
-const INSIGHT_REFS = 12;
-const INSIGHT_N = 99;
-
-/**
- * 「AI 解读」 and the reports it cites. A ref without its number, its article or its title is dropped (its `[n]` then reads as plain
- * text), and so is a second ref under a number already taken; the rest are ordered by number.
- */
-function parseInsight(value: unknown): FrontierInsight | null {
-  const raw = record(value);
-  const body = text(raw?.text)?.trim();
-  if (!raw || !body) return null;
-  const taken = new Set<number>();
-  const refs = (Array.isArray(raw.refs) ? raw.refs : []).flatMap((entry) => {
-    const ref = record(entry);
-    const n = ref?.n;
-    const publicId = text(ref?.publicId)?.trim();
-    const title = text(ref?.title)?.trim();
-    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > INSIGHT_N || taken.has(n) || !publicId || !title) return [];
-    taken.add(n);
-    return [{ n, publicId: publicId.slice(0, 128), title: title.slice(0, 300), source: text(ref?.source)?.trim().slice(0, 120) ?? "", at: moment(ref?.at) }];
-  }).sort((a, b) => a.n - b.n).slice(0, INSIGHT_REFS);
-  return { text: body.slice(0, INSIGHT_MAX), refs };
-}
-
 /** What one 要点 field holds at most: a sentence, a few items (a roundup lists more), and a quotation. */
 const BRIEF_TEXT_MAX = 400;
 const BRIEF_ITEMS_MAX = 6;
@@ -1187,7 +1163,6 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
     abstractZh: text(raw.abstractZh),
     lead: text(raw.lead) ?? item.summary,
     brief: parseFrontierBrief(raw.brief),
-    insight: parseInsight(raw.insight),
     body: zh || original ? {
       zh,
       original,
@@ -1552,6 +1527,7 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   if (query.specialties?.length) params.set("specialty", query.specialties.join(","));
   if (query.tag) params.set("tag", query.tag);
   if (query.evidence) params.set("evidence", query.evidence);
+  if (query.industryKind) params.set("industryKind", query.industryKind);
   if (query.unread) params.set("unread", "1");
   if (query.follow) params.set("follow", query.follow);
   if (query.window) params.set("window", query.window);
@@ -1819,9 +1795,13 @@ export async function fetchFrontierEvent(eventId: string, order?: FrontierEventO
   return event;
 }
 
-export function listFrontierDailies(limit = 30, day?: string | null): Promise<FrontierDailyArchive | null> {
+/**
+ * The archive, newest first. `day` asks for the publication outcome of that day; `before` asks for the issues before that day — the
+ * page after a full one (the archive is read sixty at a time).
+ */
+export function listFrontierDailies(limit = 30, day?: string | null, before?: string | null): Promise<FrontierDailyArchive | null> {
   return optional(async () => {
-    const raw = record(await productRequest<unknown>(`/frontier/dailies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}${day ? `&day=${encodeURIComponent(day)}` : ""}`)) ?? {};
+    const raw = record(await productRequest<unknown>(`/frontier/dailies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}${day ? `&day=${encodeURIComponent(day)}` : ""}${before ? `&before=${encodeURIComponent(before)}` : ""}`)) ?? {};
     const dailies = (Array.isArray(raw.dailies) ? raw.dailies : Array.isArray(raw.items) ? raw.items : []).flatMap((entry) => {
       const row = record(entry);
       const day = text(row?.day);
@@ -2113,7 +2093,10 @@ export interface FrontierCongressRecap {
 }
 export interface FrontierCongressHub {
   congress: Omit<FrontierCongress, "itemCount" | "status"> & { status: FrontierCongressStatus | "later" | "past"; sourceUrl: string | null; abstractsAt: string | null };
+  /** What the congress holds: the same number the congress list says (「ESMO 2026 · 收录 624 条」). */
   itemCount: number;
+  /** How many of them the days list, the newest; fewer than `itemCount` where the hub is capped (「显示最新 400 条」). Equal where a server says none. */
+  listedCount: number;
   days: Array<{ day: string; recap: FrontierCongressRecap | null; items: Array<{ item: FrontierItem; caveat: string | null }> }>;
   listId: string | null;
 }
@@ -2202,6 +2185,7 @@ export function parseFrontierCongressHub(value: unknown): FrontierCongressHub | 
   return {
     congress: { ...congress, status: oneOf(header?.status, [...FRONTIER_CONGRESS_STATUSES, "later", "past"] as const, "recent"), sourceUrl: safeLink(header?.sourceUrl), abstractsAt: day(header?.abstractsAt) },
     itemCount: count(raw.itemCount),
+    listedCount: raw.listedCount === undefined || raw.listedCount === null ? count(raw.itemCount) : Math.min(count(raw.listedCount), count(raw.itemCount)),
     days: (Array.isArray(raw.days) ? raw.days : []).flatMap((entry): FrontierCongressHub["days"] => {
       const row = record(entry);
       const when = day(row?.day);

@@ -351,12 +351,12 @@ export const VCR_TWIN_LABELS_ZH = Object.freeze({ digital_twin: '数字孪生', 
 /** What data the study has. Every module works at T0 (§3.2). */
 export const VCR_DATA_TIERS = frozen(['T0', 'T1', 'T2', 'T3'])
 export const VCR_DATA_TIER_LABELS_ZH = Object.freeze({
-  T0: 'T0 公开资料', T1: 'T1 基线与招募资料', T2: 'T2 完整治疗与纵向结局', T3: 'T3 随机试验个体数据',
+  T0: 'T0 公开资料', T1: 'T1 基线资料', T2: 'T2 完整治疗与纵向结局', T3: 'T3 随机试验个体数据',
 })
 
 /** What each tier above T0 lets a study do that the one below it does not (§3.2) — the words an offer to move up says. */
 export const VCR_DATA_TIER_UNLOCKS_ZH = Object.freeze({
-  T1: '用你的数据筛真实队列、做患者匹配与招募',
+  T1: '用已授权的患者资料筛选真实队列、逐条匹配',
   T2: '走真实外部对照，用真实结局分布做仿真',
 })
 
@@ -455,8 +455,8 @@ export const VCR_STEP_NEEDS = Object.freeze({
 /** The seven tabs of a study page, in order (§9.4). The design spec caps this at seven. */
 export const VCR_TABS = frozen(['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'])
 export const VCR_TAB_LABELS_ZH = Object.freeze({
-  overview: '总览', population: '人群', patients: '虚拟患者', comparator: '对照', trial: '试验',
-  matching: '匹配与招募', data: '定义与证据',
+  overview: '总览', population: '人群与患者', patients: '人群与患者', comparator: '对照', trial: '试验',
+  matching: '匹配', data: '依据',
 })
 
 /**
@@ -554,19 +554,19 @@ export const VCR_STUDY_NAME_FROM_QUESTION_MAX = 24
 // ---------------------------------------------------------------------------
 
 /** Study-level roles. Deliberately not an organization model (§11.1). */
-export const VCR_MEMBER_ROLES = frozen(['lead', 'clinical_reviewer', 'statistical_reviewer', 'data_manager', 'recruiter', 'site', 'viewer'])
+export const VCR_MEMBER_ROLES = frozen(['lead', 'clinical_reviewer', 'statistical_reviewer', 'data_manager', 'viewer'])
 export const VCR_MEMBER_ROLE_LABELS_ZH = Object.freeze({
   lead: '研究负责人', clinical_reviewer: '临床复核', statistical_reviewer: '统计复核', data_manager: '数据管理',
-  recruiter: '招募协调员', site: '中心', viewer: '只读查看者',
+  viewer: '只读查看者',
 })
+/** Read-only labels for legacy rows; these roles can be revoked, never granted. */
+export const VCR_RETIRED_MEMBER_ROLE_LABELS_ZH = Object.freeze({ recruiter: '旧版协调角色（已停用）', site: '旧版中心角色（已停用）' })
 /** What a role may do. Checked in code, per operation (platform principle 14). */
 export const VCR_ROLE_ABILITIES = Object.freeze({
-  lead: frozen(['read', 'write', 'run', 'export', 'manage_members', 'manage_study', 'manage_data', 'review_any', 'contact_patients', 'read_patient_level']),
+  lead: frozen(['read', 'write', 'run', 'export', 'manage_members', 'manage_study', 'manage_data', 'review_any', 'read_patient_level']),
   clinical_reviewer: frozen(['read', 'review_clinical', 'export']),
   statistical_reviewer: frozen(['read', 'review_statistical', 'export']),
   data_manager: frozen(['read', 'write', 'run', 'manage_data', 'read_patient_level']),
-  recruiter: frozen(['read', 'write_referrals', 'contact_patients']),
-  site: frozen(['read_referrals', 'write_referrals']),
   viewer: frozen(['read']),
 })
 /**
@@ -745,19 +745,6 @@ export const VCR_ELIGIBILITY_SUMMARY_LABELS_ZH = Object.freeze({
   eligible: '符合', ineligible: '不符合', insufficient_evidence: '证据不足', pending: '待复评',
 })
 
-/** The referral ledger, in order (§7.2). */
-export const VCR_REFERRAL_STATES = frozen([
-  'candidate', 'needs_evidence', 'contactable', 'contacted', 'interested', 'referred', 'site_responded',
-  'screening', 'enrolled', 'screen_failed', 'withdrawn',
-])
-export const VCR_REFERRAL_STATE_LABELS_ZH = Object.freeze({
-  candidate: '候选', needs_evidence: '待补证', contactable: '可联系', contacted: '已联系', interested: '有意向',
-  referred: '已转诊', site_responded: '中心已响应', screening: '筛选中', enrolled: '已入组',
-  screen_failed: '筛选失败', withdrawn: '退出',
-})
-/** The states a referral may never reach without a coordinator's per-person confirmation (§10.1). */
-export const VCR_CONTACT_STATES = frozen(['contacted', 'interested', 'referred'])
-
 /** What a follow-up episode records (§7.3). */
 export const VCR_FOLLOWUP_KINDS = frozen(['routine_care', 'study_specific', 'post_exit'])
 export const VCR_FOLLOWUP_KIND_LABELS_ZH = Object.freeze({ routine_care: '常规诊疗观察', study_specific: '研究专属随访', post_exit: '出组后观察' })
@@ -768,6 +755,7 @@ export const VCR_FOLLOWUP_KIND_LABELS_ZH = Object.freeze({ routine_care: '常规
 
 /** Every deterministic computation the engine can be asked for. */
 export const VCR_JOB_KINDS = frozen([
+  'fit_survival_model', 'apply_prognostic_model',
   'profile_snapshot', 'build_cohort', 'generate_population', 'literature_population', 'synthesize_population',
   'population_quality', 'generate_patients', 'generate_patients_continuous', 'generate_patients_binary',
   'reconstruct_km', 'pool_evidence', 'weight_comparator', 'propensity_weight_comparator', 'maic_comparator',
@@ -789,6 +777,7 @@ export const VCR_JOB_KINDS = frozen([
  * conversation asked for) is absent, and the strip lists it by its kind.
  */
 export const VCR_JOB_KIND_STEPS = Object.freeze({
+  fit_survival_model: 'patients', apply_prognostic_model: 'patients',
   pool_evidence: 'evidence', reconstruct_km: 'evidence', map_prior: 'evidence',
   profile_snapshot: 'population', build_cohort: 'population', generate_population: 'population', literature_population: 'population',
   synthesize_population: 'population', population_quality: 'population',
@@ -817,9 +806,9 @@ export const VCR_JOB_WAIT_LABELS_ZH = Object.freeze({
 })
 
 /** The three places a human is required to stop (§10.1). Nothing else stops. */
-export const VCR_HUMAN_STOPS = frozen(['contact_patient', 'compute_over_budget', 'clinical_safety'])
+export const VCR_HUMAN_STOPS = frozen(['compute_over_budget', 'clinical_safety'])
 export const VCR_HUMAN_STOP_LABELS_ZH = Object.freeze({
-  contact_patient: '联系真实患者之前', compute_over_budget: '计算超出研究预算', clinical_safety: '出现临床安全问题',
+  compute_over_budget: '计算超出研究预算', clinical_safety: '出现临床安全问题',
 })
 
 /**
@@ -827,10 +816,10 @@ export const VCR_HUMAN_STOP_LABELS_ZH = Object.freeze({
  * and, since R10 (2026-10-07), the end of a computation the researcher asked for — in the conversation or with 「让 AI 做」. The
  * programme's own recomputation after a changed assumption sends none.
  */
-export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast', 'new_evidence', 'job_finished'])
+export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_evidence', 'job_finished'])
 export const VCR_NOTIFICATION_LABELS_ZH = Object.freeze({
   package_ready: '研究包完成', not_estimable: '结论为不可估计或假设冲突', budget_confirm: '计算预算需要确认',
-  new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测', new_evidence: '假设卡有了新证据',
+  new_evidence: '假设卡有了新证据',
   job_finished: '你要的计算算完了',
 })
 

@@ -1,0 +1,22 @@
+{
+  "dependency": "dsh",
+  "version": "0.2.1-rc.2",
+  "observedAt": "2026-10-28T00:08:07Z",
+  "observedOn": "the dev box, 2026-10-28: `@deepseek-ai/dsh@0.2.1-rc.2` installed with npm under the pin's `publishedBefore` into a scratch prefix, booted as the shipped `web` profile (not the hosted `evimed-runtime` composition) with one `--patch` overlay that sets the `ui-chat` row's config to `transcriptView: standard` and `linkOpening: new-tab`, the two values apps/server/src/dshProfilePatch.mjs writes",
+  "fixtureEvidence": "Every other file in this directory is the verbatim response body the kernel returned, byte for byte, captured with curl after exchanging the printed launch token for the browser cookie. Nothing was re-indented, trimmed or invented.",
+  "fixtures": {
+    "settings-describe.json": {
+      "request": "POST /api/settings/describe, body {\"type\":\"client-request\",\"rpcId\":\"r1\",\"method\":\"settings/describe\",\"payload\":{\"args\":{}}}",
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "readBy": "apps/server/test/runtimeUiPolicy.test.mjs (replayed through the hosted proxy's projection, runtimeUiSettingsAnswer in @evimed/domain) and apps/server/test/dshProfilePatch.test.mjs (the profile's values against the kernel's schema)"
+    }
+  },
+  "observations": [
+    "The web page sends exactly that body for the mirror's read (seen in the page's own network log the same day), over HTTP and not over the multiplexed socket.",
+    "The kernel refuses any other payload: `{}` and `null` answer gateway/internal (\"Remote payload must contain exactly one plain-object a…\"), and `{\"args\":{\"x\":1}}` answers gateway/arguments-invalid.",
+    "The `--patch` overlay's values arrive in the namespace view's `value`; `base` holds the schema defaults (`linkOpening: sidebar`, no `transcriptView`) and `user` is `{}`. The chat adopts `value`.",
+    "The document carries one view per configurable row of the whole composition: 21 here, among them the model provider's catalogue, the web tools' endpoints, the sandbox limits and the permission table. Only `ui-chat` is the page's to read.",
+    "Side by side on the same kernel against a stub Messages endpoint, three tool steps per turn: with the overlay the running turn shows one folded group titled by the step under way plus the live line; without it (the web default `detailed`) it shows six flat Think and tool rows."
+  ]
+}

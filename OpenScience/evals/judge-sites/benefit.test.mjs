@@ -127,6 +127,8 @@ test('what a decision takes with the site on counts the original path wherever t
   assert.equal(hybridOf('J3', failed).asked, true);
   // J4's original path is no notice at all.
   assert.equal(hybridOf('J4', unsettled).asked, false);
+  // J23's original path is no harm check: a method the judge does not settle is not flagged and goes on, with no second call.
+  assert.equal(hybridOf('J23', unsettled).asked, false);
 });
 
 test('a cascade whose Jev call is mostly unsettled is slower and dearer than the original path alone, and the benefit check sees it', () => {

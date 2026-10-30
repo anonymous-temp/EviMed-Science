@@ -1,3 +1,5 @@
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Freshness } from "@/components/ui/Freshness";
 import { useCallback, useEffect, useState } from "react";
 import { Play, RotateCw, Square } from "lucide-react";
 import { webErrorMessage, fetchWebMetrics, restartWebRuntime, startWebRuntime, stopWebRuntime, type WebMetrics } from "@/lib/apiClient";
@@ -12,6 +14,8 @@ import { OpsCard } from "./OpsCard";
 export function WebResourcesCard() {
   const [metrics, setMetrics] = useState<WebMetrics | null>(null);
   const [loading, setLoading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
+  const [lastSuccess, setLastSuccess] = useState<string | null>(null);
   const [runtimeAction, setRuntimeAction] = useState<"start" | "restart" | "stop" | null>(null);
   // Stop and restart end whatever analysis is running in the container. They
   // were one click next to 「启动」 with no confirmation (review B, P0).
@@ -21,8 +25,10 @@ export function WebResourcesCard() {
     setLoading(true);
     try {
       setMetrics(await fetchWebMetrics());
+      setReadError(null);
+      setLastSuccess(new Date().toISOString());
     } catch (e) {
-      toast.error(`无法读取资源：${webErrorMessage(e)}`);
+      setReadError(`无法读取资源：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -37,6 +43,8 @@ export function WebResourcesCard() {
     try {
       await startWebRuntime();
       setMetrics(await fetchWebMetrics());
+      setReadError(null);
+      setLastSuccess(new Date().toISOString());
       toast.success("研究运行时已启动。");
     } catch (e) {
       toast.error(`无法启动研究运行时：${webErrorMessage(e)}`);
@@ -50,6 +58,8 @@ export function WebResourcesCard() {
     try {
       await restartWebRuntime();
       setMetrics(await fetchWebMetrics());
+      setReadError(null);
+      setLastSuccess(new Date().toISOString());
       toast.success("研究运行时已重启。");
     } catch (e) {
       toast.error(`无法重启研究运行时：${webErrorMessage(e)}`);
@@ -63,6 +73,8 @@ export function WebResourcesCard() {
     try {
       await stopWebRuntime();
       setMetrics(await fetchWebMetrics());
+      setReadError(null);
+      setLastSuccess(new Date().toISOString());
       toast.success("研究运行时已停止。");
     } catch (e) {
       toast.error(`无法停止研究运行时：${webErrorMessage(e)}`);
@@ -86,11 +98,12 @@ export function WebResourcesCard() {
       description={metrics ? `${metrics.project.name} · ${formatClock(metrics.createdAt)}` : "当前项目与服务端进程"}
       refresh={{ label: "刷新资源状态", loading, disabled: runtimeAction != null, onRefresh: () => void refresh() }}
     >
+      <div className="px-5 pt-4">{metrics ? <Freshness at={lastSuccess} error={readError} onRetry={() => void refresh()} /> : readError ? <InlineAlert onRetry={() => void refresh()}>{readError}</InlineAlert> : <p className="text-ui text-text-3">正在读取运行状况</p>}</div>
       <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="存储" value={max ? `${humanSize(used)} / ${humanSize(max)}` : humanSize(used)} detail={pct == null ? "无配额" : `已用 ${pct}%`} />
-        <Metric label="任务" value={`${runningTasks} 个进行中`} detail={`共 ${metrics?.tasks.total ?? 0} 条`} />
+        <Metric label="存储" value={!metrics ? "未知" : max ? `${humanSize(used)} / ${humanSize(max)}` : humanSize(used)} detail={!metrics ? "尚未读取" : pct == null ? "无配额" : `已用 ${pct}%`} />
+        <Metric label="任务" value={metrics ? `${runningTasks} 个进行中` : "未知"} detail={metrics ? `共 ${metrics.tasks.total} 条` : "尚未读取"} />
         <Metric label="运行时" {...runtimeMetric(metrics, runningTasks)} />
-        <Metric label="服务端内存" value={humanSize(metrics?.server.memory.rssBytes ?? 0)} detail={metrics ? `pid ${metrics.server.pid}` : "未加载"} />
+        <Metric label="服务端内存" value={metrics ? humanSize(metrics.server.memory.rssBytes) : "未知"} detail={metrics ? `pid ${metrics.server.pid}` : "未加载"} />
       </div>
       <div className="flex flex-wrap gap-2 px-5 pb-4">
         <Tooltip content="启动研究运行时" kind="label">
@@ -168,7 +181,7 @@ function Metric({ label, value, detail, tone }: { label: string; value: string; 
  * is an alarm only when work waits on it — 「失联」 is a claim that someone is affected, and it is made only then.
  */
 function runtimeMetric(metrics: WebMetrics | null, waiting: number): { value: string; detail: string; tone?: "warn" } {
-  if (!metrics) return { value: "已停止", detail: "未加载" };
+  if (!metrics) return { value: "未知", detail: "尚未读取" };
   const runtime = metrics.runtime;
   if (runtime.running) return { value: "运行中", detail: runtime.startedAt ? `启动于 ${formatRelativeTime(runtime.startedAt)}` : "" };
   if (runtime.stale && waiting > 0) return { value: "失联", detail: `有 ${waiting} 个任务在等它`, tone: "warn" };

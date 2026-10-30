@@ -526,14 +526,14 @@ describe("行动: a read that failed is not an empty page (owner, 2026-10-19)", 
     client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [], control: [], counts: { total: 0, byKind: {}, byStatus: {}, gapsWithoutEntry: 0 } });
     client.getGeoArticles.mockRejectedValue(new Error("offline"));
     renderTab(geoProject({ content: "done" }));
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent(/^稿件没有读到：/);
     expect(alert.closest("section")).toHaveAttribute("id", "geo-review");
     expect(screen.queryByRole("button", { name: "写第一批稿件" })).not.toBeInTheDocument();
     client.getGeoArticles.mockResolvedValue({ articles: [ARTICLES[3]] });
     await userEvent.click(within(alert).getByRole("button", { name: /重试/ }));
     expect(await screen.findByRole("region", { name: "等你放行的稿件" })).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
   it("says the placing and the measured effect were not read, each with its own 重试, and keeps the rest of the page", async () => {
@@ -541,10 +541,13 @@ describe("行动: a read that failed is not an empty page (owner, 2026-10-19)", 
     client.getGeoMonitoring.mockRejectedValue(new Error("offline"));
     renderTab();
     await findRow(ACTION_BRAND.key);
-    const alerts = await screen.findAllByRole("alert");
-    expect(alerts.map((node) => node.textContent)).toEqual(expect.arrayContaining([
-      expect.stringMatching(/^投放效果的测量没有读到：/), expect.stringMatching(/^投放记录没有读到：/),
-    ]));
+    const distributionFailure = await screen.findByRole("note");
+    expect(distributionFailure).toHaveTextContent(/^投放记录没有读到：/);
+    expect(within(distributionFailure).getByRole("button", { name: /重试/ })).toBeInTheDocument();
+    // The monitoring section retains its own direct alert; shared LoadError is a persistent note.
+    const monitoringFailure = await screen.findByRole("alert");
+    expect(monitoringFailure).toHaveTextContent(/^投放效果的测量没有读到：/);
+    expect(within(monitoringFailure).getByRole("button", { name: /重试/ })).toBeInTheDocument();
     expect(screen.queryByText("首批稿件上线后，这里会把投放的问题群和对照组放在一起比。")).not.toBeInTheDocument();
   });
 

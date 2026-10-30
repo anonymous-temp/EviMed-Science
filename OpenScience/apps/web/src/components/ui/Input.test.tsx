@@ -1,8 +1,9 @@
+import { SearchInput } from "./SearchInput";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Input, inputClasses, Textarea, textareaClasses } from "./Input";
+import { Input, inputClasses, Select, Textarea, textareaClasses } from "./Input";
 
 describe("Input trailing", () => {
   it("holds a control inside the field's right edge, and the text stops before it", () => {
@@ -63,7 +64,9 @@ describe("Input", () => {
     expect(input).toHaveClass("border-border-control");
     // Focus is an outline forced colours can paint, never a ring shadow
     // (appendix E #1).
-    expect(input).toHaveClass("focus:outline-focus", "focus:outline-1", "focus:-outline-offset-2");
+    expect(input).toHaveClass("focus:outline-focus-input", "focus:outline-2", "focus:-outline-offset-2");
+    // Inside the box: an outside ring is cut off where the field has no room around it.
+    expect(input.className).not.toMatch(/(^|\s)focus:outline-offset-/);
     expect(input.className).not.toMatch(/ring-/);
   });
 
@@ -124,4 +127,19 @@ it('native select shares the field label, error association and control height w
   expect(select).toHaveClass('h-control');expect(input).toHaveClass('h-control');expect(select).toHaveAttribute('aria-invalid','true');
   expect(document.getElementById(select.getAttribute('aria-errormessage')!)).toHaveTextContent('请选择频率');
   expect(select.parentElement?.querySelector('label')).toHaveAttribute('for',select.id);
+});
+
+
+it("keeps an error border and an independent ink focus outline on all field variants", () => {
+  render(<><Input label="Input" error="Required" /><Textarea label="Textarea" error="Required" /><Select label="Select" error="Required"><option>Choice</option></Select></>);
+  for (const label of ["Input", "Textarea", "Select"]) {
+    expect(screen.getByLabelText(label)).toHaveClass("border-error", "focus:border-error", "focus:outline-focus-input", "focus:outline-2");
+  }
+});
+
+
+it("uses ink focus for full-size and toolbar search fields", () => {
+  render(<><SearchInput label="Page search" /><SearchInput label="Toolbar search" size="sm" /></>);
+  expect(screen.getByLabelText("Page search")).toHaveClass("focus:border-focus-input");
+  expect(screen.getByLabelText("Toolbar search")).toHaveClass("focus:outline-focus-input", "focus:outline-2");
 });

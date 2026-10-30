@@ -217,6 +217,8 @@ function fakeEditor(provider = { balanceSpent: false }) {
       const lane = marker(item.titleRaw, "lane");
       return { ...base, verification: "passed", output: {
         genre: marker(item.titleRaw, "genre"),
+        // c5-biz: [kind:x] is the kind of 行业动态 the model names (a word outside the list reaches the pipeline as the model said it).
+        industryKind: marker(item.titleRaw, "kind"),
         titleZh: item.isChinese ? item.titleRaw : `中文：${item.titleRaw.slice(0, 20)}`,
         summaryZh: `导读：${item.abstract ? "有摘要" : "无摘要"}。`, reasonZh: "值得一看。",
         lane: lane && item.allowedLanes.includes(lane) ? lane : item.allowedLanes[0],
@@ -616,21 +618,23 @@ test("c3 review: a total the scoring of 2026-10-25 did not write is not weighed 
   await reset();
   const clock = new Date("2026-09-22T12:00:00Z");
   const { pipeline, plugin } = pipelineWith({ now: () => clock });
-  const round = async (/** @type {string} */ doi) => {
-    const delivered = await deliver({ source_id: "j-small", doi, title: `A paper of the day ${doi} [score:20]`, summary: "P".repeat(200) });
+  const round = async (/** @type {string} */ doi, /** @type {string} */ topic) => {
+    const delivered = await deliver({ source_id: "j-small", doi, title: `${topic} [score:20]`, summary: "P".repeat(200) });
     plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
     await pipeline.processBatch();
     return Number((await entry(delivered.id)).item_id);
   };
-  const old = await round("10.1000/scale.1");
+  const old = await round("10.1000/scale.1", DISTINCT_TOPICS[0]);
   // As production holds an item before the rescore: a total from the old prompts, high on today's line, no scoreVersion.
   await database.query(`UPDATE evimed_frontier.items SET score_total = 90, selected = false, selected_rule = NULL, selected_at = NULL,
     editor_diagnostics = editor_diagnostics - 'scoreVersion' WHERE id = $1`, [old]);
-  await round("10.1000/scale.2");
+  const second = await round("10.1000/scale.2", DISTINCT_TOPICS[1]);
+  assert.notEqual(second, old, "the selection probe must not merge into the old-scored item");
   assert.equal((await item(old)).selected, false, "an old-scale 90 is no pick: selection is sticky, and the old scale fills the day");
   await database.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb) || jsonb_build_object('scoreVersion', $2::text)
     WHERE id = $1`, [old, FRONTIER_SCORE_VERSION]);
-  await round("10.1000/scale.3");
+  const third = await round("10.1000/scale.3", DISTINCT_TOPICS[2]);
+  assert.equal(new Set([old, second, third]).size, 3);
   assert.deepEqual([(await item(old)).selected, (await item(old)).selected_rule], [true, "threshold"], "scored again, it is weighed like any other");
 });
 
@@ -1509,4 +1513,60 @@ test("ct-write: the edit's genre is stored — the model's where code is not sur
   assert.equal(fixed["Morning rounds: three stories"], "roundup");
   assert.equal(fixed["国家药监局批准一款新药上市"], null);
   assert.equal(fixed["Novo Nordisk announces a licensing deal"], null);
+});
+
+test("c5-biz: the edit's kind of 行业动态 is stored with the genre — only for an item that ends as 行业动态 — and a word outside the list is none", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const deal = await deliver({ source_id: "c-novo", title: "Novo Nordisk announces a licensing deal [kind:deal]", summary: "N".repeat(120) });
+  const named = await deliver({ source_id: "m-stat", title: "A biotech raises a Series B [genre:industry] [kind:financing]", summary: "S".repeat(120) });
+  const approval = await deliver({ source_id: "m-cn", title: "国家药监局批准一款新药上市 [genre:approval] [kind:deal]", summary: "国".repeat(120) });
+  const safety = await deliver({ source_id: "r-medwatch", title: "Drug Safety Communication: a recall [kind:operations]", summary: "R".repeat(120) });
+  const unknown = await deliver({ source_id: "c-novo", title: "Novo Nordisk is in a merger [kind:merger]", summary: "U".repeat(120) });
+  const unnamed = await deliver({ source_id: "c-novo", title: "Novo Nordisk opens a plant", summary: "P".repeat(120) });
+  for (const id of [deal, named, approval, safety, unknown, unnamed]) {
+    plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} });
+  }
+  await pipeline.processBatch();
+  await pipeline.processBatch();
+  const stored = async (/** @type {{ id: number }} */ delivered) => {
+    const row = await item(Number((await entry(delivered.id)).item_id));
+    return [row.genre, row.industry_kind];
+  };
+  assert.deepEqual(await stored(deal), ["industry", "deal"], "code's genre for a newsroom, the model's kind");
+  assert.deepEqual(await stored(named), ["industry", "financing"], "the model's genre and the model's kind");
+  assert.deepEqual(await stored(approval), ["approval", null], "an approval has no kind, whatever the model said");
+  assert.deepEqual(await stored(safety), ["safety", null], "a safety notice has none either");
+  assert.deepEqual(await stored(unknown), ["industry", null], "a word outside the list is dropped, not mapped to the nearest kind");
+  assert.deepEqual(await stored(unnamed), ["industry", null], "no kind named: none");
+});
+
+test("c5-biz: an item re-labelled without a new edit keeps the kind an earlier edit or the backfill gave it for as long as it is 行业动态", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  // Both are published with their edit: a company's newsroom, and a news report the model calls news.
+  const company = await deliver({ source_id: "c-novo", title: "Novo Nordisk announces a licensing deal [kind:deal]", summary: "N".repeat(120) });
+  const news = await deliver({ source_id: "m-stat", title: "A report on a hospital merger [genre:news] [kind:deal]", summary: "C".repeat(120) });
+  for (const delivered of [company, news]) {
+    plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} });
+  }
+  await pipeline.processBatch();
+  const ids = [Number((await entry(company.id)).item_id), Number((await entry(news.id)).item_id)];
+  assert.deepEqual([(await item(ids[0])).industry_kind, (await item(ids[1])).industry_kind], ["deal", null], "the edit named the company's and not the news report's");
+  // The backfill has since named each one's kind (the second is a stale one), and the items are back at the start of their queue (a
+  // failed item seen again is adopted that way) with the editor unavailable this time: they are labelled again, with no new edit.
+  await database.query("UPDATE evimed_frontier.items SET industry_kind = 'financing' WHERE id = ANY($1::bigint[])", [ids]);
+  await database.query(`UPDATE evimed_frontier.items SET state = 'screened', attempts = 0, editor_version = NULL, verification = 'pending', lease_owner = NULL,
+    lease_until = NULL WHERE id = ANY($1::bigint[])`, [ids]);
+  const offline = pipelineWith({ now: () => clock, plugin, editor: Object.assign(fakeEditor(), { available: false }) });
+  await offline.pipeline.processBatch();
+  const after = await Promise.all(ids.map(item));
+  assert.deepEqual(after.map((row) => row.state), ["published", "published"]);
+  assert.deepEqual(after.map((row) => row.editor_diagnostics.reason), ["unavailable", "unavailable"], "no edit was asked: the labels were decided without one");
+  assert.equal(after[0].genre, "industry");
+  assert.equal(after[0].industry_kind, "financing", "the backfill's kind stands while the item is still 行业动态");
+  assert.equal(after[1].genre, "news");
+  assert.equal(after[1].industry_kind, null, "a kind on an item that is not 行业动态 is not kept");
 });

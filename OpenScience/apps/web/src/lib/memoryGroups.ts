@@ -3,8 +3,11 @@ import type { OwnCapsuleEntry } from "./memoryClient";
 
 /**
  * Where a fact belongs on the capsule page: 关于你 or a project (2026-10-07
- * plan §3.2). Each is one tab, one list; 做法 is the third tab and holds the
- * learned methods, which are not facts at all, and 成长 the fourth.
+ * plan §3.2). Both are rows of the one list 关于你 since 2026-10-28 — a project's
+ * facts are its last group, 「项目记忆」, each row naming its project; there is
+ * no section for a project, because a person has one capsule and a project is a
+ * label on a memory. 做法 is the second list and holds the learned methods, which
+ * are not facts at all.
  *
  * Two stores answer one question here. A structured memory files itself by
  * kind and scope; a capsule entry by its fact kind and the project it was

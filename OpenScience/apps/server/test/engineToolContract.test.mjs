@@ -118,7 +118,7 @@ test("the session models, efforts and engine tools the MCP server admits are the
     release();
     return decorated;
   });
-  assert.equal(wrapped.length, 9, "the wrapper decorates the six specialists, calculator and scoped knowledge search/browse");
+  assert.equal(wrapped.length, 15, "the wrapper decorates specialists, calculator, knowledge and six VCR tools");
   assert.deepEqual(missingFrom(wrapped, admitted.tools), [], "the wrapper attaches a context to a tool whose body refuses one");
   assert.deepEqual(missingFrom(admitted.tools, wrapped), [], "the MCP server expects a context on a tool the wrapper never gives one");
 });
@@ -183,7 +183,7 @@ test("the engines' own copies of the context check admit the certified models, l
 
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const vcrHealth = { ok: true, engineVersion: "1.0.0", rVersion: "R 4.3.3", packageLockHash: "a".repeat(64),
-  numericalSourceDigest: "b".repeat(64), methods: ["design.analytic", "comparator.evalue"] };
+  numericalSourceDigest: "b".repeat(64), methods: ["design.analytic", "comparator.evalue", "design.simulate", "design.assurance", "accrual.poisson_gamma", "comparator.map_prior"] };
 
 /**
  * What the control plane's VCR replay says of one frozen input: `admitted` once
@@ -223,7 +223,7 @@ test("research_calculate offers the domain's methods and describes inputs the VC
   assert.deepEqual(missingFrom(described.methods, RESULT_REPLAY_METHODS), [], "the tool offers a method the control plane does not run");
   // Every method is asked about by one of the two suites; these are this one's.
   assert.equal(described.executed.length, 3);
-  assert.deepEqual(Object.keys(described.cases).sort(), ["comparator.evalue", "design.analytic"]);
+  assert.deepEqual(Object.keys(described.cases).sort(), ["accrual.poisson_gamma", "comparator.evalue", "comparator.map_prior", "design.analytic", "design.assurance", "design.simulate"]);
 
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "evimed-engine-tool-contract-"));
   t.after(() => rm(rootDir, { recursive: true, force: true }));

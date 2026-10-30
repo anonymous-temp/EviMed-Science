@@ -34,7 +34,7 @@ worse, one that reads well and no longer matches its sources:
    clause changes what it is claimed to support.
 4. **Hidden claim markers** — `<!-- claim:CLM-014 -->`. They bind report prose
    to the evidence matrix. Keep each one attached to the sentence it marked.
-5. **Derivation marks** — `〔推导〕` — and the assumptions, method, and
+5. **Derivation marks** — `〔推导〕`, `[derived]` — and the assumptions, method, and
    sensitivity that accompany a derived result.
 6. **Section headings**, their order, and the reference list.
 7. **Hedging that reflects evidence strength.** "可能" in front of a claim

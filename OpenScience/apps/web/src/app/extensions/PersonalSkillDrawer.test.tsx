@@ -37,17 +37,21 @@ it("opens on the skill's text and where it is used, in two tabs rather than ten 
   expect(within(drawer).getByText("核对检索式")).toBeInTheDocument();
   expect(within(drawer).getByText("Use sources.")).toBeInTheDocument();
   expect(within(drawer).getByRole("link", { name: "资料/表.csv" })).toBeInTheDocument();
-  expect(within(drawer).getByRole("switch", { name: "在“我的研究”里使用" })).not.toBeChecked();
-  expect(within(drawer).getByRole("switch", { name: "新项目默认使用" })).not.toBeChecked();
+  expect(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ })).not.toBeChecked();
+  expect(within(drawer).getByRole("switch", { name: /新项目默认使用/ })).not.toBeChecked();
+  // Each switch says, in the words beside it, what it switches; its state is a state, not a verb on a button.
+  expect(within(drawer).getByText("在“我的研究”里使用")).toBeVisible();
+  expect(within(drawer).getByText("新项目默认使用")).toBeVisible();
+  expect(within(drawer).queryByText(/应用启用|应用停用/)).not.toBeInTheDocument();
   expect(drawer.textContent).not.toMatch(/版本 \d|当前项目选用版本|包摘要/);
 });
 
 it("the switches select the skill for this project and for new ones, at its current state", async () => {
   show();
   const drawer = await screen.findByRole("dialog", { name: "检索方案" });
-  await userEvent.click(within(drawer).getByRole("switch", { name: "在“我的研究”里使用" }));
+  await userEvent.click(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ }));
   await waitFor(() => expect(skills.saveProjectSkills).toHaveBeenCalledWith("project-1", 6, [{ skillId: "skill:one", revision: 2 }]));
-  await userEvent.click(within(drawer).getByRole("switch", { name: "新项目默认使用" }));
+  await userEvent.click(within(drawer).getByRole("switch", { name: /新项目默认使用/ }));
   await waitFor(() => expect(skills.savePersonalSkillDefaults).toHaveBeenCalledWith(5, [{ skillId: "skill:one", revision: 2 }]));
 });
 
@@ -89,7 +93,7 @@ it("opening an earlier state compares its text with the current one, and the com
   expect(within(drawer).queryByRole("region", { name: "版本比较" })).not.toBeInTheDocument();
 });
 
-it("the menu edits in the drawer, and a saved edit tells the list", async () => {
+it("the menu edits in the main area, and a saved edit tells the list", async () => {
   skills.updatePersonalSkill.mockResolvedValue(skill);
   show();
   await screen.findByRole("dialog", { name: "检索方案" });
@@ -162,4 +166,36 @@ it("exports the skill's history through the authenticated portable endpoint, fro
   await userEvent.click(screen.getByRole("menuitem", { name: "导出历史" }));
   expect(click).toHaveBeenCalledTimes(1);
   click.mockRestore();
+});
+
+
+it("keeps a failed edit in the main area and guards the return to details", async () => {
+  skills.updatePersonalSkill.mockRejectedValue(new Error("save unavailable"));
+  show();
+  await screen.findByRole("dialog", { name: "检索方案" });
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("名称"), " draft");
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText("名称")).toHaveValue("检索方案 draft");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能详情" }));
+  await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "取消" }));
+  expect(screen.getByLabelText("名称")).toHaveValue("检索方案 draft");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能详情" }));
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改" }));
+  expect(await screen.findByRole("dialog", { name: "检索方案" })).toBeInTheDocument();
+});
+
+
+it("moves focus into the editing form, and back to 更多操作 when the details return", async () => {
+  show();
+  await screen.findByRole("dialog", { name: "检索方案" });
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+  expect(await screen.findByRole("region", { name: "编辑技能" })).toHaveFocus();
+  await userEvent.click(screen.getByRole("button", { name: "返回技能详情" }));
+  await screen.findByRole("dialog", { name: "检索方案" });
+  await waitFor(() => expect(screen.getByRole("button", { name: "更多操作" })).toHaveFocus());
 });

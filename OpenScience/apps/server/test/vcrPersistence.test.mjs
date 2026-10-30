@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { VCR_COMPARATOR_ROUTES, VCR_CONCLUSIONS, VCR_CRITERION_STATES, VCR_JOB_STATES, VCR_MEMBER_ROLES, VCR_REFERRAL_STATES, VCR_VALUE_SOURCES } from "@evimed/domain";
+import { VCR_COMPARATOR_ROUTES, VCR_CONCLUSIONS, VCR_CRITERION_STATES, VCR_JOB_STATES, VCR_MEMBER_ROLES, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import { VCR_SCHEMA, VCR_TABLES, vcrSchemaSql } from "../src/vcrPersistence.mjs";
 import { VCR_ID_PREFIXES, vcrId } from "../src/vcrStoreBase.mjs";
@@ -49,7 +49,6 @@ test("patient-level rows have no home in this schema", () => {
 test("closed vocabularies reach the schema as CHECKs", () => {
   for (const word of VCR_CONCLUSIONS) assert.ok(sql.includes(`'${word}'`), `${word} is not CHECKed anywhere`);
   for (const word of VCR_CRITERION_STATES) assert.ok(sql.includes(`'${word}'`), `${word} is not CHECKed anywhere`);
-  for (const word of VCR_REFERRAL_STATES) assert.ok(sql.includes(`'${word}'`), `${word} is not CHECKed anywhere`);
   for (const word of VCR_MEMBER_ROLES) assert.ok(sql.includes(`'${word}'`), `${word} is not CHECKed anywhere`);
   for (const word of VCR_COMPARATOR_ROUTES) assert.ok(sql.includes(`'${word}'`), `${word} is not CHECKed anywhere`);
   for (const word of VCR_JOB_STATES) assert.ok(sql.includes(`'${word}'`), `${word} is not CHECKed anywhere`);
@@ -92,13 +91,19 @@ test("a sealed outcome field is a column on the snapshot, not a convention", () 
   assert.match(sql, /snapshots[\s\S]*?sealed_until\s+timestamptz/);
 });
 
-test("a screen failure points at the criterion that failed", () => {
-  assert.match(sql, /referrals[\s\S]*?screen_fail_criterion_id\s+text REFERENCES evimed_vcr\.criteria\(id\)/);
+test("fresh schemas omit approved retired CRM tables and never drop legacy data on startup", () => {
+ for(const table of ["sites","referrals","referral_events"]) {
+  assert.equal(VCR_TABLES.includes(table),false);
+  assert.doesNotMatch(sql,new RegExp(`CREATE TABLE IF NOT EXISTS evimed_vcr\\.${table} \\(`));
+ }
+ assert.doesNotMatch(sql,/DROP TABLE|DELETE FROM evimed_vcr\.members/);
+ assert.ok(VCR_TABLES.includes("followup_episodes"));
 });
 
-test("contacting a patient is a column two people have to fill", () => {
-  assert.match(sql, /referrals[\s\S]*?contact_approved_by\s+text/);
-  assert.match(sql, /referrals[\s\S]*?contact_approved_at\s+timestamptz/);
+test("active role checks preserve legacy rows with NOT VALID while denying new recruitment roles",()=>{
+ assert.match(sql,/vcr_members_active_roles CHECK \(role IN [^;]+ NOT VALID/);
+ assert.match(sql,/vcr_grants_active_roles CHECK \(revoked_at IS NOT NULL OR role IS NULL OR role IN [^;]+ NOT VALID/);
+ assert.equal(VCR_MEMBER_ROLES.includes("recruiter"),false);assert.equal(VCR_MEMBER_ROLES.includes("site"),false);
 });
 
 test("ids carry their kind, and an unknown kind is refused", () => {

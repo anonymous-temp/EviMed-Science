@@ -51,11 +51,11 @@ export function percentile(values, p) {
 /**
  * What a decision takes and costs with the site on: Jev's call, plus the original path's where the caller asks it after Jev.
  * Most callers ask it for every decision Jev did not settle; J3 leaves an unsure answer on the ordinary line, which is no model call,
- * and asks the original classifier only when Jev failed; J4's original path is no notice at all.
+ * and asks the original classifier only when Jev failed; J4's original path is no notice at all, and J23's no harm check.
  * @param {string} site @param {any} row
  */
 export function hybridOf(site, row) {
-  const asked = site === 'J4' ? false : site === 'J3' ? row.outcome === 'fallback' : row.outcome !== 'settled';
+  const asked = site === 'J4' || site === 'J23' ? false : site === 'J3' ? row.outcome === 'fallback' : row.outcome !== 'settled';
   const ms = (Number.isFinite(row.ms) ? row.ms : 0) + (asked && Number.isFinite(row.incumbent?.ms) ? row.incumbent.ms : 0);
   const cost = (Number.isFinite(row.cost) ? row.cost : 0) + (asked && Number.isFinite(row.incumbent?.cost) ? row.incumbent.cost : 0);
   return { ms, cost, asked };

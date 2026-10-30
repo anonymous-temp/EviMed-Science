@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "evaluators": [
+    {
+      "keyId": "",
+      "publicKey": "",
+      "surfaces": ["frontier-selection"],
+      "procedureDigests": [],
+      "consumerDigests": []
+    }
+  ],
+  "activationPolicies": {
+    "frontier-selection": {
+      "mode": "shadow",
+      "afterShadow": "global",
+      "allowGlobal": true,
+      "allowExpansion": true,
+      "minExecutions": 200,
+      "minDays": 2,
+      "maxErrors": 0
+    }
+  }
+}

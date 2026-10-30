@@ -207,7 +207,7 @@ test("every one of the plan's 38 acceptance scenarios is named by a test title s
     "a scenario nothing asserts reads exactly like one that passes; put its id in the title of the test that asserts it, or say in the plan why it cannot be a test");
 });
 
-test("AC-24 every capability ships at least three real briefs, and one of them is the accrual backtest", async () => {
+test("AC-24 every capability ships research briefs and matching retains both directions without recruitment operations", async () => {
   /** @type {Record<string, any[]>} */
   const packs = {};
   for (const id of VCR_CAPABILITIES) {
@@ -225,13 +225,12 @@ test("AC-24 every capability ships at least three real briefs, and one of them i
     }
     packs[id] = briefs;
   }
-  // The one the plan names specifically: a backtest of accrual against a
-  // partner's historical funnel (AC-37's measurement, asked for as a brief).
-  const matching = JSON.stringify(packs["vcr-matching"]);
-  assert.ok(/入组|accrual|漏斗|funnel/i.test(matching),
-    "no vcr-matching brief asks for the accrual work the plan names in AC-24");
-  assert.ok(/回测|backtest|覆盖率|coverage/i.test(matching),
-    "no vcr-matching brief asks for the backtest half of it");
+  // The reset retains evidence-backed matching and retires the old CRM accrual brief.
+  const matching = packs["vcr-matching"];
+  assert.ok(matching.some(brief => brief.inputs.direction === "patient_to_trial"));
+  assert.ok(matching.some(brief => brief.inputs.direction === "trial_to_patient"));
+  assert.ok(matching.some(brief => brief.id.includes("thin-chart")), "missing criteria must be evaluated as unknown");
+  assert.ok(matching.every(brief => !brief.id.includes("accrual-forecast-backtest") && !("draftMaterials" in brief.inputs)));
 });
 
 test("AC-02 the T0 tier is a complete journey in the vocabulary, not a degraded one", () => {
@@ -239,7 +238,7 @@ test("AC-02 the T0 tier is a complete journey in the vocabulary, not a degraded 
   // population → virtual patients → a reference trial, with realPatients 0).
   // What belongs here is the rule that makes it possible: at T0 — public
   // material only — a population kind, a comparator route and a trial design
-  // all exist, so no step of the seven has to be skipped for want of data.
+  // all exist, so useful research is possible without observed patient rows.
   assert.equal(VCR_DATA_TIERS[0], "T0");
   assert.ok(VCR_POPULATION_KINDS.includes("scenario"), "a declared parametric population is a first-class population");
   assert.ok(VCR_POPULATION_KINDS.includes("literature"), "a population from published baselines is too");

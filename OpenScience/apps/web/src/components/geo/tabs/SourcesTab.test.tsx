@@ -24,7 +24,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 
 function Probe() {
   const location = useLocation();
-  return <div data-testid="search">{location.search}</div>;
+  return <><div data-testid="location">{location.pathname}</div><div data-testid="search">{location.search}</div></>;
 }
 
 function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/sources") {
@@ -139,10 +139,12 @@ describe("信源: two views in the band", () => {
 });
 
 describe("selected source analysis",()=>{
- it("uses the server selected source union presenter before the existing source actions",async()=>{
+ it("offers source analysis without mounting another workbench",async()=>{
   client.getGeoSources.mockResolvedValue({...sourcesFilled,sources:many});renderTab();await screen.findByText("6 个信源");
-  const workbench=screen.getByTestId("source-analysis"),list=screen.getByRole("list",{name:"信源"});
-  expect(workbench).toHaveTextContent("V17");expect(workbench.compareDocumentPosition(list)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const entry=screen.getByRole("link",{name:"信源引用分析"});
+  expect(entry).toHaveAttribute("href", expect.stringContaining("analysis=V17"));
+  expect(screen.queryByTestId("source-analysis")).toBeNull();
+  expect(screen.getByRole("list",{name:"信源"})).toBeInTheDocument();
   expect(screen.queryByRole("list",{name:"各类站点被引用的次数"})).toBeNull();
  });
 });
@@ -283,4 +285,56 @@ it('opens an exact registered source detail action beyond the bounded catalogue 
  expect(await screen.findByRole('dialog',{name:'Registered source 2001'})).toBeInTheDocument();
  expect(client.getGeoSource).toHaveBeenCalledWith('geo_1','source-2001',{selectionRef:'gsel_tail'});
  expect(screen.getByRole('button',{name:'查看相关实施方案'})).toBeInTheDocument();
+});
+
+it('navigates source planning to the plan main area with exact source and selection identity', async () => {
+  const base = sourcesFilled.sources[0];
+  client.getGeoSources.mockResolvedValue({...sourcesFilled,selection:{reference:'gsel_plan_exact'}});
+  client.getGeoSource.mockResolvedValue({...sourceDetailOf(base),selection:{reference:'gsel_plan_exact'}});
+  renderTab(geoProject(), `/app/geo/geo_1/sources?source=${base.domain}&session=s1&selectionRef=gsel_plan_exact`);
+  await screen.findByRole('dialog');
+  await userEvent.click(screen.getByRole('button', {name:'查看相关实施方案'}));
+  expect(screen.getByTestId('location')).toHaveTextContent('/app/geo/geo_1/plan');
+  expect(screen.getByTestId('search')).toHaveTextContent(`planSource=${base.id}`);
+  expect(screen.getByTestId('search')).toHaveTextContent('selectionRef=gsel_plan_exact');
+  expect(screen.getByTestId('search')).toHaveTextContent('session=s1');
+});
+
+it('keeps the selected destination and exact analytical scope when clearing a source-list query',async()=>{
+ renderTab(geoProject(),'/app/geo/geo_1/sources?selectionRef=gsel_keep&engines=kimi&questionVersion=3&session=s1');
+ await screen.findByLabelText('搜索信源');
+ await userEvent.click(screen.getByRole('button',{name:'可投放'}));
+ await userEvent.type(screen.getByLabelText('搜索信源'),'丁香');
+ await userEvent.click(within(toolbar()).getByRole('button',{name:'清除筛选'}));
+ const params=new URLSearchParams(screen.getByTestId('search').textContent!);
+ expect(params.get('view')).toBe('placeable');expect(params.get('selectionRef')).toBe('gsel_keep');
+ expect(params.get('engines')).toBe('kimi');expect(params.get('questionVersion')).toBe('3');expect(params.get('session')).toBe('s1');
+ expect(params.has('sourceSearch')).toBe(false);expect(screen.getByRole('button',{name:'可投放'})).toHaveAttribute('aria-pressed','true');
+});
+
+it.each(['explicit','selected','empty'] as const)('preserves the original %s source-to-plan context in the named main-area entry',async mode=>{
+ const source=sourcesFilled.sources[0];
+ if(mode==='empty')client.getGeoSources.mockResolvedValue({...sourcesFilled,sources:[],selection:{reference:'gsel_exact_plan'}});
+ else client.getGeoSources.mockResolvedValue({...sourcesFilled,selection:{reference:'gsel_exact_plan'}});
+ const query=new URLSearchParams({planUrl:'https://example.org/original/page?x=1',session:'s1',strategyVersion:'7',targetVersion:'3'});
+ if(mode==='selected')query.set('source',source.domain);else query.set('planSource','source_exact');
+ const mounted=renderTab(geoProject(),`/app/geo/geo_1/sources?${query}`);
+ await waitFor(()=>expect(mounted.container.querySelector('a[href*="/plan?"]')).toBeInTheDocument());
+ const link=mounted.container.querySelector('a[href*="/plan?"]') as HTMLAnchorElement;
+ const address=new URL(link.href);expect(address.pathname).toBe('/app/geo/geo_1/plan');
+ expect(address.searchParams.get('planSource')).toBe(mode==='selected'?source.id:'source_exact');
+ expect(address.searchParams.get('planUrl')).toBe('https://example.org/original/page?x=1');
+ expect(address.searchParams.get('selectionRef')).toBe('gsel_exact_plan');expect(address.searchParams.get('session')).toBe('s1');
+ expect(address.searchParams.get('strategyVersion')).toBe('7');expect(address.searchParams.get('targetVersion')).toBe('3');
+});
+
+
+it('clears the platform the analysis scope set in the cited view — the filter shows it, so clearing it must — and leaves the rest of the address',async()=>{
+ renderTab(geoProject(),'/app/geo/geo_1/sources?selectionRef=gsel_keep&engines=deepseek&questionVersion=3&session=s1');
+ await screen.findByLabelText('搜索信源');
+ await userEvent.click(within(toolbar()).getByRole('button',{name:'清除筛选'}));
+ const params=new URLSearchParams(screen.getByTestId('search').textContent!);
+ expect(params.has('engines')).toBe(false);expect(params.has('selectionRef')).toBe(false);
+ expect(params.get('questionVersion')).toBe('3');expect(params.get('session')).toBe('s1');
+ expect(within(toolbar()).queryByRole('button',{name:'清除筛选'})).toBeNull();
 });

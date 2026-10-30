@@ -56,7 +56,7 @@ describe("a GEO metric opens all of its contributors", () => {
     render(<MemoryRouter><CellLink geoId="g" cell={cell} label="提及率" /></MemoryRouter>);
     await user.click(screen.getByRole("button", { name: /提及率/ }));
     await user.click(await screen.findByRole("button", { name: "继续读取回答" }));
-    await screen.findByRole("alert");
+    await screen.findByRole("note");
     expect(screen.getByRole("link", { name: "原题 0" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(client.getGeoObservations).toHaveBeenLastCalledWith("g", "gsel_current", member.metric, 1));
