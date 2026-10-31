@@ -236,7 +236,11 @@ feeds 9.
 `python tools/text_probe.py <doi-file>` runs the chain on DOIs (`doi` or `doi|source_id` a line) and prints which step
 answered each, writing nothing; `python tools/measure_abstract_feeds.py` measures the configured feeds (text share, median
 length, matchability). `python -m knowledge_plugin retext --kinds journal [--apply]` reads the journal entries the
-platform asked for that have no text at all through the chain again.
+platform asked for that have no text at all through the chain again. `retext --kinds unread-page [--apply]` (named
+only) reads again the page entries the platform asked for that were answered `unavailable` with no text because the
+page reader found no article (`page_no_main_text`) or met an error (`page_http-error`) — 643 News-Medical and 54
+sciencenet pages in 30 days, from before the reader was replaced on 2026-10-22; a page that still fails stays as it
+was, and a robots refusal, a challenge, a PDF or a journal entry is not among them.
 
 ## Social posts (contract 1.5.0)
 
@@ -263,7 +267,16 @@ an identity key, polls in the fetch log, health by the same rule — but the sch
   `--apply` buys them within the day's cap and delivers each recovered entry again as its next revision.
 - **Six platforms**: a standing watch list (`watch_list` in the same file, each term with its reason) searched one
   platform and one term at a time, 120 requests a day spread over the day, ten minutes' wait whenever GEO's crawler is
-  busy. A post keeps an excerpt and the platform's counts, never its author.
+  busy. A post keeps the platform's counts, a 300-character excerpt (its `summary`), **its own text whole** (`/text`
+  `body_text`, whitespace normalised, at most 20,000 characters, the title not repeated in it; a post that says nothing
+  beyond its title has none) and its **pictures** — a picture post's pictures in order, a video's one poster, at most
+  eight — never its author. The crawl asks for the provider's raw answer and reads only the picture addresses out of it
+  (`social/crawl.py`, `pictures_of`, tolerant of any shape); the raw answer is dropped there, and the pictures go through
+  the media store like an X post's. A post stored before 2026-10-31 (an excerpt, no picture) is filled when a later
+  read of the crawl answers it whole, and delivered again as its next revision. `python -m knowledge_plugin
+  social-bodies [--apply]` does the same for the posts the crawl will not see again, from the crawler's retained jobs
+  (no crawl, no request against the day's cap): the dry run prints one line per platform; `--apply` stores the whole
+  texts and delivers the entries again; run twice, the second finds nothing.
 - **Money**: every paid call is a row of `provider_calls`; a provider's daily cap stops that provider until the next
   Shanghai day and nothing else; `/v1/health`'s `providers` names calls, spend, cap, balance and the last error.
 
