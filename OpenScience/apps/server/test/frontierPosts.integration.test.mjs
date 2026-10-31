@@ -5,9 +5,6 @@
 // outage only delays it; a revision that brings words brings a withdrawn post back; the reader's page serves the cleaned words or none.
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_ASK_INSTRUCTIONS } from "../src/frontierAsk.mjs";
@@ -33,8 +30,6 @@ const reader = { id: `reader_${randomUUID().slice(0, 8)}` };
 const owner = { userId: operator, projectId: "evimed-frontier" };
 /** @type {any} */
 let database;
-/** @type {string} */
-let tokenDirectory;
 let seq = 0;
 
 before(async () => {
@@ -44,12 +39,9 @@ before(async () => {
   await migrateUsageLedger(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Reader','development'),($2,'Operator','development')", [reader.id, operator]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'evimed-frontier','EviMed 前沿动态',1048576)", [operator]);
-  tokenDirectory = await mkdtemp(path.join(os.tmpdir(), "rd-posts-"));
-  await writeFile(path.join(tokenDirectory, "token"), "test-token\n", { mode: 0o600 });
 });
 
 after(async () => {
-  if (tokenDirectory) await rm(tokenDirectory, { recursive: true, force: true });
   if (!database) return;
   await database.query("DELETE FROM evimed_frontier.items");
   await database.query("DELETE FROM evimed_control.users WHERE id = ANY($1::text[])", [[reader.id, operator]]);
@@ -129,21 +121,24 @@ function editorWith(behaviour = {}) {
   };
 }
 
-/** A plugin that answers texts from a map and the stored pictures as JPEG bytes (the media route of the contract). */
-function pluginFor(/** @type {Map<string, any>} */ texts, /** @type {{ pictures?: Set<string>, mediaDown?: boolean }} */ { pictures = new Set([PICTURE_ID, PICTURE_ID_2]), mediaDown = false } = {}) {
+/**
+ * A plugin that answers texts from a map, and the stored pictures as JPEG bytes through the same call the server wires (`fetchFrontierMedia`,
+ * over a stubbed fetch with a token file of its own).
+ */
+function pluginFor(/** @type {Map<string, any>} */ texts) {
+  return { text: async (/** @type {string} */ id) => texts.get(id) ?? { status: "unavailable" } };
+}
+
+/** The pictures the plugin stores, as the pipeline asks for them: `media(id)`; `down` makes the plugin unreachable. */
+function mediaFor({ pictures = new Set([PICTURE_ID, PICTURE_ID_2]), down = false } = {}) {
   const fetched = /** @type {string[]} */ ([]);
-  return {
-    fetched,
-    baseUrl: "http://plugin.test", tokenFile: path.join(tokenDirectory, "token"), timeoutMs: 5_000,
-    text: async (/** @type {string} */ id) => texts.get(id) ?? { status: "unavailable" },
-    fetch: async (/** @type {URL} */ url) => {
-      if (mediaDown) throw new TypeError("fetch failed");
-      const id = String(url).split("/").pop() ?? "";
-      fetched.push(id);
-      if (!pictures.has(id)) return new Response("{}", { status: 404 });
-      return new Response(Buffer.from(`jpeg-bytes-of-${id.slice(0, 4)}`), { status: 200, headers: { "content-type": "image/jpeg", "content-length": "20" } });
-    },
+  const media = async (/** @type {string} */ id) => {
+    if (down) throw Object.assign(new Error("unreachable"), { code: "knowledge_plugin_unreachable" });
+    fetched.push(id);
+    if (!pictures.has(id)) throw Object.assign(new Error("gone"), { code: "frontier_media_not_found" });
+    return { bytes: Buffer.from(`jpeg-bytes-of-${id.slice(0, 4)}`), contentType: "image/jpeg" };
   };
+  return Object.assign(media, { fetched });
 }
 
 /** @param {(input: any) => Promise<{ text: string }>} read */
@@ -152,9 +147,9 @@ function parserWith(read) {
   return { configured: true, calls, async parseBytes(/** @type {any} */ input) { calls.push(input); return read(input); } };
 }
 
-/** @param {any} editor @param {{ now?: Date, plugin: any, parser?: any, config?: Record<string, any> }} input */
-function pipelineFor(editor, { now = NOW, plugin, parser = null, config = {} }) {
-  return new FrontierPipeline({ database, editor, plugin, parser, embedder: null, now: () => now, workerId: `test-${randomUUID()}`, glossary: new FrontierGlossary([]),
+/** @param {any} editor @param {{ now?: Date, plugin: any, parser?: any, media?: any, config?: Record<string, any> }} input */
+function pipelineFor(editor, { now = NOW, plugin, parser = null, media = mediaFor(), config = {} }) {
+  return new FrontierPipeline({ database, editor, plugin, parser, media, embedder: null, now: () => now, workerId: `test-${randomUUID()}`, glossary: new FrontierGlossary([]),
     config: { kbEmbeddingDimension: 1024, frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 300, frontierSelectThreshold: 80, ...config } });
 }
 
@@ -226,13 +221,14 @@ test("a thin post with pictures waits for them, is read once through the parser,
   const texts = new Map();
   const post = await deliver(XHS_TAGS, texts, { media: [{ id: PICTURE_ID, kind: "image", original_url: "https://example.org/1.jpg" }, { id: PICTURE_ID_2, kind: "image", original_url: "https://example.org/2.jpg" }] });
   const plugin = pluginFor(texts);
+  const media = mediaFor();
   const parser = parserWith(async () => ({ text: `${POSTER_WORDS}\n[笑哭R]` }));
   const editor = editorWith({ lead: (input) => (input.includes("图片中的文字") ? { lead_zh: "司美格鲁肽减重须遵医嘱，每周一次，起始剂量0.25毫克。" } : { lead_zh: "" }) });
-  const pipeline = pipelineFor(editor, { plugin, parser });
+  const pipeline = pipelineFor(editor, { plugin, parser, media });
   const summary = await pipeline.processBatch();
 
   assert.equal(summary.postPictures, 1);
-  assert.deepEqual(plugin.fetched, [PICTURE_ID, PICTURE_ID_2], "the pictures in order");
+  assert.deepEqual([...media.fetched], [PICTURE_ID, PICTURE_ID_2], "the pictures in order");
   assert.equal(parser.calls.length, 2);
   assert.match(parser.calls[0].filename, /^aaaaaaaaaaaaaaaa\.jpg$/);
   assert.equal(parser.calls[0].mediaType, "image/jpeg");
@@ -248,7 +244,7 @@ test("a thin post with pictures waits for them, is read once through the parser,
   assert.equal(item.lead_zh, "司美格鲁肽减重须遵医嘱，每周一次，起始剂量0.25毫克。");
   assert.match(editor.editInputs[0].bodyExcerpt, /图片中的文字：/);
   // Tried once: the next round reads nothing again, and the page's body does not carry the pictures' words.
-  await pipelineFor(editor, { plugin, parser, now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
+  await pipelineFor(editor, { plugin, parser, media, now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
   assert.equal(parser.calls.length, 2);
   const page = (await serviceFor().getItem(reader, item.public_id)).body.item;
   assert.equal(page.body.original, null);

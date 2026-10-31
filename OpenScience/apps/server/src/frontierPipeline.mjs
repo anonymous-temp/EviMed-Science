@@ -69,6 +69,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   FRONTIER_CRAWL_PLATFORMS,
   FRONTIER_ITEM_FLAGS,
+  FRONTIER_MEDIA_ID,
   FRONTIER_LANES,
   FRONTIER_MODEL_FLAGS,
   FRONTIER_NOTICE_KINDS,
@@ -110,7 +111,6 @@ import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasi
 import { FRONTIER_ASK_VERSION, frontierWriteAsk } from "./frontierAsk.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "./frontierLead.mjs";
 import { FRONTIER_POST_LIMITS, frontierCrawlPost, frontierPostClean, frontierPostMaterial, frontierPostOf, frontierPostReading, frontierPostText, frontierPostWeight } from "./frontierPostText.mjs";
-import { FRONTIER_MEDIA_ID, fetchFrontierMedia } from "./frontierMedia.mjs";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "./frontierBrief.mjs";
 import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead,
   frontierFaithCheckSummary, frontierStudyFactsWanted, frontierWriteFaith } from "./frontierFaithStep.mjs";
@@ -995,7 +995,8 @@ export class FrontierPipeline {
   /**
    * @param {{ database: any, editor: any, plugin: any, embedder?: any, glossary?: any, config?: Record<string, any>,
    *           sourceChanges?: any, policies?: any, evolution?: any, webReader?: { read: (url: string, options?: any) => Promise<any> } | null,
-   *           parser?: { parseBytes: Function, configured?: boolean } | null, tags?: FrontierTagStore | null, now?: () => Date, workerId?: string }} options
+   *           parser?: { parseBytes: Function, configured?: boolean } | null,
+ *           media?: ((id: string) => Promise<{ bytes: Buffer, contentType: string }>) | null, tags?: FrontierTagStore | null, now?: () => Date, workerId?: string }} options
    *   `editor` a `FrontierEditor` (its `owner` is the operator's internal
    *   project, and the budget is read for it); `plugin` offers `text(entryId)`
    *   (`KnowledgePluginClient`); `embedder` a `KbEmbedder` or null; `glossary`
@@ -1004,7 +1005,7 @@ export class FrontierPipeline {
    *   (`sourceChanges.mjs`), which each retraction, correction, concern or
    *   withdrawal notice is also written to (absent: nothing is).
    */
-  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, parser = null, tags = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
+  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, parser = null, media = null, tags = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
     if (!database) throw new TypeError("The frontier pipeline needs a database.");
     if (typeof editor?.screen !== "function" || typeof editor?.edit !== "function") throw new TypeError("The frontier pipeline needs an editor.");
     if (typeof plugin?.text !== "function") throw new TypeError("The frontier pipeline needs the plugin client.");
@@ -1018,6 +1019,8 @@ export class FrontierPipeline {
     this.webReader = webReader && typeof webReader.read === "function" ? webReader : null;
     /** The in-house document parser (`documentParserClient.mjs`), for the words in a thin crawl post's pictures (`#postPictures`); null when none is configured. */
     this.parser = parser && typeof parser.parseBytes === "function" && parser.configured !== false ? parser : null;
+    /** One stored picture's bytes from the knowledge plugin (`fetchFrontierMedia`, wired in `server.mjs`: this module reads no plugin token itself). */
+    this.media = typeof media === "function" ? media : null;
     this.config = config ?? {};
     this.now = now;
     this.workerId = String(workerId).slice(0, 120);
@@ -2825,7 +2828,7 @@ export class FrontierPipeline {
    */
   async #postPictures(context) {
     const { now, summary } = context;
-    if (this.config.frontierPostPicturesEnabled === false || !this.parser) return;
+    if (this.config.frontierPostPicturesEnabled === false || !this.parser || !this.media) return;
     const claimed = (await this.database.query(`WITH picked AS (
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.platform = ANY($2::text[]) AND i.state IN ('screened', 'scored', 'published') AND t.picture_tried_at IS NULL
@@ -2890,12 +2893,14 @@ export class FrontierPipeline {
   async #readPostPictures(item) {
     const ids = (Array.isArray(item.media) ? item.media : []).map((/** @type {any} */ entry) => String(entry?.id ?? "")).filter((id) => FRONTIER_MEDIA_ID.test(id))
       .slice(0, FRONTIER_POST_LIMITS.maxPictures);
+    const fetchPicture = this.media;
+    if (!fetchPicture) return { text: "", delayed: true, failed: false };
     /** @type {string[]} */
     const parts = [];
     let refused = 0;
     for (const id of ids) {
       try {
-        const picture = await fetchFrontierMedia(this.plugin, id);
+        const picture = await fetchPicture(id);
         const extension = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif" }[/** @type {"image/jpeg"} */ (picture.contentType)];
         // The parser reads jpg, png, bmp and gif; a stored picture in another type has no words to be had from it here.
         if (!extension) { refused += 1; continue; }

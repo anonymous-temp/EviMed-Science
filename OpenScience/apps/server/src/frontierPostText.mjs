@@ -24,8 +24,7 @@
  * @module frontierPostText
  */
 
-import { FRONTIER_CRAWL_PLATFORMS } from "@evimed/domain";
-import { FRONTIER_MEDIA_ID } from "./frontierMedia.mjs";
+import { FRONTIER_CRAWL_PLATFORMS, FRONTIER_MEDIA_ID } from "@evimed/domain";
 
 /**
  * The limits of a post's text, each with its reason.

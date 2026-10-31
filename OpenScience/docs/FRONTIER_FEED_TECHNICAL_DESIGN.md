@@ -742,6 +742,17 @@ flowchart TB
 - **从 `first_seen_at` 起 5 天后，无论如何发布**，并打 `no-abstract` 标记；
 - 判定：`available` 或 `unavailable` → 提升（再过编辑闸门后发布）；否则，已有正文快照（已提升）、或紧急来源、或已有可用摘要（≥80 字符且无截断/过短/无摘要缺陷）→ 先提升（随后编辑并发布）并继续等（`promote-hold`）；其余 → 继续等。
 
+#### 4.5.1 社媒帖子的阅读文本（2026-10-31，`frontierPostText.mjs`）
+
+小红书、抖音、知乎、微博、哔哩哔哩、视频号（`FRONTIER_CRAWL_PLATFORMS`）的帖子，到平台时是一整串 `标题 正文`（旧布局，存在 `body_excerpt`，截在 300 字），里面有平台自己的标记（`#抑郁症[话题]#`、`[笑哭R]`、零宽字符、只有制表符的行）、重复两遍的标题（视频号 35/73、哔哩哔哩 14/25、小红书 10/60 的正文就是标题本身），很多帖子标题后面只有话题标签。读者看到的是一个标题加它的重复，导读写的是"这条帖子以…为题，正文只有话题标签"。插件改存整帖（`body_text`，不再把标题接在前面）之后，旧行仍在库里。
+
+`frontierPostText.mjs` 是对这种文本的唯一读法，纯函数、只管格式（原则 5）：去标记；去掉旧布局接在前面的那份标题；把结尾的话题标签和帖子自己的话分开；数帖子在标题和标签之外说了多少（字母数字，汉字 1、其他 0.3，即 `frontierLeadLimit` 的单位；链接、`@` 提及、标点不算）。**`FRONTIER_POST_LIMITS.own` = 12**：45 条真实帖子里，没有自己内容的（标题两遍、标题加标签、被截断的标题重复）都在 0–0.9，说了点什么的最少是 38，12 约一个短句。详情页的 `body` 读它（旧行也在读取时清理），编辑、导读、就此提问读它给模型的材料（话和话题标签；图片读出的字附在后面，标明"图片中的文字"）；图片里的字从不进读者看到的 `body`。
+
+- **没有自己的话**（< 12）：`body` 为空，不调导读和要点（省钱，也没有"这条帖子只有标题"那种元叙述）。没有图片的这种帖子**不展示**（2026-10-22 的规则「除非是真的全部信息都没有，那么就先不展示出来」）：补全步骤判定为 `drop`，原因 `post-no-text`，之后插件再来一版带正文的修订，走普通路径；已在库里发布的，在新规则首次运行时**一次**撤下（`items.state = 'withdrawn'`，`withdrawn_reason = 'post-no-text'`，`item_changes` 一行 `remove`，不发通知，不动证据卡；运营撤下的原因不会是这一个），后来的修订带来正文则恢复发布并欠一次重编辑。
+- **有图片**：没有自己的话、但插件存了图片（`items.media`）的帖子，由 `#postPictures` 读一次——最多 `maxPictures` = 4 张、每轮最多 4 个帖子、字节来自插件的媒体路由，经文档解析器（`parseBytes`，jpg/png/gif）；读出的字存在 `item_texts.picture_text`，`picture_tried_at` 是那一次尝试。读出的字够一个短句（`picture` = 12）才算有东西可展示；等待期间不发布，也在既有的放弃窗口内；读出来是空或解析器拒绝这张图，帖子不展示。**解析器或插件不可达不算尝试**（只是延后，本轮步骤停止）。`OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED`，默认开，需要解析器已配置。计数器：`postPicturesRead/Empty/Failed/Deferred`。
+- **起步时一次**（`#sweepPosts`，`meta.post_sweep` 为标记，咨询锁内做，可重复启动）：上面的撤下；以及清掉六个平台的帖子、和阅读文本是来源摘要或网页节选且短于 300 字的条目的 `lead_basis`（30 天内已发布），由 `#lead` 按自己的预算和批量重写。写作规则回答为空的，导读变为空，页面不显示这一段。
+- **写作规则**（`frontierLead.mjs`、编辑的 summary_zh 条、`social` 风格卡）：写这件事本身，不写这条消息本身（标题、话题标签、正文长短、"这条帖子以…为题"），也不写原文缺了什么；帖子里的说法写成它的说法（"发帖者称"）；除标题、话题标签和口号外没有可写的事实时，答案为空。
+
 ### 4.6 初筛
 
 初筛是第一个模型调用，一批最多 20 条，问的是每条的六件事：是不是医学（`medical`）、是不是新闻（`news`）、归哪一栏（`lane`）、关联哪些专科（`specialties`，最多 3 个）、语言（`language`）、是不是"多事汇总"（`digest`，一篇文章讲了好几件事）。
@@ -1741,6 +1752,7 @@ node evals/frontier-editing/run_eval.mjs --runs 3 --key-file <你的模型密钥
 | `OPEN_SCIENCE_FRONTIER_FAITH_ENABLED` | `true` | 需要上一项。导读、要点写成后据研究事实复核：设计、方向、对照、人群不符或把握程度强于原文的，退回写作模型改一次，仍不符的句子删去；卡片摘要只删不改；不向读者显示，结果在 `open_science_frontier_pipeline_total{outcome=faith*}` 与 `editor_diagnostics.faith`；存量用 `frontier-rewrite.mjs --steps facts,faith` |
 | `OPEN_SCIENCE_FRONTIER_RECLUSTER_MAX_PAIRS` | 40 | 0–400；重新聚类每轮（每 10 分钟，仅在当日预算正常时）交给模型判断的事件对数；0 关闭 |
 | `OPEN_SCIENCE_FRONTIER_PRIMARY_REPORTS_ENABLED` | `true` | 权威 4–5 期刊、有 DOI 但没有正文的条目，每 6 小时看一次附近已发布的非期刊报道（同事件、向量近邻、否则共享词），一次 flash 调用判断它是否为研究、哪些是它的报道；采纳的报道导读成为它的阅读正文，导读注明出自谁的报道；因无正文被丢下的条目 21 天内再向插件要；`false` 两者都关 |
+| `OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED` | `true` | 没有自己的话（标题加话题标签）、但存了图片的社媒帖子，每轮最多 4 个，读前 4 张图一次（文档解析器，需已配置）；读出的字是模型写导读的材料，从不进读者的 `body`；读出为空或失败则这个帖子不展示；解析器不可达只是延后；`false` 则这类帖子不展示（4.5.1） |
 | `OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT` | 55 | 30–95；打字关注（读者输入的药物、试验或问题，词表里没有对应实体时）走向量一路时，条目向量与关注词的余弦下限（百分之一）；起始值，未在线上向量上测过：向量命中把余弦记在 `follow_matches.score`（实体或词命中记 1.0），先读这个分布和读者点开了哪些再调 |
 | `OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH` | 50 | 1–200；周刊收件人分页、安全推送扇出与投递循环的批量（日报推送固定每次 50 人） |
 | `OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH` | 100 | 1–500 |
