@@ -193,6 +193,7 @@ export {
   RUN_CONTEXT_PROTOCOL,
   RUN_PROTOCOL_SKEW_OPENING,
   RUN_STATE_DIR,
+  RUN_TIME_BUDGET_MINUTES,
   SOURCES_DIR,
   deliverableDir,
   deliverableIdOfPath,
@@ -207,6 +208,7 @@ export {
   receiptFilesFor,
   runStateFileFor,
   runStateFileForSession,
+  runTimeBudgetMinutes,
   workspaceLayout,
 } from './src/workspaceLayout.mjs'
 

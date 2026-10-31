@@ -21,7 +21,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
-import { CONTRACT_KINDS, RUN_CONTEXT_PROTOCOL, RUN_PROTOCOL_SKEW_OPENING, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, deliverySummaryFileFor, receiptFileFor, workspaceLayout } from "@evimed/domain";
+import { CONTRACT_KINDS, PLATFORM_CONTEXT_TAGS, RUN_CONTEXT_PROTOCOL, RUN_PROTOCOL_SKEW_OPENING, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, deliverySummaryFileFor, receiptFileFor, workspaceLayout } from "@evimed/domain";
 
 import { GUIDANCE_SECTION_NAME, buildChildGuidanceText, buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
@@ -803,8 +803,8 @@ test("a root session is shown only its own research tools, in its own scope, onc
   assert.ok(degraded.some((line) => /found no research tools registered/.test(line)), `an empty narrowing is said out loud: ${JSON.stringify(degraded)}`);
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null, skills?: Record<string, string>|null, registered?: string[]|null, reviewEnabled?: boolean, capsuleMounted?: boolean, attendanceEnabled?: boolean }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null, skills = null, registered = null, reviewEnabled = false, capsuleMounted = true, attendanceEnabled = true } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null, skills?: Record<string, string>|null, registered?: string[]|null, reviewEnabled?: boolean, reviewWaitMs?: number, capsuleMounted?: boolean, attendanceEnabled?: boolean, now?: (() => number) | null }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null, skills = null, registered = null, reviewEnabled = false, reviewWaitMs = 3000, capsuleMounted = true, attendanceEnabled = true, now = null } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -867,7 +867,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     /** @type {any} */ (ctx.tools).schemas = (/** @type {any} */ scope) => visibleTo(scope).map((name) => ({ name, description: `${name}.`, parameters: {} }));
     /** @type {any} */ (ctx.tools).get = (/** @type {string} */ name, /** @type {any} */ scope) => (visibleTo(scope).includes(name) ? { name } : undefined);
   }
-  await applyRunPolicy(ctx, { attendancePublicKey: attendanceEnabled ? ATTENDANCE_PUBLIC_KEY : "", attendanceUserId: "owner", attendanceProjectId: "project-test", maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000, skillsDir: "/skills", reviewEnabled, reviewPollMs: 10, reviewWaitMs: 3000 });
+  await applyRunPolicy(ctx, { attendancePublicKey: attendanceEnabled ? ATTENDANCE_PUBLIC_KEY : "", attendanceUserId: "owner", attendanceProjectId: "project-test", maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000, skillsDir: "/skills", reviewEnabled, reviewPollMs: 10, reviewWaitMs, ...(now ? { now } : {}) });
   const start = () => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
   /** Each model request, as the kernel builds it: the tools the assembly
    *  carried and the messages the entering step was handed.
@@ -2262,6 +2262,94 @@ test("a submission brings back the gate's verdict and the independent review in 
     assert.equal(gateway.requests.filter((request) => request.path === "/internal/review/v1/deliverables").length, starts);
   } finally {
     await gateway.close();
+  }
+});
+
+test("a passed submission says nothing more is required, and the editor reads a package once: the same bytes are not read again, changed ones get the code's checks", async () => {
+  // 2026-10-28, twelve BixBench capsules: 18 submissions blocked for 61.6 minutes, 31.0 of them in resubmissions, and a run that held
+  // a clean, accepted package fixed a typo and submitted again "to keep the receipt consistent" - four minutes - because nothing said it
+  // need not. The editor found something owed in 2 of the 9 first reads and in none of the 9 that followed.
+  const clean = { ...sampleReview, findings: sampleReview.findings.filter((/** @type {any} */ finding) => !finding.answerRequired) };
+  const gateway = await reviewGatewayStub(clean);
+  const f = await nativePolicyFixture({ briefId: "review-settled", reviewEnabled: true, revisionAuthorizeUrl: gateway.revisionAuthorizeUrl });
+  const starts = () => gateway.requests.filter((request) => request.method === "POST" && request.path === "/internal/review/v1/deliverables");
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary.\n");
+
+    const first = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(first.value.ok, true, JSON.stringify(first.value));
+    assert.deepEqual(first.value.data.review.answerRequired, []);
+    assert.match(first.value.data.next, /没有必须修的问题，交付物成立/);
+    assert.match(first.value.data.next, /不需要为它们重新提交/);
+    assert.equal(starts().length, 1);
+    assert.equal("editor" in starts()[0].body, false, "the first read is the editor's");
+
+    // The same bytes again: the finished review comes back at once and nothing is started.
+    const same = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(same.value.ok, true);
+    assert.equal(starts().length, 1, "no second review of the same bytes");
+    assert.match(same.value.data.review.unchanged, /没有改动/);
+    assert.match(same.value.data.next, /没有必须修的问题/);
+
+    // Changed bytes after a read that owed nothing: the code's checks, not the editor.
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary, with a typo fixed.\n");
+    const edited = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(edited.value.ok, true);
+    assert.equal(starts().length, 2);
+    assert.equal(starts()[1].body.editor, false);
+    assert.match(edited.value.data.next, /没有必须修的问题/);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("a review still running when the wait ends is recorded as pending, the submission is not held, and the next one looks at it before starting another", async () => {
+  /** @type {any[]} */
+  const requests = [];
+  let running = true;
+  const server = (await import("node:http")).createServer((req, res) => {
+    const chunks = /** @type {Buffer[]} */ ([]);
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      requests.push({ method: String(req.method), path: String(req.url), body: chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : null });
+      const send = (/** @type {number} */ status, /** @type {any} */ value) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(value)); };
+      if (req.method === "POST") return send(202, { reviewId: "rv_0123456789abcdef01234567", status: "running" });
+      return send(200, running ? { reviewId: "rv_0123456789abcdef01234567", status: "running" } : { reviewId: "rv_0123456789abcdef01234567", status: "done", ...sampleReview, findings: [sampleReview.findings[1]] });
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  // The fixture's review wait is 3 s; this run's is shorter, so the editor outlasts it.
+  const f = await nativePolicyFixture({ briefId: "review-pending", reviewEnabled: true, revisionAuthorizeUrl, reviewWaitMs: 150 });
+  const starts = () => requests.filter((request) => request.method === "POST");
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary.\n");
+    const first = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(first.value.ok, true, JSON.stringify(first.value));
+    assert.equal(first.value.data.review.status, "pending");
+    assert.match(first.value.data.review.reason, /不拦交付/);
+    assert.match(first.value.data.next, /没有必须修的问题/, "a review that is not in this answer is no reason to hold the delivery");
+
+    // Still running at the next submission: looked at, and no second review stacked behind it.
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAnother summary.\n");
+    const second = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(second.value.data.review.status, "pending");
+    assert.equal(starts().length, 1);
+
+    // Finished by the third: its standing (nothing owed) decides what is asked next.
+    running = false;
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA third summary.\n");
+    const third = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(third.value.ok, true);
+    assert.equal(starts().length, 2);
+    assert.equal(starts()[1].body.editor, false, "the pending read finished clean, so the editor has had its read");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
   }
 });
 
@@ -4092,4 +4180,209 @@ test('an attended receipt proves only the exact words it signed: a request id us
   await f.step(5, { inputs: [claimedUser('person-again', '每周一提醒我检查新文献')] });
   assert.equal((await f.execute('ask_user_question', {})).value?.ok, true);
   assert.equal((await f.execute('mcp__evimed__schedule_task', {})).value?.ok, true);
+});
+
+// ---- the wall-clock budget a dispatch states ----------------------------------------------------------------------------------------
+//
+// `timeBudgetMinutes` on a dispatch reaches the run policy in the session's index, and the policy says the clock to the model: at the
+// turn's first step and on crossing 50%, 75% and 90% of the budget, each once, measured on its own clock from the turn's own start. It
+// is a line of context. Nothing is refused for it, no turn ends at it, and a turn without a budget reads exactly what it read before.
+
+const CLOCK_MINUTE = 60_000;
+const CLOCK_BRIEF = "/workspace/.evimed-brief/sessions/native-session";
+
+/** A policy fixture whose clock the test holds, and a dispatch as the control plane writes it. @param {{ child?: boolean }} [options] */
+async function clockFixture({ child = false } = {}) {
+  let now = 1_700_000_000_000;
+  const f = await nativePolicyFixture({ now: () => now, child });
+  /** @param {string} runId @param {string} revision @param {Record<string, any>} [extra] */
+  const dispatch = (runId, revision, extra = {}) => {
+    f.files.set(`${CLOCK_BRIEF}/index.json`, JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId, contextRevision: revision, ...extra }));
+    f.files.set(`${CLOCK_BRIEF}/context.md`, `<context for ${runId}>`);
+  };
+  /** @param {number} minutes */
+  const advance = (minutes) => { now += minutes * CLOCK_MINUTE; };
+  const texts = () => f.injected.map((/** @type {any} */ message) => String(message.content?.[0]?.text ?? ""));
+  const clock = () => texts().filter((text) => text.includes("本轮时间预算"));
+  return { f, dispatch, advance, texts, clock };
+}
+const clockLine = (/** @type {number} */ budget, /** @type {number} */ used) => `<evimed-run>本轮时间预算 ${budget} 分钟，已用 ${used} 分钟，剩余 ${budget - used} 分钟。时间用完之前，要有一份完整的可交付成果。</evimed-run>`;
+
+test("a turn with a wall-clock budget is told the clock at its first step and on crossing 50%, 75% and 90%, each once", async () => {
+  const { f, dispatch, advance, clock } = await clockFixture();
+  dispatch("run_clock", "req_clock", { timeBudgetMinutes: 60 });
+  await f.step(1);
+  assert.deepEqual(clock(), [clockLine(60, 0)], "the first step");
+  await f.step(1);
+  advance(29);
+  await f.step(1);
+  assert.equal(clock().length, 1, "29 of 60 minutes is not yet half");
+  advance(1);
+  await f.step(1);
+  await f.step(1);
+  assert.deepEqual(clock().slice(1), [clockLine(60, 30)], "half, once");
+  advance(14);
+  await f.step(1);
+  assert.equal(clock().length, 2, "44 minutes is not three quarters");
+  advance(1);
+  await f.step(1);
+  assert.deepEqual(clock().slice(2), [clockLine(60, 45)], "three quarters");
+  advance(8);
+  await f.step(1);
+  assert.equal(clock().length, 3, "53 minutes is not nine tenths");
+  advance(1);
+  await f.step(1);
+  assert.deepEqual(clock().slice(3), [clockLine(60, 54)], "nine tenths");
+  advance(5);
+  await f.step(1);
+  advance(600);
+  await f.step(1);
+  await f.step(1);
+  assert.equal(clock().length, 4, "four lines in all: nothing more is said once the last has been, however long the turn runs");
+
+  const line = f.injected.find((/** @type {any} */ message) => String(message.content?.[0]?.text).includes("本轮时间预算"));
+  assert.equal(line.role, "user");
+  assert.equal(line.source.kind, "plugin:evimed-run-policy", "a message of the run policy's, which every reader tells from the researcher's words by its source");
+  assert.ok(PLATFORM_CONTEXT_TAGS.some((entry) => entry.tag === "evimed-run" && entry.role === "injected"), "and its tag is one the memory door and the learning loop read as machine text");
+});
+
+test("the clock never refuses a step or ends a turn: past the budget the step still enters", async () => {
+  const { f, dispatch, advance } = await clockFixture();
+  dispatch("run_overrun", "req_overrun", { timeBudgetMinutes: 5 });
+  await f.step(1);
+  advance(500);
+  /** @type {any[]} */
+  const decisions = [];
+  for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+    decisions.push(await handler({ agent: f.agent, turn: 1, messages: [], step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] })));
+  }
+  assert.deepEqual(decisions.map((decision) => decision?.kind), ["enter"], "the step is admitted a hundred times over the budget");
+  assert.ok(decisions[0].messages.some((/** @type {any} */ message) => String(message.content?.[0]?.text).includes("剩余 0 分钟")), "and it is told there is none left");
+});
+
+test("without a budget the policy says nothing about time and the step's messages are what they always were", async () => {
+  const run = async (/** @type {Record<string, any>} */ extra) => {
+    const { f, dispatch, advance, texts, clock } = await clockFixture();
+    dispatch("run_plain", "req_plain", extra);
+    await f.step(1);
+    advance(10_000);
+    await f.step(1);
+    advance(10_000);
+    await f.step(1);
+    return { texts: texts(), clock: clock(), requests: f.requests.map((request) => request.messages.map((/** @type {any} */ message) => message.content?.[0]?.text)) };
+  };
+  const plain = await run({});
+  assert.deepEqual(plain.clock, [], "no budget, no line, however long the turn runs");
+  assert.equal(plain.texts.length, 2, "the dispatch's context and the run's scope, as before");
+  assert.equal(plain.texts[0], "<context for run_plain>");
+  assert.match(plain.texts[1], /^当前运行作用域：本次运行 run_plain，会话 native-session。/);
+  assert.equal(plain.requests.length, 3);
+  assert.deepEqual(plain.requests.map((messages) => messages.length), [2, 0, 0], "the first step carries them, the next two carry nothing");
+
+  // A field the policy does not read as minutes is no budget: byte-identical to the index that never had it.
+  for (const bad of [0, -5, 1441, 2.5, "60", null, true, [60], {}]) {
+    const refused = await run({ timeBudgetMinutes: bad });
+    assert.deepEqual(refused.texts, plain.texts, `timeBudgetMinutes ${JSON.stringify(bad)} adds nothing`);
+    assert.deepEqual(refused.requests, plain.requests);
+  }
+
+  // And a budget adds its lines to those messages and changes none of them.
+  const budgeted = await run({ timeBudgetMinutes: 1440 });
+  assert.deepEqual(budgeted.texts.filter((text) => !text.includes("本轮时间预算")), plain.texts);
+  assert.ok(budgeted.clock.length >= 2);
+});
+
+test("a child session is never told the clock: the budget is the root turn's", async () => {
+  // A session that is itself a child, with the budget in its index: it reads no brief (its parent's was the dispatch's) and has no clock.
+  const alone = await clockFixture({ child: true });
+  alone.dispatch("run_child", "req_child", { timeBudgetMinutes: 10 });
+  await alone.f.step(1);
+  alone.advance(9);
+  await alone.f.step(1);
+  alone.advance(100);
+  await alone.f.step(1);
+  assert.deepEqual(alone.clock(), []);
+
+  // And a child's step beside a root that has one: the root is told, the child's step is not, and it is never asked for a decision it
+  // would not have been asked for without the budget.
+  const { f, dispatch, advance, clock } = await clockFixture();
+  dispatch("run_parent", "req_parent", { timeBudgetMinutes: 10 });
+  await f.step(1);
+  assert.equal(clock().length, 1, "the root's first step");
+  advance(9);
+  const child = { id: "child-agent", session: { id: "child-session", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } }, ctx: f.agent.ctx, inject: f.agent.inject };
+  /** @type {any[]} */
+  const entered = [];
+  for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+    entered.push(await handler({ agent: child, turn: 1, messages: [], step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] })));
+  }
+  assert.deepEqual(entered.map((decision) => decision?.kind), ["enter"]);
+  assert.deepEqual(entered.flatMap((decision) => decision.messages ?? []), [], "the child's step enters with nothing added");
+  assert.equal(clock().length, 1, "and nothing reached the root's inbox for it");
+  await f.step(1);
+  assert.equal(clock().length, 2, "while the root's own next step is told it is at 90%");
+});
+
+test("each dispatch's turn has its own clock, and a turn typed in later has none", async () => {
+  const { f, dispatch, advance, clock } = await clockFixture();
+  dispatch("run_a", "req_a", { timeBudgetMinutes: 60 });
+  await f.step(1);
+  advance(20);
+  await f.step(1);
+  assert.deepEqual(clock(), [clockLine(60, 0)]);
+  await f.endTurn();
+
+  // The next dispatch in the conversation: a new run, a new turn, its own budget and its own start.
+  advance(100);
+  dispatch("run_b", "req_b", { timeBudgetMinutes: 30 });
+  await f.step(2);
+  assert.deepEqual(clock().slice(1), [clockLine(30, 0)], "the new turn's first step, from the new turn's own start (not 120 minutes in)");
+  advance(15);
+  await f.step(2);
+  assert.deepEqual(clock().slice(2), [clockLine(30, 15)]);
+  await f.endTurn();
+
+  // A person types into the kernel's own window: no dispatch, no new revision. The earlier budget was that dispatch's.
+  advance(500);
+  await f.step(3);
+  advance(500);
+  await f.step(3);
+  assert.equal(clock().length, 3, "nothing is said to a turn the dispatch did not start");
+
+  // A dispatch that states none, after one that did, has none either.
+  dispatch("run_c", "req_c");
+  await f.step(4);
+  advance(1000);
+  await f.step(4);
+  assert.equal(clock().length, 3);
+});
+
+test("a steer of the running turn continues its clock: the first-step line is not said again and the later moments still come", async () => {
+  const { f, dispatch, advance, clock } = await clockFixture();
+  dispatch("run_steered", "req_steered", { timeBudgetMinutes: 60 });
+  await f.step(1);
+  advance(31);
+  await f.step(1);
+  assert.deepEqual(clock(), [clockLine(60, 0), clockLine(60, 31)]);
+  // What the control plane writes for a steer: the same run, a new revision, no budget field (and no context).
+  f.files.set(`${CLOCK_BRIEF}/index.json`, JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId: "run_steered", contextRevision: "req_steer" }));
+  advance(1);
+  await f.step(1);
+  assert.equal(clock().length, 2, "a steer restarts nothing");
+  advance(13);
+  await f.step(1);
+  assert.deepEqual(clock().slice(2), [clockLine(60, 45)], "and the schedule goes on");
+});
+
+test("a budget read after the turn began counts from the turn's start and says only the latest moment it has passed", async () => {
+  // The control plane creates the session and writes the brief in two calls; a step can come before the index does.
+  const { f, dispatch, advance, clock } = await clockFixture();
+  await f.step(1);
+  advance(48);
+  dispatch("run_late", "req_late", { timeBudgetMinutes: 60 });
+  await f.step(1);
+  assert.deepEqual(clock(), [clockLine(60, 48)], "80% in: the three-quarters line, not the first-step and half lines after it");
+  advance(6);
+  await f.step(1);
+  assert.deepEqual(clock().slice(1), [clockLine(60, 54)]);
 });

@@ -38,8 +38,28 @@ import { sendWithFreshWorkloadToken } from './workloadRequest.mjs'
 /** How often a running review is asked after. */
 export const REVIEW_POLL_MS = 3_000
 
-/** How long a submission waits for its review before delivering the verdict without it. */
-export const REVIEW_WAIT_MS = 16 * 60_000
+/**
+ * How long a submission waits for the editor to read a package before it
+ * answers with the gate's verdict alone. The review goes on and is recorded
+ * either way; the wait decides only whether this answer carries it.
+ *
+ * The bound is above what was measured and below what a stuck editor can hold:
+ * across twelve BixBench capsules (2026-10-28) the editor's reads took 1.9 to
+ * 5.2 minutes (median 3.7) and two of the nine first reads found a defect the
+ * writer then fixed (a contradicted sentence; a check that was itself wrong),
+ * so a bound under three minutes would have kept them out of the run. The
+ * control plane's own editor timeout is fifteen.
+ */
+export const REVIEW_WAIT_MS = 6 * 60_000
+
+/**
+ * The wait for a repeat review, which asks the code's checks alone (references,
+ * traced numbers, statistics): seconds of work, bounded for the queue in front of it.
+ */
+export const REVIEW_REPEAT_WAIT_MS = 30_000
+
+/** The wait when the writer asked for the review itself (`evimed_review_run`): it chose to listen, so it listens as long as the editor may think. */
+export const REVIEW_EXPLICIT_WAIT_MS = 16 * 60_000
 
 /** Findings listed one by one in a submission's answer; the rest are counted. */
 export const REVIEW_ISSUE_LIMIT = 20
@@ -121,11 +141,19 @@ function pause(ms, signal) {
  * @property {string} model
  * @property {string} editor
  * @property {string | null} editorError
- * @property {{ id: string, kind: string, label: string, severity: string, origin: string, location: string, evidence: string, fix: string, message: string, answerRequired: boolean }[]} findings
+ * @property {{ id: string, kind: string, label: string, severity: string, origin: string, location: string, evidence: string, fix: string, message: string, answerRequired: boolean, response?: string }[]} findings
  * @property {{ present: number, absent: string[], unlocated: string[] }} checklist
  * @property {{ met: string[], unmet: string[], unlocated: string[] }} acceptance
  * @property {{ references: any, numeric: any, jobs: string[], previous: { open: string[], resolved: string[] } }} deterministic
  * @property {number} dropped
+ */
+
+/**
+ * What asking for a review comes to. `pending` is a review that is still
+ * running when the wait ends: it carries its id so the next submission can look
+ * at it instead of starting another. `reused` is the finished review of the
+ * very bytes being submitted again.
+ * @typedef {{ ok: true, review: ReviewResult, reused?: boolean } | { ok: true, skipped: string } | { ok: false, code: string, message: string, pending?: boolean, reviewId?: string }} ReviewOutcome
  */
 
 /**
@@ -137,7 +165,7 @@ function pause(ms, signal) {
  *   `studyType` is what the plan declared the deliverable to report or design;
  *   the control plane attaches that design's reporting checklist. Sent only
  *   when declared, so a request without one is the request it always was.
- * @returns {Promise<{ ok: true, review: ReviewResult } | { ok: true, skipped: string } | { ok: false, code: string, message: string }>}
+ * @returns {Promise<ReviewOutcome>}
  */
 export async function runReview(ctx, config, input) {
   const pollMs = Math.max(10, Number(input.pollMs ?? REVIEW_POLL_MS))
@@ -171,7 +199,7 @@ export async function runReview(ctx, config, input) {
       if (state.status === 200 && state.value?.status === 'done') return { ok: true, review: state.value }
       return unavailable(state)
     }
-    return { ok: false, code: 'review_unavailable', message: `审查在 ${Math.round(waitMs / 60_000)} 分钟内没有完成；本次提交不等它。` }
+    return { ok: false, code: 'review_unavailable', pending: true, reviewId, message: `审查还在进行（已等 ${waitMs >= 120_000 ? `${Math.round(waitMs / 60_000)} 分钟` : `${Math.round(waitMs / 1000)} 秒`}）：它会继续，发现会记入交付记录；不拦交付，也不需要为它等或再提交。` }
   } catch (error) {
     return { ok: false, code: 'review_unavailable', message: `审查没有完成：${error instanceof Error ? error.message : String(error)}` }
   }
@@ -204,6 +232,146 @@ export async function answerReview(ctx, config, { reviewId, answers, signal }) {
 }
 
 /**
+ * The findings a writer still owes an answer to: a kind that asks for one, and
+ * none given. An answered finding carried into a later pass is not owed again.
+ * @param {{ findings?: readonly { id: string, answerRequired?: boolean, response?: string }[] } | null | undefined} review
+ */
+export function owedFindings(review) {
+  return (Array.isArray(review?.findings) ? review.findings : []).filter((finding) => finding.answerRequired && !finding.response)
+}
+
+/** @param {{ answerRequired?: boolean, response?: string }} finding */
+function findingStanding(finding) {
+  if (finding.response) return `（已回应：${finding.response === 'fixed' ? '已改' : '不改'}）`
+  return finding.answerRequired ? '（需回应）' : ''
+}
+
+/**
+ * What a deliverable's last review comes to, kept on its plan item: enough to
+ * decide whether the next submission needs another read, and to remind the run
+ * of what it still owes.
+ *
+ * `required` counts every finding whose kind asks for an answer, answered or
+ * not: a package whose last read raised one is read once more after the
+ * writer's repair, and one whose last read raised none is not.
+ * @typedef {{ reviewId: string, digest: string, status: 'done' | 'pending', required: number, findings: { id: string, kind: string, answerRequired: boolean, answered: boolean }[] }} ReviewStanding
+ */
+
+/**
+ * @param {ReviewResult} review @param {string} digest the submitted bytes it read
+ * @returns {ReviewStanding}
+ */
+export function reviewStanding(review, digest) {
+  const findings = Array.isArray(review?.findings) ? review.findings : []
+  return {
+    reviewId: review.reviewId,
+    digest,
+    status: 'done',
+    required: findings.filter((finding) => finding.answerRequired).length,
+    findings: findings.map((finding) => ({ id: finding.id, kind: finding.kind, answerRequired: Boolean(finding.answerRequired), answered: Boolean(finding.response) })),
+  }
+}
+
+/**
+ * What the plan item keeps after a submission asked for a review.
+ * @param {ReviewStanding | undefined} previous @param {ReviewOutcome} outcome @param {string} digest
+ * @returns {ReviewStanding | undefined}
+ */
+export function nextStanding(previous, outcome, digest) {
+  if (outcome.ok && 'review' in outcome) return reviewStanding(outcome.review, digest)
+  // Still out: it read the bytes it was started on, which are not these when it is the earlier one still running.
+  if (!outcome.ok && outcome.pending && outcome.reviewId) {
+    return outcome.reviewId === previous?.reviewId ? previous : { reviewId: outcome.reviewId, digest, status: 'pending', required: 0, findings: [] }
+  }
+  // Skipped, unavailable, refused: whatever was known stays known.
+  return previous
+}
+
+/**
+ * One look at a review that was started earlier: running, done (with its
+ * findings) or gone (failed, unknown, unreachable). Never waits.
+ * @param {any} ctx @param {{ revisionAuthorizeUrl?: string, tokenFile?: string }} config @param {string} reviewId @param {AbortSignal | undefined} signal
+ * @returns {Promise<{ state: 'running' } | { state: 'done', review: ReviewResult } | { state: 'gone' }>}
+ */
+async function peekReview(ctx, config, reviewId, signal) {
+  try {
+    const answer = await gateway(ctx, config, 'GET', `/deliverables/${reviewId}`, undefined, signal)
+    if (answer.status === 200 && answer.value?.status === 'running') return { state: 'running' }
+    if (answer.status === 200 && answer.value?.status === 'done') return { state: 'done', review: answer.value }
+  } catch { /* unreachable reads as gone: the caller asks afresh or goes without */ }
+  return { state: 'gone' }
+}
+
+/**
+ * The review a submission asks for, given what the deliverable's last review
+ * came to. The editor reads a package once; a submission after that gets less:
+ *
+ * - the very bytes already read: the finished review is handed back, nothing is
+ *   started;
+ * - changed bytes, and the last read raised nothing the writer owed an answer
+ *   to: the code's checks alone (`editor: false`) — a resubmission that chases
+ *   advisories is not read again for them;
+ * - changed bytes after a read that owed findings: the editor reads once more,
+ *   which is the repair loop the review exists for;
+ * - a read still out from an earlier submission is looked at first, and no
+ *   second one is stacked behind it.
+ *
+ * Measured on twelve BixBench capsules (2026-10-28): 18 submissions, 61.6
+ * minutes blocked, 31.0 of them in 9 resubmissions, and in none did the
+ * repeated read find a finding the writer owed. A read the writer asked for
+ * (`explicit`) is always the full one.
+ *
+ * @param {any} ctx @param {{ revisionAuthorizeUrl?: string, tokenFile?: string }} config
+ * @param {Parameters<typeof runReview>[2] & { digest?: string, explicit?: boolean }} input
+ * @param {ReviewStanding | undefined} previous
+ * @returns {Promise<ReviewOutcome>}
+ */
+export async function reviewForSubmission(ctx, config, input, previous) {
+  const { digest = '', explicit = false, ...request } = input
+  if (explicit) return runReview(ctx, config, { ...request, waitMs: request.waitMs ?? REVIEW_EXPLICIT_WAIT_MS })
+  let standing = previous
+  if (standing?.status === 'pending') {
+    const looked = await peekReview(ctx, config, standing.reviewId, request.signal)
+    if (looked.state === 'running') return pendingOutcome(standing.reviewId, '审查还在进行：它会继续，发现会记入交付记录；不拦交付，也不需要为它等或再提交。')
+    standing = looked.state === 'done' ? reviewStanding(looked.review, standing.digest) : undefined
+    // A read that finished between submissions is the previous read from here on.
+    if (looked.state === 'done' && digest && standing?.digest === digest) return { ok: true, review: looked.review, reused: true }
+  } else if (standing?.status === 'done' && digest && standing.digest === digest) {
+    const looked = await peekReview(ctx, config, standing.reviewId, request.signal)
+    return looked.state === 'done' ? { ok: true, review: looked.review, reused: true } : { ok: true, skipped: 'review_unchanged' }
+  }
+  const codeOnly = standing?.status === 'done' && standing.required === 0
+  return runReview(ctx, config, {
+    ...request,
+    ...(codeOnly ? { editor: false } : {}),
+    waitMs: request.waitMs ?? (codeOnly ? REVIEW_REPEAT_WAIT_MS : REVIEW_WAIT_MS),
+  })
+}
+
+/** @param {string} reviewId @param {string} message @returns {ReviewOutcome} */
+function pendingOutcome(reviewId, message) {
+  return { ok: false, code: 'review_unavailable', pending: true, reviewId, message }
+}
+
+/**
+ * The plain sentence a passed submission ends on: whether anything is still
+ * required, and that nothing else is a reason to submit again. The tool's
+ * description says the same before the call; this is the line at the point of
+ * use, where a run weighing a typo or an advisory note decides whether to
+ * submit once more (2026-10-28: a run fixed a typo after an accepted, clean
+ * submission and resubmitted "to keep the receipt consistent", four minutes).
+ * @param {ReviewOutcome | null} outcome the review this submission got, null when none was asked for
+ * @returns {string}
+ */
+export function settledNote(outcome) {
+  const owed = outcome && outcome.ok && 'review' in outcome ? owedFindings(outcome.review) : []
+  if (owed.length) {
+    return `已通过。审查有 ${owed.length} 条需回应的发现（${owed.map((finding) => finding.id).join('、')}）：改了的在下次提交的 responses 里回 fixed，不改的回 declined 并写一句理由，然后再提交一次。除此之外，没有必须再提交的理由。`
+  }
+  return '已通过：没有必须修的问题，交付物成立。其余只是建议，改不改由你判断，不需要为它们重新提交；本轮结束前文件还能改，回执会按最终文件生成。'
+}
+
+/**
  * A review as the lines the run acts on: each finding with its id, where it
  * is, the words it rests on and the edit; answer-required ones say so.
  * @param {ReviewResult} review @returns {{ code: string, severity: string, message: string }[]}
@@ -213,7 +381,7 @@ export function reviewIssues(review) {
   const listed = findings.slice(0, REVIEW_ISSUE_LIMIT).map((finding) => ({
     code: `review_${finding.kind}`,
     severity: finding.severity === 'required' ? 'required' : 'advisory',
-    message: `[${finding.id}]${finding.answerRequired ? '（需回应）' : ''} ${finding.message}`,
+    message: `[${finding.id}]${findingStanding(finding)} ${finding.message}`,
   }))
   const rest = findings.length - listed.length
   if (rest > 0) listed.push({ code: 'review_more', severity: 'advisory', message: `另有 ${rest} 条审查发现没有列出；读回请调用 evimed_review_run。` })
@@ -233,9 +401,9 @@ export function reviewIssues(review) {
 
 /**
  * A review as the run's summary line in a submission's data.
- * @param {ReviewResult} review
+ * @param {ReviewResult} review @param {boolean} [reused] the finished review of the very bytes being submitted again
  */
-export function reviewSummary(review) {
+export function reviewSummary(review, reused = false) {
   const findings = Array.isArray(review?.findings) ? review.findings : []
   /** @type {Record<string, number>} */
   const byKind = {}
@@ -251,13 +419,14 @@ export function reviewSummary(review) {
     editor: review.editor,
     ...(review.editorError ? { editorError: review.editorError } : {}),
     findings: findings.length,
-    answerRequired: findings.filter((finding) => finding.answerRequired).map((finding) => finding.id),
+    answerRequired: owedFindings(review).map((finding) => finding.id),
     byKind,
     references: review.deterministic?.references ?? null,
     ...(review.deterministic?.numeric ? { numeric: review.deterministic.numeric } : {}),
     ...(review.deterministic?.previous?.resolved?.length ? { previousResolved: review.deterministic.previous.resolved } : {}),
     checklist: { present: review.checklist?.present ?? 0, absent: (review.checklist?.absent ?? []).length },
     ...(review.dropped ? { dropped: review.dropped } : {}),
+    ...(reused ? { unchanged: '文件自上次审查后没有改动，这是上次的结果。' } : {}),
     how: '对每条「需回应」的发现，改了就在下次提交时回 fixed，不改就回 declined 并写一句理由（responses 参数）。其余是建议。',
   }
 }

@@ -52,6 +52,7 @@ import {
   workspaceLayout,
   RUN_CONTEXT_PROTOCOL,
   RUN_PROTOCOL_SKEW_OPENING,
+  runTimeBudgetMinutes,
   planFileFor,
   briefFileForSession,
   deliverySummaryFileFor,
@@ -73,6 +74,8 @@ import {
   isSubagentSession,
   listDirAt,
   onPreStep,
+  waitOnHook,
+  hookWaitReporter,
   parentSessionOf,
   onClaimedPromptAssemble,
   onSessionEvent,
@@ -126,6 +129,7 @@ import {
   sourceArtifactPaths,
   stepPolicy,
   submissionVerdict,
+  timeBudgetNotice,
   toolPolicy,
   selectedGeoInputReadAllowed,
   unmetDependencies,
@@ -134,7 +138,7 @@ import {
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
 import { collectSubagentRun } from '../src/subagentRun.mjs'
-import { answerReview, reviewIssues, reviewSummary, runReview } from '../src/review.mjs'
+import { answerReview, nextStanding, reviewForSubmission, reviewIssues, reviewSummary, settledNote } from '../src/review.mjs'
 import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
 import { capSkillBodies } from '../src/skillBodies.mjs'
 import { proseShape } from '../src/proseShape.mjs'
@@ -157,10 +161,18 @@ import { attendanceReceiptFor, attendanceReceiptsFileFor, verifyRunContextAuthor
  * server that predates it.
  */
 const QUOTE_LOCATOR = 'locate_quote'
+
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { ChildAttendance } from '../src/childAttendance.mjs'
 import { unreadableSubmission } from '@evimed/domain'
+
+/**
+ * How long a root's first step waits on this plugin's reads of the dispatch (the brief, the capability's tools and method)
+ * before it goes on without them, saying so. They are files in the runtime and a control-plane lookup bounded at three
+ * seconds; a minute is a hang, and the kernel hears a cancel only when the hook it awaits returns (`hookWait.mjs`).
+ */
+const FIRST_STEP_WAIT_MS = 60_000
 
 const Schema = await configSchema()
 
@@ -189,6 +201,7 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents', 'systemPrompt
  * @property {boolean} reviewEnabled
  * @property {number} [reviewPollMs]
  * @property {number} [reviewWaitMs]
+ * @property {() => number} [now] the milliseconds clock a turn's wall-clock budget is measured on; a test seam, never set by the kernel
  */
 
 export const Config = Schema.object({
@@ -241,8 +254,8 @@ export const Config = Schema.object({
     .description('Whether the control plane reviews submissions (its review module is on). Submission asks for the review when it is.'),
   reviewPollMs: Schema.number().default(3_000)
     .description('How often a submission asks after its running review.'),
-  reviewWaitMs: Schema.number().default(16 * 60_000)
-    .description('How long a submission waits for its review before answering with the verdict alone. Above the control plane\'s own editor timeout.'),
+  reviewWaitMs: Schema.number().default(0)
+    .description('How long a submission waits for its review before answering with the verdict alone, in milliseconds; 0 leaves it to the review module\'s own bounds (src/review.mjs: the editor\'s read, a repeat\'s code checks, a read the writer asked for).'),
   // The capability catalogue a plan is validated against is published by the
   // guidance row. Switched off, that row publishes nothing, and every plan
   // naming a capability would be refused as unknown — a session whose
@@ -389,6 +402,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   if (config.guidanceEnabled === false) {
     ctx.provide('evimedCapabilities', await capabilityCatalogue(ctx, config.capabilitiesDir, config.disabledToolsFile ?? ''), true)
   }
+  /** The one clock a turn's wall-clock budget is measured on (principle 17): injectable for tests, the system's otherwise. */
+  const now = typeof config.now === 'function' ? config.now : Date.now
   /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
   /** A child may submit only the one parent-plan item that created it. */
@@ -426,6 +441,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         items: [],
         budget: { steps: 0, tokens: 0, children: 0 },
         limits: runLimits(config),
+        /** The wall-clock budget the dispatch stated and what has been said of it (`timeBudgetNotice`), or null. Bound to the
+         *  turn that first saw it (`turn`), so a turn typed in later has none; cleared with the run. */
+        timeBudget: null,
+        /** When the root's current turn began, on the clock below; null before the first. */
+        turnStartedAtMs: null,
         /** Every child this run delegated, by handle, running or settled. */
         delegations: new Map(),
         /** Tail of the run's write lock; see `withRunLock`. */
@@ -1044,7 +1064,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   }))
 
   // ---- the tools a root's next request carries -----------------------------
-  ctx.effect(() => onClaimedPromptAssemble(ctx, prepareRootRequest))
+  ctx.effect(() => onClaimedPromptAssemble(ctx, prepareRootRequest, { label: name, hardMs: FIRST_STEP_WAIT_MS }))
 
   // ---- budget and the root/child verdict ----------------------------------
   ctx.effect(() => onPreStep(
@@ -1068,6 +1088,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // control plane reading what it delivered — not for the conversation.
         if (entry.turn !== step.turn) {
           entry.turn = step.turn
+          entry.turnStartedAtMs = now()
           entry.frozen = false
           // What was already running when this turn began; anything else this turn's tools start (synchronously
           // here: no tool of this turn has run yet).
@@ -1109,10 +1130,21 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         }
         entry.assembled = false
         if (agent) {
-          await injectBrief(ctx, agent, sessionState, config)
-          // What a delegated child would have been handed, handed to the session
-          // that is going to do the work itself.
-          await activateBoundCapability(entry, agent)
+          // Read from files in the runtime: a read that never returns costs this step its context (and says so), not
+          // the step, and a cancel is heard while it waits.
+          await waitOnHook({
+            name: `the dispatch's context and method (${name})`,
+            fallback: undefined,
+            signal: payload?.signal,
+            hardMs: FIRST_STEP_WAIT_MS,
+            report: hookWaitReporter(ctx, agent),
+            work: async () => {
+              await injectBrief(ctx, agent, sessionState, config)
+              // What a delegated child would have been handed, handed to the session
+              // that is going to do the work itself.
+              await activateBoundCapability(entry, agent)
+            },
+          })
         } else {
           diagnostics(step.sessionId)?.degrade?.('root step entered with no live agent for its id; its context and capability method were not handed over')
         }
@@ -1147,6 +1179,25 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           for (const [, child] of fresh) child.told = true
         }
       }
+      // The clock, for a turn whose dispatch gave it a wall-clock budget: said at its first step and on crossing 50%, 75% and 90%
+      // of the budget, each once, measured from the turn's own start on this plugin's clock. A line of context and nothing more —
+      // no step is refused for it and no turn ends at it. No budget, no line: a turn without one reads exactly what it read
+      // before. Root steps only: a child (the kernel's `subagent` or a delegation) never reaches this block.
+      if (step.root && entry.timeBudget) {
+        const budget = entry.timeBudget
+        // The turn that first meets the budget is the turn it was given for: a conversation typed into the kernel's window
+        // later is not that dispatch's, and finds its schedule spent.
+        budget.turn ??= step.turn
+        if (budget.turn === step.turn) {
+          entry.turnStartedAtMs ??= now()
+          const due = timeBudgetNotice(budget.minutes, now() - entry.turnStartedAtMs, budget.said)
+          const clockAgent = due ? ctx.get('agents')?.get?.(step.agentId) : null
+          if (due && clockAgent) {
+            injectContext(clockAgent, `<evimed-run>${due.text}</evimed-run>`, name)
+            budget.said = due.level
+          }
+        }
+      }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
         // Rejecting a step without saying why teaches the model nothing. The
@@ -1162,6 +1213,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       first: Number(payload?.turn ?? 0) <= 1 && Number(payload?.step ?? 0) <= 1,
       root: !isSubagentSession(payload?.agent),
     }),
+    // No deadline for the hook as a whole: it holds the step budget and the root/child verdict, which are not skipped. Its reads
+    // of the dispatch are bounded where they are made, above.
+    { label: name },
   ))
 
   ctx.effect(() => onSessionEvent(ctx, (session, event) => {
@@ -2332,7 +2386,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       name: 'evimed_submit_deliverable',
       description: [
         '提交一件交付物，当场得到裁定：先把引用编号与参考文献表渲染整齐，再跑门禁，再请独立审查（另一家族的模型逐条核对参考文献、数字与论断，发现带编号与原文），三者的结果一次返回。',
-        '第一次不通过是常态：按 issues 修好，再提交，直到 ok。契约种类由计划派生，不需要你传。',
+        '第一次不通过是常态：按 issues 修好，再提交，直到 ok。ok 之后交付物已成立，不需要再提交，除非审查标了「需回应」的发现；建议和之后的小改动不必重新提交，回执按最终文件生成。契约种类由计划派生，不需要你传。',
         '审查发现里标了「需回应」的，下次提交时在 responses 里逐条回应：改了回 fixed，不改回 declined 并写一句理由；审查只读 responses，写进 revision-notes.md 的不算回应。',
         '本轮对话结束前文件都还能改；回执与冻结在本轮结束时才发生。',
       ].join(' '),
@@ -2359,7 +2413,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // lets one submission's charge overwrite another's. The review runs
         // after the lock is released: it is a subagent that takes minutes, and
         // nothing it does touches this run's counters.
-        /** @type {{ envelope: { ok: boolean, code?: string, data?: any, issues?: any[] }, entry?: Record<string, any> }} */
+        /** @type {{ envelope: { ok: boolean, code?: string, data?: any, issues?: any[] }, entry?: Record<string, any>, digest?: string }} */
         const judged = await withRunLock(ownedSessionState(call.sessionId).entry, async () => {
           const resolved = resolveDeliverable(call, args.deliverableId)
           if (resolved.refusal) return { envelope: resolved.refusal }
@@ -2445,6 +2499,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           return {
             envelope: { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, ...renderedData, notices: boundedSuggestions(receiptEntry.notices, (count) => `另有 ${count} 条建议记在回执里，不需要再处理。`) } },
             entry,
+            // What the review read, to tell a resubmission of the same bytes from a changed one.
+            digest: await sha256Hex(JSON.stringify(receiptEntry.files)),
           }
         })
         // The writer's answers to the last review go first, so the ledger has
@@ -2461,7 +2517,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         if (!judged.entry) return withAnswers
         const item = judged.entry.items.find((/** @type {any} */ candidate) => candidate.id === String(args.deliverableId ?? ''))
         if (!item) return withAnswers
-        return withReview(withAnswers, await requestReview(judged.entry, item, call))
+        const review = await requestReview(judged.entry, item, call, judged.digest)
+        const reviewed = withReview(withAnswers, review)
+        // The sentence the call ends on: what, if anything, is still required.
+        return { ...reviewed, data: { ...(reviewed.data ?? {}), next: settledNote(review) } }
       },
     })
   }
@@ -2770,11 +2829,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * @param {Record<string, any>} entry @param {Record<string, any>} item
    * @param {{ sessionId: string, signal?: AbortSignal }} call
    */
-  const requestReview = async (entry, item, call) => {
+  const requestReview = async (entry, item, call, digest = '') => {
     if (!config.reviewEnabled) return null
     const capabilities = ctx.get('evimedCapabilities') ?? []
     if (capabilities.find((/** @type {any} */ manifest) => manifest.id === String(item.capability ?? ''))?.visibility === 'internal') return null
-    const result = await runReview(ctx, config, {
+    // A call with no digest is the writer asking for the review (`evimed_review_run`);
+    // a submission carries the digest of the bytes it judged.
+    const result = await reviewForSubmission(ctx, config, {
       runId: entry.runId,
       sessionId: call.sessionId,
       deliverableId: String(item.id),
@@ -2784,17 +2845,16 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       acceptance: Array.isArray(item.acceptance) ? item.acceptance : [],
       ...(item.studyType ? { studyType: String(item.studyType) } : {}),
       signal: call.signal,
+      digest,
+      explicit: !digest,
       ...(config.reviewPollMs ? { pollMs: config.reviewPollMs } : {}),
       ...(config.reviewWaitMs ? { waitMs: config.reviewWaitMs } : {}),
-    })
-    if (result.ok && 'review' in result) {
-      item.lastReview = {
-        reviewId: result.review.reviewId,
-        // Answered already when the reviewer carried a decline over from an
-        // earlier pass (the same finding, word for word).
-        findings: result.review.findings.map((/** @type {any} */ finding) => ({ id: finding.id, kind: finding.kind, answerRequired: Boolean(finding.answerRequired), answered: Boolean(finding.response) })),
-      }
-    }
+    }, item.lastReview)
+    // Kept: what the last read came to, which the next submission is decided by
+    // and a turn closing is reminded of (answers still owed; a finding answered
+    // already — a decline carried over word for word — is not owed again).
+    const standing = nextStanding(item.lastReview, result, digest)
+    if (standing) item.lastReview = standing
     return result
   }
 
@@ -2828,12 +2888,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const withReview = (envelope, review) => {
     if (!review) return envelope
     if (!review.ok) {
-      return { ...envelope, data: { ...(envelope.data ?? {}), review: { status: 'unavailable', reason: review.message } } }
+      return { ...envelope, data: { ...(envelope.data ?? {}), review: { status: review.pending ? 'pending' : 'unavailable', reason: review.message } } }
     }
     if ('skipped' in review) return { ...envelope, data: { ...(envelope.data ?? {}), review: { status: 'skipped', reason: review.skipped } } }
     return {
       ...envelope,
-      data: { ...(envelope.data ?? {}), review: reviewSummary(review.review) },
+      data: { ...(envelope.data ?? {}), review: reviewSummary(review.review, Boolean(review.reused)) },
       issues: [...(envelope.issues ?? []), ...reviewIssues(review.review)],
     }
   }
@@ -3358,6 +3418,11 @@ async function loadBriefRevision(ctx, agent, entry, config) {
     entry.frozen = false
   }
   entry.limits = runLimits(config, index?.budget && typeof index.budget === 'object' ? index.budget : {})
+  // The wall-clock budget this dispatch states (`timeBudgetMinutes`, optional: an index without it predates it or has none). A
+  // revision that states one starts a schedule of its own, unbound until a step meets it; one that states none leaves the
+  // schedule as it is, because a steer continues its turn, and a new run has already cleared it (`resetRunState`).
+  const timeBudgetMinutes = runTimeBudgetMinutes(index?.timeBudgetMinutes)
+  if (timeBudgetMinutes) entry.timeBudget = { minutes: timeBudgetMinutes, turn: null, said: -1 }
   // What this dispatch was routed to, from the index the control plane wrote and only from it. Stated by every revision, so a
   // follow-up run that is not routed does not keep the previous run's route.
   entry.routedCapability = capabilityIdOf(index?.capability)
@@ -3418,6 +3483,7 @@ function resetRunState(entry, runId) {
   }
   entry.runId = runId
   entry.startedAt = new Date().toISOString()
+  entry.timeBudget = null
   entry.briefText = null
   entry.memoryText = null
   entry.knowledgeEntries = 0

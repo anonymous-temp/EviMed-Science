@@ -72,6 +72,13 @@ const SNAPSHOT_LIMIT = 256
 /** Provided in the preset's realm when the recall and note tools are registered; absent when the memory half is off. */
 export const MEMORY_SERVICE = 'evimedCapsuleMemory'
 
+/**
+ * How long the first step waits on this row's context (the methods it lists, the conversation's block) before it goes on
+ * without it. The control plane is asked within three seconds; the rest is files in the runtime, so a minute is not a read
+ * but a hang (`hookWait.mjs`: the kernel awaits a hook and hears a cancel only when it returns).
+ */
+export const CONTEXT_WAIT_MS = 60_000
+
 /** A ceiling on the list, not on the methods: past it the rest are counted,
  *  and delegations still carry every body. */
 const METHODS_SECTION_MAX_CHARS = 12_000
@@ -173,7 +180,7 @@ export async function apply(ctx, config) {
     }, (payload) => ({
       first: Number(payload?.turn ?? 0) <= 1 && Number(payload?.step ?? 0) <= 1,
       root: !isSubagentSession(payload?.agent),
-    })))
+    }), { label: name, hardMs: CONTEXT_WAIT_MS }))
   }
 
   // This service reads only the control-plane snapshot authenticated by the
@@ -245,7 +252,7 @@ function conversationMethods(ctx, config, launched) {
       ctx.get('evimedDiagnostics')?.degrade?.(`conversation methods not read: ${errorMessage(error)}`)
     }
     return false
-  }))
+  }, { label: name, hardMs: CONTEXT_WAIT_MS }))
 }
 
 /**

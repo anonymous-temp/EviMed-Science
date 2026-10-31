@@ -399,6 +399,42 @@ export function stepPolicy(budget, limits) {
 }
 
 /**
+ * Where in a turn's wall-clock budget the model is told the clock, as shares of it: at its first step (0%), then on crossing
+ * each of these. Whole percents, so the comparison below is integer arithmetic and 90% of a budget is exactly 90%.
+ */
+export const TIME_BUDGET_NOTICE_PERCENTS = Object.freeze([0, 50, 75, 90])
+
+/**
+ * The sentence a turn that has a wall-clock budget is told, when one is due, or null. The caller wraps it as the run's own
+ * context (`<evimed-run>`, a tag the memory door and the learning loop already read as machine text).
+ *
+ * Context only (`RUN_TIME_BUDGET_MINUTES`): it names the budget, what was used and what is left, and says a complete deliverable
+ * should exist before the time is out. It stops nothing and nothing waits on it. `said` is the highest level already told this
+ * turn (-1: none). A step that finds more than one level crossed — a long step, or a first step that comes late — is told once,
+ * the latest, and the levels before it are then said; so each level is told at most once, and a turn is told nothing more once the
+ * last has been. The platform's own lines are written in Chinese whatever the researcher's language is; the dispatch's context
+ * says whose words decide the language of the reply.
+ * @param {number} minutes the budget, in whole minutes; 0 or less is no budget
+ * @param {number} elapsedMs since the turn began, on the caller's clock
+ * @param {number} said the highest level already told this turn, -1 if none
+ * @returns {{ level: number, text: string } | null}
+ */
+export function timeBudgetNotice(minutes, elapsedMs, said) {
+  if (!(minutes > 0)) return null
+  const spent = Math.max(0, Number(elapsedMs) || 0)
+  let level = -1
+  TIME_BUDGET_NOTICE_PERCENTS.forEach((percent, index) => {
+    if (spent * 100 >= percent * minutes * 60_000) level = index
+  })
+  if (level <= said) return null
+  const elapsed = Math.round(spent / 60_000)
+  return {
+    level,
+    text: `本轮时间预算 ${minutes} 分钟，已用 ${elapsed} 分钟，剩余 ${Math.max(0, minutes - elapsed)} 分钟。时间用完之前，要有一份完整的可交付成果。`,
+  }
+}
+
+/**
  * The parameters of `evimed_plan`, as the kernel compiles them.
  *
  * Here rather than inline in the plugin so a test can compile them with the

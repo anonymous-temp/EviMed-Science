@@ -16,7 +16,7 @@ import http from "node:http";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, runTimeBudgetMinutes, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv, nativeInputText } from "@evimed/harness-port";
 import { appendAttendanceReceipt, attendanceInputDigest, attendanceReceiptsFileFor, runContextAuthorityPublicKey, signRunContextAuthority, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
 import {
@@ -254,6 +254,37 @@ export async function requestRuntime(runtime, target, options = {}, { retryDelay
     await response.body?.cancel().catch(() => {});
     await delay(retryDelaysMs[attempt], undefined, options.signal ? { signal: options.signal } : undefined);
   }
+}
+
+/** What Node's own HTTP client says when the kernel's socket is gone, refused or cut: the container was replaced, killed or has not
+ *  bound yet. Closed on purpose: any other failure is not a statement about the runtime's reachability. */
+const KERNEL_TRANSPORT_CODES = new Set([
+  "ECONNRESET", "ECONNREFUSED", "ECONNABORTED", "EPIPE", "ENOTCONN", "ENOENT", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH",
+  "ERR_STREAM_PREMATURE_CLOSE", "ERR_STREAM_DESTROYED",
+]);
+
+/**
+ * A kernel call whose connection failed, as the refusal a client can act on.
+ *
+ * `requestRuntime` rejects with the raw socket error, so a dispatch that met a runtime being replaced (a release recreates the
+ * runtime controller, which removes every project runtime) left through the generic handler as `500 internal_error`, and a run
+ * refused before its prompt was sent was recorded with the Node code (`ECONNRESET`) as its error code. The same call that answers
+ * a timeout 504 answers this 503 `runtime_unavailable`: the next turn starts a runtime again, and a dispatch asked again with the
+ * same id finds the run it began. No retry here: whether to ask again is the caller's, and the one that does is told how long to wait.
+ *
+ * Passed through unchanged: an error that is already ours, and anything raised after the caller's own signal aborted (its
+ * deadline turns that into 504). An `AbortError` while the signal is still live is a response the runtime cut short.
+ * @param {unknown} error @param {AbortSignal | undefined} [signal]
+ * @returns {unknown}
+ */
+export function kernelTransportRefusal(error, signal = undefined) {
+  if (error instanceof HttpError || signal?.aborted || !(error instanceof Error)) return error;
+  const code = /** @type {any} */ (error).code;
+  const cut = error.name === "AbortError";
+  if (!cut && !(typeof code === "string" && KERNEL_TRANSPORT_CODES.has(code))) return error;
+  const refusal = new HttpError(503, "runtime_unavailable", "The runtime did not answer; it may have just been replaced.", { retryAfterSeconds: 5 });
+  refusal.cause = error;
+  return refusal;
 }
 
 /** TypeScript infers a destructured parameter as exactly the shape its
@@ -2849,10 +2880,30 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         //
         // `/runtime` is a per-project rw mount, quota-accounted and
         // deleted with the project. `dsh-sandbox`'s `writableRoots()`
-        // follows `os.tmpdir()`, so the landlock grant moves with it
-        // and covers only this subtree.
+        // follows `os.tmpdir()`, but only for the in-process file fence;
+        // the Landlock launcher the bash tool runs every command under
+        // grants /tmp, the workspace and /dev/null whatever TMPDIR says
+        // (dsh-sandbox-local, `landlockProfileArgs`, measured on the
+        // image 2026-10-31). A command therefore inherits a TMPDIR it
+        // cannot write to — `Rscript -e` died on it — and the image's
+        // evimed-tool-env.sh (BASH_ENV, exported by the serve script)
+        // points it at /tmp for the commands and leaves this one to the
+        // kernel.
         "--env",
         `TMPDIR=${runtimeTmpDir}`,
+        // Where a model's command may keep a cache. Everything under
+        // /runtime is read-only to it by the same sandbox — the XDG
+        // directories above too, kernel configuration included, and that
+        // stays — so matplotlib warned about its config directory in every
+        // run and `import umap` raised "cannot cache function" until the
+        // model set these itself (Neuroscience_003). /tmp is the one
+        // writable place that is neither the workspace nor a deliverable,
+        // and is a 64 MiB tmpfs: both caches are small and rebuilt when
+        // the container is.
+        "--env",
+        "MPLCONFIGDIR=/tmp/matplotlib",
+        "--env",
+        "NUMBA_CACHE_DIR=/tmp/numba-cache",
         // The authority the control plane will send as `Host`. DSH
         // refuses every `/api` request whose Host is neither
         // loopback nor a declared trusted host — not just browser
@@ -6063,7 +6114,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, unattended = undefined, mode = "queue", recordPromptActor = null, beforePrompt = null }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, unattended = undefined, mode = "queue", recordPromptActor = null, beforePrompt = null, timeBudgetMinutes = undefined }) {
     // Background work whose runtime a researcher's start just took says so, so
     // its owner waits and asks again instead of counting a failed attempt
     // (`RUNTIME_YIELDED_CODE`). Nothing was sent: the prompt is refused whole.
@@ -6093,7 +6144,8 @@ export class RuntimeManager {
         const error = new HttpError(409,'runtime_context_unverified','The runtime changed before forwarding.');
         error.definitivelyRejected = true; throw error;
       }
-      return this.callKernel(runtime,project,method,args,signal);
+      try { return await this.callKernel(runtime,project,method,args,signal); }
+      catch (error) { throw kernelTransportRefusal(error, signal); }
     };
     // The methods this conversation is given are chosen by what it asks: the directory the runtime mounts is rewritten for the
     // first message of a session (`refreshCapsuleMethods`), before the prompt that makes the plugin read it. Ordinary refresh
@@ -6129,6 +6181,8 @@ export class RuntimeManager {
         contextRevision: requestId,
         capability: routedCapability,
         unattended,
+        // A steer continues the turn whose clock the runtime already holds: it states no budget and is not given a default.
+        timeBudgetMinutes: mode === "steer" ? 0 : timeBudgetMinutes,
       });
       dispatchedUnattended = authority?.unattended ?? dispatchedUnattended;
     }
@@ -6144,7 +6198,12 @@ export class RuntimeManager {
             cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
             agentPreset: EVIMED_AGENT_PRESET,
           },
-        }, signal),
+        }, signal).catch((error) => {
+          // No prompt has been sent yet, so a lost connection here is a refusal and not an unknown outcome: the run ends with
+          // our code and the session is free to be asked again, instead of reading as running until its monitor gives up.
+          if (error?.code === "runtime_unavailable") error.definitivelyRejected = true;
+          throw error;
+        }),
         "runtime_prompt_rejected",
         "The runtime did not create the session in time.",
       );
@@ -6298,11 +6357,17 @@ export class RuntimeManager {
    * memories and knowledge text, so a sentence in it proves nothing. `null`
    * says the context was routed nowhere; left out, the index keeps what the
    * run's previous index said, because a steer writes an index and no context.
+   *
+   * `timeBudgetMinutes` is the wall-clock budget the turn is told it has (`RUN_TIME_BUDGET_MINUTES`): the dispatch's own, or — when
+   * it states none (`undefined`) and nobody attends the dispatch — the deployment's (`runTimeBudgetMinutes`, 0 = none). `0` says
+   * none outright, as a steer does, and a value outside the range is no budget. Optional and additive: an index without the field
+   * is a run without a budget, which is what every index was before it. It is context for the model, not authority, so it is not
+   * one of the signed claims.
    * @param {Record<string, any>} project @param {string} runId
-   * @param {{ sessionId?: string, required?: boolean, contextRevision?: string | null, capability?: string | null, unattended?: boolean }} [options] `sessionId` is not optional in practice: it is refused when absent
+   * @param {{ sessionId?: string, required?: boolean, contextRevision?: string | null, capability?: string | null, unattended?: boolean, timeBudgetMinutes?: number }} [options] `sessionId` is not optional in practice: it is refused when absent
    * @returns {Promise<{unattended:boolean}|undefined>}
    */
-  async writeRunBriefIndex(project, runId, { sessionId, required = false, contextRevision = null, capability = undefined, unattended = undefined } = {}) {
+  async writeRunBriefIndex(project, runId, { sessionId, required = false, contextRevision = null, capability = undefined, unattended = undefined, timeBudgetMinutes = undefined } = {}) {
     const session = safeId(sessionId, "session id");
     const write = async () => {
       const relative = `.evimed-brief/sessions/${session}/index.json`;
@@ -6321,6 +6386,8 @@ export class RuntimeManager {
       // to be attending. A person-initiated path always says `unattended: false`.
       if (unattended === undefined) withoutReader = previousAuthority?.protocol === RUN_CONTEXT_PROTOCOL && previousAuthority.runId === runId
         ? previousAuthority.unattended === true : true;
+      const budgetMinutes = runTimeBudgetMinutes(timeBudgetMinutes)
+        || (timeBudgetMinutes === undefined && withoutReader ? runTimeBudgetMinutes(this.config.runTimeBudgetMinutes) : 0);
       const index = {
         // The hand-off revision this index was written under; the runtime image reads an index under its own revision and
         // refuses any other by name (`RUN_CONTEXT_PROTOCOL`).
@@ -6330,6 +6397,7 @@ export class RuntimeManager {
         ...(typeof contextRevision === "string" && contextRevision ? { contextRevision } : {}),
         ...(routed ? { capability: routed } : {}),
         ...(withoutReader ? { unattended: true } : {}),
+        ...(budgetMinutes ? { timeBudgetMinutes: budgetMinutes } : {}),
       };
       const signed = signingSecret && contextRevision ? { ...index, attendanceAuthority: signRunContextAuthority(index, {
         signingSecret, userId: String(project.userId), projectId: String(project.id),

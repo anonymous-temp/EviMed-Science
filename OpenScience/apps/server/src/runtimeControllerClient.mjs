@@ -54,9 +54,11 @@ async function assertSocketFile(socketPath) {
   let current = parsed.root;
   for (const part of parts) {
     current = path.join(current, part);
+    // A directory that cannot be read (a mount being replaced, a stale handle) is the controller being unavailable, like a
+    // missing one; a raw errno here left as `500 internal_error`.
     const component = await fs.lstat(current).catch((error) => {
       if (error?.code === "ENOENT") return null;
-      throw error;
+      throw controllerError("runtime_controller_unavailable", "Runtime controller socket path could not be inspected.");
     });
     if (!component) {
       throw controllerError("runtime_controller_unavailable", "Runtime controller is unavailable.");

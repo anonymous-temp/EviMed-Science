@@ -158,7 +158,7 @@ import { OfficialPacks, officialPackMetricFamilies } from "./officialPacks.mjs";
 import { OFFICIAL_PACKS_DIR } from "./officialPackSources.mjs";
 import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
 import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, RUN_TIME_BUDGET_MINUTES, runTimeBudgetMinutes, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -7813,10 +7813,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A question, dispatched as a run.
       //
       //   POST /api/agent-runs/dispatch
-      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>" }
+      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>", timeBudgetMinutes?: integer }
       //   202 { data: run }   run.estimatedMinutes says how long it usually takes (C3); where it went is the ledger's machine reason
       //   400 invalid_agent_run — an unknown field; a `line` that is neither `answer` nor a public
-      //       capability id; a `line` on a conversation already bound to a capability
+      //       capability id; a `line` on a conversation already bound to a capability; a `timeBudgetMinutes`
+      //       that is not a whole number of minutes from 1 to 1440
+      //
+      // `timeBudgetMinutes` is an optional wall-clock budget for the run's turn (`RUN_TIME_BUDGET_MINUTES`). The run policy
+      // tells the model the clock — at its first step and at 50%, 75% and 90% of the budget — and stops nothing. A dispatch
+      // that states none gets none, except an unattended one under the deployment's `OPEN_SCIENCE_RUN_TIME_BUDGET_MINUTES`.
       //
       // `line` is the researcher's own choice and replaces the router and the
       // classifier: `answer` pins the answer line (「改为普通问答」), an id pins
@@ -7824,7 +7829,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
-        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line"].includes(field));
+        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line", "timeBudgetMinutes"].includes(field));
         if (unknown.length > 0) {
           throw new HttpError(400, "invalid_agent_run", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
         }
@@ -7833,6 +7838,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // 31 unread items the 2026-09-17 walk found were eval cells.
         if (body.automated != null && typeof body.automated !== "boolean") {
           throw new HttpError(400, "invalid_agent_run", "automated must be a boolean.");
+        }
+        // Context for the run's clock, never a limit: refused for this request when it is not minutes in range.
+        if (body.timeBudgetMinutes != null && !runTimeBudgetMinutes(body.timeBudgetMinutes)) {
+          throw new HttpError(400, "invalid_agent_run", `timeBudgetMinutes must be a whole number of minutes from ${RUN_TIME_BUDGET_MINUTES.min} to ${RUN_TIME_BUDGET_MINUTES.max}.`);
         }
         // The same statement as a request header (`AUTOMATED_REQUEST_HEADER`),
         // for a probe, audit or acceptance driver that sets it once for every
@@ -8026,6 +8035,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // The same decision the context got (`attended: !automated`): a person's dispatch is attended, a probe's, an audit's
             // or an evaluation harness's is not, and the signed attendance says so.
             unattended: automated,
+            // The clock the dispatch asked to be told, if any; an unattended one with none gets the deployment's, in the index.
+            ...(body.timeBudgetMinutes != null ? { timeBudgetMinutes: body.timeBudgetMinutes } : {}),
           });
           // The profile is the conversation's from here: the next dispatch finds it there (`ResidentProfiles`).
           await resident.delivered();

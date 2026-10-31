@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, GEO_SOCIAL_PLATFORMS, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, GEO_SOCIAL_PLATFORMS, METHOD_UNUSED_RETIRE_LOADS, RUN_TIME_BUDGET_MINUTES, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { researchDbSettings } from "./researchDbConfig.mjs";
@@ -2370,6 +2370,10 @@ export function loadConfig(overrides = {}) {
     ),
     runMaxSteps: Number(overrides.runMaxSteps ?? process.env.OPEN_SCIENCE_RUN_MAX_STEPS ?? 0),
     runMaxTokens: Number(overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 0),
+    // The wall-clock budget a turn nobody attends is told it has (minutes, 0 = none). Context only: the run policy says the
+    // clock to the model at the first step and at 50%, 75% and 90%, and nothing stops at it. A dispatch states its own
+    // (`timeBudgetMinutes`) and a person's ordinary turn gets none from here.
+    runTimeBudgetMinutes: boundedInteger(overrides.runTimeBudgetMinutes ?? process.env.OPEN_SCIENCE_RUN_TIME_BUDGET_MINUTES, 0, 0, RUN_TIME_BUDGET_MINUTES.max, "OPEN_SCIENCE_RUN_TIME_BUDGET_MINUTES"),
     evidenceStaleMinutes: Number(
       overrides.evidenceStaleMinutes ?? process.env.OPEN_SCIENCE_EVIDENCE_STALE_MINUTES ?? 10,
     ),
