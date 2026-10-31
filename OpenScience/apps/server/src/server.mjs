@@ -7452,6 +7452,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return;
       }
 
+      // What a signed-in shell may fetch ahead of opening a conversation (`shellPreload.ts`): the kernel's content-addressed files
+      // this process already holds. Empty until someone has opened one since it started, and a start is never asked for here.
+      if (pathname === "/api/runtime-ui/preload" && req.method === "GET") {
+        await store.ensureSessionUser(req, res, { allowDevAuth: false });
+        const origin = config.runtimeUiProxyEnabled ? String(config.runtimeUiPublicOrigin ?? "").replace(/\/$/, "") : "";
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: { origin, paths: origin ? runtimeManager.preloadableUiAssets() : [] } });
+        return;
+      }
+
       if (pathname === "/api/runtime-ui/frames" && req.method === "POST") {
         if (!config.runtimeUiProxyEnabled) throw new HttpError(404, "runtime_ui_not_enabled", "The native UI is not enabled.");
         const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });

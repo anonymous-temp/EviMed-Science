@@ -502,6 +502,9 @@ export const SHARED_UI_ASSET_PREFIX = "/__evimed/k/";
 const SHARED_UI_ASSET_CACHE_BYTES = 64 * 1024 * 1024;
 /** The largest single file taken into that cache. */
 const SHARED_UI_ASSET_MAX_BYTES = 16 * 1024 * 1024;
+/** What a shell may fetch ahead of an opening: one composition's files (six on 2026-10-31, 1.9 MB gzipped), with room for its growth. */
+const SHARED_UI_PRELOAD_FILES = 8;
+const SHARED_UI_PRELOAD_BYTES = 6 * 1024 * 1024;
 
 function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options = {}) {
   const surface = options.surface ?? "runtime";
@@ -7173,6 +7176,13 @@ export class RuntimeManager {
       || facts.tools.some(name => !['doc_read', 'doc_write'].includes(name))) throw new HttpError(403, 'extension_access_denied', 'Native invocation facts changed.');
     return { ...facts, runtimeGeneration: generation };
   }
+  /** The plugin composite a runtime carries, proven on its own: null for a runtime that has none.
+   * @param {any} project @returns {Promise<{candidate:any,proof:any}|null>} */
+  async provePersonalComposite(project) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime?.extensionGeneration || !this.markPersonalCompositeEffective) return null;
+    return { candidate: runtime.extensionGeneration, proof: await this.probeGeneration(project, runtime.extensionGeneration, false) };
+  }
   /** Called only by the existing exclusive idle apply fence. @param {any} project @param {any} candidate */
   async replaceGeneration(project, candidate) {
     await this.prepareGeneration(project, candidate);
@@ -7981,6 +7991,24 @@ export class RuntimeManager {
       this.sharedUiAssetBytes -= entry.body.length + (entry.gzip?.length ?? 0);
     }
     return asset;
+  }
+
+  /**
+   * The kernel's application files worth fetching ahead of an opening, newest first, as paths on the conversation's origin. Only the
+   * cached immutable ones: this never reaches a runtime. Bounded in number and bytes, because the cache also holds other compositions'.
+   * @returns {string[]}
+   */
+  preloadableUiAssets() {
+    /** @type {string[]} */ const paths = [];
+    let bytes = 0;
+    for (const [suffix, asset] of [...this.sharedUiAssets].reverse()) {
+      if (!asset.immutable || !/^\/(?:assets\/|plugins\/\?\?)/.test(suffix)) continue;
+      const size = asset.gzip?.length ?? asset.body.length;
+      if (paths.length >= SHARED_UI_PRELOAD_FILES || bytes + size > SHARED_UI_PRELOAD_BYTES) break;
+      bytes += size;
+      paths.push(`${SHARED_UI_ASSET_PREFIX}${suffix.slice(1)}`);
+    }
+    return paths;
   }
 
   /**

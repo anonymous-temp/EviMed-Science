@@ -2390,6 +2390,13 @@ export async function startWebRuntime({ projectId, opening = false }: { projectI
   return parseApiResponse<string>(res);
 }
 
+/** The kernel's application files the control plane holds, as paths on the conversation's origin (`shellPreload.ts`). */
+export async function listRuntimeUiPreload(): Promise<{ origin: string; paths: string[] }> {
+  if (!hasWebApi) return { origin: "", paths: [] };
+  const res = await fetchWithWebAuth(apiUrl("/runtime-ui/preload"));
+  return parseApiResponse<{ origin: string; paths: string[] }>(res);
+}
+
 /** When each project's runtime was last asked to warm, by project id; guesses apart. */
 const warmedAt = new Map<string, number>();
 const guessedAt = new Map<string, number>();

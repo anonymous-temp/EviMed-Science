@@ -188,3 +188,18 @@ test("auth fixture owns startup resources before startKernel can fail", async t 
   assert.equal(managerClosed, true);
   await assert.rejects(stat(fixture.root), { code: "ENOENT" });
 });
+
+test("what a shell may fetch ahead of an opening is the cached kernel files, newest first, bounded, and never reaches a runtime", () => {
+  const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0 });
+  const file = (bytes, immutable = true) => ({ immutable, status: 200, body: Buffer.alloc(bytes), gzip: null, contentType: "text/javascript" });
+  manager.sharedUiAssets.set("/assets/old.js", file(10));
+  manager.sharedUiAssets.set("/plugin-runtime/x.js", file(10));
+  manager.sharedUiAssets.set("/assets/mutable.js", file(10, false));
+  manager.sharedUiAssets.set("/plugins/??a/client.js&rev=abcdef", file(20));
+  manager.sharedUiAssets.set("/assets/new.js", file(30));
+  assert.deepEqual(manager.preloadableUiAssets(), ["/__evimed/k/assets/new.js", "/__evimed/k/plugins/??a/client.js&rev=abcdef", "/__evimed/k/assets/old.js"]);
+  manager.sharedUiAssets.set("/assets/huge.js", file(7 * 1024 * 1024));
+  assert.deepEqual(manager.preloadableUiAssets(), [], "a file past the byte bound ends the list: what is newest is what is wanted");
+  manager.sharedUiAssets.clear();
+  assert.deepEqual(manager.preloadableUiAssets(), []);
+});

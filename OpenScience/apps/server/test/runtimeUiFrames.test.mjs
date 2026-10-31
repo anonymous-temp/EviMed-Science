@@ -193,3 +193,12 @@ test("frame release requires login and CSRF, and clears only the named frame coo
   const live = await fetch(`http://127.0.0.1:${f.app.runtimeUi.address().port}${new URL(b.frameUrl).pathname}__evimed_bootstrap.js`, { headers: { cookie: `${f.cookie}; ${b.cookie}` } });
   assert.equal(live.status, 200, "releasing A must not disturb B");
 });
+
+test("what a shell may fetch ahead of an opening needs a signed-in session, names the conversation's origin and starts nothing", async (t) => {
+  const f = await frameApi(t);
+  assert.equal((await fetch(`${f.base}/api/runtime-ui/preload`)).status, 401);
+  const answer = async () => (await (await fetch(`${f.base}/api/runtime-ui/preload`, { headers: { cookie: f.cookie } })).json()).data;
+  assert.deepEqual(await answer(), { origin: uiOrigin, paths: [] }, "nothing is cached until someone has opened a conversation");
+  f.app.runtimeManager.sharedUiAssets.set("/assets/index-abc.js", { immutable: true, status: 200, body: Buffer.alloc(10), gzip: null, contentType: "text/javascript" });
+  assert.deepEqual(await answer(), { origin: uiOrigin, paths: ["/__evimed/k/assets/index-abc.js"] });
+});

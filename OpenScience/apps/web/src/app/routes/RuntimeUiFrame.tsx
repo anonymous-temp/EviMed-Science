@@ -1,6 +1,6 @@
 import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, stopGeoConversationRun, type GeoConversationScope } from "@/lib/geoNativeClient";
 import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
-import { putConversationReference, stageVcrConversationReference } from "@/lib/apiClient";
+import { putConversationReference, recordWebVital, stageVcrConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, runtimeLockMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
@@ -295,6 +295,45 @@ export function FrameSkeleton({ title = null, line = "正在打开" }: { title?:
   );
 }
 
+/** What the cover's box holds at most: what the frame's bridge takes as a draft (see the `draft` bound below). */
+const COVER_DRAFT_MAX_CHARS = 100_000;
+
+/** Only an opening that creates a plain new conversation with no brief of its own has a composer to fill. */
+function coverTakesText(intent: RuntimeUiIntent | null, scope: unknown): boolean {
+  return intent?.kind === "create" && intent.draft === undefined && !scope;
+}
+
+/**
+ * The cover of a new conversation: the same quiet line, under a box that takes what the reader has come to say.
+ *
+ * A new conversation has nothing to show but its composer, and that composer is the kernel's, so it cannot exist until the runtime and
+ * the kernel's application have (up to a minute over a poor line, 2026-10-31). What is typed here goes to the composer as its draft when
+ * the conversation opens, by the path a capability card's brief takes, and this box goes away: there is still one composer, and nothing
+ * here sends. It takes focus only from nobody and never on a touch screen, where focus would raise a keyboard over the page.
+ */
+function ConversationCover({ line, draft, onDraft, handedOver }: { line?: string; draft: string; onDraft: (value: string) => void; handedOver: boolean }) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (document.activeElement === document.body && window.matchMedia("(hover: hover)").matches) box.current?.focus();
+  }, []);
+  return (
+    <div data-frame-skeleton="" className="absolute inset-0 z-sticky flex flex-col items-center justify-center gap-3 bg-bg px-6 text-center">
+      <textarea
+        ref={box}
+        aria-label="输入你想做的事"
+        placeholder="输入你想做的事"
+        rows={3}
+        maxLength={COVER_DRAFT_MAX_CHARS}
+        value={draft}
+        readOnly={handedOver}
+        onChange={(event) => onDraft(event.target.value)}
+        className="w-full max-w-content-narrow resize-none rounded-composer border border-border-control bg-surface px-4 py-3 text-body text-text placeholder:text-text-3"
+      />
+      <p role="status" aria-live="polite" className="text-ui text-muted">{line ?? "正在打开"}</p>
+    </div>
+  );
+}
+
 /**
  * The way from a refused conversation to the page that states the ceiling:
  * 设置's usage section, which a deployment that bills research calls 额度
@@ -405,6 +444,11 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [renewing, setRenewing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // What was typed on a new conversation's cover, until the frame has been handed it (`ConversationCover`).
+  const [coverDraft, setCoverDraft] = useState("");
+  const coverDraftRef = useRef("");
+  coverDraftRef.current = coverDraft;
+  const [coverHandedOver, setCoverHandedOver] = useState(false);
   // The runtime's settings are being applied, so the opening is tried again by
   // itself (`PREPARING_CODE`): said on the cover instead of an alert, until the
   // conversation opens or the tries run out.
@@ -1031,10 +1075,14 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
       if (intent.originReference) await putConversationReference(intent.sessionId, projectId, intent.originReference);
       const stagedReference = intent.vcrReference ? await stageVcrConversationReference(intent.sessionId, projectId, intent.vcrReference) : undefined;
       if (!alive) return;
+      // What the reader typed while this was opening travels as the composer's draft; the box stops taking text at this moment.
+      const typed = coverTakesText(intent, scope) && coverDraftRef.current.trim() ? coverDraftRef.current : undefined;
+      const draft = intent.draft ?? typed;
+      if (typed !== undefined) setCoverHandedOver(true);
       iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(draft === undefined ? {} : { draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
     }, origin);
     })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
     return () => { alive = false; };
@@ -1164,6 +1212,29 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
     return () => clearTimeout(timeout);
   }, [pending, error, attempt, intent?.requestId]);
 
+  // The conversation is open: what the cover held is in the composer now. A failed opening keeps it for the retry.
+  useEffect(() => {
+    if (navigated) { setCoverDraft(""); setCoverHandedOver(false); }
+    else if (error) setCoverHandedOver(false);
+  }, [navigated, error]);
+
+  // How long this opening took, reported once (`OPEN_COLD`, `OPEN_WARM`): the browser's own measures cannot see inside the frame.
+  const openStartedAt = useRef(0);
+  const openWasCold = useRef<boolean | null>(null);
+  const openReported = useRef(false);
+  useEffect(() => {
+    if (!active || suspended || navigated) return;
+    if (!openStartedAt.current) openStartedAt.current = performance.now();
+    if (openWasCold.current === null && startStatus) openWasCold.current = !startStatus.running;
+  }, [active, suspended, navigated, startStatus]);
+  useEffect(() => {
+    if (!navigated || openReported.current || !openStartedAt.current || openWasCold.current === null) return;
+    openReported.current = true;
+    const name = openWasCold.current ? "OPEN_COLD" : "OPEN_WARM";
+    const device = window.matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop";
+    void recordWebVital({ route: "/app/chat", device, name, id: crypto.randomUUID(), value: Math.round(performance.now() - openStartedAt.current) }).catch(() => {});
+  }, [navigated]);
+
   // What covers the conversation, and when: until this frame has opened one,
   // the conversation's title and 「正在打开…」, cold start or warm alike. Once
   // it has, switching to another shows nothing — the kernel is on screen and
@@ -1175,7 +1246,10 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
   // reports (`cleanupPending`) before the start that will be refused for it has even been asked.
   const cleaning = waiting === "cleanup" || (startStatus?.cleanupPending === true && !runtimeUp);
   const waitLine = waiting === "room" ? ROOM_FULL_LINE : cleaning ? CLEANUP_LINE : null;
-  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={waitLine ?? (preparing ? PREPARING_LINE : undefined)} />;
+  const coverLine = waitLine ?? (preparing ? PREPARING_LINE : undefined);
+  const cover = navigated ? null : coverTakesText(intent, scope) && !sessionId
+    ? <ConversationCover line={coverLine} draft={coverDraft} onDraft={setCoverDraft} handedOver={coverHandedOver} />
+    : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={coverLine} />;
   // A renewal that failed is only worth saying once the lease it renews has
   // actually run out — or when it is an expired login, which no retry fixes.
   const leaseAlert = leaseFailure && (leaseFailure.final || leaseExpired) ? leaseFailure.text : null;

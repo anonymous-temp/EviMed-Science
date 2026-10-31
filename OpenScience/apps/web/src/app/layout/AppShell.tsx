@@ -17,6 +17,7 @@ import { useProjectStore } from "@/lib/projects";
 import { SIDEBAR_DRAWER_QUERY } from "@/lib/sidebarLayout";
 import { useUiStore } from "@/lib/store";
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "@/lib/apiClient";
+import { startShellHeadStart } from "@/lib/shellPreload";
 import { loginAddress } from "@/lib/loginReturn";
 
 /** Below Tailwind's `lg` the sidebar is a drawer over the content; from `lg` up it is a column beside it. */
@@ -158,6 +159,7 @@ export function AppShell() {
     void fetchWebMe()
       .then((me) => {
         if (active) setAuthState(me ? "authenticated" : "unauthenticated");
+        if (me) startShellHeadStart();
       })
       .catch(() => {
         if (active) setAuthState("unauthenticated");
