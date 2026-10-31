@@ -538,20 +538,24 @@ test("the simulations column reads an injected reader, shows every number with i
 test("the monthly page shows the last twelve months that have data, a month without data says so, and the figures are shared and cached", options, async (t) => {
   const zone = await userZone(alice, { title: "Alice's zone" });
   await userCard(alice, zone, cardInput("Card"));
-  let clock = new Date("2026-12-15T04:00:00Z");
+  // The months count from the card just written, in the real month: a date written here stops passing when that month is over (it did, on 2026-11-01).
+  const [year, month] = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit" }).format(new Date()).split("-").map(Number);
+  const monthAfter = (/** @type {number} */ offset) => new Date(Date.UTC(year, month - 1 + offset, 1)).toISOString().slice(0, 7);
+  const [written, next, last] = [monthAfter(0), monthAfter(1), monthAfter(2)];
+  let clock = new Date(Date.UTC(year, month + 1, 15, 4));
   /** @type {string[]} */ const computed = [];
-  const figures = async ({ month }) => {
-    computed.push(month);
-    const has = month === "2026-10";
-    return { month, verification: { cards: has ? 2 : 0, claims: has ? 8 : 0, verified: has ? 6 : 0, passRate: has ? 0.75 : null }, corrections: { entries: 0, medianLatencyHours: null }, challenges: { filed: 0, upheld: 0, amended: 0, withdrawn: 0, open: 0, upheldShare: null } };
+  const figures = async ({ month: asked }) => {
+    computed.push(asked);
+    const has = asked === written;
+    return { month: asked, verification: { cards: has ? 2 : 0, claims: has ? 8 : 0, verified: has ? 6 : 0, passRate: has ? 0.75 : null }, corrections: { entries: 0, medianLatencyHours: null }, challenges: { filed: 0, upheld: 0, amended: 0, withdrawn: 0, open: 0, upheldShare: null } };
   };
   const metrics = createEvidencePublicMetrics({ database: db, now: () => clock, figures });
   const { text } = await serve(t, { now: () => clock, metrics });
   const [a, b] = await Promise.all([text("/evidence/metrics"), text("/evidence/metrics")]);
   assert.equal(a.status, 200);
   assert.ok(a.body.includes("75%") && a.body.includes("6 / 8 条结论"));
-  assert.match(a.body, /2026-12<\/td><td colspan="3" class="muted">这个月没有数据。/);
-  assert.match(a.body, /2026-11<\/td><td colspan="3" class="muted">这个月没有数据。/);
+  assert.ok(a.body.includes(`${last}</td><td colspan="3" class="muted">这个月没有数据。`));
+  assert.ok(a.body.includes(`${next}</td><td colspan="3" class="muted">这个月没有数据。`));
   assert.equal(/0%/.test(a.body.replace(/75%|100%|10%/g, "")), false, "a month with no data is never shown as 0");
   assert.equal(computed.length, 3, "three months, built once for both requests that arrived together");
   assert.equal(b.body, a.body);
@@ -561,7 +565,7 @@ test("the monthly page shows the last twelve months that have data, a month with
   await text("/evidence/metrics");
   assert.equal(computed.length, 6, "recomputed once the cache is ten minutes old");
   const api = json(await text("/evidence/api/v1/metrics"));
-  assert.deepEqual(api.data.months.map((month) => [month.month, month.hasData]), [["2026-12", false], ["2026-11", false], ["2026-10", true]]);
+  assert.deepEqual(api.data.months.map((month) => [month.month, month.hasData]), [[last, false], [next, false], [written, true]]);
   // The real computation, over the tables, gives this month's verification: one of two claims found in its source.
   const real = createEvidencePublicMetrics({ database: db });
   const months = await real.months();
