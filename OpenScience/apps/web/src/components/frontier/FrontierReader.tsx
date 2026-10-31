@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useLocation } from "react-router";
-import { ArrowUpRight, FileText, MessageSquareText, MoreHorizontal, RefreshCw, Sparkles, Star } from "lucide-react";
+import { FileText, MessageSquareText, MoreHorizontal, RefreshCw, Sparkles, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   fetchFrontierAbstractZh,
@@ -13,7 +13,7 @@ import {
   type FrontierPlatform,
   type FrontierQuoted,
 } from "@/lib/frontierClient";
-import { Button, buttonClasses } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { FactList } from "@/components/ui/FactList";
 import { filterChipClasses } from "@/components/ui/FilterChips";
 import { IconButton } from "@/components/ui/IconButton";
@@ -52,20 +52,27 @@ import {
 } from "./frontierText";
 
 /*
- * The article reader's blocks (owner, 2026-10-22: the reader reads like AIHOT's detail page — AI 导读, 推荐理由 with AI 评分, the full
+ * The article reader's blocks (owner, 2026-10-22: the reader reads like AIHOT's detail page — a lead, 推荐理由 with AI 评分, the full
  * text with its AI translation and a 中文 / 原文 switch, the pictures, the quoted post, 专科 and 标签, 事件后续; later that evening the
- * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supported one (deleted 2026-10-27, below), and a full text with its sections;
+ * lead set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supported one (deleted 2026-10-27, below), and a full text with its sections;
  * 2026-10-23 the right column of actions and notes, a text that reads its addresses, lists and quotes, and a reading size).
  * The shapes follow AIHOT's `routes/item.tsx` and `features/item/*` (MIT). The type is EviMed's, set again on 2026-10-26 (owner:
  * 「字体大小 间距啥的都再处理处理」 — the three AI blocks were 20, 16 and 18 px side by side on a wide screen): the title in the sans at 24 / 600,
- * balanced; the 导读 at 18 and the 要点 at 16 at every width, all at 1.8 and in one 640 px measure (about 36 characters); the
+ * balanced; the lead at 18 and the 要点 at 16 at every width, all at 1.8 and in one 640 px measure (about 36 characters); the
  * interface at 14 and every block's label at 12, all 400 — a block is named by its colour, not a weight. The text itself is a view of
  * its own (owner, 2026-10-26: 「查看正文，在右上角地方啥的就行了，不要再弄到 AI 解读的下边去了」): the second option of the toolbar's
- * 「AI 导读 | 查看正文」 swaps the AI blocks for the whole text, at 16 and 18 from 1280 px, with one 600 in it — the run-in heading of a
+ * switch swaps the AI blocks for the whole text, at 16 and 18 from 1280 px, with one 600 in it — the run-in heading of a
  * structured abstract's paragraph (「Background:」), as a journal sets it. On 2026-10-27 (owner, after the box of five controls in the
  * column's corner and a 「就此提问」 list under it) the actions became one toolbar row under the title, the right column starts at 推荐理由,
  * and the questions are the chips of 「继续追问」 at the article's end; and 「AI 解读」 was deleted with its pipeline step and its field of
- * the item API (owner: it said again what the 导读 and the 要点 say, in a third block).
+ * the item API (owner: it said again what the lead and the 要点 say, in a third block).
+ *
+ * On 2026-10-31 (owner: 「查看正文和打开原文是重复了……打开原文应该是列在AI导读里……像腾讯的公众号，题目、内容，底下一个阅读原文」) the page
+ * became what a WeChat article is: the title, the content, and at its foot one plain 「阅读原文 ↗」 (`ReaderOriginal`; a post's is 「在小红书查看原帖」)
+ * in both views. The toolbar was the switch and the actions both, and 「打开原文」 beside 「查看正文」 read as two ways to the same text; now the
+ * band's one row is the switch alone (「速读 | 正文」: the lead is 「速读」 where it was 「AI 导读」, and the text view is named by what it is, with
+ * no verb), and ☆ ⋯ 深入研究 are the title row's. An item with no switch has no band row. 「AI 要点」 keeps its name: it is the page's one
+ * statement that what is above it was machine-written.
  *
  * Every block is drawn from what the server sent and only that: a field it could not fill is null and its block is not on the page.
  */
@@ -82,16 +89,18 @@ function hostOf(url: string): string {
 /* ------------------------------------------------------------- moved here */
 
 /**
- * An item whose title stayed the source's own (no Chinese title was written): the one plain way to the source, under the title, and no
- * word about why. The page used to explain the checking behind it — which number did not match, which check was not finished — in
- * notes that stood beside the 导读 they said was missing (G5, 2026-10-25: how a text was made is the model's context and an operator's
- * view, never the reader's page). Null when there is a Chinese title.
+ * The way out of the page: one plain link at the foot of the article's content — after the lead and the 要点, or after the text, its pictures
+ * and the quoted post — in both views and nowhere else (owner, 2026-10-31: 「阅读原文」 under a WeChat article's content). A post's is
+ * the platform's own (「在小红书查看原帖」). It opens the address the title's record names, in a new tab, and is read by the page's tracking
+ * as the original opened. It replaces the toolbar's 「打开原文」 button, the bar's, and the 「阅读来源」 line an item with no Chinese title had over
+ * its text; how a text was made is never said here (G5, 2026-10-25).
  */
-export function ReaderSourceAction({ item, className }: { item: Pick<FrontierItem, "titleZh" | "url">; className?: string }) {
-  if (item.titleZh) return null;
+export function ReaderOriginal({ item, className }: { item: Pick<FrontierItem, "platform" | "url">; className?: string }) {
   return (
     <p className={className}>
-      <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1.5 px-1.5 text-link")}>阅读来源</a>
+      <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1.5 px-1.5 text-link")}>
+        {originalLinkLabel(item)}<span aria-hidden="true"> ↗</span>
+      </a>
     </p>
   );
 }
@@ -143,9 +152,14 @@ export function useReaderLanguage(): [ReaderLanguage, (language: ReaderLanguage)
 /** A block's name: 12 / 400 in the secondary grey (the lead's in the accent), as every block of the reader names itself. */
 const LABEL = "text-caption text-text-3";
 
-function Block({ label, labelClassName, aside, ruled = false, className, children }: {
+function Block({ label, labelClassName, labelHidden = false, aside, ruled = false, className, children }: {
   label: ReactNode;
   labelClassName?: string;
+  /**
+   * The label is said by a screen reader only and takes no row: the view's own tab names the block, and a row of its height over the
+   * first block was the dead space under the switch (owner, 2026-10-31). Not with an `aside`, which needs the row.
+   */
+  labelHidden?: boolean;
   aside?: ReactNode;
   /** A hairline above it, where the block starts a new part of the page. */
   ruled?: boolean;
@@ -155,10 +169,12 @@ function Block({ label, labelClassName, aside, ruled = false, className, childre
   const id = useId();
   return (
     <section aria-labelledby={id} className={cn(ruled && "border-t border-border pt-4", className)}>
-      <div className="mb-3 flex min-h-sm flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <h2 id={id} className={labelClassName ?? LABEL}>{label}</h2>
-        {aside}
-      </div>
+      {labelHidden && !aside ? <h2 id={id} className="sr-only">{label}</h2> : (
+        <div className="mb-3 flex min-h-sm flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <h2 id={id} className={labelClassName ?? LABEL}>{label}</h2>
+          {aside}
+        </div>
+      )}
       {children}
     </section>
   );
@@ -226,18 +242,18 @@ export function bylineEvidence(item: FrontierItem): string | null {
   return item.evidenceType && GENRE_SAYS_EVIDENCE.has(item.evidenceType) ? null : evidenceTag(item);
 }
 
-/** The name of a block the model wrote (「AI 导读」, 「AI 要点」): in the accent, where every other block names itself in grey. */
+/** The name of a block the model wrote (「速读」, 「AI 要点」): in the accent, where every other block names itself in grey. */
 const AI_LABEL = "text-caption text-accent";
 
 /**
- * 「AI 导读」: one paragraph, answer first, a size above the 要点 (18 at every width, at 1.8) — the first thing read, and plainly not the
- * article.
+ * 「速读」 (「AI 导读」 until 2026-10-31, owner): one paragraph, answer first, a size above the 要点 (18 at every width, at 1.8) — the first
+ * thing read, and plainly not the article. It is the default view of the page; the 要点 under it says it was machine-written.
  */
 export function ReaderLead({ text, className, named = false }: { text: string; className?: string; named?: boolean }) {
-  // `named`: the toolbar's 「AI 导读」 tab already names this view right above it (owner, 2026-10-27: the same words twice read as
-  // two things), so the heading is for a screen reader only.
+  // `named`: the toolbar's 「速读」 tab already names this view right above it (owner, 2026-10-27: the same words twice read as two things),
+  // so the heading is for a screen reader only and has no row.
   return (
-    <Block label="AI 导读" labelClassName={named ? "sr-only" : AI_LABEL} className={className}>
+    <Block label="速读" labelClassName={AI_LABEL} labelHidden={named} className={className}>
       <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-pretty text-reading-lg text-text">{text}</p>
     </Block>
   );
@@ -247,7 +263,7 @@ const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id
 
 /**
  * 「AI 要点」 (ct-write 2026-10-24; a soft panel since 2026-10-27, owner: the old one was a table of ruled rows with the label in a
- * column of its own and the words beside it): under the 导读, the item's facts as the fields its genre is read by — a paper's 研究问题,
+ * column of its own and the words beside it): under the 速读, the item's facts as the fields its genre is read by — a paper's 研究问题,
  * 设计与对象, 主要结果, 安全性, 局限; a policy's 发文机关与文号, 核心内容, 适用对象, 时间节点; a deal's 事件, 交易与金额, 资产与阶段.
  * One rounded panel on the page's one grey step (`surface-1`, no border), the fields stacked — the label as a caption over its words
  * at the reading size, a faint rule between two fields — with a few items as compact bullets whose marks are the accent, and the numbers
@@ -311,7 +327,7 @@ export function isPost(item: Pick<FrontierItem, "platform">): boolean {
 
 /**
  * What an item's text is called (ct-write W6): an abstract 「摘要」, a journal's or a preprint server's own full text 「全文」, anything
- * else — a news report of a paper included — 「正文」: the name of the view 「查看正文」 opens and of its block.
+ * else — a news report of a paper included — 「正文」: the name of the toolbar's second view and of its block.
  */
 export function readerTextKind(item: Pick<FrontierItem, "sourceType">, body: Pick<FrontierBody, "source">): "正文" | "摘要" | "全文" {
   if (body.source === "abstract") return "摘要";
@@ -444,13 +460,13 @@ export function readerOutline(text: FrontierBody, language: ReaderLanguage, idPr
 
 /**
  * The text itself — the article or the post (`正文`), or a paper's abstract (`摘要`) — in Chinese or in the original, whole: it is the
- * view the reader asked for (「查看正文」), or a post, which is short and is the item. Where there is a translation and an original the
+ * view the reader asked for (the toolbar's 「正文」), or a post, which is short and is the item. Where there is a translation and an original the
  * block's row has 中文 · 原文 and names what is on screen (「正文 · AI 翻译」, 「正文 · 原文」); a translation the server says is partial
  * says so once, with the way to the whole original. A full text's `## ` paragraphs are its section headings, in either language; an
  * abstract's paragraph that starts with its own heading has it set in 600; lists and quotations are set as such, and a bare address is a
  * short link.
  */
-export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idPrefix, className }: {
+export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idPrefix, named = false, className }: {
   kind: "正文" | "摘要" | "全文";
   text: FrontierBody;
   /** The original's language (`lang` on its paragraphs); `und` is not said. */
@@ -461,6 +477,8 @@ export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idP
   ownUrl?: string;
   /** The ids its section headings take (`readerOutline`). */
   idPrefix?: string;
+  /** The toolbar's tab already says 「正文」 right above: a heading that says no more than it takes no row (it stays for a screen reader). */
+  named?: boolean;
   className?: string;
 }) {
   const { showing, switchable, text: shown } = shownText(text, language);
@@ -478,7 +496,7 @@ export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idP
   const textLang = showing === "original" && lang !== "und" ? lang : undefined;
   let headings = 0;
   return (
-    <Block label={label} className={className} aside={languages ?? undefined}>
+    <Block label={label} labelHidden={named && label === kind} className={className} aside={languages ?? undefined}>
       {translated && !text.complete && text.original && (
         <Note className="mb-4" action={<Button variant="text" size="sm" onClick={() => onLanguage("original")}>看原文</Button>}>译文尚不完整</Note>
       )}
@@ -519,12 +537,14 @@ type AbstractState = { kind: "loading" } | { kind: "ready"; zh: string | null; o
  * everyone (plan §10.3.6) — beside the original. Where the Chinese cannot be written (the budget, a failed number check, a server
  * that does not offer it) the original stands alone under its own name; where there is no abstract at all there is no block.
  */
-export function ReaderAbstract({ item, language, onLanguage, onEmpty, className }: {
+export function ReaderAbstract({ item, language, onLanguage, onEmpty, named = false, className }: {
   item: FrontierItemDetail;
   language: ReaderLanguage;
   onLanguage: (language: ReaderLanguage) => void;
   /** The server has no abstract after all, in either language: the page takes its switch away (its view would be empty). */
   onEmpty?: () => void;
+  /** The toolbar's 「摘要」 tab names the block (see `ReaderText`). */
+  named?: boolean;
   className?: string;
 }) {
   const ask = !item.abstractZh && abstractOffered(item);
@@ -545,7 +565,7 @@ export function ReaderAbstract({ item, language, onLanguage, onEmpty, className 
 
   if (state.kind === "loading") {
     return (
-      <Block label="摘要" className={className}>
+      <Block label="摘要" labelHidden={named} className={className}>
         <div className="animate-pulse space-y-2" aria-hidden="true">
           <div className="h-3.5 w-full rounded bg-surface-2" />
           <div className="h-3.5 w-11/12 rounded bg-surface-2" />
@@ -556,7 +576,7 @@ export function ReaderAbstract({ item, language, onLanguage, onEmpty, className 
   }
   if (state.kind === "error") {
     return (
-      <Block label="摘要" className={className}>
+      <Block label="摘要" labelHidden={named} className={className}>
         <div role="alert" className="flex flex-wrap items-center gap-3 text-ui text-text-2">
           <span>{state.message}</span>
           <Button variant="secondary" onClick={() => setAttempt((value) => value + 1)}><RefreshCw size={16} aria-hidden="true" />重试</Button>
@@ -569,7 +589,7 @@ export function ReaderAbstract({ item, language, onLanguage, onEmpty, className 
   const text: FrontierBody = chinese && !state.zh
     ? { zh: state.original, original: null, zhKind: "original-zh", complete: true, source: "abstract" }
     : { zh: state.zh, original: state.original, zhKind: state.zh ? (chinese ? "original-zh" : "translation") : null, complete: true, source: "abstract" };
-  return <ReaderText kind="摘要" text={text} lang={item.lang} language={language} onLanguage={onLanguage} className={className} />;
+  return <ReaderText kind="摘要" text={text} lang={item.lang} language={language} onLanguage={onLanguage} named={named} className={className} />;
 }
 
 /**
@@ -655,7 +675,8 @@ export function ReaderQuote({ quoted, platform, language, className }: {
 /**
  * 「出处」, in the right column whichever view is open (owner, 2026-10-26: the 来源 line under the AI blocks went with the text): who
  * published it and the site, then what the card left out of a paper — its journal, authors, impact factor, the trial — as one list of
- * facts, then the free full text and the other institutions that reported it. The way to the original is the column's own button.
+ * facts, then the free full text and the other institutions that reported it. The way to the original is not here: it is the one link at
+ * the article's foot (`ReaderOriginal`), so the page has no second way out.
  */
 export function ReaderProvenance({ item, reports }: {
   item: FrontierItemDetail;
@@ -816,24 +837,21 @@ export function ReaderNotes({ item, reports, outline }: { item: FrontierItemDeta
   );
 }
 
-/** The switch between the AI blocks and the text: what the text's option says, whether the text is open, and how to change it. */
+/** The switch between the lead and the text: what the text's option says, whether the text is open, and how to change it. */
 export interface ReaderViewSwitch {
   /**
-   * 「查看正文」「查看摘要」「查看全文」: by what the text is (`readerTextKind`). It is the second option of the toolbar's switch beside
-   * 「AI 导读」, and the bottom bar's button names what it opens — 「AI 导读」 while the text is open.
+   * 「正文」「摘要」「全文」: what the text is (`readerTextKind`), without a verb (owner, 2026-10-31). It is the second option of the toolbar's
+   * switch beside 「速读」, and the bottom bar's button names what it opens — 「速读」 while the text is open.
    */
-  label: string;
+  label: "正文" | "摘要" | "全文";
   text: boolean;
   onToggle: () => void;
 }
 
 /**
- * The reader's actions, at the right end of the page's one toolbar row (owner, 2026-10-27: the box in the column's top corner held five
- * controls in two rows and a switch; the row is 「AI 导读 | 查看正文」 at the left and these at the right): 「打开原文 ↗」, the publisher's
- * page (a post's 「在 X 查看原帖 ↗」, where the post is on the page already), ☆ and ⋯; 「深入研究」, the page's one primary button, is
- * the title row's (`ReaderResearch`).
- * The row stands in the band above the text, so ☆ and ⋯ act on the article and not on a list in its text (the walk's
- * control-after-content read the old rail's ☆ as the text's list control, 2026-10-24).
+ * The reader's ☆ and ⋯, at the right of the title's row with 「深入研究」 after them (owner, 2026-10-31: they were the toolbar's, with a
+ * 「打开原文」 button beside the 「查看正文」 switch). The reasons of 「不感兴趣」 open under ⋯. The way to the original is not here: it is at the
+ * foot of the article (`ReaderOriginal`).
  */
 export function ReaderActions({ item, more, onStar }: {
   item: FrontierItem;
@@ -843,9 +861,6 @@ export function ReaderActions({ item, more, onStar }: {
   const starred = item.state.starred;
   return (
     <div role="group" aria-label="文章操作" className="flex items-center gap-1">
-      <a href={item.url} {...EXTERNAL} className={buttonClasses({ variant: "secondary" })}>
-        <span className="truncate">{originalLinkLabel(item)}</span><ArrowUpRight size={16} aria-hidden="true" />
-      </a>
       <IconButton icon={Star} label="收藏" aria-pressed={starred} className={starred ? "text-accent [&_svg]:fill-current" : undefined} onClick={onStar} />
       <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
     </div>
@@ -878,8 +893,9 @@ function AskChip({ text, onAsk }: { text: string; onAsk: () => void }) {
 /**
  * 「继续追问」 (c3-ask; a block of the article since 2026-10-27, after it was a 「就此提问」 list of rows in the right column): the
  * questions a reader of this item would put to the assistant, each a chip that opens the conversation with the question as a draft and
- * the item as its origin, and 「自己提问…」, which opens it with the item alone. At the end of the article, after what the AI view says
- * and its 事件后续, at every width. The questions are the server's; with none the block is the reader's own question alone.
+ * the item as its origin, and 「自己提问…」, which opens it with the item alone. At the end of the article, after what the page says
+ * and its 事件后续, at every width. The questions are the server's; with none there is no block (owner, 2026-10-31: the lone chip said
+ * what 「深入研究」 says — that one opens the same conversation with a question that fits the item as a draft, which the reader rewrites).
  */
 export function ReaderAsk({ questions, onAsk, className }: {
   questions: readonly string[];
@@ -887,6 +903,7 @@ export function ReaderAsk({ questions, onAsk, className }: {
   onAsk: (question: string | null) => void;
   className?: string;
 }) {
+  if (questions.length === 0) return null;
   return (
     <Block ruled label="继续追问" className={className}>
       <ul aria-label="可以问的问题" className="flex flex-wrap gap-2">
@@ -936,8 +953,8 @@ const BAR_TOOL = "flex flex-col items-center justify-center gap-0.5 rounded text
 
 /**
  * Below 1024 px the article's own bar at the window's bottom (AIHOT `ReaderTools`, MIT): 收藏, the switch to the text (「正文」, then
- * 「AI 导读」) where there is one, 深入研究, the way to the original and ⋯. It steps aside while the reader scrolls down through the text
- * and comes back on the way up and at either end.
+ * 「速读」) where there is one, 深入研究 and ⋯. The way to the original is the link at the article's foot, as on a wide screen (owner,
+ * 2026-10-31). It steps aside while the reader scrolls down through the text and comes back on the way up and at either end.
  */
 export function ReaderBar({ item, more, onStar, onResearch, view }: {
   item: FrontierItem;
@@ -958,21 +975,18 @@ export function ReaderBar({ item, more, onStar, onResearch, view }: {
         hidden && "translate-y-full",
       )}
     >
-      <section aria-label="文章操作" className={cn("mx-auto grid h-14 max-w-read px-2", view ? "grid-cols-5" : "grid-cols-4")}>
+      <section aria-label="文章操作" className={cn("mx-auto grid h-14 max-w-read px-2", view ? "grid-cols-4" : "grid-cols-3")}>
         <button type="button" aria-pressed={starred} onClick={onStar} className={cn(BAR_TOOL, starred && "text-accent [&_svg]:fill-current")}>
           <Star size={20} aria-hidden="true" />{starred ? "已收藏" : "收藏"}
         </button>
         {view && (
           <button type="button" onClick={view.onToggle} className={BAR_TOOL}>
-            {view.text ? <Sparkles size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}{view.text ? "AI 导读" : view.label.replace(/^查看/, "")}
+            {view.text ? <Sparkles size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}{view.text ? "速读" : view.label}
           </button>
         )}
         <button type="button" onClick={onResearch} className={BAR_TOOL}>
           <MessageSquareText size={20} aria-hidden="true" />深入研究
         </button>
-        <a href={item.url} {...EXTERNAL} className={BAR_TOOL}>
-          <ArrowUpRight size={20} aria-hidden="true" />{originalLinkLabel(item) === "打开原文" ? "打开原文" : "查看原帖"}
-        </a>
         <Menu label="更多操作" items={more}>
           <button type="button" className={BAR_TOOL}><MoreHorizontal size={20} aria-hidden="true" />更多</button>
         </Menu>

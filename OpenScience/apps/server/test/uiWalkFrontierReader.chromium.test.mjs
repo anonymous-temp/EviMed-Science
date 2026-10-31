@@ -32,9 +32,11 @@ for (const [size, viewport] of [["desktop", { width: 1512, height: 945 }], ["pho
         // A pasted address and a reload both read the same preserved record.
         await page.goto(`${base}${route}`);
         await page.getByRole("heading", { level: 1, name: item.title, exact: true }).waitFor();
-        // 「打开原文」 is the right of the toolbar row under the title on a desktop and the bottom bar's on a phone (owner, 2026-10-27; the rail
-        // before it); a post's is 「在 X 查看原帖」.
-        assert.equal(await page.getByRole("link", { name: /^(打开原文|在.+查看原帖)/ }).first().getAttribute("href"), item.url);
+        // 「阅读原文」 is the one link at the foot of the article, at every width and in both views (owner, 2026-10-31; before it the toolbar's
+        // button on a desktop and the bottom bar's on a phone); a post's is 「在 X 查看原帖」.
+        const original = page.getByRole("link", { name: /^(阅读原文|在.+查看原帖)/ });
+        assert.equal(await original.count(), 1, "the page has one way to the original");
+        assert.equal(await original.getAttribute("href"), item.url);
         assert.equal(await page.getByRole("dialog").count(), 0, "the reader is an addressed page");
         await page.reload();
         await page.getByRole("heading", { level: 1, name: item.title, exact: true }).waitFor();

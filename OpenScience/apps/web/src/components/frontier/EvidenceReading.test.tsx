@@ -24,10 +24,10 @@ describe("evidence reading", () => {
     await userEvent.click(sources.getByRole("button", { name: "不安全链接" }));
     const unsafe = screen.getByRole("dialog", { name: "来源 1" });
     expect(within(unsafe).getByText("原文引句")).toBeInTheDocument();
-    expect(within(unsafe).queryByRole("link", { name: /打开原文/ })).not.toBeInTheDocument();
+    expect(within(unsafe).queryByRole("link", { name: /阅读原文/ })).not.toBeInTheDocument();
     await userEvent.click(within(unsafe).getByRole("button", { name: "关闭" }));
     await userEvent.click(sources.getByRole("button", { name: "论文" }));
-    expect(within(screen.getByRole("dialog", { name: "来源 2" })).getByRole("link", { name: /打开原文/ })).toHaveAttribute("href", "https://example.org/paper");
+    expect(within(screen.getByRole("dialog", { name: "来源 2" })).getByRole("link", { name: /阅读原文/ })).toHaveAttribute("href", "https://example.org/paper");
     // A card that says nothing of who made it has no fold for it; and the card's own title is the page's, not an <h2> of the article
     // (the article's sections are the page's h2 since release 11, under its one h1).
     expect(folds(container)).toHaveLength(0);
