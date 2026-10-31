@@ -1,5 +1,6 @@
-// Tests of bench-driver.mjs's group, keepRuntime and personal-skill paths against the fake control plane (fake-server.mjs).
-// Run: node tools/test/driver-flows.test.mjs   (from the benchmark work directory)
+// Tests of bench-driver.mjs's group, keepRuntime, personal-skill, file-capture, timeout and dispatch-retry paths against the fake
+// control plane (fake-server.mjs).
+// Run: node tools/test/driver-flows.test.mjs   (about two minutes; TEST_FILTER=<regexp on the test name> runs a subset)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
@@ -33,7 +34,7 @@ async function run(name, lines, { fake: fakeOptions = {}, flags = [] } = {}) {
     try { results[entry] = JSON.parse(await readFile(path.join(resultDir, entry, "result.json"), "utf8")); } catch { /* a file, or no result */ }
   }
   const calls = fake.state.calls;
-  const done = { code, log, results, calls, state: fake.state };
+  const done = { code, log, results, calls, state: fake.state, out: resultDir };
   fake.close();
   return done;
 }
@@ -42,6 +43,7 @@ const projectOf = (r, group) => r.calls.find((call) => call.what === "project-cr
 
 let failures = 0;
 async function test(name, fn) {
+  if (process.env.TEST_FILTER && !new RegExp(process.env.TEST_FILTER).test(name)) return; // TEST_FILTER=timeout node …: a subset
   try { await fn(); console.log(`ok   ${name}`); } catch (error) { failures += 1; console.log(`FAIL ${name}\n${error.stack}`); }
 }
 
@@ -164,6 +166,151 @@ await test("a group's items must carry the same skill, or none", async () => {
   const r = await run("mixed", [item("m/1", "ga", { groupSkill: SKILL }), item("m/2", "ga", { groupSkill: { ...SKILL, instructions: "other" } })]);
   assert.notEqual(r.code, 0);
   assert.match(r.log, /different groupSkill/);
+});
+
+// ------------------------------------------------------------------------------------------------ file capture, timeouts, retries
+
+const textFile = (text, ago = 0) => ({ text, ago });
+const exists = async (file) => readFile(file, "utf8").then(() => true, () => false);
+
+await test("report-like files are read first: a report listed behind 45 code files is captured, the code is what the cap cuts", async () => {
+  const code = Object.fromEntries(Array.from({ length: 45 }, (_, i) => [`code/step_${String(i).padStart(2, "0")}.py`, textFile(`print(${i})`)]));
+  const files = { ...code, "outputs/tables/t.csv": textFile("a,b\n1,2"), "notes/old.md": textFile("old", 600), "notes/new.md": textFile("newer note", 5),
+    "deliverables/x/report.md": textFile("# Deliverable\n".repeat(50), 100), "report/report.md": textFile("# Report\nfinal"), "report/images/fig1.png": textFile("png") };
+  const r = await run("cap", [item("c/1", "g", { collect: true })], { fake: { scenario: () => ({ files }) }, flags: ["--retry-scale", "0.001"] });
+  assert.equal(r.code, 0, r.log);
+  const res = r.results["c__1"];
+  const saved = new Map(res.files.filter((f) => f.saved).map((f) => [f.path, f]));
+  assert.equal(res.files.filter((f) => f.saved).length, 40);
+  for (const name of ["report/report.md", "deliverables/x/report.md", "notes/new.md", "notes/old.md", "report/images/fig1.png"]) assert.ok(saved.has(name), `${name} captured`);
+  assert.ok(await exists(path.join(r.out, "c__1", "files", "report", "report.md")));
+  const more = res.files.find((f) => /^\(\d+ more\)$/.test(f.path));
+  assert.ok(more, "the cut is listed");
+  assert.equal(more.reportLikeLeft, 0, "no report-like file was cut");
+  assert.ok(res.files.findIndex((f) => f.path === "report/report.md") < res.files.findIndex((f) => f.path === "code/step_00.py"), "documents before code");
+  // Same mtime tier: the newer document first, the larger one before a smaller one of the same age.
+  const pos = (name) => res.files.findIndex((f) => f.path === name);
+  assert.ok(pos("report/report.md") < pos("deliverables/x/report.md") && pos("notes/new.md") && pos("notes/new.md") < pos("deliverables/x/report.md") && pos("deliverables/x/report.md") < pos("notes/old.md"), "newest first");
+  assert.equal(res.lastReport, undefined, "lastReport belongs to a timeout");
+});
+
+await test("a run that times out: the workspace is scanned, the newest report-like files are captured and lastReport names the newest document", async () => {
+  const upload = path.join(await mkdtemp(path.join(tmpdir(), "bench-up-")), "readme.md");
+  await writeFile(upload, "# an input, not a report\n");
+  // `ago` is seconds before the dispatch: the draft and the report were written during the run (the report later), the stale file before it.
+  const files = { "report/draft.md": textFile("# Draft\nhalf", 0), "report/report.md": textFile("# Report v2\nmore text here", -2), "code/a.py": textFile("x=1"),
+    "old/stale.md": textFile("written before the dispatch", 7200), "report/figures/f.png": textFile("png", -1),
+    "notes/todo.md": textFile("- [ ] finish the report", -5) };
+  const scenario = () => ({ files, hang: true, unlisted: true, writes: [{ atMs: 700, tool: "write", path: "/workspace/report/draft.md" }, { atMs: 1100, tool: "write", path: "/workspace/report/report.md" }] });
+  const r = await run("timeout", [item("t/1", "g", { collect: true, timeoutMin: 0.03, files: [{ src: upload, dest: "inputs/readme.md" }] })], { fake: { scenario }, flags: ["--retry-scale", "0.001"] });
+  assert.equal(r.code, 0, r.log);
+  const res = r.results["t__1"];
+  assert.equal(res.status, "timeout");
+  assert.equal(res.deliveredWithinCap, false);
+  assert.equal(res.lastReport.path, "report/report.md", "a scratch note written last does not stand for the report");
+  assert.equal(res.lastReport.saved, true);
+  assert.equal(res.lastReport.bytes, Buffer.byteLength("# Report v2\nmore text here"));
+  const project = [...r.state.projects.values()][0];
+  assert.equal(new Date(res.lastReport.mtime).getTime(), project.files.get("report/report.md").mtime * 1000);
+  const saved = res.files.filter((f) => f.saved).map((f) => f.path);
+  assert.ok(saved.includes("report/report.md") && saved.includes("report/draft.md") && saved.includes("notes/todo.md"), `captured: ${saved}`);
+  assert.ok(!saved.includes("old/stale.md") && !saved.includes("inputs/readme.md"), "files from before the dispatch and the item's own uploads are not reports of the run");
+  assert.equal(res.firstReportAtMs, 700);
+  assert.equal(res.firstReportPath, "report/draft.md");
+  assert.equal(await readFile(path.join(r.out, "t__1", "files", "report", "report.md"), "utf8"), "# Report v2\nmore text here");
+});
+
+await test("a timeout with nothing report-like written records lastReport null, never a guess", async () => {
+  const scenario = () => ({ files: { "code/a.py": textFile("x=1") }, hang: true, unlisted: true });
+  const r = await run("noreport", [item("n/1", "g", { collect: true, timeoutMin: 0.03 })], { fake: { scenario }, flags: ["--retry-scale", "0.001"] });
+  const res = r.results["n__1"];
+  assert.equal(res.status, "timeout");
+  assert.equal(res.lastReport, null);
+  assert.equal(res.firstReportAtMs, null);
+  assert.equal(res.deliveredWithinCap, false);
+});
+
+await test("firstReportAtMs: the first completed write of a report-like file, by the write tool or a shell command; reads and failed writes do not count", async () => {
+  const writes = [
+    { atMs: 100, tool: "write", path: "/workspace/code/a.py" },
+    { atMs: 200, tool: "bash", command: "cat report/report.md | head -5" },
+    { atMs: 300, tool: "write", path: "/workspace/report/lost.md", status: "error" },
+    { atMs: 400, tool: "write", path: "/tmp/scratch.md" },
+    { atMs: 2500, tool: "bash", command: "pandoc notes.md -o report/final.docx" },
+    { atMs: 5000, tool: "write", path: "/workspace/report/report.md" },
+  ];
+  const r = await run("first", [item("f/1", "g", { collect: false }), item("f/2", "g", { collect: false })], { fake: { scenario: (body) => ({ writes: body.text.includes("f/2") ? [{ atMs: 900, tool: "bash", command: "python - <<'EOF'\nfrom pathlib import Path\nPath(\"report/x.md\").write_text('hi')\nEOF" }] : writes }) } });
+  assert.equal(r.code, 0, r.log);
+  assert.equal(r.results["f__1"].firstReportAtMs, 2500);
+  assert.equal(r.results["f__1"].firstReportPath, "report/final.docx");
+  assert.equal(r.results["f__2"].firstReportAtMs, 900);
+  assert.equal(r.results["f__2"].firstReportPath, "report/x.md");
+  assert.equal(r.results["f__1"].deliveredWithinCap, true);
+});
+
+await test("deliveredWithinCap and firstReportAtMs are null/false when the run wrote nothing report-like and left no answer", async () => {
+  const r = await run("empty", [item("e/1", "g", { collect: false })], { fake: { scenario: () => ({ answer: "" }) } });
+  const res = r.results["e__1"];
+  assert.equal(res.firstReportAtMs, null);
+  assert.equal(res.deliveredWithinCap, false);
+});
+
+await test("a dispatch answered 503/500 is infrastructure: retried with backoff, recorded, and the item runs", async () => {
+  const refuse = [503, 500];
+  const r = await run("infra", [item("i/1", "g")], { fake: { scenario: () => ({ refuse }) }, flags: ["--retry-scale", "0.001"] });
+  assert.equal(r.code, 0, r.log);
+  const res = r.results["i__1"];
+  assert.equal(res.status, "succeeded");
+  assert.deepEqual(res.dispatchRetries.map((x) => [x.status, x.kind]), [[503, "infrastructure"], [500, "infrastructure"]]);
+  assert.deepEqual(res.infrastructure, { retries: 2, statuses: [503, 500] });
+  assert.equal(res.infrastructureFailure, undefined);
+  assert.match(r.log, /infrastructure, asking again/);
+  assert.equal(callsOf(r, "dispatch-refused").length, 2);
+});
+
+await test("a dispatch refused 429 is busy, not infrastructure; a refusal that is not retried ends the item at once", async () => {
+  const once = [429];
+  const busy = await run("busy", [item("b/1", "g")], { fake: { scenario: () => ({ refuse: once }) }, flags: ["--retry-scale", "0.001"] });
+  assert.equal(busy.results["b__1"].status, "succeeded");
+  assert.equal(busy.results["b__1"].dispatchRetries[0].kind, "busy");
+  assert.equal(busy.results["b__1"].infrastructure, undefined);
+  const nope = [400];
+  const hard = await run("hard", [item("h/1", "g")], { fake: { scenario: () => ({ refuse: nope }) }, flags: ["--retry-scale", "0.001"] });
+  assert.equal(hard.results["h__1"].status, "dispatch_refused");
+  assert.equal(hard.results["h__1"].dispatchRetries, undefined);
+  assert.equal(hard.results["h__1"].infrastructureFailure, undefined);
+});
+
+await test("a platform that stays down is dispatch_refused after the bounded backoff, marked as infrastructure, and the item is run again next start", async () => {
+  const refuse = Array.from({ length: 40 }, () => 503);
+  const r = await run("down", [item("d/1", "g")], { fake: { scenario: () => ({ refuse }) }, flags: ["--retry-scale", "0.0005"] });
+  const res = r.results["d__1"];
+  assert.equal(res.status, "dispatch_refused");
+  assert.equal(res.errorCode, "product_state_unavailable");
+  assert.equal(res.infrastructureFailure, true);
+  assert.equal(res.infrastructure.retries, 12);
+  assert.equal(res.dispatchRetries.length, 12);
+  assert.equal(callsOf(r, "dispatch-refused").length, 13, "12 retries and the last answer");
+  assert.ok(r.state.accountDeleted);
+});
+
+await test("timeBudgetMinutes is sent to the dispatch only when the item sets it, and recorded", async () => {
+  const r = await run("budget", [item("tb/1", "g", { timeBudgetMinutes: 20, timeoutMin: 30 }), item("tb/2", "g")]);
+  assert.equal(r.code, 0, r.log);
+  const [a, b] = r.state.dispatchBodies;
+  assert.equal(a.timeBudgetMinutes, 20);
+  assert.equal(Object.hasOwn(b, "timeBudgetMinutes"), false, "an item without the field sends none");
+  assert.equal(r.results["tb__1"].timeBudgetMinutes, 20);
+  assert.equal(r.results["tb__2"].timeBudgetMinutes, undefined);
+  for (const bad of [0, -3, "20", 2000, null]) {
+    const refused = await run("budgetbad", [item("tb/3", "g", { timeBudgetMinutes: bad })]);
+    assert.notEqual(refused.code, 0, `${JSON.stringify(bad)} is refused`);
+    assert.match(refused.log, /timeBudgetMinutes must be a number above 0/);
+    assert.equal(refused.calls.length, 0, "before any account is made");
+  }
+  const warned = await run("budgetwarn", [item("tb/4", "g", { timeBudgetMinutes: 5, timeoutMin: 3 })]);
+  assert.match(warned.log, /WARN .*timeBudgetMinutes 5 is not below/);
+  assert.equal(warned.code, 0, warned.log);
 });
 
 console.log(failures ? `${failures} FAILED` : "all passed");

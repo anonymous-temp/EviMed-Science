@@ -99,7 +99,7 @@ export async function evaluatorReceiptPayload({ manifest, inputs, request, check
  */
 async function skillReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation }) {
   const registration = inputs.registration, statistics = registration.statistics;
-  const identity = await skillCampaignConsumerIdentity();
+  const identity = await skillCampaignConsumerIdentity(registration);
   if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
   const choice = chooseSkillCandidate(inputs.sources[development.id], registration);
   const frozen = checkpoint.frozenPolicy;

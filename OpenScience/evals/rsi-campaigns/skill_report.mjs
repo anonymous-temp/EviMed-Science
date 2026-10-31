@@ -35,7 +35,8 @@ async function main() {
       repeats: supply?.confirmation?.repeats ?? null, baseline: base ? { overall: base.overall, slice: base.slice } : null,
       candidate: cand ? { overall: cand.overall, slice: cand.slice } : null, costCny: supply?.confirmation?.costCny ?? null } : null,
     statistics: evaluation ? { decision: evaluation.decision, reasons: evaluation.reasons ?? [], quantities: evaluation.quantities ?? null, scope: evaluation.scope ?? null } : null,
-    failureCalculators: inputs?.registration?.failureCalculators ?? null,
+    scorer: inputs?.registration?.scorer ?? 'medcalc',
+    failureCalculators: inputs?.registration?.failureCalculators ?? inputs?.registration?.failureSlice ?? null,
   };
   const lines = [
     `# 能力技能 RSI 活动报告 · ${month}`, '',

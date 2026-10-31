@@ -7,14 +7,18 @@
 //   one started with nothing running does, and the selection is proven (`effective`) a moment after the runtime started;
 // - a run records the runtime's skill pins (`personalSkillGeneration.pins`), the live catalogue lists a mounted personal skill;
 // - `stop_runtime` is recorded so the test can tell which groups were stopped and when.
+// - `scenario(dispatchBody)` may return, per dispatched prompt: `files` {path: {text, ago?}} written into the project's workspace (`ago`: seconds before the dispatch the file was last written)
+//   (what `read_artifact` and `list_dir` serve; the run record lists them in object order), `hang` (the run never ends until it is
+//   cancelled), `refuse` (statuses answered to the dispatch before it is accepted), `writes` [{atMs, tool, path|command}] (tool calls
+//   in the transcript, `atMs` after the turn began), `unlisted` (the files are in the workspace but not in the run record) and `answer`.
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 
 const PROOF_MS = 800;
 const RUN_MS = 1200;
 
-export async function startFake({ failSkillCreate = false, preselect = false } = {}) {
-  const state = { users: new Map(), projects: new Map(), skills: new Map(), runs: [], sessions: new Map(), calls: [], accountDeleted: false, token: "csrf-token" };
+export async function startFake({ failSkillCreate = false, preselect = false, scenario = () => undefined } = {}) {
+  const state = { users: new Map(), projects: new Map(), skills: new Map(), runs: [], sessions: new Map(), calls: [], dispatchBodies: [], accountDeleted: false, token: "csrf-token" };
   let runtimeSeq = 0;
   const sha = (text) => createHash("sha256").update(text).digest("hex");
   const log = (what, project, extra = {}) => state.calls.push({ at: Date.now(), what, project, ...extra });
@@ -44,6 +48,7 @@ export async function startFake({ failSkillCreate = false, preselect = false } =
   }
   function finishRun(run) {
     const p = project(run.projectId);
+    if (run.scenario?.hang) return;
     setTimeout(() => {
       if (run.status !== "running") return;
       run.status = "succeeded"; run.phase = "accepted"; run.finishedAt = new Date().toISOString(); run.durationMs = RUN_MS;
@@ -64,7 +69,7 @@ export async function startFake({ failSkillCreate = false, preselect = false } =
   on("POST", /^\/api\/simulated-wallet\/topups$/, () => [404, { code: "simulated_wallet_not_enabled" }]);
   on("POST", /^\/api\/projects$/, (req, res, _m, body) => {
     if (state.projects.has(body.id)) return [409, { code: "project_exists" }];
-    const p = { id: body.id, selection: { revision: 1, skills: [] }, runtime: null, proof: null };
+    const p = { id: body.id, selection: { revision: 1, skills: [] }, runtime: null, proof: null, files: new Map() };
     if (preselect) { p.selection.skills = [{ skillId: "skill:rogue", revision: 1, digest: "sha256:x", nativeName: "personal-rogue" }]; p.selection.revision = 2; }
     state.projects.set(body.id, p); log("project-create", body.id);
     return [200, { data: { id: body.id } }];
@@ -107,8 +112,17 @@ export async function startFake({ failSkillCreate = false, preselect = false } =
   on("POST", /^\/api\/agent-runs\/dispatch$/, (req, res, _m, body) => {
     const p = project(req.headers["x-open-science-project"]);
     if (state.runs.some((r) => r.projectId === p.id && r.status === "running")) return [409, { code: "agent_run_active" }];
+    const sc = scenario(body) ?? {};
+    state.dispatchBodies.push(body);
+    if (sc.refuse?.length) { const status = sc.refuse.shift(); log("dispatch-refused", p.id, { status }); return [status, { code: status >= 500 ? "product_state_unavailable" : "agent_run_busy" }]; }
+    const now = Date.now();
+    for (const [name, file] of Object.entries(sc.files ?? {})) p.files.set(name, { text: file.text, mtime: Math.floor(now / 1000) - (file.ago ?? 0) });
+    const listed = sc.unlisted ? [] : Object.keys(sc.files ?? {});
     const run = { id: `run_${randomUUID().replaceAll("-", "")}`, projectId: p.id, sessionId: body.sessionId, dispatchId: body.dispatchId, status: "running", phase: "running", question: body.text,
-      observedMessages: 4, observedToolCalls: 0, startedAt: new Date().toISOString(), effectiveAgentId: "open-domain-answer", effectiveRouteReason: "unrouted:open-domain", model: "deepseek/fake", archived: false };
+      observedMessages: 4, observedToolCalls: 0, startedAt: new Date(now).toISOString(), effectiveAgentId: "open-domain-answer", effectiveRouteReason: "unrouted:open-domain", model: "deepseek/fake", archived: false,
+      artifacts: sc.listedAs === "outputFiles" ? [] : listed, outputFiles: sc.listedAs === "outputFiles" ? listed : [] };
+    Object.defineProperty(run, "scenario", { value: sc, enumerable: false });
+    Object.defineProperty(run, "startedMs", { value: now, enumerable: false });
     state.runs.push(run);
     startRuntime(p, { dispatch: true });
     const pins = mountedPins(p).map((s) => ({ skillId: s.skillId, revision: s.revision, digest: s.digest, nativeName: s.nativeName, source: "personal" }));
@@ -126,15 +140,41 @@ export async function startFake({ failSkillCreate = false, preselect = false } =
     const p = project(run.projectId);
     if (!p.runtime) return [409, { code: "runtime_not_running" }];
     const skilled = (run.mountedPins ?? []).length > 0;
-    const messages = [{ role: "user", parts: [{ type: "text", text: run.question }] }];
-    if (skilled) messages.push({ role: "tool", parts: [{ type: "tool", tool: "skill", callId: "c1", status: "completed", input: { name: run.mountedPins[0].nativeName }, output: "loaded", error: null }] });
-    messages.push({ role: "assistant", parts: [{ type: "text", text: `42${skilled ? "\nSKILL-PROBE-OK" : ""}` }] });
+    const t0 = run.startedMs ?? Date.now();
+    const messages = [{ role: "user", source: "user", time: t0, parts: [{ type: "text", text: run.question }] }];
+    if (skilled) messages.push({ role: "tool", time: t0 + 100, parts: [{ type: "tool", tool: "skill", callId: "c1", status: "completed", input: { name: run.mountedPins[0].nativeName }, output: "loaded", error: null }] });
+    for (const [i, w] of (run.scenario?.writes ?? []).entries()) {
+      messages.push({ role: "tool", time: t0 + w.atMs, parts: [{ type: "tool", tool: w.tool, callId: `w${i}`, status: w.status ?? "completed", input: w.tool === "bash" ? { command: w.command } : { file_path: w.path, content: "x" }, output: "ok", error: null }] });
+    }
+    messages.push({ role: "assistant", time: t0 + 1000, parts: [{ type: "text", text: run.scenario?.answer ?? `42${skilled ? "\nSKILL-PROBE-OK" : ""}` }] });
     return [200, { data: { sessionId: m[1], messages } }];
   });
   on("POST", /^\/api\/commands\/start_runtime$/, (req) => { const p = project(req.headers["x-open-science-project"]); log("start_runtime", p.id); startRuntime(p); return [200, { data: "http://x" }]; });
   on("POST", /^\/api\/commands\/stop_runtime$/, (req) => { const p = project(req.headers["x-open-science-project"]); log("stop_runtime", p.id); p.runtime = null; return [200, { data: null }]; });
-  on("POST", /^\/api\/commands\/read_artifact$/, () => [404, { code: "file_not_found" }]);
-  on("POST", /^\/api\/files\/upload$/, () => [200, { data: {} }]);
+  on("POST", /^\/api\/commands\/read_artifact$/, (req, res, _m, body) => {
+    const file = project(req.headers["x-open-science-project"])?.files.get(body.path);
+    log("read_artifact", req.headers["x-open-science-project"], { path: body.path });
+    return file ? [200, { data: { path: body.path, mime: "text/markdown", encoding: "utf8", data: file.text, size: Buffer.byteLength(file.text) } }] : [404, { code: "file_not_found" }];
+  });
+  on("POST", /^\/api\/commands\/list_dir$/, (req, res, _m, body) => {
+    const p = project(req.headers["x-open-science-project"]);
+    const rel = String(body.rel ?? "").replace(/\/+$/, "");
+    log("list_dir", p.id, { rel });
+    const prefix = rel ? `${rel}/` : "";
+    const entries = new Map();
+    for (const [name, file] of p.files) {
+      if (!name.startsWith(prefix)) continue;
+      const rest = name.slice(prefix.length), head = rest.split("/")[0];
+      if (rest.includes("/")) entries.set(head, { path: `${prefix}${head}`, name: head, isDir: true, size: 0, modified: 0 });
+      else entries.set(head, { path: name, name: head, isDir: false, size: Buffer.byteLength(file.text), modified: file.mtime });
+    }
+    return [200, { data: [...entries.values()] }];
+  });
+  on("POST", /^\/api\/files\/upload$/, (req, res, _m, body) => {
+    // An uploaded input is a workspace file written now, as the product writes it.
+    project(req.headers["x-open-science-project"])?.files.set(body.path, { text: Buffer.from(body.data, "base64").toString("utf8"), mtime: Math.floor(Date.now() / 1000) });
+    return [200, { data: {} }];
+  });
   on("GET", /^\/__state$/, () => [200, { data: { calls: state.calls, accountDeleted: state.accountDeleted, projects: [...state.projects.keys()] } }]);
 
   const server = createServer((req, res) => {

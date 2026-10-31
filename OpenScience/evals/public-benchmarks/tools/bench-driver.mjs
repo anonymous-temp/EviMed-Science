@@ -23,9 +23,24 @@
 //   6. the answer (last assistant message of the transcript), the full transcript, the run record, the cost
 //      (`GET /api/runs/:id/usage`) and the text files the run wrote are written to <out>/<key>/…
 //
+// Files (collectFiles): at most 40 are read, and the report-like ones always come first — a document under a `report/` folder, a
+// Markdown/Word/PDF file at any depth (newest, then largest), then the figures of a report, then the rest in the run record's order
+// (a 54-file `artifacts` list once hid report/report.md behind its own code files). A run that TIMED OUT also gets the workspace
+// scanned (`list_dir`) for report-like files written after the dispatch: the newest ones are captured too and the newest document is
+// recorded as `lastReport` {path, bytes, mtime, saved} (the newest one under `report/`, else the newest anywhere): a draft that
+// existed at the cap. Scorers read it as delivery "at-cap" and report both figures: strict (timeout = 0) and at-cap
+// (judge_packets.py, report.py).
+// Timing: `firstReportAtMs` is the first write of a report-like file by a tool call of the transcript (milliseconds after the turn
+// began; `firstReportPath` says which file), `deliveredWithinCap` is true when the run ended on its own, inside the cap, with an answer
+// or a report; both are null/false when the facts are not there, never guessed.
+//
 // Queue line: {"key":"<bench>/<id>","bench":"…","id":"…","group":"…","prompt":"…","line":null|"answer"|"<capability-id>",
 //   "timeoutMin":15,"files":[{"src":"/bench/data/…","dest":"inputs/x.csv"}],"collect":true,"deleteGroupAfter":false,
-//   "keepRuntime":false,"groupSkill":null|{"title":"…","description":"…","instructions":"…"},"expectInAnswer":"…"}
+//   "keepRuntime":false,"groupSkill":null|{"title":"…","description":"…","instructions":"…"},"expectInAnswer":"…",
+//   "timeBudgetMinutes":<absent|positive number>}
+//
+// timeBudgetMinutes: the optional dispatch field of the same name, passed to the product as given when the item sets it and left out
+// otherwise (the run budget the product shows the model; `timeoutMin` stays this driver's own cap and is never sent).
 //
 // The key names the result folder: `/` becomes `__` and every character outside [A-Za-z0-9_.-] becomes `_`, so
 // `bench/123#r1` is `bench__123_r1`. Two keys that map to one folder are refused when the queue is read.
@@ -44,9 +59,12 @@
 // Resumable: an item whose result.json has a FINAL status (succeeded, failed, canceled, timeout — the run started and
 // ended) is skipped. A run that was interrupted by this driver's own stop, a refused dispatch and a driver error leave a
 // non-final result (`interrupted`, `dispatch_refused`, `driver_error`) and are run again by the next start, the earlier
-// attempt kept in `previousAttempts`. A dispatch refused with 429/423/503 is asked again after 60 s (10 times, each time
-// with a fresh session and dispatch id, because a refused dispatch is recorded as a failed run under its id); a dispatch
-// that did not answer at all is looked up by its dispatch id and adopted if the run exists, never sent twice.
+// attempt kept in `previousAttempts`. A dispatch refused with 429/423 is asked again after 60 s (10 times, each time
+// with a fresh session and dispatch id, because a refused dispatch is recorded as a failed run under its id); one answered
+// 500/502/503/504 is infrastructure and is asked again with a bounded exponential backoff (see INFRA_*), every try recorded in
+// result.json `dispatchRetries` and `infrastructure`; if it never succeeds the item is `dispatch_refused` with
+// `infrastructureFailure: true` (so it is told apart from a run that failed). A dispatch that did not answer at all is looked up
+// by its dispatch id and adopted if the run exists, never sent twice.
 //
 // Stop gracefully by creating <out>/STOP (the lane finishes the item in hand and exits), or `docker stop -t 180`.
 // Exit: 0 done, 2 driver error, 3 five items in a row could not run, 4 the account was not deleted, 130/143/129 signals.
@@ -56,7 +74,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const DRIVER = "bench-driver/2";
+const DRIVER = "bench-driver/3";
 const HELPER = process.env.BENCH_THROWAWAY_HELPER ?? "/app/scripts/ops/throwaway-account.mjs";
 const { fetchTransport, openThrowawayAccount } = await import(HELPER);
 
@@ -72,7 +90,17 @@ const ARTIFACT_MAX_BYTES = 2 * 1024 * 1024;
 const ARTIFACT_MAX_FILES = 40;
 const REFUSAL_RETRIES = 10;
 const REFUSAL_WAIT_MS = 60_000;
+/** A dispatch answered 5xx (a release switching, a gateway restarting) is infrastructure, not the item: asked again with a bounded
+ *  exponential backoff (10 s, 20 s … capped at 2 min, 12 tries, about 19 minutes) and recorded as such in result.json. */
+const INFRA_STATUSES = new Set([500, 502, 503, 504]);
+const INFRA_RETRIES = 12;
+const INFRA_WAIT_MS = 10_000;
+const INFRA_WAIT_CAP_MS = 120_000;
 const CANCEL_GRACE_MS = 90_000;
+/** Workspace scan after a timeout: directories listed at most, depth, and the newest report-like files taken beyond the run record. */
+const SCAN_MAX_DIRS = 80;
+const SCAN_MAX_DEPTH = 5;
+const SCAN_EXTRA_REPORTS = 12;
 
 /** @param {string[]} argv */
 function parseArgs(argv) {
@@ -88,7 +116,7 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 if (args.help || !args.queue || !args.out) {
   console.log("usage: bench-driver.mjs --queue <file.jsonl> --out <dir> [--base http://127.0.0.1:18887] [--poll-ms 8000] [--limit N]\n"
-    + "       [--min-credits 40] [--skill-warmup-s 180] [--no-skill-warmup] [--no-archive] [--insecure]");
+    + "       [--min-credits 40] [--skill-warmup-s 180] [--no-skill-warmup] [--no-archive] [--retry-scale 1] [--insecure]");
   process.exit(args.help ? 0 : 2);
 }
 const base = String(args.base ?? "http://127.0.0.1:18887").replace(/\/+$/, "");
@@ -99,6 +127,9 @@ const pollMs = Number(args["poll-ms"] ?? 8000);
 const limit = args.limit === undefined ? Infinity : Number(args.limit);
 const minCredits = Number(args["min-credits"] ?? 40);
 const archiveRuns = args["no-archive"] !== true;
+/** Multiplies every refusal wait (tests use a tiny value; production leaves it at 1). */
+const retryScale = Number(args["retry-scale"] ?? 1);
+const waitFor = (/** @type {number} */ ms) => Math.max(1, Math.round(ms * (Number.isFinite(retryScale) && retryScale > 0 ? retryScale : 1)));
 const logFile = path.join(outDir, "driver.log");
 const stopFile = path.join(outDir, "STOP");
 
@@ -155,7 +186,7 @@ async function readResult(dir) {
 
 /** A project id the product accepts (`^[a-z0-9][a-z0-9_-]{0,63}$`, not reserved) and the same group always gets. @param {string} group */
 function projectIdFor(group) {
-  const slug = group.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 36).replace(/-+$/, "");
+  const slug = group.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30).replace(/-+$/, "");
   return `bench-${slug ? `${slug}-` : ""}${createHash("sha256").update(group).digest("hex").slice(0, 6)}`;
 }
 
@@ -185,7 +216,7 @@ async function enterGroup(item) {
   let group = groups.get(item.group);
   if (!group) {
     const projectId = projectIdFor(item.group);
-    const made = await api("POST", "/api/projects", { body: { id: projectId, name: `bench ${item.group}`.slice(0, 80) } });
+    const made = await api("POST", "/api/projects", { body: { id: projectId, name: `bench ${item.group}`.slice(0, 40) } });
     // A project that is already there (409 project_exists) is gone on in.
     const reused = made.status === 409 && made.code === "project_exists";
     if (made.status !== 200 && made.status !== 201 && !reused) throw new Error(`project ${projectId} was not created (${said(made)})`);
@@ -517,17 +548,47 @@ async function uploadInputs(item, projectId) {
 }
 
 /**
+ * What a refusal is worth waiting for: `null` when it is final, else the wait before the next try. 429/423 are a busy
+ * platform (flat 60 s, 10 tries); 5xx is infrastructure (bounded exponential backoff). Every retry is written to the result.
+ * @param {Record<string, any>} result @param {{ status: number, code: string | null, retryAfterMs: number | null }} answer
+ * @param {{ busy: number, infra: number }} tries
+ * @returns {{ waitMs: number, kind: "busy" | "infrastructure", n: number, of: number } | null}
+ */
+function refusalWait(result, answer, tries) {
+  /** @type {{ waitMs: number, kind: "busy" | "infrastructure", n: number, of: number } | null} */
+  let wait = null;
+  if (INFRA_STATUSES.has(answer.status) && tries.infra < INFRA_RETRIES) {
+    tries.infra += 1;
+    wait = { waitMs: waitFor(Math.min(INFRA_WAIT_MS * 2 ** (tries.infra - 1), INFRA_WAIT_CAP_MS)), kind: "infrastructure", n: tries.infra, of: INFRA_RETRIES };
+  } else if ([429, 423].includes(answer.status) && tries.busy < REFUSAL_RETRIES) {
+    tries.busy += 1;
+    wait = { waitMs: waitFor(REFUSAL_WAIT_MS), kind: "busy", n: tries.busy, of: REFUSAL_RETRIES };
+  }
+  if (!wait) return null;
+  (result.dispatchRetries ??= []).push({ status: answer.status, code: answer.code, kind: wait.kind, waitedMs: wait.waitMs });
+  if (wait.kind === "infrastructure") result.infrastructure = { retries: tries.infra, statuses: [...new Set(result.dispatchRetries.filter((/** @type {any} */ row) => row.kind === "infrastructure").map((/** @type {any} */ row) => row.status))] };
+  return wait;
+}
+
+/**
  * A new open-domain conversation and its dispatch. Returns the run.
  * @param {any} item @param {string} projectId @param {Record<string, any>} result
  */
 async function startRun(item, projectId, result) {
   let credited = false;
+  const tries = { busy: 0, infra: 0 };
+  const timeBudget = Number(item.timeBudgetMinutes);
+  if (Number.isFinite(timeBudget) && timeBudget > 0) result.timeBudgetMinutes = timeBudget;
   for (let attempt = 1; ; attempt += 1) {
     const sessionId = `web-${randomBytes(12).toString("hex")}`;
     const dispatchId = `web-${randomBytes(16).toString("hex")}`;
     const bound = await api("PUT", `/api/research-sessions/${sessionId}`, { project: projectId, body: { mode: "open-domain" } });
-    if (bound.status !== 200) throw new Refused(`session ${sessionId} was not made (${said(bound)})`, bound.code);
-    const body = { sessionId, dispatchId, text: item.prompt, automated: true, ...(item.line ? { line: item.line } : {}) };
+    if (bound.status !== 200) {
+      const wait = refusalWait(result, bound, tries);
+      if (wait) { log(`item ${item.key}: session not made (${said(bound)}); ${wait.kind}, asking again in ${Math.round(wait.waitMs / 1000)} s (${wait.n}/${wait.of})`); await sleep(wait.waitMs); continue; }
+      throw refused(result, `session ${sessionId} was not made (${said(bound)})`, bound);
+    }
+    const body = { sessionId, dispatchId, text: item.prompt, automated: true, ...(item.line ? { line: item.line } : {}), ...(result.timeBudgetMinutes ? { timeBudgetMinutes: result.timeBudgetMinutes } : {}) };
     const asked = Date.now();
     // `automated: true` again in the call itself: the repository-wide check reads the dispatch statement, not the line above it.
     const answer = await api("POST", "/api/agent-runs/dispatch", { project: projectId, body: { ...body, automated: true }, timeoutMs: 10 * 60_000 });
@@ -552,13 +613,20 @@ async function startRun(item, projectId, result) {
       throw new Error(`dispatch did not answer (${/** @type {any} */ (answer).error}) and no run carries its id`);
     }
     if (answer.status === 402 && !credited) { credited = true; await ensureCredits(true); continue; }
-    if ([429, 423, 503].includes(answer.status) && attempt <= REFUSAL_RETRIES) {
-      log(`item ${item.key}: dispatch refused (${said(answer)}); asking again in ${REFUSAL_WAIT_MS / 1000} s (${attempt}/${REFUSAL_RETRIES})`);
-      await sleep(REFUSAL_WAIT_MS);
+    const wait = refusalWait(result, answer, tries);
+    if (wait) {
+      log(`item ${item.key}: dispatch refused (${said(answer)}); ${wait.kind === "infrastructure" ? "infrastructure, " : ""}asking again in ${Math.round(wait.waitMs / 1000)} s (${wait.n}/${wait.of})`);
+      await sleep(wait.waitMs);
       continue;
     }
-    throw new Refused(`dispatch refused (${said(answer)})`, answer.code);
+    throw refused(result, `dispatch refused (${said(answer)})`, answer);
   }
+}
+
+/** A refusal that is final. A 5xx that outlasted its backoff says so: the platform was down, the item did not fail. */
+function refused(/** @type {Record<string, any>} */ result, /** @type {string} */ message, /** @type {{ status: number, code: string | null }} */ answer) {
+  if (INFRA_STATUSES.has(answer.status)) result.infrastructureFailure = true;
+  return new Refused(message, answer.code);
 }
 
 /** @param {string} projectId @param {string} runId */
@@ -693,7 +761,12 @@ async function capture(item, group, finished, result, dir) {
 
   await writeAtomic(path.join(dir, "run.json"), `${JSON.stringify(run, null, 2)}\n`);
 
-  if (item.collect !== false) result.files = await collectFiles(projectId, run, dir, captured);
+  const first = firstReportWrite(messages);
+  result.firstReportAtMs = first?.atMs ?? null;
+  result.firstReportPath = first?.path ?? null;
+  if (item.collect !== false) result.files = await collectFiles(projectId, run, dir, captured, { timedOut: finished.timedOut, result });
+  // Delivered within the cap: the run ended on its own, inside the cap, and left an answer or a report-like file.
+  result.deliveredWithinCap = result.status === "succeeded" && (answer.length > 0 || (result.files ?? []).some((/** @type {any} */ entry) => entry.saved && reportTier(entry.path) === 0));
   result.capture = captured;
 
   const after = await readAvailable();
@@ -705,16 +778,127 @@ async function capture(item, group, finished, result, dir) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------- report-like files
+
+const IMAGE_FILE = /\.(png|jpe?g|svg|gif|webp)$/i;
+const REPORT_DOCUMENT = /\.(md|docx|pdf)$/i;
+/** Figures a report links to (ResearchClawBench scores image items): kept as bytes, up to 5 MB each. */
+const FIGURE_PATH = /(^|\/)(report|figures|images|figs?)\//i;
+/** Directories a scan for reports never enters: tool caches, dependency trees, hidden state. */
+const SCAN_SKIP_DIRS = new Set(["node_modules", "__pycache__", "venv", "env"]);
+
+/**
+ * How early a file is read when more than the cap were written. 0: report-like — a Markdown, Word or PDF document anywhere, or
+ * any non-image file under a `report/` folder; 1: a figure; 2: everything else (code, data, logs), in the run record's order.
+ * @param {string} name
+ */
+function reportTier(name) {
+  if (REPORT_DOCUMENT.test(name) || (/(^|\/)report\//i.test(name) && !IMAGE_FILE.test(name))) return 0;
+  return IMAGE_FILE.test(name) && FIGURE_PATH.test(name) ? 1 : 2;
+}
+
+/** A path as a tool call names it (`/workspace/report/report.md`, `./x.md`, `x.md`) → workspace-relative, or null outside it. @param {unknown} value */
+function workspaceRelative(value) {
+  const clean = String(value ?? "").replace(/\\/g, "/").trim();
+  const rel = clean.startsWith("/workspace/") ? clean.slice("/workspace/".length) : clean.startsWith("./") ? clean.slice(2) : clean;
+  return rel && !rel.startsWith("/") && !rel.split("/").includes("..") ? rel : null;
+}
+
+/** Where a shell command writes: the token before it is a redirect, tee or -o, or the token after it is saved/written. */
+const BASH_BEFORE = /(?:>>?|\btee(?:\s+-a)?|\s-o|--output(?:-file)?[=\s]|\.save\()\s*["']?$/;
+const BASH_AFTER = /^["']?\s*\)?\s*(?:\.(?:write_text|write_bytes|save)\(|,\s*["'][wa]b?["'])/;
+/** The report-like paths a shell command writes (best effort: a script that writes its own path is not seen). @param {string} command */
+function bashReportWrites(command) {
+  const found = [];
+  for (const match of command.matchAll(/(?<![\w@%+./\\-])[\w@%+./\\-]*\.(?:md|docx|pdf)\b|(?<![\w/-])report\/[\w@%+./-]+/gi)) {
+    const before = command.slice(Math.max(0, match.index - 40), match.index), after = command.slice(match.index + match[0].length, match.index + match[0].length + 40);
+    if (BASH_BEFORE.test(before) || BASH_AFTER.test(after)) { const rel = workspaceRelative(match[0]); if (rel && reportTier(rel) === 0) found.push(rel); }
+  }
+  return found;
+}
+
+/**
+ * The first write of a report-like file by a tool call, and when: milliseconds after the turn began (the first user message),
+ * or null when the transcript has no such write or no clock. The `write` tool names its file; a shell command is read for the
+ * redirects and saves above. A write that did not complete is not a report.
+ * @param {any[]} messages @returns {{ atMs: number | null, path: string, via: string } | null}
+ */
+function firstReportWrite(messages) {
+  const began = messages.find((message) => (message?.role ?? message?.info?.role) === "user" && Number.isFinite(message?.time))?.time ?? messages.find((message) => Number.isFinite(message?.time))?.time;
+  for (const message of messages) {
+    for (const part of message?.parts ?? []) {
+      if (part?.type !== "tool" || part.status !== "completed") continue;
+      let path = null, via = "";
+      if (part.tool === "write") { const rel = workspaceRelative(part.input?.file_path ?? part.input?.path); if (rel && reportTier(rel) === 0) { path = rel; via = "write"; } }
+      else if (part.tool === "bash" && typeof part.input?.command === "string") { path = bashReportWrites(part.input.command)[0] ?? null; via = "bash"; }
+      if (path) return { atMs: Number.isFinite(message.time) && Number.isFinite(began) ? Math.max(0, message.time - began) : null, path, via };
+    }
+  }
+  return null;
+}
+
+/** One directory of the project's workspace, with size and mtime (seconds): `list_dir`. @param {string} projectId @param {string} rel */
+async function listDir(projectId, rel) {
+  const read = await api("POST", "/api/commands/list_dir", { project: projectId, body: { rel }, timeoutMs: 30_000 });
+  return read.status === 200 && Array.isArray(read.body?.data) ? read.body.data : null;
+}
+
+/** Newest first, then largest, then by name. @param {{ path: string, size: number, modified: number }} a @param {{ path: string, size: number, modified: number }} b */
+const newestLargest = (a, b) => b.modified - a.modified || b.size - a.size || a.path.localeCompare(b.path);
+
+/**
+ * Report-like files in the workspace written at or after `since` (seconds), breadth first so a top-level `report/` is reached
+ * before anything deep. Bounded in directories and depth; hidden and dependency directories are not entered; the item's own
+ * uploads are skipped. Best effort: a directory that cannot be listed is passed over.
+ * @param {string} projectId @param {number} since @param {Set<string>} uploaded @param {Set<string>} uploadedTop
+ * @returns {Promise<Array<{ path: string, size: number, modified: number }>>}
+ */
+async function scanReportFiles(projectId, since, uploaded, uploadedTop) {
+  const found = [];
+  const queue = [{ rel: "", depth: 0 }];
+  for (let listed = 0; queue.length && listed < SCAN_MAX_DIRS; listed += 1) {
+    const { rel, depth } = /** @type {{ rel: string, depth: number }} */ (queue.shift());
+    for (const entry of (await listDir(projectId, rel)) ?? []) {
+      const name = String(entry?.name ?? ""), entryPath = String(entry?.path ?? "");
+      if (!name || !entryPath) continue;
+      if (entry.isDir) {
+        if (depth < SCAN_MAX_DEPTH && !name.startsWith(".") && !SCAN_SKIP_DIRS.has(name) && !(depth === 0 && uploadedTop.has(name))) queue.push({ rel: entryPath, depth: depth + 1 });
+      } else if (reportTier(entryPath) === 0 && Number(entry.modified) >= since && !uploaded.has(entryPath)) {
+        found.push({ path: entryPath, size: Number(entry.size) || 0, modified: Number(entry.modified) });
+      }
+    }
+  }
+  return found;
+}
+
 /**
  * Read back the files the run wrote (`POST /api/commands/read_artifact`): at most 40; text up to 2 MB, Office/PDF documents up to 10 MB.
+ * Report-like files are read first (reportTier; newest then largest), so the cap only ever cuts code and data. After a timeout the
+ * workspace is scanned and its newest report-like files are added to the run record's list; `lastReport` is the newest document.
  * @param {string} projectId @param {any} run @param {string} dir @param {Record<string, string>} captured
+ * @param {{ timedOut: boolean, result: Record<string, any> }} context
  */
-async function collectFiles(projectId, run, dir, captured) {
+async function collectFiles(projectId, run, dir, captured, { timedOut, result }) {
   const names = [...new Set([...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? []), ...(run.outputFiles ?? []), ...(run.presentedFiles ?? [])]
     .map((entry) => typeof entry === "string" ? entry : entry?.path).filter((entry) => typeof entry === "string" && entry))];
+  /** @type {Map<string, { size: number, modified: number }>} */ const stats = new Map();
+  /** @type {Array<{ path: string, size: number, modified: number }>} */ let scanned = [];
+  if (timedOut) {
+    const uploads = (result.uploads ?? []).map((/** @type {any} */ upload) => String(upload.dest));
+    const since = Math.floor((Date.parse(result.dispatchedAt ?? result.startedAt) || Date.now()) / 1000) - 2;
+    scanned = (await scanReportFiles(projectId, since, new Set(uploads), new Set(uploads.filter((dest) => dest.includes("/")).map((dest) => dest.split("/")[0])))).sort(newestLargest);
+    for (const file of scanned) stats.set(file.path, file);
+    for (const file of scanned.slice(0, SCAN_EXTRA_REPORTS)) if (!names.includes(file.path)) names.push(file.path);
+  } else if (names.length > ARTIFACT_MAX_FILES) {
+    // Over the cap: the report-like ones need their mtime and size to be put first, from the directories that hold them.
+    const parents = [...new Set(names.filter((name) => reportTier(name) < 2).map((name) => name.includes("/") ? name.slice(0, name.lastIndexOf("/")) : ""))].slice(0, 20);
+    for (const parent of parents) for (const entry of (await listDir(projectId, parent)) ?? []) if (!entry.isDir) stats.set(String(entry.path), { size: Number(entry.size) || 0, modified: Number(entry.modified) || 0 });
+  }
+  const ordered = names.map((name, index) => ({ name, index, tier: reportTier(name), stat: stats.get(name) }))
+    .sort((a, b) => a.tier - b.tier || (b.stat?.modified ?? 0) - (a.stat?.modified ?? 0) || (b.stat?.size ?? 0) - (a.stat?.size ?? 0) || a.index - b.index).map((entry) => entry.name);
   const filesRoot = path.join(dir, "files");
   /** @type {Array<Record<string, any>>} */ const index = [];
-  for (const name of names.slice(0, ARTIFACT_MAX_FILES)) {
+  for (const name of ordered.slice(0, ARTIFACT_MAX_FILES)) {
     const read = await api("POST", "/api/commands/read_artifact", { project: projectId, body: { path: name }, timeoutMs: 60_000 });
     const data = read.body?.data;
     if (read.status !== 200 || !data) { index.push({ path: name, saved: false, reason: `read ${said(read)}` }); continue; }
@@ -722,7 +906,7 @@ async function collectFiles(projectId, run, dir, captured) {
     // they are kept as bytes, up to 10 MB; other binaries (images, archives) are listed, not kept.
     // Figures a report links to are part of it (ResearchClawBench scores image items), so images under a report or
     // figures directory are kept too, up to 5 MB each.
-    const figure = /\.(png|jpe?g|svg|gif|webp)$/i.test(name) && /(^|\/)(report|figures|images|figs?)\//i.test(name);
+    const figure = IMAGE_FILE.test(name) && FIGURE_PATH.test(name);
     const document = /\.(docx|pdf|xlsx|pptx)$/i.test(name) || figure;
     if (data.encoding !== "utf8" && !document) { index.push({ path: name, saved: false, reason: "binary", size: data.size ?? null, mime: data.mime ?? null }); continue; }
     const bytes = data.encoding === "utf8" ? Buffer.from(String(data.data), "utf8") : Buffer.from(String(data.data), "base64");
@@ -732,8 +916,18 @@ async function collectFiles(projectId, run, dir, captured) {
     await writeAtomic(target, bytes);
     index.push({ path: name, saved: true, size: bytes.length });
   }
-  if (names.length > ARTIFACT_MAX_FILES) index.push({ path: `(${names.length - ARTIFACT_MAX_FILES} more)`, saved: false, reason: "over 40 files" });
+  const left = ordered.slice(ARTIFACT_MAX_FILES);
+  if (left.length) index.push({ path: `(${left.length} more)`, saved: false, reason: "over 40 files", reportLikeLeft: left.filter((name) => reportTier(name) === 0).length });
   captured.files = `${index.filter((entry) => entry.saved).length}/${names.length} saved`;
+  if (timedOut) {
+    // What existed at the cap: the newest document under a `report/` folder, else the newest document anywhere (a scratch note
+    // written last must not stand for the report).
+    const documents = scanned.filter((file) => !IMAGE_FILE.test(file.path));
+    const newest = documents.find((file) => /(^|\/)report\//i.test(file.path)) ?? documents[0] ?? null;
+    const row = newest ? index.find((entry) => entry.path === newest.path) : null;
+    result.lastReport = newest ? { path: newest.path, bytes: newest.size, mtime: new Date(newest.modified * 1000).toISOString(), saved: row?.saved === true } : null;
+    captured.lastReport = newest ? `${newest.path} ${row?.saved ? "saved" : "not saved"}` : "none";
+  }
   return index;
 }
 
@@ -769,6 +963,11 @@ async function readQueue() {
     if (folders.has(folder)) throw new Error(`${where}: key ${item.key} and key ${folders.get(folder)} are the same result folder ${folder}`);
     folders.set(folder, item.key);
     const group = typeof item.group === "string" && item.group ? item.group : "bench";
+    // timeBudgetMinutes is the product's dispatch field (the run budget the model is shown); absent unless the item sets it.
+    if (item.timeBudgetMinutes !== undefined) {
+      if (!(typeof item.timeBudgetMinutes === "number" && Number.isFinite(item.timeBudgetMinutes) && item.timeBudgetMinutes > 0 && item.timeBudgetMinutes <= 1440)) throw new Error(`${where}: timeBudgetMinutes must be a number above 0 and up to 1440`);
+      if (item.timeBudgetMinutes >= Number(item.timeoutMin ?? 15)) log(`WARN ${where} (${item.key}): timeBudgetMinutes ${item.timeBudgetMinutes} is not below this driver's own cap timeoutMin ${item.timeoutMin ?? 15}; the cap cancels the run first`);
+    }
     const skill = item.groupSkill ?? null;
     if (skill !== null) {
       const text = (/** @type {unknown} */ value, /** @type {number} */ max, /** @type {boolean} */ empty) => typeof value === "string" && value.length <= max && (empty || value.trim() !== "");

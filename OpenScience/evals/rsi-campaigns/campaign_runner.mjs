@@ -5,7 +5,7 @@ import { rsiLabConfigurationIssues } from '../../apps/server/src/rsiLabConfigura
 import { ProductDocuments } from '../../apps/server/src/productStore.mjs';
 import {canonicalRsiJson,rsiDigest} from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierDaysIssues, frontierObservations } from './frontier_campaign.mjs';
-import { chooseSkillCandidate, skillArmsIssues, skillCampaignConsumerIdentity, skillObservations, SKILL_BASELINE_ARM } from './skill_campaign.mjs';
+import { chooseSkillCandidate, inSkillSlice, skillArmsIssues, skillCampaignConsumerIdentity, skillObservations, skillScorer, skillSlice, SKILL_BASELINE_ARM } from './skill_campaign.mjs';
 export const digest = rsiDigest;
 const stop = reason => ({status:'not-qualified',reason});
 /** Statistics answers that are a verdict on the evidence; anything else (authority, receipt, process failure) is retried. */
@@ -104,16 +104,19 @@ const consumers = Object.freeze({
  /**
   * A personal skill measured on recorded production runs (skill_campaign.mjs). The lab computation is deterministic over
   * the records (a stage re-runs to the same bytes); the measurement was paid for and is stochastic, so the statistics are
-  * a paid paired-t family with repeats, and the evaluator attests the runs' settled costs instead of zero.
+  * a paid paired-t family with repeats, and the evaluator attests the runs' settled costs instead of zero. What scores a run
+  * is the registration's `scorer`, an id of the closed registry in skill_scorers.mjs (absent: medcalc).
   */
  'capability-skill': {
   deterministic:true,
   paidMeasurement:true,
   identity:skillCampaignConsumerIdentity,
   validate(manifest, inputs, dev, confirm) {
-   const development=inputs.sources[dev.id], confirmation=inputs.sources[confirm.id], registration=inputs.registration;
-   for(const source of [development,confirmation]) if(skillArmsIssues(source).length) return 'campaign_source_invalid';
-   if(!Array.isArray(registration.failureCalculators) || !registration.failureCalculators.length || registration.failureCalculators.some(id=>!Number.isInteger(id)) || !(registration.margin>0 && registration.margin<1)) return 'campaign_registration_invalid';
+   const development=inputs.sources[dev.id], confirmation=inputs.sources[confirm.id], registration=inputs.registration, scorer=skillScorer(registration);
+   if(!scorer) return 'campaign_scorer_not_qualified';
+   for(const source of [development,confirmation]) if(skillArmsIssues(source,registration).length) return 'campaign_source_invalid';
+   const sliceIds=registration[scorer.slice.registration];
+   if(!Array.isArray(sliceIds) || !sliceIds.length || sliceIds.some(id=>!scorer.slice.valid(id)) || !(registration.margin>0 && registration.margin<1)) return 'campaign_registration_invalid';
    if(registration.selection?.objective!=='failure-slice-gain' || registration.selection?.tieBreak!=='shorter-skill') return 'campaign_selection_registration_missing';
    if(manifest.data.classification!=='synthetic') {
     const devRows=new Set(development.rows.map(row=>String(row.id)));
@@ -123,8 +126,8 @@ const consumers = Object.freeze({
    if(candidates.length!==1 || !Object.hasOwn(development.arms,candidates[0]) || development.arms[candidates[0]].skill.digest!==confirmation.arms[candidates[0]].skill.digest) return 'campaign_confirmation_candidate_mismatch';
    const statistics=registration.statistics, family=statistics?.families?.[statistics?.groups?.[0]?.family];
    if(!family || family.repeats!==confirmation.repeats || statistics.deterministicConsumer!==false || statistics.mode!=='paired-t') return 'campaign_statistics_registration_invalid';
-   const slice=new Set(registration.failureCalculators);
-   const expected=confirmation.rows.map(row=>`row-${row.id}:${slice.has(Number(row.calculatorId))}`).sort();
+   const slice=skillSlice(registration,scorer);
+   const expected=confirmation.rows.map(row=>`row-${row.id}:${inSkillSlice(slice,scorer,row)}`).sort();
    if(digest(expected)!==digest(statistics.groups.map(group=>`${group.id}:${group.failure_slice}`).sort())) return 'campaign_source_group_registration_invalid';
    return null;
   },
@@ -264,7 +267,7 @@ async function evaluateCampaignEvidence({manifest,inputs,state,request,attestEva
  const paid=consumers[manifest.surface].paidMeasurement===true;
  if(manifest.data.classification!=='synthetic' && (registration.mode!=='paired-t' || registration.deterministicConsumer!==!paid)) return verdict('not-qualified','campaign_statistical_consumer_not_qualified');
  const confirmation=state.stages.confirmation.result;
- const identity=await consumers[manifest.surface].identity();
+ const identity=await consumers[manifest.surface].identity(inputs.registration);
  if(registration.consumer_id!==identity.implementationSha256 || registration.corpus_digest!==request.corpusDigest) return verdict('not-qualified','campaign_evaluation_consumer_or_corpus_changed');
  if(!Array.isArray(confirmation.observations)) return verdict('not-qualified','campaign_source_group_registration_invalid');
  let authority;try{authority=await attestEvaluation(request);}catch{return retry('campaign_evaluator_authority_unavailable');}
