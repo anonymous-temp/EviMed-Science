@@ -23,6 +23,8 @@ answers the post without a round trip and the enrichment worker never fetches it
 ``redeliver`` is the one revision without a content change: a text that arrives after the platform was answered
 ``unavailable`` for it (the WeChat texts recovered by ``python -m knowledge_plugin wechat-bodies --apply``). The platform
 asks ``/text`` again when it sees a new revision of an entry (contract, ``getEntryText``) and would not otherwise.
+``fill_post`` is the same revision for a social post stored short of itself: the post's whole text, or its pictures, arrive
+after the entry was delivered with an excerpt (the six Chinese platforms' posts before 2026-10-31), and are written in with it.
 """
 
 from __future__ import annotations
@@ -216,6 +218,28 @@ async def redeliver(conn: AsyncConnection, entry_id: str, now: datetime) -> int 
                 WHERE source_id = %s AND key_sha256 = %s""",
             (row["revision"], row["source_id"], key_sha256(row["external_key"])))
     return int(row["revision"])
+
+
+async def fill_post(conn: AsyncConnection, entry_id: str, *, body: str | None = None, media: list | None = None,
+                    fetched_from: str = "social", now: datetime) -> int | None:
+    """Write a social post's whole text (``body``, already cleaned) and/or its stored pictures (``media``, contract items)
+    into the entry it was delivered as, and deliver the entry again as its next revision; returns the revision, or ``None``
+    when the entry is gone. A text is a full text (its head is its own excerpt) and the entry is ``available``; the stored
+    excerpt, pictures and counts are otherwise left as they were. The caller's transaction holds the seq lock first."""
+    async with conn.transaction():
+        await lock_seq(conn)
+        if body:
+            await conn.execute(
+                """INSERT INTO evimed_knowledge.entry_texts (entry_id, revision, text_kind, body_text, body_excerpt, fetched_from, fetched_at)
+                   SELECT entry_id, revision, 'full', %s, %s, %s, %s FROM evimed_knowledge.entries WHERE entry_id = %s
+                   ON CONFLICT (entry_id) DO UPDATE SET text_kind = 'full', body_text = EXCLUDED.body_text,
+                     body_excerpt = EXCLUDED.body_excerpt, fetched_from = EXCLUDED.fetched_from, fetched_at = EXCLUDED.fetched_at,
+                     next_attempt_at = NULL, last_error = NULL""",
+                (body, cut(body, 20_000), fetched_from, now, entry_id))
+            await conn.execute("UPDATE evimed_knowledge.entries SET text_status = 'available' WHERE entry_id = %s", (entry_id,))
+        if media:
+            await conn.execute("UPDATE evimed_knowledge.entries SET media = %s WHERE entry_id = %s", (Jsonb(media), entry_id))
+        return await redeliver(conn, entry_id, now)
 
 
 # ------------------------------------------------------------------------------------ fetch log

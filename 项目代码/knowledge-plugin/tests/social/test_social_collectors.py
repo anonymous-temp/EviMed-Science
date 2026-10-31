@@ -306,12 +306,13 @@ async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_
     first = (await collector.tick())["crawl"]
     assert first == {"term": "司美格鲁肽", "platform": "xhs", "posts": 1, "new": 1}
     assert requests[0] == {"query": "司美格鲁肽", "platforms": ["xhs"], "sort_type": "latest", "page": 1, "minimum_detail_posts": 5,
-                           "minimum_comments_per_post": 0, "collect_comments": False, "include_provider_raw": False}
+                           "minimum_comments_per_post": 0, "collect_comments": False, "include_provider_raw": True}
     (row,) = await entries(pool, "social-xiaohongshu")
     assert row["channel"] == "social" and row["platform"] == "xiaohongshu" and row["author"] is None
     assert len(row["summary"]) <= 300 and "某用户" not in json.dumps(row, default=str) and "我也是" not in json.dumps(row, default=str)
     assert row["metrics"] == {"reposts": 30, "replies": 12, "observed_at": "2026-10-22T06:00:00Z"}, "an unstated count is absent"
-    assert row["text_kind"] == "excerpt" and row["body_text"] is None and row["text_status"] == "available"
+    assert row["text_kind"] == "full" and row["body_text"] == "体重下降了 8 公斤，" * 40 and row["text_status"] == "available"
+    assert not row["body_text"].startswith("打了司美格鲁肽三个月"), "the title is not put in front of the post's own text"
     assert row["published_at"] == NOW - timedelta(hours=5)
     assert (await collector.tick())["crawl"] == {"skipped": "not_yet"}, "120 a day is one every twelve minutes"
 
