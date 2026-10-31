@@ -8,9 +8,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_ASK_INSTRUCTIONS } from "../src/frontierAsk.mjs";
+import { FRONTIER_POST_LIMITS } from "../src/frontierPostText.mjs";
 import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
-import { FRONTIER_META_KEYS, migrateFrontier } from "../src/frontierPersistence.mjs";
+import { FRONTIER_META_KEYS, bumpFrontierVersion, migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_LEAD_WINDOW_MS, FrontierPipeline, POST_WITHDRAWN } from "../src/frontierPipeline.mjs";
 import { FrontierService, frontierVocabularyView } from "../src/frontierService.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
@@ -92,7 +93,7 @@ async function deliver(post, texts, more = {}) {
 function editorWith(behaviour = {}) {
   return {
     owner, available: true, timeZone: "Asia/Shanghai", model: "deepseek-flash",
-    leadInputs: /** @type {string[]} */ ([]), editInputs: /** @type {any[]} */ ([]), tidyCalls: 0,
+    leadInputs: /** @type {string[]} */ ([]), editInputs: /** @type {any[]} */ ([]), askInputs: /** @type {string[]} */ ([]), tidyCalls: 0,
     async writeJson(/** @type {string} */ instructions, /** @type {string} */ input, /** @type {number} */ _max, /** @type {any} */ opts) {
       if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: {}, error: null };
       this.leadInputs.push(input);
@@ -100,7 +101,7 @@ function editorWith(behaviour = {}) {
       return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };
     },
     async callJson(/** @type {any[]} */ messages) {
-      if (messages[0].content === FRONTIER_ASK_INSTRUCTIONS) return { questions: [] };
+      if (messages[0].content === FRONTIER_ASK_INSTRUCTIONS) { this.askInputs.push(String(messages[1]?.content ?? "")); return { questions: [] }; }
       this.tidyCalls += 1;
       return { drop: [] };
     },
@@ -422,4 +423,295 @@ test("a lead the writer answers empty for a stored post becomes none; a post wit
 
 test("the window the sweep and the lead step share is the lead window", () => {
   assert.equal(FRONTIER_LEAD_WINDOW_MS, 30 * DAY);
+});
+
+
+// ───────────────────────── rd-fix (2026-10-31): the review's findings ─────────────────────────
+
+const PICTURE_ID_3 = "c".repeat(64);
+const PICTURE_ID_4 = "d".repeat(64);
+const pictureRef = (/** @type {string} */ id) => ({ id, kind: "image", original_url: `https://example.org/${id.slice(0, 4)}.jpg` });
+const WORDS_A = "司美格鲁肽减重须遵医嘱：每周一次，起始剂量0.25毫克";
+const WORDS_B = "不可自行加量，出现严重恶心呕吐应及时就医复诊";
+const markSwept = () => database.query("INSERT INTO evimed_frontier.meta (key, value, updated_at) VALUES ($1, '1'::jsonb, clock_timestamp()) ON CONFLICT (key) DO UPDATE SET value = excluded.value", [FRONTIER_META_KEYS.postSweep]);
+const rowOf = async (/** @type {{ id: string }} */ item) => (await database.query("SELECT * FROM evimed_frontier.items WHERE id = $1", [item.id])).rows[0];
+/** A parser that reads the words of a picture by the first letter of its file name (a/b/c/d), as the pipeline names them. */
+const parserByLetter = (/** @type {Record<string, string | Error>} */ words) => parserWith(async (input) => {
+  const answer = words[input.filename[0]];
+  if (answer instanceof Error) throw answer;
+  return { text: answer ?? "" };
+});
+const refused = (/** @type {string} */ code) => Object.assign(new Error(code), { code });
+
+test("F1: a post the pipeline withdrew, or gave up on, whose pictures arrive later is read through them and comes back with its 导读 and an edit", options, async () => {
+  await markSwept();
+  const texts = new Map();
+  // Withdrawn by us while it had no pictures; the plugin delivered them since (items.media is the entry's latest).
+  const withdrawn = await storedPost(XHS_TAGS);
+  await database.query("UPDATE evimed_frontier.items SET state = 'withdrawn', withdrawn_reason = $2, withdrawn_at = clock_timestamp(), media = $3::jsonb WHERE id = $1",
+    [withdrawn.id, POST_WITHDRAWN, JSON.stringify([pictureRef(PICTURE_ID), pictureRef(PICTURE_ID_2)])]);
+  // Gave up for having no text, with pictures stored: the same.
+  const gaveUp = await storedPost({ ...XHS_TAGS, title: "另一条只有标签的笔记", text: "另一条只有标签的笔记 #罕见病[话题]#" }, { media: [pictureRef(PICTURE_ID)] });
+  await database.query("UPDATE evimed_frontier.items SET state = 'failed', editor_diagnostics = '{\"giveUp\":\"no-text\"}'::jsonb WHERE id = $1", [gaveUp.id]);
+  // Pulled by an operator: never read, never brought back.
+  const pulled = await storedPost({ ...XHS_TAGS, title: "运营撤下的笔记", text: "运营撤下的笔记 #新药[话题]#" }, { media: [pictureRef(PICTURE_ID)] });
+  await database.query("UPDATE evimed_frontier.items SET state = 'withdrawn', withdrawn_reason = 'operator', withdrawn_at = clock_timestamp() WHERE id = $1", [pulled.id]);
+  // Withdrawn by us and its pictures hold no words: it stays out, and is not asked about again.
+  const bare = await storedPost({ ...XHS_TAGS, title: "图里没有字的笔记", text: "图里没有字的笔记 #新药[话题]#" }, { media: [pictureRef(PICTURE_ID_3)] });
+  await database.query("UPDATE evimed_frontier.items SET state = 'withdrawn', withdrawn_reason = $2, withdrawn_at = clock_timestamp() WHERE id = $1", [bare.id, POST_WITHDRAWN]);
+
+  const editor = editorWith({ lead: (input) => (input.includes("图片中的文字") ? { lead_zh: "司美格鲁肽减重须遵医嘱，每周一次，起始剂量0.25毫克。" } : { lead_zh: "" }) });
+  const parser = parserByLetter({ a: WORDS_A, b: WORDS_B, c: "" });
+  const media = mediaFor({ pictures: new Set([PICTURE_ID, PICTURE_ID_2, PICTURE_ID_3]) });
+  const pipeline = pipelineFor(editor, { plugin: pluginFor(texts), parser, media });
+  await pipeline.processBatch();
+
+  const back = await rowOf(withdrawn);
+  assert.equal(back.state, "published");
+  assert.equal(back.withdrawn_reason, null);
+  assert.equal(pipeline.counters.postsReinstated, 1);
+  assert.ok((await database.query("SELECT op, reason FROM evimed_frontier.item_changes WHERE item_id = $1 ORDER BY seq", [withdrawn.id])).rows.some((row) => row.op === "upsert" && row.reason === "published"));
+  assert.equal(back.lead_zh, "司美格鲁肽减重须遵医嘱，每周一次，起始剂量0.25毫克。", "its 导读 is written from the words in the pictures");
+  assert.ok(editor.editInputs.some((input) => /图片中的文字：/.test(input.bodyExcerpt ?? "")), "and it owed one edit, made from them");
+  assert.ok(back.text_arrived_at, "the edit is claimed by the window it is in");
+  const queued = await rowOf(gaveUp);
+  assert.equal(queued.state, "published", "a post that gave up for having no text is queued again and published in the same round");
+  assert.equal((await rowOf(pulled)).state, "withdrawn");
+  assert.equal((await rowOf(pulled)).withdrawn_reason, "operator");
+  assert.equal((await textsOf(pulled.id)).picture_tried_at, null, "an operator's withdrawal is not looked at");
+  const stayed = await rowOf(bare);
+  assert.equal(stayed.state, "withdrawn");
+  assert.ok((await textsOf(bare.id)).picture_tried_at, "tried once");
+  const calls = parser.calls.length;
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, media, now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
+  assert.equal(parser.calls.length, calls, "not asked again");
+});
+
+test("F1: a revision that brings a picture the post did not have makes a post whose pictures held no words claimable again", options, async () => {
+  const texts = new Map();
+  const first = await deliver(XHS_TAGS, texts, { media: [pictureRef(PICTURE_ID)] });
+  const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+  const parser = parserByLetter({ a: "", d: WORDS_A });
+  const media = mediaFor({ pictures: new Set([PICTURE_ID, PICTURE_ID_4]) });
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, media }).processBatch();
+  assert.equal((await itemOfEntry(first.entryId)).state, "failed", "its only picture held no words");
+  assert.ok((await textsOf((await itemOfEntry(first.entryId)).id)).picture_tried_at);
+
+  await deliver(XHS_TAGS, texts, { pluginEntryId: first.pluginEntryId, revision: 2, media: [pictureRef(PICTURE_ID), pictureRef(PICTURE_ID_4)], answer: { status: "unavailable" } });
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, media, now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
+  const item = await itemOfEntry(first.entryId);
+  assert.equal(item.state, "published", "the new picture was read");
+  assert.equal((await textsOf(item.id)).picture_text, WORDS_A);
+});
+
+test("F2: a picture that always fails is that picture's failure — the other pictures' words are kept, the post counts as tried, and nothing is parsed twice", options, async () => {
+  for (const code of ["source_parser_internal_error", "source_parser_upstream_error", "source_parser_timeout", "source_parser_canceled"]) {
+    await database.query("DELETE FROM evimed_frontier.items");
+    await database.query("DELETE FROM evimed_frontier.entries");
+    const texts = new Map();
+    const post = await deliver(XHS_TAGS, texts, { media: [pictureRef(PICTURE_ID), pictureRef(PICTURE_ID_2), pictureRef(PICTURE_ID_3)] });
+    const parser = parserByLetter({ a: WORDS_A, b: WORDS_B, c: refused(code) });
+    const media = mediaFor({ pictures: new Set([PICTURE_ID, PICTURE_ID_2, PICTURE_ID_3]) });
+    const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+    const pipeline = pipelineFor(editor, { plugin: pluginFor(texts), parser, media });
+    await pipeline.processBatch();
+    const item = await itemOfEntry(post.entryId);
+    const stored = await textsOf(item.id);
+    assert.equal(item.state, "published", code);
+    assert.equal(stored.picture_text, `${WORDS_A}\n${WORDS_B}`, code);
+    assert.ok(stored.picture_tried_at, `${code}: tried`);
+    assert.equal(pipeline.counters.postPicturesDeferred, 0, code);
+    assert.equal(parser.calls.length, 3, code);
+    await pipelineFor(editor, { plugin: pluginFor(texts), parser, media, now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
+    assert.equal(parser.calls.length, 3, `${code}: the good pictures are not parsed again`);
+  }
+});
+
+test("F2: a service-level refusal after the first picture parsed only delays the post, and the picture that parsed is not parsed again", options, async () => {
+  const texts = new Map();
+  const post = await deliver(XHS_TAGS, texts, { media: [pictureRef(PICTURE_ID), pictureRef(PICTURE_ID_2)] });
+  let limited = true;
+  const parser = parserWith(async (input) => {
+    if (input.filename[0] === "b" && limited) throw refused("source_parser_rate_limited");
+    return { text: input.filename[0] === "a" ? WORDS_A : WORDS_B };
+  });
+  const media = mediaFor();
+  const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+  const first = pipelineFor(editor, { plugin: pluginFor(texts), parser, media });
+  await first.processBatch();
+  assert.equal(first.counters.postPicturesDeferred, 1);
+  assert.equal((await textsOf((await itemOfEntry(post.entryId)).id)).picture_tried_at, null, "not a try");
+  limited = false;
+  // The same worker, a later round: the limit is lifted.
+  first.now = () => new Date(NOW.getTime() + 3_600_000);
+  await first.processBatch();
+  assert.equal((await textsOf((await itemOfEntry(post.entryId)).id)).picture_text, `${WORDS_A}\n${WORDS_B}`, "in order");
+  assert.equal(parser.calls.filter((call) => call.filename[0] === "a").length, 1, "the first picture was parsed once");
+});
+
+test("F2/F9: a plugin that cannot be reached costs no parse, and a post not reached in a round keeps the wait it sat in", options, async () => {
+  const texts = new Map();
+  const media = [pictureRef(PICTURE_ID)];
+  const posts = [];
+  for (let i = 0; i < 6; i += 1) posts.push(await deliver({ ...XHS_TAGS, title: `只有标签的第${i}条笔记`, text: `只有标签的第${i}条笔记 #罕见病[话题]#` }, texts, { media }));
+  const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+  // Round one: the parser is down; every post waits twelve hours.
+  const down = parserWith(async () => { throw refused("source_parser_unavailable"); });
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser: down }).processBatch();
+  const waits = new Map();
+  for (const post of posts) {
+    const item = await itemOfEntry(post.entryId);
+    assert.ok(item.lease_until && new Date(item.lease_until) > NOW, "waiting");
+    waits.set(post.entryId, new Date(item.lease_until).getTime());
+  }
+  // Round two, half an hour later: the parser works, four posts are read, the other two are not reached and keep their wait.
+  const parser = parserByLetter({ a: WORDS_A });
+  const later = new Date(NOW.getTime() + 30 * 60_000);
+  const pipeline = pipelineFor(editor, { plugin: pluginFor(texts), parser, now: later });
+  await pipeline.processBatch();
+  assert.equal(parser.calls.length, FRONTIER_POST_LIMITS.postsPerRound);
+  let kept = 0;
+  for (const post of posts) {
+    const item = await itemOfEntry(post.entryId);
+    if (item.state === "published") continue;
+    kept += 1;
+    assert.equal(new Date(item.lease_until).getTime(), waits.get(post.entryId), "the wait it sat in, not twelve hours from this round");
+    assert.equal((await textsOf(item.id)).picture_tried_at, null);
+  }
+  assert.equal(kept, posts.length - FRONTIER_POST_LIMITS.postsPerRound);
+});
+
+test("F5: the sweep's owed edit really reaches a post older than the owed-edit window; a post already re-scored keeps its card summary", options, async () => {
+  const old = await storedPost(XHS_WORDS, { visibleAt: "2026-10-21T02:00:00Z" });
+  const rescored = await storedPost({ ...XHS_WORDS, title: "另一条已经重新打分的笔记", text: XHS_WORDS.text.replace(XHS_WORDS.title, "另一条已经重新打分的笔记") }, { visibleAt: "2026-10-21T03:00:00Z" });
+  await database.query("UPDATE evimed_frontier.items SET rescored_at = '2026-10-22T00:00:00Z' WHERE id = $1", [rescored.id]);
+  const editor = editorWith({ lead: () => ({ lead_zh: "一名200斤男子联用两种减重药物后突发脑梗。" }) });
+  const pipeline = pipelineFor(editor, { plugin: pluginFor(new Map()) });
+  await pipeline.processBatch();
+  assert.equal(editor.editInputs.length, 1, "one edit: the old post's");
+  assert.match(editor.editInputs[0].bodyExcerpt, /^200斤男子使用/);
+  const edited = await rowOf(old);
+  assert.equal(edited.editor_version, FRONTIER_EDITOR_VERSION);
+  assert.ok(edited.rescored_at, "the edit is a re-score of the post");
+  assert.ok(edited.text_arrived_at);
+  assert.equal((await rowOf(rescored)).text_arrived_at, null);
+  assert.equal((await rowOf(rescored)).summary_zh, "卡片摘要。", "what its re-score wrote stays");
+});
+
+test("F5: pictures read for a post that was edited before it had anything to read owe it a second edit; a post shown while waiting is not edited from nothing", options, async () => {
+  await markSwept();
+  const texts = new Map();
+  const media = [pictureRef(PICTURE_ID)];
+  const waiting = await storedPost(XHS_TAGS, { media });
+  await database.query("UPDATE evimed_frontier.items SET rescored_at = '2026-10-30T03:00:00Z' WHERE id = $1", [waiting.id]);
+  const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+  // The parser is down: the post waits, owes an edit (a late text moved it), and is not edited from the title alone.
+  await database.query("UPDATE evimed_frontier.items SET editor_version = NULL, text_arrived_at = clock_timestamp() WHERE id = $1", [waiting.id]);
+  const down = parserWith(async () => { throw refused("source_parser_unavailable"); });
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser: down }).processBatch();
+  assert.equal(editor.editInputs.length, 0, "no edit from nothing");
+  const parked = await rowOf(waiting);
+  assert.equal(parked.editor_version, null);
+  assert.ok(new Date(parked.lease_until) > NOW, "it waits for its pictures");
+  // The pictures are read: it owes the edit, rescored or not, and gets it from the words.
+  const parser = parserByLetter({ a: WORDS_A });
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, now: new Date(NOW.getTime() + 13 * 3_600_000) }).processBatch();
+  assert.equal(editor.editInputs.length, 1);
+  assert.match(editor.editInputs[0].bodyExcerpt, /图片中的文字：\n司美格鲁肽/);
+  assert.equal((await rowOf(waiting)).editor_version, FRONTIER_EDITOR_VERSION);
+});
+
+test("F8: a post with nothing to read is recorded as having no 要点, as it is for the 导读, and leaves the queue", options, async () => {
+  await markSwept();
+  const thin = await storedPost(XHS_TAGS, { media: [pictureRef(PICTURE_ID)] });
+  await database.query("UPDATE evimed_frontier.items SET selected = true, selected_rule = 'threshold', selected_at = visible_at WHERE id = $1", [thin.id]);
+  const editor = editorWith();
+  await pipelineFor(editor, { plugin: pluginFor(new Map()), parser: null }).processBatch();
+  const row = await rowOf(thin);
+  assert.equal(row.brief, null);
+  assert.equal(row.brief_basis, `${(await textsOf(thin.id)).reader_tidy.sha}:social`, "asked once for this text and genre");
+  assert.equal(row.lead_zh, null);
+});
+
+test("F10: a title-only post whose pictures held words gets its 导读 and its questions, with no text column at all", options, async () => {
+  const texts = new Map();
+  const TITLE_ONLY = { platform: "xiaohongshu", title: "笔记", text: "笔记 #罕见病[话题]#" };
+  const post = await deliver(TITLE_ONLY, texts, { media: [pictureRef(PICTURE_ID)], answer: { status: "unavailable" } });
+  const editor = editorWith({ lead: (input) => (input.includes("图片中的文字") ? { lead_zh: "司美格鲁肽减重须遵医嘱，每周一次，起始剂量0.25毫克。" } : { lead_zh: "" }) });
+  const parser = parserByLetter({ a: WORDS_A });
+  const pipeline = pipelineFor(editor, { plugin: pluginFor(texts), parser });
+  await pipeline.processBatch();
+  const item = await itemOfEntry(post.entryId);
+  const stored = await textsOf(item.id);
+  assert.equal(item.state, "published");
+  assert.equal(stored.body_text ?? stored.body_excerpt ?? null, null, "no text column of the post's own");
+  assert.equal(stored.reader_summary, `图片中的文字：\n${WORDS_A}`);
+  assert.ok(stored.reader_tidy?.sha, "its reader text is settled");
+  assert.equal(editor.leadInputs.length, 1);
+  assert.match(editor.leadInputs[0], /\n图片中的文字：\n司美格鲁肽/);
+  assert.equal((editor.leadInputs[0].match(/图片中的文字/g) ?? []).length, 1, "the words are given once");
+  assert.equal(item.lead_zh, "司美格鲁肽减重须遵医嘱，每周一次，起始剂量0.25毫克。");
+  assert.equal(editor.askInputs.length, 1, "the questions are asked for it too");
+  assert.match(editor.askInputs[0], /图片中的文字/);
+  assert.equal(item.ask_basis, stored.reader_tidy.sha);
+  // A revision of the post that changes nothing of its text keeps the words as its reader text.
+  await deliver(TITLE_ONLY, texts, { pluginEntryId: post.pluginEntryId, revision: 2, media: [pictureRef(PICTURE_ID)], answer: { status: "unavailable" } });
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
+  assert.equal((await textsOf(item.id)).reader_summary, `图片中的文字：\n${WORDS_A}`);
+  // The reader's page does not carry them.
+  const page = (await serviceFor().getItem(reader, item.public_id)).body.item;
+  assert.equal(page.body.original, null);
+});
+
+test("F11: the sweep takes the content version last — a transaction holding a later item and wanting the version is not deadlocked with it", options, async () => {
+  const tagsOnly = await storedPost(XHS_TAGS);
+  const twice = await storedPost(CHANNELS_TWICE);
+  const thinSummary = await insertItem(database, { title: "A record", visibleAt: "2026-10-30T03:00:00Z" });
+  await database.query("UPDATE evimed_frontier.items SET lead_zh = '消息仅提供标题。', lead_basis = 'basis-old' WHERE id = $1", [thinSummary.id]);
+  await database.query("UPDATE evimed_frontier.item_texts SET reader_summary = 'Sponsor: X.', reader_tidy = $2::jsonb WHERE item_id = $1", [thinSummary.id, JSON.stringify({ source: "summary", sha: "s", drop: [] })]);
+  const client = await database.pool.connect();
+  const editor = { ...editorWith(), available: false };
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT id FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [thinSummary.id]);
+    const sweep = pipelineFor(editor, { plugin: pluginFor(new Map()) }).processBatch();
+    // The sweep has withdrawn its posts and waits for the item this transaction holds.
+    for (let waited = 0; waited < 50; waited += 1) {
+      const blocked = (await database.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE '%SET lead_basis = NULL%'")).rows[0].n;
+      if (blocked) break;
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+    }
+    // This transaction now wants the version: with the sweep holding it, the two would wait for each other.
+    await bumpFrontierVersion(client);
+    await client.query("COMMIT");
+    await sweep;
+  } finally {
+    await client.query("ROLLBACK").catch(() => {});
+    client.release();
+  }
+  assert.equal(Number((await database.query("SELECT value FROM evimed_frontier.meta WHERE key = $1", [FRONTIER_META_KEYS.postSweep])).rows[0]?.value), 1, "the sweep finished its first try");
+  for (const gone of [tagsOnly, twice]) assert.equal((await rowOf(gone)).state, "withdrawn");
+  assert.equal((await rowOf(thinSummary)).lead_basis, null);
+});
+
+test("F13: an operator's withdrawal of a post the pipeline already withdrew replaces the reason, so a revision with words does not bring it back", options, async () => {
+  const texts = new Map();
+  const bare = await storedPost(XHS_TAGS);
+  const editor = editorWith({ lead: () => ({ lead_zh: "我国拟对目录外罕见病新药设置市场独占期保护。" }) });
+  await pipelineFor(editor, { plugin: pluginFor(texts) }).processBatch();
+  assert.equal((await rowOf(bare)).withdrawn_reason, POST_WITHDRAWN);
+  const done = await serviceFor().operateItem(bare.publicId, "withdraw", { reason: "operator: duplicate of another" });
+  assert.equal(done.item.withdrawnReason, "operator: duplicate of another");
+  assert.equal((await rowOf(bare)).withdrawn_reason, "operator: duplicate of another");
+
+  const entry = (await database.query("SELECT * FROM evimed_frontier.entries WHERE item_id = $1", [bare.id])).rows[0];
+  const whole = `${XHS_TAGS.title} 我国拟对目录外的罕见病新药设置市场独占期保护，保护期内不批准同类仿制药上市。#罕见病[话题]# #新药[话题]#`;
+  seq += 1;
+  await database.query(`INSERT INTO evimed_frontier.entries (plugin_entry_id, plugin_seq, revision, source_id, identity_key, url, canonical_url, title_raw, summary_raw, first_seen_at,
+      content_sha256, state, platform, channel, media)
+    VALUES ($1,$2,2,'social-monitor',$3,$4,$4,$5,$6,$7,$8,'received','xiaohongshu','social','[]'::jsonb)`,
+  [entry.plugin_entry_id, 740_000 + seq, entry.identity_key, entry.url, entry.title_raw, whole.slice(0, 299), entry.first_seen_at, sha256(`rev${seq}`)]);
+  texts.set(entry.plugin_entry_id, { status: "available", body_text: whole.replace(`${XHS_TAGS.title} `, ""), text_kind: "full", enrichment: {} });
+  await pipelineFor(editor, { plugin: pluginFor(texts), now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
+  assert.equal((await rowOf(bare)).state, "withdrawn", "the operator's withdrawal stands");
 });

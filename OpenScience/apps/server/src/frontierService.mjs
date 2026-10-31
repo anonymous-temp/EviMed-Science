@@ -19,7 +19,7 @@ import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.m
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
 import { FRONTIER_FALLBACKS } from "./frontierIngest.mjs";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
-import { frontierItemGenre, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { POST_WITHDRAWN, frontierItemGenre, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
 import { servedAsk } from "./frontierAsk.mjs";
 import { frontierBriefView } from "./frontierBrief.mjs";
 import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
@@ -2262,7 +2262,7 @@ export class FrontierService {
     if (reason != null && !note) throw failure(400, "frontier_operation_invalid", "The reason must be one line of at most 500 characters.");
     if (action === "withdraw" && !note) throw failure(400, "frontier_operation_invalid", "A withdrawal needs its reason.");
     const item = await this.#transaction(async (client) => {
-      const row = (await client.query(`SELECT id, state, selected, selected_rule FROM evimed_frontier.items WHERE public_id=$1 FOR UPDATE`, [publicId])).rows[0];
+      const row = (await client.query(`SELECT id, state, selected, selected_rule, withdrawn_reason FROM evimed_frontier.items WHERE public_id=$1 FOR UPDATE`, [publicId])).rows[0];
       if (!row || !["published", "withdrawn"].includes(row.state)) throw failure(404, "frontier_item_not_found", "No such item.");
       if (action === "withdraw") {
         if (row.state !== "withdrawn") {
@@ -2270,6 +2270,10 @@ export class FrontierService {
             updated_at=clock_timestamp() WHERE id=$1`, [row.id, note]);
           await client.query(`INSERT INTO evimed_frontier.item_changes(item_id, op, reason) VALUES ($1, 'remove', 'withdrawn')`, [row.id]);
           await bumpFrontierVersion(client);
+        } else if (row.withdrawn_reason === POST_WITHDRAWN) {
+          // The pipeline took this post out for having no text of its own, and a revision that brings words puts back what it took out and
+          // nothing an operator took: the operator's withdrawal replaces the reason, so no revision undoes it. The item is out already, so no reader sees a change.
+          await client.query(`UPDATE evimed_frontier.items SET withdrawn_at=clock_timestamp(), withdrawn_reason=$2, updated_at=clock_timestamp() WHERE id=$1`, [row.id, note]);
         }
       } else if (row.state !== "published") {
         throw failure(409, "frontier_item_withdrawn", "A withdrawn item cannot be pinned.");

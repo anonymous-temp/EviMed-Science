@@ -46,10 +46,37 @@ def test_a_content_that_only_repeats_the_title_is_no_text_but_the_post_is_still_
     for content in ("标题", "  标题 ", "标题\n", ""):
         entry = crawl_mod.build_entry(post(content=content), "xhs", now=NOW)
         assert entry is not None and entry.body_text is None and entry.body_from is None and entry.title == "标题", content
+    # Without a title field the first line is the title, and a content that is that one line is the title again: no text.
     only_content = crawl_mod.build_entry(post(title="", content="没有标题的一段话"), "bilibili", now=NOW)
-    assert only_content.title == "没有标题的一段话" and only_content.body_text == "没有标题的一段话"
+    assert only_content.title == "没有标题的一段话" and only_content.body_text is None
+    two_lines = crawl_mod.build_entry(post(title="", content="没有标题的一段话\n第二行说的事。"), "bilibili", now=NOW)
+    assert two_lines.title == "没有标题的一段话" and two_lines.body_text == "第二行说的事。"
     assert crawl_mod.build_entry(post(title="", content=""), "xhs", now=NOW) is None, "nothing to say at all"
     assert crawl_mod.build_entry(post(url=""), "xhs", now=NOW) is None
+
+
+def test_the_title_is_not_said_twice_in_the_text_but_only_at_a_boundary():
+    """F7: the page shows the title above the text, so a copy at the head goes; a title that is only the first words of the
+    sentence, or a cut of the first line, is not a copy and the sentence stays whole."""
+    def body(title, content):
+        return crawl_mod.build_entry(post(title=title, content=content), "xhs", now=NOW).body_text
+
+    assert body("全球首例人体内DNA改写", "全球首例人体内DNA改写\n\n一名患者接受了治疗。") == "一名患者接受了治疗。"
+    assert body("全球首例人体内DNA改写", "全球首例人体内DNA改写 一名患者接受了治疗。") == "一名患者接受了治疗。"
+    assert body("全球首例人体内DNA改写", "全球首例人体内DNA改写。一名患者接受了治疗。") == "一名患者接受了治疗。"
+    assert body("全球首例人体内DNA改写", "全球首例人体内DNA改写。") is None, "the title and its full stop are the title"
+    # After a comma or a colon the sentence goes on: the title is its first part, and the sentence stays whole.
+    assert body("全球首例人体内DNA改写", "全球首例人体内DNA改写，一名患者接受了治疗。") == "全球首例人体内DNA改写，一名患者接受了治疗。"
+    # Not a boundary: the title is the first words of a longer word or sentence.
+    assert body("全球首例", "全球首例人体内DNA改写的患者接受了治疗。") == "全球首例人体内DNA改写的患者接受了治疗。"
+    # A title cut from the first line (no title field, a first line over TITLE_MAX) is not stripped: the sentence stays whole.
+    first = "很长的第一行" * 30
+    entry = crawl_mod.build_entry(post(title="", content=f"{first}\n第二行。"), "weibo", now=NOW)
+    assert entry.title.endswith("…") and entry.body_text == f"{first}\n\n第二行。"
+    # A title that wraps over two lines of the text is the same title.
+    assert body("PD-1 抑制剂 联合治疗", "PD-1 抑制剂\n联合治疗\n结果公布。") == "结果公布。"
+    # Not the head: a copy in the middle is the author's words.
+    assert body("标题", "先说点别的。\n标题\n再说。") == "先说点别的。\n\n标题\n\n再说。"
 
 
 def test_the_text_is_bounded_with_a_reason_and_cut_at_a_paragraph():

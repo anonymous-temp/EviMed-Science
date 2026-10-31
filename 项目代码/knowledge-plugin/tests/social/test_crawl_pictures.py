@@ -86,7 +86,7 @@ async def test_a_post_is_stored_whole_with_its_pictures_and_the_raw_answer_goes_
 
 async def test_a_weibo_picture_is_asked_with_the_referrer_its_host_wants(social_settings, pool, tmp_path):
     def post():
-        return [{"post_id": "w1", "title": "", "content": "微博正文", "url": "https://m.weibo.cn/detail/w1",
+        return [{"post_id": "w1", "title": "", "content": "微博标题\n微博正文", "url": "https://m.weibo.cn/detail/w1",
                  "publish_time": int((NOW - timedelta(hours=1)).timestamp()),
                  "raw_response": {"detail": {"data": {"pic_ids": ["006abcDEFgy1"], "pic_infos": {"006abcDEFgy1": {"large": {"url": "[REDACTED_URL]"}}}}}}}]
 

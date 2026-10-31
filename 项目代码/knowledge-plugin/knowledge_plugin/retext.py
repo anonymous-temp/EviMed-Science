@@ -64,10 +64,12 @@ _WHERE = {
     "journal": "t.abstract IS NULL AND t.body_text IS NULL AND t.body_excerpt IS NULL "
                "AND (s.access IN ('crossref-issn', 'eutils-query', 'europepmc') OR e.doi IS NOT NULL OR e.pmid IS NOT NULL)",
     # The notes of ``enrich.page`` (``page_no_main_text``; ``page_http-error:<detail>`` from ``Attempt.note``) in ``last_error``'s
-    # comma-joined list. Not a journal's entry (that is the ``journal`` kind), not a WeChat article (bought, never read).
+    # comma-joined list. Not a journal's entry (that is the ``journal`` kind), not a WeChat article (bought, never read), not a crawled post
+    # (its own text is all there is of it: the page reader never sees one).
     "unread-page": r"t.abstract IS NULL AND t.body_text IS NULL AND t.body_excerpt IS NULL "
                    r"AND t.last_error ~ '(^|,)page_(no_main_text|http-error)' "
                    r"AND NOT (s.access IN ('crossref-issn', 'eutils-query', 'europepmc') OR e.doi IS NOT NULL OR e.pmid IS NOT NULL) "
+                   r"AND s.access <> 'social-crawl' "
                    r"AND e.url !~* '^https?://mp\.weixin\.qq\.com/'",
 }
 # Which stored states a kind reads: a text that is there (the fixes' kinds), or a journal entry answered without one.

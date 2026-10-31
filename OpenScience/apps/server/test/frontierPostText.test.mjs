@@ -11,7 +11,7 @@ import { buildLeadInput, frontierLeadInstructions } from "../src/frontierLead.mj
 import { frontierItemReadable, frontierReaderText, frontierTextDecision } from "../src/frontierPipeline.mjs";
 import {
   FRONTIER_POST_LIMITS, frontierCrawlPost, frontierPostBody, frontierPostClean, frontierPostMaterial, frontierPostOf, frontierPostReading, frontierPostSaysSomething,
-  frontierPostText, frontierPostWeight,
+  frontierPostPictureReader, frontierPostText, frontierPostWeight,
 } from "../src/frontierPostText.mjs";
 
 const XHS_TAGS = { platform: "xiaohongshu", title: "目录外罕见病新药拟纳入市场独占期保护", text: "目录外罕见病新药拟纳入市场独占期保护 #罕见病[话题]# #新药[话题]#" };
@@ -37,11 +37,54 @@ test("the crawl platforms are the contract's platforms that are posts a crawler 
 
 test("the platforms' markers go and the words stay: topic marks, emoticons, zero-width characters, tab-only lines", () => {
   assert.equal(frontierPostClean("第一行‌​ \n\t\t\n\n\n第二行￼的字[笑哭R][赞R] ok\n\t \n"), "第一行\n\n第二行的字 ok");
-  assert.equal(frontierPostClean("【#话题# [思考]】正文"), "【#话题#】正文");
+  // Weibo's `[思考]` cannot be told from a post's own `[结果]` or `[注]`: it stays in the text.
+  assert.equal(frontierPostClean("【#话题# [思考]】正文"), "【#话题# [思考]】正文");
   // A citation number and a bracketed range are the text's own and stay.
   assert.equal(frontierPostClean("结果显示[1] 与[2]相符 [图片] 末尾 [21-46]"), "结果显示[1] 与[2]相符 末尾 [21-46]");
   assert.equal(frontierPostClean("#抑郁症[话题]# #焦虑[话题]#"), "#抑郁症 #焦虑");
   assert.equal(frontierPostClean(null), "");
+});
+
+test("only the platforms' closed marker forms go: a clinical abbreviation or a section label in brackets is the author's words", () => {
+  // The review's probes: any capital token ending in R and any one to four Han characters in brackets used to go.
+  assert.equal(frontierPostClean("风险比[HR]=0.72，客观缓解率[ORR]为45%，[EGFR]突变"), "风险比[HR]=0.72，客观缓解率[ORR]为45%，[EGFR]突变");
+  assert.equal(frontierPostClean("[目的]评价疗效。[方法]随机对照。[结果]有效。[结论]可行。"), "[目的]评价疗效。[方法]随机对照。[结果]有效。[结论]可行。");
+  assert.equal(frontierPostClean("收缩压[高压]达标，见[注]"), "收缩压[高压]达标，见[注]");
+  // The closed forms: Xiaohongshu's emoticon (Han characters, then R), the picture's place, the topic mark.
+  assert.equal(frontierPostClean("开心[笑哭R][赞R] 看图[图片]结束"), "开心 看图结束");
+  assert.equal(frontierPostClean("[R] [aR] [HR] [中位OS]"), "[R] [aR] [HR] [中位OS]");
+});
+
+test("zero-width characters go but the joiner of an emoji sequence stays", () => {
+  assert.equal(frontierPostClean("医生👨\u200d⚕️提醒\u200b每天\u200c一次\ufeff"), "医生👨\u200d⚕️提醒每天一次");
+  assert.equal(frontierPostText({ title: "标题", text: "标题 👩\u200d⚕️ 医生建议按时服药，不要自行停药，复诊时带上化验单。", layout: "titled" }).words.includes("👩\u200d⚕️"), true);
+});
+
+test("a topic mark ends its tag and glues nothing: the words after it are words, and a sentence is never a tag", () => {
+  // The review's two strings: the whole post was read as one tag, and judged to say nothing.
+  const glued = "#抑郁症[话题]#抗抑郁药物要坚持吃，不要随意停药，否则容易复发，这是亲身经历。";
+  assert.equal(frontierPostClean(glued), "#抑郁症 抗抑郁药物要坚持吃，不要随意停药，否则容易复发，这是亲身经历。");
+  const one = frontierPostText({ title: "抗抑郁", text: glued, layout: "own" });
+  assert.deepEqual(one.tags, []);
+  assert.equal(one.words, "#抑郁症 抗抑郁药物要坚持吃，不要随意停药，否则容易复发，这是亲身经历。");
+  assert.ok(frontierPostSaysSomething(one), `${one.own} characters of its own`);
+  const open = frontierPostText({ title: "抗抑郁", text: "家人们 #抗抑郁药物要坚持吃，不要随意停药，否则容易复发，这是亲身经历。", layout: "own" });
+  assert.deepEqual(open.tags, []);
+  assert.match(open.words, /亲身经历。$/);
+  assert.ok(frontierPostSaysSomething(open));
+  // `Phase #2` is no tag, and the number stays in the body.
+  const phase = frontierPostText({ title: "结果", text: "结果良好，继续进入 Phase #2", layout: "own" });
+  assert.deepEqual(phase.tags, []);
+  assert.equal(phase.words, "结果良好，继续进入 Phase #2");
+  // A tag word is at most thirty characters: a longer run is a sentence.
+  const sentence = `${"很长的一句话没有标点".repeat(4)}`;
+  assert.deepEqual(frontierPostText({ title: "t", text: `正文 #${sentence}`, layout: "own" }).tags, []);
+  // A run of real tags still ends the post, each ending at a space, a `#` or a mark.
+  const tags = frontierPostText({ title: "t", text: "吃药要遵医嘱。 #高血压 #降压药# #用药安全", layout: "own" });
+  assert.deepEqual(tags.tags, ["#高血压", "#降压药#", "#用药安全"]);
+  assert.equal(tags.words, "吃药要遵医嘱。");
+  // A Weibo topic holds its marks inside, up to the closing `#`.
+  assert.deepEqual(frontierPostText({ title: "t", text: "正文内容 #诺如病毒：儿童易感染#", layout: "own" }).tags, ["#诺如病毒：儿童易感染#"]);
 });
 
 test("a post that is its title and its hashtags says nothing of its own — the title twice, or the title and its tags, or a cut title repeated", () => {
@@ -73,13 +116,48 @@ test("a post with words keeps them: the title copy the old layout put in front i
 
 test("a first line that is the title's own cut stays in the body once: the copy the layout adds is removed, the post is read whole", () => {
   const titled = frontierPostText({ ...WEIBO_WORDS, layout: "titled" });
-  assert.match(titled.words, /^【#小城良方治鼻炎的偏方对吗#】#甲硝唑磨粉吸进鼻子到底行不行# 近日，医疗剧《小城良方》热播/);
+  assert.match(titled.words, /^【#小城良方治鼻炎的偏方对吗# \[思考\]】#甲硝唑磨粉吸进鼻子到底行不行# 近日，医疗剧《小城良方》热播/);
   assert.match(titled.words, /顿时震惊不已。$/);
   assert.equal(titled.words.split("近日，医疗剧").length, 2, "the cut title appears once");
   // The same post as its plugin text arrives now: the whole text, the title not added in front of it.
   const own = frontierPostText({ title: WEIBO_WORDS.title, text: titled.words, layout: "own" });
   assert.equal(own.words, titled.words);
   assert.equal(own.own, titled.own);
+});
+
+test("the plugin's own text does not say the title again: a copy at the head goes at a boundary, a cut title and a longer word stay whole", () => {
+  const title = "全球首例人体内DNA改写";
+  const own = (/** @type {string} */ text, /** @type {string} */ asTitle = title) => frontierPostText({ title: asTitle, text, layout: "own" });
+  assert.equal(own(`${title}\n\n一名患者接受了治疗，目前状态稳定，随访将持续两年。`).words, "一名患者接受了治疗，目前状态稳定，随访将持续两年。");
+  assert.equal(own(`${title}。一名患者接受了治疗，目前状态稳定，随访将持续两年。`).words, "一名患者接受了治疗，目前状态稳定，随访将持续两年。");
+  // After a comma or a colon the sentence goes on: the title is its first part, and the sentence stays whole.
+  assert.equal(own(`${title}，一名患者接受了治疗，目前状态稳定。`).words, `${title}，一名患者接受了治疗，目前状态稳定。`);
+  assert.ok(frontierPostSaysSomething(own(`${title}\n一名患者接受了治疗，目前状态稳定，随访将持续两年。`)));
+  // The title and nothing else, with or without its stop: no text.
+  assert.equal(own(title).own, 0);
+  assert.equal(own(`${title}。`).words, "");
+  assert.equal(frontierPostBody(frontierPostOf({ body_text: `${title}\n\n一名患者接受了治疗，目前状态稳定，随访将持续两年。` }, title)), "一名患者接受了治疗，目前状态稳定，随访将持续两年。");
+  // The first words of a longer sentence are not a copy of the title.
+  assert.equal(own("全球首例人体内DNA改写的患者接受了治疗，状态稳定。", "全球首例").words, "全球首例人体内DNA改写的患者接受了治疗，状态稳定。");
+  // A title cut from the first line (the ellipsis form) is a sentence cut short: the sentence stays whole.
+  const cut = "今天去医院检查，医生说我的情况还不错，继续吃药就行了…";
+  assert.equal(own("今天去医院检查，医生说我的情况还不错，继续吃药就行了，下个月再来复查一次。", cut).words, "今天去医院检查，医生说我的情况还不错，继续吃药就行了，下个月再来复查一次。");
+  // The layout the old plugin wrote is unchanged.
+  assert.equal(frontierPostText({ title, text: `${title} 一名患者接受了治疗。`, layout: "titled" }).words, "一名患者接受了治疗。");
+});
+
+test("a post whose only words are in its pictures has them as its reader summary, and the model reads them once under their label", () => {
+  assert.equal(frontierPostPictureReader("  服药方法：每周一次，每次一支  "), "图片中的文字：\n服药方法：每周一次，每次一支");
+  assert.equal(frontierPostPictureReader("很短"), "", "under the least a picture must say");
+  assert.equal(frontierPostPictureReader(null), "");
+  const words = "服药方法：每周一次，每次一支";
+  const texts = { reader_summary: frontierPostPictureReader(words), picture_text: words, picture_tried_at: new Date() };
+  const read = frontierReaderText(texts, null, { platform: "xiaohongshu", title: "一个标题" });
+  assert.deepEqual(read, { source: "summary", text: `图片中的文字：\n${words}` });
+  // Without the post, the same summary is an ordinary summary text; for another reader summary the words are added once.
+  assert.equal(frontierReaderText(texts)?.source, "summary");
+  const withTitleSummary = frontierReaderText({ reader_summary: "这是一条比较长的卡片说明文字用于测试", picture_text: words }, null, { platform: "xiaohongshu", title: "一个标题" });
+  assert.match(withTitleSummary?.text ?? "", /图片中的文字：\n服药方法/);
 });
 
 test("what a post says of its own is counted in the unit of frontierLeadLimit and not by its links, mentions, tags or punctuation", () => {

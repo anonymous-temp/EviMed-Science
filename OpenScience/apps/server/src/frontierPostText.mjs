@@ -56,15 +56,19 @@ export function frontierCrawlPost(platform) {
   return typeof platform === "string" && CRAWL.has(platform);
 }
 
-// Zero-width and object-replacement characters the platforms leave in a text: U+200B..U+200F, U+2060, U+FEFF, U+FFFC, the soft hyphen.
-const INVISIBLE = /[\u200b-\u200f\u2060\ufeff\ufffc\u00ad]/gu;
-// Xiaohongshu writes a topic as `#词[话题]#`; the marker is the platform's, the tag is `#词`.
+// Zero-width and object-replacement characters the platforms leave in a text: U+200B, U+200C, U+200E, U+200F, U+2060, U+FEFF, U+FFFC, the soft
+// hyphen. Not U+200D, the zero-width joiner that joins an emoji sequence (👨‍⚕️): taking it out breaks the emoji into its parts.
+const INVISIBLE = /[\u200b\u200c\u200e\u200f\u2060\ufeff\ufffc\u00ad]/gu;
+// Xiaohongshu writes a topic as `#词[话题]#`: the mark ends the tag, and the words that follow are not part of it, so it becomes a space.
 const TOPIC_MARK = /\[话题\]#?/gu;
-// Xiaohongshu's emoticons are `[笑哭R]`, `[赞R]`; Weibo's, `[思考]`, `[话筒]`; a picture's place, `[图片]`: one to four Han characters, or a few ending in R.
-const EMOTICON = /\[(?:[一-鿿]{1,4}|[一-鿿A-Za-z]{1,6}R)\]/gu;
-// A tag: `#词`, or Weibo's `#词#`; the word runs to a space or the next `#`.
-const TAG = /#[^\s#]{1,60}#?/gu;
-const TRAILING_TAGS = /(?:^|[^\p{L}\p{N}#])(#[^\s#]{1,60}#?)\s*$/u;
+// The platforms' closed marker forms: Xiaohongshu's emoticons (`[笑哭R]`, `[赞R]`: Han characters, then R) and a picture's place, `[图片]`.
+const EMOTICON = /\[(?:[\u4e00-\u9fff]{1,8}R|图片)\]/gu;
+// A tag word runs to a space, the next `#`, a sentence mark (Chinese or Latin) or a bracket; at most thirty characters, and not a digit first
+// (`Phase #2`, `#1`). Weibo's closed form `#词#` may hold marks inside, up to its closing `#`. A run longer than thirty is a sentence, no tag.
+const TAG_STOP = "\\s#，。！？、；：,.!?;:…（）()\\[\\]【】「」『』“”‘’\"'";
+const TAG_SOURCE = `#(?![0-9０-９])(?:[^\\s#]{1,30}#|[^${TAG_STOP}]{1,30}(?![^${TAG_STOP}])#?)`;
+const TAG = new RegExp(TAG_SOURCE, "gu");
+const TRAILING_TAGS = new RegExp(`(?:^|[^\\p{L}\\p{N}#])(${TAG_SOURCE})\\s*$`, "u");
 const LINK = /https?:\/\/\S+|\bt\.cn\/\S+/giu;
 const MENTION = /@[^\s@，。！？、：；,.!?:;）)】]{1,40}/gu;
 const HAN = /[\u3400-\u9fff\uf900-\ufaff]/u;
@@ -74,7 +78,7 @@ const HAN = /[\u3400-\u9fff\uf900-\ufaff]/u;
  * one, paragraph breaks kept. @param {unknown} value
  */
 export function frontierPostClean(value) {
-  const lines = String(value ?? "").replace(/\r\n?/g, "\n").replace(INVISIBLE, "").replace(TOPIC_MARK, "").replace(EMOTICON, "")
+  const lines = String(value ?? "").replace(/\r\n?/g, "\n").replace(INVISIBLE, "").replace(TOPIC_MARK, " ").replace(EMOTICON, "")
     .split("\n").map((line) => line.replace(/[ \t\f\v\u00a0\u3000]+/g, " ").replace(/ ([】）」』])/gu, "$1").replace(/([【（「『]) /gu, "$1").trim());
   /** @type {string[]} */
   const out = [];
@@ -91,10 +95,19 @@ function flat(value) {
 }
 
 /**
- * The text after the copies of `title` it begins with (at most `max`), whitespace folded for the comparison and mapped back to the
- * original string. @param {string} text @param {string} title @param {number} [max] @returns {{ rest: string, copies: number }}
+ * What may follow a copy of the title for it to be the title and not the start of a longer word or sentence: a space, the end, a mark that
+ * ends a sentence or closes a quotation. A comma or a colon is not one: the sentence goes on after it, and a title that is its first clause
+ * (Weibo's, cut where the crawler cut it) is not a copy of the post's first line but the first part of it.
  */
-function afterTitle(text, title, max = Infinity) {
+const TITLE_BOUNDARY = /[\s。！？.!?；;）)】」』”’》]/u;
+
+/**
+ * The text after the copies of `title` it begins with (at most `max`), whitespace folded for the comparison and mapped back to the
+ * original string. With `boundary`, a copy counts only when the text goes on with a space or a mark, or ends there: a title that is the
+ * first words of a longer sentence is not a copy of it. @param {string} text @param {string} title @param {number} [max]
+ * @param {boolean} [boundary] @returns {{ rest: string, copies: number }}
+ */
+function afterTitle(text, title, max = Infinity, boundary = false) {
   if (!title) return { rest: text, copies: 0 };
   let rest = text;
   let copies = 0;
@@ -113,11 +126,24 @@ function afterTitle(text, title, max = Infinity) {
       previousSpace = space;
       index += 1;
     }
+    if (boundary && index < head.length && !TITLE_BOUNDARY.test(head[index])) break;
     rest = head.slice(index);
     copies += 1;
     if (!rest.trim()) break;
   }
   return { rest: rest.replace(/^\s+/u, ""), copies };
+}
+
+/**
+ * The post's own text without a copy of its title at its head (layout `own`): the platforms' first line is often the title itself, and the
+ * page shows the title above the text. Only at a boundary (`TITLE_BOUNDARY`) and never for a title that is a cut of the first
+ * line (it ends in an ellipsis): that is a sentence cut short, and the sentence stays whole. A mark that joined the copy to the rest goes
+ * with it. @param {string} text @param {string} rawTitle @param {string} head the title as `flat` reads it
+ */
+function withoutTitleCopy(text, rawTitle, head) {
+  if (!head || /(?:…|\.{3})\s*$/u.test(String(rawTitle ?? "").trim())) return text;
+  const { rest, copies } = afterTitle(text, head, 1, true);
+  return copies ? rest.replace(/^[\s，、；：,;:。！？.!?]+/u, "") : text;
 }
 
 /**
@@ -152,7 +178,8 @@ function splitTrailingTags(text) {
  *
  * `layout` says how the stored text was made: `titled` — the plugin's first layout, `title content` (the title is joined to the front,
  * and a post whose content is the title says it twice) — or `own`, the post's own text as the platform's author wrote it. The title's
- * leading copy is removed in `titled` always, and in either layout a copy that is the whole text is no text.
+ * leading copy is removed in `titled` always, and in `own` when it is followed by a space, the end or a mark that ends a sentence (a post
+ * whose first line is its title) and the title is not a cut of that line; in either layout a copy that is the whole text is no text.
  * @param {{ title?: unknown, text?: unknown, layout?: "titled" | "own" }} input
  * @returns {{ text: string, words: string, tags: string[], own: number }}
  *   `text` — the cleaned post, words and tags, the layout's title copy gone; `words` — without its trailing tags (what the reader's body shows);
@@ -161,7 +188,7 @@ function splitTrailingTags(text) {
 export function frontierPostText({ title = "", text = "", layout = "titled" }) {
   const head = flat(title);
   const cleaned = frontierPostClean(text);
-  const stripped = layout === "titled" ? afterTitle(cleaned, head, 1).rest : cleaned;
+  const stripped = layout === "titled" ? afterTitle(cleaned, head, 1).rest : withoutTitleCopy(cleaned, String(title ?? ""), head);
   const { words, tags } = splitTrailingTags(stripped);
   // What is left after the title once more (a post that begins with its own title, Weibo's cut first line) is the post's own part;
   // compared before the tags are taken off, because a title can end in tags itself.
@@ -200,6 +227,21 @@ export function frontierPostOf(texts, title, fallback = null) {
   return null;
 }
 
+/** The label the model reads the words of a post's pictures under. */
+const PICTURE_LABEL = "图片中的文字：";
+
+/**
+ * The reader text of a post whose only words are in its pictures: the pictures' words under their label, or '' when they are too few to be
+ * a text (`FRONTIER_POST_LIMITS.picture`). A post with a title and nothing else has no reader text of its own (`item_texts.reader_summary`
+ * is empty), so the 导读 and the questions would never be asked for it; the picture step stores this as its `reader_summary`, the
+ * fourth reader text, and the model reads exactly what it reads of any post with pictures read (`frontierPostMaterial`).
+ * @param {unknown} pictureText
+ */
+export function frontierPostPictureReader(pictureText) {
+  const words = typeof pictureText === "string" ? pictureText.trim() : "";
+  return frontierPostWeight(words) >= FRONTIER_POST_LIMITS.picture ? `${PICTURE_LABEL}\n${words}` : "";
+}
+
 /**
  * What the model reads of a post: its words, its trailing tags on a line of their own, and — when the post said nothing in text and its
  * pictures were read — the words in the pictures under their own label. Never the reader's `body` (`frontierPostBody`).
@@ -207,7 +249,7 @@ export function frontierPostOf(texts, title, fallback = null) {
  */
 export function frontierPostMaterial(post, pictureText = null) {
   const pictures = typeof pictureText === "string" ? pictureText.trim() : "";
-  return [post?.words ?? "", post?.tags.length ? post.tags.join(" ") : "", pictures ? `图片中的文字：\n${pictures}` : ""].filter((part) => part.trim()).join("\n\n").trim();
+  return [post?.words ?? "", post?.tags.length ? post.tags.join(" ") : "", pictures ? `${PICTURE_LABEL}\n${pictures}` : ""].filter((part) => part.trim()).join("\n\n").trim();
 }
 
 /**

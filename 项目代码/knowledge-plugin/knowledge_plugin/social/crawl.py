@@ -145,16 +145,59 @@ def _time(post: dict) -> datetime | None:
     return None
 
 
+# What may follow a copy of the title for it to be the title and not the start of a longer word or sentence: a space, the end, a mark that
+# ends a sentence or closes a quotation. A comma or a colon is not one: the sentence goes on after it, and a title that is its first clause
+# is the first part of the line, not a copy of it. (The platform's reader, ``frontierPostText.mjs``, applies the same rule to texts stored.)
+_TITLE_BOUNDARY = frozenset("。！？.!?；;）)】」』”’》")
+_TITLE_JOINERS = "，、；：,;:。！？.!?"
+
+
+def _title_of(title_raw: str, content: str, fallback: str = "") -> str:
+    """The entry's title: the platform's own title, else the first line of the content (else ``fallback``), at most ``TITLE_MAX``
+    characters (cut with an ellipsis)."""
+    first = next((line.strip() for line in (title_raw or content).splitlines() if line.strip()), fallback)
+    return first if len(first) <= TITLE_MAX else first[: TITLE_MAX - 1].rstrip() + "…"
+
+
+def _without_title(body: str, title: str) -> str | None:
+    """``body`` without a copy of ``title`` at its head, or ``None`` when nothing else is left. Only at a boundary (a space, a mark, the
+    end) and never for a title that is a cut of the first line (it ends in an ellipsis): that is a sentence cut short, and the post's
+    sentence stays whole. The marks that joined the copy to the rest go with it."""
+    title = " ".join(title.split())
+    if not title or title.endswith(("…", "...")):
+        return body
+    folded = " ".join(body.split())
+    if not folded.startswith(title):
+        return body
+    after = folded[len(title):]
+    if after and not (after[0].isspace() or after[0] in _TITLE_BOUNDARY):
+        return body
+    # Map the folded copy back onto the body, which keeps its paragraph breaks: walk it until the title's characters are consumed.
+    consumed, index, previous_space = 0, 0, False
+    while index < len(body) and consumed < len(title):
+        space = body[index].isspace()
+        if not (space and previous_space):
+            consumed += 1
+        previous_space = space
+        index += 1
+    rest = body[index:].lstrip()
+    rest = rest.lstrip(" \t\r\n" + _TITLE_JOINERS)
+    return rest or None
+
+
 def whole_text(post: dict) -> str | None:
     """The post's whole own text: its ``content`` as paragraphs (``clean_body``: whitespace only — markers such as XHS's
-    ``[话题]`` and its tab-only lines are the platform's to read), at most ``BODY_MAX`` characters. A ``content`` that only
-    repeats the title is not a text: the title is the entry's own field, and a text of the same words would be read twice."""
+    ``[话题]`` and its tab-only lines are the platform's to read), at most ``BODY_MAX`` characters, without a copy of the entry's
+    title at its head (the title is the entry's own field and the page shows it above the text; only at a boundary, and never a title
+    that is a cut of the first line: ``_without_title``). A ``content`` that only repeats the title is not a text."""
     content = post.get("content") if isinstance(post.get("content"), str) else ""
     body = clean_body(content, BODY_MAX)
     if body is None:
         return None
-    title = post.get("title") if isinstance(post.get("title"), str) else ""
-    return None if " ".join(title.split()) == " ".join(body.split()) else body
+    title_raw = post.get("title") if isinstance(post.get("title"), str) else ""
+    if " ".join(title_raw.split()) == " ".join(body.split()):
+        return None
+    return _without_title(body, _title_of(title_raw, content))
 
 
 def build_entry(post: dict, crawler_platform: str, *, now: datetime, media: list[dict] | None = None) -> NormalizedEntry | None:
@@ -170,8 +213,7 @@ def build_entry(post: dict, crawler_platform: str, *, now: datetime, media: list
     excerpt = _excerpt(title_raw, content)
     if not excerpt:
         return None
-    first = next((line.strip() for line in (title_raw or content).splitlines() if line.strip()), excerpt)
-    title = first if len(first) <= TITLE_MAX else first[: TITLE_MAX - 1].rstrip() + "…"
+    title = _title_of(title_raw, content, excerpt)
     post_id = post.get("post_id") if isinstance(post.get("post_id"), (str, int)) else post.get("id")
     key = f"{crawler_platform}:{post_id}" if isinstance(post_id, (str, int)) and str(post_id) else url
     metrics = {"likes": _stated(post.get("likes")), "reposts": _stated(post.get("shares")),
