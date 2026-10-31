@@ -53,7 +53,7 @@ test('PostgreSQL optional policy survives restart, waits for current work, publi
   const runtime = { runtimeGeneration: () => epoch, runtimePersonalSkillGeneration: () => captured, pluginRuntimeBusy: async () => busy,
     async replacePersonalSkillRuntime(_project, desired) { replacements++; captured = desired; epoch = 'fixture-runtime' },
     async probePersonalSkillGeneration() { return { generation: epoch } } }
-  const worker = new PersonalSkillGenerationWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false })
+  const worker = new PersonalSkillGenerationWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false, proofRetryWaitsMs: [] })
   await worker.tick()
   assert.equal(replacements, 0)
   assert.equal((await skills.projectPlatform(user, project)).items.find(item => item.id === 'curated:matplotlib').effective, true)
@@ -80,8 +80,11 @@ test('PostgreSQL optional policy survives restart, waits for current work, publi
   assert.equal((await service.current(project)).payload.runtimeGeneration, 'cold-runtime')
   await plugins.withAdmission(project, () => skills.saveProjectPlatform(user, project, { expectedRevision: 2, disabled: [] }))
   const enabled = await plugins.withAdmission(project, () => service.reconcile(user, project))
-  let fail = true
-  runtime.probePersonalSkillGeneration = async () => { if (fail) { fail = false; throw new Error('native proof failed') } return { generation: epoch } }
+  // A proof is asked again before it can cost a restart, so what fails here is every proof of the new generation.
+  runtime.probePersonalSkillGeneration = async (_project, expected) => {
+    if (expected?.reference?.generationHash === enabled.reference.generationHash) throw new Error('native proof failed')
+    return { generation: epoch }
+  }
   await worker.tick()
   const failed = await skills.projectPlatform(user, project)
   assert.equal(failed.activation.phase, 'rolled-back')
