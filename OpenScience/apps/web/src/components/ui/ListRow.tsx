@@ -188,7 +188,7 @@ export function ListRow({
   title,
   to,
   state,
-  replace = false,
+  replace,
   href,
   leaves = false,
   onOpen,
@@ -212,7 +212,7 @@ export function ListRow({
   to?: string;
   /** Router state handed to the page `to` opens: where it was opened from, so its way back returns here (`FrontierBack`). */
   state?: unknown;
-  /** The route replaces the current history entry instead of adding one: a row that switches what a pane shows, not a place Back should return to. */
+  /** The route replaces the current history entry instead of adding one: a row that switches what a pane shows, not a place Back should return to. Unset, the router decides: a click on the row already open adds no entry, so Back still leaves it in one press. */
   replace?: boolean;
   /** An outside address the row opens in a new tab. */
   href?: string;
