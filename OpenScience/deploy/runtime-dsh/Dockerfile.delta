@@ -29,7 +29,10 @@
 #     passed once on an image whose bundle could not be imported at all.
 #
 # NOT ADMISSIBLE HERE: a changed `pnpm-lock.yaml`, a new dependency, a kernel
-# pin move, or anything under `runtime/` other than the curated and office
+# pin move, a change to an `install-runtime.sh` phase that installs something
+# (the `analysis` phase's R packages and Python wheels, 2026-10-31: the first
+# release that carries them is a full runtime build, in CI or with
+# EVIMED_RUNTIME_BUILD=full on the host), or anything under `runtime/` other than the curated and office
 # skills' prose, the general (`core`) and community skill trees short of a
 # moved bundle pin, the research MCP server's own Python sources and the
 # private GEO method pack (see those steps). The release switch reads every
@@ -315,6 +318,19 @@ RUN set -eux; \
   diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \
   chmod -R a-w "${DSH_HOME_SEED}"
+
+# The launcher and the files the model's shell commands run with (the `serve` phase of the full build; the
+# serve script says why each exists). Plain files with no dependency, so an edit to any of them is a delta:
+# without these lines a delta kept the base's copy, as it did the personal-skill validator above until
+# 2026-10-28. A base built before 2026-10-31 has none of the three small files and gains them here; the
+# launcher exports BASH_ENV only for a file that exists.
+COPY deploy/runtime-dsh/open-science-dsh-serve.sh /usr/local/bin/open-science-dsh-serve
+COPY deploy/runtime-dsh/evimed-oom-guard.sh /usr/local/bin/evimed-oom-guard
+COPY deploy/runtime-dsh/evimed-tool-env.sh /usr/local/lib/evimed/evimed-tool-env.sh
+COPY deploy/runtime-dsh/tool-bin/timeout /usr/local/lib/evimed/tool-bin/timeout
+RUN set -eux; \
+  chmod 0755 /usr/local/bin/open-science-dsh-serve /usr/local/bin/evimed-oom-guard /usr/local/lib/evimed/tool-bin/timeout; \
+  chmod 0644 /usr/local/lib/evimed/evimed-tool-env.sh
 
 COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
 COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml

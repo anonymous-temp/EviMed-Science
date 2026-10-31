@@ -78,8 +78,44 @@ test("the python-methods phase adds the curated skills' libraries once, after th
   // Every library it pins is imported by the phase's own check, by a module the domain's table says it provides.
   for (const name of added) assert.ok(phase.includes(`"${PYTHON_DISTRIBUTION_MODULES[name][0]}"`), `${name} is imported by the phase's check`);
   // The phase runs wherever the image runs it: the script accepts it and dispatches it.
-  assert.match(script, /\|verify-tools\|python-methods\|curated-smoke\|/);
+  assert.match(script, /\|verify-tools\|python-methods\|analysis\|curated-smoke\|/);
   assert.equal(spawnSync("bash", [path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "no-such-phase"], { encoding: "utf8" }).status, 64);
+});
+
+test("the analysis phase adds DESeq2 and the model libraries once, after the methods libraries and before the kernel, and proves them by running them", async () => {
+  // 2026-10-31. BixBench's DESeq2 questions (bix-13, bix-31) found base R and no pydeseq2 in a runtime that cannot install
+  // anything, and ResearchClawBench met `No module named 'shap'`; the phase is the install, the check is what a run would do.
+  const { docker, agentbay, script } = await sources();
+  for (const dockerfile of [docker, agentbay]) {
+    const calls = installPhaseCalls(dockerfile);
+    assert.ok(calls.indexOf("python-methods") < calls.indexOf("analysis") && calls.indexOf("analysis") < calls.indexOf("kernel"));
+  }
+  const phases = definedInstallPhases(script);
+  const phase = phases.get("analysis") ?? "";
+  // R from the distribution's own packages: Debian bookworm and Ubuntu noble carry these four names, and neither carries
+  // apeglm, ashr or org.Mm.eg.db (so the phase must not name them: a package that does not exist fails the whole build).
+  const apt = [...phase.matchAll(/^\s+(r-bioc-[a-z0-9.+-]+)\s*\\?$/gmu)].map((match) => match[1]);
+  assert.deepEqual(apt, ["r-bioc-deseq2", "r-bioc-edger", "r-bioc-limma", "r-bioc-org.hs.eg.db"]);
+  assert.match(phase, /apt-get install -y --no-install-recommends/);
+  assert.match(phase, /rm -rf \/var\/lib\/apt\/lists\/\*/);
+  assert.doesNotMatch(phase.replace(/^\s*#.*$/gmu, ""), /apeglm|ashr|org\.Mm\.eg\.db/u);
+  // The Python half is the methods phase's shape: exact pins, wheels only, the stack frozen as constraints, then a consistency check.
+  const pin = /^\s+([A-Za-z0-9_.-]+)==([0-9][^\s\\]*)/gmu;
+  const added = [...phase.matchAll(pin)].map((match) => match[1]);
+  assert.deepEqual([...added].sort(), ["lightgbm", "pydeseq2", "shap", "xgboost-cpu"]);
+  const others = ["python", "python-methods"].flatMap((name) => [...String(phases.get(name)).matchAll(pin)].map((match) => match[1]));
+  assert.ok(added.every((name) => !others.includes(name)), "a library is pinned in one phase");
+  assert.match(phase, /uv pip freeze --python "\$\{VIRTUAL_ENV\}\/bin\/python" > "\$\{stack\}"/);
+  assert.match(phase, /--only-binary :all: --constraint "\$\{stack\}"/);
+  assert.match(phase, /uv pip check --python/);
+  // `xgboost` itself drags in the CUDA collective library (350 MB) that a container with no GPU never loads.
+  assert.doesNotMatch(phase, /^\s+xgboost==/mu);
+  for (const name of added) assert.ok(PYTHON_DISTRIBUTION_MODULES[name], `${name} is in the supply table's module list`);
+  // The check runs a differential expression in each language, not an import.
+  assert.match(phase, /DESeq\(DESeqDataSetFromMatrix/);
+  assert.match(phase, /DeseqDataSet\(/);
+  assert.match(phase, /mapIds\(org\.Hs\.eg\.db/);
+  assert.match(phase, /shap\.TreeExplainer/);
 });
 
 test("both images pin every shared tool to the same version, and the kernel to deps-version.json", async () => {
@@ -327,7 +363,7 @@ test("the runtime layers are ordered by how often they change, so a release reus
   // full release used to load the whole runtime again (2026-10-19).
   const { docker } = await sources();
   const calls = installPhaseCalls(docker);
-  const stable = ["system", "renderer", "toolchain", "python", "browser", "python-methods"];
+  const stable = ["system", "renderer", "toolchain", "python", "browser", "python-methods", "analysis"];
   assert.deepEqual(calls.slice(0, stable.length), stable, "the heavy, stable phases come first");
   assert.ok(calls.indexOf("kernel") === stable.length, "the kernel pin is the first thing a kernel bump rebuilds");
   // The tool checks prove the LibreOffice Kit, which ships in the kernel's closure, and the Office smoke needs it.

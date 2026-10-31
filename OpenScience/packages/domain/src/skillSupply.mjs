@@ -525,10 +525,16 @@ export function rLibraries(source) {
   return [...found].sort()
 }
 
-/** The R packages `r-base-core` and `r-recommended` install: what an R script may load without a download. */
+/**
+ * The R packages `r-base-core` and `r-recommended` install, and the analysis phase's (`analysis_libs` in install-runtime.sh: DESeq2, edgeR,
+ * limma and org.Hs.eg.db with the Bioconductor and CRAN packages Debian pulls in for them): what an R script may load without a download.
+ * apeglm, ashr and org.Mm.eg.db are not here because Debian has no package for them.
+ */
 export const R_IMAGE_PACKAGES = Object.freeze([
   'base', 'boot', 'class', 'cluster', 'codetools', 'compiler', 'datasets', 'foreign', 'graphics', 'grDevices', 'grid', 'KernSmooth', 'lattice', 'MASS', 'Matrix',
   'methods', 'mgcv', 'nlme', 'nnet', 'parallel', 'rpart', 'spatial', 'splines', 'stats', 'stats4', 'survival', 'tcltk', 'tools', 'utils',
+  'AnnotationDbi', 'Biobase', 'BiocGenerics', 'BiocParallel', 'DelayedArray', 'DESeq2', 'edgeR', 'GenomeInfoDb', 'GenomicRanges', 'ggplot2', 'IRanges',
+  'limma', 'MatrixGenerics', 'org.Hs.eg.db', 'S4Vectors', 'SummarizedExperiment',
 ])
 
 /**
@@ -565,6 +571,11 @@ export const PYTHON_DISTRIBUTION_MODULES = Object.freeze({
   lifelines: ['lifelines', 'autograd', 'autograd_gamma', 'formulaic'],
   rdkit: ['rdkit'],
   scanpy: ['scanpy', 'numba', 'llvmlite', 'umap', 'pynndescent', 'seaborn', 'networkx', 'tqdm'],
+  // The analysis libraries (`analysis_libs` in install-runtime.sh); `xgboost-cpu` provides the module `xgboost`.
+  lightgbm: ['lightgbm'],
+  pydeseq2: ['pydeseq2', 'formulaic_contrasts'],
+  shap: ['shap', 'slicer'],
+  'xgboost-cpu': ['xgboost'],
 })
 
 /**

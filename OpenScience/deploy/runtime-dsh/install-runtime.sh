@@ -28,7 +28,7 @@ case "${target}" in docker|agentbay) ;; *) echo "EVIMED_RUNTIME_TARGET must be d
 
 # Invalid requests are rejected before reading or changing host state.
 case "${phase}" in
-  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|python-methods|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|loopx|openviking-plugin|profile-seed|smoke|serve|session) ;;
+  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|python-methods|analysis|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|loopx|openviking-plugin|profile-seed|smoke|serve|session) ;;
   *) echo "unknown phase: ${phase}" >&2; exit 64 ;;
 esac
 if [ "${phase}" = session ] && [ "${target}" != agentbay ]; then
@@ -334,6 +334,95 @@ assert KaplanMeierFitter().fit([5, 6, 6, 2, 4, 4, 8, 9], event_observed=[1, 0, 1
 PY
 }
 
+# The libraries a data-analysis run reaches for that neither the stack nor the curated skills' methods
+# carry. Benchmarks of real analyses (BixBench, 2026-10-29) found base R only: bix-13 and bix-31 ask for
+# DESeq2 and its shrinkage, found neither it nor pydeseq2 (no network in the runtime), wrote the estimator
+# by hand, and got 33 genes where the reference has 197; ResearchClawBench ran into `No module named
+# 'shap'`. A run cannot install them, so the image does.
+#
+# R, from Debian's own packages (and Ubuntu's, which carry the same four names): built, signed and
+# patched with the release and needing no compiler. DESeq2, edgeR and limma are the differential-expression
+# trio; org.Hs.eg.db is the human gene-identifier map (symbol, Entrez, Ensembl) a run would otherwise fetch
+# from Ensembl with no route to it. Not here because Debian has no package for them: apeglm, ashr (so
+# `lfcShrink(type = "apeglm"|"ashr")`; `"normal"` works) and org.Mm.eg.db. pydeseq2 below shrinks too.
+# The Debian closure also installs the C and C++ headers (libboost, libstdc++) that r-cran-bh asks for;
+# there is still no compiler. The apt packages float within the base image's Debian release like the
+# system phase's (`BASE_REFRESH` rebuilds them monthly); the Python pins are exact.
+#
+# Python, wheels only on top of the stack frozen as constraints, like python_methods. `xgboost-cpu` is the
+# same `xgboost` module without the CUDA build: the plain `xgboost` wheel depends on nvidia-nccl-cu12
+# (350 MB) that a container with no GPU never loads. Both libraries read numpy 2.2.6 as the stack pins it.
+#
+# The check runs a small differential expression end to end in both languages, because an import proves
+# neither that DESeq2's compiled code loads nor that pydeseq2 fits.
+analysis_libs() {
+  set -x
+  apt-get update
+  apt-get install -y --no-install-recommends \
+    r-bioc-deseq2 \
+    r-bioc-edger \
+    r-bioc-limma \
+    r-bioc-org.hs.eg.db
+  rm -rf /var/lib/apt/lists/*
+  Rscript - <<'RSCRIPT'
+suppressPackageStartupMessages({
+  library(DESeq2)
+  library(edgeR)
+  library(limma)
+  library(org.Hs.eg.db)
+})
+set.seed(1)
+counts <- matrix(rnbinom(600, mu = 100, size = 10), 100, 6, dimnames = list(sprintf("g%03d", 1:100), paste0("s", 1:6)))
+design <- data.frame(group = factor(rep(c("a", "b"), each = 3)), row.names = colnames(counts))
+dds <- DESeq(DESeqDataSetFromMatrix(counts, design, ~group), quiet = TRUE)
+stopifnot(nrow(results(dds)) == 100, nrow(lfcShrink(dds, coef = 2, type = "normal", quiet = TRUE)) == 100)
+fit <- eBayes(lmFit(voom(DGEList(counts), model.matrix(~group, design)), model.matrix(~group, design)))
+stopifnot(nrow(topTable(fit, coef = 2, number = Inf)) == 100)
+ids <- mapIds(org.Hs.eg.db, c("TP53", "EGFR"), "ENTREZID", "SYMBOL")
+stopifnot(identical(unname(ids), c("7157", "1956")))
+cat("R analysis stack ok:", as.character(packageVersion("DESeq2")), "\n")
+RSCRIPT
+  stack="$(mktemp)"
+  uv pip freeze --python "${VIRTUAL_ENV}/bin/python" > "${stack}"
+  uv pip install --python "${VIRTUAL_ENV}/bin/python" --index-url "${PIP_INDEX_URL}" --no-cache \
+    --only-binary :all: --constraint "${stack}" \
+    lightgbm==4.7.0 \
+    pydeseq2==0.5.4 \
+    shap==0.51.0 \
+    xgboost-cpu==3.2.0
+  uv pip check --python "${VIRTUAL_ENV}/bin/python"
+  rm -f "${stack}"
+  python - <<'PY'
+import importlib
+
+for package in ("lightgbm", "pydeseq2", "shap", "xgboost"):
+    importlib.import_module(package)
+
+import lightgbm
+import numpy
+import pandas
+import shap
+import xgboost
+from pydeseq2.dds import DeseqDataSet
+from pydeseq2.ds import DeseqStats
+
+rng = numpy.random.default_rng(0)
+counts = pandas.DataFrame(rng.negative_binomial(10, 0.1, size=(6, 60)), index=[f"s{i}" for i in range(6)], columns=[f"g{i}" for i in range(60)])
+metadata = pandas.DataFrame({"group": ["a"] * 3 + ["b"] * 3}, index=counts.index)
+dds = DeseqDataSet(counts=counts, metadata=metadata, design="~group", quiet=True)
+dds.deseq2()
+stats = DeseqStats(dds, contrast=["group", "b", "a"], quiet=True)
+stats.summary()
+assert stats.results_df.shape[0] == 60 and "log2FoldChange" in stats.results_df
+
+features = rng.normal(size=(120, 5))
+target = features[:, 0] + 0.1 * rng.normal(size=120)
+for model in (xgboost.XGBRegressor(n_estimators=10, max_depth=2, n_jobs=1), lightgbm.LGBMRegressor(n_estimators=10, num_leaves=4, n_jobs=1, verbose=-1)):
+    model.fit(features, target)
+    assert numpy.asarray(shap.TreeExplainer(model).shap_values(features[:10])).shape == (10, 5)
+PY
+}
+
 # A browser that is not a snap. Debian's apt package is already in place; on
 # Ubuntu 24.04 Playwright's own Chromium build (the one the pinned `playwright`
 # package drives) is installed into a fixed root with its system libraries, and
@@ -617,9 +706,13 @@ smoke() {
   SOCKET_VERSION="${SOCKET_VERSION}" /usr/local/bin/evimed-build-smoke
 }
 
+# The launcher, and the three small files that make the model's shell commands work inside the sandbox
+# the kernel puts them in (deploy/runtime-dsh/open-science-dsh-serve.sh says why each exists). They are
+# plain files, so Dockerfile.delta carries an edit to any of them without a full build.
 serve() {
   set -x
-  chmod 0755 /usr/local/bin/open-science-dsh-serve
+  chmod 0755 /usr/local/bin/open-science-dsh-serve /usr/local/bin/evimed-oom-guard /usr/local/lib/evimed/tool-bin/timeout
+  chmod 0644 /usr/local/lib/evimed/evimed-tool-env.sh
 }
 
 # What only an AgentBay session needs (plan §3.1 #3, #6): its launcher and the
@@ -660,6 +753,7 @@ case "${phase}" in
   browser) browser ;;
   verify-tools) verify_tools ;;
   python-methods) python_methods ;;
+  analysis) analysis_libs ;;
   curated-smoke) curated_smoke ;;
   office-smoke) office_smoke ;;
   sider-cache) sider_cache ;;

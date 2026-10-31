@@ -60,6 +60,14 @@ export DSH_PERMISSION_MODE="${DSH_PERMISSION_MODE:-workspace-write}"
 # short-lived HMAC the control plane refreshes in place.
 unset DEEPSEEK_API_KEY
 
+# What the model's shell commands need that the kernel's environment cannot say: a TMPDIR inside the
+# sandbox's writable places, and a `timeout` that the kernel's process-group signal reaches. Exported
+# for the kernel to hand down, so it applies to the shells the kernel starts and to no process of ours
+# (the shells below read it only after this point, and none is a model's). The file is absent from an
+# image that predates it, and bash would complain about it in every command.
+tool_env=/usr/local/lib/evimed/evimed-tool-env.sh
+if [ -f "${tool_env}" ]; then export BASH_ENV="${tool_env}"; fi
+
 # No `web` subcommand here: `web` is an alias for `--profile web`, and the
 # launcher refuses both at once — "web takes none of parent --profile, --patch,
 # --dump-config, or --dump-default-config" — so the container would have exited
@@ -114,9 +122,17 @@ else
 fi
 socat_pid=$!
 
+# Beside the kernel, outside the sandbox the model's commands run in: it raises their processes to be
+# the OOM killer's first choice (see the script). Optional; an image without it serves as before.
+guard_pid=""
+if [ -x /usr/local/bin/evimed-oom-guard ]; then
+  /usr/local/bin/evimed-oom-guard &
+  guard_pid=$!
+fi
+
 cleanup() {
-  kill "${dsh_pid}" "${socat_pid}" 2>/dev/null || true
-  wait "${dsh_pid}" "${socat_pid}" 2>/dev/null || true
+  kill "${dsh_pid}" "${socat_pid}" ${guard_pid:+"${guard_pid}"} 2>/dev/null || true
+  wait "${dsh_pid}" "${socat_pid}" ${guard_pid:+"${guard_pid}"} 2>/dev/null || true
   if [ "${bridge}" = socat ]; then rm -f "${socket}"; fi
 }
 

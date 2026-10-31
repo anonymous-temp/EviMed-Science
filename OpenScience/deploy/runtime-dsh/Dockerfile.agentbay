@@ -84,6 +84,7 @@ COPY deploy/runtime-dsh/fixtures/legacy-spreadsheet.xls /usr/local/lib/evimed/fi
 RUN bash /usr/local/lib/evimed/install-runtime.sh python
 RUN bash /usr/local/lib/evimed/install-runtime.sh browser
 RUN bash /usr/local/lib/evimed/install-runtime.sh python-methods
+RUN bash /usr/local/lib/evimed/install-runtime.sh analysis
 # The phase order is the Docker image's (see `Dockerfile`): the kernel after the
 # stable stack, and the tool checks after the kernel whose closure carries the
 # LibreOffice Kit.
@@ -155,6 +156,9 @@ ENV DSH_TELEMETRY_DISABLED=1
 ENV DSH_PERMISSION_MODE=workspace-write
 
 COPY deploy/runtime-dsh/open-science-dsh-serve.sh /usr/local/bin/open-science-dsh-serve
+COPY deploy/runtime-dsh/evimed-oom-guard.sh /usr/local/bin/evimed-oom-guard
+COPY deploy/runtime-dsh/evimed-tool-env.sh /usr/local/lib/evimed/evimed-tool-env.sh
+COPY deploy/runtime-dsh/tool-bin/timeout /usr/local/lib/evimed/tool-bin/timeout
 RUN bash /usr/local/lib/evimed/install-runtime.sh serve
 
 # The session's own entry points: the launcher the control plane runs through

@@ -111,6 +111,14 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh browser
 COPY --from=install-phases /phases/python-methods.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh python-methods
 
+# The analysis libraries a data run reaches for and cannot install itself (no route off the host): DESeq2,
+# edgeR, limma and the human gene-identifier map for R from Debian's packages, and pydeseq2, SHAP, XGBoost
+# and LightGBM for Python. After the methods libraries and before the kernel for the same reason as they
+# are: a kernel pin bump or a SKILL.md edit must not reinstall them. About +0.7 GB of R and +0.1 GB of
+# wheels; a delta cannot add them (Dockerfile.delta), so the release that first carries them is a full build.
+COPY --from=install-phases /phases/analysis.sh /usr/local/lib/evimed/install-runtime.sh
+RUN bash /usr/local/lib/evimed/install-runtime.sh analysis
+
 # The kernel, and its whole subpackage tree, at one version: resolved with
 # `--before` and then verified package by package. It is the first phase a
 # kernel pin bump reaches; everything above is reused.
@@ -354,6 +362,11 @@ ENV DSH_TELEMETRY_DISABLED=1
 ENV DSH_PERMISSION_MODE=workspace-write
 
 COPY deploy/runtime-dsh/open-science-dsh-serve.sh /usr/local/bin/open-science-dsh-serve
+# Beside the launcher, for the commands the model runs inside the kernel's sandbox: the OOM guard it
+# starts, the shell startup file it exports as BASH_ENV, and the `timeout` that file puts first on PATH.
+COPY deploy/runtime-dsh/evimed-oom-guard.sh /usr/local/bin/evimed-oom-guard
+COPY deploy/runtime-dsh/evimed-tool-env.sh /usr/local/lib/evimed/evimed-tool-env.sh
+COPY deploy/runtime-dsh/tool-bin/timeout /usr/local/lib/evimed/tool-bin/timeout
 COPY --from=install-phases /phases/serve.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh serve
 
