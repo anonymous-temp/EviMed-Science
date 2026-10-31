@@ -1,9 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
-import { identifierShapesIn, maskIdentifiers, projectContextLine } from "@evimed/domain";
+import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates } from "./nativeMemoryMetrics.mjs";
+import { freshnessOf } from "./memoryMapSources/common.mjs";
+import { replacedStatements } from "./memoryMapSources/replacedStatements.mjs";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
+import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -71,6 +74,8 @@ export const NATIVE_RECORD_ID = /^nm_[a-f0-9]{24}(?:_[a-f0-9]{12})?$/;
 export const SOURCE_LABEL_PREFIX = "> 来源变更：";
 
 const AS_OF = /\s*[(（]as of (\d{4}-\d{2}-\d{2})[)）]\s*$/i;
+/** The old statements the map draws at most for one account, newest first: what was replaced is the first the map folds, so this only bounds the read. */
+const MAP_REPLACED_MARKS = 60;
 const sha256 = (/** @type {string} */ text) => createHash("sha256").update(text).digest("hex");
 
 /** @param {string} uri */
@@ -670,9 +675,11 @@ export class NativeMemoryStore {
       nativeType: file.type,
       uri: file.uri,
       contentHash: file.hash,
-      // When a search or read through the gateway last returned the file and how often: recorded for a later decision, acted on by nothing.
+      // When a search or read through the gateway last returned the file and how often: what a mark's brightness on the map says (`freshnessOf`), and
+      // nothing else acts on it — recall does not read it.
       lastRecalledAt: file.lastRecalledAt ?? null,
       recallCount: file.recallCount ?? 0,
+      freshness: freshnessOf({ kind: /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[file.type] ?? "project_fact", projectId: projectScoped ? file.projectId : null, writtenAt: updatedAt, recalledAt: file.lastRecalledAt, recalls: file.recallCount }, this.now()),
     };
   }
 
@@ -822,7 +829,61 @@ export class NativeMemoryStore {
       .map((record) => ({ ...record, summary: "" }));
   }
 
-  /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, no conflicts, no usage. @param {string} userId */
+  /**
+   * What a set of files used to say, from the revisions, against everything the person has removed from memories of those files' namespaces: a line forgotten in one
+   * type of memory stays forgotten when another type's history holds it.
+   * @param {string} userId @param {any[]} files
+   */
+  async #replacedOf(userId, files) {
+    const revisions = await this.overlay.revisionsOfMany(userId, files.map((file) => file.uri));
+    /** @type {Map<string | null, { fingerprint: string, text: string | null }[]>} */
+    const rejected = new Map();
+    for (const namespace of new Set(files.filter((file) => revisions.get(file.uri)?.length).map((file) => file.namespaceId ?? null))) {
+      const lists = await Promise.all((namespace === null ? OPENVIKING_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => this.overlay.rejectedLines(userId, nativeMemoryRejectionType(type, namespace), { limit: 1_000 })));
+      rejected.set(namespace, lists.flat());
+    }
+    return files.flatMap((file) => {
+      const history = (revisions.get(file.uri) ?? []).slice().reverse();
+      if (!history.length) return [];
+      const fileId = nativeFileId(file.uri);
+      return replacedStatements({
+        fileId, body: file.body, history, perLine: file.type === "profile", statementsOf: statements,
+        recordIdOfLine: (line) => `${fileId}_${lineFingerprint(line).slice(0, 12)}`, rejected: rejected.get(file.namespaceId ?? null) ?? [],
+        // What the worker's checks take out of a memory (`lineRefusal`), which a line older than the checks or gone before they ran has only in the revisions.
+        refused: (line) => identifierShapesIn(line).length > 0 || carriesPlatformContext(line) || platformIdentifiersIn(line).length > 0,
+      }).map((statement) => ({ ...statement, uri: file.uri, memoryType: file.type, namespaceId: file.namespaceId ?? null }));
+    });
+  }
+
+  /**
+   * What the account's memories used to say, the newest `MAP_REPLACED_MARKS` of them. A read that fails costs these marks and nothing else: the map draws what is true now.
+   * @param {string} userId @param {any[]} files
+   */
+  async #replacedStatements(userId, files) {
+    try {
+      const found = await this.#replacedOf(userId, files.filter((file) => !file.sensitive));
+      return found.sort((left, right) => String(right.until ?? "").localeCompare(String(left.until ?? ""))).slice(0, MAP_REPLACED_MARKS);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * The person asks that a memory's old words be gone (`DELETE /api/memory/records/:id/replaced/:statementId`): out of every revision, as a delete takes a line, and on the rejection list, so
+   * the engine does not learn them back. The memory in force is left as it is. It cannot be undone, and nothing but a statement the map could draw can be named.
+   * @param {string} userId @param {string} id the memory in force @param {string} statementId
+   */
+  async forgetReplaced(userId, id, statementId) {
+    this.#touch(userId);
+    const { file } = await this.#target(userId, id);
+    const statement = (await this.#replacedOf(userId, [file])).find((candidate) => candidate.id === statementId);
+    if (!statement) throw new HttpError(404, "memory_not_found", "Memory not found.");
+    await this.overlay.reject(userId, nativeMemoryRejectionType(file.type, file.namespaceId ?? null), file.uri, statement.lines);
+    await this.overlay.scrubLines(userId, file.uri, statement.lines);
+    return { removed: true };
+  }
+
+  /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, what they used to say, no conflicts, no usage. @param {string} userId */
   async mapMemories(userId) {
     const files = await this.files(userId);
     const records = (await this.records(userId, { files })).filter((record) => !record.sensitive);
@@ -830,6 +891,7 @@ export class NativeMemoryStore {
     const idOf = new Map(records.map((record) => [record.uri, record.id]));
     return {
       records,
+      replaced: await this.#replacedStatements(userId, files),
       sources: sources.filter((source) => idOf.has(source.uri)).map((source) => ({
         recordId: /** @type {string} */ (idOf.get(source.uri)), type: source.type, id: source.id,
         state: source.state === "removed" ? "expired" : source.state, linkedAt: source.stateAt,

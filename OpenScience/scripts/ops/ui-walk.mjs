@@ -2292,6 +2292,13 @@ export function pageProbe([kind, arg]) {
       tabs: all("nav[aria-label='记忆'] a").filter(visible).map(words),
       canvases: all("[data-chart]").filter(visible).length,
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
+      // The star map, where this browser draws it (a browser with no real GPU gets the relation graph, and then there is nothing to read here).
+      star: (() => {
+        const card = all("[data-chart='stars']").filter(visible)[0];
+        if (!card) return null;
+        const canvas = card.querySelector("canvas")?.getBoundingClientRect();
+        return { width: canvas ? Math.round(canvas.width) : 0, height: canvas ? Math.round(canvas.height) : 0, named: Boolean(card.querySelector("[role='img'][aria-label]")), legend: Boolean(card.querySelector("[role='group'][aria-label^='图例']")), walkable: Boolean(card.querySelector("[role='listbox'][tabindex='0']")) };
+      })(),
       tiles,
       rows: rowList ? [...rowList.querySelectorAll(":scope > li [data-overview-row]")].filter(visible).length : 0,
       recipe: all("[data-empty]").filter(visible).length,
@@ -2453,14 +2460,14 @@ export const MEMORY_TABS = Object.freeze(["总览", "关于你", "做法", "收�
 /**
  * The overview, judged: its four tiles in order, each a number that was read; the sentence over them is the tiles' numbers; the navigation links
  * are the four, with no 地图 or 项目 among them, and a link that carries a number carries the tile's; the page draws at most two canvases (the
- * change chart and the relation graph); behind a sentence there is a table of changes, and an account with nothing has one recipe with one button instead.
+ * change chart and the star map or the relation graph), and a star map that is there has a picture in it, words for a screen reader and a list for a keyboard; behind a sentence there is a table of changes, and an account with nothing has one recipe with one button instead.
  * A page that has nothing to compare is **not observable**, never a pass.
  *
  * The sentence is 「记住了 N 条关于你的事，学会了 K 种做法；最近一次在…」: each clause is the tile of its name (关于你 counts a project's memories too, as its
  * list draws them), and a clause the sentence leaves out is a tile that holds nothing (or was not read). A tile whose read failed has no number
  * and is named, because a failed read is not a zero.
  * @param {string} current the report's `name@viewport`
- * @param {{ headline: string | null, tabs?: string[], canvases?: number, tiles: Array<{ label: string, value: number | null, note?: string, href?: string | null, loading?: boolean }>, rows?: number, recipe?: number, recipeButtons?: number }} read
+ * @param {{ headline: string | null, tabs?: string[], canvases?: number, star?: { width: number, height: number, named: boolean, walkable: boolean } | null, tiles: Array<{ label: string, value: number | null, note?: string, href?: string | null, loading?: boolean }>, rows?: number, recipe?: number, recipeButtons?: number }} read
  * @returns {{ failures: string[], notices: string[] }}
  */
 export function memoryOverviewFindings(current, read) {
@@ -2469,7 +2476,12 @@ export function memoryOverviewFindings(current, read) {
   const order = read.tiles.map((tile) => tile.label).join(",");
   if (order !== MEMORY_OVERVIEW_TILES.join(",")) failures.push(`${current}: the tiles read “${read.tiles.map((tile) => tile.label).join("、")}” (${MEMORY_OVERVIEW_TILES.join("、")})`);
   if (read.tabs && read.tabs.length > 0 && read.tabs.map((tab) => tab.replace(/\s*\d+$/, "")).join(",") !== MEMORY_TABS.join(",")) failures.push(`${current}: the navigation reads “${read.tabs.join("、")}” (${MEMORY_TABS.join("、")})`);
-  if ((read.canvases ?? 0) > 2) failures.push(`${current}: ${read.canvases} canvases on the page (two: the change chart and the relation graph)`);
+  if ((read.canvases ?? 0) > 2) failures.push(`${current}: ${read.canvases} canvases on the page (two: the change chart and one of the star map, the relation graph)`);
+  if (read.star) {
+    if (read.star.width < 320 || read.star.height < 240) failures.push(`${current}: the star map draws ${read.star.width}×${read.star.height} (a card with no picture in it)`);
+    if (!read.star.named) failures.push(`${current}: the star map has no words for a screen reader`);
+    if (!read.star.walkable) failures.push(`${current}: the star map has no list for a keyboard to walk`);
+  }
   for (const tile of read.tiles) {
     if (tile.loading) failures.push(`${current}: the ${tile.label} tile is still loading`);
     else if (tile.value === null) failures.push(`${current}: the ${tile.label} tile could not be read`);

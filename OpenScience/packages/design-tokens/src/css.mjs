@@ -141,6 +141,7 @@ function staticDeclarations() {
   CHART_COLORS.diverging.forEach((value, index) => lines.push(declaration(`diverging-${index}`, value)))
   lines.push(declaration('chart-missing', CHART_COLORS.missing))
   for (const [level, value] of Object.entries(CHART_COLORS.severity)) lines.push(declaration(`severity-${level}`, value))
+  for (const [name, value] of Object.entries(CHART_COLORS.star)) lines.push(declaration(`star-${name}`, value))
   for (const [kind, { fg, bg }] of Object.entries(STUDY_TYPE_BADGES)) {
     lines.push(declaration(`study-${kind}-fg`, fg))
     lines.push(declaration(`study-${kind}-bg`, bg))

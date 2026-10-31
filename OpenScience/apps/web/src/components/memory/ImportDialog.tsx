@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { offerMemoryImport, saveMemoryImport, type MemoryImportOffer } from "@/lib/memoryClient";
 import { toast } from "@/lib/toast";
@@ -18,6 +18,39 @@ export const IMPORT_PROMPT = [
   "我的身份和工作、我做事的偏好和习惯、我常用的工具、我正在做的项目。",
   "不要写别人的信息，不要写密码、证件号、银行卡这类内容，不要加解释，也不要加标题。",
 ].join("\n");
+
+/** The plain text an old archive is kept in: a file is read here in the browser, so anything else would arrive as noise. */
+export const IMPORT_FILE_TYPES = ".md,.markdown,.txt,.text,.log,.rst,.org";
+
+function readBytes(blob: Blob): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error ?? new Error("unreadable"));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+/**
+ * The start of a file as text: no more of it than an import can hold, so a huge log does not stop the tab, and in UTF-8 or, where that is not what it is, in the GB encodings an old
+ * Windows file is in, so it never fills the box with replacement characters. A UTF-8 file cut inside a character is not a reason to call it something else, so a cut read tolerates its last bytes.
+ */
+export async function readFileText(file: Blob): Promise<{ text: string; cut: boolean }> {
+  const most = IMPORT_MAX_CHARS * 4;
+  const cut = file.size > most;
+  const bytes = await readBytes(file.slice(0, most));
+  try {
+    return { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: cut }), cut };
+  } catch {
+    return { text: new TextDecoder("gb18030").decode(bytes), cut };
+  }
+}
+
+/** Several texts as one, a blank line between them, within what the control plane reads; `cut` says something did not fit. */
+export function joinImportFiles(texts: readonly string[]): { text: string; cut: boolean } {
+  const whole = texts.map((text) => text.trim()).filter(Boolean).join("\n\n");
+  return { text: whole.slice(0, IMPORT_MAX_CHARS), cut: whole.length > IMPORT_MAX_CHARS };
+}
 
 type Step = "prompt" | "paste" | "review";
 
@@ -40,7 +73,22 @@ export function ImportDialog({ onClose, onSaved }: {
   const [kept, setKept] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cut, setCut] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
 
+  /** What the files say, one after another, into the same box a paste goes into: the person reads it there before anything is read out of it. */
+  const takeFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError(null);
+    try {
+      const read = await Promise.all([...files].map(readFileText));
+      const { text: next, cut: over } = joinImportFiles([text, ...read.map((file) => file.text)]);
+      setText(next);
+      setCut(over || read.some((file) => file.cut));
+    } catch {
+      setError("没有读出这份文件，请确认它是纯文本。");
+    }
+  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(IMPORT_PROMPT);
@@ -97,11 +145,16 @@ export function ImportDialog({ onClose, onSaved }: {
       )}
       {step === "paste" && (
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void read(); }}>
-          <p className="text-ui text-text">把它的回答粘贴在这里，最多 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字。</p>
-          <Textarea aria-label="原来助手的回答" rows={8} maxLength={IMPORT_MAX_CHARS} value={text} onChange={(event) => setText(event.target.value)} />
+          <p className="text-ui text-text">把它的回答粘贴在这里，或者选一份以前写好的档案，最多 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字。</p>
+          <Textarea aria-label="原来助手的回答" rows={8} maxLength={IMPORT_MAX_CHARS} value={text} onChange={(event) => { setText(event.target.value); setCut(false); }} />
+          {cut && <p role="status" className="text-ui text-text">文件比 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字长，只读入了前面的部分。可以分几次导入。</p>}
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
+          <input ref={picker} type="file" multiple accept={IMPORT_FILE_TYPES} aria-label="选择档案文件" className="sr-only" tabIndex={-1} onChange={(event) => { void takeFiles(event.target.files); event.target.value = ""; }} />
           <div className="flex items-center justify-between gap-2">
-            <span className="text-caption text-text-3">{text.length} / {IMPORT_MAX_CHARS}</span>
+            <span className="flex items-center gap-3 text-caption text-text-3">
+              <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => picker.current?.click()}>选择文件</Button>
+              {text.length} / {IMPORT_MAX_CHARS}
+            </span>
             <div className="flex gap-2">
               <Button type="button" variant="text" disabled={busy} onClick={() => setStep("prompt")}>上一步</Button>
               <Button type="submit" loading={busy} disabled={!text.trim()}>读取</Button>

@@ -2,7 +2,7 @@ import { flushSync } from "react-dom";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
+import { deleteStructuredMemory, forgetReplacedStatement, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
 import { formatDateTime, formatDay } from "@/lib/format";
 import { kindTitle } from "@/lib/memoryGroups";
 import { readerPath } from "@/lib/knowledgeNav";
@@ -75,7 +75,12 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * 不再记这条 deletes and stops the engine from learning it again, so it is the one
  * that asks first.
  */
-export function FactDrawer({ item, projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord }: {
+/** What a memory used to say and no longer does, as the map draws it in grey. */
+export interface FormerStatement { id: string; text: string; until: string | null }
+
+export function FactDrawer({ item, formerly = [], projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord }: {
+  /** Its old statements, which are the person's to have gone: where the map opened the drawer, it knows them. */
+  formerly?: readonly FormerStatement[];
   item: FactItem;
   /** The project a project's fact belongs to, when the shell knows its name. */
   projectName: string | null;
@@ -99,6 +104,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
   const [busy, setBusy] = useState(false);
   const editGuard = useUnsavedGuard(editing && value !== text, () => setEditing(false), busy);
   const [rejecting, setRejecting] = useState(false);
+  const [removingFormer, setRemovingFormer] = useState<FormerStatement | null>(null);
   useEffect(() => { if (!editing) setValue(text); }, [text, editing]);
   // 编辑 was a button a moment ago, so the field it opens takes the focus.
   const field = useRef<HTMLTextAreaElement>(null);
@@ -183,6 +189,14 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     toast.success("已删除");
   });
 
+  const removeFormer = () => run(async () => {
+    if (!record || !removingFormer) return;
+    const { id } = removingFormer;
+    setRemovingFormer(null);
+    await forgetReplacedStatement(record.id, id);
+    toast.success("已删除");
+  });
+
   // ---- a note of the researcher's own capsule ----
   const capsuleId = entry?.payload.capsuleId ?? "";
   const saveEntry = () => run(async () => {
@@ -219,6 +233,8 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     toast.success("已确认");
   }, productErrorMessage);
   const since = formatDay(record?.createdAt ?? entry?.createdAt ?? null);
+  // When it was last used, and for one long unused that it is still kept: the map draws such a memory dim, and a dim mark is not a forgotten one.
+  const used = record?.lastRecalledAt ? `最近用到：${formatDay(record.lastRecalledAt)}` : record && (record.freshness ?? 1) < 0.33 ? "很久没用到，仍然记着" : "";
   const source = record ? memorySource(record) : null;
   const revisions = record ? [...record.revisions].reverse().slice(0, 5) : [];
   const undoable = record ? record.revisions.length > 0 : (entry?.revision ?? 1) > 1;
@@ -238,7 +254,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
       {editGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={editGuard.discard} onCancel={editGuard.keepEditing} />}
       <Drawer
         title={record ? kindTitle(record.kind) : kindTitle(entry?.payload.factKind ?? "")}
-        description={[projectName, since].filter(Boolean).join(" · ")}
+        description={[projectName, since, used].filter(Boolean).join(" · ")}
         onClose={onClose}
         dirty={editing && value !== text}
         busy={busy}
@@ -323,6 +339,19 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {record && <RelatedSection recordId={record.id} onOpenRecord={onOpenRecord} canOpen={canOpenRecord} />}
 
+          {formerly.length > 0 && (
+            <DrawerSection label="以前的说法">
+              <ul className="space-y-1 text-ui text-text-2">
+                {formerly.map((statement) => (
+                  <li key={statement.id} className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0">{statement.text}{statement.until ? `（到 ${formatDay(statement.until)}）` : ""}</span>
+                    <Button size="sm" variant="text" destructive disabled={busy} className="shrink-0" onClick={() => setRemovingFormer(statement)}>删掉</Button>
+                  </li>
+                ))}
+              </ul>
+            </DrawerSection>
+          )}
+
           {revisions.length > 0 && (
             <DrawerSection label="以前的版本">
               <ul className="space-y-1 text-ui text-text-2">
@@ -344,6 +373,15 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
           )}
         </div>
       </Drawer>
+      {removingFormer && (
+        <ConfirmDialog
+          title="删掉这条以前的说法？"
+          body={`“${removingFormer.text}”会从历史里删除，不能恢复，以后也不会再记下同样的内容。现在的说法不变。`}
+          confirmLabel="删除"
+          onConfirm={() => void removeFormer()}
+          onCancel={() => setRemovingFormer(null)}
+        />
+      )}
       {rejecting && (
         <ConfirmDialog
           title="不再记这条？"

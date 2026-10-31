@@ -5,7 +5,7 @@ import { fetchMemoryProfile, type WebMemoryProfile } from "@/lib/apiClient";
 import { listAllMethods } from "@/lib/methodsClient";
 import type { WebMethod } from "@/lib/methodsClient";
 import { fetchMyCapsule, type MyCapsule } from "@/lib/memoryClient";
-import { FactDrawer } from "@/components/memory/FactDrawer";
+import { FactDrawer, type FormerStatement } from "@/components/memory/FactDrawer";
 import { factItems } from "@/components/memory/memoryItems";
 import { MethodDrawer } from "@/components/memory/PracticeDrawer";
 
@@ -19,8 +19,10 @@ import { MethodDrawer } from "@/components/memory/PracticeDrawer";
  * the researcher's own capsule (what a conversation noted, labelled with its project): the page reads the capsule's notes when it opens, and `FactDrawer` edits,
  * forgets and undoes it through the capsule's own routes, as it does on the memory page.
  */
-export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord, canOpenRecord }: {
+export function MapDrawer({ open, formerlyOf, projectName, onClose, onChanged, onOpenRecord, canOpenRecord }: {
   open: string;
+  /** What a memory used to say, from the marks of the document in hand. */
+  formerlyOf?: (recordId: string) => FormerStatement[];
   projectName: (id: string | null) => string | null;
   onClose: () => void;
   onChanged: () => void;
@@ -77,7 +79,7 @@ export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord,
     }
     return (
       <FactDrawer
-        key={item.key} item={item}
+        key={item.key} item={item} formerly={item.kind === "record" ? formerlyOf?.(item.record.id) : undefined}
         projectName={item.group === "project" ? projectName(item.projectId) : null}
         conversations={profile && profile !== "failed" ? profile.conversations : undefined}
         siblings={records ?? []}

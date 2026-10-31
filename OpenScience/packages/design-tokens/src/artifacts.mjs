@@ -89,6 +89,7 @@ export function tailwindPreset() {
           severity: Object.fromEntries(
             Object.keys(CHART_COLORS.severity).map((level) => [level, `var(--severity-${level})`]),
           ),
+          star: Object.fromEntries(Object.keys(CHART_COLORS.star).map((name) => [name, `var(--star-${name})`])),
         },
         // `var()` rather than the literal, so reduced motion shortens them.
         transitionDuration: { fast: 'var(--dur-fast)', base: 'var(--dur-base)', slow: 'var(--dur-slow)' },
@@ -357,6 +358,7 @@ export function figmaTokens() {
         severity: Object.fromEntries(
           Object.entries(CHART_COLORS.severity).map(([level, value]) => [level, color(value)]),
         ),
+        star: Object.fromEntries(Object.entries(CHART_COLORS.star).map(([name, value]) => [name, color(value)])),
       },
       study: Object.fromEntries(
         Object.entries(STUDY_TYPE_BADGES).map(([kind, { fg, bg, label }]) => [
@@ -463,6 +465,7 @@ export function dtcgFiles() {
       diverging: Object.fromEntries(CHART_COLORS.diverging.map((value, index) => [String(index), dtcgColorToken(value)])),
       missing: dtcgColorToken(CHART_COLORS.missing, 'a cell with no reading'),
       severity: Object.fromEntries(Object.entries(CHART_COLORS.severity).map(([level, value]) => [level, dtcgColorToken(value)])),
+      star: Object.fromEntries(Object.entries(CHART_COLORS.star).map(([name, value]) => [name, dtcgColorToken(value)])),
       study: Object.fromEntries(
         Object.entries(STUDY_TYPE_BADGES).map(([kind, { fg, bg, label }]) => [
           kind,

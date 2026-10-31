@@ -48,7 +48,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '3.0.0'
+export const DESIGN_TOKENS_VERSION = '3.1.0'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -372,6 +372,31 @@ export const CHART_COLORS = Object.freeze({
    * its legend.
    */
   missing: '#bac2ca',
+  /**
+   * 记忆星图 (`/app/memory/overview`, DESIGN.md 「记忆星图」): the page's one brand moment, a night window in either scheme, the one place a mark's
+   * kind has a hue of its own. Every value is read against `ground`; a dim mark is the same hue at a lower brightness and never a second colour.
+   */
+  star: Object.freeze({
+    ground: '#03050b',
+    /** The legend's and the controls' glass over the sky. */
+    panel: '#0c101cc7',
+    you: '#ffd27a',
+    hub: '#8fd0ff',
+    about: '#ffc04d',
+    preference: '#ff8a4c',
+    correction: '#ff4d6a',
+    fact: '#4fb3ff',
+    decision: '#a47bff',
+    method: '#a6f05a',
+    document: '#2fe0b8',
+    entity: '#8796ff',
+    replaced: '#8a90a0',
+    'line-replaces': '#ffb35c',
+    'line-conflicts': '#ff4d6a',
+    'line-rests': '#2fe0b8',
+    'line-relates': '#7d8cff',
+    spark: '#fff0c8',
+  }),
 })
 
 /**

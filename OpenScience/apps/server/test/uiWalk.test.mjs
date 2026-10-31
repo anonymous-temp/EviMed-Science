@@ -2987,6 +2987,11 @@ test("总览's sentence is held to its tiles, the navigation to the tiles, and a
     headline, tabs: ["总览", "关于你7", "做法2", "收到的1"], canvases: 2, tiles: tiles(over), rows: 12, recipe: 0, recipeButtons: 0,
   });
   assert.deepEqual(memoryOverviewFindings(at, read()), { failures: [], notices: [] });
+  const star = (extra) => memoryOverviewFindings(at, { ...read(), star: { width: 900, height: 630, named: true, walkable: true, ...extra } }).failures;
+  assert.deepEqual(star({}), []);
+  assert.deepEqual(star({ width: 0, height: 0 }), [`${at}: the star map draws 0×0 (a card with no picture in it)`]);
+  assert.deepEqual(star({ named: false }), [`${at}: the star map has no words for a screen reader`]);
+  assert.deepEqual(star({ walkable: false }), [`${at}: the star map has no list for a keyboard to walk`]);
   // The sentence's numbers are the tiles': each clause is the tile of its name (关于你 counts a project's memories too, as its list draws them).
   assert.deepEqual(memoryOverviewFindings(at, read({}, "记住了 8 条关于你的事，学会了 2 种做法。")).failures, [`${at}: the sentence says 8 memories and the tile counts 7`]);
   assert.deepEqual(memoryOverviewFindings(at, read({}, "记住了 7 条关于你的事。")).failures, [`${at}: the sentence says 0 methods and the tile counts 2`]);
@@ -3005,7 +3010,7 @@ test("总览's sentence is held to its tiles, the navigation to the tiles, and a
   assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["总览", "地图", "关于你7", "做法2", "收到的1"] }).failures, [`${at}: the navigation reads “总览、地图、关于你7、做法2、收到的1” (总览、关于你、做法、收到的)`]);
   assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["总览", "关于你7", "项目", "做法2", "收到的1"] }).failures, [`${at}: the navigation reads “总览、关于你7、项目、做法2、收到的1” (总览、关于你、做法、收到的)`]);
   assert.deepEqual(memoryOverviewFindings(at, { ...read(), tiles: [tile("关于你", 7), tile("项目", 2), tile("做法", 2), tile("收到的", 1), tile("知识", 39)] }).failures[0], `${at}: the tiles read “关于你、项目、做法、收到的、知识” (关于你、做法、收到的、知识)`);
-  assert.deepEqual(memoryOverviewFindings(at, { ...read(), canvases: 3 }).failures, [`${at}: 3 canvases on the page (two: the change chart and the relation graph)`]);
+  assert.deepEqual(memoryOverviewFindings(at, { ...read(), canvases: 3 }).failures, [`${at}: 3 canvases on the page (two: the change chart and one of the star map, the relation graph)`]);
   // A page that counts what it holds has a table behind its numbers.
   assert.deepEqual(memoryOverviewFindings(at, { ...read(), rows: 0 }).failures, [`${at}: the page counts what it holds and has no table of changes behind it`]);
   // An account with nothing is one recipe with one button; with the tiles at zero there is nothing to compare, which is not a pass.
