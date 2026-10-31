@@ -257,7 +257,8 @@ test('the receipt command signs a receipt the runner accepts, and refuses by clo
     assert.deepEqual([summary.status, summary.type, summary.publicKeySha256], ['signed', 'rsi-evaluator-receipt-v1', key.publicKeySha256]);
     const profile = { publicKeyPath: join(dir, 'public.pem'), publicKeySha256: key.publicKeySha256, receiptPath: files.out };
     await writeFile(profile.publicKeyPath, key.publicKey.export({ type: 'spki', format: 'pem' }));
-    const attest = await signedEvaluatorReceipt(profile, () => new Date().toISOString());
+    // The clock of the fixture's request (`NOW`), not the wall clock: a receipt is capped by the campaign's deadline, and the real date passed it on 2026-10-31.
+    const attest = await signedEvaluatorReceipt(profile, () => NOW);
     const answered = await attest(c.request);
     assert.equal(answered.observationDigest, rsiDigest(c.checkpoint.stages.confirmation.result.observations));
     // A bare checkpoint (not wrapped in the runner's result) is read the same way.
