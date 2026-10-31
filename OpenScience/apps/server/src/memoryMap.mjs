@@ -1,6 +1,6 @@
 import { dayOf, timeZoneOrDefault } from "./memoryTimeline.mjs";
 import { HttpError, apiBaseFromRequest, assertObject, readJson, sendJson } from "./security.mjs";
-import { MAP_EDGE_TYPES, MAP_NODE_TYPES, excerpt, nodeId, parseNodeId, requestMemo } from "./memoryMapSources/common.mjs";
+import { MAP_EDGE_TYPES, MAP_NODE_TYPES, PROJECT_MEMORY_KINDS, excerpt, nodeId, parseNodeId, requestMemo } from "./memoryMapSources/common.mjs";
 import { edgeIdOf, isDismissable } from "./memoryMapEdges.mjs";
 
 /**
@@ -44,8 +44,6 @@ export const MAP_FOCUS_NODES = 300;
 export const MAP_EDGES = 600;
 /** The most events a read returns. */
 export const MAP_EVENTS = 500;
-/** The kinds of memory the memory page files under a project (`PROJECT_KINDS` of the web's `memoryGroups.ts`); every other kind is about the person. */
-const PROJECT_KINDS = new Set(["project_fact", "analysis", "decision", "follow_up", "run_summary"]);
 /** How long one source is waited for. */
 export const MAP_SOURCE_TIMEOUT_MS = 8_000;
 /** The blocks of the document a caller may ask for, and the ones it gets by default. */
@@ -163,7 +161,8 @@ export function foldToFit(nodes, edges, limit) {
   };
   /** @param {number} kept @param {1 | 2} level */
   const folding = (kept, level) => {
-    const folded = rest.slice(kept);
+    // What was replaced is no memory for a group to count: it goes rather than folds, and its line with it.
+    const folded = rest.slice(kept).filter((node) => node.state !== "replaced");
     const made = clusters(folded, level);
     const keep = new Set([...fixed, ...rest.slice(0, kept)].map((node) => node.id));
     const into = new Map(folded.map((node) => [node.id, foldKey(node, level)]));
@@ -388,7 +387,7 @@ export async function buildMemoryMap({ sources }, request) {
   /** @type {Map<string, { id: string, label: string, count: number }>} */
   const aboutYou = new Map();
   for (const node of memories) {
-    if (node.projectId || PROJECT_KINDS.has(node.subtype)) continue;
+    if (node.projectId || PROJECT_MEMORY_KINDS.has(node.subtype)) continue;
     aboutYou.set(node.subtype, { id: node.subtype, label: node.group ?? node.subtype, count: (aboutYou.get(node.subtype)?.count ?? 0) + 1 });
   }
   const byCount = (/** @type {{ id: string, count: number }} */ left, /** @type {{ id: string, count: number }} */ right) => right.count - left.count || String(left.id).localeCompare(String(right.id));

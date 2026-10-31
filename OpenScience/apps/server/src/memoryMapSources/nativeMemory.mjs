@@ -15,6 +15,7 @@
  *     sources?: NativeSource[],      // what each rests on
  *     conflicts?: NativeConflict[],  // the disagreements still open (a file of the engine has none)
  *     usage?: Record<string, { count: number }>,   // how often each was handed to a conversation (the engine counts none)
+ *     replaced?: ReplacedStatement[], // what they used to say, read from the overlay's revisions (`replacedStatements.mjs`)
  *   }
  *   NativeRecord = {                 // the shape of `publicRecord` in `nativeMemoryStore.mjs`, the fields the map reads
  *     id: string,                    // the memory's stable id; becomes `memory:<id>`
@@ -25,6 +26,7 @@
  *     importance: number,            // 0..1
  *     sensitive: boolean,            // true is never drawn
  *     createdAt: string, updatedAt: string, validFrom: string | null, invalidSince: string | null, expiresAt: string | null,
+ *     lastRecalledAt: string | null, recallCount: number, // when and how often a search or read returned it: what a mark's brightness says, nothing else
  *     supersededBy: string | null,   // the id of the memory that replaced this one
  *     revisions: { version: number, value: string, summary: string, status: string, changedAt: string | null, by?: string, runId?: string }[],
  *   }
@@ -43,7 +45,7 @@ import { MAP_RECORD_LIMIT, recordsContribution } from "./records.mjs";
 
 /**
  * @typedef {object} NativeMemories
- * @property {any[]} records @property {any[]} [sources] @property {any[]} [conflicts] @property {Record<string, { count: number }>} [usage]
+ * @property {any[]} records @property {any[]} [sources] @property {any[]} [conflicts] @property {Record<string, { count: number }>} [usage] @property {any[]} [replaced]
  */
 
 /**
@@ -60,7 +62,7 @@ export function createNativeMemorySource({ readMemories = null } = {}) {
         .filter((record) => !request.projectId || (record.scope === "project" && record.scopeId === request.projectId));
       // A file of the engine has no importance and no use counter of its own (every one reads 0.5 and none is counted), so a mark's size
       // says what the engine can: how recently the file was written.
-      return recordsContribution(records, { sources: held?.sources ?? [], conflicts: held?.conflicts ?? [], usage: held?.usage ?? {} },
+      return recordsContribution(records, { sources: held?.sources ?? [], conflicts: held?.conflicts ?? [], usage: held?.usage ?? {}, replaced: held?.replaced ?? [] },
         { now: request.now, weigh: (record) => recencyWeight(record.updatedAt ?? record.createdAt ?? null, request.now) });
     },
   };

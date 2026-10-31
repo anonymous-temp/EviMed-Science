@@ -3,6 +3,8 @@ import { zipSync } from 'fflate';
 import { identifierShapesIn, maskIdentifiers, projectContextLine } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates } from "./nativeMemoryMetrics.mjs";
+import { freshnessOf } from "./memoryMapSources/common.mjs";
+import { replacedStatements } from "./memoryMapSources/replacedStatements.mjs";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
@@ -71,6 +73,8 @@ export const NATIVE_RECORD_ID = /^nm_[a-f0-9]{24}(?:_[a-f0-9]{12})?$/;
 export const SOURCE_LABEL_PREFIX = "> 来源变更：";
 
 const AS_OF = /\s*[(（]as of (\d{4}-\d{2}-\d{2})[)）]\s*$/i;
+/** The old statements the map draws at most for one account, newest first: what was replaced is the first the map folds, so this only bounds the read. */
+const MAP_REPLACED_MARKS = 60;
 const sha256 = (/** @type {string} */ text) => createHash("sha256").update(text).digest("hex");
 
 /** @param {string} uri */
@@ -670,9 +674,11 @@ export class NativeMemoryStore {
       nativeType: file.type,
       uri: file.uri,
       contentHash: file.hash,
-      // When a search or read through the gateway last returned the file and how often: recorded for a later decision, acted on by nothing.
+      // When a search or read through the gateway last returned the file and how often: what a mark's brightness on the map says (`freshnessOf`), and
+      // nothing else acts on it — recall does not read it.
       lastRecalledAt: file.lastRecalledAt ?? null,
       recallCount: file.recallCount ?? 0,
+      freshness: freshnessOf({ kind: /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[file.type] ?? "project_fact", projectId: projectScoped ? file.projectId : null, writtenAt: updatedAt, recalledAt: file.lastRecalledAt, recalls: file.recallCount }, this.now()),
     };
   }
 
@@ -822,7 +828,36 @@ export class NativeMemoryStore {
       .map((record) => ({ ...record, summary: "" }));
   }
 
-  /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, no conflicts, no usage. @param {string} userId */
+  /**
+   * What the account's memories used to say, from the revisions (`replacedStatements.mjs`), the newest `MAP_REPLACED_MARKS` of them. A read that
+   * fails costs these marks and nothing else: the map draws what is true now.
+   * @param {string} userId @param {any[]} files
+   */
+  async #replacedStatements(userId, files) {
+    try {
+      const shown = files.filter((file) => !file.sensitive);
+      const revisions = await this.overlay.revisionsOfMany(userId, shown.map((file) => file.uri));
+      const rejectionType = (/** @type {any} */ file) => nativeMemoryRejectionType(file.type, file.namespaceId ?? null);
+      /** @type {Map<string, { fingerprint: string, text: string | null }[]>} */
+      const rejected = new Map();
+      for (const type of new Set(shown.filter((file) => revisions.get(file.uri)?.length).map(rejectionType))) {
+        rejected.set(type, await this.overlay.rejectedLines(userId, type, { limit: 1_000 }));
+      }
+      return shown.flatMap((file) => {
+        const history = (revisions.get(file.uri) ?? []).slice().reverse();
+        if (!history.length) return [];
+        const fileId = nativeFileId(file.uri);
+        return replacedStatements({
+          fileId, body: file.body, history, perLine: file.type === "profile", statementsOf: statements,
+          recordIdOfLine: (line) => `${fileId}_${lineFingerprint(line).slice(0, 12)}`, rejected: rejected.get(rejectionType(file)) ?? [],
+        });
+      }).sort((left, right) => String(right.until ?? "").localeCompare(String(left.until ?? ""))).slice(0, MAP_REPLACED_MARKS);
+    } catch {
+      return [];
+    }
+  }
+
+  /** What the map draws (`createNativeMemorySource`): the records, the sources they rest on, what they used to say, no conflicts, no usage. @param {string} userId */
   async mapMemories(userId) {
     const files = await this.files(userId);
     const records = (await this.records(userId, { files })).filter((record) => !record.sensitive);
@@ -830,6 +865,7 @@ export class NativeMemoryStore {
     const idOf = new Map(records.map((record) => [record.uri, record.id]));
     return {
       records,
+      replaced: await this.#replacedStatements(userId, files),
       sources: sources.filter((source) => idOf.has(source.uri)).map((source) => ({
         recordId: /** @type {string} */ (idOf.get(source.uri)), type: source.type, id: source.id,
         state: source.state === "removed" ? "expired" : source.state, linkedAt: source.stateAt,
