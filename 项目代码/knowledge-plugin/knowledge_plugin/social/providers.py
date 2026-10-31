@@ -19,7 +19,10 @@ What each costs (the ledger's amounts):
   one that passes: on 2026-10-22 production had 88 of 300 ``article_detail`` calls answer it, all between 16:21 and 17:29
   Beijing while the balance ran down, and the same links read fine after the top-up — so it is ``failed`` (try later),
   and what bounds the retries is the caller's (``collector``: six calls per entry's text, a pause after five in a row).
-- The crawler: one request, counted against the day's request cap; 429/503 means GEO is using it.
+- The crawler: one request, counted against the day's request cap; 429/503 means GEO is using it. A crawl of XHS or Weibo asks for
+  the provider's raw answer (``include_provider_raw``) so a post's pictures can be named from the file ids in it
+  (``crawl.pictures_of``); the answer is large (``CRAWL_MAX_BYTES``) and is dropped by the collector. ``CrawlClient.retained``
+  reads the crawler's retained jobs (``GET /api/jobs``) for ``social-bodies``: no crawl, no request against the day's cap.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 
 from ..model import FetchError, RequestSpec
+from .crawl import PICTURE_PLATFORMS
 from .spend import DAJIALA, SOCIAL_CRAWL, SOCIALDATA, Cap, ProviderLedger
 
 log = logging.getLogger("knowledge_plugin.social.providers")
@@ -54,6 +58,8 @@ DAJIALA_BALANCE = 20001
 DAJIALA_GONE = (101, 104, 107)       # 107: measured 2026-10-24 on a nickname no account answers to (¥0.02)
 DAJIALA_RETRY = (2003, 2005, 20002, 50000)    # 20002: module docstring
 CRAWL_PATH = "/api/jobs"
+# The answer's size cap: a bound on a runaway answer. With the provider's raw answer (asked for XHS and Weibo only) a detailed post is
+# 12–15 KB (retained answers, 2026-10-31), far inside it; an answer over it parks the platform.
 CRAWL_MAX_BYTES = 8 * 1024 * 1024
 # A poll of an accepted job that met a busy answer (429/503) or a dropped connection is asked again, at most this many times and
 # within the crawl's one deadline: the job is running there, and one blip must not end it. The platform's own client retries twice.
@@ -308,7 +314,7 @@ class CrawlClient:
         # `platforms`, as the platform's own client sends it: the collector's job takes a list, one name for this crawl.
         body = {"query": query, "platforms": [platform], "sort_type": "latest", "page": 1,
                 "minimum_detail_posts": max(0, min(50, detail_posts)), "minimum_comments_per_post": 0,
-                "collect_comments": False, "include_provider_raw": False}
+                "collect_comments": False, "include_provider_raw": platform in PICTURE_PLATFORMS}
         accepted = False
         outcome, detail, objects = "failed", "request_failed", 0
         try:
@@ -409,7 +415,8 @@ class CrawlClient:
                     # Usable posts that are not the whole of what was asked for are kept and said to be partial; no posts and nothing
                     # wrong is an empty read.
                     incomplete = errored or (unmet and bool(posts))
-                    # The collector's build_entry keeps only public post excerpts and stated counts.
+                    # The posts still carry their raw provider answer: the collector reads a post's picture addresses out of it
+                    # and drops it; build_entry keeps only the public text and stated counts.
                     answer = {"platform": platform, "posts": posts, "meta": {"collection_status": "partial_collected" if incomplete else status}}
                     outcome, detail, objects = ("failed" if incomplete else "ok"), ("collection_incomplete" if incomplete else ""), len(posts)
                     return answer
@@ -421,6 +428,98 @@ class CrawlClient:
             raise ProviderError(SOCIAL_CRAWL, "failed", detail) from None
         finally:
             await self._ledger.record(SOCIAL_CRAWL, purpose="crawl", outcome=outcome, objects=objects, amount=1, error=detail or None)
+
+    async def retained(self, *, page: int = 100, most: int = 2000, on_job=None) -> dict:
+        """The crawler's retained jobs, read and not asked for: ``GET /api/jobs?limit&offset`` page by page, then each job's
+        snapshot, newest listing first as the crawler orders it. It starts no crawl and is no crawl request (the day's cap and the
+        ledger are untouched); the crawler serves one request at a time, so a busy answer (429/503) is waited out for the time it
+        names (at most ``CRAWL_MAX_RETRY_AFTER_S``, three times) and a job that still cannot be read is counted, not retried.
+        ``on_job(snapshot)`` is called with each readable snapshot; returns ``{"listed", "read", "unreadable"}`` (and ``"stopped"`` when a later page of the listing could not be read)."""
+        origin = self._endpoint()
+        self._headers()
+        counts: dict = {"listed": 0, "read": 0, "unreadable": 0}
+        seen: set[str] = set()
+
+        async with httpx.AsyncClient(transport=self._transport, timeout=self._settings.social_crawl_timeout_s,
+                                     follow_redirects=False) as client:
+            async def get(path: str):
+                for attempt in range(4):
+                    async with client.stream("GET", origin + path, headers=self._headers()) as response:
+                        if response.status_code in (429, 503) and attempt < 3:
+                            wait = _retry_after_s(response.headers, 2.0 * (attempt + 1))
+                        elif response.status_code != 200:
+                            raise ProviderError(SOCIAL_CRAWL, "failed", f"http_{response.status_code}")
+                        else:
+                            chunks, size = [], 0
+                            async for chunk in response.aiter_bytes():
+                                size += len(chunk)
+                                if size > CRAWL_MAX_BYTES:
+                                    raise ProviderError(SOCIAL_CRAWL, "failed", "response_too_large")
+                                chunks.append(chunk)
+                            return json.loads(b"".join(chunks))
+                    await asyncio.sleep(wait)
+
+            offset = 0
+            while counts["listed"] < most:
+                try:
+                    listing = await get(f"{CRAWL_PATH}?{urlencode({'limit': page, 'offset': offset})}")
+                except (ProviderError, httpx.HTTPError, ValueError, OSError) as error:
+                    if offset == 0:
+                        raise ProviderError(SOCIAL_CRAWL, "failed", "jobs_unlistable") from error
+                    counts["stopped"] = "list_failed"
+                    break
+                found = job_ids(listing)
+                offset += len(found)
+                ids = [job for job in found if job not in seen]
+                if not ids:
+                    break               # past the last page (or a crawler that ignores the offset)
+                seen.update(ids)
+                counts["listed"] += len(ids)
+                for job_id in ids:
+                    try:
+                        snapshot = await get(f"{CRAWL_PATH}/{job_id}")
+                    except (ProviderError, httpx.HTTPError, ValueError, OSError):
+                        counts["unreadable"] += 1
+                        continue
+                    if not isinstance(snapshot, dict):
+                        counts["unreadable"] += 1
+                        continue
+                    counts["read"] += 1
+                    if on_job is not None:
+                        await on_job(snapshot)
+        return counts
+
+
+def job_ids(listing) -> list[str]:
+    """The job ids of one page of ``GET /api/jobs``: the answer is a list, or an object holding one (``jobs``, ``items``,
+    ``results``, ``data``); an entry is an id or an object with ``job_id``. Anything else is no id."""
+    items = listing
+    if isinstance(listing, dict):
+        items = next((listing[key] for key in ("jobs", "items", "results", "data") if isinstance(listing.get(key), list)), [])
+    ids = []
+    for item in items if isinstance(items, list) else []:
+        value = item.get("job_id") if isinstance(item, dict) else item
+        if isinstance(value, str) and re.fullmatch(r"[a-fA-F0-9]{32}", value):
+            ids.append(value)
+    return ids
+
+
+def snapshot_posts(snapshot) -> list[tuple[str, dict]]:
+    """``(crawler platform, post)`` of every post a retained job's snapshot holds: its ``result`` is one platform's answer, or the
+    multi-platform envelope (``results``) the live read also accepts. Jobs without a result (waiting, failed) hold none."""
+    result = snapshot.get("result") if isinstance(snapshot, dict) else None
+    if not isinstance(result, dict):
+        return []
+    if isinstance(result.get("results"), dict):
+        answers = list(result["results"].items())
+    else:
+        named = snapshot.get("platforms") if isinstance(snapshot.get("platforms"), list) else []
+        answers = [(result.get("platform") or (named[0] if len(named) == 1 else None), result)]
+    out = []
+    for platform, answer in answers:
+        posts = answer.get("posts") if isinstance(answer, dict) and isinstance(answer.get("posts"), list) else []
+        out.extend((platform, post) for post in posts if isinstance(platform, str) and isinstance(post, dict))
+    return out
 
 
 def _int(value) -> int | None:

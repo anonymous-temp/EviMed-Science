@@ -334,7 +334,7 @@ ones was a sixth pair. The release walk holds both (`typePairs` in the `data` an
 | `compact` | 13 / 20px | held in reserve for a dense grid whose 12 px cells would be too small; nothing sets it since R19.2 — a control is `ui`, a table head and a heat cell `caption` |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
-| `reading` · `reading-lg` · `reading-xl` | 16 · 18 · 20 / 1.8 | the frontier reader (2026-10-23): an article's text is `reading` below 1280 px and `reading-lg` from there (`text-reading xl:text-reading-lg`), its AI 导读 one step above (`reading-lg` → `reading-xl`), on the reading measure (`max-w-measure-body xl:max-w-read`, 40 CJK a line) — the scale's own sizes at a long text's line height, a responsive pair rather than a tenth size |
+| `reading` · `reading-lg` · `reading-xl` | 16 · 18 · 20 / 1.8 | the frontier reader (2026-10-23): an article's text is `reading` below 1280 px and `reading-lg` from there (`text-reading xl:text-reading-lg`), its 速读 one step above (`reading-lg` → `reading-xl`), on the reading measure (`max-w-measure-body xl:max-w-read`, 40 CJK a line) — the scale's own sizes at a long text's line height, a responsive pair rather than a tenth size |
 | `wordmark` | 16 / 1.3 · serif | standalone brand lockups; the sidebar uses the compact sans `ui` rung |
 | `section` | 18 / 26px | a section heading inside an answer or a report |
 | `heading` | 20 / 28px | a card heading on a data page, a document title in a preview pane |
@@ -721,9 +721,10 @@ the title's link stretches over it, the ground lightens under the pointer and th
 is three lines (two on a phone) and never expands; the meta row ends in the 「AI 评分」 pill and the footer holds three tags that
 narrow the feed, 「另有 N 家报道」, ☆ and ⋯ (深入研究 first). A day-grouped list has its clock in a column and a heading per day that
 stays under the band; any other list says the date after the source. The reader is two columns from 1024 px: the article on one
-edge (back, byline, title, 导读, text) and a sticky column whose top is the back row's — 「打开原文 ↗」 with ☆ and ⋯, 「深入研究」,
+edge (back, byline, title with ☆, ⋯ and 「深入研究」 at its right, the switch 「速读 | 正文」 where the item has both, the content, and at the
+content's foot one plain 「阅读原文 ↗」 — owner, 2026-10-31: as a WeChat article has it) and a sticky column whose top is the back row's —
 推荐理由 with the score's parts, 专科 and 标签 (one chip, every one a link) and 本文目录 at three sections; below 1024 px the notes
-follow the text and the actions are a bar at the window's bottom.
+follow the text and the switch, ☆, ⋯ and 深入研究 are a bar at the window's bottom.
 
 **The event page's record and timeline (c5-reader, 2026-10-26).** An event is the list column (1040) from 1024 px with 「事件记录」 in the right column — its heat and 72-hour trend, then 最早报道 and 最近更新 (Beijing time, said once in the heading), how many reports and from how many sources, and whether first-hand material is among them — and the reading column (720) below it, where the record is the strip above the summary. The reports are 「一手材料」 (the parties' own texts) and 「报道时间线」, the rest cut into Beijing days, the newest day first (最早 reverses it), each row saying the clock it stands at; the page holds the same four size × weight pairs as before.
 
@@ -1082,7 +1083,7 @@ metric.
 
 The owner requires usable workflows and visible memory charts, not compliance with the older drawer/tree shape at their expense. The memory landing opens its map when available, with explicit list and record links preserved. One real node or topic is enough to visualize; sparse dimensions use honest bars rather than a misleading radar or a missing chart. No-data and failed-read states remain distinct, and no placeholder records are fabricated.
 
-Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「打开原文」) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Non-VCR method libraries retain configuration, versioned jobs and results; VCR methods are AI tools and its historical calculations are read-only (2026-10-25/26 reset). Refer to `../docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
+Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「阅读原文」, at the foot of the content) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Non-VCR method libraries retain configuration, versioned jobs and results; VCR methods are AI tools and its historical calculations are read-only (2026-10-25/26 reset). Refer to `../docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
 
 
 ## Workflow correction adopted 2026-10-20

@@ -124,7 +124,7 @@ export function SourceDetail({ source, citedBy, onOpenClaim }: {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {url && (
           <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-link hover:underline">
-            打开原文<ArrowUpRight size={16} aria-hidden="true" />
+            阅读原文<ArrowUpRight size={16} aria-hidden="true" />
           </a>
         )}
         {coverage && <span className="text-caption text-text-3">{coverage}</span>}

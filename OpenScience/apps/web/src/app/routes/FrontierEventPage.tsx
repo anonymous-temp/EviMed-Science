@@ -448,7 +448,7 @@ function TimelineRow({ item, clock = false }: { item: FrontierItem & { role: Fro
         {when && <><span aria-hidden="true">·</span><span className={clock ? "tabular-nums" : undefined}>{when}</span></>}
         <span aria-hidden="true">·</span>
         <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 px-1 text-accent")}>
-          <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>
+          <span className="text-caption">阅读原文<span aria-hidden="true"> ↗</span></span>
         </a>
       </div>
     </li>

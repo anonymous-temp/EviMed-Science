@@ -110,6 +110,22 @@ async def test_full_feed_text_is_the_answer_when_the_page_gives_none():
         assert len(result.body_excerpt) <= EXCERPT_MAX and row["summary"].startswith(result.body_excerpt[:200])
 
 
+async def test_a_crawled_post_with_no_text_is_never_sent_to_the_page_reader():
+    """F6: the post's page can carry the uploader's name and the comments (contract rule 4), and the platforms refuse programs; the crawler's
+    answer is all there is of a post, so a title-only post is ``unavailable`` with a named reason and the platform decides what it is worth."""
+    row = {"entry_id": "social-xiaohongshu:x", "revision": 1, "source_id": "social-xiaohongshu", "external_key": "xhs:n1", "identity_key": None,
+           "url": "https://www.xiaohongshu.com/explore/n1", "canonical_url": None, "doi": None, "pmid": None, "registry_ids": [],
+           "title": "只有标题的笔记", "summary": "只有标题的笔记", "lang": "zh", "published_at": NOW, "facts": {}, "first_seen_at": NOW,
+           "source_access": "social-crawl", "source_egress": "direct", "source_type": "media", "source_config": {}, "attempts": 0}
+    assert kind_of(row) == "post"
+    result = await enrich(row, RefusingFetcher(), None, now=NOW)
+    assert result.status == "unavailable" and result.notes == ["post_is_the_text"] and result.body_text is None and result.body_excerpt is None
+    (batched,) = await enrich_batch([row, ], RefusingFetcher(), None, now=NOW)
+    assert (batched.status, batched.notes) == ("unavailable", ["post_is_the_text"])
+    # The other social accesses and every page source are read as before.
+    assert kind_of({**row, "source_access": "rss"}) == "page"
+
+
 async def test_record_entries_fetch_nothing():
     row = entry_row("json-api/openfda-enforcement")
     assert kind_of(row) == "record"

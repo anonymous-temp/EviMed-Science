@@ -65,7 +65,7 @@ export function archiveEntryName(entry: Pick<FrontierDailySummary, "day" | "item
 /** One of 「先看三件事」: the item, the sentence that opens it and, for the lead, the event page it belongs to. */
 export interface TopThing {
   item: FrontierItem;
-  /** The 导读: the lead's own text where the issue wrote one, else the item's summary. */
+  /** The 速读: the lead's own text where the issue wrote one, else the item's summary. */
   text: string | null;
   event: { id: string; title: string } | null;
 }
