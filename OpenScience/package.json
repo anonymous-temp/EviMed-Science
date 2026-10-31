@@ -147,6 +147,11 @@
   },
   "packageManager": "pnpm@9.4.0",
   "pnpm": {
+    "auditConfig": {
+      "ignoreCves": [
+        "CVE-2026-118764"
+      ]
+    },
     "peerDependencyRules": {
       "allowedVersions": {
         "echarts-wordcloud>echarts": "6"
@@ -188,8 +193,6 @@
       "brace-expansion@5": "5.0.12",
       "exceljs>uuid": "11.1.1",
       "follow-redirects@<1.16.2": "1.16.2",
-      "glob@7>minimatch": "11.0.3",
-      "readdir-glob>minimatch": "11.0.3",
       "ip-address@10.7.2": "10.7.4",
       "pptx-preview>echarts": "6.1.0",
       "pptx-preview>uuid": "11.1.1",

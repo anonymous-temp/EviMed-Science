@@ -1,4 +1,16 @@
 {
+  "auditExceptions": [
+    {
+      "cve": "CVE-2026-118764",
+      "ghsa": "GHSA-g3hv-75wg-m249",
+      "package": "minimatch",
+      "severity": "moderate",
+      "since": "2026-10-31",
+      "found": ["3.1.5 under glob@7 (rimraf, archiver-utils)", "5.1.9 under readdir-glob (archiver)"],
+      "why": "The amplification needs an attacker-controlled pattern and optimizationLevel >= 2. Both parents pass patterns written in code, and no 3.x or 5.x fix exists. Overriding to 11.0.3 was tried on 2026-10-31 and breaks glob@7 at run time (rawGlob undefined in GlobSync._processReaddir).",
+      "dropWhen": "unzipper and exceljs no longer pull glob@7 and archiver, or a patched 3.x and 5.x is published."
+    }
+  ],
   "$comment": "The single definition of every version we track upstream. A Dockerfile ARG, a seam manifest, a peerDependency and a release manifest that each carried their own copy meant 'bump the pin' was four edits and one of them was always missed. Tests assert every derived copy equals the value here; the nightly compatibility matrix is one job that loops over these keys.",
   "$runtimeTools": {
     "pandoc": {
