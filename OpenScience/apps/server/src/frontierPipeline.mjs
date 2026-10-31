@@ -2922,6 +2922,7 @@ export class FrontierPipeline {
   /**
    * Once, under the `post_sweep` marker, what the new reading of a crawl post leaves of what is already stored (rd-server 2026-10-31):
    *
+   * 0. every other published crawl post of the window owes one edit (its card summary was written by the older rule);
    * 1. a published crawl post that says nothing of its own and has no pictures to wait for (`frontierPostReading`) is withdrawn the way
    *    `#withdrawPost` does — no notice, no card — and counted;
    * 2. the 导读 of the six platforms' posts, and of the posts of any platform whose reader text is a summary or a page excerpt shorter than
@@ -2947,6 +2948,9 @@ export class FrontierPipeline {
           const reading = frontierPostReading({ title: row.title_raw, texts: row, summary: row.summary_raw, media: row.media });
           if (!reading.readable && !reading.waiting && await this.#withdrawPost(client, row.id)) withdrawn += 1;
         }
+        // A crawl post's card summary was written by the same older rule and shows wherever its 导读 is none: it owes one edit from the post as read now.
+        await client.query(`UPDATE evimed_frontier.items SET editor_version = NULL, editor_diagnostics = '{}'::jsonb, updated_at = clock_timestamp()
+          WHERE state = 'published' AND platform = ANY($1::text[]) AND rescored_at IS NULL AND visible_at > $2`, [[...FRONTIER_CRAWL_PLATFORMS], new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS)]);
         const reset = await client.query(`UPDATE evimed_frontier.items i SET lead_basis = NULL, updated_at = clock_timestamp()
           FROM evimed_frontier.item_texts t WHERE t.item_id = i.id AND i.state = 'published' AND i.lead_basis IS NOT NULL AND i.visible_at > $1
             AND (i.platform = ANY($2::text[])

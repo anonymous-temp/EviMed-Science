@@ -21,6 +21,7 @@ const DOUYIN_TWICE = { platform: "douyin", title: "这2种降压药被查出致�
   text: "这2种降压药被查出致癌，快看看家里的药箱！ #降压药 #高血压 #神经内科 #抖出健康知识宝藏 #降压药的副作用 这2种降压药被查出致癌，快看看家里的药箱！ #降压药 #高血压 #神经内科 #抖出健康知识宝藏 #降压药的副作用" };
 const WEIBO_CUT_TWICE = { platform: "weibo", title: "#原创# #健康有料到# 警惕！诺如病毒进入高发期，儿童易感染且无特效药！医生提醒：吃水果前记得充分洗净，双手保持清洁卫生。 http://t.cn/AXj80",
   text: "#原创# #健康有料到# 警惕！诺如病毒进入高发期，儿童易感染且无特效药！医生提醒：吃水果前记得充分洗净，双手保持清洁卫生。 http://t.cn/AXj80 #原创# #健康有料到# 警惕！诺如病毒进入高发期，儿童易感染且无特效药！医生提醒：吃水果前记得充分洗净，双手保持清洁卫生。 http://t.cn/AXj80QC3" };
+const HEADLINE_TWICE = { platform: "channels", title: "慢性阻塞性肺疾病诊治指南2026", text: "慢性阻塞性肺疾病诊治指南2026 慢性阻塞性肺疾病诊治指南2026" };
 const XHS_WORDS = { platform: "xiaohongshu", title: "男子用两种减肥药两个月减重40斤后突发脑梗",
   text: "男子用两种减肥药两个月减重40斤后突发脑梗 200斤男子使用“减肥神针”司美格鲁肽和达格列净两种药物 ，两个月减重40斤后突发脑梗，医生表示：两种药物不当联用或诱发卒中，须遵医嘱用药。#健康科普howto[话题]# #医疗健康howto[话题]# #减肥药[话题]# #减肥方法[话题]# #健康科普[话题]#" };
 const ZHIHU_SHORT = { platform: "zhihu", title: "FDA 将波士顿科学 enroute 产品召回划为最高级别，这对患者和医疗行业有何影响？",
@@ -140,13 +141,13 @@ test("the text decision: a post that says nothing and has nothing to wait for is
   };
   // The feed summary of the title and its hashtags is more than 80 characters: the ordinary rule would have called it usable.
   assert.ok(entryOf(XHS_TAGS).summary_raw.length >= 30);
-  assert.deepEqual(decide(CHANNELS_TWICE, "available"), { action: "drop", holdMs: 0, reason: "post-no-text" });
+  assert.deepEqual(decide(HEADLINE_TWICE, "available"), { action: "drop", holdMs: 0, reason: "post-no-text" });
   assert.deepEqual(decide(XHS_TAGS, "available"), { action: "drop", holdMs: 0, reason: "post-no-text" });
   assert.equal(decide(XHS_WORDS, "available").action, "promote");
   // Pictures to wait for: promoted, not dropped; and a post already an item is kept whatever its text now says (the revision decides afterwards).
   const media = [{ id: "c".repeat(64), kind: "image" }];
   assert.equal(decide(XHS_TAGS, "available", { entry: { media } }).action, "promote");
-  assert.equal(decide(CHANNELS_TWICE, "available", { promoted: true }).action, "promote");
+  assert.equal(decide(HEADLINE_TWICE, "available", { promoted: true }).action, "promote");
   // A text still to come is waited for, a post whose summary already says something is shown meanwhile; once nothing comes it is dropped.
   assert.equal(decide(XHS_TAGS, "pending").action, "hold");
   assert.equal(decide(XHS_WORDS, "pending").action, "promote-hold");
@@ -157,7 +158,7 @@ test("the text decision: a post that says nothing and has nothing to wait for is
 
 test("an item is readable by its post's words, not by a feed summary that holds only the title and its tags", () => {
   const source = { access: "rss" };
-  for (const [post, readable] of [[XHS_WORDS, true], [XHS_TAGS, false], [CHANNELS_TWICE, false], [DOUYIN_TWICE, false]]) {
+  for (const [post, readable] of [[XHS_WORDS, true], [XHS_TAGS, false], [HEADLINE_TWICE, false], [DOUYIN_TWICE, false], [CHANNELS_TWICE, true]]) {
     const entry = entryOf(post);
     assert.equal(frontierItemReadable({ texts: { body_excerpt: post.text }, entry, source }), readable, post.title);
   }
@@ -211,4 +212,14 @@ test("the pictures lever is read, forwarded to the container and written in the 
   assert.match(compose, /\n\s+OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED:\n/);
   const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
   assert.match(example, /\nOPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED=true\n/);
+});
+
+test("a long caption is information and a short headline is not: the post whose title says something by itself is shown, with no body", () => {
+  const statement = "钟南山：国际主流认可的“慢阻肺无症状就不用管” 是错误的，用证据让全世界服气！";
+  const shown = frontierPostReading({ title: statement, texts: { body_excerpt: `${statement} ${statement}` } });
+  assert.deepEqual([shown.readable, shown.waiting, shown.says], [true, false, false]);
+  const headline = "慢性阻塞性肺疾病诊治指南2026";
+  assert.deepEqual(Object.values((({ readable, waiting }) => ({ readable, waiting }))(frontierPostReading({ title: headline, texts: { body_excerpt: `${headline} ${headline}` } }))), [false, false]);
+  const tagged = "这2种降压药被查出致癌，快看看家里的药箱！ #降压药 #高血压 #神经内科 #抖出健康知识宝藏 #降压药的副作用";
+  assert.equal(frontierPostReading({ title: tagged, texts: { body_excerpt: tagged } }).readable, false, "its tags do not count towards a caption");
 });

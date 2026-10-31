@@ -352,6 +352,9 @@ test("once at start: the published posts with nothing of their own are withdrawn
   // The bases of the six platforms' posts and of the thin summary are cleared; the paper's long abstract is left alone.
   for (const item of [withWords, waiting, thinSummary]) assert.equal((await state(item)).lead_basis, null);
   assert.equal((await state(xPost)).lead_basis, "basis-old", "an X post is not a crawl platform's");
+  const edited = async (/** @type {{ id: string }} */ item) => (await database.query("SELECT editor_version FROM evimed_frontier.items WHERE id = $1", [item.id])).rows[0].editor_version;
+  assert.equal(await edited(withWords), null, "a crawl post's card summary owes one edit under the new rule");
+  assert.notEqual(await edited(xPost), null);
   assert.equal((await state(longAbstract)).lead_basis, "basis-old");
   assert.equal(pipeline.counters.postSweepLeadsReset >= 3, true);
   assert.equal(Number((await database.query("SELECT value FROM evimed_frontier.meta WHERE key = $1", [FRONTIER_META_KEYS.postSweep])).rows[0].value), 1);

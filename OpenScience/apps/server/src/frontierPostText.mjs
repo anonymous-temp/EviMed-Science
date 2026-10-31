@@ -34,15 +34,20 @@ import { FRONTIER_CRAWL_PLATFORMS, FRONTIER_MEDIA_ID } from "@evimed/domain";
  *   (the title twice, the title and its hashtags, a cut title repeated) count 0 to 0.9 (the tail of the cut), the thinnest post that says
  *   anything counts 38 (a Zhihu answer of one sentence under its question) and the next 44; 12 is about one short clause, so a stray word
  *   or two after a title is not a text and a clause is. A post under it has no text of its own.
+ * - `caption` — how much a post's title must say by itself for the post to be shown with nothing else: a video's or a short post's whole
+ *   content is often one long caption stored as its title, and that is information (the owner: 「除非是真的全部信息都没有」). Same unit. On the
+ *   16 of those 45 posts with nothing beyond their title, the bare names and headlines count 11 to 21 (「慢性阻塞性肺疾病诊治指南2026」 13) and
+ *   what says something counts 32 to 66 (「钟南山：国际主流认可的“慢阻肺无症状就不用管”是错误的…」 33). Such a post has no `body`: its title
+ *   is all it says, and it is on the page already.
  * - `picture` — the least the pictures of a thin post must read as for the post to be shown: the same unit, the same measure of a clause.
  * - `maxPictures` — how many pictures of one post are read: a picture post is up to nine pictures (Xiaohongshu), and the first ones carry the
  *   post's point; the rest would cost a parse each for a caption.
  * - `postsPerRound` — how many posts have their pictures read in a round: each is up to `maxPictures` parses of the in-house API, which
  *   charges per page.
  * - `pictureChars` — the most text kept of one post's pictures: a poster of text, never a document.
- * @type {Readonly<{ own: number, picture: number, maxPictures: number, postsPerRound: number, pictureChars: number }>}
+ * @type {Readonly<{ own: number, caption: number, picture: number, maxPictures: number, postsPerRound: number, pictureChars: number }>}
  */
-export const FRONTIER_POST_LIMITS = Object.freeze({ own: 12, picture: 12, maxPictures: 4, postsPerRound: 4, pictureChars: 4_000 });
+export const FRONTIER_POST_LIMITS = Object.freeze({ own: 12, caption: 30, picture: 12, maxPictures: 4, postsPerRound: 4, pictureChars: 4_000 });
 
 const CRAWL = new Set(FRONTIER_CRAWL_PLATFORMS);
 
@@ -174,6 +179,14 @@ export function frontierPostSaysSomething(post) {
 }
 
 /**
+ * Whether a post's title is a caption that says something by itself (`FRONTIER_POST_LIMITS.caption`), its tags, links and mentions not counted.
+ * @param {unknown} title
+ */
+export function frontierPostCaption(title) {
+  return frontierPostWeight(flat(title).replace(LINK, " ").replace(TAG, " ").replace(MENTION, " ")) >= FRONTIER_POST_LIMITS.caption;
+}
+
+/**
  * The text of a stored row for the post it holds: the best of the row's own text (`body_text`, layout `own`) and its excerpt
  * (`body_excerpt`, layout `titled`), or the entry's summary for a row not yet stored (`titled` too).
  * @param {{ body_text?: unknown, body_excerpt?: unknown } | null | undefined} texts
@@ -208,8 +221,8 @@ export function frontierPostBody(post) {
 /**
  * Whether a crawl post can be shown, from what is stored of it, and what it still waits for.
  *
- * `readable` — the post says something of its own, or its pictures were read and held words; `waiting` — it says nothing in text, has
- * stored pictures and they have not been tried (`item_texts.picture_tried_at`): the picture step will decide; otherwise it is nothing
+ * `readable` — the post says something of its own, its title is a caption that says something by itself, or its pictures were read and
+ * held words; `waiting` — it says nothing in text, its title is no such caption, it has stored pictures and they have not been tried (`item_texts.picture_tried_at`): the picture step will decide; otherwise it is nothing
  * a reader could use and, with no pictures to wait for, it is not shown (the owner's 2026-10-22 rule, 「除非是真的全部信息都没有，那么就先不展示出来」).
  * @param {{ title?: unknown, texts?: { body_text?: unknown, body_excerpt?: unknown, picture_text?: unknown, picture_tried_at?: unknown } | null,
  *   summary?: unknown, media?: unknown }} input
@@ -221,5 +234,6 @@ export function frontierPostReading({ title = "", texts = null, summary = null, 
   const pictureRead = frontierPostWeight(String(texts?.picture_text ?? "")) >= FRONTIER_POST_LIMITS.picture;
   const stored = (Array.isArray(media) ? media : []).some((entry) => entry && typeof entry === "object" && FRONTIER_MEDIA_ID.test(String(/** @type {any} */ (entry).id ?? "")));
   const pictures = pictureRead ? "read" : stored && !texts?.picture_tried_at ? "pending" : "none";
-  return { readable: says || pictureRead, waiting: !says && pictures === "pending", says, pictures, own: post?.own ?? 0 };
+  const caption = frontierPostCaption(title);
+  return { readable: says || caption || pictureRead, waiting: !says && !caption && pictures === "pending", says, pictures, own: post?.own ?? 0 };
 }
