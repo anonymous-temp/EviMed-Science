@@ -19,8 +19,8 @@ What each costs (the ledger's amounts):
   one that passes: on 2026-10-22 production had 88 of 300 ``article_detail`` calls answer it, all between 16:21 and 17:29
   Beijing while the balance ran down, and the same links read fine after the top-up — so it is ``failed`` (try later),
   and what bounds the retries is the caller's (``collector``: six calls per entry's text, a pause after five in a row).
-- The crawler: one request, counted against the day's request cap; 429/503 means GEO is using it. A crawl asks for the
-  provider's raw answer (``include_provider_raw``) so the addresses of a post's pictures can be read out of it
+- The crawler: one request, counted against the day's request cap; 429/503 means GEO is using it. A crawl of XHS or Weibo asks for
+  the provider's raw answer (``include_provider_raw``) so a post's pictures can be named from the file ids in it
   (``crawl.pictures_of``); the answer is large (``CRAWL_MAX_BYTES``) and is dropped by the collector. ``CrawlClient.retained``
   reads the crawler's retained jobs (``GET /api/jobs``) for ``social-bodies``: no crawl, no request against the day's cap.
 """
@@ -39,6 +39,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 
 from ..model import FetchError, RequestSpec
+from .crawl import PICTURE_PLATFORMS
 from .spend import DAJIALA, SOCIAL_CRAWL, SOCIALDATA, Cap, ProviderLedger
 
 log = logging.getLogger("knowledge_plugin.social.providers")
@@ -57,12 +58,9 @@ DAJIALA_BALANCE = 20001
 DAJIALA_GONE = (101, 104, 107)       # 107: measured 2026-10-24 on a nickname no account answers to (¥0.02)
 DAJIALA_RETRY = (2003, 2005, 20002, 50000)    # 20002: module docstring
 CRAWL_PATH = "/api/jobs"
-# The answer's size cap. Since the crawl asks for the provider's raw answer (the addresses of a post's pictures are read out of it)
-# an answer carries every post's whole upstream record: measured from the retained jobs' shapes (2026-10-31, masked values,
-# lengths summed) about 7 KB a post on Weibo, Zhihu and Channels, 38 KB on Douyin and 150 KB on Bilibili (its related-video list),
-# so five detailed posts and the search's other posts are under 2 MB. The cap is a bound on a runaway answer, not a size
-# expected, and an answer over it parks the platform; it keeps the margin of the 8 MiB it was set at over the old 100 KB answers.
-CRAWL_MAX_BYTES = 16 * 1024 * 1024
+# The answer's size cap: a bound on a runaway answer. With the provider's raw answer (asked for XHS and Weibo only) a detailed post is
+# 12–15 KB (retained answers, 2026-10-31), far inside it; an answer over it parks the platform.
+CRAWL_MAX_BYTES = 8 * 1024 * 1024
 # A poll of an accepted job that met a busy answer (429/503) or a dropped connection is asked again, at most this many times and
 # within the crawl's one deadline: the job is running there, and one blip must not end it. The platform's own client retries twice.
 CRAWL_POLL_RETRY_DELAYS_S = (0.5, 2.0)
@@ -316,7 +314,7 @@ class CrawlClient:
         # `platforms`, as the platform's own client sends it: the collector's job takes a list, one name for this crawl.
         body = {"query": query, "platforms": [platform], "sort_type": "latest", "page": 1,
                 "minimum_detail_posts": max(0, min(50, detail_posts)), "minimum_comments_per_post": 0,
-                "collect_comments": False, "include_provider_raw": True}
+                "collect_comments": False, "include_provider_raw": platform in PICTURE_PLATFORMS}
         accepted = False
         outcome, detail, objects = "failed", "request_failed", 0
         try:

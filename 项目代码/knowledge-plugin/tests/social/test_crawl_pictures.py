@@ -24,7 +24,7 @@ NOTE_TEXT = "第一段说明。\n\n第二段：夜间血压要监测。 #高血�
 
 
 def xhs_post(post_id="n1", *, content=NOTE_TEXT, images=3):
-    note = {"type": "normal", "images_list": [{"url": f"https://img.test/{post_id}/{n}", "url_size_large": f"https://img.test/{post_id}/{n}",
+    note = {"type": "normal", "images_list": [{"url": "[REDACTED_URL]", "url_size_large": "[REDACTED_URL]", "fileid": f"{post_id}-file-{n}",
                                                "index": n, "width": 8, "height": 6} for n in range(images)]}
     return {"post_id": post_id, "title": "血压日记", "content": content, "url": f"https://www.xiaohongshu.com/explore/{post_id}",
             "likes": 3, "author": SECRET, "author_id": "u-secret",
@@ -37,10 +37,10 @@ def pictures_fetcher(*, fail=()):
     colours = {"0": (200, 30, 30), "1": (30, 200, 30), "2": (30, 30, 200)}
 
     def serve(spec):
-        n = spec.url.rsplit("/", 1)[-1]
+        n = spec.url[-1]
         return (500, b"") if n in fail else (200, png_bytes((64, 48), colours[n]), {"content-type": "image/png"})
 
-    return FakeFetcher({("GET", "https://img.test/"): serve})
+    return FakeFetcher({("GET", "https://ci.xiaohongshu.com/"): serve})
 
 
 async def monitor(social_settings, pool, tmp_path, posts, *, fetcher, platform=("xhs", "xiaohongshu"), asked=None):
@@ -72,7 +72,7 @@ async def test_a_post_is_stored_whole_with_its_pictures_and_the_raw_answer_goes_
     assert row["body_text"] == NOTE_TEXT and row["text_kind"] == "full" and row["text_status"] == "available"
     assert len(row["summary"]) <= 300 and row["title"] == "血压日记"
     assert [item["kind"] for item in row["media"]] == ["image", "image"]
-    assert [item["original_url"] for item in row["media"]] == ["https://img.test/n1/0", "https://img.test/n1/1"], "in the post's order"
+    assert [item["original_url"] for item in row["media"]] == ["https://ci.xiaohongshu.com/n1-file-0", "https://ci.xiaohongshu.com/n1-file-1"], "in the post's order"
     assert collector.media.counters["stored"] == 2
 
     everything = []
@@ -88,7 +88,7 @@ async def test_a_weibo_picture_is_asked_with_the_referrer_its_host_wants(social_
     def post():
         return [{"post_id": "w1", "title": "", "content": "微博正文", "url": "https://m.weibo.cn/detail/w1",
                  "publish_time": int((NOW - timedelta(hours=1)).timestamp()),
-                 "raw_response": {"detail": {"data": {"pic_ids": ["p1"], "pic_infos": {"p1": {"large": {"url": "https://wx1.sinaimg.cn/large/p1.jpg"}}}}}}}]
+                 "raw_response": {"detail": {"data": {"pic_ids": ["006abcDEFgy1"], "pic_infos": {"006abcDEFgy1": {"large": {"url": "[REDACTED_URL]"}}}}}}}]
 
     seen = []
 
@@ -175,3 +175,17 @@ async def test_the_stream_and_text_say_it_on_the_wire(social_settings, pool, tmp
         assert text["body_excerpt"] == NOTE_TEXT, "a full text is its own excerpt, so a reader of the excerpt alone sees the post"
         stored = (await client.get(f"/v1/media/{entry['media'][0]['id']}")).headers["content-type"]
         assert stored == "image/jpeg", "re-encoded by the store"
+
+
+def test_pictures_are_named_from_file_ids_because_the_crawler_redacts_every_address():
+    from knowledge_plugin.social.crawl import pictures_of
+    note = {"type": "normal", "images_list": [{"fileid": "1040g2sg31abcDEF", "index": 1, "url": "[REDACTED_URL]"},
+                                              {"fileid": "1040g2sg31abcDE0", "index": 0, "url": "[REDACTED_URL]"},
+                                              {"fileid": "../../etc/passwd", "index": 2}]}
+    assert pictures_of({"raw_response": {"detail": {"data": {"data": [{"note_list": [note]}]}}}}, "xhs") == [
+        {"url": "https://ci.xiaohongshu.com/1040g2sg31abcDE0", "kind": "image"}, {"url": "https://ci.xiaohongshu.com/1040g2sg31abcDEF", "kind": "image"}], "in order, and a value that is no file id is nothing"
+    video = {"type": "video", "images_list": [{"fileid": "1040g2sg31abcDEF"}, {"fileid": "1040g2sg31abcDE0"}]}
+    assert pictures_of({"raw_response": {"search": {"note": video}}}, "xhs") == [{"url": "https://ci.xiaohongshu.com/1040g2sg31abcDEF", "kind": "video-poster"}]
+    assert pictures_of({"raw_response": {"search": {"pic_ids": ["006abcDEFgy1"]}}}, "weibo") == [{"url": "https://wx1.sinaimg.cn/large/006abcDEFgy1.jpg", "kind": "image"}]
+    for platform in ("douyin", "bilibili", "wechat_channels", "zhihu"):
+        assert pictures_of({"raw_response": {"search": {"image": "[REDACTED_URL]"}}}, platform) == []

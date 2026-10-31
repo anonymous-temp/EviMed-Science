@@ -61,8 +61,7 @@ def test_the_text_is_bounded_with_a_reason_and_cut_at_a_paragraph():
 # ------------------------------------------------------------------------------------ the pictures
 
 def image(n, **extra):
-    return {"url": f"http://sns-webpic.test/{n}/std", "original": f"http://sns-webpic.test/{n}/orig",
-            "url_size_large": f"https://sns-webpic.test/{n}/large", "width": 1080, "height": 1440, "index": n, **extra}
+    return {"fileid": f"1040g2sg-file-{n}", "url": "[REDACTED_URL]", "url_size_large": "[REDACTED_URL]", "width": 1080, "height": 1440, "index": n, **extra}
 
 
 def xhs_raw(images, *, kind="normal", where="detail"):
@@ -72,57 +71,33 @@ def xhs_raw(images, *, kind="normal", where="detail"):
     return {"search": {"note": note}}
 
 
-def test_an_xhs_picture_note_gives_all_its_pictures_in_order_the_large_one_first():
-    raw = xhs_raw([image(2), image(0), image(1, url_size_large=None)])
-    assert crawl_mod.pictures_of(post(raw_response=raw), "xhs") == [
-        {"url": "https://sns-webpic.test/0/large", "kind": "image"},
-        {"url": "https://sns-webpic.test/1/orig", "kind": "image"},      # no large one: the original (http taken as https)
-        {"url": "https://sns-webpic.test/2/large", "kind": "image"}]
+def test_an_xhs_picture_note_gives_all_its_pictures_in_order():
+    raw = xhs_raw([image(2), image(0), image(1)])
+    assert [item["url"] for item in crawl_mod.pictures_of(post(raw_response=raw), "xhs")] == [
+        "https://ci.xiaohongshu.com/1040g2sg-file-0", "https://ci.xiaohongshu.com/1040g2sg-file-1", "https://ci.xiaohongshu.com/1040g2sg-file-2"]
 
 
 def test_an_xhs_video_note_gives_one_poster_and_the_search_answer_is_read_when_there_is_no_detail():
     video = xhs_raw([image(0), image(1)], kind="video")
-    assert crawl_mod.pictures_of(post(raw_response=video), "xhs") == [{"url": "https://sns-webpic.test/0/large", "kind": "video-poster"}]
-    searched = xhs_raw([image(0)], where="search")
-    assert crawl_mod.pictures_of(post(raw_response=searched), "xhs") == [{"url": "https://sns-webpic.test/0/large", "kind": "image"}]
+    assert crawl_mod.pictures_of(post(raw_response=video), "xhs") == [{"url": "https://ci.xiaohongshu.com/1040g2sg-file-0", "kind": "video-poster"}]
+    searched = {"search": {"note": {"type": "normal", "images_list": [image(0)]}}}
+    assert crawl_mod.pictures_of(post(raw_response=searched), "xhs") == [{"url": "https://ci.xiaohongshu.com/1040g2sg-file-0", "kind": "image"}]
 
 
 def test_pictures_are_capped_at_the_contracts_media_bound_and_deduplicated():
     raw = xhs_raw([image(n) for n in range(12)])
     assert len(crawl_mod.pictures_of(post(raw_response=raw), "xhs")) == crawl_mod.PICTURES_MAX == 8
-    same = xhs_raw([image(0), image(0), image(1)])
-    assert [item["url"] for item in crawl_mod.pictures_of(post(raw_response=same), "xhs")] == [
-        "https://sns-webpic.test/0/large", "https://sns-webpic.test/1/large"]
+    same = xhs_raw([image(0), image(0, index=1)])
+    assert [item["url"] for item in crawl_mod.pictures_of(post(raw_response=same), "xhs")] == ["https://ci.xiaohongshu.com/1040g2sg-file-0"]
 
 
-def test_weibo_pictures_follow_pic_ids_through_pic_infos_and_fall_back_to_the_parsed_media():
-    infos = {"a1": {"large": {"url": "https://wx1.sinaimg.test/large/a1.jpg"}, "thumbnail": {"url": "https://t/x"}},
-             "b2": {"original": {"url": "http://wx2.sinaimg.test/orj/b2.jpg"}}}
-    raw = {"detail": {"data": {"pic_ids": ["b2", "a1", "missing"], "pic_num": 3, "pic_infos": infos}}}
+def test_weibo_pictures_are_named_from_pic_ids_on_its_image_host():
+    raw = {"detail": {"data": {"pic_ids": ["006abcDEFgy1", "006abcDEFgy2"]}}}
     assert crawl_mod.pictures_of(post(raw_response=raw), "weibo") == [
-        {"url": "https://wx2.sinaimg.test/orj/b2.jpg", "kind": "image"}, {"url": "https://wx1.sinaimg.test/large/a1.jpg", "kind": "image"}]
-    parsed = {"search": {"_v2_parsed": {"media": {"has_image": True, "images": ["//wx3.sinaimg.test/large/c3.jpg",
-                                                                              {"url": "https://wx4.sinaimg.test/d4.jpg"}]}}}}
-    assert [item["url"] for item in crawl_mod.pictures_of(post(raw_response=parsed), "weibo")] == [
-        "https://wx3.sinaimg.test/large/c3.jpg", "https://wx4.sinaimg.test/d4.jpg"]
-    video = {"detail": {"data": {"pic_ids": [], "page_info": {"type": "video", "page_pic": "https://p.test/poster.jpg"}}}}
-    assert crawl_mod.pictures_of(post(raw_response=video), "weibo") == [{"url": "https://p.test/poster.jpg", "kind": "video-poster"}]
-    text_only = {"search": {"_v2_parsed": {"media": {"has_image": False, "images": []}}}, "detail": {"data": {"pic_ids": [], "pic_num": 0}}}
-    assert crawl_mod.pictures_of(post(raw_response=text_only), "weibo") == []
-
-
-def test_a_video_has_one_poster_on_douyin_bilibili_and_channels_an_album_has_its_pictures():
-    video = {"detail": {"data": {"aweme_detail": {"images": None, "video": {"cover": {"url_list": [
-        "https://p3.douyinpic.test/a.heic", "https://p3.douyinpic.test/a.jpeg"]}}}}}}
-    assert crawl_mod.pictures_of(post(raw_response=video), "douyin") == [{"url": "https://p3.douyinpic.test/a.jpeg", "kind": "video-poster"}], \
-        "an address of a format the store cannot decode is chosen only when it is the only one"
-    album = {"search": {"video": {"cover": {"url_list": ["https://x.test/cover.jpeg"]}},
-                        "images": [{"url_list": ["https://x.test/1.jpeg"], "width": 1}, {"url_list": ["https://x.test/2.webp"]}]}}
-    assert [item["kind"] for item in crawl_mod.pictures_of(post(raw_response=album), "douyin")] == ["image", "image"]
-    bilibili = {"search": {"av": {"cover": "//i0.hdslb.test/bfs/archive/c.jpg"}}, "detail": {"data": {"data": {"View": {"pic": ""}}}}}
-    assert crawl_mod.pictures_of(post(raw_response=bilibili), "bilibili") == [{"url": "https://i0.hdslb.test/bfs/archive/c.jpg", "kind": "video-poster"}]
-    channels = {"search": {"image": "https://wx.test/cover.jpg"}, "detail": {"data": {"cover_img_url": "", "media": {"cover_url": "https://wx.test/other"}}}}
-    assert crawl_mod.pictures_of(post(raw_response=channels), "wechat_channels") == [{"url": "https://wx.test/cover.jpg", "kind": "video-poster"}]
+        {"url": "https://wx1.sinaimg.cn/large/006abcDEFgy1.jpg", "kind": "image"}, {"url": "https://wx1.sinaimg.cn/large/006abcDEFgy2.jpg", "kind": "image"}]
+    assert [item["url"] for item in crawl_mod.pictures_of(post(raw_response={"search": {"pic_ids": ["006abcDEFgy3"]}}), "weibo")] == [
+        "https://wx1.sinaimg.cn/large/006abcDEFgy3.jpg"]
+    assert crawl_mod.pictures_of(post(raw_response={"search": {"pic_ids": []}}), "weibo") == []
 
 
 @pytest.mark.parametrize("platform", ["xhs", "weibo", "douyin", "bilibili", "wechat_channels", "zhihu", "unknown"])
@@ -137,14 +112,12 @@ def test_a_raw_answer_of_any_shape_costs_the_pictures_never_the_post(platform, r
     assert entry is not None and entry.media == [], "the entry never carries the raw answer or an address from it"
 
 
-def test_zhihu_and_unusable_addresses_give_no_pictures():
-    raw = {"search": {"object": {"thumbnail_info": {"thumbnails": [{"url": "https://pic.zhimg.test/a.jpg"}]}}}}
-    assert crawl_mod.pictures_of(post(raw_response=raw), "zhihu") == []
-    for bad in ("ftp://x/a.jpg", "javascript:alert(1)", "data:image/png;base64,AAAA", "https://a b/c.jpg", "https://x.test/" + "a" * 2100):
-        assert crawl_mod.pictures_of(post(raw_response=xhs_raw([{"url": bad}])), "xhs") == [], bad
+def test_a_platform_with_no_file_id_and_a_redacted_or_unsafe_value_give_no_pictures():
+    for platform in ("douyin", "bilibili", "wechat_channels", "zhihu"):
+        assert crawl_mod.pictures_of(post(raw_response={"search": {"image": "[REDACTED_URL]", "video": {"cover": "[REDACTED_URL]"}}}), platform) == []
+    for bad in ("[REDACTED_URL]", "../../etc/passwd", "short", "a b c d e f g h", 7, None):
+        assert crawl_mod.pictures_of(post(raw_response=xhs_raw([{"fileid": bad, "url": "[REDACTED_URL]"}])), "xhs") == [], bad
 
-
-# ------------------------------------------------------------------------------------ the retained jobs
 
 def test_job_ids_reads_a_list_or_an_object_holding_one():
     a, b, c = "a" * 32, "b" * 32, "c" * 32

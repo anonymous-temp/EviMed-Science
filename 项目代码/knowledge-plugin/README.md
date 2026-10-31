@@ -269,9 +269,9 @@ an identity key, polls in the fetch log, health by the same rule — but the sch
   platform and one term at a time, 120 requests a day spread over the day, ten minutes' wait whenever GEO's crawler is
   busy. A post keeps the platform's counts, a 300-character excerpt (its `summary`), **its own text whole** (`/text`
   `body_text`, whitespace normalised, at most 20,000 characters, the title not repeated in it; a post that says nothing
-  beyond its title has none) and its **pictures** — a picture post's pictures in order, a video's one poster, at most
-  eight — never its author. The crawl asks for the provider's raw answer and reads only the picture addresses out of it
-  (`social/crawl.py`, `pictures_of`, tolerant of any shape); the raw answer is dropped there, and the pictures go through
+  beyond its title has none) and, on XHS and Weibo, its **pictures**, in order, at most eight — never its author. The crawl
+  asks those two for the provider's raw answer and reads only the pictures' file ids out of it, because the crawler redacts
+  every address (`social/crawl.py`, `pictures_of`); Douyin, Bilibili and Channels give no such id. The raw answer is dropped there, and the pictures go through
   the media store like an X post's. A post stored before 2026-10-31 (an excerpt, no picture) is filled when a later
   read of the crawl answers it whole, and delivered again as its next revision. `python -m knowledge_plugin
   social-bodies [--apply]` does the same for the posts the crawl will not see again, from the crawler's retained jobs

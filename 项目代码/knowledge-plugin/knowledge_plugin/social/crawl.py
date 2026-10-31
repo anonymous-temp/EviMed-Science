@@ -1,8 +1,8 @@
 """Six Chinese platforms through the GEO module's crawler, for monitoring (contract 1.5.0, channel ``social``).
 
 ``POST {KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL}/api/jobs`` and fixed-path job polling with the request the platform's ``socialCrawlClient.mjs`` sends:
-``platforms: [one name]``, newest first, five detailed posts, collect_comments=false, and the provider's raw answer (read for the
-addresses of a post's pictures and discarded, see below). What is read:
+``platforms: [one name]``, newest first, five detailed posts, collect_comments=false, and for XHS and Weibo the provider's raw answer
+(read for the file ids of a post's pictures and discarded, see below). What is read:
 
 - **A standing watch list** (``watch_list`` in ``registry/social-sources.json``): about forty medical topics and drug
   classes the public talks about and the feed covers, each with the reason it is there. Every (term, platform) pair is
@@ -27,8 +27,8 @@ addresses of a post's pictures and discarded, see below). What is read:
   the post's **whole own text** (``body_text``: what the platform answered as the post's ``content``, as paragraphs, at most
   ``BODY_MAX`` characters; the title is not put in front of it, and a ``content`` that only repeats the title is no text),
   its pictures and the counts the platform states (likes, shares, the comment count when stated — never the length of a comment
-  sample). The pictures are read out of the provider's raw answer by ``pictures_of`` (a picture note's pictures in order, a
-  video's one poster), stored by the media store like an X post's, and the raw answer is dropped there: it holds the author
+  sample). XHS and Weibo pictures are named from the file ids in the provider's raw answer by ``pictures_of`` (its addresses are
+  redacted; the other platforms have no such id), stored by the media store like an X post's, and the raw answer is dropped there: it holds the author
   and the account's other data, and it reaches no store, no log and no entry. Never the author: a post on these platforms is
   a member of the public's, and personal data does not pass the adapter (contract rule 4). Comments are not asked for. A post
   the crawler returns without an address (only the first detailed ones carry one) is left out. A post with a title and no
@@ -38,11 +38,11 @@ addresses of a post's pictures and discarded, see below). What is read:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
 
-from ..model import MEDIA_MAX, URL_MAX, NormalizedEntry
+from ..model import MEDIA_MAX, NormalizedEntry
 from ..normalize import clean_body
 
 PLATFORMS = {"xhs": "xiaohongshu", "douyin": "douyin", "zhihu": "zhihu", "weibo": "weibo", "bilibili": "bilibili",
@@ -186,16 +186,19 @@ def build_entry(post: dict, crawler_platform: str, *, now: datetime, media: list
 
 # ------------------------------------------------------------------------------------ pictures
 #
-# The provider's raw answer (``posts[].raw_response``, asked with ``include_provider_raw``) is read here for the addresses of a
-# post's pictures, one small function per platform, and goes no further. Every step tolerates a missing or differently-typed
-# key (a platform changing its answer costs that platform's pictures, never the post). The shapes are the crawler's retained
-# answers (2026-10-27..31, values masked): XHS ``detail.data.data[0].note_list[0]`` and ``search.note`` (``images_list``,
-# ``type`` normal/video), Douyin ``detail.data.aweme_detail`` / ``search`` (``video.cover``, ``images``), Bilibili
-# ``detail.data.data.View.pic`` / ``search.av.cover``, Channels ``detail.data.cover_img_url`` / ``search.image``, Weibo
-# ``detail.data.pic_infos`` / ``pic_ids``.
+# The provider's raw answer (``posts[].raw_response``, asked with ``include_provider_raw``) is read here for a post's pictures, one
+# small function per platform, and goes no further. The crawler replaces every address in it with ``[REDACTED_URL]`` (all six
+# platforms' retained answers, 2026-10-31), so a picture can only be named by its file id, on the platform's own public image
+# host: XHS ``images_list[].fileid`` on ``ci.xiaohongshu.com`` (read from production that day: 200, image/jpeg, with or without a
+# referrer) and Weibo ``pic_ids`` on ``wx1.sinaimg.cn`` (the host's long-standing form; no retained answer had a picture to try it
+# on). Douyin, Bilibili and Channels give no id a picture can be built from, and have none. Every step tolerates a missing or
+# differently-typed key: a platform changing its answer costs that platform's pictures, never the post.
 
-# What the media store decodes (``media._FORMATS``): an address of another format is chosen only when it is the only one.
-_UNDECODED = (".heic", ".heif", ".avif")
+# A file id goes into an address path: its closed form, and nothing else, gets there.
+_FILE_ID = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+XHS_PICTURE = "https://ci.xiaohongshu.com/{}"
+WEIBO_PICTURE = "https://wx1.sinaimg.cn/large/{}.jpg"
+PICTURE_PLATFORMS = frozenset({"xhs", "weibo"})
 
 
 def _dig(value, *path):
@@ -212,30 +215,8 @@ def _dig(value, *path):
     return value
 
 
-def _link(value) -> str | None:
-    """An https address from an address, a ``{url}`` object or a ``url_list``'s first usable member; ``//host`` and ``http://`` are
-    taken as https (the platforms' image hosts serve it), anything else is nothing."""
-    if isinstance(value, dict):
-        value = value.get("url") if isinstance(value.get("url"), str) else value.get("url_list")
-    if isinstance(value, list):
-        usable = [link for link in (_link(item) for item in value) if link]
-        return next((link for link in usable if not urlsplit(link).path.lower().endswith(_UNDECODED)), usable[0] if usable else None)
-    if not isinstance(value, str):
-        return None
-    url = value.strip()
-    if url.startswith("//"):
-        url = "https:" + url
-    elif url.startswith("http://"):
-        url = "https://" + url[len("http://"):]
-    return url if url.startswith("https://") and " " not in url and len(url) <= URL_MAX else None
-
-
-def _first_link(*values) -> str | None:
-    return next((link for link in (_link(value) for value in values) if link), None)
-
-
-def _xhs_picture(item) -> str | None:
-    return _first_link(*(_dig(item, key) for key in ("url_size_large", "original", "url")))
+def _file_id(value) -> str | None:
+    return value if isinstance(value, str) and _FILE_ID.fullmatch(value) else None
 
 
 def _xhs(raw: dict) -> list[dict]:
@@ -248,58 +229,28 @@ def _xhs(raw: dict) -> list[dict]:
     items = [item for item in images if isinstance(item, dict)]
     if all(isinstance(item.get("index"), int) for item in items):
         items.sort(key=lambda item: item["index"])
-    links = [link for link in (_xhs_picture(item) for item in items) if link]
+    links = [XHS_PICTURE.format(file_id) for file_id in (_file_id(item.get("fileid")) for item in items) if file_id]
     if _dig(note, "type") == "video":
         return [{"url": links[0], "kind": "video-poster"}] if links else []
     return [{"url": link, "kind": "image"} for link in links]
 
 
 def _weibo(raw: dict) -> list[dict]:
-    data = _dig(raw, "detail", "data")
-    infos = _dig(data, "pic_infos")
-    ids = _dig(data, "pic_ids")
-    links: list[str | None] = []
-    if isinstance(infos, dict):
-        for pid in (ids if isinstance(ids, list) and ids else list(infos)):
-            links.append(_first_link(*(_dig(infos, pid, size) for size in ("large", "largest", "original", "mw2000", "bmiddle"))))
-    if not any(links):
-        parsed = _dig(raw, "search", "_v2_parsed", "media", "images")
-        links = [_link(item) for item in parsed] if isinstance(parsed, list) else []
-    if any(links):
-        return [{"url": link, "kind": "image"} for link in links if link]
-    poster = _first_link(_dig(data, "page_info", "page_pic")) if _dig(data, "page_info", "type") == "video" else None
-    return [{"url": poster, "kind": "video-poster"}] if poster else []
+    ids = _dig(raw, "detail", "data", "pic_ids")
+    if not isinstance(ids, list) or not ids:
+        ids = _dig(raw, "search", "pic_ids")
+    if not isinstance(ids, list):
+        return []
+    return [{"url": WEIBO_PICTURE.format(pic), "kind": "image"} for pic in (_file_id(item) for item in ids) if pic]
 
 
-def _douyin(raw: dict) -> list[dict]:
-    for aweme in (_dig(raw, "detail", "data", "aweme_detail"), _dig(raw, "search")):
-        album = _dig(aweme, "images")
-        if isinstance(album, list) and album:
-            return [{"url": link, "kind": "image"} for link in (_link(item) for item in album) if link]
-        poster = _first_link(*(_dig(aweme, "video", key) for key in ("cover", "origin_cover", "dynamic_cover")))
-        if poster:
-            return [{"url": poster, "kind": "video-poster"}]
-    return []
-
-
-def _bilibili(raw: dict) -> list[dict]:
-    poster = _first_link(_dig(raw, "detail", "data", "data", "View", "pic"), _dig(raw, "search", "av", "cover"))
-    return [{"url": poster, "kind": "video-poster"}] if poster else []
-
-
-def _channels(raw: dict) -> list[dict]:
-    poster = _first_link(_dig(raw, "detail", "data", "cover_img_url"), _dig(raw, "search", "image"),
-                         _dig(raw, "detail", "data", "media", "cover_url"))
-    return [{"url": poster, "kind": "video-poster"}] if poster else []
-
-
-_PICTURES = {"xhs": _xhs, "weibo": _weibo, "douyin": _douyin, "bilibili": _bilibili, "wechat_channels": _channels}
+_PICTURES = {"xhs": _xhs, "weibo": _weibo}
 
 
 def pictures_of(post: dict, crawler_platform: str) -> list[dict]:
     """``[{url, kind}]`` of a post's pictures, at most ``PICTURES_MAX``, in the post's order: the pictures of a picture post
-    (``image``) or the poster of a video (``video-poster``, one). Read from the post's raw provider answer only; nothing there is
-    kept but these addresses. Zhihu's answers carry theirs in the text, not here."""
+    (``image``) or the poster of an XHS video (``video-poster``, one). Read from the post's raw provider answer only; nothing there
+    is kept but the file ids."""
     raw = post.get("raw_response") if isinstance(post, dict) else None
     reader = _PICTURES.get(crawler_platform)
     if not isinstance(raw, dict) or reader is None:
