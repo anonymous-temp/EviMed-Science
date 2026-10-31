@@ -67,6 +67,7 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
+  FRONTIER_CRAWL_PLATFORMS,
   FRONTIER_ITEM_FLAGS,
   FRONTIER_LANES,
   FRONTIER_MODEL_FLAGS,
@@ -103,11 +104,13 @@ import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SC
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
-import { bumpFrontierVersion, FRONTIER_FEED_TIME_ZONE, migrateFrontier } from "./frontierPersistence.mjs";
+import { bumpFrontierVersion, FRONTIER_FEED_TIME_ZONE, FRONTIER_META_KEYS, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
 import { FrontierTagStore } from "./frontierTags.mjs";
 import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasis, frontierTidyVerdict, FRONTIER_TIDY_LIMITS } from "./frontierReaderTidy.mjs";
 import { FRONTIER_ASK_VERSION, frontierWriteAsk } from "./frontierAsk.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "./frontierLead.mjs";
+import { FRONTIER_POST_LIMITS, frontierCrawlPost, frontierPostClean, frontierPostMaterial, frontierPostOf, frontierPostReading, frontierPostText, frontierPostWeight } from "./frontierPostText.mjs";
+import { FRONTIER_MEDIA_ID, fetchFrontierMedia } from "./frontierMedia.mjs";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "./frontierBrief.mjs";
 import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead,
   frontierFaithCheckSummary, frontierStudyFactsWanted, frontierWriteFaith } from "./frontierFaithStep.mjs";
@@ -322,6 +325,34 @@ const SUMMARY_BATCH = 200;
 const FULLTEXT_TIMEOUT_MS = 180_000;
 /** How far back a published item gets its 导读 written (a late text, the backfill of 2026-10-22). */
 export const FRONTIER_LEAD_WINDOW_MS = 30 * DAY;
+/**
+ * Posts the picture step looks at a round (it marks the ones that say something of their own as not needing it, and reads the thin ones'
+ * pictures up to `FRONTIER_POST_LIMITS.postsPerRound`), and the longest one picture's parse may take.
+ */
+const POST_PICTURE_SCAN = 40;
+/**
+ * The rule the sweep of what is stored (`#sweepPosts`) was last run by, as `meta.post_sweep` holds it: raise it to sweep again.
+ * `POST_SWEEP_THIN_CHARS` is the length under which a summary or a page excerpt is thin material for a 导读: a source of that size has no
+ * result, basis or decision to write a paragraph from beyond its title, and the older instruction wrote about the source (「消息仅提供…」)
+ * instead; the reader's 导读 of a source at least that long is not rewritten.
+ */
+const FRONTIER_POST_SWEEP = 1;
+const POST_SWEEP_THIN_CHARS = 300;
+const POST_PICTURE_TIMEOUT_MS = 90_000;
+/**
+ * The parser's and the plugin's codes that mean "not now" and not "this picture": a post whose pictures met one is tried again in a later
+ * round and is not counted as tried (a parser outage only delays). The rest of a parse's refusals are that picture's own.
+ */
+const POST_PICTURE_DELAY_CODES = new Set(["source_parser_unavailable", "source_parser_timeout", "source_parser_unconfigured", "source_parser_rate_limited",
+  "source_parser_quota_exhausted", "source_parser_auth_failed", "source_parser_internal_error", "source_parser_upstream_error", "source_parser_canceled",
+  "knowledge_plugin_unreachable", "knowledge_plugin_unconfigured", "knowledge_plugin_failed"]);
+/** `items.withdrawn_reason` of a crawl post taken out for having no text of its own (rd-server 2026-10-31); an operator's reason is never this. */
+export const POST_WITHDRAWN = "post-no-text";
+
+/** Whether a platform's item is a post: an X post or one of the six crawl platforms' (the writers read a post as a claim of its author). @param {unknown} platform */
+function frontierIsPost(platform) {
+  return platform === "x" || frontierCrawlPost(platform);
+}
 const ITEM_BATCH = 20;
 const DEFERRED_BATCH = 8;
 const EMBED_BATCH = 16;
@@ -566,17 +597,22 @@ export function frontierUpdateLinks(entry) {
  *   that never waits, or a usable feed summary);
  * `hold` — wait for the text;
  * `drop` — no text will come and nothing else a reader could use is there: the item is not shown (2026-10-22).
- * @param {{ status: "available" | "pending" | "unavailable" | "error", entry: any, source: any, promoted: boolean, now: Date, nextAttemptAt?: string | null }} input
- * @returns {{ action: "promote" | "promote-hold" | "hold" | "drop", holdMs: number }}
+ * @param {{ status: "available" | "pending" | "unavailable" | "error", entry: any, source: any, promoted: boolean, now: Date, nextAttemptAt?: string | null,
+ *   post?: ReturnType<typeof frontierPostReading> | null }} input
+ * @returns {{ action: "promote" | "promote-hold" | "hold" | "drop", holdMs: number, reason?: string }}
  */
-export function frontierTextDecision({ status, entry, source, promoted, now, nextAttemptAt = null }) {
+export function frontierTextDecision({ status, entry, source, promoted, now, nextAttemptAt = null, post = null }) {
   const age = now.getTime() - new Date(entry.first_seen_at).getTime();
   // What a reader can be shown without the text: a whole feed summary, a record that is its own text (a registry entry, an openFDA
   // record), or a safety source's notice (a recall or a warning is news on its title). Anything else with no text is not shown
   // (owner, 2026-10-22: 「除非是真的全部信息都没有，那么就先不展示出来」).
-  const readable = promoted || usableSummary(entry) || frontierRecordEntry(entry, source) || source?.safety_feed === true;
-  if (status === "available") return { action: "promote", holdMs: 0 };
-  if (status === "unavailable" || age >= frontierTextGiveUpMs(source)) return readable ? { action: "promote", holdMs: 0 } : { action: "drop", holdMs: 0 };
+  // A crawl post is the same rule with its own measure (rd-server 2026-10-31): a feed summary of a title and its hashtags is not a text, so
+  // what a reader can be shown is a post that says something of its own, or one whose pictures are still to be read (`post`,
+  // `frontierPostReading`). A post that is neither, and has no text still to come, is not shown: `post-no-text`.
+  const readable = post ? promoted || post.readable || post.waiting : promoted || usableSummary(entry) || frontierRecordEntry(entry, source) || source?.safety_feed === true;
+  const drop = post ? { action: /** @type {const} */ ("drop"), holdMs: 0, reason: "post-no-text" } : { action: /** @type {const} */ ("drop"), holdMs: 0 };
+  if (status === "available") return post && !readable ? drop : { action: "promote", holdMs: 0 };
+  if (status === "unavailable" || age >= frontierTextGiveUpMs(source)) return readable ? { action: "promote", holdMs: 0 } : drop;
   const holdMs = status === "error" ? FRONTIER_TEXT_RETRY_MS : frontierTextPendingHold(nextAttemptAt, now);
   return readable ? { action: "promote-hold", holdMs } : { action: "hold", holdMs };
 }
@@ -588,10 +624,12 @@ export function frontierTextGiveUpMs(source) {
 
 /**
  * Whether an item may be shown: it has a reader text (`frontierReaderText`), its entry a summary a reader could use, or its source
- * is a safety feed. An item without is not published, and waits for its text (`#processItems`).
+ * is a safety feed. An item without is not published, and waits for its text (`#processItems`). A crawl post is shown when it says
+ * something of its own or its pictures were read (`frontierPostReading`).
  * @param {{ texts: any, entry: any, source: any }} input
  */
 export function frontierItemReadable({ texts, entry, source }) {
+  if (frontierCrawlPost(entry?.platform)) return frontierPostReading({ title: entry.title_raw, texts, summary: entry.summary_raw, media: entry.media }).readable;
   return Boolean(frontierReaderText(texts)) || usableSummary(entry) || frontierRecordEntry(entry, source) || source?.safety_feed === true;
 }
 
@@ -817,14 +855,25 @@ const READER_BEST_SOURCE_SQL = `(CASE WHEN btrim(coalesce(t.body_text, '')) <> '
  * found not to be the article's taken out — as paragraphs joined by blank lines, so the reader, the translation and the
  * check that a translation is still its text's all read the same thing.
  * @param {any} texts an `item_texts` row @param {"body" | "abstract" | "excerpt" | "summary" | "reports" | null} [source]
+ * @param {{ platform?: string | null, title?: string | null } | null} [post] the item, when it may be a crawl post: its text is then the model's material
+ *   for the post (`frontierPostMaterial`), not a tidied article
  * @returns {{ source: "body" | "abstract" | "excerpt" | "summary" | "reports", text: string } | null}
  */
-export function frontierReaderText(texts, source = null) {
+export function frontierReaderText(texts, source = null, post = null) {
   const columns = { body: texts?.body_text, abstract: texts?.abstract_raw, excerpt: texts?.body_excerpt, summary: texts?.reader_summary,
     reports: texts?.reader_reports };
   for (const name of source ? [source] : FRONTIER_READER_TEXT_SOURCES) {
     const text = columns[name];
-    if (typeof text === "string" && text.trim()) return { source: name, text: frontierSettledParagraphs(text, name, texts?.reader_tidy ?? null).join("\n\n") };
+    if (typeof text !== "string" || !text.trim()) continue;
+    if (post && frontierCrawlPost(post.platform) && name !== "reports") {
+      // A crawl post is read as a post (`frontierPostText.mjs`): its words and tags without the markers and the title copy, and the words of
+      // its pictures when they were read. One that says nothing of its own and has no words in its pictures has no reader text at all.
+      const read = { ...frontierPostText({ title: post.title, text, layout: name === "body" ? "own" : "titled" }), layout: /** @type {"own" | "titled"} */ (name === "body" ? "own" : "titled") };
+      const pictureRead = frontierPostWeight(String(texts?.picture_text ?? "")) >= FRONTIER_POST_LIMITS.picture;
+      if (read.own < FRONTIER_POST_LIMITS.own && !pictureRead) return null;
+      return { source: name, text: frontierPostMaterial(read, pictureRead ? texts?.picture_text : null) };
+    }
+    return { source: name, text: frontierSettledParagraphs(text, name, texts?.reader_tidy ?? null).join("\n\n") };
   }
   return null;
 }
@@ -931,7 +980,8 @@ function orderedFlags(flags) {
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
  *             preprintLane: number, genreFloor: number, zhTarget: number, eventPrimary: number, translated: number, tidied: number,
  *             tidyDropped: number, leads: number, asks: number, retagged: number, studyFacts: number, faithChecked: number,
- *             faithMismatched: number, faithRepaired: number, faithTrimmed: number, faithUnchecked: number }} FrontierBatchSummary
+ *             faithMismatched: number, faithRepaired: number, faithTrimmed: number, faithUnchecked: number, postsWithdrawn: number,
+ *             postPictures: number }} FrontierBatchSummary
  */
 
 /** The words search finds an item by: its titles, card summary, entities and tags. @param {any} item */
@@ -945,7 +995,7 @@ export class FrontierPipeline {
   /**
    * @param {{ database: any, editor: any, plugin: any, embedder?: any, glossary?: any, config?: Record<string, any>,
    *           sourceChanges?: any, policies?: any, evolution?: any, webReader?: { read: (url: string, options?: any) => Promise<any> } | null,
-   *           tags?: FrontierTagStore | null, now?: () => Date, workerId?: string }} options
+   *           parser?: { parseBytes: Function, configured?: boolean } | null, tags?: FrontierTagStore | null, now?: () => Date, workerId?: string }} options
    *   `editor` a `FrontierEditor` (its `owner` is the operator's internal
    *   project, and the budget is read for it); `plugin` offers `text(entryId)`
    *   (`KnowledgePluginClient`); `embedder` a `KbEmbedder` or null; `glossary`
@@ -954,7 +1004,7 @@ export class FrontierPipeline {
    *   (`sourceChanges.mjs`), which each retraction, correction, concern or
    *   withdrawal notice is also written to (absent: nothing is).
    */
-  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, tags = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
+  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, parser = null, tags = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
     if (!database) throw new TypeError("The frontier pipeline needs a database.");
     if (typeof editor?.screen !== "function" || typeof editor?.edit !== "function") throw new TypeError("The frontier pipeline needs an editor.");
     if (typeof plugin?.text !== "function") throw new TypeError("The frontier pipeline needs the plugin client.");
@@ -966,6 +1016,8 @@ export class FrontierPipeline {
     /** The platform's web reader (`webRead.mjs`: robots.txt, private addresses refused, PDFs through the document parser), for an
      *  open-access PDF the plugin could not read; null reads none. */
     this.webReader = webReader && typeof webReader.read === "function" ? webReader : null;
+    /** The in-house document parser (`documentParserClient.mjs`), for the words in a thin crawl post's pictures (`#postPictures`); null when none is configured. */
+    this.parser = parser && typeof parser.parseBytes === "function" && parser.configured !== false ? parser : null;
     this.config = config ?? {};
     this.now = now;
     this.workerId = String(workerId).slice(0, 120);
@@ -1017,6 +1069,12 @@ export class FrontierPipeline {
       asks: 0, asksEmpty: 0, askQuestionsDropped: /** @type {Record<string, number>} */ ({}),
       // Open-access PDFs read for a full text (`#fullText`): read and kept, read and too short or unreadable.
       fullTexts: 0, fullTextsMissed: 0, fullTextsRefused: 0,
+      // Crawl posts (rd-server 2026-10-31, `frontierPostText.mjs`): entries dropped for saying nothing beyond their title and tags, published
+      // posts withdrawn for it, withdrawn ones shown again by a revision with words; the pictures of thin posts read (`#postPictures`) —
+      // read and held words, held none, failed for the parser's own reason — and the parser being unreachable (tried again, not counted as a try);
+      // and the one-time sweep of what was already stored (`#sweepPosts`).
+      postsNoText: 0, postsWithdrawn: 0, postsReinstated: 0, postPicturesRead: 0, postPicturesEmpty: 0, postPicturesFailed: 0, postPicturesDeferred: 0,
+      postSweepWithdrawn: 0, postSweepLeadsReset: 0,
       // The tag tree (`#retag`, `#score`): items tagged again, answers left without a usable row, calls that failed, candidates made.
       retagged: 0, retagSkipped: 0, retagFailures: 0, tagCandidatesCreated: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
@@ -1103,7 +1161,7 @@ export class FrontierPipeline {
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
       waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
       translated: 0, tidied: 0, tidyDropped: 0, leads: 0, asks: 0, retagged: 0, studyFacts: 0, faithChecked: 0, faithMismatched: 0, faithRepaired: 0,
-      faithTrimmed: 0, faithUnchecked: 0 };
+      faithTrimmed: 0, faithUnchecked: 0, postsWithdrawn: 0, postPictures: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
       const now = this.now();
@@ -1112,8 +1170,10 @@ export class FrontierPipeline {
       // A tree that cannot be read leaves the edits without candidates; it never stops a batch.
       const tags = await this.tags.vocabulary().catch(() => null);
       const context = { now, budget, capabilities, glossary, tags, summary };
+      await this.#sweepPosts(context);
       await this.#processEntries(context);
       await this.#primaryTexts(context);
+      await this.#postPictures(context);
       await this.#processItems(context);
       await this.#processOwedEdits(context);
       if (summary.published || summary.rescored) {
@@ -1741,9 +1801,16 @@ export class FrontierPipeline {
     } catch (error) {
       status = codeOf(error) === "knowledge_plugin_not_found" ? "unavailable" : "error";
     }
-    const snapshot = await this.database.query("SELECT item_id FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId]);
+    const snapshot = await this.database.query("SELECT item_id, body_text, body_excerpt, picture_text, picture_tried_at FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId]);
     const promoted = snapshot.rowCount > 0;
-    const decision = frontierTextDecision({ status, entry, source, promoted, now, nextAttemptAt: status === "pending" ? text?.next_attempt_at : null });
+    // A crawl post is judged as a post: what it says of its own, as the text this answer carries or the stored one (the same columns the
+    // snapshot below writes), and whether its pictures are still to be read.
+    const stored = snapshot.rows[0] ?? null;
+    const post = frontierCrawlPost(entry.platform) ? frontierPostReading({ title: entry.title_raw, summary: entry.summary_raw, media: entry.media, texts: {
+      body_text: status === "available" ? text?.body_text ?? stored?.body_text : stored?.body_text,
+      body_excerpt: status === "available" ? text?.body_excerpt ?? stored?.body_excerpt : stored?.body_excerpt,
+      picture_text: stored?.picture_text, picture_tried_at: stored?.picture_tried_at } }) : null;
+    const decision = frontierTextDecision({ status, entry, source, promoted, now, nextAttemptAt: status === "pending" ? text?.next_attempt_at : null, post });
     if (decision.action === "hold") {
       await this.#finishEntry(entry, "held", status === "error" ? "plugin-text-unreachable" : "text-pending",
         { itemId, holdUntil: new Date(now.getTime() + decision.holdMs) });
@@ -1753,11 +1820,14 @@ export class FrontierPipeline {
     if (decision.action === "drop") {
       // No text came and nothing else a reader could use: the item is not shown. It stays unpublished without a text, so a later
       // revision of the entry that brings one (the plugin read it again) takes it through the ordinary path.
-      await this.#finishEntry(entry, "dropped", "no-text", { itemId });
+      await this.#finishEntry(entry, "dropped", decision.reason ?? "no-text", { itemId });
+      if (decision.reason === "post-no-text") this.counters.postsNoText += 1;
       summary.dropped += 1;
       return;
     }
     const available = status === "available" ? text : null;
+    /** @type {"withdrawn" | "reinstated" | null} */
+    let postMoved = null;
     await this.database.transaction(async (/** @type {any} */ client) => {
       const item = (await client.query("SELECT * FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [itemId])).rows[0];
       if (!item) throw Object.assign(new Error("The entry's item is gone."), { code: "frontier_item_missing" });
@@ -1846,13 +1916,53 @@ export class FrontierPipeline {
           state=CASE WHEN state='scored' THEN 'screened' ELSE state END,
           lease_until=CASE WHEN lease_owner IS NULL THEN NULL ELSE lease_until END WHERE id=$1`, [item.id]);
       }
-      if (linked || item.state === "published") await bumpFrontierVersion(client);
+      // A crawl post whose text now says nothing of its own leaves the feed as an operator's withdrawal does; a post withdrawn for that
+      // comes back when a revision brings words (or its pictures were read).
+      if (post && item.state === "published" && !post.readable && !post.waiting) {
+        await this.#withdrawPost(client, item.id);
+        postMoved = "withdrawn";
+      } else if (post && item.state === "withdrawn" && item.withdrawn_reason === POST_WITHDRAWN && post.readable) {
+        await this.#reinstatePost(client, item.id);
+        postMoved = "reinstated";
+      } else if (linked || item.state === "published") await bumpFrontierVersion(client);
       const hold = decision.action === "promote-hold" && !available;
       await this.#finishEntry(entry, hold ? "held" : "promoted", hold ? "text-pending" : null,
         { itemId, holdUntil: hold ? new Date(now.getTime() + decision.holdMs) : null, client });
     });
     if (!promoted) summary.promoted += 1;
     if (decision.action === "promote-hold" && !available) summary.held += 1;
+    if (postMoved === "withdrawn") { this.counters.postsWithdrawn += 1; summary.postsWithdrawn += 1; }
+    if (postMoved === "reinstated") this.counters.postsReinstated += 1;
+  }
+
+  /**
+   * A crawl post that says nothing of its own and has no pictures to wait for leaves the feed the way an operator's withdrawal takes an
+   * item out (`FrontierService.operateItem`): state `withdrawn`, the reason kept, an `item_changes` row, the content version moved. No
+   * notice and no card is made or retracted; every list reads `published` only. The caller holds the item's row lock.
+   * @param {any} client @param {number | string} itemId
+   */
+  async #withdrawPost(client, itemId) {
+    const moved = await client.query(`UPDATE evimed_frontier.items SET state = 'withdrawn', withdrawn_at = clock_timestamp(), withdrawn_reason = $2,
+        lease_owner = NULL, lease_until = NULL, updated_at = clock_timestamp() WHERE id = $1 AND state = 'published'`, [itemId, POST_WITHDRAWN]);
+    if (!moved.rowCount) return false;
+    await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'remove', 'withdrawn')", [itemId]);
+    await bumpFrontierVersion(client);
+    return true;
+  }
+
+  /**
+   * A post withdrawn for having no text, shown again: a revision brought words, or its pictures were read. Only the withdrawal this
+   * pipeline made (`withdrawn_reason`), never an operator's. It owes one re-edit, from the text it has now. The caller holds the lock.
+   * @param {any} client @param {number | string} itemId
+   */
+  async #reinstatePost(client, itemId) {
+    const moved = await client.query(`UPDATE evimed_frontier.items SET state = 'published', withdrawn_at = NULL, withdrawn_reason = NULL,
+        editor_version = NULL, editor_diagnostics = '{}'::jsonb, lead_basis = NULL, updated_at = clock_timestamp()
+      WHERE id = $1 AND state = 'withdrawn' AND withdrawn_reason = $2`, [itemId, POST_WITHDRAWN]);
+    if (!moved.rowCount) return false;
+    await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'published')", [itemId]);
+    await bumpFrontierVersion(client);
+    return true;
   }
 
   /**
@@ -1919,9 +2029,16 @@ export class FrontierPipeline {
   #editItem(item, texts, entry, source, glossary) {
     const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts?.publication_types });
     const abstract = texts?.abstract_raw ?? null;
-    const summary = abstract ? null : (entry?.summary_raw ?? null);
+    // A crawl post is edited from what it says (`frontierPostText.mjs`): its words and tags, the words of its pictures when they were read,
+    // in place of the entry's `title content` summary and the excerpt that repeat the title and carry the platform's markers.
+    const crawl = frontierCrawlPost(item.platform);
+    const post = crawl ? frontierPostOf(texts, item.title_raw, entry?.summary_raw) : null;
+    const postSays = crawl ? frontierPostReading({ title: item.title_raw, texts, summary: entry?.summary_raw, media: entry?.media ?? item.media }).readable : false;
+    const summary = crawl ? null : abstract ? null : (entry?.summary_raw ?? null);
     // The full text (contract 1.4.0) stands in for the excerpt a post or a page has none of: the edit is bounded anyway.
-    const bodyExcerpt = texts?.body_excerpt ?? (typeof texts?.body_text === "string" && texts.body_text.trim() ? texts.body_text.slice(0, 12_000) : null);
+    const bodyExcerpt = crawl
+      ? (postSays ? frontierPostMaterial(post, texts?.picture_text).slice(0, 12_000) : null)
+      : texts?.body_excerpt ?? (typeof texts?.body_text === "string" && texts.body_text.trim() ? texts.body_text.slice(0, 12_000) : null);
     const author = item.author && typeof item.author === "object" && typeof item.author.name === "string" && item.author.name.trim()
       ? { name: item.author.name, role: ["organisation", "person"].includes(item.author.role) ? item.author.role : null } : null;
     const quoted = item.quoted && typeof item.quoted === "object" && typeof item.quoted.text === "string" && item.quoted.text.trim()
@@ -1962,6 +2079,14 @@ export class FrontierPipeline {
     if (!vocabulary) return editItem;
     const text = [editItem.abstract ?? editItem.summary ?? "", editItem.bodyExcerpt ? String(editItem.bodyExcerpt).slice(0, 4_000) : ""].join("\n");
     return { ...editItem, tagCandidates: vocabulary.candidatesFor({ title: editItem.titleRaw, text }).map((tag) => tag.name) };
+  }
+
+  /**
+   * The reader text the model reads for an item: `frontierReaderText`, and for a crawl post its words, tags and the words of its pictures
+   * (`frontierPostText.mjs`). @param {any} item @param {any} texts
+   */
+  #readerOf(item, texts) {
+    return frontierReaderText(texts, null, frontierCrawlPost(item.platform) ? { platform: item.platform, title: item.title_raw } : null);
   }
 
   /**
@@ -2095,15 +2220,20 @@ export class FrontierPipeline {
           continue;
         }
         if (!frontierItemReadable({ texts, entry, source })) {
-          if (frontierTextGivenUp({ entry, item, now, source })) {
+          // A crawl post whose text says nothing of its own and whose pictures are not to be waited for (none stored, or read and without
+          // words) is not waited for either: it leaves the queue as an item does that waited out its give-up, and a revision with words takes it back.
+          const postGone = frontierCrawlPost(entry?.platform)
+            && !frontierPostReading({ title: entry.title_raw, texts, summary: entry.summary_raw, media: entry.media }).waiting;
+          if (postGone || frontierTextGivenUp({ entry, item, now, source })) {
             // Nothing came in `FRONTIER_TEXT_GIVE_UP_MS` (G11, 2026-10-25): the item leaves the queue for good, so it stops taking a place in
             // every claim batch. A text that arrives later takes it back (`#textStep`), and so does another sighting (`#adopt`).
             await this.#withEditClaim(item, async (client) => {
               await client.query(`UPDATE evimed_frontier.items SET state = 'failed', lease_owner = NULL, lease_until = NULL,
                 editor_diagnostics = editor_diagnostics || '{"giveUp":"no-text"}'::jsonb, updated_at = clock_timestamp() WHERE id = $1`, [item.id]);
-              await client.query("UPDATE evimed_frontier.entries SET state_reason = 'no-text-gave-up' WHERE item_id = $1", [item.id]);
+              await client.query("UPDATE evimed_frontier.entries SET state_reason = $2 WHERE item_id = $1", [item.id, postGone ? "post-no-text" : "no-text-gave-up"]);
             });
-            this.counters.textGaveUp += 1;
+            if (postGone) this.counters.postsNoText += 1;
+            else this.counters.textGaveUp += 1;
             summary.failed += 1;
             continue;
           }
@@ -2598,7 +2728,8 @@ export class FrontierPipeline {
     const { now, budget, summary } = context;
     const hasText = "(t.body_text IS NOT NULL OR t.abstract_raw IS NOT NULL OR t.body_excerpt IS NOT NULL OR btrim(coalesce(t.reader_summary, '')) <> '' OR btrim(coalesce(t.reader_reports, '')) <> '')";
     // The reader's text (frontierReaderText's order) is judged by the model when it is a page's or a WeChat article's.
-    const judged = `(i.platform IS DISTINCT FROM 'x' AND (btrim(coalesce(t.body_text, '')) <> ''
+    // A post (X, or a crawl platform's, rd-server 2026-10-31) has no navigation or boilerplate to take out: it is settled without a call.
+    const judged = `((i.platform IS NULL OR i.platform <> ALL('{${["x", ...FRONTIER_CRAWL_PLATFORMS].join(",")}}'::text[])) AND (btrim(coalesce(t.body_text, '')) <> ''
       OR (btrim(coalesce(t.abstract_raw, '')) = '' AND btrim(coalesce(t.body_excerpt, '')) <> '')))`;
     const modelReady = this.editor.available && typeof this.editor.callJson === "function" && budget.state !== "exhausted"
       && !this.#providerPause(now);
@@ -2678,6 +2809,156 @@ export class FrontierPipeline {
     };
     for (const item of plain) await settle(item, false);
     await Promise.all(models.map((item) => settle(item, true)));
+  }
+
+  /**
+   * The words in the pictures of a crawl post that says nothing of its own (rd-server 2026-10-31): a Xiaohongshu or Weibo note that is a
+   * title and hashtags over its pictures. A leased, tried-once step in the manner of `#fullText`: a post of the last `FRONTIER_LEAD_WINDOW_MS`
+   * with stored pictures (the plugin's `media`) and no try yet is looked at, at most `POST_PICTURE_SCAN` a round; one that says something in
+   * words is marked as not needing it, and a thin one has its first `FRONTIER_POST_LIMITS.maxPictures` pictures read through the document
+   * parser (`parseBytes`, bytes from the plugin's media route), at most `FRONTIER_POST_LIMITS.postsPerRound` posts a round. The words kept
+   * are the item's own column (`item_texts.picture_text`), the model's material for the post and never the reader's text; they are what a
+   * waiting post is shown for (`frontierPostReading`), and a published thin post whose pictures held none is withdrawn. A parser or plugin
+   * outage is not a try: the post is released and the step stops for the round (it only delays, inside the text give-up window); a picture the
+   * parser refuses for its own reason is a picture without words. `OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED`, and a configured parser.
+   * @param {any} context
+   */
+  async #postPictures(context) {
+    const { now, summary } = context;
+    if (this.config.frontierPostPicturesEnabled === false || !this.parser) return;
+    const claimed = (await this.database.query(`WITH picked AS (
+        SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE i.platform = ANY($2::text[]) AND i.state IN ('screened', 'scored', 'published') AND t.picture_tried_at IS NULL
+          AND jsonb_typeof(i.media) = 'array' AND jsonb_array_length(i.media) > 0 AND coalesce(i.visible_at, i.first_seen_at) > $3
+          AND (i.lease_owner IS NULL OR i.lease_until <= $1)
+        ORDER BY coalesce(i.visible_at, i.first_seen_at) DESC, i.id DESC
+        LIMIT $4
+        FOR UPDATE OF i SKIP LOCKED)
+      UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
+      RETURNING i.id, i.title_raw, i.platform, i.state, i.media, i.lease_until`,
+    [now, [...FRONTIER_CRAWL_PLATFORMS], new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), POST_PICTURE_SCAN, this.workerId,
+      new Date(now.getTime() + this.leaseMs)])).rows;
+    let read = 0;
+    let stopped = false;
+    for (const item of claimed) {
+      await this.#withItemLease(item, async () => {
+        if (stopped || read >= FRONTIER_POST_LIMITS.postsPerRound) return false;
+        const { texts, entry } = await this.#itemContext(item);
+        if (!texts) return false;
+        const reading = frontierPostReading({ title: item.title_raw, texts, summary: entry?.summary_raw, media: item.media });
+        /** @type {string | null} */
+        let words = null;
+        if (!reading.says) {
+          const found = await this.#readPostPictures(item);
+          if (found.delayed) { stopped = true; this.counters.postPicturesDeferred += 1; return false; }
+          read += 1;
+          words = found.text;
+          if (found.failed) this.counters.postPicturesFailed += 1;
+          else if (frontierPostWeight(words) >= FRONTIER_POST_LIMITS.picture) this.counters.postPicturesRead += 1;
+          else this.counters.postPicturesEmpty += 1;
+        }
+        const after = frontierPostReading({ title: item.title_raw, texts: { ...texts, picture_text: words, picture_tried_at: now }, summary: entry?.summary_raw, media: item.media });
+        let withdrawn = false;
+        const written = await this.#writeUnderLease(item, async (client) => {
+          await client.query("UPDATE evimed_frontier.item_texts SET picture_text = $2, picture_tried_at = $3 WHERE item_id = $1", [item.id, words, now]);
+          if (item.state === "published" && !reading.says) {
+            if (!after.readable) withdrawn = await this.#withdrawPost(client, item.id);
+            else {
+              // The words in the pictures are new material for a post already shown: its 导读 is written again from them and its card owes one edit.
+              await client.query(`UPDATE evimed_frontier.items SET lead_basis = NULL, text_arrived_at = clock_timestamp(),
+                  editor_version = CASE WHEN rescored_at IS NULL THEN NULL ELSE editor_version END,
+                  editor_diagnostics = CASE WHEN rescored_at IS NULL THEN '{}'::jsonb ELSE editor_diagnostics END, updated_at = clock_timestamp() WHERE id = $1`, [item.id]);
+            }
+          }
+          // The wait of an item that was not readable ends now: the next round takes it.
+          await client.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
+        });
+        if (written && !reading.says) summary.postPictures += 1;
+        if (written && withdrawn) { this.counters.postsWithdrawn += 1; summary.postsWithdrawn += 1; }
+        return written;
+      });
+    }
+  }
+
+  /**
+   * One post's pictures through the parser: the first `FRONTIER_POST_LIMITS.maxPictures`, in order, each fetched from the plugin and
+   * parsed with a deadline. `delayed` — the plugin or the parser could not be reached (or refused for its quota or credential): nothing is
+   * decided; `failed` — every picture was refused for its own reason; otherwise `text` is the words found, '' when there were none.
+   * @param {{ media: unknown }} item
+   * @returns {Promise<{ text: string, delayed: boolean, failed: boolean }>}
+   */
+  async #readPostPictures(item) {
+    const ids = (Array.isArray(item.media) ? item.media : []).map((/** @type {any} */ entry) => String(entry?.id ?? "")).filter((id) => FRONTIER_MEDIA_ID.test(id))
+      .slice(0, FRONTIER_POST_LIMITS.maxPictures);
+    /** @type {string[]} */
+    const parts = [];
+    let refused = 0;
+    for (const id of ids) {
+      try {
+        const picture = await fetchFrontierMedia(this.plugin, id);
+        const extension = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif" }[/** @type {"image/jpeg"} */ (picture.contentType)];
+        // The parser reads jpg, png, bmp and gif; a stored picture in another type has no words to be had from it here.
+        if (!extension) { refused += 1; continue; }
+        const parsed = await this.parser.parseBytes({ bytes: picture.bytes, filename: `${id.slice(0, 16)}.${extension}`, mediaType: picture.contentType,
+          signal: AbortSignal.timeout(POST_PICTURE_TIMEOUT_MS) });
+        const words = frontierPostClean(parsed?.text ?? "");
+        if (words) parts.push(words);
+      } catch (error) {
+        const code = codeOf(error);
+        if (POST_PICTURE_DELAY_CODES.has(code)) return { text: "", delayed: true, failed: false };
+        // An evicted picture (the plugin's 404) or one the parser refuses: a picture without words.
+        refused += 1;
+      }
+    }
+    const text = parts.join("\n").slice(0, FRONTIER_POST_LIMITS.pictureChars).trim();
+    return { text, delayed: false, failed: !text && ids.length > 0 && refused === ids.length };
+  }
+
+  /**
+   * Once, under the `post_sweep` marker, what the new reading of a crawl post leaves of what is already stored (rd-server 2026-10-31):
+   *
+   * 1. a published crawl post that says nothing of its own and has no pictures to wait for (`frontierPostReading`) is withdrawn the way
+   *    `#withdrawPost` does — no notice, no card — and counted;
+   * 2. the 导读 of the six platforms' posts, and of the posts of any platform whose reader text is a summary or a page excerpt shorter than
+   *    `POST_SWEEP_THIN_CHARS`, within `FRONTIER_LEAD_WINDOW_MS`, has its basis cleared, so `#lead` writes it again under its own budget and
+   *    batching with the instructions of today; one that answers empty then becomes none and the page shows no paragraph.
+   *
+   * Idempotent: the marker is written in the transaction that did the work, under an advisory lock, so a second worker or a second start does
+   * nothing. @param {any} context
+   */
+  async #sweepPosts(context) {
+    const { now } = context;
+    try {
+      const done = await this.database.transaction(async (/** @type {any} */ client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-frontier-post-sweep'))");
+        const marker = (await client.query("SELECT value FROM evimed_frontier.meta WHERE key = $1", [FRONTIER_META_KEYS.postSweep])).rows[0]?.value;
+        if (metaNumber(marker) >= FRONTIER_POST_SWEEP) return null;
+        const rows = (await client.query(`SELECT i.id, i.title_raw, i.media, e.summary_raw, t.body_text, t.body_excerpt, t.picture_text, t.picture_tried_at
+          FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+          LEFT JOIN LATERAL (SELECT summary_raw FROM evimed_frontier.entries WHERE item_id = i.id ORDER BY revision DESC, id DESC LIMIT 1) e ON true
+          WHERE i.state = 'published' AND i.platform = ANY($1::text[]) FOR UPDATE OF i`, [[...FRONTIER_CRAWL_PLATFORMS]])).rows;
+        let withdrawn = 0;
+        for (const row of rows) {
+          const reading = frontierPostReading({ title: row.title_raw, texts: row, summary: row.summary_raw, media: row.media });
+          if (!reading.readable && !reading.waiting && await this.#withdrawPost(client, row.id)) withdrawn += 1;
+        }
+        const reset = await client.query(`UPDATE evimed_frontier.items i SET lead_basis = NULL, updated_at = clock_timestamp()
+          FROM evimed_frontier.item_texts t WHERE t.item_id = i.id AND i.state = 'published' AND i.lead_basis IS NOT NULL AND i.visible_at > $1
+            AND (i.platform = ANY($2::text[])
+              OR (t.reader_tidy->>'source' = 'summary' AND char_length(coalesce(t.reader_summary, '')) < $3)
+              OR (t.reader_tidy->>'source' = 'excerpt' AND char_length(coalesce(t.body_excerpt, '')) < $3))`,
+        [new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), [...FRONTIER_CRAWL_PLATFORMS], POST_SWEEP_THIN_CHARS]);
+        await client.query(`INSERT INTO evimed_frontier.meta (key, value, updated_at) VALUES ($1, to_jsonb($2::integer), clock_timestamp())
+          ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = clock_timestamp()`, [FRONTIER_META_KEYS.postSweep, FRONTIER_POST_SWEEP]);
+        return { withdrawn, reset: reset.rowCount ?? 0 };
+      });
+      if (!done) return;
+      this.counters.postSweepWithdrawn += done.withdrawn;
+      this.counters.postSweepLeadsReset += done.reset;
+      process.stderr.write(`frontier post sweep: ${done.withdrawn} crawl posts without a text of their own withdrawn, ${done.reset} lead bases cleared to be written again\n`);
+    } catch (error) {
+      this.lastError = codeOf(error);
+    }
   }
 
   /**
@@ -2965,14 +3246,24 @@ export class FrontierPipeline {
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
       const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
-      const reader = frontierReaderText(texts);
+      const reader = this.#readerOf(item, texts);
       const sha = texts?.reader_tidy?.sha;
-      if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
+      if (!sha || (reader ? texts.reader_tidy.source !== reader.source : !frontierCrawlPost(item.platform))) return false;
+      if (!reader) {
+        // A crawl post that says nothing of its own and whose pictures held no words (or are still to be read): no 导读 and no call — the
+        // text is recorded as having none, and read again when its pictures are (`#postPictures` clears the basis).
+        const emptied = await this.#writeUnderLease(item, async (client) => {
+          await client.query(`UPDATE evimed_frontier.items SET lead_zh = NULL, lead_basis = $2, lead_at = $3, lead_version = $4, lease_owner = NULL, lease_until = NULL
+            WHERE id = $1`, [item.id, sha, now, FRONTIER_LEAD_VERSION]);
+        });
+        if (emptied) this.counters.leadsEmpty += 1;
+        return emptied;
+      }
       const source = sources.get(item.primary_source_id);
       const leadInput = {
         sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, titleZh: item.title_zh,
-        text: reader.text, kind: reader.source, post: item.platform === "x", genre: frontierItemGenre(item),
+        text: reader.text, kind: reader.source, post: frontierIsPost(item.platform), genre: frontierItemGenre(item),
         // Above an 「AI 要点」 (an item whose reader is read, of a genre with fields) the 导读 leaves the details to it.
         briefed: frontierReaderWorthy(item, this.threshold) && frontierBriefWanted(frontierItemGenre(item)) };
       const result = await frontierWriteLead(this.editor, leadInput);
@@ -3036,7 +3327,7 @@ export class FrontierPipeline {
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
       const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
-      const reader = frontierReaderText(texts);
+      const reader = this.#readerOf(item, texts);
       const sha = texts?.reader_tidy?.sha;
       if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
       const genre = frontierItemGenre(item);
@@ -3050,7 +3341,7 @@ export class FrontierPipeline {
         const briefInput = {
           genre, sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
           date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, titleRaw: item.title_raw, titleZh: item.title_zh,
-          text: reader.text, kind: reader.source, post: item.platform === "x" };
+          text: reader.text, kind: reader.source, post: frontierIsPost(item.platform) };
         const result = await frontierWriteBrief(this.editor, briefInput);
         if (result.error) {
           if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
@@ -3168,14 +3459,14 @@ export class FrontierPipeline {
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
       const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
-      const reader = frontierReaderText(texts);
+      const reader = this.#readerOf(item, texts);
       const sha = texts?.reader_tidy?.sha;
       if (!reader || !sha || texts.reader_tidy.source !== reader.source) return false;
       const source = sources.get(item.primary_source_id);
       const result = await frontierWriteAsk(this.editor, {
         sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
         date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, genre: frontierItemGenre(item),
-        titleRaw: item.title_raw, titleZh: item.title_zh, lead: item.lead_zh, text: reader.text, kind: reader.source, post: item.platform === "x" });
+        titleRaw: item.title_raw, titleZh: item.title_zh, lead: item.lead_zh, text: reader.text, kind: reader.source, post: frontierIsPost(item.platform) });
       if (result.error && frontierCallDeferred(result.error)) {
         if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
         return false;

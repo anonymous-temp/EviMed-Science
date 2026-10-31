@@ -471,6 +471,10 @@ function frontierSettings(overrides) {
     // c3-primary 2026-10-25: a top journal's research paper with no text is read through the published reports of it
     // (frontierPrimaryReports.mjs), and its dropped entries are asked of the plugin again for twenty-one days.
     frontierPrimaryReportsEnabled: overrides.frontierPrimaryReportsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_PRIMARY_REPORTS_ENABLED", true),
+    // rd-server 2026-10-31 (frontierPostText.mjs): a crawl post that says nothing in its text but has pictures is read through the document
+    // parser once (the words in its first pictures, at most FRONTIER_POST_LIMITS.postsPerRound posts a round) and written up from them. On
+    // where the parser is configured; false leaves such a post out (it has nothing to show).
+    frontierPostPicturesEnabled: overrides.frontierPostPicturesEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED", true),
     frontierLeadsDailyQueries: integer("frontierLeadsDailyQueries", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES", 120, 0, 1000),
     // c2-leads 2026-10-25 (frontierTopics.mjs): the outside-event trigger — the public hot lists the knowledge plugin reads, a
     // grouping call and a topic call on deepseek-flash under purpose `frontier` and the module's budget, topics with their

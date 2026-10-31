@@ -5,6 +5,7 @@ import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
 import { FRONTIER_MEDIA_ID, fetchFrontierMedia, frontierMediaList } from "./frontierMedia.mjs";
+import { frontierCrawlPost, frontierPostBody, frontierPostOf } from "./frontierPostText.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
 import { frontierMonthlyMarkdown } from "./frontierMonthly.mjs";
@@ -1141,10 +1142,16 @@ export class FrontierService {
    * @param {any} client @param {Record<string, any>} row
    */
   async #reader(client, row) {
-    const post = row.platform === "x";
-    const translated = row.body_zh_kind === "translation" && typeof row.body_zh === "string" && row.body_zh.trim() ? row.body_zh : null;
+    const crawl = frontierCrawlPost(row.platform);
+    const post = row.platform === "x" || crawl;
+    // A crawl post's body is what it says (`frontierPostText.mjs`): its words without the title copy, the platforms' markers and its
+    // trailing tags — nothing when it says nothing beyond its title and tags, and never the words of its pictures.
+    const crawled = crawl ? frontierPostOf(row, row.title_raw) : null;
+    const crawlBody = crawl ? frontierPostBody(crawled) : null;
+    const translated = (!crawl || crawlBody) && row.body_zh_kind === "translation" && typeof row.body_zh === "string" && row.body_zh.trim() ? row.body_zh : null;
     // The 原文 a translation was made from, or the best text there is (frontierReaderText), as the paragraphs the translation has.
-    const text = (translated ? frontierReaderText(row, row.body_zh_source ?? null) : null) ?? frontierReaderText(row);
+    const text = crawl ? (crawlBody && crawled ? { source: crawled.layout === "own" ? "body" : "excerpt", text: crawlBody } : null)
+      : (translated ? frontierReaderText(row, row.body_zh_source ?? null) : null) ?? frontierReaderText(row);
     const original = text ? (post ? text.text.trim() : frontierParagraphs(text.text).join("\n\n")) : null;
     const chinese = Boolean(original) && !translated && (row.body_zh_kind === "original-zh" || isChineseProse(String(original).slice(0, 3_000)));
     const quoted = row.quoted && typeof row.quoted === "object" && typeof row.quoted.text === "string" && row.quoted.text.trim() ? row.quoted : null;

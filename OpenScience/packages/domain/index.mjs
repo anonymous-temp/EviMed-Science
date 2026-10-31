@@ -1272,7 +1272,7 @@ export {
 // memoryNeverKept — 2 exports: what a memory never holds and how to decide what it holds, the two texts the native engine's
 // type templates and the legacy extraction's instruction both state.
 export { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT } from './src/memoryNeverKept.mjs'
-// frontierVocabulary — 66 exports: the frontier feed's closed vocabularies
+// frontierVocabulary — 67 exports: the frontier feed's closed vocabularies
 // (lane, source type, evidence type, specialty, flag, health, egress, access, and since contract 1.5.0 channel, platform
 // and author role —
 // the enums of the knowledge-source plugin's contract), their Chinese labels,
@@ -1287,6 +1287,7 @@ export {
   FRONTIER_CHANNELS,
   FRONTIER_CHANNEL_LABELS_ZH,
   FRONTIER_BROAD_SAFETY_FLAGS,
+  FRONTIER_CRAWL_PLATFORMS,
   FRONTIER_DATE_PRECISIONS,
   FRONTIER_EGRESSES,
   FRONTIER_EGRESS_LABELS_ZH,

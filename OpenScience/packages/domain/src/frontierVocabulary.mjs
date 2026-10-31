@@ -343,6 +343,13 @@ export const FRONTIER_CHANNEL_LABELS_ZH = /** @type {Readonly<Record<string, str
 /** The platform a social post was made on (contract 1.5.0, `Entry.platform`). */
 export const FRONTIER_PLATFORMS = Object.freeze(['x', 'wechat', 'xiaohongshu', 'douyin', 'zhihu', 'weibo', 'bilibili', 'channels', 'web'])
 
+/**
+ * The six platforms the plugin's crawler reads posts from (the contract's platforms but `x`, `wechat` and `web`, whose texts arrive
+ * as their own articles or posts): a post there is a short text the author wrote under a title the platform made, and the feed reads
+ * it as a post (`frontierPostText.mjs`, rd-server 2026-10-31).
+ */
+export const FRONTIER_CRAWL_PLATFORMS = Object.freeze(['xiaohongshu', 'douyin', 'zhihu', 'weibo', 'bilibili', 'channels'])
+
 export const FRONTIER_PLATFORM_LABELS_ZH = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
   x: 'X',
   wechat: '微信公众号',

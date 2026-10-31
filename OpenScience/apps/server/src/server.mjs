@@ -2453,7 +2453,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges, tags: tagStore, policies:evolutionModulePolicies, evolution:{observe:async event=>evolution?.observe(event)},
       glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-"),
       // An open-access PDF the plugin could not read (2026-10-22): read through the platform's own web reader, when it runs.
-      webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) } });
+      webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) },
+      // The words in the pictures of a crawl post that says nothing in its text (rd-server 2026-10-31): read through the same document parser.
+      parser: documentParser });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
     const tagUpkeep = new FrontierTagUpkeep({ database: productDatabase, editor, tags: tagStore, ...(budget ? { budget } : {}) });

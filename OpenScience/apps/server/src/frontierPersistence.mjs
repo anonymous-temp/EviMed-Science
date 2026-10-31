@@ -86,6 +86,8 @@ export const FRONTIER_META_KEYS = Object.freeze({
   tagsVersion: "tags_version",
   /** The rule `timeline_at` was last given by (`FRONTIER_TIMELINE_RULE`); not a version, nothing bumps it. */
   timelineRule: "timeline_rule",
+  /** The rule a crawl post's text was last swept by (`FRONTIER_POST_SWEEP`, rd-server 2026-10-31): the thin posts taken out and the 导读 of the posts and thin texts written again. */
+  postSweep: "post_sweep",
 });
 
 /** The keys `bumpFrontierVersion` moves; the cursor and the manifest are not versions.
@@ -358,6 +360,11 @@ CREATE INDEX IF NOT EXISTS frontier_items_industry_kind_idx ON evimed_frontier.i
   WHERE industry_kind IS NOT NULL AND state = 'published';
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_origin text CHECK (body_text_origin IN ('oa-pdf'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS oa_pdf_tried_at timestamptz(3);
+-- rd-server 2026-10-31: the words in the pictures of a post that says nothing in its text (a crawl post of Xiaohongshu or Weibo), read once
+-- through the document parser (picture_tried_at is the try, picture_text the words, an empty string when the pictures held none). They are
+-- what the model writes the post's 导读 from and never the reader's text.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS picture_text text CHECK (char_length(picture_text) <= 12000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS picture_tried_at timestamptz(3);
 -- rt2 2026-10-22: a full text read from an open-access PDF is the paper to its references, up to 100,000 characters, and its
 -- translation with it — the lengths the two columns were first declared with (40,000 and 60,000, contract 1.5.0) are widened on a
 -- database that already has them (ADD COLUMN IF NOT EXISTS changes nothing there); a constraint already as declared is left.
