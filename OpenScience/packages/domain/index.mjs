@@ -2647,3 +2647,5 @@ export { geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessme
 
 export { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SCHEMA_VERSION, RSI_CAMPAIGN_CLAIMS, RSI_CAMPAIGN_SURFACES,
   rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth } from './src/rsiCampaign.mjs'
+
+export { GEO_STEP_DEPENDENCIES, geoWorkflowState, geoAutomationEnabled } from './src/geoWorkflow.mjs'

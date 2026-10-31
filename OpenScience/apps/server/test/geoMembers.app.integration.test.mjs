@@ -322,3 +322,23 @@ test("a member whose display name is their login name, or an address, is listed 
   assert.equal(byId.address_named_member.name, "项目成员");
   assert.equal(byId[accounts.owner].name, "王负责人", "a real display name is kept");
 });
+
+
+test("project summaries and recurring choices use current member abilities and preserve the real actor", options, async () => {
+  const id=await made();
+  await call("owner","POST",`/api/geo/projects/${id}/members`,{userId:accounts.viewer,role:"viewer"});
+  await call("owner","POST",`/api/geo/projects/${id}/members`,{userId:accounts.editor,role:"editor"});
+  const listed=(await call("viewer","GET","/api/geo/projects")).body.data.projects.find(row=>row.id===id);
+  assert.equal(listed.access.owner,false);
+  assert.equal(listed.access.abilities.includes("run"),false);
+  assert.equal((await call("viewer","POST",`/api/geo/projects/${id}/monitoring/automation`,{enabled:true})).status,403);
+  const started=await call("editor","POST",`/api/geo/projects/${id}/monitoring/automation`,{enabled:true});
+  assert.equal(started.status,200,JSON.stringify(started.body));
+  const current=(await call("owner","GET",`/api/geo/projects/${id}`)).body.data;
+  assert.equal(current.steps.monitoring.automation.actorId,accounts.editor);
+  assert.equal(current.steps.monitoring.automation.state,"confirmed");
+  await call("owner","PATCH",`/api/geo/projects/${id}`,{status:"paused"});
+  assert.equal((await call("editor","POST",`/api/geo/projects/${id}/monitoring/automation`,{enabled:true})).status,409);
+  assert.equal((await call("editor","POST",`/api/geo/projects/${id}/monitoring/automation`,{enabled:false})).status,200);
+  assert.equal((await call("owner","GET",`/api/geo/projects/${id}`)).body.data.steps.monitoring.automation.state,"declined");
+});

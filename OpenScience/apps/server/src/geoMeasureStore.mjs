@@ -1,6 +1,6 @@
 import { prepareGeoLegacyError, resolveGeoErrorIds } from "./geoLegacyErrorIdentity.mjs";
 import { createHash } from "node:crypto";
-import { geoValueCanonical } from "@evimed/domain";
+import { geoValueCanonical, geoAutomationEnabled } from "@evimed/domain";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
 import { GEO_MEASUREMENT_METHOD_VERSION, geoValueJudged } from "@evimed/domain";
@@ -142,6 +142,8 @@ const list = (value) => (Array.isArray(value) ? value : []);
  * @property {Array<Record<string, any>>} competitors
  * @property {string[]} engines
  * @property {string} status
+ * @property {Record<string, any>} steps
+ * @property {number} coverageDays
  * @property {string[]} entityKeys
  */
 
@@ -155,6 +157,8 @@ function projectRow(row) {
     competitors: list(row.competitors),
     engines: list(row.engines).map(String),
     status: String(row.status),
+    steps: row.steps ?? {},
+    coverageDays: Number(row.coverage_days),
     entityKeys: list(row.entity_keys).map(String),
   };
 }
@@ -463,6 +467,15 @@ export class GeoMeasureStore {
         if (existing) {
           if (existing.ref?.requestDigest !== requestDigest) throw new HttpError(409, "geo_request_key_conflict", "This request key already names a different diagnosis.");
           return String(existing.id);
+        }
+      }
+      if (round.kind === "confirm") {
+        // Serialize automatic acceptance with scope edits and consent withdrawal on the same project row.
+        const current = (await client.query(`SELECT * FROM evimed_geo.projects WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [round.geoProjectId])).rows[0];
+        const authorized = current ? projectRow(current) : null;
+        if (!authorized || authorized.status !== "active" || !geoAutomationEnabled(authorized)
+          || round.engines.some((engine) => !authorized.steps.monitoring.automation.engines.includes(engine))) {
+          throw new HttpError(409, "geo_monitoring_authorization_required", "Automatic confirmation requires current monitoring authorization for these engines.");
         }
       }
       if (round.ref?.recoveryOf) {

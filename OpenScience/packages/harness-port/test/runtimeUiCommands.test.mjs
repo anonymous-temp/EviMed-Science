@@ -457,3 +457,15 @@ test('without the command or trigger services the rest still stands', () => {
   assert.ok(toolbarChip(f));
   assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset'));
 });
+
+test('ordinary GEO journey shows actual scope and product inputs without creating a capability or another composer', () => {
+  const f=frame();
+  f.kit.hub.deliver('capability',{capabilityId:null,sessionId:'session-a'});
+  f.kit.hub.deliver('geo',{...GEO_OPTIONS,starters:[{label:'诊断 AI 回答',draft:'Diagnose',requirement:'Product and audience'},{label:'修改已有稿件',draft:'Edit'},{label:'制定策略与方案',draft:'Plan'}],journey:{title:'先说明产品与这次要做的事',detail:'产品名称、目标受众与本次任务；资料可附在对话中',requested:'尚未提交工作',nextLabel:'在对话中补充产品与任务',nextDraft:'Product and task',nextStep:null,steps:[]}});
+  const hero=f.ctx.slots.registrations.find((/** @type {any} */ entry)=>entry.name==='conversation.hero.agentPreset');
+  const drawn=renderStatic(hero.component);
+  assert.match(drawn,/尚未提交工作/);assert.match(drawn,/目标受众/);assert.match(drawn,/修改已有稿件/);
+  assert.doesNotMatch(drawn,/data-evimed-tool-chip|textarea|contenteditable|移除/);
+  assert.match(renderStatic(toolbarChip(f).component),/当前工作：先说明产品/);
+  assert.equal(f.sent.filter(([type])=>type==='bind-capability').length,0);
+});

@@ -1442,7 +1442,7 @@ export function rollingTrend(points, weeks = Number(geoConstant(TABLE.net_effect
  */
 
 /**
- * The net effect of placement, the only acceptance figure (plan §4.4):
+ * An observational difference in changes, conditional on comparable groups and windows:
  * (pilot's current window − its baseline window) − (control's current window
  * − its baseline window), each window `ROLLING_WINDOW_WEEKS` weeks. Within the
  * noise threshold — measured by {@link noiseBand}, or the default and flagged
@@ -1513,33 +1513,33 @@ export function netEffect(pilotSeries, controlSeries, options = {}) {
 /**
  * @typedef {object} GeoHardLines
  * @property {boolean|null} met   false when a line is missed or a retrieval-layer error is open; null when the accuracy is not measurable (a rate over fewer than STD_CELL_MIN_SAMPLES answers is not) and nothing else is wrong
- * @property {{ metricId: string, value: number|null, share: number|null, line: number, met: boolean|null, status: string|null, numerator: number|null, denominator: number|null }} accuracy
+ * @property {{ metricId: string, value: number|null, share: number|null, line: number|null, met: boolean|null, status: string|null, numerator: number|null, denominator: number|null }} accuracy
  * @property {{ open: number, ids: string[], bySeverity: Record<string, number>, met: boolean }} retrievalErrors
  * @property {{ open: number, ids: string[], bySeverity: Record<string, number>, blocking: false }} parametricErrors
  */
 
 /**
- * The two hard lines (plan §4.2, decisions #1–#2): fact accuracy (M-06) at
- * or above ACCURACY_HARD_LINE, and no open 讲错我方 traced to a cited source
- * (the retrieval layer, correctable in period). Misstatements from the
- * model's own knowledge are listed apart and never block.
+ * Compatibility read model for an optional project accuracy goal and open errors.
+ * No universal accuracy target or delivery acceptance is inferred. Open errors
+ * remain actionable findings; comparison to a goal is not an outcome guarantee.
  *
  * A line is held by a measurement: the accuracy counts only from an `ok` cell,
  * not from one `insufficient` (3 answers, all right, used to meet it). The
  * thin cell's counts stay in `accuracy` for a page to say how thin it is.
  * @param {GeoMetricCell[]} cells
  * @param {GeoErrorRow[]} errors  the project's `errors` rows
- * @param {{ accuracyCell?: GeoMetricCell|null }} [options]  default: the project-scope M-06 cell
+ * @param {{ accuracyCell?: GeoMetricCell|null, accuracyTarget?: number|null }} [options]  default: the project-scope M-06 cell
  * @returns {GeoHardLines}
  */
 export function hardLines(cells, errors, options = {}) {
-  const line = Number(geoConstant('ACCURACY_HARD_LINE'))
+  const target = options.accuracyTarget
+  const line = isNumber(target) && target >= 0 && target <= 100 ? target / PERCENT : null
   const cell = options.accuracyCell
     ?? cells.find((candidate) => candidate.scope === 'project' && candidate.metricId === 'M-06' && candidate.variant === null)
     ?? null
   const value = cell && cell.value !== null && cell.status === 'ok' ? cell.value : null
   const share = value === null ? null : value / PERCENT
-  const accuracyMet = share === null ? null : share >= line
+  const accuracyMet = share === null || line === null ? null : share >= line
   const closed = new Set(PLATFORM.error_closed_statuses)
   const open = (errors ?? []).filter((error) => !closed.has(String(error?.status ?? '')))
   const retrieval = open.filter((error) => {

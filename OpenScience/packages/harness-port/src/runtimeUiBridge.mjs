@@ -400,6 +400,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         coverageOptions: (Array.isArray(data.coverageOptions) ? data.coverageOptions : []).filter(days).slice(0, 8),
         engines: (Array.isArray(data.engines) ? data.engines : []).filter((/** @type {unknown} */ id) => engineId(id) && offeredIds.includes(id)).slice(0, 12),
         offered,
+        ...(typeof data.unavailable === 'string' && data.unavailable ? { unavailable: text(data.unavailable, 300) } : {}),
+        ...(data.journey && typeof data.journey === 'object' ? { journey: {
+          title: text(data.journey.title, 100), detail: text(data.journey.detail, 500), requested: text(data.journey.requested, 200), nextLabel: text(data.journey.nextLabel, 80),
+          nextStep: ['evidence','journey','questions','diagnosis','sources','content','distribution','monitoring'].includes(data.journey.nextStep) ? data.journey.nextStep : null,
+          ...(typeof data.journey.nextDraft === 'string' && data.journey.nextDraft ? {nextDraft:text(data.journey.nextDraft,2000)} : {}),
+          steps: (Array.isArray(data.journey.steps) ? data.journey.steps : []).slice(0,8).filter((/** @type {any} */ step) => ['evidence','journey','questions','diagnosis','sources','content','distribution','monitoring'].includes(step?.key))
+            .map((/** @type {any} */ step) => ({key:step.key,label:text(step.label,24),status:['none','queued','running','done','minimal','failed'].includes(step.status) ? step.status : 'none'})),
+        }} : {}),
         starters: (Array.isArray(data.starters) ? data.starters : []).slice(0, 8)
           .filter((/** @type {any} */ starter) => starter && typeof starter.label === 'string' && starter.label && typeof starter.draft === 'string' && starter.draft)
           .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400), ...(typeof starter.requirement === 'string' && starter.requirement ? { requirement: text(starter.requirement, 500) } : {}), ...(typeof starter.minimumFields === 'string' && starter.minimumFields ? { minimumFields: text(starter.minimumFields, 800) } : {}), ...(typeof starter.inputLabel === 'string' && starter.inputLabel ? { inputLabel: text(starter.inputLabel, 80) } : {}) })),

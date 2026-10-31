@@ -67,7 +67,7 @@ const num = (value) => (value == null ? null : Number(value));
 /** @param {unknown} value */
 const text = (value) => (typeof value === "string" ? value : null);
 
-/** @typedef {{ status: string, requested: boolean, runId?: string | null, roundId?: string | null, updatedAt: string | null, note?: string | null }} GeoStep */
+/** @typedef {{ status: string, requested: boolean, runId?: string | null, roundId?: string | null, updatedAt: string | null, note?: string | null, requestOrigin?: string, requestedAt?: string|null, requestedBy?: string|null, automation?: { state: string, actorId: string, at: string, engines: string[], coverageDays: number } }} GeoStep */
 
 /**
  * A step as the orchestrator and the page read it: every one of the eight
@@ -83,6 +83,15 @@ export function normalizedSteps(value) {
     steps[step] = {
       status: typeof entry.status === "string" ? entry.status : "none",
       requested: entry.requested === true,
+      ...(entry.requested === true ? { requestOrigin: ["browser", "conversation", "platform"].includes(entry.requestOrigin)
+        && typeof entry.requestedAt === "string" && Number.isFinite(Date.parse(entry.requestedAt)) ? entry.requestOrigin : "legacy",
+        requestedAt: typeof entry.requestedAt === "string" ? entry.requestedAt : null,
+        requestedBy: typeof entry.requestedBy === "string" ? entry.requestedBy : null } : {}),
+      ...(entry.automation && ["confirmed", "declined"].includes(entry.automation.state) && typeof entry.automation.actorId === "string"
+        && typeof entry.automation.at === "string" && Number.isFinite(Date.parse(entry.automation.at)) && Array.isArray(entry.automation.engines)
+        && entry.automation.engines.every((engine) => typeof engine === "string") && Number.isSafeInteger(entry.automation.coverageDays)
+        ? { automation: { state: entry.automation.state, actorId: entry.automation.actorId, at: entry.automation.at,
+          engines: entry.automation.engines, coverageDays: entry.automation.coverageDays } } : {}),
       ...(entry.runId ? { runId: String(entry.runId) } : {}),
       ...(entry.roundId ? { roundId: String(entry.roundId) } : {}),
       updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null,
@@ -615,10 +624,25 @@ export class GeoStore {
 
   /** The projects an account owns or is a member of, newest first. @param {string} userId */
   async listProjectsFor(userId) {
-    const result = await this.query(`SELECT ${PROJECT_COLUMNS} FROM evimed_geo.projects
+    const result = await this.query(`SELECT ${PROJECT_COLUMNS}, coalesce((SELECT array_agg(m.role ORDER BY m.role) FROM evimed_geo.members m
+        WHERE m.geo_project_id = evimed_geo.projects.id AND m.user_id = $1), '{}') AS member_roles FROM evimed_geo.projects
       WHERE deleted_at IS NULL AND (user_id = $1 OR EXISTS (SELECT 1 FROM evimed_geo.members m WHERE m.geo_project_id = evimed_geo.projects.id AND m.user_id = $1))
       ORDER BY updated_at DESC, id LIMIT 500`, [userId]);
-    return result.rows.map(geoProjectFromRow);
+    return result.rows.map((row) => ({ ...geoProjectFromRow(row), roles: [...(String(row.user_id) === userId ? ["owner"] : []),
+      ...(Array.isArray(row.member_roles) ? row.member_roles.map(String) : [])] }));
+  }
+
+  /** Actual accepted measurement work, batched for list and detail projections.
+   * Prefer a monitoring round over concurrent diagnosis/confirmation work; within that lane prefer running, then oldest.
+   * @param {string[]} geoIds
+   * @returns {Promise<Map<string, {id: string, kind: string, status: string}>>} */
+  async activeMeasurements(geoIds) {
+    if (!geoIds.length) return new Map();
+    const { rows } = await this.query(`SELECT DISTINCT ON (geo_project_id) geo_project_id, id, kind, status
+      FROM evimed_geo.rounds WHERE geo_project_id = ANY($1::text[]) AND status IN ('queued', 'running')
+      ORDER BY geo_project_id, (kind IN ('weekly', 'sentinel', 'post_publication', 'noise')) DESC,
+        (status = 'running') DESC, created_at, id`, [geoIds]);
+    return new Map(rows.map((row) => [String(row.geo_project_id), { id: String(row.id), kind: String(row.kind), status: String(row.status) }]));
   }
 
   // --- members -------------------------------------------------------------------
@@ -719,7 +743,8 @@ export class GeoStore {
    * @param {string} id @param {string} step @param {Partial<GeoStep>} fields
    */
   async setStep(id, step, fields) {
-    const patch = { ...fields, updatedAt: new Date().toISOString() };
+    const at = new Date().toISOString();
+    const patch = { ...fields, ...(fields.requested === true ? { requestOrigin: fields.requestOrigin ?? "platform", requestedAt: at } : {}), updatedAt: at };
     const result = await this.query(`UPDATE evimed_geo.projects
       SET steps = jsonb_set(coalesce(steps, '{}'::jsonb), ARRAY[$2::text], coalesce(steps -> $2::text, '{}'::jsonb) || $3::jsonb),
           updated_at = now()

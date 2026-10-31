@@ -90,3 +90,41 @@ test('actual automatic module dispatch reads scoped KB with captured launch proo
  const runtime=manager.runtimes.get(manager.key(project));runtime.modelGatewayTokenJti='wrong-generation';
  await assert.rejects(context.sourceScope(dispatched.sessionId));runtime.modelGatewayTokenJti='fixture-generation';
 });
+
+test('unselected authenticated GEO primary freezes ordinary native routing with module tools scope', options, async t => {
+  const f = await fixture(t, true, { llmRoutingEnabled: false });
+  const geo = (await f.call('owner', 'POST', '/api/geo/projects', { brandName: 'Scoped product' })).body.data;
+  const opened = (await f.call('owner', 'POST', `/api/geo/projects/${geo.id}/conversation/open`, { target: { kind: 'primary' } })).body.data;
+  const frameResponse = await fetch(`${f.base}/api/runtime-ui/frames`, { method: 'POST', headers: f.cookies.owner,
+    body: JSON.stringify({ projectId: geo.projectId, scope: opened.scope }) });
+  assert.equal(frameResponse.status, 201);
+  const frame = (await frameResponse.json()).data;
+  const frameCookie = `${f.cookies.owner.cookie}; ${frameResponse.headers.get('set-cookie').split(';')[0]}`;
+  const address = f.app.runtimeUi.address() ?? await f.app.runtimeUi.listen(0, '127.0.0.1');
+  const owner = await f.app.store.userById('owner'), project = await f.app.store.requireProject(owner, geo.projectId);
+  const kernel = f.app.runtimeManager.callKernel.bind(f.app.runtimeManager);
+  f.app.runtimeManager.callKernel = async (...args) => {
+    if (args[2] === 'session/page') return { items: [], hasMore: false };
+    if (args[2] === 'session/projections') return { kind: 'sequenced', asOfSeq: 0, values: {} };
+    return kernel(...args);
+  };
+  f.app.runtimeManager.proxy = async (_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ type: 'server-response', rpcId: 'module-http', result: { ok: true, value: { accepted: true } } }));
+  };
+  const request = { requestId: 'module-product-only', sessionId: opened.sessionId, mode: 'queue', content: [{ type: 'text', text: 'Only save product basics in this project. Do not start other steps.' }] };
+  const response = await fetch(`http://127.0.0.1:${address.port}${new URL(frame.frameUrl).pathname}api/session/prompt`, {
+    method: 'POST', headers: { ...f.cookies.owner, cookie: frameCookie, origin: 'http://127.0.0.1:8443' },
+    body: JSON.stringify({ type: 'client-request', rpcId: 'module-http', method: 'session/prompt', payload: { args: { request } } }),
+  });
+  assert.equal(response.status, 200, await response.text());
+  const { readdir, readFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const directory = join(project.metaDir, 'native-routes');
+  const records = await Promise.all((await readdir(directory)).map(async file => JSON.parse(await readFile(join(directory, file), 'utf8'))));
+  const frozen = records.find(record => record.requestId === request.requestId);
+  assert.equal(frozen.route.effectiveAgentId, 'open-domain-answer');
+  assert.deepEqual(frozen.route.geoModuleScope, { version: 1, geoProjectId: geo.id, rootSessionId: opened.sessionId });
+  assert.equal(frozen.route.geoContextRef, undefined);
+  assert.equal((await f.app.geo.store.getProject('owner', geo.id)).steps.diagnosis.requested, false);
+});

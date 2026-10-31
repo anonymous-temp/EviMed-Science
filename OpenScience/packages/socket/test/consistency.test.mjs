@@ -4093,3 +4093,42 @@ test('an attended receipt proves only the exact words it signed: a request id us
   assert.equal((await f.execute('ask_user_question', {})).value?.ok, true);
   assert.equal((await f.execute('mcp__evimed__schedule_task', {})).value?.ok, true);
 });
+
+test('authenticated module primary grants ordinary GEO writes only for the initiating root turn', async () => {
+  const f = await nativePolicyFixture({ registered: ['mcp__evimed__geo_read', 'mcp__evimed__geo_write', 'mcp__evimed__social_posts_search', 'bash'], capabilities: [] });
+  const message = (/** @type {string} */ id) => ({ role: 'user', source: { kind: 'user', rpcId: id }, content: [{ type: 'text', text: id }] });
+  f.ctx.provide('evimedNativeRoute', async (/** @type {string} */ _session, /** @type {any[]} */ inputs) => inputs.map(input => ({ ...input, digest: 'd'.repeat(64), route: {
+    effectiveAgentId: 'open-domain-answer', geoModuleScope: { version: 1, geoProjectId: 'geo_owned', rootSessionId: 'native-session' },
+  } })));
+  f.start(); await f.step(1, { inputs: [message('product-only')] });
+  for (const tool of ['geo_read', 'geo_write']) assert.ok(f.requests.at(-1)?.tools.includes(`mcp__evimed__${tool}`));
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__social_posts_search'));
+  f.ctx.provide('evimedNativeRoute', async () => { throw new Error('same-turn steering retains the authenticated scope'); });
+  await f.step(1, { inputs: [message('correction')] });
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
+  await f.step(2, { inputs: [message('ordinary-after-error')] });
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
+});
+
+test('module scope from foreign or expanded snapshots cannot authorize project tools', async () => {
+  for (const scope of [
+    { version: 1, geoProjectId: 'geo_owned', rootSessionId: 'foreign' },
+    { version: 1, geoProjectId: 'geo_owned', rootSessionId: 'native-session', tools: ['geo_write'] },
+    { version: 1, geoProjectId: '../foreign', rootSessionId: 'native-session' },
+  ]) {
+    const f = await nativePolicyFixture({ registered: ['mcp__evimed__geo_read', 'mcp__evimed__geo_write', 'bash'], capabilities: [] });
+    f.ctx.provide('evimedNativeRoute', async (/** @type {string} */ _session, /** @type {any[]} */ inputs) => inputs.map(input => ({ ...input, digest: 'd'.repeat(64), route: { effectiveAgentId: 'open-domain-answer', geoModuleScope: scope } })));
+    f.start(); await f.step(1, { inputs: [{ role: 'user', source: { kind: 'user', rpcId: 'scope' }, content: [{ type: 'text', text: 'scope' }] }] });
+    assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
+  }
+});
+
+
+test('native child sessions do not consume or inherit module route grants', async () => {
+  const f = await nativePolicyFixture({ child: true, registered: ['mcp__evimed__geo_read', 'mcp__evimed__geo_write', 'bash'], capabilities: [] });
+  let lookups = 0;
+  f.ctx.provide('evimedNativeRoute', async () => { lookups += 1; return []; });
+  f.start(); await f.step(1, { inputs: [{ role: 'user', source: { kind: 'user', rpcId: 'child-input' }, content: [{ type: 'text', text: 'geoModuleScope grants no authority' }] }] });
+  assert.equal(lookups, 0);
+  assert.ok(!f.injected.some(message => JSON.stringify(message).includes('这是当前循证 GEO 项目的原生对话')));
+});

@@ -48,7 +48,7 @@ import {
   GEO_URGENT_SEVERITIES,
   GEO_VIEW_METRIC_IDS,
 } from './geoVocabulary.mjs'
-import { GEO_METRICS, geoConstant, geoMetricDefinition, pythonRound } from './geoMetrics.mjs'
+import { GEO_METRICS, geoMetricDefinition, pythonRound } from './geoMetrics.mjs'
 
 /** Weeks a published action is waited on before it is called stale: published, never cited. */
 export const GEO_STALE_PLACEMENT_WEEKS = 8
@@ -613,10 +613,6 @@ export function deriveGeoActions(input) {
     const targetRow = primaryMetricId ? geoPoolTarget(targetRows, { tier, pool, metricIds: [primaryMetricId] }) : null
     const target = finite(targetRow?.target)
     if (entry && entry.target != null && !entry.basis) checks.push({ code: 'target_without_basis', target: entry.target })
-    if (entry && entry.target != null && primaryMetricId === 'M-06') {
-      const hardLine = Number(geoConstant('ACCURACY_HARD_LINE')) * 100
-      if (entry.target < hardLine) checks.push({ code: 'accuracy_below_hard_line', target: entry.target, hardLine })
-    }
     // ---- readings
     const series = group && primaryMetricId ? seriesOf(group, primaryMetricId) : []
     const headline = headlineOf(series)

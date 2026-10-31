@@ -111,6 +111,8 @@ async function seed(id, { engines = ["deepseek", "doubao"] } = {}) {
     ownedDomains: ["mazdutide.example.com"],
     careNodes: [{ node: "用药中", redFlags: ["出现持续剧烈腹痛应立即就医"] }],
   });
+  await database.query(`UPDATE evimed_geo.projects SET steps=$2::jsonb WHERE id=$1`, [id, JSON.stringify({ monitoring: { automation: {
+    state: "confirmed", actorId: `user_${id}`, at: new Date().toISOString(), engines, coverageDays: 90 } } })]);
 }
 
 /** The probe's answers in the baseline: a wrong statement, a suspect that is asked again, a refusal. */
@@ -2093,5 +2095,24 @@ test("a task whose id could not be recorded on its job ends as an unreadable tas
     await tickProbe({ ...h.deps, maxAsks: 1 });
     assert.equal(h.probe.asks.length, 1);
     assert.equal(h.state.hostFailures, 0, "the host answered: this is not it failing");
+  } finally { await h.probe.close(); }
+});
+
+test("withdrawing confirmation consent keeps accepted answers, parsed facts and urgent errors", options, async () => {
+  await reset();
+  await seed("geo_consent", { engines: ["deepseek"] });
+  const h = await harness({ answers: () => ({ answer: A_WRONG }) });
+  try {
+    const accepted = await enqueueRound(h.deps, { geoProjectId: "geo_consent", kind: "baseline", questionIds: ["geo_consent_q1"] });
+    await database.query(`UPDATE evimed_geo.projects SET steps=jsonb_set(steps,'{monitoring,automation,state}','"declined"'::jsonb) WHERE id='geo_consent'`);
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    await tickParse({ ...h.deps, maxParse: 10 });
+    assert.equal((await rows(`SELECT id FROM evimed_geo.snapshots WHERE round_id=$1`, [accepted.roundId])).length, 1);
+    assert.equal((await rows(`SELECT snapshot_id FROM evimed_geo.facts WHERE geo_project_id='geo_consent'`)).length, 1);
+    const [error] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE geo_project_id='geo_consent'`);
+    assert.equal(error.confirm.status, "unavailable");
+    assert.equal(error.confirm.reason, "geo_monitoring_authorization_required");
+    assert.equal((await rows(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id='geo_consent' AND kind='confirm'`)).length, 0);
+    assert.ok(h.notices.length > 0);
   } finally { await h.probe.close(); }
 });

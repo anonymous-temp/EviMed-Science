@@ -77,7 +77,7 @@
  * @module geoProbeQueue
  */
 
-import { GEO_METRICS, geoConstant } from "@evimed/domain";
+import { GEO_METRICS, geoConstant, geoAutomationEnabled } from "@evimed/domain";
 import { CONSUMER_ANSWER_UNAVAILABLE, GEO_PROBE_ALLOWED_PROVIDERS, GEO_PROBE_POLL_TRANSIENT_CODES, GEO_UNDELIVERED_FAILURE_CODES, GeoProbeGatewayError,
   probeUpstream } from "./geoProbeGateway.mjs";
 import { citationRows } from "./geoParse.mjs";
@@ -557,6 +557,12 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
   }
   if (contract?.questionVersion != null && questions.some((question) => question.setVersion !== contract.questionVersion)) {
     throw new HttpError(400, "geo_round_question_invalid", "Round questions must belong to the measurement agreement's version.");
+  }
+  // Confirmation adds paid calls automatically; a preserved question/answer never grants that authority.
+  // Explicit one-shot starts and already accepted rounds retain their existing paths.
+  if (kind === "confirm" && (project.status !== "active" || !geoAutomationEnabled(project)
+    || requested.some((engine) => !project.steps.monitoring.automation.engines.includes(engine)))) {
+    throw new HttpError(409, "geo_monitoring_authorization_required", "Automatic confirmation requires current monitoring authorization for these engines.");
   }
   const admittedEngines = requested.filter((engine) => channels.includes(engine));
   const defaultRepeat = kind === "noise" ? catalogue("PROBE_NOISE_SAMPLE_N", 5) : kind === "confirm" ? catalogue("EC_CONFIRM_REPEATS", 10) : 1;

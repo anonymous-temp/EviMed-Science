@@ -12,6 +12,7 @@ To populate it on a build machine:
 ```bash
 node scripts/build/vendor-geo-skills.mjs            # verifies the archive's sha256 against SHA256SUMS, then unpacks
 node scripts/build/vendor-geo-skills.mjs --check    # verify only
+node deploy/runtime-dsh/check-geo-method-pack.mjs runtime/skills/geo-private # match the reviewed platform release
 ```
 
 The archives and their `SHA256SUMS` live outside the repository (`.evimed-local/geo/dist/` by default; `--dist` or
@@ -22,3 +23,9 @@ naming the archive and its digest.
 With only this README present — a fresh clone — the image still builds, the four 「循证 GEO」 capabilities
 (`geo-insight`, `geo-strategy`, `geo-content`, `geo-proposal`) still load, and a run that cannot find a `geo-*`
 skill says the method pack is not installed and continues with the capability's own short method.
+
+All three runtime image recipes verify the installed private tree against
+`deploy/runtime-dsh/geo-method-pack-release.json`. This public receipt contains only
+version, digests and skill names. A delta build cannot silently retain an older
+private pack from its base image: supply the matching private archive before
+building. The receipt is a build contract, not evidence of online activation.

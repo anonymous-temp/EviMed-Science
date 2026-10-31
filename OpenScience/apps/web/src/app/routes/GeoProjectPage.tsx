@@ -447,8 +447,8 @@ function GeoBand({
     ...(can("edit") ? [{ label: "重命名", onSelect: () => onPanel("rename") }] : []),
     // The engines, the window, the budget, who speaks for the product and the members: one drawer, not four entries.
     { label: "项目设置", onSelect: () => onPanel("settings") },
-    ...(can("run") && unstarted ? [{ label: "导出周报", onSelect: startWeekly }] : []),
-    ...(can("run") ? [{ label: "导出提案资料包", onSelect: startProposal }] : []),
+    ...(can("run") && !paused && unstarted ? [{ label: "导出周报", onSelect: startWeekly }] : []),
+    ...(can("run") && !paused ? [{ label: "导出提案资料包", onSelect: startProposal }] : []),
     // What the programme did in the background, read-only — the steps are in no conversation list.
     { label: "AI 运行", onSelect: () => onPanel("runs") },
     // A paused project's 「继续」 is in the header, beside the word that says it is paused.
@@ -494,11 +494,11 @@ function GeoBand({
   const continues: { label: string; onClick: () => void } | null = selectedStep === "distribution" && needsBudget && can("manage_money")
     ? { label: "设预算", onClick: () => api.openPanel("budget") }
     : !canConverse ? null
-      : selectedStep === "evidence" ? { label: "让 AI 补充结论", onClick: ask(`请在现有结论库的基础上，补充${product}还没有覆盖的说明书内容和临床证据，每条结论都带原文出处。`) }
-        : selectedStep === "journey" ? { label: "让 AI 重画旅程", onClick: ask(`请根据最新的结论和 AI 的回答，重新画一遍${product}的患者与医生旅程。`) }
-          : selectedStep === "questions" ? { label: "加问", onClick: ask(`请再补几个值得测量的问题，覆盖${product}现有问句池里还没有问到的情形。`) }
+      : selectedStep === "evidence" ? { label: "在对话中补充结论", onClick: ask(`请在现有结论库的基础上，补充${product}还没有覆盖的说明书内容和临床证据，每条结论都带原文出处。`) }
+        : selectedStep === "journey" ? { label: "在对话中重画旅程", onClick: ask(`请根据最新的结论和 AI 的回答，重新画一遍${product}的患者与医生旅程。`) }
+          : selectedStep === "questions" ? { label: "在对话中补充问题", onClick: ask(`请再补几个值得测量的问题，覆盖${product}现有问句池里还没有问到的情形。`) }
             : selectedStep === "sources" ? { label: "选目标档", onClick: () => navigate(destination("plan", undefined, "sources", "targets")) }
-              : selectedStep === "content" ? { label: "让 AI 写下一批", onClick: ask("请为现在还没有稿件的问题群写下一批稿件，先写讲错最严重、离目标最远的。") } : null;
+              : selectedStep === "content" ? { label: "在对话中写下一批", onClick: ask("请为现在还没有稿件的问题群写下一批稿件，先写讲错最严重、离目标最远的。") } : null;
   const analysis = !onChat && !snapshotId ? geoAnalysisDescriptor(location.search) : null;
   const changeAnalysis = (descriptor: Parameters<typeof geoAnalysisSearch>[1]) => navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash },
     { replace: geoAnalysisChangeReplaces(location.search, descriptor) });
@@ -547,9 +547,9 @@ function GeoBand({
       meta={<Tag title={week ? "按项目开始日期计算，不代表已经完成测量。" : now ?? undefined}>{`${paused ? "已暂停 · " : ""}${week ? `项目第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}`}</Tag>}
       actionPlan={{
         // A project nothing has run in yet starts in its conversation; the weekly report waits in the overflow until there is a week to report.
-        ...(!onChat && (canConverse || readOnlyChat) ? { primary: { id: "conversation", label: unstarted && canConverse ? "开始项目" : "对话", icon: MessageSquare, loading: busy === "conversation", onSelect: openChat } } : {}),
+        ...(!onChat && (canConverse || readOnlyChat) ? { primary: { id: "conversation", label: unstarted && canConverse ? "在对话中开始" : "对话", icon: MessageSquare, loading: busy === "conversation", onSelect: openChat } } : {}),
         secondary: [
-          ...(can("run") && !unstarted ? [{ id: "weekly", label: "周报", icon: FileDown, loading: busy === "weekly", onSelect: startWeekly }] : []),
+          ...(can("run") && !paused && !unstarted ? [{ id: "weekly", label: "周报", icon: FileDown, loading: busy === "weekly", onSelect: startWeekly }] : []),
           ...(paused && can("edit") ? [{ id: "resume", label: "继续", onSelect: () => setPaused(false) }] : []),
         ],
         overflow: menu,

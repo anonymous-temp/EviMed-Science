@@ -58,7 +58,7 @@ describe("方案: what it is", () => {
   it("is one plan in five blocks, in the order a reader asks — and nothing of the settings, the journey or the claims", async () => {
     renderPlan();
     await screen.findByRole("heading", { name: "目标" });
-    const order = ["目标", "战场", "各引擎能承诺什么", "需要你做的", "假设"];
+    const order = ["目标", "战场", "各引擎的机会与限制", "需要你做的", "假设"];
     const headings = order.map((name) => screen.getByRole("heading", { name }));
     headings.slice(1).forEach((heading, index) => {
       expect(headings[index].compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING, `${heading.textContent} follows ${headings[index].textContent}`).toBeTruthy();
@@ -153,7 +153,7 @@ describe("方案: 目标", () => {
     });
     expect(second).toHaveTextContent("16 篇稿件 · 24 个投放位 · 预算 8,000 灵豆");
     expect(second).toHaveTextContent("12 个位次 + 16 篇稿件");
-    const promised = within(second).getByRole("list", { name: "不承诺的" });
+    const promised = within(second).getByRole("list", { name: "不适用的目标" });
     expect(within(promised).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["不承诺 P3 泛症状池被提及", "不承诺豆包任何变化（未测）"]);
     // 品牌提及率 is M-01 over 增量 questions: a row of the table behind the columns, under its own name.
     await userEvent.click(screen.getByText("各问句池和其余指标的目标"));
@@ -225,7 +225,7 @@ describe("方案: 战场", () => {
   });
 });
 
-describe("方案: 各引擎能承诺什么", () => {
+describe("方案: 各引擎的机会与限制", () => {
   it("merges the promise with the layout: the retrieval it rests on, the level, the layer, the account and its state", async () => {
     renderPlan();
     const deepseek = await waitFor(() => {
@@ -236,13 +236,13 @@ describe("方案: 各引擎能承诺什么", () => {
     expect(deepseek).toHaveTextContent("DeepSeek");
     expect(deepseek).toHaveTextContent("96%");
     expect(deepseek).toHaveTextContent("62 次里 60 次");
-    expect(within(deepseek).getByText("能承诺被提及，也能承诺讲对")).toBeInTheDocument();
+    expect(within(deepseek).getByText("存在被提及与表述改善的机会")).toBeInTheDocument();
     expect(within(deepseek).getByText("锚点 + 覆盖")).toBeInTheDocument();
     expect(deepseek).toHaveTextContent("认证自有公众号");
     expect(deepseek).toHaveTextContent("还没有");
     expect(deepseek).toHaveTextContent("进入引用：锚点层 + 覆盖层");
     const kimi = document.querySelector("[data-geo-expectation='kimi']") as HTMLElement;
-    expect(within(kimi).getByText("只承诺讲对，不承诺被提及")).toBeInTheDocument();
+    expect(within(kimi).getByText("以表述纠错为主，提及机会有限")).toBeInTheDocument();
     // An engine measured only for being mentioned says so, in the retrieval's place.
     expect(within(document.querySelector("[data-geo-expectation='baidu']") as HTMLElement).getByText("只测提及")).toBeInTheDocument();
   });

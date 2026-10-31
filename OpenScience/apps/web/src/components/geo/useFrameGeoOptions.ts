@@ -85,18 +85,20 @@ export function useFrameGeoOptions({
       (geoId ? getGeoProject(geoId) : listGeoProjects().then(projects => projects.filter(project => project.projectId === projectId).length === 1 ? projects.find(project => project.projectId === projectId) ?? null : null))
         // The module refusing, or the list not answering: the chip keeps its
         // starters and has nothing to write options to.
-        .catch(() => null),
+        .then(project => ({project,error:null}), (error:unknown) => ({project:null,error:webErrorMessage(error,{fallback:"项目设置暂时无法读取，请稍后重试。"})})),
       builders(),
     ])
-      .then(([project, { frameGeoOptions }]) => {
+      .then(([read, { frameGeoOptions }]) => {
+        const {project,error} = read;
         if (!live) return;
         // A read begun before a successful edit cannot reset its saved options.
         if (project && refreshing && found.current !== refreshing) return;
         if (project && !geoId) rememberGeoProject(project as GeoProjectSummary, controlName);
         // A first GEO turn may create its project after the capability chip appears.
         else if (!project) discovery = setTimeout(() => setRevision((value) => value + 1), 10_000);
-        found.current = { scopeKey, sessionId, project };
-        post(frameGeoOptions(sessionId, project));
+        found.current = { scopeKey, sessionId, project: error ? null : project };
+        if (error) post({...frameGeoOptions(sessionId, null),controls:false,coverageDays:0,engines:[],starters:[],unavailable:error});
+        else post(frameGeoOptions(sessionId, project));
       })
       // The builders' chunk would not load: the chip draws nothing extra.
       .catch(() => {});
@@ -106,7 +108,7 @@ export function useFrameGeoOptions({
   return useCallback((change: { sessionId?: unknown; coverageDays?: unknown; engines?: unknown }) => {
     const current = found.current;
     const project = current?.project;
-    if (!current || !project || (change.sessionId != null && change.sessionId !== current.sessionId)) return;
+    if (!current || !project || project.access && !project.access.abilities.includes("edit") || (change.sessionId != null && change.sessionId !== current.sessionId)) return;
     const sameConversation = () => found.current?.scopeKey === current.scopeKey && found.current?.project?.id === project.id;
     // Loaded already: `found` is set only after the builders arrived.
     void builders().then(({ frameGeoOptions, isCoverageOption, offeredEngines }) => {

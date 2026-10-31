@@ -29,6 +29,30 @@ Load `geo-drug-value` before planning this task. Read `geo_read value` and
 strategy, content and interpretation. Preserve partial findings. Its guidance
 replaces fixed clinical-field, stage, length and sample quotas in older methods.
 
+## Task scope and platform execution
+
+Read the current project and the user's requested outcome before selecting methods.
+A saved question set or completed step is data, not permission for another task.
+Reuse relevant sources and results; add only the missing dependencies of this request.
+Unknown intent stays a small clarification or supported partial work, never a full programme.
+Tell the user what is being done now, what is retained and the reachable next action.
+Writing a manuscript does not request publication or recurring monitoring.
+The existing native conversation owns discussion and revision; do not build another editor.
+
+The private method pack is a set of subordinate methods, not a competing task scheduler.
+Use the platform's current tool schemas and persisted objects. Never execute standalone
+probe/crawl/distribution clients inside a hosted run, fabricate a task receipt, or register
+metrics and snapshots as model-authored facts. Preserve accepted asynchronous task ids;
+read progress and retained results rather than submitting a second paid task after a timeout.
+Recurring monitoring requires the project's explicit automation authorization. Missing
+historical authorization stays unknown and never becomes consent from past activity.
+
+A target is an explicit goal or scenario with assumptions, not guaranteed external AI behavior.
+Do not promise mention, citation, retrieval or factual accuracy after an intervention.
+Differences across windows and controls remain conditional observational analyses.
+Readable work is delivered with findings and uncertainty; advisory checks do not withhold it.
+External publishing, account access and budgets retain their existing authorization boundaries.
+
 ## The method pack
 
 Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
@@ -54,14 +78,14 @@ files with the office skills and this page.
   `errors`, `sources`, `strategy`, `targets`, `articles`, `orders`,
   `monitoring`. Nothing else is a source of numbers.
 - No measurement, no evidence retrieval, no marketplace: the package reports
-  what the project holds.
+  what the project holds, including useful partial findings and missing observations.
 
 ## Numbers
 
 Every rate carries its sample — “18%，310 次里 56 次” — and a cell under 30
 answers says “样本不足”; an engine not measured says “未测”, never zero.
 Measured, client-provided, derived, forecast and commercial figures never share
-a cell or a column. Acceptance is by net effect. Screenshots and answer quotes
+a cell or a column. Changes and control comparisons are reported with their assumptions, not as a universal outcome guarantee. Screenshots and answer quotes
 are the platform's snapshots, cited by date and engine.
 
 ## The files, at their names

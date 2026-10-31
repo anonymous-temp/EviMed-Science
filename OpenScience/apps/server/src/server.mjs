@@ -3747,7 +3747,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const frozen = await nativeInputRoute?.routeFor(full, sessionId, input?.requestIds, text);
           // Only the authenticated immutable snapshot can commission a GEO turn over the persistent binding.
           // A fallback classification or text that merely names a context has no such authority.
-          return frozen ? { ...frozen, routedOverBinding: /^gpc_[a-f0-9]{64}$/.test(frozen.geoContextRef ?? "") }
+          return frozen ? { ...frozen, routedOverBinding: /^gpc_[a-f0-9]{64}$/.test(frozen.geoContextRef ?? "")
+            || frozen.geoModuleScope?.version === 1 && frozen.geoModuleScope.rootSessionId === sessionId }
             : routeAdoptedInput(full, sessionId, text);
         },
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
@@ -6610,18 +6611,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (input?.request && geoPlanOwnWork.has(input.request) && (!selected || selected.referenceId !== geoPlanOwnWork.get(input.request))) {
       throw new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");
     }
-    if (binding?.mode === "specialist" && !selected) return {
+    const moduleInput = !selected && input?.request && geoNativeInputs ? await geoNativeInputs.routingScopeForRequest(project, input.request) : null;
+    if (binding?.mode === "specialist" && !selected && !moduleInput) return {
       effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
       effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
       estimatedMinutes: runEstimate(registry.get(binding.agentId)),
     };
     const query = selected?.originalText ?? text;
-    const supplied = new Set(Object.keys(selected?.suppliedInputs ?? {}));
+    const supplied = new Set(Object.keys(selected?.suppliedInputs ?? moduleInput?.suppliedInputs ?? {}));
     // Inputs already supplied by the verified GEO project are not missing from a short native request.
     // Keep the human words and both classifier implementations unchanged; only this request's catalogue is qualified.
     // The module's own capabilities are module-only (`display.listed: false`, left out of every ordinary classification);
     // a verified selection is inside the module, so for this request they are candidates again.
-    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID).map(agent => selected && agent.id.startsWith("geo-")
+    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID).map(agent => (selected || moduleInput) && agent.id.startsWith("geo-")
       ? { ...agent, listed: true, requiredInputs: (agent.requiredInputs ?? []).filter(key => !supplied.has(key)) } : agent);
     const classifierTrace = {};
     const { specialist } = await routeOpenDomain({
@@ -6644,6 +6646,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
       effectiveRouteReason: effective?.reason ?? null,
       ...(selected ? { geoContextRef: selected.referenceId } : {}),
+      ...(moduleInput ? { geoModuleScope: moduleInput.scope } : {}),
       ...(["analysis", "signal"].includes(selected?.mode) && effective?.agentId === OPEN_DOMAIN_ANSWER_AGENT_ID
         ? { geoInputRead: { referenceId: selected.referenceId, what: selected.mode } } : {}),
       estimatedMinutes: runEstimate(effective?.agentId ? registry.get(effective.agentId) : null),

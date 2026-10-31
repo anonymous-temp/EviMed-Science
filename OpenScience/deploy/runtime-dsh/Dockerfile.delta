@@ -251,11 +251,13 @@ RUN set -eux; \
   done
 
 # A public checkout carries only the private pack's README. Keep the verified
-# base's pack in that case; a complete receipt-bound private source replaces it.
+# base's pack only if it matches this release; otherwise require the new archive.
 COPY deploy/runtime-dsh/refresh-geo-pack.mjs /tmp/evimed-refresh-geo-pack.mjs
+COPY deploy/runtime-dsh/check-geo-method-pack.mjs deploy/runtime-dsh/geo-method-pack-release.json /usr/local/lib/evimed/
 COPY runtime/skills/geo-private /tmp/evimed-geo-pack-source
 RUN set -eu; \
   node /tmp/evimed-refresh-geo-pack.mjs /tmp/evimed-geo-pack-source /opt/evimed/skills/geo-private; \
+  node /usr/local/lib/evimed/check-geo-method-pack.mjs /opt/evimed/skills/geo-private --allow-missing; \
   rm -rf /tmp/evimed-geo-pack-source /tmp/evimed-refresh-geo-pack.mjs
 
 # The preset's system-trusted skill roots, and the copy of the preset under the

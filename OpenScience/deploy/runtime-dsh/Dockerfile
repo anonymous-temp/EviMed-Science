@@ -172,6 +172,8 @@ COPY runtime/skills/community /opt/evimed/skills/community
 # exists (the README is tracked), so a clone without the pack builds an image
 # whose GEO capabilities say the pack is missing.
 COPY runtime/skills/geo-private /opt/evimed/skills/geo-private
+COPY deploy/runtime-dsh/check-geo-method-pack.mjs deploy/runtime-dsh/geo-method-pack-release.json /usr/local/lib/evimed/
+RUN node /usr/local/lib/evimed/check-geo-method-pack.mjs /opt/evimed/skills/geo-private --allow-missing
 # The agent packages under `runtime/skills/evimed` that are NOT delegated
 # capabilities. The eleven specialists reach a run through
 # `capability-skills`, which delegation injects; `open-domain-answer` is

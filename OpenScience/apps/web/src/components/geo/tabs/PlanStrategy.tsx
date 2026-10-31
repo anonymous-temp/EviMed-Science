@@ -43,7 +43,7 @@ import { useOpenGeoConversation } from "../useOpenGeoConversation";
  *  1. **目标** — three tiers as three columns whose header is the choice (「选这一档」: it writes the project, which a row of chips
  *     looked like a filter and was not), each head metric as where it began, where it is and where this tier puts it;
  *  2. **战场** — the main battlefield, the secondary ones and what is not worth doing, each with its reason and its groups;
- *  3. **各引擎能承诺什么** — what each engine's retrieval lets the plan promise, where to place and what account that needs;
+ *  3. **各引擎的机会与限制** — what each engine's retrieval lets the plan promise, where to place and what account that needs;
  *  4. **需要你做的** — what the strategy asks the client to do outside the platform;
  *  5. **假设** — what the plan took as given, one line each.
  *
@@ -167,7 +167,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
                 </p>
                 {tier.buys && <p className="mt-2 text-caption text-text-3">{tier.buys}</p>}
                 {tier.notPromised.length > 0 && (
-                  <ul aria-label="不承诺的" className="mt-2 flex flex-col gap-0.5 text-caption text-text-3">
+                  <ul aria-label="不适用的目标" className="mt-2 flex flex-col gap-0.5 text-caption text-text-3">
                     {tier.notPromised.map((line) => <li key={line}>{line}</li>)}
                   </ul>
                 )}
@@ -333,9 +333,9 @@ export function EnginePromises({ plan }: { plan: GeoStrategyView }) {
   if (rows.length === 0) return null;
   return (
     <div id={geoSectionId("engines")}>
-      <Section title="各引擎能承诺什么">
+      <Section title="各引擎的机会与限制">
         <DataTable<GeoStrategyEngine>
-          label="各引擎的承诺"
+          label="各引擎的预期机会"
           minWidth="min-w-[44rem]"
           rows={rows}
           rowKey={(row) => row.engine}
@@ -353,7 +353,7 @@ export function EnginePromises({ plan }: { plan: GeoStrategyView }) {
             },
             {
               key: "level",
-              header: "能承诺",
+              header: "预期机会",
               width: "w-44",
               cell: (row) => (row.ceiling && row.ceiling in GEO_PROMISE_CEILING_WORDS ? GEO_PROMISE_CEILING_WORDS[row.ceiling] : "—"),
               isEmpty: (row) => !row.ceiling,

@@ -1783,6 +1783,8 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_unavailable',
   // A paused project runs nothing: 「让 AI 做」 and 导出 wait until it is resumed.
   'geo_project_paused',
+  'geo_monitoring_scope_changed',
+  'geo_monitoring_authorization_required',
   // One evidence chain (flywheel F21): the producer settings, and the product-zone cards made from the claims.
   'geo_producer_invalid',
   'geo_card_producer_required',
@@ -2204,6 +2206,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   media_market_response_too_large: '媒介集市的答复超过了大小上限，这次结果没有采用。',
   media_market_request_invalid: '发给媒介集市的请求不符合要求（媒体类型、订单号、标题或正文），已拒绝。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
+  geo_monitoring_scope_changed: '所选引擎超出了已保存的监测范围。请在原对话中调整并保存问题的测量范围，再开启持续监测。',
+  geo_monitoring_authorization_required: '自动复核尚未获得当前范围的持续监测授权。已有回答和结果已保留；如需继续，请确认监测范围并开启持续监测。',
   geo_signal_not_found: '找不到这条线索，请刷新后查看当前记录。',
   geo_signal_conflict: '这条线索或处理请求已更新，请刷新后继续。',
   geo_plan_context_invalid: '方案选择不完整，请刷新方案页后重新选择。',

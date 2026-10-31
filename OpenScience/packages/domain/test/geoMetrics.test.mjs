@@ -583,7 +583,7 @@ test("hard lines: accuracy at the line and no open retrieval-layer 讲错我方;
   const parametric = { id: "e2", status: "acting", severity: "S2", citedSource: null };
   const closed = { id: "e3", status: "closed", severity: "S4", citedSource: { domain: "x.org", attribute: "farm" } };
 
-  const met = hardLines(accuracy(98), [parametric, closed]);
+  const met = hardLines(accuracy(98), [parametric, closed], { accuracyTarget: 98 });
   assert.equal(met.accuracy.share, 0.98);
   assert.equal(met.accuracy.met, true, "98 % meets a 0.98 line");
   assert.equal(met.retrievalErrors.open, 0);
@@ -591,9 +591,9 @@ test("hard lines: accuracy at the line and no open retrieval-layer 讲错我方;
   assert.equal(met.parametricErrors.blocking, false);
   assert.equal(met.met, true, "a parametric error is listed, not blocking");
 
-  const missed = hardLines(accuracy(97.99), []);
+  const missed = hardLines(accuracy(97.99), [], { accuracyTarget: 98 });
   assert.equal(missed.met, false);
-  const blocked = hardLines(accuracy(100), [retrieval, parametric]);
+  const blocked = hardLines(accuracy(100), [retrieval, parametric], { accuracyTarget: 98 });
   assert.equal(blocked.met, false);
   assert.deepEqual(blocked.retrievalErrors, { open: 1, ids: ["e1"], bySeverity: { S3: 1 }, met: false });
   const unknown = hardLines(/** @type {any[]} */ ([{ metricId: "M-06", scope: "project", variant: null, value: null, status: "not_measurable" }]), []);
@@ -615,10 +615,10 @@ test("hard lines are held by a measurement, never by a reading over too few answ
   assert.deepEqual([unmet.accuracy.status, unmet.accuracy.numerator, unmet.accuracy.denominator], ["insufficient", 3, 3], "and the page can say how thin");
 
   // Thirty answers are a measurement, and then the line decides.
-  const enough = hardLines(project(answers(30)), []);
+  const enough = hardLines(project(answers(30)), [], { accuracyTarget: 98 });
   assert.deepEqual([enough.accuracy.status, enough.accuracy.met, enough.met], ["ok", true, true]);
   const wrong = [...answers(29), row({ pool: "P1" }, { ...ours, statements: [ourStatement("wrong")] })];
-  const missed = hardLines(project(wrong), []);
+  const missed = hardLines(project(wrong), [], { accuracyTarget: 98 });
   assert.deepEqual([missed.accuracy.met, missed.met], [false, false], "29 of 30 is under 98 %");
 
   // A retrieval-layer error that is open fails the line whether or not the accuracy can be read; a parametric one never does.
@@ -733,4 +733,15 @@ test("geoCellRows returns the snapshots behind a cell", () => {
     const cell = cellOf(cells, where);
     assert.equal(geoCellRows(fixture.rows, cell).length, cell.snapshotCount, JSON.stringify(where));
   }
+});
+
+test("an observed accuracy never invents a universal target or a delivery acceptance", () => {
+  /** @type {any[]} */
+  const cells = [{ metricId: "M-06", scope: "project", variant: null, value: 80, status: "ok", numerator: 40, denominator: 50 }];
+  const reading = hardLines(cells, []);
+  assert.equal(reading.accuracy.value, 80);
+  assert.equal(reading.accuracy.line, null);
+  assert.equal(reading.accuracy.met, null);
+  assert.equal(reading.met, null);
+  assert.equal(hardLines(cells, [], { accuracyTarget: 75 }).accuracy.met, true);
 });

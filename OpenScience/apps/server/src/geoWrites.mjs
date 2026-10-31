@@ -1739,12 +1739,9 @@ function validatedTargets(items, issues) {
       horizonWeeks: read.number("horizonWeeks", 1, 104, { integer: true }), placements: read.number("placements", 0, 10_000, { integer: true }),
       budgetCny: read.number("budgetCny", 0, 10_000_000), dataType,
     };
-    // Factual accuracy is a hard line in every tier, not a number that climbs
-    // with the budget (the owner's ACCURACY_HARD_LINE; production 2026-09-25:
-    // a strategy wrote 76 / 84 / 90 %).
-    const hardLine = Number(geoConstant("ACCURACY_HARD_LINE")) * 100;
-    if (!read.refused && metricId === "M-06" && typeof target.target === "number" && target.target < hardLine) {
-      read.refuse("target", "below_hard_line", `事实准确率在每一档都是硬线：目标不低于 ${hardLine}%。`);
+    // Goals express the project's expectations, never a guaranteed external AI outcome.
+    if (!read.refused && metricId === "M-06" && typeof target.target === "number" && (target.target < 0 || target.target > 100)) {
+      read.refuse("target", "out_of_range", "An accuracy goal must be between 0 and 100 percent.");
     }
     const key = `${target.tier}\u0000${metricId}\u0000${pool}`;
     if (!read.refused && seen.has(key)) read.refuse("metricId", "duplicate", "This tier, metric and pool appear twice in this write.");
@@ -2159,7 +2156,7 @@ async function writeToProject({ store, project, what, body, renameProject = null
       issues.push(...check.notices);
       if (check.thin && !minimal) {
         issues.push({ field: "program", code: "notice",
-          message: `This set is under what the full programme measures (${GEO_MEASURED_RANGE.full[0]} or more questions and control groups), so it is locked as a minimal set: a diagnosis. The later steps are not started from it unless they are asked for.` });
+          message: `This set is under what the full programme measures (${GEO_MEASURED_RANGE.full[0]} or more questions and control groups), so it is locked as a minimal set. Saving or locking data does not start measurement or later steps; request the intended task explicitly.` });
       }
       const locked = await store.lockQuestionSet(project.id, version, check.measured);
       await store.setStep(project.id, "questions", { status: asMinimal ? "minimal" : "done" });

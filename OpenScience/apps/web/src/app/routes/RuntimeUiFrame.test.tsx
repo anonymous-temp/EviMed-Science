@@ -1977,8 +1977,8 @@ describe("循证 GEO in the conversation", () => {
       engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"] });
     expect(options.offered.map((engine: { name: string }) => engine.name)).toEqual(["豆包", "千问", "DeepSeek", "元宝", "Kimi"]);
     expect(options.starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["完整方案", "AI 怎么说我的产品", "信源分析与预期", "优化已有稿件", "去 AI 味", "持续监测"]);
-    expect(options.starters[0].draft).toMatch(/产品是信尔美。$/);
+      .toEqual(["诊断 AI 回答", "修改已有稿件", "制定策略与方案"]);
+    expect(options.starters[0].draft).toContain("产品是信尔美。");
     view.unmount();
   });
 
@@ -2413,7 +2413,7 @@ describe("exact GEO scope in the existing native frame",()=>{
   it("sends GEO starters for the authorized ordinary primary without a specialist binding or global project discovery",async()=>{
     const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
     nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);
-    geo.listGeoProjects.mockClear();geo.getGeoProject.mockResolvedValue({id:"geo-shared",projectId:"same-id",sessionId:"shared-root",product:{brandName:"Scoped brand"},engines:["kimi"],coverageDays:90});
+    geo.listGeoProjects.mockClear();geo.getGeoProject.mockResolvedValue({id:"geo-shared",projectId:"same-id",sessionId:"shared-root",steps:{},status:"active",product:{brandName:"Scoped brand"},engines:["kimi"],coverageDays:90});
     const view=render(<MemoryRouter initialEntries={["/app/geo/geo-shared/chat/shared-root"]}><RuntimeUiFrame projectId="same-id" scope={scope} sessionId="shared-root" origin={mocks.profile.uiOrigin}/></MemoryRouter>);
     await waitFor(()=>expect(view.container.querySelector("iframe")).not.toBeNull());
     const frame=view.container.querySelector("iframe")!,post=vi.spyOn(frame.contentWindow!,"postMessage");
@@ -2422,7 +2422,7 @@ describe("exact GEO scope in the existing native frame",()=>{
     await waitFor(()=>expect(post.mock.calls.map(call=>call[0]).some(data=>data.type==="evimed.runtime-ui.navigate")).toBe(true));
     const command=post.mock.calls.map(call=>call[0]).find(data=>data.type==="evimed.runtime-ui.navigate");
     emit(frame,{type:"evimed.runtime-ui.ack",seq:3,projectId:"same-id",requestId:command.requestId,ok:true,sessionId:"shared-root"});
-    await waitFor(()=>expect(post.mock.calls.map(call=>call[0]).some(data=>data.type==="evimed.runtime-ui.geo"&&data.sessionId==="shared-root"&&data.starters?.length===6)).toBe(true));
+    await waitFor(()=>expect(post.mock.calls.map(call=>call[0]).some(data=>data.type==="evimed.runtime-ui.geo"&&data.sessionId==="shared-root"&&data.starters?.length===3)).toBe(true));
     expect(geo.listGeoProjects).not.toHaveBeenCalled();
     expect(nativeGeo.capability).toHaveBeenCalledWith(scope);
     expect(post.mock.calls.map(call=>call[0]).filter(data=>data.type==="evimed.runtime-ui.capability").at(-1)).toMatchObject({capabilityId:null});
@@ -2516,3 +2516,24 @@ describe("what the frame asks of the shell in a module conversation", () => {
     expect(mocks.toastError.mock.calls.map(([text]) => text)).toEqual(["这份内容在项目所有者的资料里，请在对话右侧查看。", "只有项目所有者可以把这份文件存入知识库。", "这份内容在项目所有者的资料里，请在对话右侧查看。"]);
   });
 });
+
+ it('keeps a resident frame when a result page returns an equivalent GEO scope descriptor',async()=>{
+  const props={projectId:'same-id',scope:{kind:'geo' as const,geoProjectId:'geo-shared',sessionId:'shared-root'},sessionId:'shared-root',origin:mocks.profile.uiOrigin};
+  nativeGeo.start.mockResolvedValue({running:true}); nativeGeo.status.mockResolvedValue({running:true}); nativeGeo.runs.mockResolvedValue([]); nativeGeo.checks.mockResolvedValue([]);
+  const view=render(<MemoryRouter><RuntimeUiFrame {...props}/></MemoryRouter>);
+  await waitFor(()=>expect(view.container.querySelector('iframe')).not.toBeNull());
+  const frame=view.container.querySelector('iframe'); const created=mocks.create.mock.calls.length;
+  view.rerender(<MemoryRouter><RuntimeUiFrame {...props} scope={{...props.scope}}/></MemoryRouter>);
+  expect(view.container.querySelector('iframe')).toBe(frame);
+  await act(async()=>{await Promise.resolve();});
+  expect(mocks.create).toHaveBeenCalledTimes(created);
+ });
+
+ it('does not downgrade an invalid supplied module scope to owned-project authority',async()=>{
+  const scope={kind:'geo' as const,geoProjectId:'',sessionId:'shared-root'};
+  nativeGeo.start.mockResolvedValue({running:true}); nativeGeo.status.mockResolvedValue({running:true});
+  render(<MemoryRouter><RuntimeUiFrame projectId="same-id" scope={scope} sessionId="shared-root" origin={mocks.profile.uiOrigin}/></MemoryRouter>);
+  await waitFor(()=>expect(mocks.create).toHaveBeenCalledWith('same-id',scope));
+  expect(nativeGeo.start).toHaveBeenCalledWith(scope);
+  expect(mocks.start).not.toHaveBeenCalled();
+ });

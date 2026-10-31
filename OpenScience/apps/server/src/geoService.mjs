@@ -1,3 +1,4 @@
+import { geoAutomationEnabled } from "@evimed/domain";
 import { geoPlanFreshness, geoPlanScopeKey, geoPlanDigest, geoPlanCanonicalScope } from "./geoPlanContext.mjs";
 import { geoErrorClinicalContext } from "./geoErrors.mjs";
 /**
@@ -583,13 +584,14 @@ export class GeoService {
     const projects = await this.store.listProjectsFor(String(user.id));
     const ids = projects.map((project) => project.id);
     const headline = [GEO_VIEW_METRIC_IDS.gvi, GEO_VIEW_METRIC_IDS.mentionHeadline];
-    const [latest, series, names, alerts, targets, started] = await Promise.all([
+    const [latest, series, names, alerts, targets, started, activeMeasurements] = await Promise.all([
       this.#latestProjectMetrics(ids, headline),
       this.#series(ids, [GEO_VIEW_METRIC_IDS.gvi]),
       this.#controlProjectNames(projects.map((project) => ({ userId: project.userId, projectId: project.projectId }))),
       this.#alerts(ids),
       Promise.all(projects.map((project) => this.store.latestTargets(project.id))),
       this.#startedAt(projects),
+      this.store.activeMeasurements(ids),
     ]);
     const availableEngines = geoAvailableEngines(this.config);
     return {
@@ -605,7 +607,9 @@ export class GeoService {
           coverageDays: project.coverageDays,
           engines: project.engines,
           status: project.status,
+          access: { roles: project.roles, abilities: geoAbilitiesOf(project.roles), owner: project.roles.includes("owner") },
           steps: project.steps,
+          activeMeasurement: activeMeasurements.get(project.id) ?? null,
           headline: {
             gvi: { ...geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.gvi)), target: this.#target(targets[index], project.tier, GEO_VIEW_METRIC_IDS.gvi), trend },
             mention: geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.mentionHeadline)),
@@ -736,7 +740,7 @@ export class GeoService {
   /** @param {any} project */
   async #projectViewBase(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
-    const [latest, series, targets, week, names, started, cardsBlockedBy, needsYou, summaries] = await Promise.all([
+    const [latest, series, targets, week, names, started, cardsBlockedBy, needsYou, summaries, activeMeasurements] = await Promise.all([
       this.#latestProjectMetrics([project.id], metricIds),
       this.#series([project.id], metricIds, "project", "", { coverage: true }),
       this.store.latestTargets(project.id),
@@ -746,6 +750,7 @@ export class GeoService {
       this.#cardsBlockedBy(project),
       this.#needsYou(project),
       this.spine.stepSummaries(project.id).catch(() => ({})),
+      this.store.activeMeasurements([project.id]),
     ]);
     // One short count per programme step, for the rail: what the step produced (「86 条结论」「25 个群」).
     const steps = Object.fromEntries(Object.entries(project.steps ?? {}).map(([step, state]) => [step,
@@ -763,6 +768,7 @@ export class GeoService {
     await this.#attachSnapshotIds(project.id, GEO_OVERVIEW_METRICS.map(({ metricId }, index) => ({ cell: metrics[index].cell, row: rows.get(metricId) })));
     return {
       ...project,
+      activeMeasurement: activeMeasurements.get(project.id) ?? null,
       name: geoProjectName(project, names.get(project.projectId)),
       startedAt: started.get(project.id) ?? project.createdAt,
       availableEngines: geoAvailableEngines(this.config),
@@ -908,8 +914,13 @@ export class GeoService {
       view.failureModes = Object.fromEntries(Object.entries(modes).map(([key, ids]) => [key, { ...tallyCell(ids.length, eligible.length, ids.slice(0, GEO_CELL_SNAPSHOT_LIMIT)),
         members: { total: ids.length, shown: Math.min(ids.length, GEO_CELL_SNAPSHOT_LIMIT), more: ids.length > GEO_CELL_SNAPSHOT_LIMIT, exact: true, unit: "answers" } }]));
       const accuracy = cell(GEO_VIEW_METRIC_IDS.accuracy, {}, !selected.rows.some((member) => member.facts) && view.hardLines?.accuracy ? { ...view.hardLines.accuracy, methodVersion: null } : null);
+      // Only the unfiltered current project reading is compared to its current project-wide goal.
+      // A narrowed or historical selection has no frozen target binding; never borrow today's target for it.
+      const goal = filtered ? null : await this.store.latestTargets(project.id);
+      const accuracyTarget = goal ? this.#target(goal, project.tier, GEO_VIEW_METRIC_IDS.accuracy) : null;
       view.hardLines = { ...hardLines([], scopeErrors.live.map((row) => ({ id: row.id, status: row.status, severity: row.severity, citedSource: row.cited_source })),
-        { accuracyCell: !selected.rows.length && accuracy.status === "absent" ? null : accuracy }), roundId: roundView?.id ?? null };
+        { accuracyCell: !selected.rows.length && accuracy.status === "absent" ? null : accuracy, accuracyTarget }), roundId: roundView?.id ?? null,
+        goalVersion: accuracyTarget == null ? null : goal?.version ?? null, goalBasis: filtered ? "not_bound_to_selection" : accuracyTarget == null ? "not_set" : "current_project_goal" };
       view.round = roundView ? { ...roundView, surface: round.surface, planned: selection.counts.planned, done: selection.counts.returned, engines: selection.engines,
         measuredEngines, linklessEngines, unparsed: !filtered && !selected.rows.length ? view.round?.unparsed ?? null : selection.counts.unjudged,
         absent: selection.engines.filter((engine) => !measuredEngines.includes(engine)).map((engine) => ({ engine,
@@ -1462,9 +1473,8 @@ export class GeoService {
       byClaim: geoErrorsByClaim(errors),
       // Counted over every error of the project, not over the page of rows above: the list is capped, the counts are not.
       errorCounts,
-      // The two hard lines (Q-5): accuracy (M-06) at or above the owner's line, read from the round's project cell only when it is a
-      // measurement (a thin one is `null`, with its counts), and no open 讲错我方 traced to a cited source. The model's own errors are
-      // listed apart and never block. `met` is null when nothing is missed and the accuracy cannot be read.
+      // Compatibility field name: measured accuracy and actionable errors, not a delivery gate.
+      // The selection projection binds a current project-wide goal only where its scope matches.
       hardLines: { ...hardLines([], liveErrors, { accuracyCell: /** @type {any} */ (accuracyRow ? geoCellFromRow(accuracyRow) : null) }), roundId: round ? String(round.id) : null },
       noise: noiseRow ? { band: num(noiseRow.value), measuredAt: iso(noiseRow.computed_at) } : null,
       more,
@@ -2025,7 +2035,7 @@ export class GeoService {
   async #monitoringBase(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
     const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
-    const [series, arms, byEngine, net, noise, cited, newErrors, queued, baseline, rivals] = await Promise.all([
+    const [series, arms, byEngine, net, noise, cited, newErrors, queued, baseline, rivals, activeMeasurements] = await Promise.all([
       this.#series([project.id], metricIds, "project", "", { coverage: true }),
       this.#series([project.id], [GEO_ARM_METRIC_ID], "arm", "arm", { coverage: true }),
       this.#series([project.id], GEO_METRIC_IDS, "engine", "engine", { coverage: true }),
@@ -2047,6 +2057,7 @@ export class GeoService {
           AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))
         ORDER BY r.finished_at LIMIT 1`, [project.id]),
       this.#rivalSeries(project.id),
+      this.store.activeMeasurements([project.id]),
     ]);
     const pause = geoMeasurementPause({ engines: project.engines, probe: this.probeState?.() ?? null, config: this.config, now: this.now() });
     // Since when, as the stored answers show it: for each paused engine, its first failed or suspect ask after its last counted
@@ -2071,12 +2082,13 @@ export class GeoService {
     // Nothing is next while the owner has paused the project or no engine of it can be asked: the page would name a re-measure that
     // will not happen.
     const next = project.status === "paused" || measurement.state === "paused" ? null : queued.rows[0]
-      ? { date: dayIn(new Date(queued.rows[0].created_at), this.timeZone), kind: String(queued.rows[0].kind) }
-      : measured && wantedSteps(programSteps(project.steps)).want.has("monitoring")
+      ? { date: dayIn(new Date(queued.rows[0].created_at), this.timeZone), kind: String(queued.rows[0].kind), source: "queued" }
+      : measured && geoAutomationEnabled(project) && wantedSteps(programSteps(project.steps)).want.has("monitoring")
         ? { date: nextWeeklySlot({ now: this.now(), timeZone: this.timeZone, baselineFinishedAt: measured.finished_at,
-          taken: new Set(Array.isArray(measured.taken) ? measured.taken.map(String) : []) }).monday, kind: "weekly" }
+          taken: new Set(Array.isArray(measured.taken) ? measured.taken.map(String) : []) }).monday, kind: "weekly", source: "schedule" }
         : null;
     return {
+      activeMeasurement: activeMeasurements.get(project.id) ?? null,
       series: GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({ key, points: projectSeries.get(metricId) ?? [] })),
       arms: {
         pilot: points("pilot"),

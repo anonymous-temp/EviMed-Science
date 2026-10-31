@@ -772,9 +772,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (entry.nativeRouteNeedsReset || claimed.turn > 0 && entry.nativeRouteTurn !== claimed.turn) {
       entry.nativeRouteNeedsReset = false
       entry.nativeRouteTurn = claimed.turn
-      if (entry.nativeGeoContextRef) {
+      if (entry.nativeGeoContextRef || entry.nativeGeoModuleScope) {
         entry.nativeGeoContextRef = null
         entry.nativeGeoAnalysisRead = null
+        entry.nativeGeoModuleScope = null
+        entry.nativeGeoModuleTold = false
         entry.nativeCapability = undefined
         entry.inlineCapabilities.clear()
         changed = applyRootNarrowing(agent, [])
@@ -813,7 +815,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         entry.inlineCapabilities.clear()
         changed = applyRootNarrowing(agent, [])
       }
-      if (claimed.inputs.length && !entry.nativeGeoContextRef) {
+      if (claimed.inputs.length && !entry.nativeGeoContextRef && !entry.nativeGeoModuleScope) {
         const resolve = ctx.get('evimedNativeRoute')
         if (typeof resolve === 'function') {
           const inputs = await Promise.all(claimed.inputs.map(async (input) => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
@@ -839,6 +841,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
               changed = applyRootNarrowing(agent, []) || changed
               entry.nativeGeoContextRef = /^gpc_[a-f0-9]{64}$/.test(selected.route.geoContextRef ?? '') ? selected.route.geoContextRef : null
               entry.nativeGeoAnalysisRead = null
+              entry.nativeGeoModuleScope = null
+              const moduleScope = selected.route.geoModuleScope
+              if (!entry.nativeManagedDispatch && capabilityId === 'open-domain-answer' && !entry.nativeGeoContextRef
+                && moduleScope && Object.keys(moduleScope).length === 3 && moduleScope.version === 1
+                && moduleScope.rootSessionId === entry.sessionId && /^[A-Za-z0-9_-]{1,128}$/.test(moduleScope.geoProjectId ?? '')) {
+                entry.nativeGeoModuleScope = moduleScope
+                changed = applyRootNarrowing(agent, [`${MCP_TOOL_PREFIX}geo_read`, `${MCP_TOOL_PREFIX}geo_write`]) || changed
+              }
               const generalized = selected.route.geoInputRead
               const legacy = selected.route.geoAnalysisRead
               const read = generalized ?? (legacy && typeof legacy === 'object' && Object.keys(legacy).length === 1 ? { referenceId: legacy.referenceId, what: 'analysis' } : null)
@@ -1115,6 +1125,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           await activateBoundCapability(entry, agent)
         } else {
           diagnostics(step.sessionId)?.degrade?.('root step entered with no live agent for its id; its context and capability method were not handed over')
+        }
+      }
+      if (step.root && entry.nativeGeoModuleScope && !entry.nativeGeoModuleTold) {
+        const moduleAgent = ctx.get('agents')?.get?.(step.agentId)
+        if (moduleAgent) {
+          injectContext(moduleAgent, '这是当前循证 GEO 项目的原生对话。通过 geo_read 查看资料、geo_write 写回项目；文件不替代项目记录。只完成用户本次范围，不因保存资料、锁题或已有结果启动诊断、发布或持续监测。普通短任务直接完成并回复，无须专业报告。', name)
+          entry.nativeGeoModuleTold = true
         }
       }
       // Native UI input has no control-plane brief. Give its root workflow a
@@ -3441,6 +3458,7 @@ function resetRunState(entry, runId) {
   entry.inlineCapabilities = new Set()
   entry.nativeGeoContextRef = null
   entry.nativeGeoAnalysisRead = null
+  entry.nativeGeoModuleScope = null
   entry.frozen = false
 }
 

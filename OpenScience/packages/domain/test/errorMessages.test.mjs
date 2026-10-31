@@ -298,3 +298,14 @@ test("the sentence of a run's failure is never handed to a surface that lists th
     assert.equal(personErrorCodeMessage(code), null);
   }
 });
+
+
+test("GEO monitoring recovery codes are exported with actionable Chinese messages", () => {
+  for (const code of ["geo_monitoring_scope_changed", "geo_monitoring_authorization_required"]) {
+    assert.ok(ALL_ERROR_CODES.includes(code));
+    assert.equal(errorCodeAudience(code), "person");
+    assert.match(knownErrorCodeMessage(code) ?? "", /范围/);
+    assert.match(errorCodeMessage(code), /持续监测/);
+    assert.ok(!looksLikeAnIdentifier(personErrorCodeMessage(code) ?? ""));
+  }
+});

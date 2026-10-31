@@ -1,3 +1,4 @@
+import { geoActionPermission } from "./geoJourney";
 import { useGeoPath } from "./useGeoPath";
 import { useGeoDestinationPath } from "./useGeoPath";
 import { useState } from "react";
@@ -33,20 +34,20 @@ import { useOpenGeoConversation } from "./useOpenGeoConversation";
  * stopped, that it goes on by itself — so the numbers above are not read as this week's. A step that failed because nothing could
  * be asked offers no 接着做 until it can be (a retry would ask nobody again).
  */
-export function NeedsYou({ geoId, project }: { geoId: string; project: GeoProject }) {
+export function NeedsYou({ geoId, project, showMeasurement = true }: { geoId: string; project: GeoProject; showMeasurement?: boolean }) {
   const geoDestinationPath = useGeoDestinationPath();
   const monitoring = useGeoMonitoring(geoId);
   const pause = measurementPause(monitoring.state.kind === "ready" ? monitoring.state.data.measurement : null);
   const items = project.needsYou;
   const paused = pause?.paused ? pause : null;
-  if (items.length === 0 && !paused) return null;
+  if (items.length === 0 && !pause) return null;
   return (
     <>
-    {paused && (
+    {showMeasurement && pause && (
       <Section title="监测状态" className="mt-0">
         {/* The way on is where the numbers above come from: the trend, which says what the last round measured. */}
         <div role="status" data-geo-measurement="paused">
-          <Note action={<Link className="text-link hover:underline" to={geoDestinationPath(geoId, GEO_STEP_HOME.monitoring)}>查看监测走势</Link>}>{paused.short}：{paused.detail}</Note>
+          <Note action={<Link className="text-link hover:underline" to={geoDestinationPath(geoId, GEO_STEP_HOME.monitoring)}>查看监测走势</Link>}>{pause.short}：{pause.detail}</Note>
         </div>
       </Section>
     )}
@@ -77,7 +78,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
       <ListRow
         title="设置投放预算"
         meta="预算还没有定，稿件写好之后要在预算里才会投放"
-        onOpen={() => frame?.openPanel("budget")}
+        onOpen={geoActionPermission(project,"manage_money").allowed ? () => frame?.openPanel("budget") : undefined}
       />
     );
   }
@@ -116,7 +117,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
             }}
           >
             {!busy && <PenLine size={16} aria-hidden="true" />}
-            写纠错稿
+            在对话中写纠错稿
           </Button>
         ) : undefined}
       />
@@ -129,7 +130,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
         title={<span className="max-w-measure">{item.text ?? ""}</span>}
         meta="信源布局里需要你这边来做"
         to={geoDestinationPath(geoId, { tab: "plan", section: item.target.section ?? "client_actions" })}
-        actions={(
+        actions={geoActionPermission(project,"edit").allowed ? (
           <Button
             variant="text"
             size="sm"
@@ -144,7 +145,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
           >
             已经做了
           </Button>
-        )}
+        ) : undefined}
       />
     );
   }
@@ -156,7 +157,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
         title={`${GEO_STEP_NAMES[step]}在等额度`}
         meta="额度补上之后会自己接着做"
         chevron={false}
-        actions={<AllowanceTopUp waiting={waiting} />}
+        actions={geoActionPermission(project,"run").allowed ? <AllowanceTopUp waiting={waiting} /> : undefined}
       />
     );
   }
@@ -168,9 +169,9 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
     return (
       <ListRow
         title={`${GEO_STEP_NAMES[step]}没有做完`}
-        meta={held ? "测量服务暂时连不上，这一轮没有问到任何 AI，恢复后再接着做" : measuring ? "上一轮没有拿到 AI 的回答，接着做会重新测一轮" : "已经做出来的部分都留着"}
+        meta={held ? "测量服务暂时不可用，已有结果仍可查看" : project.steps[step]?.summary?.text ? `已保留：${project.steps[step]?.summary?.text}` : project.steps[step]?.error || project.steps[step]?.note || "打开这一步查看运行记录和保留结果"}
         to={geoDestinationPath(geoId, GEO_STEP_HOME[step])}
-        actions={held ? undefined : (
+        actions={held || !geoActionPermission(project,"run").allowed ? undefined : (
           <Button
             variant="secondary"
             size="sm"

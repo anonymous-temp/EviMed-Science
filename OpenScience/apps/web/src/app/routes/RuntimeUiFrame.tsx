@@ -331,7 +331,7 @@ function SimulatedRechargeButton() {
  * `active` is the conversation surface being on screen in this project:
  * inactive frames keep their document and their lease and send nothing.
  */
-export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease, onPaneAcknowledged }: {
+export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease, onPaneAcknowledged }: {
   projectId: string;
   origin: string;
   scope?: GeoConversationScope;
@@ -359,6 +359,12 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
    *  runtime's slot is free for another project (`SessionFrameHost`). */
   onRelease?: (released: Promise<void>) => void;
 }) {
+  // An equivalent descriptor on returning from results must keep the resident frame.
+  const scopeProvided = scopeInput != null;
+  const scopeGeoId = scopeInput?.geoProjectId;
+  const scopeSessionId = scopeInput?.sessionId;
+  const scope = useMemo<GeoConversationScope | undefined>(() => scopeProvided
+    ? {kind:'geo',geoProjectId:scopeGeoId ?? '',sessionId:scopeSessionId ?? ''} : undefined, [scopeProvided,scopeGeoId,scopeSessionId]);
   const startCurrentRuntime = useCallback(() => scope ? startGeoConversation(scope) : startWebRuntime({ projectId, opening: true }), [scope, projectId]);
   const readCurrentRuns = useCallback(() => scope ? geoConversationRuns(scope) : listWebAgentRuns({ projectId }), [scope, projectId]);
   const readCurrentChecks = useCallback(() => scope ? geoConversationChecks(scope) : Promise.resolve(null), [scope]);

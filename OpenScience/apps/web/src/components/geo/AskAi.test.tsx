@@ -98,3 +98,17 @@ it("is not offered to a role that may not open the conversation: there is nothin
   render(<MemoryRouter><GeoFrameHarness project={geoProject()}><AskAi project={{ projectId: "prj_geo_1", sessionId: "ses_geo_1" }} draft="这个数说明了什么？" /></GeoFrameHarness></MemoryRouter>);
   expect(screen.getByRole("button", { name: "问 AI" })).toBeInTheDocument();
 });
+
+it('keeps the exact result reference, conversation and scoped return destination during a handoff',async()=>{
+  const referenceId=`rr_${'a'.repeat(64)}`;
+  render(<MemoryRouter initialEntries={['/app/geo/geo_1/plan?strategyVersion=3&selectionRef=selected&step=sources']}><Routes>
+    <Route path="/app/geo/geo_1/plan" element={<AskAi project={{geoId:'geo_1',projectId:'prj_geo_1',sessionId:'historical',resultRevision:{referenceId}}} label="在对话中解释所选版本" draft="Explain selected version"/>}/>
+    <Route path="*" element={<Probe/>}/>
+  </Routes></MemoryRouter>);
+  await userEvent.click(screen.getByRole('button',{name:'在对话中解释所选版本'}));
+  await waitFor(()=>expect(screen.getByTestId('location')).toHaveTextContent('/chat/historical'));
+  const state=JSON.parse(screen.getByTestId('state').textContent??'{}');
+  expect(state.runtimeUiIntent).toMatchObject({sessionId:'historical',resultRevision:{referenceId},draft:'Explain selected version',scope:{kind:'geo',geoProjectId:'geo_1'}});
+  expect(client.open).toHaveBeenCalledWith('geo_1',{kind:'session',sessionId:'historical'});
+  expect(state.runtimeUiIntent).not.toHaveProperty('send');
+});

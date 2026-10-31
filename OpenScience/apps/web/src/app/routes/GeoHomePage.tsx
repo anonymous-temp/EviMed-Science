@@ -1,3 +1,6 @@
+import { Link } from "react-router";
+import { geoJourney } from "@/components/geo/geoJourney";
+import { GEO_STEP_HOME, geoDestinationPath } from "@/components/geo/geoTabs";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Plus, Radar } from "lucide-react";
@@ -244,6 +247,7 @@ export function GeoHomePage() {
  */
 function ProjectRow({ project, label, selected, to }: { project: GeoProjectSummary; label: string; selected: boolean; to: string }) {
   const alert = project.status === "paused" ? null : alertText(project);
+  const journey = geoJourney(project);
   return (
     <ListRow
       to={to}
@@ -260,6 +264,7 @@ function ProjectRow({ project, label, selected, to }: { project: GeoProjectSumma
           ) : progressLine(project)}
         </span>
       )}
+      actions={<Link className="rounded text-ui text-link hover:underline" to={journey.next.step ? geoDestinationPath(project.id, GEO_STEP_HOME[journey.next.step]) : `/app/geo/${encodeURIComponent(project.id)}`}>继续工作</Link>}
       trailing={(
         <span className="flex items-baseline gap-1.5 text-ui">
           <span className="text-caption text-text-3">可见度</span>

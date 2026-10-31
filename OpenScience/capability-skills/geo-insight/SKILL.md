@@ -24,6 +24,30 @@ Load `geo-drug-value` before planning this task. Read `geo_read value` and
 strategy, content and interpretation. Preserve partial findings. Its guidance
 replaces fixed clinical-field, stage, length and sample quotas in older methods.
 
+## Task scope and platform execution
+
+Read the current project and the user's requested outcome before selecting methods.
+A saved question set or completed step is data, not permission for another task.
+Reuse relevant sources and results; add only the missing dependencies of this request.
+Unknown intent stays a small clarification or supported partial work, never a full programme.
+Tell the user what is being done now, what is retained and the reachable next action.
+Writing a manuscript does not request publication or recurring monitoring.
+The existing native conversation owns discussion and revision; do not build another editor.
+
+The private method pack is a set of subordinate methods, not a competing task scheduler.
+Use the platform's current tool schemas and persisted objects. Never execute standalone
+probe/crawl/distribution clients inside a hosted run, fabricate a task receipt, or register
+metrics and snapshots as model-authored facts. Preserve accepted asynchronous task ids;
+read progress and retained results rather than submitting a second paid task after a timeout.
+Recurring monitoring requires the project's explicit automation authorization. Missing
+historical authorization stays unknown and never becomes consent from past activity.
+
+A target is an explicit goal or scenario with assumptions, not guaranteed external AI behavior.
+Do not promise mention, citation, retrieval or factual accuracy after an intervention.
+Differences across windows and controls remain conditional observational analyses.
+Readable work is delivered with findings and uncertainty; advisory checks do not withhold it.
+External publishing, account access and budgets retain their existing authorization boundaries.
+
 ## The method pack
 
 The method is the owner's GEO method pack, installed beside the platform skills
@@ -68,10 +92,10 @@ probe host, a social crawler or a marketplace.
   `mcp__evimed__literature_search`, `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`,
   `mcp__evimed__web_search`, `mcp__evimed__web_read` (regulator pages render in the cloud browser),
   `mcp__evimed__locate_quote` to find the exact passage in a preserved source.
-- Real phrasings: `mcp__evimed__social_posts_search`, one platform per call (a crawl takes
-  30–120 s): ask the platforms that carry the product's patients — usually 知乎、抖音、
-  小红书 — one after another. A platform with no posts is “无信号”,
-  never zero; when the channel fails, questions are written as kind `typical`
+- Real phrasings: `mcp__evimed__social_posts_search`, selecting supported platforms that
+  carry the relevant audience. Preserve each platform's complete, partial, empty or failed
+  observation and its asynchronous job reference; an unfinished job is not an empty result.
+  No returned posts establish only the observed sample, not absence of demand; when the channel fails, questions are written as kind `typical`
   and the report says the phrasings were not collected. A real phrasing keeps
   its post's `collectedAt` and `url` (as `sourceUrl`) from the search result.
 - Project data: `mcp__evimed__geo_read` for what the project already holds (never redo a
@@ -114,15 +138,24 @@ probe host, a social crawler or a marketplace.
 - A content priority is a hypothesis with an evidence rationale. Without measured
   cost and outcome data, do not present it as a demonstrated return-on-investment
   ranking; keep the proposed priority and say which outcomes remain unmeasured.
-- Measurement is the platform's. Never batch-probe inside a run: once the set
-  is locked the platform runs the baseline on its own. `mcp__evimed__geo_visibility_probe`
-  is only for a single question the user asks about in the conversation.
+- Measurement is the platform's. Saving or locking questions starts no measurement by itself.
+  For a platform-dispatched programme preparation run, write only the brief's evidence,
+  journey or question scope and lock questions when requested. The orchestrator alone starts
+  that programme's baseline: never call `start_diagnosis` or create a parallel one-shot round.
+  In an attended native conversation where the user explicitly requests diagnosis, use `geo_write preview_questions` with rows and the
+  measurement contract (engines, one_shot/recurring, repeats, metrics, presentation and source basis),
+  save those rows under a requestKey, then call `start_diagnosis` with the returned version and
+  its own stable requestKey. Generated phrasings are kind `typical`, not `client` or `real`.
+  Read `diagnosis_progress` for the returned round. Keep the selected scope and planned call count
+  visible; never batch-probe inside the model turn. `geo_visibility_probe` is only a single
+  question explicitly asked in conversation. A source-analysis step already requested through
+  the platform is scheduled with its minimal dependencies by the worker; do not duplicate it.
 
 ## What you decide without asking
 
-Only two things in a whole GEO project wait for a person: the distribution
-budget, and an article with an unresolved clinical-safety finding. Neither is
-yours. Everything else you decide: a default with its reason, written into the
+Ask only for unavailable information that changes the requested work or for an
+external action whose authorization is missing. The distribution budget, publication
+and recurring monitoring choices belong to the user. Within the agreed task, use a default with its reason, written into the
 package's `assumptions[]` (`field`, `value`, `basis: default|upstream|inferred|
 client_said`, `reason`, `howToChange`). When product identity changes the next decision, ask that one question.
 Continue supported molecule- or disease-level work with the identity limit visible.
