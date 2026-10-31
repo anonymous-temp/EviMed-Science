@@ -276,6 +276,7 @@ import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearch
 import { KB_BROWSE_GATEWAY_PATH, createKbBrowseGatewayHandler } from "./kbBrowseGateway.mjs";
 // 「前沿动态」 search for the runtime's `frontier_search` tool (2026-09-22).
 import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierGateway.mjs";
+import { fetchFrontierMedia } from "./frontierMedia.mjs";
 // The independent reviewer (plan 2026-09-22, tiered review): the gateway a
 // run's submission asks, the module that reviews, and its reply-check worker.
 import { REVIEW_GATEWAY_PREFIX, createReviewGatewayHandler } from "./reviewGateway.mjs";
@@ -2453,7 +2454,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges, tags: tagStore, policies:evolutionModulePolicies, evolution:{observe:async event=>evolution?.observe(event)},
       glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-"),
       // An open-access PDF the plugin could not read (2026-10-22): read through the platform's own web reader, when it runs.
-      webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) } });
+      webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) },
+      // The words in the pictures of a crawl post that says nothing in its text (rd-server 2026-10-31): read through the same document parser.
+      parser: documentParser, media: (/** @type {string} */ id) => fetchFrontierMedia(client, id) });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
     const tagUpkeep = new FrontierTagUpkeep({ database: productDatabase, editor, tags: tagStore, ...(budget ? { budget } : {}) });
