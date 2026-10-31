@@ -75,6 +75,31 @@ const DOI = "10.1056/nejmoa2034577";
 /** The page's record of a memory file, by the file. */
 const recordOf = async (base, headers, uri) => (await get(base, headers, "/api/memory/records")).body.data.find((entry) => entry.uri === uri);
 
+test("a memory's old words are marks of the map with a line from what replaced them, and only their owner can have them gone", options, async (t) => {
+  const { base, headers, otherHeaders, seed } = await fixture(t);
+  const uri = seed("preferences/answers.md", "Answers as long paragraphs.", { type: "preferences" });
+  const record = await recordOf(base, headers, uri);
+  assert.equal((await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, { method: "PATCH", headers,
+    body: JSON.stringify({ value: "Tables for comparisons.", expectedVersion: record.version }) })).status, 200);
+  const read = async () => (await get(base, headers, "/api/memory/map?include=summary,facets,nodes,edges")).body.data;
+  const map = await read();
+  const old = map.nodes.find((node) => node.state === "replaced");
+  assert.equal(old.label, "Answers as long paragraphs.");
+  assert.deepEqual(old.open, { kind: "record", id: record.id });
+  assert.ok(old.until);
+  assert.ok(map.edges.some((edge) => edge.type === "replaces" && edge.to === old.id && edge.from === `memory:${record.id}`));
+  assert.equal(map.summary.memories, 1, "an old statement is counted nowhere as a memory");
+  const live = map.nodes.find((node) => node.id === `memory:${record.id}`);
+  assert.equal(typeof live.freshness, "number");
+
+  const route = `${base}/api/memory/records/${encodeURIComponent(record.id)}/replaced/${encodeURIComponent(old.id.slice("memory:".length))}`;
+  assert.equal((await fetch(route, { method: "DELETE", headers: otherHeaders })).status, 404, "another account cannot reach it");
+  assert.equal((await fetch(route, { method: "DELETE", headers })).status, 200);
+  assert.ok(!(await read()).nodes.some((node) => node.state === "replaced"));
+  assert.equal((await fetch(route, { method: "DELETE", headers })).status, 404, "it is gone");
+  assert.equal((await recordOf(base, headers, uri)).value, "Tables for comparisons.");
+});
+
 test("the map reads an account's memory files, what they rest on and how they changed, and never what must not be drawn", options, async (t) => {
   const { app, base, headers, user, otherHeaders, seed, seedOther } = await fixture(t);
   const overlay = app.nativeMemory.overlay;

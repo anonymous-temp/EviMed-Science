@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { IMPORT_MAX_CHARS, IMPORT_PROMPT, ImportDialog, joinImportFiles } from "./ImportDialog";
+import { IMPORT_MAX_CHARS, IMPORT_PROMPT, ImportDialog, joinImportFiles, readFileText } from "./ImportDialog";
 
 const memory = vi.hoisted(() => ({ offerMemoryImport: vi.fn(), saveMemoryImport: vi.fn() }));
 vi.mock("@/lib/memoryClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), ...memory }));
@@ -128,6 +128,18 @@ describe("an old archive as a file", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
     await userEvent.upload(within(dialog).getByLabelText("选择档案文件"), new File(["字".repeat(IMPORT_MAX_CHARS + 5)], "long.txt", { type: "text/plain" }));
     expect(await within(dialog).findByRole("status")).toHaveTextContent("只读入了前面的部分");
+  });
+
+  it("reads an old Windows file in its GB encoding instead of filling the box with noise, and only the start of a huge one", async () => {
+    const gbk = new Uint8Array([0xce, 0xd2, 0xca, 0xc7, 0xd2, 0xbd, 0xc9, 0xfa]);
+    expect(await readFileText(new File([gbk], "old.txt"))).toEqual({ text: "我是医生", cut: false });
+    const huge = await readFileText(new File(["a".repeat(IMPORT_MAX_CHARS * 5)], "huge.log"));
+    expect(huge.cut).toBe(true);
+    expect(huge.text.length).toBe(IMPORT_MAX_CHARS * 4);
+    // Cut inside a character is still UTF-8: its last bytes wait, and the text before them stands.
+    const cutInside = await readFileText(new File([`${"a".repeat(IMPORT_MAX_CHARS * 4 - 1)}字`], "cut.txt"));
+    expect(cutInside.cut).toBe(true);
+    expect(cutInside.text).toBe("a".repeat(IMPORT_MAX_CHARS * 4 - 1));
   });
 
   it("joins what is there with what is added, within the limit", () => {

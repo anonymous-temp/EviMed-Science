@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Maximize, Minimize, Pause, Play, RotateCcw, Sparkles, Square } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useBlockHeadingLevel } from "@/components/ui/Section";
@@ -6,18 +6,11 @@ import { formatDate, formatNumber } from "@/lib/format";
 import type { MapNode, MemoryMap } from "@/lib/memoryMapClient";
 import { markKindWord, relationTitle, STRUCTURE, type NarrowedMap } from "../mapModel";
 import type { GraphActions } from "../GraphView";
+import { StarBoundary } from "./StarBoundary";
 import type { StarHandle } from "./StarCanvas";
 import { encodingWords, familyCounts, familyOf, replayStart, type StarFamily } from "./starModel";
 
 const StarCanvas = lazy(() => import("./StarCanvas"));
-
-/** A picture that cannot load (a chunk gone after a release, three.js refusing) is no reason for the page to fail: the page goes to the flat pictures. */
-class StarBoundary extends Component<{ onFailed: () => void; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch() { this.props.onFailed(); }
-  render() { return this.state.failed ? null : this.props.children; }
-}
 
 /** Literal, so the stylesheet's scan finds each colour. */
 const FAMILY_DOT: Readonly<Record<StarFamily, string>> = {
@@ -148,7 +141,7 @@ export function StarMapView({ layoutDoc, narrowed, selected, actions, meta, onUn
       </div>
 
       {replaying !== null && <div aria-hidden="true" className="pointer-events-none absolute bottom-10 left-1/2 -translate-x-1/2 text-metric tabular-nums text-star-you">{formatDate(replaying, "iso")}</div>}
-      <div className="pointer-events-none absolute bottom-3 left-4 text-caption text-text-3">
+      <div className="pointer-events-none absolute bottom-3 left-4 text-caption text-text">
         拖动旋转 · {full ? "滚轮" : "Ctrl 或 ⌘ 加滚轮"}缩放 · 悬停看它连着谁 · 点一颗打开{layoutDoc.truncated.nodes > 0 ? ` · 还有 ${layoutDoc.truncated.nodes} 条折叠在一组里` : ""}
       </div>
 

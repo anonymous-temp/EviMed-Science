@@ -1732,6 +1732,13 @@ export async function deleteStructuredMemory(id: string): Promise<void> {
   await parseApiResponse<boolean>(res);
 }
 
+/** Take one of a memory's old statements out of its history for good; what the memory says now stays. */
+export async function forgetReplacedStatement(recordId: string, statementId: string): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.record.replaced.delete");
+  const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(recordId)}/replaced/${encodeURIComponent(statementId)}`), { method: "DELETE" });
+  await parseApiResponse<boolean>(res);
+}
+
 export async function listWebResearchSessions(): Promise<WebResearchSession[]> {
   if (!hasWebApi) throw new BackendUnavailableError("researchSessions.list");
   const res = await fetchWithWebAuth(apiUrl("/research-sessions"));

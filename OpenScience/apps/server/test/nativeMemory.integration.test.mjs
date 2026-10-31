@@ -133,6 +133,15 @@ test("what a memory used to say comes back from its revisions for the map; an un
   assert.equal(line.successor, now.id, "the old line points at the line that replaced it");
   assert.ok(map.records.some((entry) => entry.id === line.head));
 
+  // The person may have the old words gone and keep what it says now; another memory's statement cannot be named through this one.
+  await assert.rejects(store.forgetReplaced(userId, nativeFileId(uri), line.id), (error) => error.status === 404);
+  await store.forgetReplaced(userId, line.head, line.id);
+  map = await store.mapMemories(userId);
+  assert.ok(!map.replaced.some((statement) => statement.id === line.id));
+  assert.ok(map.records.some((entry) => entry.value?.startsWith("Target journal: JASN")));
+  assert.ok(!(await store.overlay.revisionsOf(userId, profile)).some((revision) => /Kidney/.test(`${revision.before ?? ""}${revision.after ?? ""}`)), "no revision keeps it");
+  assert.ok((await store.overlay.rejectedFingerprints(userId, "profile")).has(lineFingerprint("Target journal: Kidney International")));
+
   // An undo takes the change back, so nothing was replaced.
   const edited = (await store.records(userId)).find((entry) => entry.uri === uri);
   await store.undo(userId, edited.id, { expectedVersion: edited.version });

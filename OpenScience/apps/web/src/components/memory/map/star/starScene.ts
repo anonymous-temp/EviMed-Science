@@ -57,11 +57,14 @@ const LABEL = "pointer-events-none whitespace-nowrap rounded border border-faint
 
 /** A token as a literal: a shader cannot read `var()`. */
 function tokenColour(name: string): THREE.Color {
-  return new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(`--star-${name}`).trim() || "#ffffff");
+  return new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(`--star-${name}`).trim() || "white");
 }
 const FAMILY_TOKEN: Readonly<Record<StarFamily, string>> = {
   about: "about", preference: "preference", correction: "correction", fact: "fact", decision: "decision", method: "method", document: "document", entity: "entity",
 };
+
+/** The lines that say something, by the token of each. */
+const LINE_NAMES = ["replaces", "conflicts", "rests", "relates"];
 
 const GEOMETRY: Readonly<Record<StarShape, () => THREE.BufferGeometry>> = {
   ball: () => new THREE.IcosahedronGeometry(1, 1),
@@ -135,6 +138,7 @@ export class StarScene {
   #lost = false;
   #bloomOn = true;
   #sampled = 0;
+  #speedKnown = false;
   #sampleStart = 0;
   #down: [number, number] | null = null;
   #now = Date.now();
@@ -149,7 +153,7 @@ export class StarScene {
     Object.assign(this.#labels.domElement.style, { position: "absolute", inset: "0", pointerEvents: "none" });
     host.appendChild(this.#labels.domElement);
 
-    this.#tokens = Object.fromEntries(["ground", "you", "hub", "replaced", "line-replaces", "line-conflicts", "line-rests", "line-relates", "spark", ...Object.values(FAMILY_TOKEN)].map((name) => [name, tokenColour(name)]));
+    this.#tokens = Object.fromEntries(["ground", "you", "hub", "replaced", "spark", ...LINE_NAMES.map((name) => `line-${name}`), ...Object.values(FAMILY_TOKEN)].map((name) => [name, tokenColour(name)]));
     this.#scene.background = this.#tokens.ground;
     this.#scene.fog = new THREE.FogExp2(this.#tokens.ground.getHex(), 0.00045);
     this.#scene.add(this.#root);
@@ -303,7 +307,7 @@ export class StarScene {
       middle.add(new THREE.Vector3(unitHash(salt, 7) - 0.5, unitHash(salt, 8) - 0.5, unitHash(salt, 9) - 0.5).multiplyScalar(reach));
       return new THREE.QuadraticBezierCurve3(from.clone(), middle, to.clone());
     };
-    const lineColour = (kind: FibreKind) => this.#tokens[kind === "replaces" ? "line-replaces" : kind === "conflicts" ? "line-conflicts" : kind === "rests-on" ? "line-rests" : "line-relates"];
+    const lineColour = (kind: FibreKind) => this.#tokens[`line-${kind === "replaces" ? "replaces" : kind === "conflicts" ? "conflicts" : kind === "rests-on" ? "rests" : "relates"}`];
     this.#fibres = this.#specs.map((spec) => {
       const from = this.#byId.get(spec.from) ?? null;
       const to = this.#byId.get(spec.to) ?? null;
@@ -330,6 +334,9 @@ export class StarScene {
     this.#sparks = this.#fibres.filter((fibre) => fibre.kind === "axon" && fibre.to && isRecentlyRecalled(fibre.to.node, now));
     this.#sparkHalo = this.#cloud(this.#sparks.length * 2);
 
+    // A mark under the pointer or the keyboard may be gone from what was just read: nothing stays dimmed for it.
+    if (this.#hover && !this.#byId.has(this.#hover) && !this.#hubs.some((hub) => hub.id === this.#hover)) { this.#hover = null; this.#on.onHover(null, 0, 0); }
+    if (this.#peek && !this.#byId.has(this.#peek)) { this.#peek = null; this.#on.onHover(null, 0, 0); }
     if (!this.#framed) { this.#framed = true; this.#placeHome(false); }
     this.#paint();
   }
@@ -339,7 +346,7 @@ export class StarScene {
     const before = this.#view;
     this.#view = view;
     this.#paint();
-    if (view.hits !== before.hits || view.shown !== before.shown) this.#paintHitLabels();
+    if (view.hits !== before.hits || view.shown !== before.shown || view.hiddenFamilies !== before.hiddenFamilies) this.#paintHitLabels();
     if (view.selected !== before.selected) {
       this.#shiftView(Boolean(view.selected));
       if (view.selected) this.#flyToMark(view.selected);
@@ -376,6 +383,7 @@ export class StarScene {
     this.#replay = { from, to: this.#now, start: performance.now(), onDate, onEnd };
     this.#cutoff = from;
     this.#paint();
+    this.#paintHitLabels();
     return true;
   }
 
@@ -385,6 +393,7 @@ export class StarScene {
     this.#replay = null;
     this.#cutoff = null;
     this.#paint();
+    this.#paintHitLabels();
     onEnd();
   }
 
@@ -487,7 +496,8 @@ export class StarScene {
     for (const label of this.#hitLabels) { this.#root.remove(label); label.element.remove(); }
     this.#hitLabels = [...this.#view.hits].slice(0, 12).flatMap((id) => {
       const mark = this.#byId.get(id);
-      if (!mark || mark.state === "absent") return [];
+      // Through a replay a name would stand over a mark that is not there yet, so the names wait for it to end.
+      if (!mark || mark.state === "absent" || this.#cutoff !== null) return [];
       const element = document.createElement("div");
       element.className = LABEL;
       element.textContent = mark.node.label;
@@ -667,6 +677,8 @@ export class StarScene {
   #stop() {
     cancelAnimationFrame(this.#frame);
     this.#frame = 0;
+    // A pause is no slow frame: the sample starts again when the picture does.
+    this.#sampled = 0;
   }
 
   #schedule() {
@@ -749,13 +761,12 @@ export class StarScene {
 
   /** The first sixty frames on screen say whether this machine holds the picture; if not it gives up the bloom and the density, once. */
   #watchSpeed() {
-    if (!this.#bloomOn) return;
+    if (!this.#bloomOn || this.#speedKnown) return;
     if (this.#sampled === 0) this.#sampleStart = performance.now();
     this.#sampled += 1;
     if (this.#sampled < 60) return;
-    const average = (performance.now() - this.#sampleStart) / this.#sampled;
-    this.#sampled = 0;
-    if (average <= SLOW_FRAME_MS) return;
+    this.#speedKnown = true;
+    if ((performance.now() - this.#sampleStart) / this.#sampled <= SLOW_FRAME_MS) return;
     this.#bloomOn = false;
     this.#renderer.setPixelRatio(1);
     this.#fit();

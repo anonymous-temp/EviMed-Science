@@ -82,11 +82,22 @@ describe("where a mark stands", () => {
     expect(after.has("memory:new")).toBe(true);
   });
 
-  it("gives a new project the next place, the earlier ones keeping theirs", () => {
-    const before = layoutStars(nodes, edges);
-    const after = layoutStars([...nodes, project("p3"), memory("z", { projectId: "p3", at: "2026-10-29T00:00:00.000Z" })], edges);
-    for (const hub of before.hubs) expect(after.positions.get(hub.id)).toEqual(hub.position);
-    expect(after.hubs.at(-1)?.id).toBe("project:p3");
+  it("moves no project when another comes or goes", () => {
+    const many = Array.from({ length: 6 }, (_, index) => project(`p${index}`));
+    const before = layoutStars([you, ...many], []);
+    const after = layoutStars([you, ...many.slice(0, 2), ...many.slice(3)], []);
+    const moved = after.hubs.filter((hub) => JSON.stringify(hub.position) !== JSON.stringify(before.positions.get(hub.id)));
+    expect(moved.length).toBeLessThanOrEqual(1);
+    expect(layoutStars([you, project("p4")], []).positions.get("project:p4")).toEqual(before.positions.get("project:p4"));
+  });
+
+  it("keeps projects apart, each with room for its shells' middle", () => {
+    const many = Array.from({ length: 16 }, (_, index) => project(`p${index}`));
+    const places = layoutStars(many, []).hubs.filter((hub) => hub.kind === "project").map((hub) => hub.position);
+    for (let a = 0; a < places.length; a += 1) for (let b = a + 1; b < places.length; b += 1) {
+      expect(Math.hypot(places[a][0] - places[b][0], places[a][1] - places[b][1], places[a][2] - places[b][2])).toBeGreaterThan(90);
+    }
+    expect(new Set(places.map((place) => place.join())).size).toBe(16);
   });
 
   it("hangs a project's memory from the project and everything else from the account, an unknown project too", () => {

@@ -12,12 +12,13 @@ const stand = vi.hoisted(() => ({
 }));
 vi.mock("./StarCanvas", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
-  return { default: (props: Record<string, unknown> & { handle: React.Ref<unknown> }) => {
+  function StandIn(props: Record<string, unknown> & { handle: React.Ref<unknown> }) {
     if (stand.explode) throw new Error("no chunk");
     stand.props = props;
     React.useImperativeHandle(props.handle, () => stand.handle, []);
     return React.createElement("div", { role: "img", "aria-label": String(props.label) });
-  } };
+  }
+  return { default: StandIn };
 });
 
 const memory = (id: string, extra: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "project_fact", label: `记忆 ${id}`, weight: 0.5, at: "2026-10-01T00:00:00.000Z", state: "current", freshness: 0.8, open: { kind: "record", id }, ...extra });

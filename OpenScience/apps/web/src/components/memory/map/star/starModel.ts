@@ -8,7 +8,7 @@ import { unitHash } from "@/components/charts/map/layout";
  * Why a mark stands where it stands: **the place of a mark depends on its own id and weight and on its hub, and on nothing else.** Force layouts — the
  * usual 3D graph — start from random positions, and a picture a person returns to must not move (Obsidian's users' first complaint, and
  * 2D beating 3D on spatial memory in the studies is what a 3D map has to fight): a new memory takes its place and no other mark moves, so the replay
- * and the next visit are the same sky. A project's hub takes the next place on one golden-angle spiral by when the project began.
+ * and the next visit are the same sky. A project's hub is named by its own id too (`hubSlots`).
  */
 
 /** What a mark is, for its colour, its shape and its word in the legend. */
@@ -135,32 +135,41 @@ function directionOf(id: string): Point3 {
 }
 const plus = (at: Point3, direction: Point3, distance: number): Point3 => [at[0] + direction[0] * distance, at[1] + direction[1] * distance * SQUASH, at[2] + direction[2] * distance];
 
-/** The place of the i-th project: one spiral round the account, never closer than the shells can hold, each new project on from the last. */
-function hubPlace(index: number): Point3 {
-  const angle = 0.5 + index * GOLDEN_ANGLE;
-  const ring = 250 + 36 * Math.sqrt(index);
-  const lift = ((index * 0.618034) % 1 - 0.5) * 130;
+/** A place on one golden-angle spiral round the account. */
+function hubPlace(slot: number): Point3 {
+  const angle = 0.5 + slot * GOLDEN_ANGLE;
+  const ring = 250 + 48 * Math.sqrt(slot);
+  const lift = ((slot * 0.618034) % 1 - 0.5) * 130;
   return [Math.cos(angle) * ring, lift, Math.sin(angle) * ring];
 }
 
+/** How many places a project's id chooses among: beyond this many projects, the next free ones. */
+const HUB_SLOTS = 16;
+
 /**
- * Where everything stands. Given the whole document, so a narrowing never moves a mark. Projects are ordered by the earliest mark that hangs from them
- * and then by id, so a new project takes the next place and those before it stay.
+ * Each project's place: the slot its own id names, or the next free one when another project holds it (in the order of their ids, so the same set always gets the same answer). A project
+ * that comes or goes moves nothing but a project that had to step aside for it, and that is rare; a place by sort order would move every later project when one is forgotten.
+ */
+function hubSlots(ids: readonly string[]): Map<string, number> {
+  const taken = new Set<number>();
+  const slots = new Map<string, number>();
+  for (const id of [...ids].sort()) {
+    let slot = Math.floor(unitHash(id, 61) * HUB_SLOTS);
+    while (taken.has(slot)) slot += 1;
+    taken.add(slot);
+    slots.set(id, slot);
+  }
+  return slots;
+}
+
+/**
+ * Where everything stands. Given the whole document, so a narrowing never moves a mark.
  */
 export function layoutStars(nodes: readonly MapNode[], edges: readonly MapEdge[]): StarLayout {
-  const first = new Map<string, number>();
-  for (const node of nodes) {
-    const at = Date.parse(node.at ?? "");
-    if (!node.projectId || !Number.isFinite(at)) continue;
-    first.set(node.projectId, Math.min(first.get(node.projectId) ?? Infinity, at));
-  }
-  const projects = nodes.filter((node) => node.type === "project").slice().sort((left, right) => {
-    const a = first.get(left.projectId ?? left.id.slice("project:".length)) ?? Infinity;
-    const b = first.get(right.projectId ?? right.id.slice("project:".length)) ?? Infinity;
-    return a - b || left.id.localeCompare(right.id);
-  });
+  const projects = nodes.filter((node) => node.type === "project");
+  const slots = hubSlots(projects.map((project) => project.id));
   const hubs: StarHub[] = [{ id: YOU_HUB, label: nodes.find((node) => node.type === "you")?.label ?? "你", kind: "you", position: [0, 0, 0], size: 13 }];
-  projects.forEach((project, index) => hubs.push({ id: project.id, label: project.label, kind: "project", position: hubPlace(index), size: 8.5 }));
+  for (const project of projects) hubs.push({ id: project.id, label: project.label, kind: "project", position: hubPlace(slots.get(project.id) as number), size: 8.5 });
   const positions = new Map<string, Point3>(hubs.map((hub) => [hub.id, hub.position]));
   const homes = new Map<string, string>();
   const homeOf = (node: MapNode) => (node.projectId && positions.has(`project:${node.projectId}`) ? `project:${node.projectId}` : YOU_HUB);

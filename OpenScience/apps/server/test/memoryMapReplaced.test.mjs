@@ -14,11 +14,11 @@ const revision = (id, before, after, extra = {}) => ({
   id: String(id), change: "updated", actor: "engine", reason: "", before, after, undoneAt: null, changedAt: days(100 - id), ...extra,
 });
 const lineId = (line) => `f_${lineFingerprint(line).slice(0, 12)}`;
-const profile = (body, history, rejected = []) => replacedStatements({
-  fileId: "f", body, history, perLine: true, statementsOf: memoryLines, recordIdOfLine: lineId, rejected,
+const profile = (body, history, rejected = [], refused = undefined) => replacedStatements({
+  fileId: "f", body, history, perLine: true, statementsOf: memoryLines, recordIdOfLine: lineId, rejected, refused,
 });
-const topic = (body, history, rejected = []) => replacedStatements({
-  fileId: "f", body, history, perLine: false, statementsOf: memoryLines, recordIdOfLine: lineId, rejected,
+const topic = (body, history, rejected = [], refused = undefined) => replacedStatements({
+  fileId: "f", body, history, perLine: false, statementsOf: memoryLines, recordIdOfLine: lineId, rejected, refused,
 });
 
 test("a profile line rewritten in one revision is replaced by the line that shares its words, with both ends of its time", () => {
@@ -72,6 +72,37 @@ test("the person's own edit puts the old line on the rejection list and it stays
   const history = [revision(1, `- ${old}`, "- 目标期刊：JASN", { actor: "user", reason: "edited on the memory page" })];
   assert.equal(profile("- 目标期刊：JASN", history, rejected).length, 1);
   assert.equal(topic("目标期刊：JASN", history, rejected).length, 1);
+});
+
+test("a forget of the whole file closes its history: what is written there later does not bring the old words back", () => {
+  const history = [revision(1, "甲的旧说法", "乙的说法"), { ...revision(2, "乙的说法", null), change: "deleted" }, { ...revision(3, null, "丙的说法"), change: "created" }, revision(4, "丙的说法", "丁的说法")];
+  assert.deepEqual(topic("丁的说法", history).map((statement) => statement.text), ["丙的说法"]);
+  // A restore undid the forget, so the history is whole again.
+  const restored = [history[0], { ...history[1], undoneAt: days(1) }];
+  assert.deepEqual(topic("乙的说法", restored).map((statement) => statement.text), ["甲的旧说法"]);
+});
+
+test("a topic file's old words back in force are not drawn as replaced", () => {
+  const history = [revision(1, "第一种说法", "第二种说法"), revision(2, "第二种说法", "第一种说法")];
+  assert.deepEqual(topic("第一种说法", history).map((statement) => statement.text), ["第二种说法"]);
+});
+
+test("what the platform's checks would refuse is not drawn from any revision", () => {
+  const secret = "联系电话 13800138000";
+  const refused = (line) => line.includes("138");
+  assert.deepEqual(topic("新的说法", [revision(1, secret, "新的说法")], [], refused), []);
+  assert.deepEqual(profile("- 联系电话：请走邮箱", [revision(1, "- 联系电话：13800138000", "- 联系电话：请走邮箱")], [], refused), []);
+});
+
+test("a person's edit that takes out lines and adds unrelated ones replaced nothing, while one line for one line is that line changing", () => {
+  const person = { actor: "user", reason: "edited on the memory page" };
+  assert.deepEqual(topic("留着的一行\n全新的另一件事", [revision(1, "留着的一行\n不想要的那行\n也不想要这行", "留着的一行\n全新的另一件事", person)]), []);
+  assert.equal(topic("留着的一行\n全新的另一件事", [revision(1, "留着的一行\n不想要的那行", "留着的一行\n全新的另一件事", person)]).length, 1);
+  assert.deepEqual(topic("目标期刊：JASN\n另一件事", [revision(1, "目标期刊：KI\n别的事情在这", "目标期刊：JASN\n另一件事", person)]).map((statement) => statement.lines), [["目标期刊：KI"]]);
+});
+
+test("two lines that share only a few words are not tied", () => {
+  assert.deepEqual(profile("- 喜欢短回答和表格", [revision(1, "- 喜欢长篇论述", "- 喜欢短回答和表格")]), []);
 });
 
 test("a line said again is in force and not replaced", () => {

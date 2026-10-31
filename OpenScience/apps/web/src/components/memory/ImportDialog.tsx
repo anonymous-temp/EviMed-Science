@@ -22,13 +22,28 @@ export const IMPORT_PROMPT = [
 /** The plain text an old archive is kept in: a file is read here in the browser, so anything else would arrive as noise. */
 export const IMPORT_FILE_TYPES = ".md,.markdown,.txt,.text,.log,.rst,.org";
 
-function readFileText(file: File): Promise<string> {
+function readBytes(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
     reader.onerror = () => reject(reader.error ?? new Error("unreadable"));
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(blob);
   });
+}
+
+/**
+ * The start of a file as text: no more of it than an import can hold, so a huge log does not stop the tab, and in UTF-8 or, where that is not what it is, in the GB encodings an old
+ * Windows file is in, so it never fills the box with replacement characters. A UTF-8 file cut inside a character is not a reason to call it something else, so a cut read tolerates its last bytes.
+ */
+export async function readFileText(file: Blob): Promise<{ text: string; cut: boolean }> {
+  const most = IMPORT_MAX_CHARS * 4;
+  const cut = file.size > most;
+  const bytes = await readBytes(file.slice(0, most));
+  try {
+    return { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: cut }), cut };
+  } catch {
+    return { text: new TextDecoder("gb18030").decode(bytes), cut };
+  }
 }
 
 /** Several texts as one, a blank line between them, within what the control plane reads; `cut` says something did not fit. */
@@ -66,9 +81,10 @@ export function ImportDialog({ onClose, onSaved }: {
     if (!files?.length) return;
     setError(null);
     try {
-      const { text: next, cut: over } = joinImportFiles([text, ...await Promise.all([...files].map(readFileText))]);
+      const read = await Promise.all([...files].map(readFileText));
+      const { text: next, cut: over } = joinImportFiles([text, ...read.map((file) => file.text)]);
       setText(next);
-      setCut(over);
+      setCut(over || read.some((file) => file.cut));
     } catch {
       setError("没有读出这份文件，请确认它是纯文本。");
     }
@@ -131,7 +147,7 @@ export function ImportDialog({ onClose, onSaved }: {
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void read(); }}>
           <p className="text-ui text-text">把它的回答粘贴在这里，或者选一份以前写好的档案，最多 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字。</p>
           <Textarea aria-label="原来助手的回答" rows={8} maxLength={IMPORT_MAX_CHARS} value={text} onChange={(event) => { setText(event.target.value); setCut(false); }} />
-          {cut && <p role="status" className="text-ui text-text-2">文件比 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字长，只读入了前面的部分。可以分几次导入。</p>}
+          {cut && <p role="status" className="text-ui text-text">文件比 {IMPORT_MAX_CHARS.toLocaleString("zh-CN")} 个字长，只读入了前面的部分。可以分几次导入。</p>}
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
           <input ref={picker} type="file" multiple accept={IMPORT_FILE_TYPES} aria-label="选择档案文件" className="sr-only" tabIndex={-1} onChange={(event) => { void takeFiles(event.target.files); event.target.value = ""; }} />
           <div className="flex items-center justify-between gap-2">

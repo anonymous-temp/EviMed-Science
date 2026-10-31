@@ -188,6 +188,9 @@ function Overview() {
 
   // ---- the page ----
   const failed = map.failed && !doc;
+  const formerlyOf = useCallback((recordId: string) => (doc?.nodes ?? [])
+    .filter((node) => node.state === "replaced" && node.open?.kind === "record" && node.open.id === recordId)
+    .map((node) => ({ id: node.id.slice("memory:".length), text: node.label, until: node.until ?? null })), [doc]);
   // Any drawer a mark can open lights that mark: a memory, a note of the capsule's or a method.
   const selectedMark = (() => {
     const [kind, ...rest] = (drawer.value ?? "").split(":");
@@ -287,7 +290,7 @@ function Overview() {
       </div>
       {drawer.value && !pack && !drawer.value.startsWith("pack:") && (
         <MapDrawer
-          open={drawer.value} projectName={projectName} onClose={drawer.close} onChanged={reloadAll}
+          open={drawer.value} formerlyOf={formerlyOf} projectName={projectName} onClose={drawer.close} onChanged={reloadAll}
           onOpenRecord={(id) => drawer.open(`record:${id}`)} canOpenRecord={() => true}
         />
       )}

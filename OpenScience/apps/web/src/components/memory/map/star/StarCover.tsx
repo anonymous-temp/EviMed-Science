@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { StarBoundary } from "./StarBoundary";
 import type { StarFamily } from "./starModel";
 import { packSky } from "./starModel";
 import { useStarAllowed } from "./starSupport";
@@ -25,12 +26,14 @@ export function StarCover({ entries, sender }: { entries: ReadonlyArray<{ id: st
   if (!allowed || lost || entries.length < SHOWN_FROM) return null;
   return (
     <section data-theme="dark" data-chart="stars" className="relative isolate h-64 overflow-hidden rounded-card border border-border bg-star-ground text-text">
-      <Suspense fallback={null}>
-        <StarCanvas
-          handle={null} nodes={sky.nodes} edges={sky.edges} now={now} shown={shown} hits={NOTHING} selected={null} hiddenFamilies={NO_FAMILY} rotating={rotating}
-          label={`${sender ?? "对方"}交给你的 ${entries.length} 条内容，排成一片星空；同样的内容在下面的列表里。`} onOpen={() => undefined} onLost={() => setLost(true)}
-        />
-      </Suspense>
+      <StarBoundary onFailed={() => setLost(true)}>
+        <Suspense fallback={null}>
+          <StarCanvas
+            handle={null} nodes={sky.nodes} edges={sky.edges} now={now} shown={shown} hits={NOTHING} selected={null} hiddenFamilies={NO_FAMILY} rotating={rotating}
+            label={`${sender ?? "对方"}交给你的 ${entries.length} 条内容，排成一片星空；同样的内容在下面的列表里。`} onOpen={() => undefined} onLost={() => setLost(true)}
+          />
+        </Suspense>
+      </StarBoundary>
       <div className="absolute right-2 top-2 rounded-card border border-faint bg-star-panel p-1 backdrop-blur-md">
         <Button size="sm" variant="text" aria-pressed={rotating} onClick={() => setRotating((value) => !value)}>
           {rotating ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{rotating ? "暂停转动" : "缓慢转动"}
