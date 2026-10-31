@@ -219,6 +219,8 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     toast.success("已确认");
   }, productErrorMessage);
   const since = formatDay(record?.createdAt ?? entry?.createdAt ?? null);
+  // When it was last used, and for one long unused that it is still kept: the map draws such a memory dim, and a dim mark is not a forgotten one.
+  const used = record?.lastRecalledAt ? `最近用到：${formatDay(record.lastRecalledAt)}` : record && (record.freshness ?? 1) < 0.33 ? "很久没用到，仍然记着" : "";
   const source = record ? memorySource(record) : null;
   const revisions = record ? [...record.revisions].reverse().slice(0, 5) : [];
   const undoable = record ? record.revisions.length > 0 : (entry?.revision ?? 1) > 1;
@@ -238,7 +240,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
       {editGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={editGuard.discard} onCancel={editGuard.keepEditing} />}
       <Drawer
         title={record ? kindTitle(record.kind) : kindTitle(entry?.payload.factKind ?? "")}
-        description={[projectName, since].filter(Boolean).join(" · ")}
+        description={[projectName, since, used].filter(Boolean).join(" · ")}
         onClose={onClose}
         dirty={editing && value !== text}
         busy={busy}

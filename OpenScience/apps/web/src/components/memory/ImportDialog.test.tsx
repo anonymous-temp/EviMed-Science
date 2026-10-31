@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { IMPORT_MAX_CHARS, IMPORT_PROMPT, ImportDialog } from "./ImportDialog";
+import { IMPORT_MAX_CHARS, IMPORT_PROMPT, ImportDialog, joinImportFiles } from "./ImportDialog";
 
 const memory = vi.hoisted(() => ({ offerMemoryImport: vi.fn(), saveMemoryImport: vi.fn() }));
 vi.mock("@/lib/memoryClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), ...memory }));
@@ -111,5 +111,27 @@ describe("从其他 AI 导入", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "读取" }));
     expect(await within(dialog).findByText("没有读出可以记下的内容。")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "保存所选" })).toBeDisabled();
+  });
+});
+
+describe("an old archive as a file", () => {
+  it("reads the files into the box a paste goes into, and nothing is read out of them until 读取", async () => {
+    const { dialog } = open();
+    await userEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
+    await userEvent.upload(within(dialog).getByLabelText("选择档案文件"), [new File(["- 我是肾内科医生"], "a.md", { type: "text/markdown" }), new File(["- 回答尽量简短"], "b.txt", { type: "text/plain" })]);
+    await waitFor(() => expect(within(dialog).getByRole("textbox", { name: "原来助手的回答" })).toHaveValue("- 我是肾内科医生\n\n- 回答尽量简短"));
+    expect(memory.offerMemoryImport).not.toHaveBeenCalled();
+  });
+
+  it("says when a file was longer than one import can hold", async () => {
+    const { dialog } = open();
+    await userEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
+    await userEvent.upload(within(dialog).getByLabelText("选择档案文件"), new File(["字".repeat(IMPORT_MAX_CHARS + 5)], "long.txt", { type: "text/plain" }));
+    expect(await within(dialog).findByRole("status")).toHaveTextContent("只读入了前面的部分");
+  });
+
+  it("joins what is there with what is added, within the limit", () => {
+    expect(joinImportFiles(["  甲 ", "", "乙"])).toEqual({ text: "甲\n\n乙", cut: false });
+    expect(joinImportFiles(["x".repeat(IMPORT_MAX_CHARS + 1)])).toEqual({ text: "x".repeat(IMPORT_MAX_CHARS), cut: true });
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Share2 } from "lucide-react";
 import { LoadError } from "@/components/cards/LoadError";
@@ -10,6 +10,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Input } from "@/components/ui/Input";
 import { StateScreen } from "@/components/ui/StateScreen";
 import { workStyle } from "@/components/memory/handover";
+import { StarCover } from "@/components/memory/map/star/StarCover";
 import { WorkStyleCard } from "@/components/memory/WorkStyleCard";
 import {
   declineDelivery, importDelivery, importShareLink, openDelivery, openShareLink, type SharedPreview,
@@ -88,6 +89,8 @@ export function SharedCapsulePage() {
   const closed = shared?.delivery && !preview ? CLOSED_TEXT[shared.delivery.state] ?? "这份分享已经不能收下了。" : null;
   const sender = preview?.card?.author ?? shared?.delivery?.sender.name ?? null;
   const taken = preview ? takenEntries(preview.entries, preview.scan) : [];
+  // Kept between renders: the sky is drawn anew when what it holds changes.
+  const starEntries = useMemo(() => (preview ? takenEntries(preview.entries, preview.scan).map((entry) => ({ id: entry.id, factKind: entry.factKind, text: capsuleEntryPreview(entry).summary })) : []), [preview]);
 
   // A share that cannot be opened — refused, withdrawn, taken down — is a screen of its own: an icon, one sentence, and the way back
   // to the page it was reached from. Trying again cannot change a refusal of the share itself (R19, audit D C5).
@@ -118,6 +121,7 @@ export function SharedCapsulePage() {
             <p className="text-ui text-text-2">{[sender ? fromSender(sender) : null, preview.card?.summary ?? `${taken.length} 条`].filter(Boolean).join(" · ")}</p>
             {shared?.link && <p className="text-caption text-text-3">这个链接还能用 {shared.link.usesLeft} 次。</p>}
           </div>
+          <StarCover entries={starEntries} sender={sender} />
           {/* How the sender works, in the three categories of the 工作方式卡 the overview shows of this account's own: the same card, so a pack is read
               as a person's way of working before it is read entry by entry. */}
           {taken.length > 0 && (

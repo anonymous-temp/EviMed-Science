@@ -8,6 +8,7 @@ import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { dayIn } from "@/components/charts/map/zone";
 import { MapDrawer } from "@/components/memory/map/MapDrawer";
 import { derivedTopics, narrowMap } from "@/components/memory/map/mapModel";
+import { useStarAllowed } from "@/components/memory/map/star/starSupport";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
 import { MemoryFrame, memoryTabAddress } from "@/components/memory/MemoryFrame";
 import { headerControls, MemoryHeaderDrawers, type HeaderDrawer } from "@/components/memory/MemoryHeaderActions";
@@ -15,7 +16,7 @@ import { ChangeChart } from "@/components/memory/overview/ChangeChart";
 import { ChangesTable } from "@/components/memory/overview/ChangesTable";
 import { ExplorePanel } from "@/components/memory/overview/ExplorePanel";
 import {
-  changeEvents, changeRows, defaultExplore, exploreOffered, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook,
+  changeEvents, changeRows, chosenExplore, exploreViews, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook,
   overviewHeadline, RANGE_OPTIONS, rangeFrom, rangeWords, readable, receivedCounts, recentCount, rememberedCount, withinRange,
   type ChangeRow,
 } from "@/components/memory/overview/memoryOverviewModel";
@@ -46,7 +47,7 @@ const RECEIVED = memoryTabAddress("received");
 /**
  * 「总览」: the capsule as one data page (DESIGN.md template T4), where `/app/memory` lands, beside the memory frame's left column. In the band,
  * one toolbar row — the range, only what needs a look, and the search — that narrows everything below it together; then one sentence whose numbers
- * each open the list they count; four tiles that are each a door to a list (关于你, 做法, 收到的, and 知识 in the knowledge base); 「变化」, what the
+ * each open the list they count; 「记忆星图」, the page's one brand moment, wherever a real GPU and a wide screen can hold it; four tiles that are each a door to a list (关于你, 做法, 收到的, and 知识 in the knowledge base); 「变化」, what the
  * capsule gained and lost over time; 「关系与主题」 when there is enough to see; and the table behind the charts, 「最近变化」, whose rows open the
  * same drawers the marks do. There is no 项目 tile since 2026-10-28: a project is a label on a memory, and its memories are counted in 关于你.
  *
@@ -76,6 +77,8 @@ function reading(value: number | null, loading: boolean, failed: boolean, retry:
 
 function Overview() {
   const phone = useNarrow();
+  const starAllowed = useStarAllowed();
+  const [starLost, setStarLost] = useState(false);
   const navigate = useNavigate();
   useMemoryWritePrompt();
   const labels = useProjectLabels();
@@ -185,10 +188,19 @@ function Overview() {
 
   // ---- the page ----
   const failed = map.failed && !doc;
+  // Any drawer a mark can open lights that mark: a memory, a note of the capsule's or a method.
+  const selectedMark = (() => {
+    const [kind, ...rest] = (drawer.value ?? "").split(":");
+    const id = rest.join(":");
+    if (!id || !["record", "entry", "method"].includes(kind)) return null;
+    return doc?.nodes.find((node) => node.open?.kind === kind && "id" in node.open && node.open.id === id && node.state !== "replaced")?.id ?? null;
+  })();
   const partial = doc && doc.missing.length > 0 ? doc.missing : [];
-  // On a phone the relation graph is drawn too small to follow a line: the topics, which are a list beside their words, are its first view there.
-  const explore = selection.explore ?? (phone ? "topics" : doc ? defaultExplore(doc) : "graph");
-  const offerExplore = doc !== null && memoriesRead && exploreOffered(doc);
+  // The star map where a real GPU and a wide screen can hold it, and it leads the page; on a phone the relation graph is drawn too small to follow a line, so the
+  // topics, which are a list beside their words, are the first view there. A picture that lost its context goes the way of a browser that never had one.
+  const starUsable = starAllowed && !starLost;
+  const views = doc && memoriesRead ? exploreViews(doc, { star: starUsable }) : [];
+  const explore = doc ? chosenExplore(views, selection.explore, doc, { phone }) : null;
   const recent = (test?: (event: (typeof events)[number]) => boolean) => recentCount(events, today, test);
   const loadingMap = !doc && !map.failed;
   const retry = map.reload;
@@ -212,31 +224,32 @@ function Overview() {
     </StatBand>
   );
 
-  const grid = doc && !empty && growthRead && growth && (
-    <ChartGrid rows={[
-      [{ key: "changes", span: 2, node: (
-        <ChangeChart
-          state="content" growth={growth} events={shown} timeZone={timeZone} words={rangeWords(selection.range)} selectedWeek={selection.week}
-          emptyText={events.length === 0 ? "还没有变化。" : "这个范围里没有变化。"} onRetry={reloadAll}
-          onOpenEvent={(event) => {
-            if (event.lane === "received") open({ kind: "pack", id: event.id.slice("pack:".length) });
-            else if (event.lane === "forgotten") open({ kind: "forgotten" });
-            else if (event.lane === "documents") open({ kind: "files" });
-            else if (event.open) open({ kind: "drawer", open: event.open });
-          }}
-          onSelectWeek={(start) => narrow({ week: selection.week === start ? null : start })}
-        />
-      ) }],
-      ...(offerExplore && ranged && narrowed ? [[{ key: "explore", span: 2 as const, node: (
-        <ExplorePanel
-          explore={explore} onExplore={setExplore} doc={ranged} narrowed={narrowed} actions={{ onOpen: openNode, onFocus: () => undefined }}
-          selectedMark={drawer.value?.startsWith("record:") ? `memory:${drawer.value.slice(7)}` : null}
-          topics={topics} topic={selection.topic} grouping={map.grouping} topicsStatus={doc.status.topics}
-          onChooseTopic={(topic) => narrow({ topic })} onHideEdge={hideEdge} onChanged={map.reload}
-        />
-      ) }]] : []),
-    ]} />
-  );
+  const explorePanel = explore && ranged && narrowed && doc ? { key: "explore", span: 2 as const, node: (
+    <ExplorePanel
+      explore={explore} views={views} onExplore={setExplore} doc={ranged} layoutDoc={doc} narrowed={narrowed} actions={{ onOpen: openNode, onFocus: () => undefined }}
+      selectedMark={selectedMark}
+      topics={topics} topic={selection.topic} grouping={map.grouping} topicsStatus={doc.status.topics}
+      onChooseTopic={(topic) => narrow({ topic })} onHideEdge={hideEdge} onChanged={map.reload} onStarUnavailable={() => setStarLost(true)}
+    />
+  ) } : null;
+  const changes = doc && !empty && growthRead && growth ? { key: "changes", span: 2 as const, node: (
+    <ChangeChart
+      state="content" growth={growth} events={shown} timeZone={timeZone} words={rangeWords(selection.range)} selectedWeek={selection.week}
+      emptyText={events.length === 0 ? "还没有变化。" : "这个范围里没有变化。"} onRetry={reloadAll}
+      onOpenEvent={(event) => {
+        if (event.lane === "received") open({ kind: "pack", id: event.id.slice("pack:".length) });
+        else if (event.lane === "forgotten") open({ kind: "forgotten" });
+        else if (event.lane === "documents") open({ kind: "files" });
+        else if (event.open) open({ kind: "drawer", open: event.open });
+      }}
+      onSelectWeek={(start) => narrow({ week: selection.week === start ? null : start })}
+    />
+  ) } : null;
+  // The sky leads the page when there is one, above the tiles, wherever the reader has switched to, so the switch does not move the card under them. Else the page tells
+  // what changed first and the picture stands under that, as it did before there was a sky.
+  const leads = views.includes("star");
+  const gridRows = (leads ? [changes] : [changes, explorePanel]).filter((row) => row !== null);
+  const grid = doc && !empty && gridRows.length > 0 && <ChartGrid rows={gridRows.map((row) => [row])} />;
 
   const table = doc && !empty && growthRead && (
     rows.length > 0
@@ -260,6 +273,7 @@ function Overview() {
       <div className="space-y-6">
         {failed && <LoadError message="暂时读不到记忆。" onRetry={map.reload} />}
         {partial.length > 0 && <LoadError message="有一部分记忆没有读到，对应的数字先不显示。" onRetry={map.reload} />}
+        {leads && !empty && explorePanel && <ChartGrid rows={[[explorePanel]]} />}
         {tiles}
         {empty && (
           <EmptyState

@@ -593,6 +593,9 @@ export interface WebStructuredMemory {
   createdAt: string | null;
   updatedAt: string | null;
   lastConfirmedAt: string | null;
+  /** When a conversation was last handed it, and how bright the map draws it for that: 0 to 1. It decides nothing about recall. */
+  lastRecalledAt?: string | null;
+  freshness?: number;
   expiresAt: string | null;
   /** Who it came from and how established it is, counted from its evidence
    *  (`recordProvenance` in memorySettings.mjs). Absent from a control plane
