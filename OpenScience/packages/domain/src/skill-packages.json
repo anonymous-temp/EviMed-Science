@@ -1315,6 +1315,29 @@
     },
     {
       "schemaVersion": 1,
+      "id": "community/card-theater",
+      "name": "card-theater",
+      "origin": "community",
+      "version": "0.1.0",
+      "source": {"kind":"repository","repository":"Unclecheng-li/AI_Animation","commit":"5fbca49153a5cc4380a2c796e5ef624ab809ce3c","path":"skills/card-theater"},
+      "licence": {"id":"MIT","file":{"path":"LICENSE.card-theater","sha256":"489a9bd47c4ee7c51731faff85a28e4fcc36cc5c92b8603bd039c7338269e509"},"basis":"inventory"},
+      "digest": "sha256:61ad070e2417eb0009c3279c829fb5da51b4050ce93b4fd631ebdd110e7a5f24",
+      "digestAlgorithm": "release-directory-v1",
+      "references": [
+        {"path":"PROVENANCE.md","sha256":"f548d8656cf5f7f7d4aee8a5bf32db434d466c6779958f0143bd8a9ebffacf2b"},
+        {"path":"README.md","sha256":"d48120a4bc9622acac84361ffab45c80a34244677f9b7cd327cde8d3e1716ce4"},
+        {"path":"assets/ai-vulnerability-showcase.html","sha256":"06574c902e81d806ac368d1093a3728d2f073744e7474fd6bb8e2992b0cc63aa"},
+        {"path":"assets/apple-aurora-track.html","sha256":"312be73a81f06547a437b68d8f8bf9863e102897a6a7f1c3e02202dc2eb7cd7a"},
+        {"path":"assets/coverflow-classic.html","sha256":"e415a519810b2b36b919a20bcc526f4203b02d45244df276a68e928993c825cf"},
+        {"path":"assets/coverflow-focus.html","sha256":"01cca4e9ae5abe8233b0e88d91e59624a5244d85156fc48b11642481fd84a1e0"},
+        {"path":"assets/coverflow-watermark.html","sha256":"147849f5c8e9900e453e353309175f39a655b9aaab84d340431330dbfafac3cd"},
+        {"path":"assets/scroll-3d-tilt.html","sha256":"586d645f7ec669ad91984ec4eb45b6cf34b66b422ab37439d31c8bf5472d415c"},
+        {"path":"assets/vulnclaw-security-showcase.html","sha256":"84694abf0cb186b6711ff546ca3e515516c2b6b3ed0eccd9316672d0591b0a5c"},
+        {"path":"references/prompts.md","sha256":"7d627fca67bae4c2ba96d58e4db7b421fed262a890849b46424433af7b440f34"}
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "id": "community/deep-structural-analysis",
       "name": "deep-structural-analysis",
       "origin": "community",
@@ -1360,6 +1383,74 @@
         {"path":"PROVENANCE.md","sha256":"6d50e10f5398f8c9d6304705bd318266f61f868c6683340aeda39d3029404cb7"},
         {"path":"references/copywriting.md","sha256":"92ef116e97699f9bfe9e7541bc68db96db2102b19a2ede9db63da16b899dae4c"},
         {"path":"references/themes.md","sha256":"79a4218940b8d56ddce77fae909d05785d452ecb5a352bac95bde7528023df46"}
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "community/flowchart",
+      "name": "flowchart",
+      "origin": "community",
+      "version": "0.2.0",
+      "source": {"kind":"repository","repository":"Unclecheng-li/AI_Animation","commit":"5fbca49153a5cc4380a2c796e5ef624ab809ce3c","path":"skills/flowchart"},
+      "licence": {"id":"MIT","file":{"path":"LICENSE.flowchart","sha256":"489a9bd47c4ee7c51731faff85a28e4fcc36cc5c92b8603bd039c7338269e509"},"basis":"inventory"},
+      "digest": "sha256:0d2b9dc100aaf375dc2a4449211abc83e617320943333173010f0d58b26fcb5c",
+      "digestAlgorithm": "release-directory-v1",
+      "references": [
+        {"path":"PROVENANCE.md","sha256":"46938255033325924c143e2fda55e0797b8b9d12ddd72550fe8db8806fbe4cf1"},
+        {"path":"README.md","sha256":"89e37396081d0be5c64650dc0d36287f602c2db12a2e23534dce17deca001fa1"},
+        {"path":"assets/GPU.html","sha256":"2832266c7c4067110d2647db1b13b954febd09d48a4be6962f4ca77c220b8d8e"},
+        {"path":"assets/GRU-Introduce.html","sha256":"24f2c45d017c1d5ad9b039bf3a9b5c9c9a7f5d775075adc49144223add5ca46d"},
+        {"path":"assets/LSTM-1.html","sha256":"0a3250e07fe39cc27729813d77a2a2d4dba623d4315c5629be4f2308918dccd4"},
+        {"path":"assets/LSTM-Introduce.html","sha256":"c2b8d3cdddb2cbe42b006972371b7e7e23e27075b903f80ca7cad0cc56b354e8"},
+        {"path":"assets/MLP.html","sha256":"b52aa51fd098e537dfbab6689c35b8de2f9b7da76db9199b234f49040065dae9"},
+        {"path":"assets/RNN.html","sha256":"68c3ce4ecec1908b69451c3569825c195df53bf09ef06fa78b747137a659af4a"},
+        {"path":"assets/onehot.html","sha256":"182257811dc0689929cb0e55361d6c8e739571f8f5e15ca1fa5a88ed4619b63a"},
+        {"path":"assets/word2vec.html","sha256":"d159693dd5dd81d934815b054eaa97682592a8dbb3e31f928971a9a2deb0400c"},
+        {"path":"references/prompts.md","sha256":"2908d3a017792166b36d6daad2806f69dfe0cd0bd7838f864a75834fb344bfc3"}
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "community/frontend-design",
+      "name": "frontend-design",
+      "origin": "community",
+      "source": {"kind":"repository","repository":"anthropics/skills","commit":"dbd4588f9e1033efb41dad4bef2f7947c8993d44","path":"skills/frontend-design"},
+      "licence": {
+        "id": "Apache-2.0",
+        "file": {"path":"LICENSE.frontend-design","sha256":"0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"},
+        "basis": "inventory"
+      },
+      "digest": "sha256:e2fe48bb8a5a833f185577dfcefbc2dcb3192f33ad33088c4e90387325ab69be",
+      "digestAlgorithm": "release-directory-v1",
+      "references": [
+        {"path":"LICENSE.txt","sha256":"0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"},
+        {"path":"PROVENANCE.md","sha256":"2a5c041d0869a06909a7409b28e9d8fec704f1e2515c9a9a6e2f30353e47b702"}
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "community/stacked-data-cards",
+      "name": "stacked-data-cards",
+      "origin": "community",
+      "version": "0.1.0",
+      "source": {"kind":"repository","repository":"Unclecheng-li/AI_Animation","commit":"5fbca49153a5cc4380a2c796e5ef624ab809ce3c","path":"skills/stacked-data-cards"},
+      "licence": {
+        "id": "MIT",
+        "file": {"path":"LICENSE.stacked-data-cards","sha256":"489a9bd47c4ee7c51731faff85a28e4fcc36cc5c92b8603bd039c7338269e509"},
+        "basis": "inventory"
+      },
+      "digest": "sha256:321e7d381827640d413472e917240d2297e652b5eb705a5576e273d377a83d79",
+      "digestAlgorithm": "release-directory-v1",
+      "references": [
+        {"path":"PROVENANCE.md","sha256":"f2b43274a83ddc5a3f177e0afc09b3dd32e4d17f926ab3dd7f50bd18c71cd064"},
+        {"path":"README.md","sha256":"663a2799a595731088fe6b02584c034a2b88624bf3c49259a382f7fa52de6406"},
+        {"path":"assets/examples/png/muzimi.jpg","sha256":"842ba26b386d4a7d78b34a4738ccc785da70394aa4c8463443a08b33346203d3"},
+        {"path":"assets/examples/png/muzimi2.jpg","sha256":"8609a2e12a2f3c2117b293e0bce6bf804c1e62ee0c105af7784c782bbc748b92"},
+        {"path":"assets/examples/scene-ai-code-security-blue.html","sha256":"01ee4aa77cedd0656bf4cfeb6e38d9c4112c911356f77679948a34d151788472"},
+        {"path":"assets/examples/scene-scaling-law-orange.html","sha256":"370f1cc2f7aad45f876a994723440e5dd84ab715122b7c9335df9c7f7bd3dcc3"},
+        {"path":"assets/template.html","sha256":"c68bc94b5647ce60d01bfbcb203a2ec303c77eafe988e8b577403e04c6a16199"},
+        {"path":"references/components.md","sha256":"f33ed2292d1e6805c2eca9a5aa97a9b63f5d86b5d1a6c2c98f9b68b04aa9f28c"},
+        {"path":"references/prompts.md","sha256":"648d242ce3c6db80af3cd767810673eaa9d5539f44b20411b70bac5d4b8d198d"}
       ]
     },
     {

@@ -22,13 +22,18 @@ export interface CapsuleEntryPayload {
 export type CapsuleRecord = ProductRecord<CapsulePayload>;
 export type CapsuleEntry = ProductRecord<CapsuleEntryPayload>;
 
-export async function productRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+export async function productRequest<T>(path: string, method = "GET", body?: unknown, options: { signal?: AbortSignal } = {}): Promise<T> {
   const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
   const response = await fetchWithWebAuth(`${root}${path}`, {
     method,
+    ...(options.signal ? { signal: options.signal } : {}),
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
-  const value = await response.json().catch(() => null) as { data?: T; error?: string; code?: string; requestId?: string; details?: unknown } | null;
+  const value = await response.json().catch((error: unknown) => {
+    if (options.signal?.aborted) throw options.signal.reason;
+    if (error && typeof error === "object" && "name" in error && error.name === "AbortError") throw error;
+    return null;
+  }) as { data?: T; error?: string; code?: string; requestId?: string; details?: unknown } | null;
   if (!response.ok || !value || !("data" in value)) {
     // `Retry-After` is a header, so a client that reads only the body throws
     // away the one fact that makes a ceiling actionable.

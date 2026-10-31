@@ -72,6 +72,9 @@ importers:
       '@evimed/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@evimed/dsh-search-topics':
+        specifier: workspace:*
+        version: link:../../packages/search-topics
       '@evimed/harness-port':
         specifier: workspace:*
         version: link:../../packages/harness-port
@@ -459,6 +462,8 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/search-topics: {}
 
   packages/shared: {}
 

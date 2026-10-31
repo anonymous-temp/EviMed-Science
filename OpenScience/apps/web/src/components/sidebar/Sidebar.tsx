@@ -9,6 +9,7 @@ import {
   PanelLeft,
   Plug,
   Radar,
+  Search,
   Settings,
   SquarePen,
   Telescope,
@@ -76,6 +77,7 @@ const NAV: NavItem[] = [
  * destination that is not one.
  */
 const FRONTIER_NAV: NavItem = { to: "/app/frontier", label: "前沿动态", icon: <Newspaper size={16} aria-hidden="true" /> };
+const SEARCH_NAV: NavItem = { to: "/app/search", label: "医学检索", icon: <Search size={16} aria-hidden="true" /> };
 
 /**
  * 「虚拟临床研究」 and 「循证 GEO」, in that order directly below 「科研工具」 — and,
@@ -91,10 +93,11 @@ const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar siz
  * 「循证 GEO」 after 「科研工具」, in that order — the two boards sit together,
  * and the one this account may not have simply is not there.
  */
-function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo: boolean }): NavItem[] {
+function navRows({ frontier, vcr, geo, search }: { frontier: boolean; vcr: boolean; geo: boolean; search: boolean }): NavItem[] {
   return NAV.flatMap((item) => [
     item,
     ...(frontier && item.to === "/app/home" ? [FRONTIER_NAV] : []),
+    ...(search && item.to === "/app/home" ? [SEARCH_NAV] : []),
     ...(item.to === "/app/capabilities" ? [...(vcr ? [VCR_NAV] : []), ...(geo ? [GEO_NAV] : [])] : []),
   ]);
 }
@@ -132,12 +135,13 @@ export function Sidebar() {
   // 运维 is the operators' console, on a page of its own since it left 设置 (R19): its entry is the one thing this footer holds
   // for an operator beside the gear.
   const [operator, setOperator] = useState(false);
+  const [search, setSearch] = useState(false);
   useEffect(() => {
     let live = true;
-    void fetchWebMe().then((me) => { if (live && me) { setAccountName(me.user.name); setOperator(me.operator === true); } }).catch(() => {});
+    void fetchWebMe().then((me) => { if (live && me) { setAccountName(me.user.name); setOperator(me.operator === true); setSearch(me.features?.evimedSearch === true); } }).catch(() => {});
     return () => { live = false; };
   }, []);
-  const rows = navRows({ frontier, vcr, geo });
+  const rows = navRows({ frontier, vcr, geo, search });
 
   const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();

@@ -8,6 +8,7 @@ import {
   fetchWebMe,
   getWebOidcStartUrl,
   loginDevelopmentWeb,
+  loginEvimedWeb,
   loginWeb,
   registerWeb,
   WebApiError,
@@ -19,27 +20,44 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { loginReturnTarget } from "@/lib/loginReturn";
+import { EvimedAccountForm } from "@/components/auth/EvimedAccountForm";
+import { LoginContext } from "@/components/auth/LoginContext";
+import { LoginBackground } from "@/components/auth/LoginBackground";
+import { AuthFeedback, AuthFieldError } from "@/components/auth/AuthFeedback";
+import "@/components/auth/login.css";
+
+const PASSWORD_RULE = "密码至少 " + MIN_PASSWORD_LENGTH + " 位。";
+const AUTH_MODES = new Set(["local", "development", "oidc", "evimed"]);
+const offersEvimedAccountForm = (methods: WebAuthMethods | null | undefined) => !!methods?.evimed?.account
+  && (methods.mode === "evimed" || methods.mode === "local");
 
 export function LoginPage() {
   const navigate = useNavigate();
-  // Where the sign-in goes back to: the address the reader was sent away from (`?next=`, kept only if it is a page inside the app), else
-  // the front door. Read once: the form's own navigation must not change what a failed attempt returns to.
   const [params] = useSearchParams();
   const returnTo = loginReturnTarget(params);
+  const evimedReauthRequested = params.get("reauth") === "evimed";
   const [methods, setMethods] = useState<WebAuthMethods | null>(null);
   const [checking, setChecking] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A password the registration refuses is said on the password field, not in a line under the buttons
-  // (live walk 2026-10-10): the rule is shown with the field while registering, and checked before a request.
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const usernameInput = useRef<HTMLInputElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
-  const [registering, setRegistering] = useState(false);
-  // The password is shown only while the person asks for it, and only until they leave the page.
-  const [revealed, setRevealed] = useState(false);
+  const pending = useRef(false);
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   // The cursor goes to the account field once the form is there (the field used to ask for it with `autoFocus`). There is no field to
   // focus where the deployment signs in through its identity provider.
@@ -47,166 +65,213 @@ export function LoginPage() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([fetchWebMe(), fetchWebAuthMethods()])
+    setChecking(true);
+    setLoadFailed(false);
+    setMethods(null);
+    // Only an explicit request with an available team account form may replace
+    // an existing sign-in. It never signs the current account out beforehand.
+    void Promise.allSettled([fetchWebMe(), fetchWebAuthMethods()])
       .then(([me, available]) => {
         if (!active) return;
-        if (me) {
+        const reauthAvailable = evimedReauthRequested && available.status === "fulfilled"
+          && offersEvimedAccountForm(available.value);
+        if (me.status === "fulfilled" && me.value && !reauthAvailable) {
           navigate(returnTo, { replace: true });
           return;
         }
-        setMethods(available);
+        if (me.status === "rejected" || available.status === "rejected"
+          || !available.value || !AUTH_MODES.has(available.value.mode)) {
+          setLoadFailed(true);
+          return;
+        }
+        setMethods(available.value);
       })
-      .catch(() => {
-        if (active) setError("登录服务暂时不可用，请稍后重试。");
-      })
-      .finally(() => {
-        if (active) setChecking(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [navigate, returnTo]);
+      .finally(() => { if (active) setChecking(false); });
+    return () => { active = false; };
+  }, [navigate, returnTo, attempt, evimedReauthRequested]);
 
-/**
- * Why the sign-in did not go through.
- *
- * Every failure used to read 「账号或密码错误」 (2026-09-16 walk, U12), including
- * rate limiting, a 5xx and a dropped connection — so someone locked out by the
- * auth rate limiter retyped a correct password until the window expired. Only
- * a 401 is a wrong credential; everything else goes to the shared dictionary,
- * which knows about `Retry-After`.
- */
-function signInMessage(error: unknown): string {
-  if (error instanceof WebApiError && error.status === 401) return "账号或密码不正确，请重新输入。";
-  return webErrorMessage(error, { fallback: "登录没有完成，请检查网络后重试。" });
-}
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!username.trim() || !password) {
-      setError("请输入账号和密码。");
-      return;
-    }
-    if (registering && [...password].length < MIN_PASSWORD_LENGTH) {
-      setError(null);
-      setPasswordError(`密码至少 ${MIN_PASSWORD_LENGTH} 位。`);
-      passwordInput.current?.focus();
-      return;
-    }
+  const completeSignIn = async (action: () => Promise<void>) => {
+    if (pending.current) return;
+    pending.current = true;
     setSubmitting(true);
     setError(null);
-    setPasswordError(null);
     try {
-      if (registering) await registerWeb(username.trim(), password);
-      else if (methods?.mode === "development") await loginDevelopmentWeb();
-      else await loginWeb(username.trim(), password);
-      navigate(returnTo, { replace: true });
+      await action();
+      if (mounted.current) navigate(returnTo, { replace: true });
     } catch (err) {
+      if (!mounted.current) return;
       if (registering && err instanceof WebApiError && err.code === "weak_password") {
         setPasswordError(registrationMessage(err));
         passwordInput.current?.focus();
-      } else setError(registering ? registrationMessage(err) : signInMessage(err));
+      } else {
+        setError(registering ? registrationMessage(err) : signInMessage(err, methods?.mode === "evimed"));
+      }
     } finally {
-      setSubmitting(false);
+      pending.current = false;
+      if (mounted.current) setSubmitting(false);
     }
   };
 
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (pending.current || methods?.mode !== "local") return;
+    setSubmitted(true);
+    setError(null);
+    const accountProblem = username.trim() ? null : "请输入账号。";
+    const passwordProblem = !password ? "请输入密码。"
+      : registering && [...password].length < MIN_PASSWORD_LENGTH ? PASSWORD_RULE : null;
+    setUsernameError(accountProblem);
+    setPasswordError(passwordProblem);
+    if (accountProblem || passwordProblem) {
+      (accountProblem ? usernameInput : passwordInput).current?.focus();
+      return;
+    }
+    void completeSignIn(() => registering
+      ? registerWeb(username.trim(), password)
+      : loginWeb(username.trim(), password));
+  };
+
+  const switchMode = () => {
+    if (pending.current) return;
+    setRegistering((value) => !value);
+    setPassword("");
+    setRevealed(false);
+    setSubmitted(false);
+    setUsernameError(null);
+    setPasswordError(null);
+    setError(null);
+    usernameInput.current?.focus();
+  };
+
+  const showAccountForm = offersEvimedAccountForm(methods);
+  useEffect(() => {
+    if (!checking && methods?.mode === "local" && !showAccountForm) usernameInput.current?.focus();
+  }, [checking, methods?.mode, showAccountForm]);
+
   if (checking) {
     return (
-      <div className="grid h-screen w-screen place-items-center bg-bg text-muted">
-        <Loader2 size={20} className="animate-spin" aria-label="正在检查登录状态" />
-      </div>
+      <main className="grid min-h-screen place-items-center bg-bg px-6 text-text">
+        <PageTitle page="登录" />
+        <div role="status" className="flex items-center gap-2 text-ui text-text-2">
+          <Loader2 size={20} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          正在检查登录状态
+        </div>
+      </main>
     );
   }
 
-  // The brand once, the two fields by their labels, and the one button — no
-  // eyebrow, no sentence about the workspace, no card and no footer
-  // (2026-09-23 plan §5.10, mockup m12). The heading names the form for a
-  // screen reader; the page itself shows the brand, not a second wordmark.
   return (
-    <main className="grid min-h-screen place-items-center bg-bg px-6 py-10 text-text">
-      <PageTitle page={registering ? "注册" : "登录"} />
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-center justify-center gap-2.5">
+    <main className="auth-page">
+      <LoginBackground />
+      <PageTitle page={!showAccountForm && registering ? "注册" : "登录"} />
+      <section aria-labelledby="login-title" className="auth-layout">
+        <aside className="auth-intro">
+        <div className="auth-brand">
           <span aria-hidden="true"><EviMedMark className="h-7 w-7" /></span>
-          <span className="text-display font-semibold">EviMed Science</span>
+          <span className="text-wordmark font-semibold">EviMed Science</span>
         </div>
-        <h1 className="sr-only">{registering ? "注册" : "登录"}</h1>
+        <LoginContext />
+        </aside>
+        <div className="auth-login-panel">
+        <div className={showAccountForm ? "auth-panel-content" : "auth-panel-content auth-simple-login"}>
+        {!showAccountForm && <h1 id="login-title" className="auth-title text-center text-heading font-semibold">{registering ? "注册" : "登录"}</h1>}
 
-        {methods?.mode === "oidc" ? (
+        {loadFailed || !methods ? (
+          <div className="space-y-4">
+            <AuthFeedback>登录服务暂时不可用，请稍后重试。</AuthFeedback>
+            <Button variant="secondary" size="lg" className="w-full" onClick={() => setAttempt((value) => value + 1)}>重试</Button>
+          </div>
+        ) : showAccountForm ? (
+          <EvimedAccountForm onSignedIn={() => navigate(returnTo, { replace: true })} />
+        ) : methods.mode === "oidc" ? (
           <a href={getWebOidcStartUrl(returnTo)} className={buttonClasses({ size: "lg", className: "w-full" })}>
             {methods.oidc?.label ?? "统一身份登录"}
             <ArrowRight size={16} aria-hidden="true" />
           </a>
+        ) : methods.mode === "evimed" ? (
+          <div className="space-y-3">
+          {error && <AuthFeedback>{error}</AuthFeedback>}
+          <Button size="lg" loading={submitting} className="w-full" onClick={() => void completeSignIn(loginEvimedWeb)}>
+            使用 EviMed 账号继续
+            <ArrowRight size={16} aria-hidden="true" />
+          </Button>
+          </div>
+        ) : methods.mode === "development" ? (
+          <div className="space-y-3">
+          {error && <AuthFeedback>{error}</AuthFeedback>}
+          <Button size="lg" loading={submitting} className="w-full" onClick={() => void completeSignIn(loginDevelopmentWeb)}>进入工作台</Button>
+          </div>
         ) : (
-          <form className="space-y-4" onSubmit={submit}>
-            <Input
-              ref={usernameInput}
-              id="login-username"
-              label="账号"
-              autoComplete="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-            />
-            <Input
-              ref={passwordInput}
-              id="login-password"
-              label="密码"
-              hint={registering ? `至少 ${MIN_PASSWORD_LENGTH} 位` : undefined}
-              type={revealed ? "text" : "password"}
-              autoComplete={registering ? "new-password" : "current-password"}
-              value={password}
-              error={passwordError ?? undefined}
-              onChange={(event) => { setPassword(event.target.value); setPasswordError(null); }}
-              // One name for the button and a pressed state, not a name that flips under the reader: 「显示密码」, pressed while it is shown.
-              trailing={(
-                <IconButton
-                  icon={revealed ? EyeOff : Eye}
-                  label="显示密码"
-                  size="sm"
-                  aria-pressed={revealed}
-                  onClick={() => setRevealed((value) => !value)}
-                />
-              )}
-            />
-            <Button type="submit" size="lg" loading={submitting} className="w-full">
-              {registering ? "注册并进入" : "登录"}
-            </Button>
-            {methods?.selfRegistration && (
-              <Button
-                variant="text"
-                className="w-full"
-                onClick={() => {
-                  setRegistering((value) => !value);
+          <form noValidate onSubmit={submit} aria-label={registering ? "注册" : "登录"}>
+            <fieldset disabled={submitting} className="auth-field-stack">
+              <Input
+                ref={usernameInput}
+                id="login-username"
+                label="账号"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={username}
+                error={usernameError ? <AuthFieldError>{usernameError}</AuthFieldError> : undefined}
+                onChange={(event) => {
+                  setUsername(event.target.value);
                   setError(null);
-                  setPasswordError(null);
+                  if (submitted) setUsernameError(event.target.value.trim() ? null : "请输入账号。");
                 }}
-              >
-                {registering ? "已有账号？返回登录" : "还没有账号？注册一个"}
+              />
+              <Input
+                ref={passwordInput}
+                id="login-password"
+                label="密码"
+                hint={registering ? "至少 " + MIN_PASSWORD_LENGTH + " 位" : undefined}
+                type={revealed ? "text" : "password"}
+                autoComplete={registering ? "new-password" : "current-password"}
+                value={password}
+                error={passwordError ? <AuthFieldError>{passwordError}</AuthFieldError> : undefined}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setPassword(value);
+                  setError(null);
+                  if (submitted) setPasswordError(!value ? "请输入密码。"
+                    : registering && [...value].length < MIN_PASSWORD_LENGTH ? PASSWORD_RULE : null);
+                }}
+                trailing={(
+                  <IconButton icon={revealed ? EyeOff : Eye} label="显示密码" size="sm" aria-pressed={revealed}
+                    onClick={() => setRevealed((value) => !value)} />
+                )}
+              />
+              {error && <AuthFeedback>{error}</AuthFeedback>}
+              <Button type="submit" size="lg" loading={submitting} className="w-full">
+                {registering ? "注册并进入" : "登录"}
               </Button>
-            )}
+              {methods.selfRegistration && (
+                <Button variant="text" className="w-full" onClick={switchMode}>
+                  {registering ? "已有账号？返回登录" : "还没有账号？注册一个"}
+                </Button>
+              )}
+            </fieldset>
           </form>
         )}
 
-        {error && <p className="mt-4 text-center text-ui text-danger" role="alert">{error}</p>}
-      </div>
+        </div>
+        </div>
+      </section>
     </main>
   );
 }
 
-/**
- * What went wrong, in the words of the person who typed it.
- *
- * Registration fails for reasons a reader can act on — the name is taken, the
- * password is too short, the deployment is closed — and each has its own code.
- * A single "registration failed" would make all three look like our fault.
- */
+function signInMessage(error: unknown, evimed = false): string {
+  if (error instanceof WebApiError && error.status === 401) {
+    return evimed ? "EviMed 登录状态已失效，请先在 EviMed 登录后重试。" : "账号或密码不正确，请重新输入。";
+  }
+  return webErrorMessage(error, { fallback: "登录没有完成，请检查网络后重试。" });
+}
+
 function registrationMessage(error: unknown): string {
   const code = error instanceof WebApiError ? error.code : "";
   if (code === "user_exists") return "这个账号已经有人用了，换一个试试。";
-  if (code === "weak_password") return `密码至少 ${MIN_PASSWORD_LENGTH} 位。`;
+  if (code === "weak_password") return PASSWORD_RULE;
   if (code === "invalid_username" || code === "invalid_field") return "账号只能用字母、数字、连字符和下划线。";
   if (code === "self_registration_disabled") return "这个部署暂不开放注册。";
-  if (code === "auth_rate_limited") return "尝试太频繁了，请稍后再试。";
-  return "无法注册，请稍后重试。";
+  return webErrorMessage(error, { fallback: "无法注册，请稍后重试。" });
 }

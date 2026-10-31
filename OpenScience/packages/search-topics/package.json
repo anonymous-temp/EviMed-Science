@@ -1,0 +1,21 @@
+{
+  "name": "@evimed/dsh-search-topics",
+  "version": "0.2.0",
+  "description": "An independent DSH bundle serving source-backed medical-search homepage topics.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.mjs",
+    "./contract": "./src/contract.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": ["index.mjs", "src", "cordis.patch.yml", "examples", "openapi.json", "README.md", "LICENSE"],
+  "dsh": { "bundle": { "patch": ["./cordis.patch.yml"] } },
+  "engines": { "node": ">=22.22.0" },
+  "scripts": {
+    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
+    "lint": "pnpm --dir ../../apps/server exec eslint ../../packages/search-topics/index.mjs ../../packages/search-topics/src ../../packages/search-topics/scripts ../../packages/search-topics/test ../../packages/search-topics/examples/request.mjs --ext .mjs --config .eslintrc.cjs --no-eslintrc --max-warnings 0",
+    "typecheck": "pnpm --dir ../../apps/server exec tsc -p ../../packages/search-topics/tsconfig.json --noEmit",
+    "pack:plugin": "node scripts/pack.mjs"
+  }
+}

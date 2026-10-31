@@ -293,6 +293,24 @@
       "toolSets": [
         "research"
       ]
+    },
+    "search-topics": {
+      "publisher": "EviMed Science",
+      "kind": "platform",
+      "group": "conversation",
+      "title": "检索主题推荐",
+      "icon": "Search",
+      "use": "根据近期医学进展推荐检索主题，可查看相关来源。",
+      "does": "从近30天的文献、指南、药品与试验进展中选取主题，结合近期活跃度与独立来源排序，并提供原始资料依据。",
+      "how": "打开医学检索首页，选择检索类别；可查看推荐主题的相关来源，点击主题填入搜索框后开始检索。",
+      "control": { "kind": "none" },
+      "opens": { "kind": "page", "to": "/app/search" },
+      "gate": { "config": "searchTopicsAvailable", "requireConfigured": true },
+      "bundles": ["@evimed/dsh-search-topics"],
+      "rows": ["evimed-search-topics"],
+      "agentRows": [],
+      "skills": [],
+      "toolSets": []
     }
   },
   "plumbing": {

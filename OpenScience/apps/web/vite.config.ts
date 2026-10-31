@@ -16,6 +16,21 @@ export const BUILD_TARGET = ["chrome109", "edge109", "firefox115", "safari15.4",
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    // Local development keeps the control plane in Docker on 8798 while
+    // Vite owns 5173. Proxying the complete API namespace preserves the
+    // browser's same-origin cookies, event streams and remote.mux WebSocket.
+    proxy: {
+      "/api": {
+        target: process.env.OPEN_SCIENCE_DEV_API_ORIGIN ?? "http://127.0.0.1:8798",
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": r("./src"),

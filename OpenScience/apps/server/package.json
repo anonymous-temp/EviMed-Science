@@ -24,6 +24,7 @@
   "dependencies": {
     "@evimed/design-tokens": "workspace:*",
     "@evimed/domain": "workspace:*",
+    "@evimed/dsh-search-topics": "workspace:*",
     "@evimed/harness-port": "workspace:*",
     "@larksuiteoapi/node-sdk": "1.74.0",
     "ali-oss": "6.23.0",

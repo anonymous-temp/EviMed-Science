@@ -8,7 +8,7 @@ import { projectLibraryViewDir } from "./libraryScope.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { constants as fsConstants, lstatSync, readdirSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -38,6 +38,8 @@ import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { canonicalJson } from "@evimed/domain";
 import { CITE_VERSION } from "./pinnedVersions.mjs";
+import { SEARCH_TOPICS_RUNTIME_DIR, SEARCH_TOPICS_TOKEN_FILE, SEARCH_TOPICS_NATIVE_PATH, SEARCH_TOPICS_MAX_BYTES,
+  searchTopicsSource, searchTopicsImageVersion, projectSearchTopics, supportsSearchTopicRecommendations } from './searchTopicsRuntime.mjs';
 import { extensionGenerationRoot, validateExtensionGenerationReference, verifyExtensionGeneration } from "./extensionGenerationService.mjs";
 import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, samePersonalPackages, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
@@ -2434,6 +2436,10 @@ export async function syncRuntimeDshProfile(
   // installed while the provider is disabled; the gateway also denies calls.
   const credentials = renderCredentialsFile({ token: providerConfigured ? modelGatewayToken : null, browserSessionSecret });
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, ".credentials.yaml"), credentials, { encoding: "utf8", mode: 0o600 });
+  // A route-specific credential, never the model gateway's token. It is rotated with this runtime's bootstrap and
+  // read only by the control-plane proxy and this plugin's native handler; the browser is never given it.
+  if (plan.searchTopics) await writeFile(project.rootDir, path.join(plan.dshHomeDir, SEARCH_TOPICS_TOKEN_FILE),
+    `${randomBytes(48).toString('hex')}\n`, { encoding: 'utf8', mode: 0o600 });
 
   // The same gateway token, in a file the MCP server can read.
   //
@@ -2642,7 +2648,7 @@ export function pluginUpstreamHealth(value) {
 /** @param {any} config @param {any} project @param {number} port
  * @param {{modelGatewayProfile?:string,contextGeneration?:any,disabledPlatformSkills?:string[],disabledClientBundles?:string[],capsuleGatewayUrl?:string,revisionGatewayUrl?:string,publicSourceGatewayUrl?:string,webSearchGatewayUrl?:string,memoryGatewayUrl?:string,
  *   attendancePublicKey?:string,geoSkills?:boolean,pluginConfig?:any,platformSkillGeneration?:any,personalSkillGeneration?:any,
- *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null}} [options]
+ *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null,installedSearchTopicsVersion?:string}} [options]
  * `attendancePublicKey` is a public Ed25519 verifier, never a runtime signing key. */
 export function buildRuntimeLaunchPlan(config, project, port, {
   modelGatewayProfile = "",
@@ -2668,6 +2674,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   extensionGeneration = null,
   extensionImageId = null,
   contextGeneration = null,
+  installedSearchTopicsVersion = undefined,
 } = {}) {
   const modelGatewayUrl = releaseGateModelGatewayUrl(config, project, modelGatewayProfile);
   const sandboxMode = config.runtimeSandboxMode;
@@ -2743,6 +2750,10 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     if (platformReference) platformSkillGenerationRoot(config, platformReference);
     const personalReference = validatePersonalGenerationReference(project, personalSkillGeneration);
     if (personalReference && !/^sha256:[a-f0-9]{64}$/.test(String(personalSkillImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable personal-skill runtime image is required.");
+    const topicsSource = searchTopicsSource(config);
+    const candidateTopicsVersion = topicsSource ? installedSearchTopicsVersion ?? searchTopicsImageVersion(config, personalSkillImageId ?? extensionImageId ?? config.runtimeContainerImage) : '';
+    const topicsVersion = supportsSearchTopicRecommendations(candidateTopicsVersion) ? candidateTopicsVersion : '';
+    const searchTopics = topicsSource && topicsVersion ? { ...topicsSource, version: topicsVersion } : null;
     const legacyControlDir = path.join(runtimeRoot, "control");
     const isolatedControlMount = Boolean(config.runtimeDataVolume)
       || Buffer.byteLength(path.join(legacyControlDir, RUNTIME_SOCKET_FILE_NAME), "utf8") + 1 > UNIX_SOCKET_PATH_LIMIT;
@@ -2811,6 +2822,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           : []),
         "--mount",
         dockerRuntimeMount(config, runtimeRoot),
+        ...(searchTopics ? ['--mount', `${dockerRuntimeMount(config, searchTopics.directory, SEARCH_TOPICS_RUNTIME_DIR)},readonly`] : []),
         // Only when the directory exists. `--mount type=bind` refuses a source
         // that does not exist -- `docker run` fails before the kernel starts --
         // and a project that was never launched by this control plane has none, so
@@ -2859,6 +2871,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         "DSH_PERMISSION_MODE=workspace-write",
         "--env",
         `DSH_HOME=${runtimeDshHome}`,
+        '--env', `EVIMED_SEARCH_TOPICS_ENABLED=${searchTopics ? '1' : '0'}`,
+        ...(searchTopics ? ['--env', `EVIMED_SEARCH_TOPICS_FILE=${SEARCH_TOPICS_RUNTIME_DIR}/topics.json`,
+          '--env', `EVIMED_SEARCH_TOPICS_TOKEN_FILE=${runtimeDshHome}/${SEARCH_TOPICS_TOKEN_FILE}`] : []),
         // The kernel's temp root, off the 64 MiB tmpfs.
         //
         // `--tmpfs /tmp:...size=64m` is a security bound, and both
@@ -3002,6 +3017,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       // plane writes the generated profile patch and credentials file here,
       // host-side, before the container ever starts.
       dshHomeDir: path.join(runtimeRoot, "dsh-home"),
+      searchTopics,
       // The count this argv was built from, so `dshProfileInput` derives the
       // other half of the deployment -- the directory the profile names -- from
       // the same number that decided whether anything is mounted at all.
@@ -3423,7 +3439,9 @@ export class DockerRuntimeProvider {
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [], extensionGeneration: extensionGeneration?.reference ?? null,
-      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration,
+      ...(this.config.searchTopicsEnabled === true && manager.runtimeController
+        ? { installedSearchTopicsVersion: String((await manager.inspectRuntimeImage())?.searchTopicsVersion ?? '') } : {}) });
     plan.platformSkillGeneration = platformSkillGeneration;
     plan.personalSkillGeneration = personal ? { ...personalSkillGeneration, platformSkills: personal.platformSkills } : personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
@@ -4562,7 +4580,8 @@ export class RuntimeManager {
     if (this.config.runtimeSandboxMode !== 'docker') return null;
     const result = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', this.config.runtimeContainerImage], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
     if (result.status !== 0 || !/^sha256:[a-f0-9]{64}$/.test(result.stdout.trim())) throw new HttpError(503, 'runtime_image_unavailable', 'The runtime image is unavailable.');
-    return { imageId: result.stdout.trim() };
+    return { imageId: result.stdout.trim(), ...(this.config.searchTopicsEnabled === true
+      ? { searchTopicsVersion: searchTopicsImageVersion(this.config, result.stdout.trim()) } : {}) };
   }
 
   async cleanupDocker(plan, project) {
@@ -5253,6 +5272,8 @@ export class RuntimeManager {
     const browserSessionAuthority = new URL(runtimeUrl).host;
     const runtime = {
       pluginConfig: plan.pluginConfig,
+      searchTopics: plan.searchTopics ? { ...plan.searchTopics, tokenFile: path.join(plan.dshHomeDir, SEARCH_TOPICS_TOKEN_FILE),
+        tokenRoot: plan.contextGeneration ? this.config.dataDir : project.rootDir } : null,
       contextGeneration: plan.contextGeneration ?? null,
       contextLaunchReceipt: null,
       platformSkillGeneration,
@@ -7163,6 +7184,54 @@ export class RuntimeManager {
   }
 
   runtimePluginConfig(project) { return this.runtimes.get(this.key(project))?.pluginConfig ?? null; }
+
+  /** A read-only inventory fact. Looking at plugins never starts a runtime or installs a package. */
+  async searchTopicsAvailable(project) {
+    const source = searchTopicsSource(this.config);
+    if (!source) return false;
+    const runtime = this.runtimes.get(this.key(project));
+    if (runtime) return supportsSearchTopicRecommendations(runtime.searchTopics?.version) && runtime.searchTopics?.file === source.file;
+    try { return supportsSearchTopicRecommendations((await this.inspectRuntimeImage())?.searchTopicsVersion); }
+    catch { return false; }
+  }
+
+  /** The native plugin is reached with its own credential, over the project's existing private transport. */
+  async searchTopicsFor(project, request) {
+    if (!await this.searchTopicsAvailable(project)) throw new HttpError(503, 'evimed_search_topics_unavailable', 'Search topic recommendations are temporarily unavailable.');
+    const runtime = await this.start(project);
+    if (!runtime?.searchTopics) throw new HttpError(503, 'evimed_search_topics_unavailable', 'Search topic recommendations are temporarily unavailable.');
+    this.beginProxy(project);
+    try {
+      return await this.withRuntimeDeadline(async signal => {
+        const token = (await readTextFileNoFollow(runtime.searchTopics.tokenRoot, runtime.searchTopics.tokenFile, '')).trim();
+        if (!/^[a-f0-9]{96}$/.test(token)) throw new Error('Missing topic credential');
+        const target = new URL(SEARCH_TOPICS_NATIVE_PATH, runtime.url);
+        target.searchParams.set('category', request.category);
+        target.searchParams.set('limit', String(request.limit));
+        const response = await requestRuntime(runtime, target, { method: 'GET', headers: { authorization: `Bearer ${token}` }, signal }, { retryDelaysMs: [] });
+        if (response.status !== 200 || !String(response.headers.get('content-type') ?? '').startsWith('application/json') || !response.body) {
+          await response.body?.cancel().catch(() => {});
+          throw new Error('Topic route did not answer');
+        }
+        const reader = response.body.getReader(), chunks = [];
+        let bytes = 0;
+        try {
+          for (let current = await reader.read(); !current.done; current = await reader.read()) {
+            const { value } = current;
+            bytes += value.byteLength;
+            if (bytes > SEARCH_TOPICS_MAX_BYTES) throw new Error('Topic response exceeds limit');
+            chunks.push(Buffer.from(value));
+          }
+        } finally { await reader.cancel().catch(() => {}); }
+        if (this.runtimes.get(this.key(project)) !== runtime) throw new Error('Topic runtime changed');
+        const text = Buffer.concat(chunks).toString('utf8');
+        if (text.includes(token)) throw new Error('Topic response reflected its credential');
+        return projectSearchTopics(JSON.parse(text), request);
+      }, 'evimed_search_topics_unavailable', 'Search topic recommendations are temporarily unavailable.');
+    } catch {
+      throw new HttpError(503, 'evimed_search_topics_unavailable', 'Search topic recommendations are temporarily unavailable.');
+    } finally { this.endProxy(project); }
+  }
 
   /** A stale mount may serve only explicit steering into its already running
    * native session. New queued turns wait for exclusive idle apply; missing

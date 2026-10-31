@@ -60,10 +60,10 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "宽按钮" })).not.toHaveClass("h-control");
   });
 
-  it("loading shows a spinner, sets aria-busy and disables the button", () => {
+  it("loading shows a spinner and sets busy semantics without removing keyboard focusability", () => {
     render(<Button loading>保存中</Button>);
     const btn = screen.getByRole("button", { name: "保存中" });
-    // disabled is what blocks clicks — native button semantics, no JS needed.
+    // Activation guards block repeat intent while the button remains focusable.
     expect(btn).not.toBeDisabled();
     expect(btn).toHaveAttribute("aria-disabled", "true");
     expect(btn).toHaveAttribute("aria-busy", "true");
@@ -99,13 +99,34 @@ it("guards busy mouse, keyboard and submit activation while preserving focus and
  expect(click).not.toHaveBeenCalled();expect(submit).not.toHaveBeenCalled();
 });
 
-it("draws the spinner's room only while it spins, keeps a long label visible beside it, and leaves a resting button centred",()=>{
- const label="Save this deliberately long action label";const view=render(<Button loading>{label}</Button>);
- const button=screen.getByRole('button',{name:label});expect(button).toHaveTextContent(label);expect(button.querySelector('.invisible')).toBeNull();
- expect(button.querySelector('.w-4 .animate-spin')).not.toBeNull();
- // At rest — whether `loading` is false or absent — there is no empty slot pushing the label off centre.
- view.rerender(<Button loading={false}>{label}</Button>);expect(button.querySelector('.w-4')).toBeNull();expect(button.querySelector('svg')).toBeNull();
- view.rerender(<Button>{label}</Button>);expect(button.querySelector('.w-4')).toBeNull();
+it.each(["sm", "md", "lg"] as const)("keeps the same %s content footprint and accessible name through loading", (size) => {
+  const label = "Save this deliberately long action label";
+  const content = <><svg aria-hidden="true" data-testid="action-icon" /><span>{label}</span></>;
+  const view = render(<Button size={size}>{content}</Button>);
+  const button = screen.getByRole("button", { name: label });
+  const footprint = button.querySelector("[data-button-content]");
+  const icon = screen.getByTestId("action-icon");
+  expect(footprint).not.toHaveClass("opacity-0");
+  expect(button.querySelector("[data-button-spinner]")).toBeNull();
+
+  view.rerender(<Button size={size} loading>{content}</Button>);
+  expect(screen.getByRole("button", { name: label })).toBe(button);
+  expect(button.querySelector("[data-button-content]")).toBe(footprint);
+  expect(screen.getByTestId("action-icon")).toBe(icon);
+  expect(footprint).toHaveClass("opacity-0");
+  expect(footprint).not.toHaveAttribute("aria-hidden");
+  expect(footprint).not.toHaveAttribute("hidden");
+  const spinner = button.querySelector("[data-button-spinner]");
+  expect(spinner).toHaveClass("absolute", "inset-0", "pointer-events-none");
+  expect(spinner).toHaveAttribute("aria-hidden", "true");
+  expect(spinner?.parentElement).toBe(button);
+  expect(footprint).not.toContainElement(spinner as HTMLElement);
+
+  view.rerender(<Button size={size} loading={false}>{content}</Button>);
+  expect(button.querySelector("[data-button-content]")).toBe(footprint);
+  expect(footprint).not.toHaveClass("opacity-0");
+  expect(screen.getByTestId("action-icon")).toBe(icon);
+  expect(button.querySelector("[data-button-spinner]")).toBeNull();
 });
 
 it("loading takes temporary disabled ownership for legacy disabled=busy callers",async()=>{

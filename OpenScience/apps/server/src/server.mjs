@@ -78,6 +78,8 @@ import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { createInventoryRoutes } from "./inventoryRoutes.mjs";
+import { createSearchTopicsRoutes } from './searchTopicsRoutes.mjs';
+import { SearchTopicsRecommendations } from './searchTopicsRecommendations.mjs';
 import { ExtensionAccess } from "./extensionAccess.mjs";
 import { ExtensionService } from "./extensionService.mjs";
 import { createExtensionRoutes } from "./extensionRoutes.mjs";
@@ -478,7 +480,10 @@ import { OidcService, validateOidcSettings } from "./oidc.mjs";
 // The `evimed` login mode (fusion plan 2026-09-26 §9.2): the EviMed shell's
 // signed-in user becomes a Science session without signing in twice.
 import { EvimedAuthService, evimedAuthReadiness } from "./evimedAuthService.mjs";
+import { EvimedAccountService, isEvimedAccountPath, validateEvimedAccountSettings } from "./evimedAccountService.mjs";
 import { createEvimedAuthRoutes, evimedAuthRoutePattern } from "./evimedAuthRoutes.mjs";
+import { EvimedSearchService } from "./evimedSearchService.mjs";
+import { createEvimedSearchRoutes, EVIMED_SEARCH_PATH } from "./evimedSearchRoutes.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   RUNTIME_CAPABILITY_SKILLS_DIR,
@@ -809,6 +814,7 @@ function routePattern(pathname) {
   if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (pathname.startsWith("/api/auth/evimed")) return evimedAuthRoutePattern(pathname);
+  if (pathname === EVIMED_SEARCH_PATH || pathname.startsWith(`${EVIMED_SEARCH_PATH}/`)) return `${EVIMED_SEARCH_PATH}/:category/:action`;
   if (
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
@@ -1262,7 +1268,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null });
+  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null,
+    searchTopicsAvailable: (_user, project) => runtimeManager.searchTopicsAvailable(project) });
+  /** @type {SearchTopicsRecommendations | null} */
+  let searchTopicsRecommendations = null;
+  const searchTopicsRoutes = createSearchTopicsRoutes({ store, runtimeManager: { searchTopicsFor: (project, query) => runtimeManager.searchTopicsFor(project, query) },
+    ensureCurrent: async () => {
+      if (!searchTopicsRecommendations) throw new HttpError(503, 'evimed_search_topics_unavailable', 'Search topic recommendations are temporarily unavailable.');
+      return searchTopicsRecommendations.ensureCurrent();
+    } });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -2582,6 +2596,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes,reads:evidenceZoneReads,writes:zoneWrites});
+  if (config.searchTopicsEnabled && frontier && productDatabase) searchTopicsRecommendations = new SearchTopicsRecommendations({ database: productDatabase, config, tags: frontier.service.tags });
   // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
   // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
   const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
@@ -3571,9 +3586,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const researchHandoffRoutes = createResearchHandoffRoutes({ config, store, researchSessions, agentRegistry, context, audit });
   const oidcService = new OidcService(config, store);
   const evimedAuth = new EvimedAuthService(config, store, { fetchImpl: overrides.evimedIntrospectFetch });
+  const evimedAccount = new EvimedAccountService(config, evimedAuth, { fetchImpl: overrides.evimedAccountFetch });
+  const evimedSearch = new EvimedSearchService(config, store, { fetchImpl: overrides.evimedSearchFetch });
+  const evimedSearchRoutes = createEvimedSearchRoutes({ store, service: evimedSearch, maxJsonBytes: config.maxJsonBytes,
+    audit: (action, status, details) => securityAudit(config, action, status, details) });
   const evimedAuthRoutes = createEvimedAuthRoutes({
     store,
     service: evimedAuth,
+    accountService: evimedAccount,
     maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     onSignIn: (userId) => warmAfterSignIn(userId),
@@ -7069,6 +7089,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         releaseMutation = await maintenanceService.admitMutation();
       }
       if (await evimedAuthRoutes(req, res)) return;
+      if (await evimedSearchRoutes(req, res)) return;
+      if (await searchTopicsRoutes(req, res)) return;
       if (await personalSkillTransferRoutes(req, res)) return;
       if (await skillLibraryRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
@@ -7254,7 +7276,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // password while the shell's researchers arrive through EviMed. With the
         // EviMed mode off this answers exactly what it answered before.
         const mode = config.authMode === "evimed" ? { mode: "evimed" } : oidcService.methods();
-        sendJson(res, 200, { data: { ...mode, ...evimedAuth.loginMethod() } });
+        const evimed = evimedAuth.enabled ? { ...evimedAuth.loginMethod().evimed, ...evimedAccount.loginMethod() } : null;
+        sendJson(res, 200, { data: { ...mode, ...(evimed ? { evimed } : {}) } });
         return;
       }
 
@@ -7405,7 +7428,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         });
         sendJson(res, 200, {
           data: {
-            user: store.publicUser(user),
+            user: { ...store.publicUser(user),
+              ...(["local", "evimed", "oidc", "development"].includes(user.authType) ? { authType: user.authType } : {}) },
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
             projects: (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id)),
@@ -7427,6 +7451,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // readiness uses. The last known answer is served at once and
             // refreshed behind it; an OpenList that cannot say is `false`.
             features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
+              evimedSearch: evimedSearch.enabled,
               // 「知识页」: the compile is on for this deployment (the pages that exist are readable either way).
               knowledgePages: Boolean(knowledgePages?.enabled),
               // Sharing a capsule with other accounts, and subscribing a project to an evidence zone: each its own switch, and the
@@ -8881,6 +8906,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // can create a user, so it is bounded like the other two. Its sign-out
       // is not here — that one already needs a session and its CSRF token.
       (pathname === "/api/auth/evimed/session" && req.method === "POST") ||
+      // Captcha, SMS and recovery are anonymous upstream operations too. They
+      // share the same auth budget, including captcha's GET request.
+      isEvimedAccountPath(pathname) ||
       (pathname.startsWith("/api/auth/oidc/") && req.method === "GET")
     ) {
       authRateLimiter.check(`auth:${ip}`, {
@@ -11521,6 +11549,10 @@ async function readinessAuth(config, store) {
   if (config.evimedAuthEnabled) {
     try {
       evimed = evimedAuthReadiness(config);
+      if (config.evimedAccountApiBaseUrl) {
+        const account = validateEvimedAccountSettings(config);
+        evimed.account = { host: account.baseUrl.host };
+      }
     } catch (error) {
       throw readinessFailure(error?.code ?? "evimed_auth_configuration_invalid");
     }

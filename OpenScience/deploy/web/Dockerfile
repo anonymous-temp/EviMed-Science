@@ -11,8 +11,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY packages/design-tokens/package.json packages/design-tokens/package.json
 COPY packages/domain/package.json packages/domain/package.json
 COPY packages/harness-port/package.json packages/harness-port/package.json
+COPY packages/search-topics/package.json packages/search-topics/package.json
 COPY packages/socket/package.json packages/socket/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 

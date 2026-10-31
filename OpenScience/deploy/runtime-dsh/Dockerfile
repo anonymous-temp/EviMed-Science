@@ -314,6 +314,12 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh loopx
 COPY deploy/runtime-dsh/install-openviking-plugin.mjs /usr/local/lib/evimed/install-openviking-plugin.mjs
 COPY --from=install-phases /phases/openviking-plugin.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh openviking-plugin
+# This dependency-free host bundle is optional until the control plane supplies
+# its readonly topic snapshot and service token for a project.
+COPY packages/search-topics /opt/evimed/search-topics
+ARG SEARCH_TOPICS_VERSION=0.2.0
+RUN test "${SEARCH_TOPICS_VERSION}" = "$(node -p 'require("/opt/evimed/search-topics/package.json").version')" && \
+  install -d -m 0755 /opt/evimed/search-topics-data && chmod -R a+rX,a-w /opt/evimed/search-topics
 COPY --from=install-phases /phases/profile-seed.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
 RUN node /usr/local/bin/runtime-yaml-security.mjs verify
@@ -395,6 +401,7 @@ LABEL io.open-science.dsh.version="${DSH_VERSION}"
 LABEL io.open-science.runtime.kernel="dsh"
 LABEL io.open-science.runtime.version="${DSH_VERSION}"
 LABEL io.open-science.socket.version="${SOCKET_VERSION}"
+LABEL io.open-science.search-topics.version="${SEARCH_TOPICS_VERSION}"
 LABEL io.open-science.uv.version="${UV_VERSION}"
 
 # Release identity, last on purpose.

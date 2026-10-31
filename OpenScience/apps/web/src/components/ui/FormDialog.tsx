@@ -5,6 +5,7 @@ import { focusableIn, registerFocusLayer, ownsKeyboard, trapTab } from "@/lib/fo
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { IconButton } from "./IconButton";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { cn } from "@/lib/cn";
 
 /**
  * Component: FormDialog; owner: H; rules: DS21, DESIGN.md component adoption.
@@ -18,9 +19,10 @@ import { ConfirmDialog } from "./ConfirmDialog";
  * Responsive: viewport padding bounds the panel on narrow screens.
  * Verification: FormDialog.test.tsx; browser/AT validation remains separate.
  */
-export function FormDialog({ title, children, onClose, busy = false, dirty = false, footer, errors = [] }: {
+export function FormDialog({ title, children, onClose, busy = false, dirty = false, footer, errors = [], className }: {
   title: string; children: ReactNode | ((requestClose: () => void, markSaved: () => void) => ReactNode); onClose: () => void; busy?: boolean; dirty?: boolean; footer?: ReactNode;
   errors?: readonly { message: string; fieldId?: string }[];
+  className?: string;
 }) {
   const panel = useRef<HTMLDivElement>(null), titleId = useId(), errorId = useId();
   const guard = useUnsavedGuard(dirty, onClose, busy);
@@ -42,7 +44,7 @@ export function FormDialog({ title, children, onClose, busy = false, dirty = fal
   }, []);
   return <>
     <div role="presentation" className="fixed inset-0 z-modal flex items-center justify-center bg-scrim p-4" onClick={event => { if (event.target === event.currentTarget) guard.requestClose(); }}>
-      <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={errors.length ? errorId : undefined} aria-busy={busy || undefined} className="flex max-h-full w-full max-w-xl flex-col rounded-panel border border-border bg-surface shadow-e3 focus:outline-none">
+      <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={errors.length ? errorId : undefined} aria-busy={busy || undefined} className={cn("flex max-h-full w-full max-w-xl flex-col rounded-panel border border-border bg-surface shadow-e3 focus:outline-none", className)}>
         <header className="flex shrink-0 items-center justify-between gap-3 px-6 pb-3 pt-5"><h2 id={titleId} className="text-body font-semibold text-text">{title}</h2><IconButton icon={X} label="关闭" disabled={busy} onClick={guard.requestClose} /></header>
         {errors.length > 0 && <div id={errorId} className="shrink-0 px-6 pb-3 text-ui text-error"><p>请检查以下内容：</p><ul>{errors.map((error, index) => <li key={index}>{error.fieldId ? <a href={`#${error.fieldId}`} onClick={event => { event.preventDefault(); document.getElementById(error.fieldId!)?.focus(); }}>{error.message}</a> : error.message}</li>)}</ul></div>}
         <div className="min-h-0 overflow-y-auto px-6 pb-5">{typeof children === "function" ? children(guard.requestClose, guard.markSaved) : children}</div>

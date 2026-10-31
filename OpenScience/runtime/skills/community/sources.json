@@ -21,6 +21,50 @@
       "requiresTools": [],
       "reviewedOn": "2026-08-25",
       "why": "Sixteen adversarial lenses with calibrated confidence, as an extra review perspective beside our own rubric. Taken despite naming web search as a phase, because it declares a search-unavailable fallback that labels every framework-anchored conclusion as theoretical inference at low confidence and prints a visible notice — which is what our own runtime, having no direct egress, needs it to do."
+    },
+    {
+      "name": "flowchart",
+      "repo": "Unclecheng-li/AI_Animation",
+      "commit": "5fbca49153a5cc4380a2c796e5ef624ab809ce3c",
+      "license": "MIT",
+      "subpath": "skills/flowchart",
+      "fetch": "github-tree",
+      "requiresTools": [],
+      "reviewedOn": "2026-10-22",
+      "why": "Creates self-contained animated HTML flowcharts and explanatory diagrams from CSS and SVG. The compact skill has no runtime package dependency and covers visual teaching, concept maps and process explanations that editable Mermaid diagrams do not animate. Vendored sparsely because the upstream repository also carries hundreds of megabytes of unrelated motion-library assets."
+    },
+    {
+      "name": "card-theater",
+      "repo": "Unclecheng-li/AI_Animation",
+      "commit": "5fbca49153a5cc4380a2c796e5ef624ab809ce3c",
+      "license": "MIT",
+      "subpath": "skills/card-theater",
+      "fetch": "github-tree",
+      "requiresTools": [],
+      "reviewedOn": "2026-10-22",
+      "why": "Creates a self-contained HTML narrative with a sidebar and interactive 3D cards. It gives product, protocol and step-by-step explanations a clear clickable presentation form without adding a browser bundle or external runtime dependency."
+    },
+    {
+      "name": "stacked-data-cards",
+      "repo": "Unclecheng-li/AI_Animation",
+      "commit": "5fbca49153a5cc4380a2c796e5ef624ab809ce3c",
+      "license": "MIT",
+      "subpath": "skills/stacked-data-cards",
+      "fetch": "github-tree",
+      "requiresTools": [],
+      "reviewedOn": "2026-10-22",
+      "why": "Creates self-contained, timed HTML data-card sequences with animated charts, counters and comparisons. It is the light production form of the upstream collection for research findings and evidence summaries; the 651 MB ui2v motion-library mirror and the large video-demo packs are intentionally not shipped."
+    },
+    {
+      "name": "frontend-design",
+      "repo": "anthropics/skills",
+      "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+      "license": "Apache-2.0",
+      "subpath": "skills/frontend-design",
+      "fetch": "github-tree",
+      "requiresTools": [],
+      "reviewedOn": "2026-10-22",
+      "why": "Anthropic's focused product-interface design guidance for building or reshaping real UI. It adds deliberate visual direction, typography, layout, interaction motion, responsive behavior, keyboard focus and reduced-motion review without requiring a framework, package install or external tool."
     }
   ],
   "deferred": [

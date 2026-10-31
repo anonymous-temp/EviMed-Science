@@ -595,6 +595,25 @@ svg.lucide {
   background-clip: content-box;
 }
 
+/* Facet windows keep a visible scroll thumb on macOS as well as Windows. */
+[data-filter-options] {
+  scrollbar-color: var(--text-graphic) var(--surface-2);
+}
+@supports selector(::-webkit-scrollbar) {
+  [data-filter-options] {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+  [data-filter-options]::-webkit-scrollbar {
+    width: 8px;
+    background: var(--surface-2);
+  }
+  [data-filter-options]::-webkit-scrollbar-thumb {
+    background-color: var(--text-graphic);
+    border-width: 2px;
+  }
+}
+
 /* What the browser draws on its own — the tick in a checkbox or a radio, the thumb of a range, the caret in a field, the text a reader
    selects — wears the brand and not the browser's blue or system colour, in both themes (the craft floor's 「Browser surfaces」). They
    read the accent role, which the theme layer already switches, so nothing here restates a value; forced colours put the system's

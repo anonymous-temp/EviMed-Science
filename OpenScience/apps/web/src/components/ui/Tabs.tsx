@@ -65,6 +65,7 @@ export function Tabs<V extends string>({
   trailing,
   activation = "automatic",
   className,
+  animatedIndicator = false,
 }: {
   /** The tab list's accessible name. */
   label: string;
@@ -76,6 +77,8 @@ export function Tabs<V extends string>({
   /** Controls at the row's end; they sit on the same hairline as the tabs. */
   trailing?: ReactNode;
   className?: string;
+  /** One moving accent underline; the standard page tabs keep their static rule. */
+  animatedIndicator?: boolean;
 }) {
   const [focused, setFocused] = useState(value);
   useLayoutEffect(() => { setFocused(value); }, [value]);
@@ -83,6 +86,7 @@ export function Tabs<V extends string>({
   const listRef = useRef<HTMLDivElement>(null);
   // True while the row has tabs scrolled out of sight at its end.
   const [moreAhead, setMoreAhead] = useState(false);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!list) return undefined;
@@ -115,6 +119,37 @@ export function Tabs<V extends string>({
     const delta = box.left < row.left ? box.left - row.left : box.right > end ? box.right - end : 0;
     if (delta !== 0) list.scrollBy?.({ left: delta });
   }, [value]);
+  useLayoutEffect(() => {
+    if (!animatedIndicator) {
+      setIndicator(null);
+      return undefined;
+    }
+    const list = listRef.current;
+    const tab = refs.current[items.findIndex((item) => item.value === value)];
+    if (!list || !tab) {
+      setIndicator(null);
+      return undefined;
+    }
+    const measure = () => {
+      const row = list.getBoundingClientRect();
+      const box = tab.getBoundingClientRect();
+      const left = box.left - row.left + list.scrollLeft;
+      const width = box.width;
+      setIndicator((previous) => previous?.left === left && previous.width === width ? previous : { left, width });
+    };
+    // The first rule is mounted at its measured destination before paint. Later selections move that same rule.
+    measure();
+    list.addEventListener("scroll", measure, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(list);
+    for (const button of refs.current) if (button) observer?.observe(button);
+    window.addEventListener("resize", measure);
+    return () => {
+      list.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [animatedIndicator, items, value]);
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const at = items.some(item => item.value === value) || activation === "manual" ? refs.current.indexOf(event.currentTarget) : -1;
     if (!items.length) return;
@@ -131,6 +166,7 @@ export function Tabs<V extends string>({
   // A view that is not one of the tabs (a study's conversation, which is a view of the page and not a tab) leaves none selected: the
   // first one stays in the tab order, so the row can be reached from the keyboard.
   const anyFocused = items.some((item) => item.value === focused);
+  const anySelected = items.some((item) => item.value === value);
   const list = (
     <div
       ref={listRef}
@@ -139,7 +175,8 @@ export function Tabs<V extends string>({
       style={moreAhead ? FADED : undefined}
       className={cn(
         // `scroll-px-6`: a tab brought into view by the keyboard stops short of the edge, not under the fade.
-        "flex min-w-0 scroll-px-6 items-end gap-6 overflow-x-auto border-b border-border",
+        "flex min-w-0 scroll-px-6 items-end gap-6 overflow-x-auto overflow-y-hidden border-b border-border",
+        animatedIndicator && "relative",
         // With controls beside it the hairline belongs to the row, from `sm` up.
         trailing && "sm:flex-1 sm:border-b-0",
         !trailing && className,
@@ -169,10 +206,11 @@ export function Tabs<V extends string>({
             onClick={() => onChange(item.value)}
             onKeyDown={onKeyDown}
             className={cn(
+              // Keep the full button inside the x-scroller: a negative bottom margin creates a one-pixel vertical scrollbar on Windows.
               // One weight for every tab: the selected one is told by its
               // colour and its rule, so a tab list is one kind of control.
-              "-mb-px inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-none border-b-2 text-ui font-normal outline-none transition-colors duration-fast focus-visible:outline-focus",
-              selected ? "border-text text-text" : "border-transparent text-text-3 hover:text-text",
+              "inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-none border-b-2 text-ui font-normal outline-none transition-colors duration-fast focus-visible:outline-focus",
+              selected ? animatedIndicator ? "border-transparent text-accent" : "border-text text-text" : "border-transparent text-text-3 hover:text-text",
             )}
           >
             {/* `mx-0.5`: the ring is a 2 px shadow outside the dot, and the row clips what overflows it — on the first tab it was cut in half. */}
@@ -186,6 +224,14 @@ export function Tabs<V extends string>({
         );
         return item.hint ? <Tooltip key={item.value} content={item.hint}>{tab}</Tooltip> : tab;
       })}
+      {animatedIndicator && anySelected && indicator && (
+        <span
+          aria-hidden="true"
+          data-tab-indicator=""
+          className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-accent transition-all duration-base ease-standard motion-reduce:transition-none"
+          style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
+        />
+      )}
     </div>
   );
   if (!trailing) return list;

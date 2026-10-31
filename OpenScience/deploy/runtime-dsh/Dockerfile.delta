@@ -56,12 +56,13 @@ FROM ${RUNTIME_BASE_IMAGE}
 
 ARG DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 ARG SOCKET_VERSION=0.1.0
+ARG SEARCH_TOPICS_VERSION=0.2.0
 
 USER root
 
 # The sealed trees this delta rewrites, removed rather than written over.
 RUN set -eux; \
-  rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
+  rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/search-topics
 
 # The baseline this delta must match is the one in the source being built, not
 # the one the base image was built against. A delta that changes the
@@ -80,6 +81,9 @@ COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-token
 # tree: every delta since dropped it, and the control plane's isolated skill validation (skillValidationController.mjs runs
 # this file in a disposable container of this image) failed until a hand hotfix put it back (2026-10-28).
 COPY scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
+COPY packages/search-topics /opt/evimed/search-topics
+RUN test "${SEARCH_TOPICS_VERSION}" = "$(node -p 'require("/opt/evimed/search-topics/package.json").version')" && \
+  install -d -m 0755 /opt/evimed/search-topics-data && chmod -R a+rX,a-w /opt/evimed/search-topics
 
 RUN set -eux; \
   node /opt/evimed/socket/scripts/build-client.mjs; \
@@ -308,6 +312,9 @@ RUN set -eux; \
   mkdir -p "${installed}"; \
   cp -a /opt/evimed/socket/. "${installed}/"; \
   test -s "${installed}/dist/client.js"; \
+  recorded_store="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.env.DSH_HOME_SEED+"/profiles/evimed-runtime/node_modules/.modules.yaml","utf8")).storeDir')"; \
+  test -n "${recorded_store}"; \
+  env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=/root DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --offline --ignore-scripts --store-dir "${recorded_store}" --save-prod --save-exact file:/opt/evimed/search-topics; \
   test -f "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin/package.json" \
     || { echo "this base image predates the OpenViking memory plugin the socket configures (deps-version.json openviking.plugin); build the full runtime image" >&2; exit 1; }; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json 2> /opt/evimed/dump-config.stderr; \
@@ -316,6 +323,11 @@ RUN set -eux; \
   rm -f /opt/evimed/dump-config.stderr; \
   test -s /opt/evimed/dump-config.baseline.json; \
   diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \
+  skill_source=/opt/evimed/socket/presets/evimed-universal/skills; \
+  detached_skills="$(mktemp -d /opt/evimed/socket/presets/evimed-universal/.skills-detached.XXXXXX)"; \
+  cp -a --no-preserve=links "${skill_source}/." "${detached_skills}/"; \
+  chmod -R a+rX,a-w "${detached_skills}"; \
+  rm -rf "${skill_source}"; mv "${detached_skills}" "${skill_source}"; \
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \
   chmod -R a-w "${DSH_HOME_SEED}"
 
@@ -344,5 +356,6 @@ ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
 LABEL org.opencontainers.image.version="${RELEASE_ID}"
 LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED}"
+LABEL io.open-science.search-topics.version="${SEARCH_TOPICS_VERSION}"
 
 WORKDIR /workspace

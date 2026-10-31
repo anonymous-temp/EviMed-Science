@@ -12,6 +12,20 @@ import { EVIDENCE_CARD_ERROR_MESSAGES_ZH } from "./evidenceCard.mjs";
 import { EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH } from "./evidenceUpkeep.mjs";
 import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
 
+const EVIMED_SEARCH_MESSAGES = Object.freeze({
+  evimed_search_unavailable: "医学检索暂未开通，请联系管理员。",
+  evimed_search_topics_unavailable: "主题推荐暂时无法加载，请稍后重试；你也可以直接输入检索词。",
+  evimed_search_login_required: "请重新登录 EviMed 账号后继续检索。",
+  evimed_search_credential_expired: "检索授权已失效，请重新登录 EviMed 账号。",
+  evimed_search_invalid_input: "请检查检索词、筛选条件和页码后重试。",
+  evimed_search_reference_invalid: "这条详情链接已失效，请返回检索结果重新打开。",
+  evimed_search_rate_limited: "检索请求较多，请稍后重试。",
+  evimed_search_timeout: "检索响应超时，请稍后重试。",
+  evimed_search_upstream_unavailable: "资料来源暂时无法连接，请稍后重试。",
+  evimed_search_response_invalid: "资料来源返回的数据暂时无法读取，请稍后重试。",
+  evimed_search_detail_unavailable: "暂时无法读取这条资料的详情，可尝试打开来源页面。",
+});
+
 /** The tool's own refusals a run repairs by changing what it sent, as opposed to the outages it waits out. */
 const DATA_SEMANTICS_RUN_FIXES = ["semantics_request_invalid", "semantics_request_too_large", "semantics_dataset_invalid", "semantics_revision_conflict"];
 
@@ -2012,6 +2026,7 @@ export const RESEARCH_DB_ERROR_MESSAGES_ZH = Object.freeze({
 export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown','managed_browser_page_failed']);
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
+  ...Object.keys(EVIMED_SEARCH_MESSAGES),
   ...Object.keys(EVOLUTION_ERROR_MESSAGES),
   ...Object.keys(READINESS_ERROR_MESSAGES_ZH),
   ...EXTENSION_ERROR_CODES,
@@ -2137,6 +2152,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_subject_withdrawn: '这位受试者已撤回同意，不再评估。',
   vcr_erasure_unavailable: '本部署暂不支持这项清除。',
 
+  ...EVIMED_SEARCH_MESSAGES,
   ...EVOLUTION_ERROR_MESSAGES,
   // What the deployment's configuration check says (`/api/ready`): the operator console reads these.
   ...READINESS_ERROR_MESSAGES_ZH,
@@ -3269,6 +3285,7 @@ export function errorCodeOutcome(code) {
   if (EVIDENCE_FLYWHEEL_ERROR_CODES.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
+  if (Object.hasOwn(EVIMED_SEARCH_MESSAGES, text)) return 'upstream'
   // An evidence card's refusals are about one write to one zone, never a verdict on a run.
   if (Object.hasOwn(EVIDENCE_CARD_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
@@ -3389,6 +3406,7 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway, ...verification,
   ])
   claim('person', [
+    ...keys(EVIMED_SEARCH_MESSAGES),
     ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes, ...autopilotMaterialErrorCodes, ...AUTOPILOT_BUDGET_ERROR_CODES,
     ...libraryErrorCodes, ...capsuleTransferErrorCodes, ...CAPSULE_SHARE_ERROR_CODES, ...EXTENSION_ERROR_CODES,
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,

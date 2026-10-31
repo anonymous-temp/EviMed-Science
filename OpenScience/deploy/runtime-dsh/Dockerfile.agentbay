@@ -135,6 +135,11 @@ ENV LOOPX_USAGE_PING=0 DO_NOT_TRACK=1 LOOPX_BIN=/opt/evimed/venv/bin/loopx
 RUN bash /usr/local/lib/evimed/install-runtime.sh loopx
 COPY deploy/runtime-dsh/install-openviking-plugin.mjs /usr/local/lib/evimed/install-openviking-plugin.mjs
 RUN bash /usr/local/lib/evimed/install-runtime.sh openviking-plugin
+COPY packages/search-topics /opt/evimed/search-topics
+ARG SEARCH_TOPICS_VERSION=0.2.0
+RUN test "${SEARCH_TOPICS_VERSION}" = "$(node -p 'require("/opt/evimed/search-topics/package.json").version')" && \
+  install -d -m 0755 /opt/evimed/search-topics-data && chmod -R a+rX,a-w /opt/evimed/search-topics
+LABEL io.open-science.search-topics.version="${SEARCH_TOPICS_VERSION}"
 RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
 RUN node /usr/local/bin/runtime-yaml-security.mjs verify
 
