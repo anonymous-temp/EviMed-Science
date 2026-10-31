@@ -732,6 +732,8 @@ lift), `shadow-e2` (the composer, menus, popovers, toasts), `shadow-e3` (dialogs
 tinted cards, no coloured
 icon tiles, no sparkles, no shimmer. A list beats a wall of cards.
 
+**A conversation opening.** The kernel's composer cannot exist until the runtime and its application have, so a new conversation opens under a cover: a box of the composer's shape that takes what the reader has come to say, and one quiet line (`ConversationCover`, the cover of an existing conversation keeps its title and the line). What is typed goes to the kernel's composer as its draft when the conversation opens, and the box goes away. Nothing on the cover sends; there is one composer.
+
 **States**, the same everywhere:
 
 | State | What it is |

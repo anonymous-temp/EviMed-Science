@@ -4276,6 +4276,7 @@ async function main() {
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
       else if (chat.retriedAfterNetworkChange) report.info.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
+      if (chat.openMs > CHAT_OPEN_CEILING_MS && !chat.retriedAfterNetworkChange) failures.push(`${current}: the prewarmed conversation took ${Math.round(chat.openMs / 1000)} s to open (ceiling ${CHAT_OPEN_CEILING_MS / 1000} s)`);
       // The composer's room, chips and statistics at both widths (R13 E-17, A20), read through the frame that just loaded.
       if (chat.loaded) await recordStep(report, failures, notices, "chat-composer", () => walkComposer(page, operator));
       // A start the control plane refuses for a cleanup in progress, answered by the walk (R11); it starts nothing.
@@ -5137,7 +5138,14 @@ async function prewarmRuntime(context, base, csrf, projectId) {
   }
 }
 
+/**
+ * The longest a prewarmed conversation may take to open from this walk, which runs beside the server, so no reader's line is in it:
+ * 7 s from Taipei on 2026-10-31, and its slowness is what a reader sees multiplied by their line. A regression's ceiling, not the aim.
+ */
+const CHAT_OPEN_CEILING_MS = 20_000;
+
 async function walkChat(page, base) {
+  const openingAt = Date.now();
   let networkChanged = 0;
   const onFailed = (request) => { if (/ERR_NETWORK_CHANGED/.test(request.failure()?.errorText ?? "")) networkChanged += 1; };
   page.on?.("requestfailed", onFailed);
@@ -5146,7 +5154,7 @@ async function walkChat(page, base) {
     let retried = false;
     let deadline = Date.now() + 120_000;
     while (Date.now() < deadline) {
-      await page.waitForTimeout(3_000);
+      await page.waitForTimeout(500);
       for (const frame of page.frames()) {
         if (!frame.url().includes("/__evimed/f/")) continue;
         const seen = await frame.evaluate(() => ({
@@ -5157,7 +5165,7 @@ async function walkChat(page, base) {
         if (seen?.composer) {
           const address = globalConversationAddress(page);
           if (!address.valid) return { loaded: false, loadedRoute: address.loadedRoute, state: `the global entry did not open the default conversation (${address.loadedRoute})` };
-          return { loaded: true, loadedRoute: address.loadedRoute, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+          return { loaded: true, openMs: Date.now() - openingAt, loadedRoute: address.loadedRoute, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
         }
       }
       const shell = await page.evaluate(() => document.body.innerText).catch(() => "");

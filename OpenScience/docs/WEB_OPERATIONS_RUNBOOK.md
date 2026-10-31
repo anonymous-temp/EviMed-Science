@@ -1061,6 +1061,24 @@ the model gateway's address and need no key. The
 knowledge-base one was missing until 2026-10-03, so `kb_search` could not reach
 the control plane from any conversation on this host.
 
+### TCP on the serving host (2026-10-31)
+
+`deploy/web/sysctl/90-evimed-tcp.conf` moves the host from cubic to BBR. No release applies it: it is host-wide, and the other products on the host take it too. Measure first and keep the numbers: from `frontier-edge` (Tokyo), download a 1 MB file ten times in the evening (`curl -o /dev/null -w '%{time_total}\n'`), and note `ss -tin` for a reader's connection. Then, on the host:
+
+```bash
+sudo modprobe tcp_bbr && echo tcp_bbr | sudo tee /etc/modules-load.d/bbr.conf
+sudo cp deploy/web/sysctl/90-evimed-tcp.conf /etc/sysctl.d/ && sudo sysctl --system
+sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc
+```
+
+Only new connections use it. Measure again at the same hour. To take it back: `sudo rm /etc/sysctl.d/90-evimed-tcp.conf /etc/modules-load.d/bbr.conf && sudo sysctl -w net.ipv4.tcp_congestion_control=cubic net.core.default_qdisc=fq_codel`.
+
+### How long a conversation takes to open (2026-10-31)
+
+The shell reports it: `evimed_web_vital_p75{route="/app/chat",metric="OPEN_COLD"|"OPEN_WARM"}` in milliseconds, from the surface starting to open to the conversation on screen, with the runtime down or up when it began; `GET /api/ops/web-vitals` gives the same figures for the last 24 hours. The two nginx sites log `rt=` (until the last byte reached the socket, so it holds the reader's network) and `urt=` (the application alone) at the end of each line: a long `rt` with a short `urt` is the line, not the platform. Both conf files have to be reinstalled by hand and nginx reloaded for this (`nginx -t && systemctl reload nginx`). The post-release walk records the warm opening of `/app/home` as `openMs` and fails over `CHAT_OPEN_CEILING_MS`.
+
+A job `personal-skill-apply` that ends `failed` now names its `cause` on its result and in the server's stderr (`personal skill proof failed: project=… code=…`); a project with nothing chosen is not proved and not restarted.
+
 ### Runtime slots on a small host
 
 Allow two runtimes, not one (`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES=2`,
