@@ -427,10 +427,10 @@ export function timeBudgetNotice(minutes, elapsedMs, said) {
     if (spent * 100 >= percent * minutes * 60_000) level = index
   })
   if (level <= said) return null
-  const elapsed = Math.round(spent / 60_000)
+  const elapsed = Math.floor(spent / 60_000)
   return {
     level,
-    text: `本轮时间预算 ${minutes} 分钟，已用 ${elapsed} 分钟，剩余 ${Math.max(0, minutes - elapsed)} 分钟。时间用完之前，要有一份完整的可交付成果。`,
+    text: `本轮时间预算 ${minutes} 分钟，已用 ${elapsed} 分钟，剩余 ${Math.max(0, Math.ceil(minutes - spent / 60_000))} 分钟。时间用完之前，要有一份完整的可交付成果。`,
   }
 }
 
