@@ -1,4 +1,4 @@
-import { BookOpen, BookText, FlaskConical, Lightbulb, Radar, Repeat, Wand2, type LucideIcon } from "lucide-react";
+import { BookOpen, BookText, FlaskConical, Lightbulb, Palette, Radar, Repeat, Wand2, type LucideIcon } from "lucide-react";
 
 /**
  * Words and marks the plugins and skills page keeps of its own. What the platform's plugins and tools are called, what they
@@ -16,6 +16,7 @@ export const SKILL_GROUP_ICON: Readonly<Record<string, LucideIcon>> = {
   科研分析: FlaskConical,
   写作与核查: BookText,
   办公文档: Wand2,
+  视觉与网页: Palette,
 };
 /** The long task's entry skill, by the group the server names (`loopxGroup`). */
 export const SKILL_LOOPX_ICON: LucideIcon = Repeat;

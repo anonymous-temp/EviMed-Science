@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChips";
 import { Input } from "@/components/ui/Input";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 
 export interface YearRangeFilterProps {
@@ -148,10 +149,9 @@ export function YearRangeFilter({
         {buckets.map((bucket) => {
           const selected = bucket.start >= (parsedStart ?? firstYear) && bucket.end <= (parsedEnd ?? lastYear);
           const years = bucket.start === bucket.end ? `${bucket.start} 年` : `${bucket.start}—${bucket.end} 年`;
-          return <Button key={bucket.start} variant="text" size="sm"
+          return <Tooltip key={bucket.start} content={`${years}：${bucket.count.toLocaleString("zh-CN")} 条（${bucket.percent}%）`}><Button variant="text" size="sm"
             aria-label={`选择 ${years}，共 ${bucket.count.toLocaleString("zh-CN")} 条`}
             aria-pressed={parsedStart === bucket.start && parsedEnd === bucket.end}
-            title={`${years}：${bucket.count.toLocaleString("zh-CN")} 条（${bucket.percent}%）`}
             onClick={() => draft(String(bucket.start), String(bucket.end))}
             className={cn("w-full min-w-0 justify-start gap-2 px-1", selected && "bg-accent-soft")}>
             <span className="w-20 shrink-0 text-left text-caption tabular-nums">{bucket.start}—{bucket.end}</span>
@@ -160,7 +160,7 @@ export function YearRangeFilter({
                 style={{ width: `${bucket.percent}%` }} />
             </span>
             <span className="w-10 shrink-0 text-right text-caption tabular-nums text-text-3">{bucket.percent}%</span>
-          </Button>;
+          </Button></Tooltip>;
         })}
       </div>}
       {error && <p id={`${id}-error`} role="alert" className="text-caption text-error">{error}</p>}

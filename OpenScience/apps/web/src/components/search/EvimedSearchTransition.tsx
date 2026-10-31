@@ -107,7 +107,7 @@ export function EvimedSearchTransition({ category, query, onEdit }: {
   return <section aria-labelledby={heading} aria-busy="true" className="discovery-transition fade-in">
     <div role="status" className="relative w-full text-center">
       <h2 id={heading} className="text-title font-semibold text-text">正在检索{CONTENT_NAMES[category]}</h2>
-      <p className="mx-auto mt-3 line-clamp-3 max-w-measure break-words text-body text-text-2" title={query}>“{query}”</p>
+      <p className="mx-auto mt-3 line-clamp-3 max-w-measure break-words text-body text-text-2">“{query}”</p>
     </div>
     <DiscoveryField category={category} />
     <div className="w-full max-w-read px-2 md:px-8">

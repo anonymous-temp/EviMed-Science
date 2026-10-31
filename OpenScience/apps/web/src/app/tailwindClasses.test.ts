@@ -37,6 +37,7 @@ const selectorParser = createRequire(require.resolve("tailwindcss"))("postcss-se
 /** Strings that look like a utility and are not one. Each names why; a stale entry fails below. */
 const NOT_UTILITIES: Readonly<Record<string, string>> = {
   "content-type": "an HTTP header name",
+  "content-length": "an HTTP header name",
   "content-disposition": "an HTTP header name",
   "font-size": "a tailwind-merge class-group name (lib/cn.ts)",
   "min-h": "a tailwind-merge class-group name (lib/cn.ts)",

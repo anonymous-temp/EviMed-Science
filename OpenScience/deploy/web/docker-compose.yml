@@ -501,6 +501,8 @@ services:
       OPEN_SCIENCE_RUNTIME_ASK_USER:
       OPEN_SCIENCE_RUNTIME_ASK_USER_MODE:
       OPEN_SCIENCE_LOOPX_ENABLED:
+      # The medical-search homepage topics: the web API serves them and the controller reads the image's version label.
+      OPEN_SCIENCE_SEARCH_TOPICS_ENABLED:
       OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT:
       # The run monitor's window and stall notice, and how long a starting
       # runtime is waited for.
@@ -2332,6 +2334,8 @@ services:
       OPEN_SCIENCE_RUNTIME_ASK_USER:
       OPEN_SCIENCE_RUNTIME_ASK_USER_MODE:
       OPEN_SCIENCE_LOOPX_ENABLED:
+      # The medical-search homepage topics: the web API serves them and the controller reads the image's version label.
+      OPEN_SCIENCE_SEARCH_TOPICS_ENABLED:
       OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT:
       OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}

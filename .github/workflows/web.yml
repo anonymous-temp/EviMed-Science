@@ -117,6 +117,9 @@ jobs:
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages
 
+      - name: Test the search-topics bundle
+        run: CI=true pnpm test:search-topics
+
       - name: Install isolated RSI numerical dependencies
         run: python3 -m pip install --target ../.evimed-local/toolchains/rsi-python -r evals/rsi-campaigns/requirements.txt
 
@@ -209,9 +212,11 @@ jobs:
       - name: Lint, typecheck and audit
         run: |
           pnpm lint
+          pnpm lint:search-topics
           pnpm typecheck:domain
           pnpm typecheck:port
           pnpm typecheck:socket
+          pnpm typecheck:search-topics
           pnpm typecheck:server
           pnpm audit:source-secrets
           pnpm check:community-skills

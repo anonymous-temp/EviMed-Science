@@ -40,10 +40,12 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
  * pathway-enrichment, markdown-mermaid-writing; scientific-agent-skills v2.72.0): 17 515 characters, +21 (18 198 with the frame,
  * by this script). The markdown-mermaid-writing description grew by 63 because it now says when not to use the skill (no
  * longer "any scientific document, report, analysis, or visualization"); the matplotlib one is 42 shorter.
+ * 2026-10-31, the team's four community skills merged from Gitee main (card-theater, flowchart, frontend-design, stacked-data-cards:
+ * visual and web deliverables the catalogue had no skill for): 18 047 characters, +532 (18 730 with the frame).
  * To raise it: run `node scripts/ops/skill-catalogue-size.mjs`, read the table, change the number here and say in the commit
  * what the extra characters buy. To lower it, lower it: a budget that is not tight is not read.
  */
-const NON_GEO_BUDGET = Object.freeze({ skills: 57, lineChars: 17_520 });
+const NON_GEO_BUDGET = Object.freeze({ skills: 61, lineChars: 18_050 });
 
 const withTree = (build) => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "catalogue-size-"));

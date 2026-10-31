@@ -103,6 +103,7 @@
     { "pattern": "/app/memory/map", "template": "screen", "why": "a redirect to 总览 (2026-10-27: the map's relation graph and topics are a panel of it): it carries over what it can and is decided by the address, and the router test holds each case" },
     { "pattern": "/app/memory/delivered/:deliveryId", "template": "screen", "why": "the same page as a share link (`memory-shared-missing` walks that component with an address that is not there)" },
     { "pattern": "/app/frontier/zones/s/:slug", "template": "T5", "why": "the same page as /app/frontier/zones/:zoneId, reached by the zone's readable name; the id's route is walked as frontier-zone" },
-    { "pattern": "/app/account/simulated/:page", "template": "T1", "why": "the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold" }
+    { "pattern": "/app/account/simulated/:page", "template": "T1", "why": "the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold" },
+    { "pattern": "/app/search/:category?", "template": "T1", "why": "the medical search (医学检索) is offered only where /api/me says features.evimedSearch: an Evimed account login and the Evimed account API configured, and the sidebar draws its entry on the same answer; the walk's throwaway account and fixture have neither, so every request the page makes would fail by design, and its states are held by EvimedSearchPage.test.tsx" }
   ]
 }

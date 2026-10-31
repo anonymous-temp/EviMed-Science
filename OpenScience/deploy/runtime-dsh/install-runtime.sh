@@ -646,7 +646,7 @@ profile_seed() {
   # range at install and at every start. The kernel's own exact-version exemption, for the one pair recorded as reviewed
   # (deps-version.json loopx.compatibility.dshVersionExemption) and only for the archive whose digest is the pin.
   node /usr/local/lib/evimed/loopx-compat.mjs --grant-exemption "${DSH_HOME_SEED}" "${loopx_archive}"
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" "${loopx_archive}" "${openviking_archive}" file:/opt/evimed/search-topics file:/opt/evimed/socket
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" "${loopx_archive}" "${openviking_archive}" file:/opt/evimed/socket file:/opt/evimed/search-topics
   node -e 'const fs=require("node:fs");const name="@evimed/dsh-search-topics";const source=JSON.parse(fs.readFileSync("/opt/evimed/search-topics/package.json","utf8"));const installed=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(installed.name!==name||installed.version!==source.version)throw Error("Search topics bundle identity mismatch")' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@evimed/dsh-search-topics/package.json"
   # Reconciliation follows pnpm's package-name order; our patch must run after LoopX's and the OpenViking plugin's, whose rows it configures.
   node /usr/local/lib/evimed/loopx-compat.mjs --order-profile "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"

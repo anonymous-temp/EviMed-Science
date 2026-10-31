@@ -100,6 +100,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
     "/app/files/open": "a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks",
     "/app/memory/map": "a redirect to 总览 (2026-10-27): the map's relation graph and topics are a panel of it; the router test holds each address it carries over",
+    "/app/search": "the medical search is offered only to an Evimed-login account where the Evimed account API is configured (features.evimedSearch in /api/me); the walk's throwaway account and fixture have neither, so its requests would fail by design (page-templates.json `unwalked`)",
   };
   const walked = new Set(ROUTES.map(([, address]) => address.split("?")[0]));
   const missing = pages.filter((page) => !walked.has(page) && !Object.hasOwn(notWalked, page));

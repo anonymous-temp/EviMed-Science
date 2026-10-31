@@ -160,6 +160,8 @@ test("release manifest generator records exact images, tools, skills, and source
         "packages/contracts/healthflux/candidates.json",
         "packages/design-tokens",
         "packages/harness-port",
+        // The independent search-topics bundle the runtime image COPYs whole and installs as a host plugin (merge of the Gitee main, 2026-10-31).
+        "packages/search-topics",
         "deploy/runtime-dsh",
         "runtime/mcp/evimed-research",
         "runtime/skills/evimed",

@@ -1580,8 +1580,9 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   const off = await composedApp(t);
   // `openList` is false here because this composition configures no OpenList
   // (openListReadiness.test.mjs covers the probe that turns it on); `capsuleShare` is true because sharing is on unless turned off
-  // (2026-10-23).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: true, zoneSubscription: false, geo: false, vcr: false, memoryMap: true, openList: false });
+  // (2026-10-23). `evimedSearch` is false because this composition configures no Evimed account login and no account API (merge of the Gitee
+  // main, 2026-10-31: `EvimedSearchService.enabled`, the flag the sidebar's 医学检索 entry reads).
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, evimedSearch: false, knowledgePages: false, capsuleShare: true, zoneSubscription: false, geo: false, vcr: false, memoryMap: true, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
