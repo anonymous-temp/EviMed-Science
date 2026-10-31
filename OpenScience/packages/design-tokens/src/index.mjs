@@ -608,11 +608,11 @@ export const TYPE_SCALE = Object.freeze(
     // is the deliberate one; this alias keeps unmigrated pages rendering at `ui`.
     'ui-sm': { size: 14, lineHeight: '22px', use: 'retired alias of `ui`' },
     body: { size: 16, lineHeight: '1.75', use: 'report prose and the reading column' },
-    // An article's own text in the frontier reader (2026-10-23): 16 below 1280 px and 18 from there, its AI 导读 a step above (18 / 20),
+    // An article's own text in the frontier reader (2026-10-23): 16 below 1280 px and 18 from there, its 速读 a step above (18 / 20),
     // all at 1.8 — the sizes of the scale, read at the line height of a long text.
     reading: { size: 16, lineHeight: '1.8', use: "an article's text in the reader, below 1280 px" },
-    'reading-lg': { size: 18, lineHeight: '1.8', use: "an article's text from 1280 px; its AI 导读 below 1280 px" },
-    'reading-xl': { size: 20, lineHeight: '1.8', use: "an article's AI 导读 from 1280 px" },
+    'reading-lg': { size: 18, lineHeight: '1.8', use: "an article's text from 1280 px; its 速读 below 1280 px" },
+    'reading-xl': { size: 20, lineHeight: '1.8', use: "an article's 速读 from 1280 px" },
     wordmark: { size: 16, lineHeight: '1.3', use: 'the EviMed lockup in the sidebar', family: 'serif' },
     section: { size: 18, lineHeight: '26px', use: 'a section heading inside an answer or a report' },
     heading: { size: 20, lineHeight: '28px', use: 'a card heading on a data page, a document title in a preview pane' },
