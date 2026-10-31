@@ -125,6 +125,19 @@ test("a run that did not finish says so in one word, and why in the body", () =>
   assert.equal(runFinishedNotice({ status: "failed" }).status, "未完成");
 });
 
+test("a stopped run that handed over its main document says which, after the reason it stopped", () => {
+  // The run cancelled at its cap with the report on disk (DeepResearch Bench 65): the stop is the news, the file is what is opened next.
+  const withReport = runFinishedNotice({ status: "canceled", canceledBy: "platform", errorCode: "runtime_canceled", title: "晶粒三维重建控制设计",
+    presentedFiles: ["grain/report/Design_Report.docx", "grain/report/report.md"] });
+  assert.equal(withReport.body, `${errorCodeMessage("runtime_canceled")} Design_Report.docx、report.md 已在对话里`);
+  const lost = runFinishedNotice({ status: "failed", errorCode: "runtime_stopped", presentedFiles: ["a/summary.pdf"] });
+  assert.equal(lost.body, `${errorCodeMessage("runtime_stopped")} summary.pdf 已在对话里`);
+  assert.equal(lost.status, runFinishedNotice({ status: "failed", errorCode: "runtime_stopped" }).status, "naming a file does not change what the run's ending is called");
+  assert.equal(lost.status, "已停止");
+  // Without one, the sentence is the reason alone.
+  assert.equal(runFinishedNotice({ status: "canceled", canceledBy: "platform", errorCode: "runtime_canceled" }).body, errorCodeMessage("runtime_canceled"));
+});
+
 test("a finished run that left a data source out names it and where to add it, and is not 未完成", () => {
   // A source nobody configured is no longer a failed run (2026-10-04): the run
   // finished with the sources it had, so the title says so, and the body says

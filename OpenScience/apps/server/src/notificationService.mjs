@@ -190,7 +190,7 @@ const STATUS_BY_OUTCOME = Object.freeze({
  *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: (string | Record<string, any>)[],
  *          claimSummary?: { total?: number, verified?: number, unverified?: number } | null,
  *          artifactCounts?: { deliverable?: number, revisionNotes?: number, work?: number, superseded?: number },
- *          outputFiles?: string[]}} run
+ *          outputFiles?: string[], presentedFiles?: string[]}} run
  * @returns {{ outcome: string, status: string, title: string, body: string, severity: 'safety'|'attention'|'info',
  *   pending: number, counts: { safety: number, mustFix: number, advice: number } }}
  */
@@ -220,6 +220,10 @@ export function runFinishedNotice(run) {
   let body;
   if (!finished) {
     body = errorCodeMessage(run?.errorCode ?? "");
+    // A stopped run that handed over its main document says which (`terminalPresentation.mjs`): the stop is the news,
+    // and the report it left is what the reader opens next.
+    const handedOver = Array.isArray(run?.presentedFiles) ? run.presentedFiles : [];
+    if (handedOver.length > 0) body += ` ${outputFilesPhrase(handedOver)}`;
     if (leftOut) body += ` ${leftOut}`;
   } else {
     // What was delivered, apart from what the run wrote for itself on the way

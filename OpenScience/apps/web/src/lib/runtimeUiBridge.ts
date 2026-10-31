@@ -138,7 +138,11 @@ export function runStateFromRecord(run: WebAgentRun): FrameRunState {
     artifacts: [...(run.artifacts ?? [])],
     artifactRoles: run.artifactRoles ?? {},
     unverifiedArtifacts: [...(run.unverifiedArtifacts ?? [])],
-    ...(run.presentedFiles?.length ? { presentedFiles: [...run.presentedFiles] } : {}),
+    // A `present` call behind these is drawn by the kernel as a card in the turn, and the run card leaves those to it. A run that
+    // was stopped (cancelled, or a runtime that died) has its main document named by the control plane
+    // (`terminalPresentation.mjs`): no card exists for it, and leaving it out of the run card as "already drawn" would hide the
+    // report it was chosen to point at.
+    ...(run.presentedFiles?.length && run.status !== "canceled" && run.status !== "failed" ? { presentedFiles: [...run.presentedFiles] } : {}),
     updatedAt: run.finishedAt ?? run.lastProgressAt ?? run.startedAt,
   };
 }
