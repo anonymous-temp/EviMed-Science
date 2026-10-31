@@ -437,6 +437,8 @@ function frontierSettings(overrides) {
     // Accounts that see the module under `operators` without being operators: a person who verifies the dry run without operator rights.
     frontierPreviewUsers: overrides.frontierPreviewUsers ?? listEnv("OPEN_SCIENCE_FRONTIER_PREVIEW_USERS"),
     frontierPollMs: integer("frontierPollMs", "OPEN_SCIENCE_FRONTIER_POLL_MS", 5_000, 1_000, 3_600_000),
+    // How long a pipeline stage that found nothing owed rests before scanning again (frontierPipeline.mjs `#stage`). 0 never rests.
+    frontierIdleStageRecheckMs: integer("frontierIdleStageRecheckMs", "OPEN_SCIENCE_FRONTIER_IDLE_STAGE_RECHECK_MS", 120_000, 0, 3_600_000),
     frontierLeaseMs: integer("frontierLeaseMs", "OPEN_SCIENCE_FRONTIER_LEASE_MS", 600_000, 60_000, 86_400_000),
     frontierModel: model,
     frontierDailyTime: dailyTime,

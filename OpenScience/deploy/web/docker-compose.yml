@@ -47,6 +47,10 @@ services:
     # index's vector leg needs. Pinned by digest; see the pin's notes for the
     # host steps a move takes.
     image: pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    # The image's default is 128 MB, and on 2026-10-31 production read 23% of its blocks from disk with a frontier of 1.2 GB. A quarter
+    # of a dedicated host's memory is the usual start; this host is shared, so less. Taken at the container's next start, which this
+    # setting's first release causes (a short interruption of every database reader).
+    command: ["postgres", "-c", "shared_buffers=${OPEN_SCIENCE_POSTGRES_SHARED_BUFFERS:-1GB}"]
     environment:
       POSTGRES_DB: evimed
       POSTGRES_USER: evimed
@@ -677,6 +681,7 @@ services:
       OPEN_SCIENCE_FRONTIER_AUDIENCE:
       OPEN_SCIENCE_FRONTIER_PREVIEW_USERS:
       OPEN_SCIENCE_FRONTIER_POLL_MS:
+      OPEN_SCIENCE_FRONTIER_IDLE_STAGE_RECHECK_MS:
       OPEN_SCIENCE_FRONTIER_LEASE_MS:
       OPEN_SCIENCE_FRONTIER_MODEL:
       OPEN_SCIENCE_FRONTIER_DAILY_TIME:

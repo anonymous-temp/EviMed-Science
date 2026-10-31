@@ -55,3 +55,14 @@ test("without readCacheMs every read goes to the database", async () => {
   await track.congresses();
   assert.equal(database.state.queries, 2);
 });
+
+test("warming reads the list, then the hub of each congress that has something in it, one at a time", async () => {
+  const database = countingDatabase();
+  const track = new FrontierTrack({ database, now, calendar: [congress], readCacheMs: 40 });
+  const read = [];
+  const hub = track.congress.bind(track);
+  track.congress = async (id) => { read.push(id); return hub(id); };
+  track.congresses = async () => [{ id: "a", itemCount: 2 }, { id: "b", itemCount: 0 }, { id: "c", itemCount: 1 }];
+  await track.warmCongresses();
+  assert.deepEqual(read, ["a", "c"]);
+});

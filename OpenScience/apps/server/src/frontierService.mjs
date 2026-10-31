@@ -604,9 +604,9 @@ export class FrontierService {
 
   async ready() {
     const migrated = await migrateFrontier(this.database, { dimension: this.dimension });
-    // The first reader after a start would otherwise wait out the whole congress count (14 s on production): read it once, now,
-    // in the background, after the schema is there. A failure here is the first reader's to see again.
-    if (!this.trackWarmed) { this.trackWarmed = true; this.trackReader.congresses().catch(() => {}); }
+    // The first reader after a start would otherwise wait out the whole congress count (14 s on production) and then each hub: read
+    // them once, now, in the background, after the schema is there. A failure here is the first reader's to see again.
+    if (!this.trackWarmed) { this.trackWarmed = true; this.trackReader.warmCongresses().catch(() => {}); }
     return migrated;
   }
 
@@ -673,6 +673,12 @@ export class FrontierService {
     this.cache.delete(key);
     this.cache.set(key, { version, at: this.now().getTime(), value });
     while (this.cache.size > CACHE_MAX_ENTRIES) this.cache.delete(this.cache.keys().next().value);
+  }
+
+  /** An item as a list carries it: no card reads the editor's diagnostics, 16% of a list's bytes on 2026-10-31. @param {any} row */
+  #listItem(row) {
+    const { editorDiagnostics: _unread, ...card } = this.#item(row);
+    return card;
   }
 
   /**
@@ -826,7 +832,7 @@ export class FrontierService {
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
     return {
-      items: page.map((row) => ({ rowId: String(row.id), item: this.#item(row) })),
+      items: page.map((row) => ({ rowId: String(row.id), item: this.#listItem(row) })),
       next: more && last ? { t: iso(last.position_at), id: String(last.id) } : null,
     };
   }

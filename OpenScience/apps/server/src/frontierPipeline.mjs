@@ -974,6 +974,9 @@ export class FrontierPipeline {
     this.glossaryStore = glossary instanceof FrontierGlossary ? { current: async () => glossary }
       : glossary && typeof glossary.current === "function" ? glossary : new FrontierGlossaryStore({ database });
     this.leaseMs = Math.max(MINUTE, Number(this.config.frontierLeaseMs) || 10 * MINUTE);
+    this.idleStageRecheckMs = Math.max(0, Number(this.config.frontierIdleStageRecheckMs) || 0);
+    /** @type {Map<string, number>} a stage that found nothing owed → when it may look again */
+    this.stageRestingUntil = new Map();
     this.evolution = evolution;
     this.policies = policies;
     this.threshold = frontierSelectThreshold(this.config);
@@ -1091,6 +1094,23 @@ export class FrontierPipeline {
   }
 
   /**
+   * One stage of a round, unless it found nothing owed a moment ago. These stages each scan up to a month of items' texts to learn what
+   * is owed (2–3 s of a core each, and a round every few seconds kept the database at two of this host's four cores on 2026-10-31), so a
+   * stage that answers 0 rests for `frontierIdleStageRecheckMs`: at worst a new item's 导读 starts that much later. A stage with work
+   * goes round again at once.
+   * @param {string} name @param {{ now: Date }} context @param {() => Promise<number | undefined | void>} run
+   * @returns {Promise<number>} the stage's count, 0 when it rested
+   */
+  async #stage(name, context, run) {
+    const now = context.now.getTime();
+    if ((this.stageRestingUntil.get(name) ?? 0) > now) return 0;
+    const answer = await run();
+    if (answer === 0 && this.idleStageRecheckMs > 0) this.stageRestingUntil.set(name, now + this.idleStageRecheckMs);
+    else this.stageRestingUntil.delete(name);
+    return Number(answer ?? 0);
+  }
+
+  /**
    * One bounded round: claimed entries, then promoted items, then owed edits,
    * the lane floor and the preprint lane, and embeddings.
    * @returns {Promise<FrontierBatchSummary>}
@@ -1123,17 +1143,17 @@ export class FrontierPipeline {
         summary.zhTarget += picked["zh-target"] ?? 0;
         summary.eventPrimary += picked["event-primary"] ?? 0;
       }
-      await this.#fullText(context);
+      await this.#stage("full-text", context, () => this.#fullText(context));
       await this.#readerSummaries(context);
-      await this.#tidy(context);
-      await this.#studyFacts(context);
-      await this.#faithSummary(context);
-      await this.#lead(context);
-      await this.#brief(context);
-      await this.#ask(context);
+      await this.#stage("tidy", context, () => this.#tidy(context));
+      await this.#stage("study-facts", context, () => this.#studyFacts(context));
+      await this.#stage("faith-summary", context, () => this.#faithSummary(context));
+      await this.#stage("lead", context, () => this.#lead(context));
+      await this.#stage("brief", context, () => this.#brief(context));
+      await this.#stage("ask", context, () => this.#ask(context));
       await this.#track(context);
-      summary.translated += await this.#translate(context);
-      summary.retagged += await this.#retag(context);
+      summary.translated += await this.#stage("translate", context, () => this.#translate(context));
+      summary.retagged += await this.#stage("retag", context, () => this.#retag(context));
       summary.embedded += await this.#embed(context);
       this.counters.batches += 1;
       for (const key of /** @type {Array<keyof FrontierBatchSummary>} */ (Object.keys(summary))) {
@@ -2615,6 +2635,7 @@ export class FrontierPipeline {
     [now, onlyLeading, limit, this.workerId, new Date(now.getTime() + this.leaseMs)])).rows;
     const plain = await claim(`NOT ${judged}`, TIDY_PLAIN_BATCH, false);
     const models = modelReady ? await claim(judged, TIDY_MODEL_BATCH, budget.state === "throttled") : [];
+    if (!plain.length && !models.length) return 0;
     const names = models.length ? await this.#sources(models.map((item) => item.primary_source_id)) : new Map();
     /** @param {any} item @param {boolean} ask */
     const settle = async (item, ask) => {
@@ -2704,6 +2725,7 @@ export class FrontierPipeline {
       RETURNING i.id, i.lease_until`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), this.threshold - FRONTIER_READER_MARGIN, FULLTEXT_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs)])).rows;
+    if (!claimed.length) return 0;
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       const texts = (await this.database.query("SELECT enrichment, body_text FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
       const url = String(texts?.enrichment?.oa_pdf_url ?? "");
@@ -2960,7 +2982,7 @@ export class FrontierPipeline {
         i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.selected, i.score_total, i.lead_zh, i.lead_basis, i.study_facts`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", LEAD_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs)])).rows;
-    if (!claimed.length) return;
+    if (!claimed.length) return 0;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
@@ -3031,7 +3053,7 @@ export class FrontierPipeline {
         i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane, i.brief, i.study_facts`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", BRIEF_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs), this.threshold - FRONTIER_READER_MARGIN])).rows;
-    if (!claimed.length) return;
+    if (!claimed.length) return 0;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
@@ -3102,7 +3124,7 @@ export class FrontierPipeline {
       RETURNING i.id, i.title_raw, i.platform, i.primary_source_id, i.published_at, i.lease_until, i.genre`,
     [now, new Date(now.getTime() - STUDY_FACTS_WINDOW_MS), budget.state === "throttled", STUDY_FACTS_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN, FRONTIER_STUDY_FACTS_VERSION])).rows;
-    if (!claimed.length) return;
+    if (!claimed.length) return 0;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
@@ -3163,7 +3185,7 @@ export class FrontierPipeline {
         i.genre, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane`,
     [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", ASK_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs), FRONTIER_ASK_VERSION, ASK_PRIORITY_SCORE])).rows;
-    if (!claimed.length) return;
+    if (!claimed.length) return 0;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
@@ -3232,7 +3254,7 @@ export class FrontierPipeline {
         i.lease_until, i.genre`,
     [now, new Date(now.getTime() - STUDY_FACTS_WINDOW_MS), budget.state === "throttled", FAITH_SUMMARY_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN, FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION])).rows;
-    if (!claimed.length) return;
+    if (!claimed.length) return 0;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       if (this.#providerPause(now)) return false;
