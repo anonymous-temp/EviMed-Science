@@ -3,7 +3,7 @@ import type { ReceivedCapsule } from "@/lib/memoryClient";
 import type { MapDay, MapEvent, MapNode } from "@/lib/memoryMapClient";
 import type { WebMethod } from "@/lib/methodsClient";
 import {
-  aboutYouCount, changeEvents, changeRows, defaultExplore, exploreOffered, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook, overviewHeadline,
+  aboutYouCount, changeEvents, changeRows, chosenExplore, defaultExplore, exploreOffered, exploreViews, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook, overviewHeadline,
   rangeFrom, readable, receivedCounts, recentCount, relationCount, rememberedCount, withinRange, type ChangeEvent, type OverviewDoc,
 } from "./memoryOverviewModel";
 
@@ -224,6 +224,27 @@ describe("the relations and topics", () => {
     expect(relationCount({ edges: [...edges(2), ...edges(5, "belongs-to" as never)] })).toBe(2);
     expect(defaultExplore({ edges: edges(3) })).toBe("graph");
     expect(defaultExplore({ edges: edges(2) })).toBe("topics");
+  });
+
+  it("offers the star map from one memory where it can be drawn, and leads with it wherever it is on offer", () => {
+    const many = { summary: summary(12), edges: edges(3), facets: doc().facets };
+    const few = { summary: summary(3), edges: [], facets: doc().facets };
+    const none = { summary: summary(0), edges: [], facets: doc().facets };
+    expect(exploreViews(many, { star: true })).toEqual(["star", "graph", "topics"]);
+    expect(exploreViews(few, { star: true })).toEqual(["star"]);
+    expect(exploreViews(none, { star: true })).toEqual([]);
+    expect(exploreViews(many, { star: false })).toEqual(["graph", "topics"]);
+    expect(exploreViews(few, { star: false })).toEqual([]);
+    expect(chosenExplore(["star", "graph", "topics"], null, many, { phone: false })).toBe("star");
+    expect(chosenExplore(["star", "graph", "topics"], "topics", many, { phone: false })).toBe("topics");
+  });
+
+  it("an address that names a picture not on offer gets the one that is, and a phone starts on the topics", () => {
+    const many = { edges: edges(3) };
+    expect(chosenExplore(["graph", "topics"], "star", many, { phone: false })).toBe("graph");
+    expect(chosenExplore(["graph", "topics"], null, many, { phone: true })).toBe("topics");
+    expect(chosenExplore(["star"], "graph", many, { phone: false })).toBe("star");
+    expect(chosenExplore([], "graph", many, { phone: false })).toBeNull();
   });
 
   it("keeps the account and its projects whatever the range, a mark with no time, and what began inside it", () => {

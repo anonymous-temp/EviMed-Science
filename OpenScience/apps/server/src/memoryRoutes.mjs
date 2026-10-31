@@ -324,6 +324,18 @@ export function createMemoryRoutes({
       return true;
     }
 
+    // A memory's old words, which the map draws in grey under it, are the person's to remove without touching what it says now.
+    const replaced = /^\/api\/memory\/records\/([^/]+)\/replaced\/([^/]+)$/u.exec(pathname);
+    if (replaced && req.method === "DELETE") {
+      const recordId = decodeRouteComponent(replaced[1], "structured memory id");
+      const statementId = decodeRouteComponent(replaced[2], "replaced statement id");
+      const ctx = await context(req, res);
+      await engine().forgetReplaced(ctx.user.id, recordId, statementId);
+      await audit(ctx, "memory.record.replaced.delete", "completed", { target: recordId });
+      sendJson(res, 200, { data: true });
+      return true;
+    }
+
     if (pathname.startsWith("/api/memory/records/")) {
       const rawRecordId = pathname.slice("/api/memory/records/".length);
       if (!rawRecordId || rawRecordId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");

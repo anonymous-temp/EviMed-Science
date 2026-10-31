@@ -11,6 +11,9 @@ import type { RangeKey } from "./memoryOverviewModel";
  * selected, a topic, the search, only what needs a look — replaces, so Back does not walk through every choice; a mark that opens in the
  * drawer pushes, so Back closes it first (`useAddressOpen`). A parameter at its default is not written, so the plain address is the plain page.
  */
+/** The three pictures of what is remembered. */
+export type ExploreView = "star" | "graph" | "topics";
+
 export interface OverviewSelection {
   range: RangeKey;
   /** Only what needs a second look. */
@@ -20,8 +23,8 @@ export interface OverviewSelection {
   topic: string | null;
   /** The Monday of one week the chart selected (YYYY-MM-DD). */
   week: string | null;
-  /** The panel the reader chose; null is the page's own choice (the relations when there are some, else the topics). */
-  explore: "graph" | "topics" | null;
+  /** The panel the reader chose; null is the page's own choice (the star map where it can be drawn, else the relations when there are some, else the topics). */
+  explore: ExploreView | null;
   q: string;
 }
 
@@ -40,7 +43,7 @@ export function parseSelection(params: URLSearchParams): OverviewSelection {
     project: text("project", 160),
     topic: text("topic", 200),
     week: DAY.test(week) ? week : null,
-    explore: explore === "graph" || explore === "topics" ? explore : null,
+    explore: explore === "star" || explore === "graph" || explore === "topics" ? explore : null,
     q: (params.get("q") ?? "").slice(0, 80),
   };
 }
@@ -69,7 +72,7 @@ export function useOverviewSelection() {
   const drawer = useAddressOpen("open");
 
   /** Choosing a panel pushes an entry. */
-  const setExplore = useCallback((explore: "graph" | "topics") => {
+  const setExplore = useCallback((explore: ExploreView) => {
     setParams((current) => selectionParams({ ...parseSelection(current), explore }, current));
   }, [setParams]);
 

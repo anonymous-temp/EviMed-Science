@@ -5,11 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FactDrawer, memorySource } from "./FactDrawer";
 import type { FactItem } from "./memoryItems";
 
-const api = vi.hoisted(() => ({ updateStructuredMemory: vi.fn(), deleteStructuredMemory: vi.fn() }));
+const api = vi.hoisted(() => ({ updateStructuredMemory: vi.fn(), deleteStructuredMemory: vi.fn(), forgetReplacedStatement: vi.fn() }));
 vi.mock("@/lib/apiClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")),
   updateStructuredMemory: api.updateStructuredMemory,
   deleteStructuredMemory: api.deleteStructuredMemory,
+  forgetReplacedStatement: api.forgetReplacedStatement,
   webErrorMessage: (_error: unknown, overrides?: { fallback?: string }) => overrides?.fallback ?? "操作未完成，请重试。",
 }));
 const client = vi.hoisted(() => ({
@@ -337,5 +338,28 @@ describe("a note of the researcher's own capsule, opened from its row", () => {
     cleanup();
     open(note());
     expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+  });
+});
+
+describe("what a memory used to say", () => {
+  const formerly = [{ id: "nm_1~old", text: "目标期刊：Kidney International", until: "2026-09-01T00:00:00Z" }];
+
+  it("lists its old words where the map knows them, and has one gone only when asked twice, keeping what it says now", async () => {
+    api.forgetReplacedStatement.mockResolvedValue(undefined);
+    const { onChanged, onClose } = open(fact({ lastRecalledAt: "2026-09-10T00:00:00Z" }), { formerly });
+    expect(screen.getByText(/最近用到/)).toBeInTheDocument();
+    expect(screen.getByText(/目标期刊：Kidney International/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "删掉" }));
+    expect(api.forgetReplacedStatement).not.toHaveBeenCalled();
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "删除" }));
+    await waitFor(() => expect(api.forgetReplacedStatement).toHaveBeenCalledWith("mem_1", "nm_1~old"));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("says a memory long unused is still kept, and shows no such section without old words", () => {
+    open(fact({ freshness: 0.1 }));
+    expect(screen.getByText(/很久没用到，仍然记着/)).toBeInTheDocument();
+    expect(screen.queryByText("以前的说法")).not.toBeInTheDocument();
   });
 });

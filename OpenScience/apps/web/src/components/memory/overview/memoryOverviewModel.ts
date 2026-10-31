@@ -1,4 +1,5 @@
 import { changeKindOf, weekStart } from "@/components/charts/map/changeWeeks";
+import type { ExploreView } from "./useOverviewSelection";
 import { dayIn } from "@/components/charts/map/zone";
 import { glyphOf } from "@/components/memory/map/MarkGlyph";
 import { isAboutYou, REASON_TEXT, STRUCTURE } from "@/components/memory/map/mapModel";
@@ -401,6 +402,22 @@ export function exploreOffered(doc: Pick<OverviewDoc, "summary" | "edges" | "fac
 /** The panel the page opens on when the address names none: the relations when there are enough of them, else the topics. */
 export function defaultExplore(doc: Pick<OverviewDoc, "edges">): "graph" | "topics" {
   return relationCount(doc) >= EXPLORE_RELATIONS ? "graph" : "topics";
+}
+
+/**
+ * The pictures a reader is offered, in order. The star map asks for one memory and a browser that can draw it: a sky with three stars in it is a small sky and
+ * not a broken one (sparse real records stay visible, owner ruling of 2026-10-19), which is not true of a graph of three dots. The other two ask for what `exploreOffered` asks.
+ */
+export function exploreViews(doc: Pick<OverviewDoc, "summary" | "edges" | "facets">, { star }: { star: boolean }): ExploreView[] {
+  return [...(star && doc.summary.memories >= 1 ? ["star" as const] : []), ...(exploreOffered(doc) ? ["graph" as const, "topics" as const] : [])];
+}
+
+/** The picture drawn: the one the address names when it is on offer, else the first on offer, or on a phone the topics (a list beside their words) before the graph. */
+export function chosenExplore(views: readonly ExploreView[], named: ExploreView | null, doc: Pick<OverviewDoc, "edges">, { phone }: { phone: boolean }): ExploreView | null {
+  if (named && views.includes(named)) return named;
+  if (views.includes("star")) return "star";
+  if (!views.length) return null;
+  return phone ? "topics" : defaultExplore(doc);
 }
 
 /**

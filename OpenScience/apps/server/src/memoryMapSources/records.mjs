@@ -21,7 +21,7 @@
 
 import { MEMORY_KIND_LABELS_ZH } from "../memoryKinds.mjs";
 import { memoryEventsOf } from "./activity.mjs";
-import { excerpt, instant, nodeId, unit } from "./common.mjs";
+import { excerpt, freshnessOf, instant, nodeId, unit } from "./common.mjs";
 
 /** The memories one read draws at most (the store reads the most recently changed). */
 export const MAP_RECORD_LIMIT = 2000;
@@ -71,8 +71,8 @@ function referenceLabel(type, id) {
  * engine's files and hands its memories to this.
  *
  * @param {readonly any[]} found the memories, in the store's light shape (`publicRecord`)
- * @param {{ sources?: any[], conflicts?: any[], usage?: Record<string, { count: number }> }} links what they rest on, the open
- *   disagreements (`recordStatus` / `otherStatus` when known) and how often each was handed to a run
+ * @param {{ sources?: any[], conflicts?: any[], usage?: Record<string, { count: number }>, replaced?: readonly import("./replacedStatements.mjs").ReplacedStatement[] }} links
+ *   what they rest on, the open disagreements (`recordStatus` / `otherStatus` when known), how often each was handed to a run and what they used to say
  * @param {{ now: Date, weigh?: (record: any) => number }} context `weigh`: what a mark's size says when the store has no
  *   importance of its own to say it (the native engine's files all have the same): given, it replaces the importance-and-use weight
  * @returns {import("./common.mjs").MapContribution}
@@ -115,6 +115,8 @@ export function recordsContribution(found, links, { now, weigh = undefined }) {
       label: excerpt(recordText(record), MAP_LABEL_CHARS),
       weight: weigh ? unit(weigh(record)) : unit(0.5 * (Number(record.importance) || 0) + 0.5 * Math.min(1, Math.log1p(used) / Math.log1p(10))),
       at: instant(record.createdAt),
+      freshness: record.status === "superseded" ? 0 : freshnessOf({ kind: record.kind, projectId, writtenAt: record.updatedAt ?? record.createdAt, recalledAt: record.lastRecalledAt, recalls: record.recallCount }, now),
+      recalledAt: instant(record.lastRecalledAt),
       state: record.status === "superseded" ? "replaced" : reason ? "check" : "current",
       reason, projectId, open: { kind: "record", id: record.id },
     });
@@ -131,6 +133,23 @@ export function recordsContribution(found, links, { now, weigh = undefined }) {
           : { id: target.id, type: "reference", subtype: source.type, label: referenceLabel(source.type, source.id), state: "current" });
       }
     }
+  }
+
+  // What they used to say: a mark of its own, in grey, with a line from what replaced it. It opens the drawer of the memory in force, which lists the versions.
+  const byId = new Map(records.map((record) => [record.id, record]));
+  const replacedIds = new Set((links.replaced ?? []).map((statement) => statement.id));
+  for (const statement of links.replaced ?? []) {
+    const head = byId.get(statement.head);
+    if (!head || !(byId.has(statement.successor) || replacedIds.has(statement.successor))) continue;
+    const projectId = head.scope === "project" ? head.scopeId : null;
+    const id = nodeId("memory", statement.id);
+    nodes.push({
+      id, type: "memory", subtype: head.kind, group: /** @type {Record<string, string>} */ (MEMORY_KIND_LABELS_ZH)[head.kind] ?? head.kind,
+      label: excerpt(statement.text, MAP_LABEL_CHARS), weight: 0.1, at: instant(statement.at), until: instant(statement.until), freshness: 0, recalledAt: null,
+      state: "replaced", reason: null, projectId, open: { kind: "record", id: head.id },
+    });
+    edges.push({ from: id, to: projectId ? nodeId("project", projectId) : nodeId("you", "account"), type: "belongs-to" });
+    edges.push({ from: nodeId("memory", statement.successor), to: id, type: "replaces", at: instant(statement.until) });
   }
 
   const dated = records.map((record) => instant(record.createdAt)).filter(Boolean).sort();

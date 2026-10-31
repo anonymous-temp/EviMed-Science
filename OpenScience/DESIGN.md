@@ -213,6 +213,16 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   (the radar's angle and area read worst of all, NN/g) are gone: the chart and the table say what happened. 总览 is the memory page's one picture; its
   four lists (关于你, 项目, 做法, 收到的) are lists and nothing else; no peer's memory page has a chart, so a chart on a list page needs an argument of this
   size. The relation graph and the topics draw in the accent, the warn amber and one grey, tell a mark's kind by shape and words; the knowledge base's graph follows the same grammar.
+  **The one exception to that grammar is 记忆星图 (owner, 2026-10-31: 「展示效果尽量炫酷一些」), the page's one brand moment**, and the owner's reversal of the plan of 2026-10-23 that no
+  global graph leads the page: a night window in either scheme (`data-theme="dark"` on the card, so its controls are the page's own) above the tiles, drawn in three.js where a real GPU
+  and a wide screen can hold it. Its eight hues are the `--star-*` tokens, one a kind of mark, and nowhere else does a kind have a colour. It is spent on what the page's other pictures
+  cannot say, and each thing that moves or glows says something: brightness is how long since the memory was written or used (it decides nothing: a dim memory is recalled as a bright one is),
+  a spark along a line is a memory a conversation was handed in the last three days, grey with an amber line is what was replaced, and 回放成长 grows the sky from its first mark to today. What
+  the usual 3D graph gets wrong it does not do: no force layout, because a mark's place depends only on its own id and weight and its hub, so nothing moves when a mark is added and the sky is the
+  same at the next visit; no line that only says “belongs” is the picture's point, and the lines that say something are drawn above them; a press is taken on the screen within 14 px and not along a ray, and the
+  turning stops under a mark and on a button (WCAG 2.2.2); the wheel stays the page's and zooms only with Ctrl or ⌘ or full-screen; every mark opens its own drawer; and a listbox over the same marks is
+  the picture's one tab stop. No real GPU, a phone's width, a wish for less motion or a lost context all get the relation graph or the topics, as before: 3D has no claim on reading (Munzner, “no
+  unjustified 3D”; 2D beats it on spatial memory), and this one is there because the owner wants the memory to be felt, so reading stays with the table and the two flat pictures beside it.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -519,7 +529,7 @@ pages after every release.
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
    one kind. **The one exception is a data page** — the 记忆总览 (`/app/memory/overview`: the capsule as one data page — a toolbar of the range, only what needs a look and the search; a
-   sentence whose numbers each open the list they count; four tiles (关于你 — the memories that carry a project included —, 做法, 收到的, 知识) that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 when there is
+   sentence whose numbers each open the list they count; 记忆星图 at its head where it can be drawn, with one memory or more, the switch to 关系 and 主题 at its corner; four tiles (关于你 — the memories that carry a project included —, 做法, 收到的, 知识) that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 under it when there is no sky and there is
    enough to see; and the table behind the charts, 「最近变化」, whose rows open the same drawers the marks do — held to two kinds of section and five size × weight pairs) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
    shared selection narrowing the chart, the panel and the table together, and every mark and row opening the record's own drawer or the document's own page — so its shapes
@@ -612,7 +622,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | T1 列表页 | 前沿动态, 收件箱, 科研工具, 插件与技能, the study home's library views | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
 | T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 循证 GEO and 虚拟临床研究 homes, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
 | T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
-| T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
+| T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · 记忆总览 only: 记忆星图 · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
 

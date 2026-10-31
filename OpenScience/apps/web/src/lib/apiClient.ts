@@ -593,6 +593,9 @@ export interface WebStructuredMemory {
   createdAt: string | null;
   updatedAt: string | null;
   lastConfirmedAt: string | null;
+  /** When a conversation was last handed it, and how bright the map draws it for that: 0 to 1. It decides nothing about recall. */
+  lastRecalledAt?: string | null;
+  freshness?: number;
   expiresAt: string | null;
   /** Who it came from and how established it is, counted from its evidence
    *  (`recordProvenance` in memorySettings.mjs). Absent from a control plane
@@ -1726,6 +1729,13 @@ export async function updateStructuredMemory(
 export async function deleteStructuredMemory(id: string): Promise<void> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.record.delete");
   const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(id)}`), { method: "DELETE" });
+  await parseApiResponse<boolean>(res);
+}
+
+/** Take one of a memory's old statements out of its history for good; what the memory says now stays. */
+export async function forgetReplacedStatement(recordId: string, statementId: string): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.record.replaced.delete");
+  const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(recordId)}/replaced/${encodeURIComponent(statementId)}`), { method: "DELETE" });
   await parseApiResponse<boolean>(res);
 }
 
