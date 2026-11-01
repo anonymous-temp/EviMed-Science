@@ -235,6 +235,35 @@ describe("对照 · the record of the route in use", () => {
     expect(section).toHaveTextContent("对试验人群（ATT）");
   });
 
+  it("folds the target trial's components under the estimand, each beside how far the comparison can emulate it", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.estimand = { source: "assumed", note: "按公开方案", rows: [
+      { label: "估计目标", value: "对试验人群（ATT）" },
+      { label: "入选标准", value: "只能近似：外部对照的入排条件更宽" },
+      { label: "随访起点（时间零点）", value: "无法复现：外部对照没有随机日期" },
+    ] };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    await found(container, "[data-vcr-diagnostics]");
+    const section = screen.getByRole("heading", { name: "估计目标" }).closest("section") as HTMLElement;
+    expect(section).toHaveTextContent("对试验人群（ATT）");
+    const summary = within(section).getByText("目标试验的要素 · 3");
+    const record = section.querySelector("[data-vcr-target-trial]") as HTMLElement;
+    expect(record).not.toBeNull();
+    expect(summary.closest("details")).not.toBeNull();
+    expect(record).toHaveTextContent("无法复现：外部对照没有随机日期");
+    expect(record).toHaveTextContent("按公开方案");
+  });
+
+  it("has no folded record when the target trial was not written", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.estimand = { source: "assumed", note: null, rows: [{ label: "估计目标", value: "对试验人群（ATT）" }] };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-target-trial]")).toBeNull();
+  });
+
   it("has no counts band of its own: the four numbers are on 总览", async () => {
     const { container } = draw();
     await found(container, "[data-vcr-diagnostics]");

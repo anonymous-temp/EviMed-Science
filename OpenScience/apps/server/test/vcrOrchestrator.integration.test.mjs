@@ -1827,6 +1827,33 @@ test("a comparator that declares robustness analyses plans them beside the compa
 });
 // --- end robustness methods ---
 
+test("A7 a comparison that is to support non-inferiority is delivered limited with the reason beside it, and the same comparison without the claim is not", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("noninferiority", { dataTier: "T0" });
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: definition });
+  const curve = await module.curves.recordSelection({ studyId: study.id, principal: study.userId,
+    imageArtifactId: "controlled-curve-source.png", points: { ...publishedArm(12), treatmentArm: publishedArm(17) } });
+  /** @param {Record<string, any>} configuration */
+  const compare = async (configuration) => {
+    const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "comparator", items: null,
+      data: { route: "literature_control", estimand: "ATT", configuration: { provenance: { receiptId: curve.id }, tau: 18, timeUnit: "months", ...configuration } } });
+    assert.equal(written.ok, true, JSON.stringify(written.issues));
+    await drainJobs(module, study);
+    return (await store.results(study.id, "comparator"))[0];
+  };
+
+  const claimed = await compare({ applicability: { state: "doubtful", claim: "non_inferiority", note: "另一年代的对照" } });
+  assert.equal(claimed.conclusion, "limited", "the engine double says estimable; the claim makes it limited");
+  assert.deepEqual(claimed.diagnostics.applicabilityLimits.map((/** @type {any} */ entry) => entry.code), ["non_inferiority_purpose"]);
+  assert.match(claimed.diagnostics.applicabilityLimits[0].reason, /非劣效/);
+  assert.ok(claimed.measures.some((/** @type {any} */ measure) => measure.name === "rmst_difference"), "and the estimate is delivered");
+
+  const plain = await compare({ applicability: { state: "partly_suitable", claim: "superiority" } });
+  assert.equal(plain.conclusion, "estimable");
+  assert.equal(plain.diagnostics.applicabilityLimits, undefined);
+  assert.notEqual(plain.id, claimed.id, "the comparator is a new version and its result a new one; the first stands, superseded");
+});
+
 test("G12 a patient set naming an event-history model is queued on the longitudinal forecast path; with no provider that one step is skipped in the platform's sentence and the study's other work is queued all the same", options, async () => {
   const { knownErrorCodeMessage } = await import("@evimed/domain");
   /** @type {any[]} */

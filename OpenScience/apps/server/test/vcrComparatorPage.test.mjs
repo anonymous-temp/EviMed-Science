@@ -99,7 +99,9 @@ test("A5: the E-value stands in the premises, worded as a strength and never as 
   assert.doesNotMatch(row.value, /没有偏倚|无偏倚/);
   assert.equal(row.decisive, true);
   assert.equal(row.source, "assumed");
-  assert.deepEqual(tab.robustness.rows.map((entry) => entry.key), ["e_value", "e_value_confidence_limit"], "and the numbers are on the page as they were");
+  assert.deepEqual(tab.robustness.rows.map((entry) => entry.key), ["e_value", "e_value_confidence_limit"], "and the two numbers are in the robustness section, as they are for an E-value that lands beside an estimate");
+  assert.equal(tab.verdict.conclusion, "estimable", "an E-value beside an estimate does not relabel the comparison as a sensitivity run");
+  assert.match(tab.headline, /^真实外部对照：可估计/);
   // no E-value, no row
   assert.equal(page({ result: { measures: [{ name: "weighted_difference", value: 1 }] } }).premises.find((entry) => entry.key === "unmeasured"), undefined);
 });

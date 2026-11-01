@@ -671,6 +671,23 @@ test("the use ceiling says why in sentences a reader can act on, not vocabulary 
   assert.deepEqual(reviewed.reasons, []);
 });
 
+test("a benchmark in the study (an unanchored MAIC) lowers the ceiling of use to design support, and says so in a sentence", () => {
+  const study = { intendedUse: "specified_analysis" };
+  const data = { diagnostics: { modelsUsed: [{ name: "method", tier: "data", risk: "none" }], benchmarkBasis: "unanchored_maic" } };
+  const ceiling = useCeilingOf({ study, results: [data, { diagnostics: { modelsUsed: [{ tier: "data" }] } }], reviews: [] });
+  assert.equal(ceiling.ceiling, "design_support");
+  assert.equal(ceiling.withinCeiling, false);
+  assert.deepEqual(ceiling.reasons.map((reason) => reason.code), ["model_tier", "benchmark_only"], "the data tier alone would have allowed a specified analysis; the benchmark is the lower");
+  assert.match(ceiling.reasons[1].detail, /有一项结果只作基准.*研究设计支持/);
+  assert.ok(ceiling.reasons.every((reason) => !/[a-z]+_[a-z]+/.test(reason.detail)));
+  // a weaker model tier already says it; the benchmark adds nothing
+  const weaker = useCeilingOf({ study, results: [{ diagnostics: { modelsUsed: [{ tier: "scenario" }], benchmarkBasis: "model_prediction" } }], reviews: [] });
+  assert.equal(weaker.ceiling, "exploratory");
+  assert.deepEqual(weaker.reasons.map((reason) => reason.code), ["model_tier"]);
+  // no benchmark, no change
+  assert.equal(useCeilingOf({ study, results: [{ diagnostics: { modelsUsed: [{ tier: "data" }] } }], reviews: [] }).ceiling, "specified_analysis");
+});
+
 // --- budget and jobs -----------------------------------------------------------------------------------------
 
 test("the budget is CPU seconds — no money — and a job says what it would need", () => {

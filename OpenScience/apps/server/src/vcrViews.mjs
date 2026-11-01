@@ -41,7 +41,7 @@ import {
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_RESULT_KIND_TABS, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
-  VCR_TRIAL_DESIGN_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH,
+  VCR_TRIAL_DESIGN_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH, VCR_BENCHMARK_ONLY_BASES, VCR_BENCHMARK_ONLY_USE_CEILING,
   allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
@@ -271,12 +271,18 @@ export function useCeilingOf({ study, results }) {
     }
   }
   const modelCeiling = intendedUseCeiling(tiers);
-  const ceiling = modelCeiling;
+  // A benchmark in the study (a literature curve, an unanchored MAIC, a model's prediction; A8) informs a design and analyses no effect:
+  // the weakest result decides, as it does for a model's tier.
+  const benchmark = results.some((result) => VCR_BENCHMARK_ONLY_BASES.includes(object(result.diagnostics).benchmarkBasis));
+  const ceiling = benchmark && !useWithin(modelCeiling, VCR_BENCHMARK_ONLY_USE_CEILING) ? VCR_BENCHMARK_ONLY_USE_CEILING : modelCeiling;
   const word = (/** @type {string} */ use) => (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[use] ?? use;
   /** @type {Array<{ code: string, detail: string }>} */
   const reasons = [];
   if (modelCeiling !== "submission_preparation") {
     reasons.push({ code: "model_tier", detail: `所用模型的可信度层级最多支持「${word(modelCeiling)}」` });
+  }
+  if (ceiling !== modelCeiling) {
+    reasons.push({ code: "benchmark_only", detail: `有一项结果只作基准（文献曲线、非锚定的比较或模型预测），最多支持「${word(ceiling)}」` });
   }
   return {
     ceiling,

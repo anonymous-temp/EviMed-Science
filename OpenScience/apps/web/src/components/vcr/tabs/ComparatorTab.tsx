@@ -232,7 +232,11 @@ function UsedRoute({ data }: { data: ComparatorData }) {
   }
   const grid = [...cells.map((cell) => [cell]), ...pairRows(second)];
 
-  const estimandRows: Fact[] = estimand ? estimand.rows.map((row) => ({ label: row.label, value: row.value })) : [];
+  // The estimand is its first row; the rest is the target trial, component by component (A6), which the premise block shows only where it
+  // cannot be emulated exactly, so the whole record is folded under the estimand.
+  const [estimandHead, ...targetTrialRows]: Fact[] = estimand ? estimand.rows.map((row) => ({ label: row.label, value: row.value })) : [];
+  const estimandRows: Fact[] = estimandHead ? [estimandHead] : [];
+  if (estimand?.note) targetTrialRows.push({ label: "说明", value: estimand.note });
   const priorRows: Fact[] = prior.map((row) => ({
     label: row.label,
     value: <span data-vcr-prior={row.key} className="tabular-nums"><VcrNumber value={row.value} label={row.label} /></span>,
@@ -246,7 +250,14 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       {data.predictionBenchmark && <PredictionBenchmark data={data.predictionBenchmark} />}
       {estimandRows.length > 0 && (
         <Section title="估计目标" toolbar={estimand?.source ? <SourceTag source={estimand.source} /> : undefined}>
-          <FactList rows={estimandRows} />
+          <div className="flex flex-col gap-3">
+            <FactList rows={estimandRows} />
+            {targetTrialRows.length > 0 && (
+              <Disclosure summary={`目标试验的要素 · ${targetTrialRows.length}`}>
+                <div data-vcr-target-trial=""><FactList max={targetTrialRows.length} rows={targetTrialRows} /></div>
+              </Disclosure>
+            )}
+          </div>
         </Section>
       )}
 
