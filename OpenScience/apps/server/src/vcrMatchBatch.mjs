@@ -363,9 +363,10 @@ export function createMatchExtractExecutor({ store, matchStore, documents, extra
         const accepted = acceptExtractedFacts(read.answer, variableSet);
         const items = accepted.facts.flatMap((fact) => {
           const start = String(record.text).indexOf(fact.quote);
-          // A quotation the record does not hold is not written (the writer would refuse it); it is counted as refused below. So is a
-          // date quotation it does not hold: the writer finds both word for word.
-          if (start < 0 || (fact.dateQuote && !String(record.text).includes(fact.dateQuote))) return [];
+          // A quotation the record does not hold is not written (the writer would refuse it); it is counted as refused below. A date
+          // quotation it does not hold, or a date the quotations do not print, costs the date and not the fact: the writer finds both
+          // word for word and keeps the fact undated.
+          if (start < 0) return [];
           return [{ ...fact, subjectKey, documentId, start, end: start + fact.quote.length }];
         });
         const written = items.length

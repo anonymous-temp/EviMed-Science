@@ -1135,3 +1135,38 @@ test("settleFactEvidence keeps the fact and drops a unit the quotation does not 
   // What was never printed is still refused: a number the quotation does not hold.
   assert.deepEqual(settleFactEvidence(fact("HgbA1c 7.4 last month.", { variable: "hba1c", value: 7.9, unit: "%" }), { documents }), { ok: false, reason: "value_not_in_span" });
 });
+
+test("settleFactEvidence keeps the fact and drops a date nothing printed, each date field on its own, and stores no date that was not shown", () => {
+  const text = "Record date: 2100-03-01\n\nTakes aspirin daily.\nPatient age 19; prior MI. Dataset 2100.";
+  const documents = { d: { text } };
+  const quote = "Takes aspirin daily.";
+  const at = text.indexOf(quote);
+  /** @param {Record<string, any>} over */
+  const fact = (over) => ({ id: "f", variable: "aspirin", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "aspirin",
+    source: { documentId: "d", start: at, end: at + quote.length, quote, dateQuote: { start: 0, end: 23, quote: "Record date: 2100-03-01" } }, ...over });
+
+  // The strict check is unchanged: it is what the evaluator asks again of a stored fact.
+  assert.deepEqual(verifyFactEvidence(fact({ occurredAt: "2100-04-01" }), { documents }), { ok: false, reason: "date_not_in_span" });
+  const dropped = settleFactEvidence(fact({ occurredAt: "2100-04-01", dateSurface: "2100-04-01" }), { documents });
+  assert.equal(dropped.ok, true);
+  assert.deepEqual(dropped.ok && [dropped.fact.occurredAt, dropped.fact.recordedAt ?? null, dropped.fact.dateSurface, dropped.fact.source.dateQuote, dropped.notes, dropped.droppedDates],
+    [null, null, null, undefined, ["date_dropped"], ["occurredAt", "dateSurface"]]);
+  assert.equal(dropped.ok && verifyFactEvidence(dropped.fact, { documents }).ok, true, "what is stored passes the strict check");
+
+  // A date the second quotation shows stays, beside one that nothing shows.
+  const mixed = settleFactEvidence(fact({ occurredAt: "2100-03-01", recordedAt: "2100-06-30", dateSurface: "2100-03-02" }), { documents });
+  assert.deepEqual(mixed.ok && [mixed.fact.occurredAt, mixed.fact.recordedAt, mixed.fact.dateSurface, mixed.fact.source.dateQuote?.quote, mixed.droppedDates],
+    ["2100-03-01", null, null, "Record date: 2100-03-01", ["recordedAt", "dateSurface"]]);
+  const kept = settleFactEvidence(fact({ occurredAt: "2100-03-01", dateSurface: "2100-03-01" }), { documents });
+  assert.deepEqual(kept.ok && [kept.fact.occurredAt, kept.notes], ["2100-03-01", []]);
+
+  // The 10-29 cases, one by one: the date is absent, the fact is there.
+  for (const date of ["2081-01-01", "2100-01-01", "2100-06-30", "2026-10-29"]) {
+    const result = settleFactEvidence(fact({ occurredAt: date, source: { ...fact({}).source, dateQuote: undefined } }), { documents });
+    assert.deepEqual(result.ok && [result.fact.occurredAt, result.fact.variable], [null, "aspirin"], date);
+  }
+  // A fact whose number or quotation the document does not hold is still refused, and so is an interval the quotation does not bound.
+  assert.deepEqual(settleFactEvidence(fact({ value: 5, occurredAt: "2100-03-01" }), { documents }), { ok: false, reason: "value_not_in_span" });
+  const interval = { schema: 1, assertion: "negated", experiencer: "patient", medication: { state: "unknown", absenceScope: "interval" }, occurredInterval: { start: "2100-02-01", end: "2100-03-01" } };
+  assert.deepEqual(settleFactEvidence(fact({ polarity: "negated", clinical: interval }), { documents, anyPolarity: true }), { ok: false, reason: "date_not_in_span" });
+});

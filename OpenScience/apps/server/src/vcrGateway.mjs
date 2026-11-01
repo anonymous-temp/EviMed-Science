@@ -1766,8 +1766,8 @@ const WRITERS = {
     if (value != null && !(typeof value === "string" ? value.length <= 200 : Number.isFinite(value))) { item.bad("value", "value 是一个数或不超过 200 字的文字。"); value = undefined; }
     const unit = item.str("unit", { max: 40 });
     const polarity = item.choice("polarity", ["affirmed", "negated", "hypothetical", "family"], { fallback: "affirmed" });
-    const occurredAt = item.iso("occurredAt");
-    const recordedAt = item.iso("recordedAt");
+    let occurredAt = item.iso("occurredAt");
+    let recordedAt = item.iso("recordedAt");
     const visibleAt = item.iso("visibleAt");
     const clinical = item.row.clinical == null ? null : structuredClone(item.row.clinical);
     /** What the run should know about a fact that was kept: a link or a block the platform did not take. @type {any[]} */
@@ -1779,8 +1779,13 @@ const WRITERS = {
     }
     for (const code of clinicalFactIssues(clinical)) item.bad('clinical', code);
     const surface = item.str("surface", { max: 400, required: true });
-    const dateSurface = item.str("dateSurface", { max: 80 });
-    const dateQuote = item.str("dateQuote", { max: DATE_QUOTE_MAX });
+    let dateSurface = item.str("dateSurface", { max: 80 });
+    // The second quotation is evidence, not a field the item stands on: one that is not a line of text is not used and the fact is kept.
+    const dateQuoteGiven = item.row.dateQuote;
+    const dateQuote = typeof dateQuoteGiven === "string" && dateQuoteGiven.trim() && dateQuoteGiven.length <= DATE_QUOTE_MAX ? dateQuoteGiven : undefined;
+    if (dateQuoteGiven != null && dateQuote === undefined && !(typeof dateQuoteGiven === "string" && !dateQuoteGiven.trim())) {
+      warnings.push({ field: "dateQuote", code: "date_quote_unusable", message: `dateQuote 要是同一份文档里不超过 ${DATE_QUOTE_MAX} 个字符的一句话，没有用它；事实已保存。` });
+    }
     const documentId = item.token("documentId", ID, "vcr_read what:subject_document 给出的文档 id", { required: true });
     const start = item.num("start", { min: 0, integer: true });
     const end = item.num("end", { min: 1, integer: true });
@@ -1791,8 +1796,17 @@ const WRITERS = {
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
       fact: { variable: String(variable), surface, dateSurface, dateQuote, occurredAt, recordedAt, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
-    // What was settled without losing the fact: a unit the quotation does not print is dropped, a bare number of a variable with one
-    // conventional unit is read in it. The run is told, and the page says which it was.
+    // What was settled without losing the fact: a date nothing printed is dropped (the fact stays, undated), a unit the quotation does
+    // not print is dropped, a bare number of a variable with one conventional unit is read in it. The run is told, never refused for it.
+    occurredAt = verified.occurredAt ?? undefined;
+    recordedAt = verified.recordedAt ?? undefined;
+    dateSurface = verified.dateSurface ?? undefined;
+    if (verified.notes.includes("date_dropped")) {
+      warnings.push({ field: verified.droppedDates.join("/"), code: "date_not_shown", message: "这个日期没有整个印在 quote 里（含年份），也没有 dateQuote 印着它，已去掉日期；事实已保存，没有日期。需要日期的时间窗类条件仍是“没有日期”的未知。" });
+    }
+    if (verified.dateQuoteUnfound) {
+      warnings.push({ field: "dateQuote", code: "date_quote_not_found", message: "原文里找不到这句日期引文（dateQuote 要逐字出现在同一份文档里），没有用它；事实已保存。" });
+    }
     if (verified.notes.includes("unit_dropped") && !verified.notes.includes("unit_read_by_convention")) {
       warnings.push({ field: "unit", code: "unit_not_in_quote", message: "unit 没有印在这句引文里，已去掉 unit；事实和数值已保存。条件要求单位而病历没印时，该条件仍是“单位缺失”的未知。" });
     }
@@ -2155,7 +2169,8 @@ async function loadPoolJob(store, study, jobId, parameter) {
  * document is this study's and this subject's, the quotation is the document's
  * bytes between `start` and `end`, and the surface and any value are in it
  * (`verifyFactEvidence`, the same check the evaluator applies again when it
- * judges). Records the refusal on the item and answers `null` when any of it fails.
+ * judges). Records the refusal on the item and answers `null` when any of it fails. A unit or a date the quotation does not show is
+ * not a failure of the fact: it is dropped (`settleFactEvidence`) and the fact kept.
  *
  * @param {{ item: Item, documents: any, study: any, subjectKey: string, documentId: string,
  *   span: { start: number | null, end: number | null, quote: string },
@@ -2307,13 +2322,13 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
   // in the document's own text like the first, and a quotation the document does not hold is refused the same way.
   /** @type {{ start: number, end: number, quote: string } | null} */
   let dateQuote = null;
+  let dateQuoteUnfound = false;
   if (fact.dateQuote) {
     const at = document.text.indexOf(fact.dateQuote);
-    if (at < 0) {
-      item.bad("dateQuote", "原文里找不到这句日期引文：dateQuote 要逐字出现在同一份文档里。", "vcr_evidence_unverified");
-      return null;
-    }
-    dateQuote = { start: at, end: at + fact.dateQuote.length, quote: fact.dateQuote };
+    // A second quotation the document does not hold is not used, and the fact is not refused for it: the date then has only the first
+    // quotation to rest on, and is dropped if that does not print it.
+    if (at < 0) dateQuoteUnfound = true;
+    else dateQuote = { start: at, end: at + fact.dateQuote.length, quote: fact.dateQuote };
   }
   const settled = settleFactEvidence({
     id: "check", variable: fact.variable, polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
@@ -2322,11 +2337,13 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
   }, { documents: new Map([[documentId, { text: document.text }]]) });
   if (!settled.ok) {
     const { reason } = /** @type {{ ok: false, reason: string }} */ (settled);
-    const dated = reason === "date_not_in_span" ? "日期要整个印在 quote 里，或用 dateQuote 逐字引同一份文档里印着这个完整日期（含年份）的一句话；没有就不写 occurredAt / recordedAt。" : "";
+    const dated = reason === "date_not_in_span" ? "clinical.occurredInterval 的起止日期要整个印在 quote 里（含年份）；没有就不写 occurredInterval。" : "";
     item.bad(field, `原文里核对不上（${reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值，以及紧挨着数值写出的单位。${dated}`, "vcr_evidence_unverified");
     return null;
   }
-  return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote }, dateQuote,
+  return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote },
+    dateQuote: settled.fact.source.dateQuote ?? null, dateQuoteUnfound, droppedDates: settled.droppedDates,
+    occurredAt: settled.fact.occurredAt ?? null, recordedAt: settled.fact.recordedAt ?? null, dateSurface: settled.fact.dateSurface ?? null,
     unit: settled.fact.unit ?? null, unitBasis: settled.fact.source.unitBasis ?? null, notes: settled.notes };
 }
 

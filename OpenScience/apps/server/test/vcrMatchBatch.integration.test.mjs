@@ -150,10 +150,13 @@ test("a fact written with a second quotation for its date and a unit read by con
     { ...head, variable: "dietary_supplement", surface: "multivitamin", quote: "Takes a multivitamin daily.", occurredAt: "2100-03-01", dateQuote: "Record date: 2100-03-01" },
     { ...head, variable: "dietary_supplement", surface: "multivitamin", quote: "Takes a multivitamin daily.", occurredAt: "2100-03-02", dateQuote: "Record date: 2100-03-01" },
   ]);
-  assert.equal(done.issues.length, 1, "the date nobody printed is refused whole; the others are kept");
-  assert.equal(done.ids.length, 2);
+  assert.equal(done.issues.length, 0, "the date nobody printed is dropped, not the fact");
+  assert.equal(done.ids.length, 3);
 
   const stored = await matchStore.listFacts({ studyId: study.id, subjectKey: "P-001" });
+  const supplements = stored.filter((fact) => fact.variable === "dietary_supplement");
+  assert.deepEqual(supplements.map((fact) => fact.occurredAt).sort((a, b) => String(a).localeCompare(String(b))), ["2100-03-01T00:00:00.000Z", null], "the second row is stored without the date nobody printed");
+  assert.equal(supplements.find((fact) => fact.occurredAt === null).source.dateQuote, undefined);
   const a1c = stored.find((fact) => fact.variable === "hba1c");
   assert.deepEqual([a1c.unit, a1c.value, a1c.source.unitBasis, a1c.source.dateQuote.quote, a1c.occurredAt], ["%", 7.4, "conventional", "Record date: 2100-03-01", "2100-03-01T00:00:00.000Z"]);
   assert.equal(text.slice(a1c.source.dateQuote.start, a1c.source.dateQuote.end), "Record date: 2100-03-01", "the row holds where the date was read, in the document's own bytes");

@@ -333,29 +333,78 @@ export function verifyFactEvidence(fact, context = {}) {
 }
 
 /**
- * A fact as it is being written: checked like any other, and settled so that one defect in a unit does not cost the whole fact.
+ * The same fact without the dates it cannot show: each of `occurredAt` and `recordedAt` stands or falls on whether a quotation of the
+ * document (the fact's own, or its `dateQuote`) prints it whole, with its year; a date label (`dateSurface`) goes when it is not in
+ * either quotation or when no date is left for it to label; a second quotation that no remaining date rests on goes with them.
+ * `null` when the fact still shows a date defect after that (an interval the quotation does not bound is the clinical block's, not a date
+ * of the fact's, and stays refused).
+ * @param {any} fact @param {any} context
+ */
+function withoutUnsupportedDate(fact, context) {
+  const source = fact.source ?? {};
+  const documents = context.documents instanceof Map ? context.documents : new Map(Object.entries(context.documents ?? {}));
+  const text = String(documents.get(String(source.documentId))?.text ?? "");
+  const span = text.slice(source.start, source.end);
+  const given = source.dateQuote;
+  const dateText = given && Number.isInteger(given.start) && Number.isInteger(given.end) ? text.slice(given.start, given.end) : null;
+  /** @type {string[]} */
+  const dropped = [];
+  /** @type {any} */
+  const candidate = { ...fact };
+  for (const field of ["occurredAt", "recordedAt"]) {
+    if (candidate[field] != null && !clinicalDateInEvidence(candidate[field], span, dateText)) { candidate[field] = null; dropped.push(field); }
+  }
+  const stillDated = candidate.occurredAt != null || candidate.recordedAt != null;
+  if (typeof candidate.dateSurface === "string" && candidate.dateSurface.trim()
+    && (!stillDated || (!span.includes(candidate.dateSurface) && !(dateText ?? "").includes(candidate.dateSurface)))) { candidate.dateSurface = null; dropped.push("dateSurface"); }
+  if (!stillDated && source.dateQuote !== undefined) {
+    const { dateQuote: _gone, ...rest } = source;
+    candidate.source = rest;
+  }
+  if (!dropped.length || verifyFactEvidence(candidate, context).reason === "date_not_in_span") return null;
+  return { fact: candidate, dropped };
+}
+
+/**
+ * A fact as it is being written: checked like any other, and settled so that one defect in a unit or a date does not cost the whole fact.
  *
  * - A unit the quotation does not print beside the number is dropped, and the fact is kept with the number it printed (`unit_dropped`).
  *   A criterion that names a unit then reads it as missing; a model that supplies a unit from its own knowledge loses no evidence.
+ * - A date the quotation (or the second quotation, `dateQuote`) does not print whole, with its year, is dropped, and the fact is kept
+ *   without it (`date_dropped`, naming the fields). No date that nothing printed is ever stored, so a criterion that needs the date stays
+ *   unknown for want of it, as it does for any undated fact; the fact itself still counts wherever no date is asked for.
  * - A bare number of a variable the domain's closed table gives exactly one conventional unit (HbA1c, in percent, inside the range the
  *   table prints) is read in that unit, and the fact records `source.unitBasis: conventional` (`unit_read_by_convention`). It is
  *   never presented as printed, and a number with another unit beside it is not read this way.
  *
- * Everything else the check refuses stays refused: a number, a date or a quotation the document does not hold.
+ * Everything else the check refuses stays refused: a number or a quotation the document does not hold. `verifyFactEvidence` itself is
+ * unchanged: it still refuses a fact whose stored date is not shown, which is what the evaluator asks again of every stored fact.
  *
  * @param {any} fact a fact with its `source` located (`{ documentId, start, end, quote, dateQuote? }`)
  * @param {{ documents?: Map<string, any> | Record<string, any>, asOf?: number|string|Date, anyPolarity?: boolean }} [context]
- * @returns {{ ok: true, fact: any, notes: Array<'unit_dropped' | 'unit_read_by_convention'> } | { ok: false, reason: string }}
+ * @returns {{ ok: true, fact: any, notes: Array<'unit_dropped' | 'unit_read_by_convention' | 'date_dropped'>, droppedDates: string[] } | { ok: false, reason: string }}
  */
 export function settleFactEvidence(fact, context = {}) {
-  /** @type {Array<'unit_dropped' | 'unit_read_by_convention'>} */
+  /** @type {Array<'unit_dropped' | 'unit_read_by_convention' | 'date_dropped'>} */
   const notes = [];
+  /** @type {string[]} */
+  const droppedDates = [];
   let settled = fact;
   let verdict = verifyFactEvidence(settled, context);
-  if (!verdict.ok && verdict.reason === "unit_not_in_span" && settled.unit) {
-    const without = { ...settled, unit: null };
-    const again = verifyFactEvidence(without, context);
-    if (again.ok) { settled = without; verdict = again; notes.push("unit_dropped"); }
+  // At most one repair of each kind: a date can be dropped, then a unit, and what is still refused after that is refused.
+  for (let step = 0; step < 3 && !verdict.ok; step += 1) {
+    if (verdict.reason === "date_not_in_span" || verdict.reason === "date_quote_mismatch") {
+      const base = verdict.reason === "date_quote_mismatch" && settled.source?.dateQuote !== undefined
+        ? { ...settled, source: (({ dateQuote: _gone, ...rest }) => rest)(settled.source) } : settled;
+      const repaired = verifyFactEvidence(base, context).reason === "date_not_in_span" ? withoutUnsupportedDate(base, context) : { fact: base, dropped: [] };
+      if (!repaired) break;
+      settled = repaired.fact;
+      if (repaired.dropped.length) { notes.push("date_dropped"); droppedDates.push(...repaired.dropped); }
+    } else if (verdict.reason === "unit_not_in_span" && settled.unit) {
+      settled = { ...settled, unit: null };
+      notes.push("unit_dropped");
+    } else break;
+    verdict = verifyFactEvidence(settled, context);
   }
   if (!verdict.ok) return { ok: false, reason: String(verdict.reason) };
   if (typeof settled.value === "number" && !settled.unit && settled.source) {
@@ -365,7 +414,7 @@ export function settleFactEvidence(fact, context = {}) {
       notes.push("unit_read_by_convention");
     }
   }
-  return { ok: true, fact: settled, notes };
+  return { ok: true, fact: settled, notes, droppedDates };
 }
 
 /**

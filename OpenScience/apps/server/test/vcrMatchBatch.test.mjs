@@ -344,3 +344,36 @@ test("D4: what the reading proposes goes through the ordinary fact writer: posit
   assert.equal(result.diagnostics.factsRefused, 1);
   assert.equal(store.rows.length, 1, "the record is read even though one of its facts was refused");
 });
+
+test("D4 / V2: a date the record does not show costs the batch reading the date and not the fact", async () => {
+  const records = { d1: "记录日期：2100-03-01\n患者每日口服多种维生素。肌酐 1.1 mg/dL。" };
+  /** @type {any[]} */
+  const saved = [];
+  const matchStore = matchStoreDouble({
+    async matchingFactsByIds() { return []; },
+    async saveFact({ fact }) { saved.push(fact); return { id: `fact_${saved.length}` }; },
+  });
+  const documents = {
+    async roster() { return [{ id: "d1", subjectKey: "P-001", chars: records.d1.length }]; },
+    async runtimeRead(_study, { subjectKey, documentId }) { return { id: documentId, text: records[documentId], subjectKey, visibleAt: "2100-03-02T00:00:00.000Z" }; },
+  };
+  const extractor = { model: "deepseek-flash", async extract() {
+    return { answer: { facts: [
+      // the date is printed by the second quotation: kept with its date
+      { variable: "supplement", surface: "多种维生素", quote: "患者每日口服多种维生素。", occurredAt: "2100-03-01", dateSurface: "2100-03-01", dateQuote: "记录日期：2100-03-01" },
+      // the second quotation is not in the record, and the quotation prints no date: kept, undated
+      { variable: "creatinine", value: 1.1, unit: "mg/dL", surface: "1.1", quote: "肌酐 1.1 mg/dL", occurredAt: "2100-03-05", dateQuote: "记录日期：2100-03-05" },
+    ] }, inputTokens: 10, outputTokens: 5 };
+  } };
+  const run = createMatchExtractExecutor({
+    store: { async studyById() { return STUDY; }, async one() { return { checkpoint: {} }; } }, matchStore, documents, extractor, config: { vcrMatchExtractConcurrency: 1 },
+    writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store: {}, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report: () => {}, caller }),
+  });
+  const scenario = { protocolVersionId: "pv_1", asOf: "2100-03-05T00:00:00.000Z", subjects: ["P-001"], variables: ["supplement", "creatinine"], estimate: {}, chain: "c" };
+  const result = await run({ job: { id: "job_d", jobId: "job_d", studyId: STUDY.id, scenario, scenarioHash: "c".repeat(64), seed: 1 }, async onProgress() {}, isCanceled: async () => false });
+  assert.equal(result.diagnostics.factsKept, 2, "both facts are kept");
+  assert.equal(result.diagnostics.factsRefused, 0);
+  const [dated, undated] = saved;
+  assert.deepEqual([dated.variable, dated.occurredAt, dated.source.dateQuote.quote], ["supplement", "2100-03-01", "记录日期：2100-03-01"]);
+  assert.deepEqual([undated.variable, undated.value, undated.occurredAt, undated.source.dateQuote], ["creatinine", 1.1, null, undefined]);
+});

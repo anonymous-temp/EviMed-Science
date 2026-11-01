@@ -1499,7 +1499,7 @@ test("D7: a run asks for a result record by the result's id and is told where th
 // ---------------------------------------------------------------------------
 
 test("a date the quotation does not print is read from a second quotation of the same document and from nowhere else (dateQuote)", async () => {
-  const text = "Record date: 2100-03-01\n\nTakes aspirin daily.\nSeen on 3/14 for a cough. Dataset year 2100.\n";
+  const text = "Record date: 2100-03-01\n\nTakes aspirin daily.\nSeen on 3/14 for a cough. Dataset year 2100. Patient age 19; prior MI.\n";
   /** @param {Record<string, any>} over */
   const item = (over) => ({ subjectKey: "P-1", documentId: "doc_1", variable: "aspirin", surface: "aspirin", quote: "Takes aspirin daily.", ...over });
 
@@ -1509,28 +1509,47 @@ test("a date the quotation does not print is read from a second quotation of the
   assert.equal(honest.saved[0].occurredAt, "2100-03-01");
   assert.deepEqual(honest.saved[0].source.dateQuote, { start: 0, end: 23, quote: "Record date: 2100-03-01" }, "kept as a located quotation, like the first");
   assert.equal(text.slice(honest.saved[0].source.dateQuote.start, honest.saved[0].source.dateQuote.end), "Record date: 2100-03-01");
+  assert.equal(done.results[0].warnings, undefined, "a date that is shown needs no notice");
 
-  // The 10-29 counterexamples still hold: a date nobody printed, in the quotation or in a second one, is refused whole.
+  // The 10-29 counterexamples hold: a date nothing printed is never stored. The fact is kept without it, undated, and the run is told;
+  // a criterion that needs the date stays unknown for want of it.
   for (const [label, over] of /** @type {Array<[string, Record<string, any>]>} */ ([
     ["no second quotation at all", { occurredAt: "2100-03-01" }],
+    ["an upload time or a file's date, which no quotation prints", { occurredAt: "2100-06-30", recordedAt: "2100-06-30" }],
     ["a second quotation the document does not hold", { occurredAt: "2100-04-01", dateQuote: "Record date: 2100-04-01" }],
     ["a second quotation that prints another date", { occurredAt: "2100-03-02", dateQuote: "Record date: 2100-03-01" }],
     ["a short form with no year", { occurredAt: "2100-03-14", dateQuote: "Seen on 3/14 for a cough." }],
-    ["a year alone", { occurredAt: "2100-01-01", dateQuote: "Dataset year 2100." }],
+    ["a dataset year", { occurredAt: "2100-01-01", dateQuote: "Dataset year 2100." }],
+    ["a birth year worked out from an undated age", { occurredAt: "2081-01-01", dateQuote: "Patient age 19; prior MI." }],
     ["a second quotation too long to be a line", { occurredAt: "2100-03-01", dateQuote: `Record date: 2100-03-01${" ".repeat(200)}` }],
   ])) {
     const probe = factWriter({ text });
-    const refused = await probe.write(item(over));
-    assert.equal(refused.ok, false, label);
-    assert.equal(probe.saved.length, 0, label);
+    const kept = await probe.write(item(over));
+    assert.equal(kept.ok, true, `${label}: ${JSON.stringify(kept.issues)}`);
+    assert.equal(probe.saved.length, 1, label);
+    assert.deepEqual([probe.saved[0].occurredAt, probe.saved[0].recordedAt, probe.saved[0].dateSurface], [null, null, null], `${label}: nothing is stored as a date`);
+    assert.equal(probe.saved[0].source.dateQuote, undefined, `${label}: a second quotation no date rests on is not kept`);
+    assert.equal(probe.saved[0].variable, "aspirin", label);
+    assert.equal(kept.results[0].warnings.some((/** @type {any} */ warning) => ["date_not_shown", "date_quote_not_found", "date_quote_unusable"].includes(warning.code)), true, `${label}: the run is told`);
+    const window = { id: "w", kind: "inclusion", requirement: { op: "present", variable: "aspirin", window: { months: 2 } } };
+    assert.equal(evaluateCriterion(window, { facts: [probe.saved[0]], asOf: Date.parse("2100-03-05") }).missing[0].reason, "undated", `${label}: a window is unknown for want of the date`);
+    assert.equal(evaluateCriterion({ id: "p", kind: "inclusion", requirement: { op: "present", variable: "aspirin" } }, { facts: [probe.saved[0]], asOf: Date.parse("2100-03-05") }).state, SATISFIED, `${label}: where no date is asked for, the fact counts`);
   }
-  const noDate = factWriter({ text });
-  const hint = await noDate.write(item({ occurredAt: "2100-03-01" }));
-  assert.match(String(hint.issues[0].message), /dateQuote/, "the refusal says where a date may come from");
+  const notFound = factWriter({ text });
+  const told = await notFound.write(item({ occurredAt: "2100-04-01", dateQuote: "Record date: 2100-04-01" }));
+  assert.deepEqual(told.results[0].warnings.map((/** @type {any} */ warning) => warning.code).sort(), ["date_not_shown", "date_quote_not_found"]);
+
+  // Each date field stands or falls on its own: a date the quotations show is kept beside one they do not.
+  const partly = factWriter({ text });
+  await partly.write(item({ occurredAt: "2100-03-01", recordedAt: "2100-06-30", dateSurface: "2100-03-02", dateQuote: "Record date: 2100-03-01" }));
+  assert.deepEqual([partly.saved[0].occurredAt, partly.saved[0].recordedAt, partly.saved[0].dateSurface, partly.saved[0].source.dateQuote.quote], ["2100-03-01", null, null, "Record date: 2100-03-01"]);
   // An item that claims no date needs no second quotation, and one that names it but claims no date is not refused for it.
   const plain = factWriter({ text });
   assert.equal((await plain.write(item({}))).ok, true);
   assert.equal(plain.saved[0].occurredAt, null);
+  // What this does not touch: a number or a quotation the document does not hold is still refused whole.
+  const invented = factWriter({ text });
+  assert.equal((await invented.write(item({ quote: "Takes aspirin twice daily.", occurredAt: "2100-03-01", dateQuote: "Record date: 2100-03-01" }))).ok, false);
 });
 
 test("a unit the quotation does not print drops the unit and keeps the fact; a bare HbA1c is read in percent and says so", async () => {
