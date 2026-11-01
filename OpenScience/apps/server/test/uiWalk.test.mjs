@@ -28,7 +28,7 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  discoverCalculationHistory, discoverEmptyTaskProject, PAGE_TEMPLATES, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  discoverCalculationHistory, discoverEmptyTaskProject, PAGE_TEMPLATES, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, TOPICS_READ, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -586,6 +586,14 @@ test("the page's blocks are the title, what stands over it and the body that fol
   assert.deepEqual(lefts(node("a", { text: "返回", left: 296 }), node("div", { left: 296 }), node("div", { left: 306 })), [296, 306]);
   // A page with no way back is measured as before: the title and the body's blocks.
   assert.deepEqual(inPage(page(header(), node("p", { text: "正文", left: 0 })), () => measure([[], [], []])).pageLefts, [0]);
+  // A title the header keeps for a screen reader alone (the search home) is one pixel set a pixel to the left, and is no edge anybody sees.
+  const hidden = node("body", {}, [node("main", {}, [node("div", {}, [
+    node("header", { attrs: { class: "sr-only" } }, [node("h1", { text: "医学检索", left: 295 })]),
+    node("div", { left: 296 }, [node("p", { text: "从医学问题出发", left: 296 })]),
+  ])])]);
+  assert.deepEqual(inPage(hidden, () => measure([[], [], []])).pageLefts, [296]);
+  hidden.querySelector("header").attrs.class = "";
+  assert.deepEqual(inPage(hidden, () => measure([[], [], []])).pageLefts, [295, 296], "a title anybody can see is still an edge");
 });
 
 test("a row whose title is a link to an outside address in a new tab declares what it opens; a button or a relative link does not", () => {
@@ -1607,7 +1615,7 @@ function walkedNames() {
 }
 
 test("the refusals a page is walked to meet are not failures, and any other refusal still is", () => {
-  assert.deepEqual(Object.keys(EXPECTED_REFUSALS).sort(), ["extensions-skill-missing", "frontier-daily-empty", "memory-shared-missing"]);
+  assert.deepEqual(Object.keys(EXPECTED_REFUSALS).sort(), ["extensions-skill-missing", "frontier-daily-empty", "memory-shared-missing", "search-results"]);
   // A day nobody published answers 404, and the page is walked to say so in words.
   assert.deepEqual(unexpectedRefusals("frontier-daily-empty", ["404 /api/frontier/dailies/2020-01-01", "500 /api/frontier/dailies"]), ["500 /api/frontier/dailies"]);
   assert.deepEqual(unexpectedRefusals("frontier-daily", ["404 /api/frontier/dailies/2026-10-10", "404 /api/frontier/dailies", "404 /api/me", "500 /api/frontier/dailies/2026-10-10"]), ["404 /api/frontier/dailies", "404 /api/me", "500 /api/frontier/dailies/2026-10-10"]);
@@ -1616,6 +1624,13 @@ test("the refusals a page is walked to meet are not failures, and any other refu
   // The kernel's frame of a conversation that opens on landing is refused because the walk starts no runtime; nothing else on that page, and not on any other page.
   assert.deepEqual(unexpectedRefusals("autopilot", ["503 /api/runtime-ui/frames", "503 /api/agendas", "500 /api/runtime-ui/frames"]), ["503 /api/agendas", "500 /api/runtime-ui/frames"]);
   assert.deepEqual(unexpectedRefusals("geo", ["503 /api/runtime-ui/frames"]), ["503 /api/runtime-ui/frames"]);
+  // 医学检索: an account with no EviMed login is refused (403) and a deployment without the service answers 503, and the results page is walked to say
+  // which; the home's topic read is answered by the walk itself (it starts no runtime) and refused by design there, on the home alone.
+  assert.deepEqual(unexpectedRefusals("search-results", ["403 /api/evimed-search/literature/search", "503 /api/evimed-search/literature/facets", "500 /api/evimed-search/literature/search"]), ["500 /api/evimed-search/literature/search"]);
+  assert.deepEqual(unexpectedRefusals("search", ["503 /api/projects/0123456789abcdef0123456789abcdef0123/evimed-se", "503 /api/agents", "403 /api/evimed-search/literature/search"]), ["503 /api/agents", "403 /api/evimed-search/literature/search"]);
+  assert.deepEqual(unexpectedRefusals("memory", ["503 /api/projects/p1/evimed-search/topics"]), ["503 /api/projects/p1/evimed-search/topics"]);
+  assert.ok(TOPICS_READ.test("https://evimed.example/api/projects/p1/evimed-search/topics?category=literature&limit=3"));
+  assert.ok(!TOPICS_READ.test("https://evimed.example/api/evimed-search/literature/search"));
   // A page with no expected refusal keeps all of them, and a refusal that is not the API's was never a refusal of the page.
   assert.deepEqual(unexpectedRefusals("memory", ["404 /api/memory"]), ["404 /api/memory"]);
   assert.deepEqual(pageFindings("extensions-skill-missing", "desktop", clean(), unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/x"])).failures, []);
