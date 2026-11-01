@@ -35,6 +35,7 @@ import { useWorkspaceSplit, WorkspaceSplit } from "@/components/workspace/Worksp
 import { geoJourney } from "@/components/geo/geoJourney";
 import { geoNeeds } from "@/components/geo/geoNeeds";
 import { geoPathWithContext } from "@/components/geo/useGeoPath";
+import { tabPath } from "@/components/geo/tabs/geoTabText";
 import { Button } from "@/components/ui/Button";
 import { ProgrammeRunsDrawer } from "@/components/runs/ProgrammeRunsDrawer";
 import { GeoSignalsWorkbench } from "@/components/geo/GeoSignalsWorkbench";
@@ -53,10 +54,10 @@ import { GeoSettingsDrawer } from "@/components/geo/GeoSettingsDrawer";
 import { MembersDialog } from "@/components/geo/MembersDialog";
 import { ProducerDialog } from "@/components/geo/ProducerDialog";
 import { RenameDialog } from "@/components/geo/RenameDialog";
-import { bandNow, bandSteps, geoActivity } from "@/components/geo/geoBand";
+import { bandNow, bandSteps, geoActivity, geoStepView } from "@/components/geo/geoBand";
 import { stopGeoStepRun } from "@/lib/geoClient";
 import { CONVERSATION_SETTLED_EVENT } from "@/lib/runtimeUiBridge";
-import { GeoFrameContext, type GeoFrameApi, type GeoPanel } from "@/components/geo/geoFrame";
+import { GEO_ANSWER_BACK_NAMES, GeoFrameContext, type GeoAnswerBack, type GeoFrameApi, type GeoPanel } from "@/components/geo/geoFrame";
 import { GeoDataCache, useGeoMonitoring } from "@/components/geo/geoProjectData";
 import { scrollBlockToTop } from "@/components/geo/geoScroll";
 import { coverageText, GEO_MONITORING_TITLE, weekOf } from "@/components/geo/geoText";
@@ -163,6 +164,8 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const [panel, setPanel] = useState<GeoPanel | null>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [suggested, setSuggested] = useState<number | null>(null);
+  // Where the way back goes from the answer on the page (`useGeoAnswerBack`): the answer knows, the band draws the one control.
+  const [answerBack, setAnswerBack] = useState<GeoAnswerBack | null>(null);
   const resolved = resolveGeoTab(onChat ? new URLSearchParams(location.search).get("result") : tabParam);
   // An answer is read inside the band and keeps 问题与回答 selected: it is where the answer was asked.
   const tab: GeoTabKey = snapshotId ? "questions" : resolved.tab;
@@ -279,7 +282,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const api = useMemo<GeoFrameApi | null>(
     () => (loaded.kind === "ready" ? { geoId, scope, scopePending: loaded.scopeKey !== scopeKey, scopeError: loaded.scopeError,
       project: loaded.project, tab, conversation: heldSession ?? loaded.project.sessionId ?? null, step: viewedStep, refreshError: loaded.refreshError,
-      refreshStale: loaded.refreshStale, reload, openPanel, data, setToolbar,
+      refreshStale: loaded.refreshStale, reload, openPanel, data, setToolbar, setAnswerBack,
       openAnalysisScope: () => setScopeOpen(true),
       refreshScope: () => {
         // The stale refusal is answered by leaving the selection: what it said no longer stands, so it is not shown as pending.
@@ -290,7 +293,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
         data.invalidate();
       },
     } : null),
-    [geoId, loaded, tab, heldSession, viewedStep, reload, openPanel, data, scope, scopeKey, navigate, location.pathname, location.search],
+    [geoId, loaded, tab, heldSession, viewedStep, reload, openPanel, data, scope, scopeKey, navigate, location.pathname, location.search, setAnswerBack],
   );
 
   if (feature === "off" || loaded.kind === "off") return <GeoOffPage />;
@@ -314,7 +317,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
 
   return (
     <GeoFrameContext.Provider value={api}>
-      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} scopeOpen={scopeOpen} onScopeOpen={setScopeOpen} />
+      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} toolbar={toolbar} answerBack={answerBack} panel={panel} suggested={suggested} onPanel={setPanel} scopeOpen={scopeOpen} onScopeOpen={setScopeOpen} />
     </GeoFrameContext.Provider>
   );
 }
@@ -325,6 +328,7 @@ function GeoBand({
   onChat,
   addressedSession,
   toolbar,
+  answerBack,
   panel,
   suggested,
   onPanel,
@@ -335,6 +339,7 @@ function GeoBand({
   onChat: boolean;
   addressedSession?: string;
   toolbar: ToolbarProps | null | undefined;
+  answerBack: GeoAnswerBack | null;
   panel: GeoPanel | null;
   suggested: number | null;
   onPanel: (panel: GeoPanel | null) => void;
@@ -398,10 +403,11 @@ function GeoBand({
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure })))
       .finally(() => setBusy(null));
   };
+  // Both start a generation run on the server (`exportGeo` queues the programme's step), so both say 生成 and declare themselves starts.
   const startProposal = () => start("proposal", () => exportGeo(geoId, "proposal"),
-    { started: "已开始生成提案资料包。", queued: "提案资料包排在前一项之后，做完会自动开始。" }, "提案资料包无法导出，请稍后重试。");
+    { started: "已开始生成提案资料包。", queued: "提案资料包排在前一项之后，做完会自动开始。" }, "提案资料包暂时无法生成，请稍后重试。");
   const startWeekly = () => start("weekly", () => exportGeo(geoId, "weekly"),
-    { started: "已开始生成周报。", queued: "周报排在前一项之后，做完会自动开始。" }, "周报无法导出，请稍后重试。");
+    { started: "已开始生成周报。", queued: "周报排在前一项之后，做完会自动开始。" }, "周报暂时无法生成，请稍后重试。");
   /** The conversation the page holds (`GeoFrameApi.conversation`: never a step the programme ran); none yet opens a new one. */
   const params = new URLSearchParams(location.search);
   const heldSession = api.conversation;
@@ -460,7 +466,7 @@ function GeoBand({
     ...(can("edit") ? [{ label: "重命名", onSelect: () => onPanel("rename") }] : []),
     // The engines, the window, the budget, who speaks for the product and the members: one drawer, not four entries.
     { label: "项目设置", onSelect: () => onPanel("settings") },
-    ...(can("run") && !paused && started ? [{ label: "导出提案资料包", onSelect: startProposal }] : []),
+    ...(can("run") && !paused && started ? [{ label: "生成提案资料包", onSelect: startProposal }] : []),
     // What the programme did in the background, read-only — the steps are in no conversation list.
     { label: "AI 运行", onSelect: () => onPanel("runs") },
     // A paused project's 「继续」 is in the header, beside the word that says it is paused.
@@ -500,6 +506,14 @@ function GeoBand({
     // With the conversation open, a step changes what is beside it and leaves the conversation where it is.
     return onChat ? geoPathWithContext(path, location) : path;
   };
+  // One answer's way back is the band's, as every page's is. A reader who came from inside the app goes back to where they came from —
+  // the list as they left it, its filter in the address included; one who opened the answer from a link has no such place, and is taken
+  // to the tab that holds it (the answer says which: `useGeoAnswerBack`).
+  const answerFallback = answerBack ?? "questions";
+  const answerBackLabel = arrived !== "POP" ? "返回" : `返回${GEO_ANSWER_BACK_NAMES[answerFallback]}`;
+  const answerBackLink = <Link className="inline-block text-ui text-accent"
+    to={geoPathWithContext(answerFallback === "overview" ? `/app/geo/${encodeURIComponent(geoId)}` : tabPath(geoId, answerFallback), location)}
+    onClick={(event) => { if (arrived !== "POP") { event.preventDefault(); navigate(-1); } }}>{answerBackLabel}</Link>;
   const steps = bandSteps(project, (step) => destination(GEO_STEP_HOME[step].tab, GEO_STEP_HOME[step].view, step, GEO_STEP_HOME[step].section));
   const selectedStep = api.step ?? null;
 
@@ -510,11 +524,11 @@ function GeoBand({
   const continues: { label: string; onClick: () => void } | null = selectedStep === "distribution" && needsBudget && can("manage_money")
     ? { label: "设预算", onClick: () => api.openPanel("budget") }
     : !canConverse ? null
-      : selectedStep === "evidence" ? { label: "在对话中补充结论", onClick: ask(`请在现有结论库的基础上，补充${product}还没有覆盖的说明书内容和临床证据，每条结论都带原文出处。`) }
-        : selectedStep === "journey" ? { label: "在对话中重画旅程", onClick: ask(`请根据最新的结论和 AI 的回答，重新画一遍${product}的患者与医生旅程。`) }
-          : selectedStep === "questions" ? { label: "在对话中补充问题", onClick: ask(`请再补几个值得测量的问题，覆盖${product}现有问句池里还没有问到的情形。`) }
+      : selectedStep === "evidence" ? { label: "让 AI 补充结论", onClick: ask(`请在现有结论库的基础上，补充${product}还没有覆盖的说明书内容和临床证据，每条结论都带原文出处。`) }
+        : selectedStep === "journey" ? { label: "让 AI 重画旅程", onClick: ask(`请根据最新的结论和 AI 的回答，重新画一遍${product}的患者与医生旅程。`) }
+          : selectedStep === "questions" ? { label: "让 AI 补充问题", onClick: ask(`请再补几个值得测量的问题，覆盖${product}现有问句池里还没有问到的情形。`) }
             : selectedStep === "sources" ? { label: "选目标档", onClick: () => navigate(destination("plan", undefined, "sources", "targets")) }
-              : selectedStep === "content" ? { label: "在对话中写下一批", onClick: ask("请为现在还没有稿件的问题群写下一批稿件，先写讲错最严重、离目标最远的。") } : null;
+              : selectedStep === "content" ? { label: "让 AI 写下一批稿件", onClick: ask("请为现在还没有稿件的问题群写下一批稿件，先写讲错最严重、离目标最远的。") } : null;
   const strip = geoActivity(project);
   const stopStep = () => {
     if (!strip?.runId || busy) return;
@@ -525,10 +539,13 @@ function GeoBand({
       .finally(() => setBusy(null));
   };
   const journey = geoJourney(project);
+  const budgetOwed = geoStepView(project, "distribution").waitingFor === "设预算";
   const primary: PageActionPlan["primary"] = (() => {
-    if (needsBudget && can("manage_money") && !paused) return { id: "budget", label: "设投放预算", kind: "external" as const, onSelect: () => api.openPanel("budget") };
+    // A budget is owed once placing was asked for or is moving, as the rail says (「等你设预算」); a new project, which has asked for nothing,
+    // is not asked for money first.
+    if (budgetOwed && can("manage_money") && !paused) return { id: "budget", label: "设投放预算", kind: "external" as const, onSelect: () => api.openPanel("budget") };
     const next = journey.next;
-    if (next.kind === "conversation") return canConverse ? { id: "next", label: next.label, kind: "draft" as const, icon: PenLine, loading: busy === "conversation", onSelect: ask(next.draft ?? "") } : undefined;
+    if (next.kind === "conversation") return canConverse ? { id: "next", label: next.label, kind: "draft" as const, icon: PenLine, loading: busy === "conversation", onSelect: () => { setBusy("conversation"); void openConversation(target, next.draft).finally(() => setBusy(null)); } } : undefined;
     // Already where it leads: the page is the next step, and has nothing to press for it.
     if (!next.step || next.step === selectedStep || onChat && next.kind === "view") return undefined;
     return { id: "next", label: next.label, to: destination(GEO_STEP_HOME[next.step].tab, GEO_STEP_HOME[next.step].view, next.step, GEO_STEP_HOME[next.step].section) };
@@ -592,11 +609,11 @@ function GeoBand({
       title={project.name}
       // The way back is on every tab, so the band stands at the same place on each (the walk's module-chrome): 项目总览 from a step's
       // tab and the conversation, the project list from the overview. A block link — an inline one is a kind of control of its own.
-      back={tab !== "overview" || onChat
+      back={snapshotId ? answerBackLink : tab !== "overview" || onChat
         ? <Link className="inline-block text-ui text-accent" to={destination("overview")}>项目总览</Link>
         : <Link className="inline-block text-ui text-accent" to="/app/geo">循证 GEO</Link>}
       steps={{ label: "循证 GEO 进度", steps, activeSteps: selectedStep ? [selectedStep] : [], trailing: now, visible: true, showState: true }}
-      {...(strip ? { activity: { label: strip.label, startedAt: strip.startedAt, waiting: strip.waiting, queued: strip.queued, to: destination(GEO_STEP_HOME[strip.step].tab, GEO_STEP_HOME[strip.step].view, strip.step, GEO_STEP_HOME[strip.step].section), ...(can("run") && strip.runId ? { onCancel: stopStep, cancelling: busy === "stop" } : {}) } } : {})}
+      {...(strip ? { activity: { label: strip.label, startedAt: strip.startedAt, waiting: strip.waiting, queued: strip.queued, to: destination(GEO_STEP_HOME[strip.step].tab, GEO_STEP_HOME[strip.step].view, strip.step, GEO_STEP_HOME[strip.step].section), ...(can("run") && strip.runId ? { onCancel: stopStep, cancelLabel: "停止这一项", cancelling: busy === "stop" } : {}) } } : {})}
       dock={onChat ? undefined : <ConversationBar busy={busy === "conversation"} readOnlyTo={readOnlyChat} onOpen={canConverse ? (draft) => { setBusy("conversation"); void openConversation(target, draft).finally(() => setBusy(null)); } : undefined} />}
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width={onChat ? "full" : "wide"}
@@ -605,8 +622,8 @@ function GeoBand({
         // The one primary is the next step; the conversation has its own place on every view and takes no button in the header.
         ...(primary ? { primary } : {}),
         secondary: [
-          ...(can("run") && !paused && started ? [{ id: "weekly", label: "周报", icon: FileDown, loading: busy === "weekly", onSelect: startWeekly }] : []),
-          ...(paused && can("edit") ? [{ id: "resume", label: "继续", onSelect: () => setPaused(false) }] : []),
+          ...(can("run") && !paused && started ? [{ id: "weekly", label: "生成周报", icon: FileDown, kind: "start" as const, loading: busy === "weekly", onSelect: startWeekly }] : []),
+          ...(paused && can("edit") ? [{ id: "resume", label: "继续", kind: "set" as const, onSelect: () => setPaused(false) }] : []),
         ],
         overflow: menu,
       }}
