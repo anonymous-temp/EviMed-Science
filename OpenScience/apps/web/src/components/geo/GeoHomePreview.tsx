@@ -146,10 +146,9 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
 
       <section aria-label="当前工作" data-geo-journey={journey.stage} className="flex flex-col gap-2">
         <p className="text-caption text-text-3">{journey.requested}</p>
-        <h3 className="text-ui font-semibold">{journey.title}</h3>
-        <p className="text-ui text-text-2">{journey.detail}</p>
-        {journey.retained.length > 0 && <p className="text-caption text-text-3">{`已保留：${journey.retained.join('、')}`}</p>}
-        <Link className="self-start rounded text-ui text-link hover:underline" to={journey.next.step ? geoDestinationPath(project.id, GEO_STEP_HOME[journey.next.step]) : `/app/geo/${encodeURIComponent(project.id)}`}>继续当前工作</Link>
+        <h3 className="text-section font-semibold text-text">{journey.title}</h3>
+        <Note action={<Link className="shrink-0 rounded text-link hover:underline" to={journey.next.step ? geoDestinationPath(project.id, GEO_STEP_HOME[journey.next.step]) : `/app/geo/${encodeURIComponent(project.id)}`}>继续当前工作</Link>}>{journey.detail}</Note>
+        {journey.retained.length > 0 && <FactList rows={[{ label: "已保留", value: journey.retained.join("、") }]} ruled={false} />}
       </section>
       {figures.some(figure => !figure.read.placeholder || figure.cell.denominator != null || figure.cell.numerator != null) && <StatBand label="项目指标" columns={2} separate dense footnote={(missing ? unmeasuredWhy(project) : null) ?? undefined}>
         {figures.map((figure) => (

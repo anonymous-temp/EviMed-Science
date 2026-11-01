@@ -11,9 +11,12 @@ beforeEach(()=>{api.set.mockReset().mockResolvedValue({enabled:true});});
 it('does not imply past scope authorization; starting and declining are explicit choices',async()=>{
   render(<GeoMonitoringAutomation project={geoProject({monitoring:'done'})}/>);
   expect(screen.getByRole('heading',{name:'尚未开启自动监测'})).toBeVisible();
-  expect(screen.getByText(/监测范围.*覆盖窗口 90 天/)).toBeVisible();
+  expect(screen.getByText('监测范围')).toBeVisible();
+  expect(screen.getByText(/覆盖窗口 90 天/)).toBeVisible();
   expect(screen.getByText(/开启后才会安排后续复测/)).toBeVisible();
-  expect(screen.getByText(/每日风险抽查和发布后检查/)).toHaveTextContent('按实际调用使用项目额度');
+  expect(screen.getByText(/每日风险抽查和发布后检查/)).toBeVisible();
+  expect(screen.getByText('这些任务均按实际调用使用项目额度')).toBeVisible();
+  expect(screen.getByText('不再创建新任务，已经受理的任务会继续')).toBeVisible();
   await userEvent.click(screen.getByRole('button',{name:'开始自动监测'}));
   await waitFor(()=>expect(api.set).toHaveBeenCalledWith('geo_1',true));
   await userEvent.click(screen.getByRole('button',{name:'暂不启动'}));
