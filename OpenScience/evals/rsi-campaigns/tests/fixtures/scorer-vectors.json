@@ -2238,5 +2238,1018 @@
    ],
    "score": 1.0
   }
+ ],
+ "roundOneNote": "mbc: expected values come from score_shortanswer.score (needs_judge counts as not correct); harnessDigest: from export_harness_arms.harness_patch_digest / harness_patch_sizes (RFC 8785 canonical JSON of the bundle and the image, sha256; sizes in UTF-16 code units). Both are invented inputs.",
+ "mbc": [
+  {
+   "name": "ing-exact",
+   "text": "Searched the label.\nINGREDIENT: ZORVALINIB",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "ZORVALINIB",
+   "score": 1
+  },
+  {
+   "name": "ing-case-markdown",
+   "text": "**INGREDIENT:** Zorvalinib",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "Zorvalinib",
+   "score": 1
+  },
+  {
+   "name": "ing-bullet-trailing-period",
+   "text": "- **Ingredient**: zorvalinib.",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "zorvalinib.",
+   "score": 1
+  },
+  {
+   "name": "ing-active-label",
+   "text": "notes\nACTIVE INGREDIENT: KELDAMAB",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "KELDAMAB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "KELDAMAB",
+   "score": 1
+  },
+  {
+   "name": "ing-numbered-label",
+   "text": "1. INGREDIENT: ZORVALINIB",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "ZORVALINIB",
+   "score": 1
+  },
+  {
+   "name": "ing-quoted",
+   "text": "INGREDIENT: \"ZORVALINIB\"",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "ZORVALINIB",
+   "score": 1
+  },
+  {
+   "name": "ing-salt-answer-shorter",
+   "text": "INGREDIENT: ZORVALINIB",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB MESYLATE"
+   },
+   "verdict": "needs_judge",
+   "extraction": "label",
+   "extracted": "ZORVALINIB",
+   "score": 0
+  },
+  {
+   "name": "ing-salt-answer-longer",
+   "text": "INGREDIENT: ZORVALINIB MESYLATE",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "needs_judge",
+   "extraction": "label",
+   "extracted": "ZORVALINIB MESYLATE",
+   "score": 0
+  },
+  {
+   "name": "ing-near-typo",
+   "text": "INGREDIENT: ZORVALINAB",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "needs_judge",
+   "extraction": "label",
+   "extracted": "ZORVALINAB",
+   "score": 0
+  },
+  {
+   "name": "ing-wrong",
+   "text": "INGREDIENT: KELDAMAB",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "KELDAMAB",
+   "score": 0
+  },
+  {
+   "name": "ing-unknown",
+   "text": "INGREDIENT: UNKNOWN",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "UNKNOWN",
+   "score": 0
+  },
+  {
+   "name": "ing-none",
+   "text": "INGREDIENT: none",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "none",
+   "score": 0
+  },
+  {
+   "name": "ing-last-label-wins",
+   "text": "INGREDIENT: KELDAMAB\nrechecked the filing\nINGREDIENT: ZORVALINIB",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "ZORVALINIB",
+   "score": 1
+  },
+  {
+   "name": "ing-token-order-and-ampersand",
+   "text": "INGREDIENT: BETA & ALPHA",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ALPHA AND BETA"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "BETA & ALPHA",
+   "score": 1
+  },
+  {
+   "name": "ing-crlf",
+   "text": "Reasoning\r\nINGREDIENT: ZORVALINIB\r\n",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "ZORVALINIB",
+   "score": 1
+  },
+  {
+   "name": "ing-empty-text",
+   "text": "",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "incorrect",
+   "extraction": "fallback",
+   "extracted": "",
+   "score": 0
+  },
+  {
+   "name": "ing-nolabel-gold-in-tail",
+   "text": "The ingredient is zorvalinib.",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "The ingredient is zorvalinib.",
+   "score": 0
+  },
+  {
+   "name": "ing-nolabel-miss",
+   "text": "I could not determine it.",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "incorrect",
+   "extraction": "fallback",
+   "extracted": "I could not determine it.",
+   "score": 0
+  },
+  {
+   "name": "ing-nolabel-last-line-only",
+   "text": "Probably zorvalinib\nbut I am unsure",
+   "gold": {
+    "task_name": "Ingredient",
+    "answer": "ZORVALINIB"
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "but I am unsure",
+   "score": 0
+  },
+  {
+   "name": "co-legal-form-dropped",
+   "text": "COMPANY: Brellton Myers Co.",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "BRELLTON MYERS"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "Brellton Myers Co.",
+   "score": 1
+  },
+  {
+   "name": "co-us-inc-dropped",
+   "text": "COMPANY: ASTELLO PHARMA INC",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "ASTELLO PHARMA US INC"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "ASTELLO PHARMA INC",
+   "score": 1
+  },
+  {
+   "name": "co-applicant-label",
+   "text": "APPLICANT: Quillon Labs LLC",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "QUILLON LABS"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "Quillon Labs LLC",
+   "score": 1
+  },
+  {
+   "name": "co-article-dropped",
+   "text": "COMPANY: Orbis Group",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "THE ORBIS GROUP"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "Orbis Group",
+   "score": 1
+  },
+  {
+   "name": "co-wrong",
+   "text": "COMPANY: Vantora Inc",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "ASTELLO PHARMA US INC"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "Vantora Inc",
+   "score": 0
+  },
+  {
+   "name": "co-partial",
+   "text": "COMPANY: NORVEX",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "NORVEX PHARMACEUTICALS CORP"
+   },
+   "verdict": "needs_judge",
+   "extraction": "label",
+   "extracted": "NORVEX",
+   "score": 0
+  },
+  {
+   "name": "co-unknown",
+   "text": "COMPANY: UNKNOWN",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "NORVEX PHARMACEUTICALS CORP"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "UNKNOWN",
+   "score": 0
+  },
+  {
+   "name": "co-nolabel-gold-in-tail",
+   "text": "The applicant is Norvex Pharmaceuticals Corporation",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "NORVEX PHARMACEUTICALS CORP"
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "The applicant is Norvex Pharmaceuticals Corporation",
+   "score": 0
+  },
+  {
+   "name": "co-nolabel-miss",
+   "text": "No applicant could be found.",
+   "gold": {
+    "task_name": "Applicant_Full_Name",
+    "answer": "NORVEX PHARMACEUTICALS CORP"
+   },
+   "verdict": "incorrect",
+   "extraction": "fallback",
+   "extracted": "No applicant could be found.",
+   "score": 0
+  },
+  {
+   "name": "pat-year-only",
+   "text": "date: 2027",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "2027",
+   "score": 1
+  },
+  {
+   "name": "pat-full-date",
+   "text": "DATE: Aug 13, 2027",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "Aug 13, 2027",
+   "score": 1
+  },
+  {
+   "name": "pat-wrong-year",
+   "text": "date: 2029",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "2029",
+   "score": 0
+  },
+  {
+   "name": "pat-yyyy-label",
+   "text": "YYYY: 2027",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "2027",
+   "score": 1
+  },
+  {
+   "name": "pat-iso-gold",
+   "text": "date: 2027",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "2027-08-13"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "2027",
+   "score": 1
+  },
+  {
+   "name": "pat-slash-gold-and-label",
+   "text": "Patent expiration date: 08/13/2027",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "08/13/2027"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "08/13/2027",
+   "score": 1
+  },
+  {
+   "name": "pat-two-years-first-wins",
+   "text": "date: 2027 (extended to 2029)",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "2027 (extended to 2029)",
+   "score": 1
+  },
+  {
+   "name": "pat-label-without-year",
+   "text": "date: unknown",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "unknown",
+   "score": 0
+  },
+  {
+   "name": "pat-nolabel-gold-year-in-tail",
+   "text": "The patent expires in 2027.",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "The patent expires in 2027.",
+   "score": 0
+  },
+  {
+   "name": "pat-nolabel-other-year",
+   "text": "The patent expires in 2031.",
+   "gold": {
+    "task_name": "Patent_Expire_Date_Text",
+    "answer": "Aug 13, 2027"
+   },
+   "verdict": "incorrect",
+   "extraction": "fallback",
+   "extracted": "The patent expires in 2031.",
+   "score": 0
+  },
+  {
+   "name": "exc-mdy-dashes",
+   "text": "date: 11-17-2026",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "11-17-2026",
+   "score": 1
+  },
+  {
+   "name": "exc-month-name",
+   "text": "DATE: Nov 17, 2026",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "Nov 17, 2026",
+   "score": 1
+  },
+  {
+   "name": "exc-iso",
+   "text": "date: 2026-11-17",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "2026-11-17",
+   "score": 1
+  },
+  {
+   "name": "exc-mdy-slashes",
+   "text": "date: 11/17/2026",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "11/17/2026",
+   "score": 1
+  },
+  {
+   "name": "exc-day-month-year",
+   "text": "date: 17 Nov 2026",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "17 Nov 2026",
+   "score": 1
+  },
+  {
+   "name": "exc-wrong-day",
+   "text": "date: 11-18-2026",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "11-18-2026",
+   "score": 0
+  },
+  {
+   "name": "exc-na-for-dated-gold",
+   "text": "date: N/A",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "N/A",
+   "score": 0
+  },
+  {
+   "name": "exc-no-date-at-all",
+   "text": "date: soon",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "soon",
+   "score": 0
+  },
+  {
+   "name": "exc-nolabel-date-in-tail",
+   "text": "Exclusivity runs until Nov 17, 2026.",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "Exclusivity runs until Nov 17, 2026.",
+   "score": 0
+  },
+  {
+   "name": "exc-crlf",
+   "text": "Lookup done\r\ndate: 11-17-2026\r\n",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": "Nov 17, 2026"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "11-17-2026",
+   "score": 1
+  },
+  {
+   "name": "exc-gold-empty-na",
+   "text": "DATE: NA",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": ""
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "NA",
+   "score": 1
+  },
+  {
+   "name": "exc-gold-empty-none",
+   "text": "date: none",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": ""
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "none",
+   "score": 1
+  },
+  {
+   "name": "exc-gold-empty-na-with-words",
+   "text": "date: NA - not applicable",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": ""
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "NA - not applicable",
+   "score": 1
+  },
+  {
+   "name": "exc-gold-empty-but-dated",
+   "text": "date: 11-17-2026",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": ""
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "11-17-2026",
+   "score": 0
+  },
+  {
+   "name": "exc-gold-empty-nolabel-na",
+   "text": "There is no exclusivity listed, N/A.",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": ""
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "There is no exclusivity listed, N/A.",
+   "score": 0
+  },
+  {
+   "name": "exc-gold-empty-nolabel-nothing",
+   "text": "I do not know.",
+   "gold": {
+    "task_name": "Exclusivity_Date",
+    "answer": ""
+   },
+   "verdict": "incorrect",
+   "extraction": "fallback",
+   "extracted": "I do not know.",
+   "score": 0
+  },
+  {
+   "name": "open-not-listed",
+   "text": "The company is not listed.\nNOT LISTED",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "Not_Listed"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "The company is not listed.\nNOT LISTED",
+   "score": 1
+  },
+  {
+   "name": "open-not-listed-underscore",
+   "text": "NOT_LISTED",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "Not_Listed"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "NOT_LISTED",
+   "score": 1
+  },
+  {
+   "name": "open-not-listed-with-price",
+   "text": "NOT LISTED (though in 2019 it traded at $12.40)",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "Not_Listed"
+   },
+   "verdict": "needs_judge",
+   "extraction": "label",
+   "extracted": "NOT LISTED (though in 2019 it traded at $12.40)",
+   "score": 0
+  },
+  {
+   "name": "open-gold-not-listed-but-priced",
+   "text": "ticker ABC, $20.10",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "Not_Listed"
+   },
+   "verdict": "incorrect",
+   "extraction": "fallback",
+   "extracted": "ticker ABC, $20.10",
+   "score": 0
+  },
+  {
+   "name": "open-gold-not-listed-nothing-clear",
+   "text": "I could not find anything.",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "Not_Listed"
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "I could not find anything.",
+   "score": 0
+  },
+  {
+   "name": "open-price-exact",
+   "text": "Ticker: QZX\nOpening price on approval date: $157.02",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "157.02000427246094"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "Ticker: QZX\nOpening price on approval date: $157.02",
+   "score": 1
+  },
+  {
+   "name": "open-price-rounded",
+   "text": "ticker ZZZ, opening price 15.99",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "15.989999771118164"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "ticker ZZZ, opening price 15.99",
+   "score": 1
+  },
+  {
+   "name": "open-price-wrong",
+   "text": "ticker ZZZ, opening price $16.80",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "15.989999771118164"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "ticker ZZZ, opening price $16.80",
+   "score": 0
+  },
+  {
+   "name": "open-price-thousands-separator",
+   "text": "opening price: 1,234.50",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "1234.5"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "opening price: 1,234.50",
+   "score": 1
+  },
+  {
+   "name": "open-answered-not-listed-for-priced-gold",
+   "text": "NOT LISTED",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "15.989999771118164"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "NOT LISTED",
+   "score": 0
+  },
+  {
+   "name": "open-price-earlier-than-tail",
+   "text": "Opening price on approval was $42.10.\nThe registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page.\nI could not confirm the rest.",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "42.1"
+   },
+   "verdict": "needs_judge",
+   "extraction": "fallback",
+   "extracted": "s and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page.\nI could not confirm the rest.",
+   "score": 0
+  },
+  {
+   "name": "open-price-only-in-tail",
+   "text": "The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page.\nOpening price on approval was $42.10.",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "42.1"
+   },
+   "verdict": "correct",
+   "extraction": "label",
+   "extracted": "kept reading further down the page. The registry lists several unrelated filings and I kept reading further down the page.\nOpening price on approval was $42.10.",
+   "score": 1
+  },
+  {
+   "name": "open-empty-text",
+   "text": "",
+   "gold": {
+    "task_name": "Open_on_Approval",
+    "answer": "12.5"
+   },
+   "verdict": "incorrect",
+   "extraction": "label",
+   "extracted": "",
+   "score": 0
+  }
+ ],
+ "harnessDigest": [
+  {
+   "name": "ascii",
+   "bundle": {
+    "guidanceSupplement": "Give a first answer early, then refine it.",
+    "skills": [
+     {
+      "name": "closure",
+      "description": "Use when a task has a long tail.",
+      "body": "Deliver a provisional result first."
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "d56390bf5078dd1479e1ff1d78cc2f519e7cbe34996e23546056e4e110f1414a",
+   "chars": 116,
+   "alwaysOnChars": 81
+  },
+  {
+   "name": "cjk",
+   "bundle": {
+    "guidanceSupplement": "先给出暂定答案，再迭代改进。",
+    "skills": [
+     {
+      "name": "baogao-guifan",
+      "description": "长报告的交付规格",
+      "body": "逐项覆盖子问题，并说明依据。"
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "8a0d365dd5ed0af04d4bf294e3e414e447f02c2f99c397bbc9ba363e2f190e31",
+   "chars": 49,
+   "alwaysOnChars": 35
+  },
+  {
+   "name": "emoji-astral",
+   "bundle": {
+    "guidanceSupplement": "Mark progress ✅ 🚀 and 🧪 tests.",
+    "skills": [
+     {
+      "name": "progress-marks",
+      "description": "Use 📝 notes",
+      "body": "Body with 😀😀 pairs."
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "6211101c7c4263245810be7017bb1af05129e5f3826a685664491635074df487",
+   "chars": 79,
+   "alwaysOnChars": 58
+  },
+  {
+   "name": "control-characters",
+   "bundle": {
+    "guidanceSupplement": "bell\u0007 unit\u001f del sep  end\ttab\nnewline\rcr",
+    "skills": [
+     {
+      "name": "ctrl",
+      "description": "desc\u0001",
+      "body": "body\u001e"
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "f7faa7eae991f58f43ac0113cda96c96f499fabf35a45dcb7c2e6d73dfa45005",
+   "chars": 54,
+   "alwaysOnChars": 49
+  },
+  {
+   "name": "quotes-and-backslashes",
+   "bundle": {
+    "guidanceSupplement": "say \"hi\" \\ back\\slash \\n and 'single'",
+    "skills": [
+     {
+      "name": "quoting",
+      "description": "a \"quoted\" description",
+      "body": "C:\\path\\to\\\"file\""
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "43a3288f6ef8bc953f5f157a19d27b7214278a4e6955c0017e6a01c0477f2e1c",
+   "chars": 83,
+   "alwaysOnChars": 66
+  },
+  {
+   "name": "empty-guidance-one-skill",
+   "bundle": {
+    "guidanceSupplement": "",
+    "skills": [
+     {
+      "name": "only-skill",
+      "description": "The single skill.",
+      "body": "Its body."
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "68d99365bafb5d5c489fe4cb32f1b36b582de927c3c8e260d0c240915769a690",
+   "chars": 36,
+   "alwaysOnChars": 27
+  },
+  {
+   "name": "no-skills-guidance-only",
+   "bundle": {
+    "guidanceSupplement": "Only a guidance supplement.",
+    "skills": []
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "0ef991d66556e21ac562f2c3f498113ecf884478c454aa43d855747e349d60e3",
+   "chars": 27,
+   "alwaysOnChars": 27
+  },
+  {
+   "name": "unsorted-skills",
+   "bundle": {
+    "guidanceSupplement": "g",
+    "skills": [
+     {
+      "name": "zeta-notes",
+      "description": "z",
+      "body": "zb"
+     },
+     {
+      "name": "alpha-notes",
+      "description": "a",
+      "body": "ab"
+     },
+     {
+      "name": "mid-1",
+      "description": "m",
+      "body": "mb"
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "10404fa89fc40c5af7131009cfc5f95400497f6e331d21106822823c97f930fd",
+   "chars": 36,
+   "alwaysOnChars": 30
+  },
+  {
+   "name": "long-body",
+   "bundle": {
+    "guidanceSupplement": "g",
+    "skills": [
+     {
+      "name": "long-one",
+      "description": "A long skill.",
+      "body": "Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. Step one éè 中文 🧪. "
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "digest": "af9e424ba1b56a062c12767b0a1172086ac5d9a40b0e4058bdcd074cb90cb8ae",
+   "chars": 7622,
+   "alwaysOnChars": 22
+  },
+  {
+   "name": "same-patch-other-image",
+   "bundle": {
+    "guidanceSupplement": "Give a first answer early, then refine it.",
+    "skills": [
+     {
+      "name": "closure",
+      "description": "Use when a task has a long tail.",
+      "body": "Deliver a provisional result first."
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-2",
+    "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+   },
+   "digest": "b1a1ec68e429eaf3e9bf057edd9ec8af1a802804d87b847a8a4a0dc6928c50f1",
+   "chars": 116,
+   "alwaysOnChars": 81
+  }
  ]
 }

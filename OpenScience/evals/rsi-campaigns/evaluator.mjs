@@ -19,6 +19,7 @@ import { resolve } from 'node:path';
 import { canonicalRsiJson, rsiDigest } from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierObservations } from './frontier_campaign.mjs';
 import { chooseSkillCandidate, skillCampaignConsumerIdentity, skillObservationCosts, skillObservations } from './skill_campaign.mjs';
+import { HARNESS_COST_IDENTITY, chooseHarnessCandidate, harnessCampaignConsumerIdentity, harnessDevelopmentResult, harnessObservationCosts, harnessObservations } from './harness_campaign.mjs';
 
 /** The cost identity of a campaign whose arms ran on production: settled CNY per run from the usage ledger, exported with the runs. */
 export const SKILL_COST_IDENTITY = 'production-usage-ledger-settled-cny';
@@ -44,7 +45,7 @@ export function signEnvelope(payload, key) {
  * @param {{manifest:any, inputs:any, request:any, checkpoint:any, now?:string}} input
  */
 export async function evaluatorReceiptPayload({ manifest, inputs, request, checkpoint, now = new Date().toISOString() }) {
-  if (!['frontier-selection', 'capability-skill'].includes(manifest.surface)) fail('campaign_consumer_not_qualified');
+  if (!['frontier-selection', 'capability-skill', 'harness-patch'].includes(manifest.surface)) fail('campaign_consumer_not_qualified');
   const binding = rsiDigest({ manifest, inputs });
   if (request.binding !== binding || checkpoint.binding !== binding) fail('campaign_evaluator_binding_changed');
   const registration = inputs.registration, statistics = registration.statistics;
@@ -53,6 +54,7 @@ export async function evaluatorReceiptPayload({ manifest, inputs, request, check
   for (const source of [development, confirmation]) if (rsiDigest(inputs.sources[source.id]) !== source.digest) fail('campaign_source_changed');
   if (request.corpusDigest !== confirmation.digest || request.registrationDigest !== rsiDigest(statistics ?? null)) fail('campaign_evaluator_binding_changed');
   if (manifest.surface === 'capability-skill') return skillReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
+  if (manifest.surface === 'harness-patch') return harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
   const identity = await frontierCampaignConsumerIdentity();
   if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
   // The freeze followed the registered rule on the development source alone.
@@ -124,6 +126,49 @@ async function skillReceiptPayload({ manifest, inputs, request, checkpoint, now,
     observationDigest: rsiDigest(observations),
     costProvenance: { type: 'measured-normalized-cny', receiptId: `production-usage-ledger:${rsiDigest(recorded).slice(0, 16)}`, complete: true,
       normalization: 'Settled CNY per run: the sum of actual_cost over production evimed_usage.model_requests rows with status settled and the run id, read once at export; the lab never queries production.' },
+    costs,
+    receipt: {
+      deterministic_qualification: null,
+      attestations: { registration_digest: rsiDigest(statistics), confirmation_exposed: false, look: 1, complete_costs: true,
+        cost_identity: statistics.cost_identity, expired_budget: Date.parse(now) >= Date.parse(statistics.expires_at) },
+    },
+    consumer: identity,
+  };
+}
+
+/**
+ * The harness-patch receipt: the development choice (A/A noise floor included) and the confirmation recomputed from the recorded
+ * runs and verdict records (twice: the scoring is deterministic code over them), and the costs attested from the same records —
+ * every run's settled CNY as the lane stack's usage ledger gave it at export. A run without a settled cost leaves the costs
+ * incomplete, and an incomplete cost is never signed as complete. Judge calls are not CNY-metered and are not costs here.
+ */
+async function harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation }) {
+  const registration = inputs.registration, statistics = registration.statistics;
+  const identity = await harnessCampaignConsumerIdentity(registration);
+  if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
+  const choice = chooseHarnessCandidate(inputs.sources[development.id], registration);
+  const frozen = checkpoint.frozenPolicy;
+  if (!choice.frozen || !frozen || choice.frozen.arm !== frozen.arm || choice.frozen.harnessDigest !== frozen.harnessDigest || choice.frozen.imageDigest !== frozen.imageDigest
+    || rsiDigest(frozen) !== request.frozenPolicyDigest || rsiDigest(harnessDevelopmentResult(choice)) !== frozen.developmentResultDigest) fail('campaign_evaluator_development_differs');
+  if (!(Date.parse(checkpoint.frozenAt) < Date.parse(request.confirmationOpenedAt))) fail('campaign_evaluator_chronology_invalid');
+  const runs = [0, 1].map(() => {
+    const measured = harnessObservations(inputs.sources[confirmation.id], registration, frozen);
+    return { result: { observations: measured.observations, scores: measured.scores ?? null }, reason: measured.reason };
+  });
+  if (runs[0].reason || rsiDigest(runs[0].result) !== rsiDigest(runs[1].result)) fail('campaign_evaluator_nondeterministic');
+  if (rsiDigest(runs[0].result) !== request.confirmationResultDigest) fail('campaign_evaluator_recomputation_differs');
+  if (request.look !== 1) fail('campaign_evaluator_repeated_look');
+  if (statistics.cost_identity !== HARNESS_COST_IDENTITY || statistics.deterministicConsumer !== false) fail('campaign_cost_identity_unsupported');
+  const recorded = harnessObservationCosts(inputs.sources[confirmation.id], frozen);
+  if (!recorded) fail('campaign_cost_measurement_missing');
+  const observations = runs[0].result.observations;
+  const costs = recorded.map(({ group, arm, form, repeat, cost }) => ({ group, arm, form, repeat, cost }));
+  const expiresAt = new Date(Math.min(Date.parse(now) + RECEIPT_DAYS * 86400000, Date.parse(manifest.deadline))).toISOString();
+  return {
+    type: 'rsi-evaluator-receipt-v1', ...request, issuedAt: now, expiresAt,
+    observationDigest: rsiDigest(observations),
+    costProvenance: { type: 'measured-normalized-cny', receiptId: `lane-usage-ledger:${rsiDigest(recorded).slice(0, 16)}`, complete: true,
+      normalization: 'Settled CNY per run: the sum of actual_cost over the lane stack evimed_usage.model_requests rows with status settled and the run id, read once at export; the lab never queries the lane. Judge calls (Claude, operator subscription) are not metered in CNY.' },
     costs,
     receipt: {
       deterministic_qualification: null,

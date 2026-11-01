@@ -24,9 +24,14 @@ async function main() {
   const candidate = inputs?.registration?.candidates?.find((c) => c.arm === frozen?.arm) ?? null;
   const scores = confirmation?.scores ?? null;
   const base = scores?.baseline, cand = frozen && scores ? scores[frozen.arm] : null;
+  const qualification = run?.qualification ?? evaluation?.decision ?? (devOnly ? 'not-qualified' : null);
+  // A confirmation below the registered procedure's minimum number of groups (in the family, or in its failure slice) is refused by the procedure itself
+  // (`inconclusive`, sparse population); that is a directional reading and never a qualification. Decided from the counts, not from the refusal's wording.
+  const groups = inputs?.registration?.statistics?.G_target ?? null, sliceGroups = supply?.confirmation?.sliceGroups ?? null, minimum = inputs?.registration?.statistics?.procedure?.minimum_slice_groups ?? null;
+  const directional = Boolean(confirmation) && qualification !== 'qualified' && Number.isFinite(minimum) && ((Number.isFinite(groups) && groups < minimum) || (Number.isFinite(sliceGroups) && sliceGroups < minimum));
   const report = {
     type: 'rsi-capability-skill-report-v1', month, campaignId: checkpoint?.campaignId ?? null,
-    status: run?.status ?? devOnly?.status ?? 'not-run', qualification: run?.qualification ?? evaluation?.decision ?? (devOnly ? 'not-qualified' : null),
+    status: run?.status ?? devOnly?.status ?? 'not-run', qualification, directional: directional ? { groups, sliceGroups, minimum } : null,
     reason: run?.reason ?? evaluation?.reasons?.[0] ?? devOnly?.supply?.developmentChoice?.reason ?? null,
     scoresDevelopment: devOnly?.supply?.developmentChoice?.scores ?? null, improverSpendCny: devOnly?.supply?.improverSpendCny ?? null,
     development: supply?.development ?? null, developmentChoice: supply?.developmentChoice ?? null,
@@ -40,7 +45,8 @@ async function main() {
   };
   const lines = [
     `# 能力技能 RSI 活动报告 · ${month}`, '',
-    `结论：${report.qualification === 'qualified' ? '候选技能通过确认（targeted-repair）' : report.qualification ? `未通过（${report.qualification}）` : '未运行'}${report.reason ? `，原因 ${report.reason}` : ''}。`, '',
+    `结论：${directional ? `方向性参考，不是合格结论（确认集 ${groups} 组、失败子集 ${sliceGroups} 组，低于登记统计程序的 ${minimum} 组下限）`
+      : report.qualification === 'qualified' ? '候选技能通过确认（targeted-repair）' : report.qualification ? `未通过（${report.qualification}）` : '未运行'}${report.reason ? `，原因 ${report.reason}` : ''}。`, '',
     '## 开发期', '',
     `- 开发行 ${report.development?.rows ?? '—'}（失败子集 ${report.development?.sliceRows ?? '—'}），各臂成本 ${JSON.stringify(report.development?.costCny ?? {})} 元`,
     ...(report.developmentChoice?.candidates ?? []).map((c) => `- 候选 ${c.arm}（${c.chars} 字）：总体 ${signed(c.overallDifference)}，失败子集 ${signed(c.sliceDifference)}`),
@@ -52,6 +58,7 @@ async function main() {
     ...(report.confirmation?.baseline ? [`- 对照：总体 ${pct(report.confirmation.baseline.overall)}，失败子集 ${pct(report.confirmation.baseline.slice)}`] : []),
     ...(report.confirmation?.candidate ? [`- 候选：总体 ${pct(report.confirmation.candidate.overall)}，失败子集 ${pct(report.confirmation.candidate.slice)}`] : []),
     ...(report.confirmation?.costCny ? [`- 成本：${JSON.stringify(report.confirmation.costCny)} 元`] : []),
+    ...(directional ? ['- 方向性：组数不足时，登记的统计程序自己拒绝给出判定；上面的差异只说明方向，不能当作合格结果。'] : []),
     ...(report.statistics ? ['', '## 统计', '', `- 判定 ${report.statistics.decision}；${(report.statistics.reasons ?? []).join('；') || '无附加原因'}`] : []),
     '', '本阶段不向生产导入任何东西；通过只代表一项提议：把该技能加入平台技能库。',
   ];
