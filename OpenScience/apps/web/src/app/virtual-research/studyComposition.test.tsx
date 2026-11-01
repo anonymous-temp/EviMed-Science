@@ -86,7 +86,6 @@ describe("T3 — a study, at each of its tabs", () => {
     await screen.findByRole("region", { name: "研究对话" });
     const facts = expectComposed(container, { stepRail: false, tablists: 0 });
     expect(facts.chrome!.querySelectorAll("[data-rail-step]")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();
     expect(container.querySelector("[role=tabpanel]")).toBeNull();

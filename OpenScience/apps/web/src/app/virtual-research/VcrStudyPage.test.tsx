@@ -140,8 +140,9 @@ describe("the study page's header", () => {
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
     draw();
     await heading();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "研究对话" }));
+    // The bar only holds what is typed until the conversation opens: it has no way to send.
+    expect(screen.queryByRole("button", { name: /发送/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "打开对话" }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1/chat"));
     // Not the chat surface, and no switch of project for it: the shell was in the study's project already.
     expect(screen.getByTestId("location")).not.toHaveTextContent("/app/chat");
@@ -273,7 +274,6 @@ describe("the study page's addresses", () => {
     draw(`/app/virtual-research/${STUDY_ID}?package=exp_2`);
     expect(await screen.findByRole("heading", { name: "研究包 v1" })).toBeInTheDocument();
     expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
-    expect(screen.queryByRole("textbox")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /返回研究/ }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "研究包 v1" })).toBeNull());
     expect(screen.getByRole("button", { name: "查看：总览" })).toBeInTheDocument();

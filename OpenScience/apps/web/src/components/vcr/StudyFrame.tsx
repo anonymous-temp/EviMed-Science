@@ -1,12 +1,14 @@
 import type { VcrObjectSelection } from "@/lib/runtimeUiNavigation";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
-import { ChevronLeft, MessageSquare } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { toast } from "@/lib/toast";
 import { webErrorMessage } from "@/lib/apiClient";
 import { workStateLabel } from "@evimed/domain";
 import { cancelVcrStudy, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
+import { ConversationBar } from "@/components/workspace/ConversationBar";
+import { useWorkspaceSplit } from "@/components/workspace/WorkspaceSplit";
 import { PageShell } from "@/components/layout/PageShell";
 import type { ActivityStripProps } from "@/components/ui/ActivityStrip";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -38,6 +40,8 @@ export interface StudyFrameProps {
   view: StudyView;
   /** Read the study again now. */
   reload: () => void;
+  /** The result on screen, also while the conversation is open beside it. */
+  tab: VcrTabKey;
   /** The header's 「⋯」: the page owns what each entry opens. */
   menu: readonly MenuEntry[];
   /** The way into the conversation, with a draft waiting in its composer. Navigation inside the page. */
@@ -83,7 +87,7 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
   return null;
 }
 
-export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel, onView, children }: StudyFrameProps) {
+export function StudyFrame({ studyId, study, view, tab, reload, menu, onChat, onPanel, onView, children }: StudyFrameProps) {
   const [params, setParams] = useSearchParams();
   const individual = params.get("level") === "individual" || params.has("patient");
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
@@ -121,20 +125,23 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
     primary: waitingBudget ? { id: "budget", label: "确认预算", onSelect: () => onPanel("budget") } : tabPrimary ? { id: "tab-primary", label: tabPrimary.label, onSelect: tabPrimary.onSelect } : undefined,
     secondary: [
       ...(waitingBudget && tabPrimary ? [{ id: "tab-primary", label: tabPrimary.label, onSelect: tabPrimary.onSelect }] : []),
-      ...(view !== "chat" && (programme || study.conversation.sessionId) ? [{ id: "study-chat", label: "研究对话", icon: MessageSquare, onSelect: () => onChat() }] : []),
     ],
     overflow: menu,
     overflowLabel: "更多操作",
   };
   const strip = activityStripOf(study, { onCancel: mayRun ? cancel : undefined, cancelling });
-  const controls = view === "chat" ? undefined : toolbar;
+  // Under the breakpoint an open conversation covers the results, and what controls them goes with them.
+  const split = useWorkspaceSplit();
+  const covered = view === "chat" && !split;
+  const controls = covered ? undefined : toolbar;
+  const conversable = programme || Boolean(study.conversation.sessionId);
   const bandToolbar: ToolbarProps = {
     ...(controls ?? {}), views: undefined,
     actions: controls?.actions,
-    navigation: [{ kind: "select", label: "查看", value: view === "patients" ? "population" : view, pinned: true,
-      options: [...(programme || study.conversation.sessionId ? [{ value: "chat", label: "对话" }] : []), ...(programme ? VCR_TAB_ITEMS : VCR_TAB_ITEMS.filter(item => ["data", "population", "matching"].includes(item.key))).map(item => ({ value: item.key, label: item.label }))],
+    navigation: covered ? [] : [{ kind: "select", label: "查看", value: tab, pinned: true,
+      options: [...(programme ? VCR_TAB_ITEMS : VCR_TAB_ITEMS.filter(item => ["data", "population", "matching"].includes(item.key))).map(item => ({ value: item.key, label: item.label }))],
       onChange: next => { if (next) onView(next as StudyView); } },
-      ...(view === "population" || view === "patients" ? [{ kind: "select" as const, label: "人群与患者", value: individual ? "individual" : "cohort", options: [{ value: "cohort", label: "队列总览" }, { value: "individual", label: "个体患者" }], onChange: (next: string | null) => { if (next) setParams(previous => { const updated = new URLSearchParams(previous); updated.set("level", next); if (next === "cohort") updated.delete("patient"); return updated; }); } }] : []),
+      ...(tab === "population" ? [{ kind: "select" as const, label: "人群与患者", value: individual ? "individual" : "cohort", options: [{ value: "cohort", label: "队列总览" }, { value: "individual", label: "个体患者" }], onChange: (next: string | null) => { if (next) setParams(previous => { const updated = new URLSearchParams(previous); updated.set("level", next); if (next === "cohort") updated.delete("patient"); return updated; }); } }] : []),
       ...(controls?.views ? [{ kind: "select" as const, label: controls.views.label, value: controls.views.value, options: controls.views.items.map(item => ({ value: item.value, label: item.label })), onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
       ...(controls?.navigation ?? [])],
     filters: controls?.filters,
@@ -144,7 +151,7 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
     <StudyFrameContext.Provider value={api}>
       <PageShell<StudyView>
         title={study.name}
-        width="wide"
+        width={view === "chat" ? "full" : "wide"}
         back={(
           // No left padding: the link's own box starts on the page's one left edge.
           <Link to={programme ? VCR_HOME_PATH : vcrCalculationPath(studyId)} className={buttonClasses({ variant: "text", size: "sm", className: "pl-0" })}>
@@ -155,7 +162,7 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
         actionPlan={actionPlan}
         {...(strip ? { activity: strip } : {})}
         toolbar={bandToolbar}
-        contentClassName={view === "chat" ? "mt-3" : undefined}
+        dock={view !== "chat" && conversable ? <ConversationBar placeholder="告诉 AI 要研究什么、改什么，或把资料发给它…" onOpen={(draft) => onChat(draft)} /> : undefined}
       >
         {view === "chat" ? children : <div id={STUDY_PANEL_ID} role="region" aria-label="研究内容">{children}</div>}
       </PageShell>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { UsersRound } from "lucide-react";
 import { workStateLabel } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -34,7 +34,9 @@ import { VcrExportDialog, VcrRenameDialog } from "@/components/vcr/VcrStudyDialo
 import { VcrIntakeDrawer } from "@/components/vcr/VcrIntakeDrawer";
 import { INTAKE_LABEL } from "@/components/vcr/vcrActionWords";
 import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
-import { StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
+import { STUDY_PANEL_ID, StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
+import { NeedsBar, type WorkNeed } from "@/components/workspace/NeedsBar";
+import { WorkspaceSplit } from "@/components/workspace/WorkspaceSplit";
 import { vcrCalculationPath, vcrCalculationViewPath } from "@/lib/vcrMethodLocation";
 import { StudyPane } from "@/components/vcr/StudyPane";
 import { useStudy } from "@/components/vcr/useStudy";
@@ -99,7 +101,8 @@ export function VcrStudyPage() {
   const [query] = useSearchParams();
   const location = useLocation();
   const chat = tabParam === "chat";
-  const { tab, moved } = chat ? { tab: "overview" as VcrTabKey, moved: false } : resolveVcrTab(tabParam);
+  // With the conversation open the address also says which result is beside it.
+  const { tab, moved } = chat ? { tab: resolveVcrTab(query.get("result")).tab, moved: false } : resolveVcrTab(tabParam);
   const view: StudyView = chat ? "chat" : tab;
   const { loaded, reload, refreshError } = useStudy(studyId, feature !== "loading" && feature !== "off", view);
 
@@ -268,8 +271,11 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
     const intent: RuntimeUiIntent | null = draft && sessionId
       ? { kind: "open", projectId: study.projectId, requestId: crypto.randomUUID(), sessionId, draft, ...(restoreDraft ? { restoreDraft: true } : {}), ...(reference ? { vcrReference: reference } : {}) }
       : null;
-    navigate(vcrChatPath(studyId), intent ? { state: { runtimeUiIntent: intent } } : undefined);
-  }, [navigate, sessionId, study.projectId, studyId]);
+    // Whatever is being read stays beside the conversation.
+    const beside = new URLSearchParams(params);
+    beside.set("result", tab);
+    navigate(`${vcrChatPath(studyId)}?${beside}`, intent ? { state: { runtimeUiIntent: intent } } : undefined);
+  }, [navigate, sessionId, study.projectId, studyId, tab, params]);
   useEffect(() => {
     if (!sessionId || !pendingChat.current) return;
     const saved = pendingChat.current;
@@ -284,8 +290,10 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
   }, [view, study.status, study.question, sessionId, studyId, openChat]);
   const openView = useCallback((next: StudyView) => {
     if (next === "chat") openChat();
+    // With the conversation open, a destination changes what is beside it and leaves the conversation where it is.
+    else if (view === "chat") navigate(`${vcrChatPath(studyId)}?result=${next}`);
     else navigate(study.purpose === "calculation" ? vcrCalculationViewPath(studyId, next) : vcrTabPath(studyId, next));
-  }, [navigate, openChat, studyId, study.purpose]);
+  }, [navigate, openChat, studyId, study.purpose, view]);
 
   const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法停止，请稍后重试。" }))); };
 
@@ -318,27 +326,45 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
     </VcrTabBoundary>
   ), [Tab, tab, studyId, study, reload]);
 
+  // What the study waits for, over every result; the overview lists it all, and is where a line without a link of its own is done.
+  const needs: WorkNeed[] = tab === "overview" ? [] : study.overview.attention.filter((line) => line.tone === "attention").map((line) => ({
+    key: line.kind, kind: line.kind === "allowance_waiting" ? "resolve" as const : line.kind.startsWith("intake") || line.kind === "budget_confirm" ? "confirm" as const : "provide" as const, text: line.text,
+    action: <Link className="rounded text-link hover:underline" to={vcrTabPath(studyId, line.action?.tab ?? line.tab ?? "overview")}>{line.action?.label ?? "去处理"}</Link>,
+  }));
+  const results = (
+    <>
+      {pausedNote}
+      <NeedsBar needs={needs} more={<Link className="text-caption text-text-3 hover:underline" to={vcrTabPath(studyId, "overview")}>全部</Link>} />
+      {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
+      {budgetNote}
+      {packageId ? (
+        <VcrPackageReader
+          studyId={studyId}
+          exportId={packageId}
+          onBack={() => { params.delete("package"); setParams(params, { replace: true }); }}
+        />
+      ) : body}
+    </>
+  );
+  const collapseTo = (() => {
+    const kept = new URLSearchParams(params);
+    kept.delete("result");
+    const query = kept.toString();
+    return `${study.purpose === "calculation" ? vcrCalculationViewPath(studyId, tab) : vcrTabPath(studyId, tab)}${query ? `?${query}` : ""}`;
+  })();
+
   return (
-    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
+    <StudyFrame studyId={studyId} study={study} view={view} tab={tab} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
       <VcrRefreshContext.Provider value={reportFailure}>
-      {(refreshError !== null || Object.keys(failures).length > 0) && view !== "chat" && <VcrRefreshNote message={refreshFailed} onRetry={retryFailed} />}
+      {(refreshError !== null || Object.keys(failures).length > 0) && <VcrRefreshNote message={refreshFailed} onRetry={retryFailed} />}
       {waitingDraft && !sessionId && <Note action={<Button size="sm" variant="text" onClick={reload}>重试连接研究对话</Button>}>请求已保留。研究对话连接后会恢复到输入框，由你发送。</Note>}
       {view === "chat" ? (
-        <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
-      ) : (
-        <>
-          {pausedNote}
-          {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
-          {budgetNote}
-          {packageId ? (
-            <VcrPackageReader
-              studyId={studyId}
-              exportId={packageId}
-              onBack={() => { params.delete("package"); setParams(params, { replace: true }); }}
-            />
-          ) : body}
-        </>
-      )}
+        <WorkspaceSplit
+          collapseTo={collapseTo}
+          results={<div id={STUDY_PANEL_ID} role="region" aria-label="研究内容">{results}</div>}
+          conversation={<StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />}
+        />
+      ) : results}
 
       {panel === "rename" && <VcrRenameDialog studyId={studyId} name={study.name} onClose={() => setPanel(null)} onRenamed={renamed} />}
       {panel === "export" && <VcrExportDialog busy={running} onClose={() => setPanel(null)} onExport={exportAs} />}

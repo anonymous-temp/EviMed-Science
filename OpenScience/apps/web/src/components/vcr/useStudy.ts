@@ -1,3 +1,4 @@
+import { CONVERSATION_SETTLED_EVENT } from "@/lib/runtimeUiBridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { getVcrStudy, isVcrMissing, isVcrOff, type VcrStudy } from "@/lib/vcrClient";
@@ -104,6 +105,12 @@ export function useStudy(studyId: string, enabled: boolean, view: string): { loa
     document.addEventListener("visibilitychange", read);
     return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", read); };
   }, [loaded, answers, view, studyId, reload]);
+
+  // A turn of the conversation beside the page ended, and may have written what the page shows.
+  useEffect(() => {
+    window.addEventListener(CONVERSATION_SETTLED_EVENT, reload);
+    return () => window.removeEventListener(CONVERSATION_SETTLED_EVENT, reload);
+  }, [reload]);
 
   useEffect(() => {
     const onRefresh = (event: Event) => {
