@@ -41,3 +41,12 @@ test('overlap depends on the run intervals, not an old directory or an unknown s
   const overlap = run('r4', 's4', 'peer', { startedAt: '2026-11-01T10:05:00Z', finishedAt: null });
   assert.deepEqual(overlappingRuns(current, [current, old, future, overlap]).map((item) => item.id), ['r4']);
 });
+
+test('a witnessed accepted submission is ownership evidence without a surviving plan', () => {
+  const current = run('r1', 's1', 'statistics');
+  const peer = run('r2', 's2', 'unused', { nativeWorkflow: { plan: null,
+    submissions: [{ id: 'adr', accepted: { contractKind: 'adr-analysis-report' } }], delegates: [] } });
+  assert.deepEqual([...foreignDeliverableIds(current, [peer])], ['adr']);
+  assert.deepEqual([...foreignDeliverableIds({ ...current, nativeWorkflow: { ...current.nativeWorkflow,
+    submissions: [{ id: 'adr', accepted: {} }] } }, [peer])], [], 'an ID witnessed by both runs remains ambiguous');
+});
