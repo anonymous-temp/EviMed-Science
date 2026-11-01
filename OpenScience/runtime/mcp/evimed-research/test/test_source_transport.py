@@ -357,6 +357,20 @@ class FetchTests(unittest.TestCase):
         self.assertNotIn("rate limiting this caller", str(error))
         self.assertIn("do not describe it as", error.next_actions()[0])
 
+    def test_a_pace_that_does_not_fit_the_time_left_is_still_the_gateways_and_never_the_sources_ask(self):
+        # 10 s of 60 remain and the gateway asks for 120: the wait is not slept, but the source was never asked for anything, so the
+        # failure keeps its reason and its wording instead of being restated as "<source> asked for a wait".
+        self.clock.now += 50
+        paced = {"code": "public_source_gateway_project_rate_limited", "message": "This project may make 600 public-source requests a minute; ask again in 120 s.", "retryAfterSeconds": 120}
+        door, error = self.fetch(http_error(429, paced, retry_after=120), FakeResponse(b"{}"))
+        self.assertIsInstance(error, source_outcome.SourceError)
+        self.assertEqual((error.state, error.reason, error.retryable, error.retry_after), ("unavailable", "gateway_project_limit", True, 120))
+        self.assertEqual(self.clock.sleeps, [], "a wait that cannot fit is never slept")
+        self.assertEqual(len(door.calls), 1)
+        self.assertIn("was not asked", str(error))
+        self.assertNotIn("asked for a wait", str(error))
+        self.assertIn("about 120 s", error.next_actions()[0])
+
     def test_a_verification_page_with_status_200_is_a_refusal_never_a_file(self):
         # Recorded 2026-10-04: pmc.ncbi.nlm.nih.gov/articles/instance/<id>/bin/<file>
         # answers a reCAPTCHA page, HTTP 200, text/html, to a plain client.

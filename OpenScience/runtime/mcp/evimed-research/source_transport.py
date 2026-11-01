@@ -406,8 +406,9 @@ def _run(open_response, handle, *, deadline, scope, per_attempt, attempts, idemp
             raise failure
         delay = retry_delay(attempt, failure.retry_after, rng=rng)
         if delay >= deadline.remaining():
-            # A wait that does not fit is not slept: say what the source asked for.
-            if failure.retry_after is not None:
+            # A wait that does not fit is not slept: say what the source asked for. The gateway's own pace for the project is not
+            # the source's ask: the source was never asked, and its reason and wording already say so.
+            if failure.retry_after is not None and failure.reason != "gateway_project_limit":
                 raise failure.restated(
                     "retry_after_exceeds_deadline",
                     "%s asked for a wait of %d s and only %d s of the time budget remain." % (
