@@ -136,6 +136,15 @@ review checks the report against the reporting checklist for this design and
 traces every stated result to the job's own output files. Write each result from
 the engine's display value; rounding is checked, not forbidden.
 
+Choose effect measure from the research question and estimand; differences in
+baseline risk can affect interpretation on both relative and absolute scales.
+Different sample sizes or observed control rates alone do not establish
+between-study effect heterogeneity or justify a random-effects model. Explain
+clinical and methodological variation and the assumptions behind the model.
+With few studies, a low I² or a nonsignificant Q does not establish homogeneity.
+In leave-one-out analyses compare effect estimates and intervals, not merely
+whether each p value crosses 0.05; removing data changes precision.
+
 ## Before delivering: two fixed steps
 
 Both run on the finished deliverable, in this order, every time. They are steps

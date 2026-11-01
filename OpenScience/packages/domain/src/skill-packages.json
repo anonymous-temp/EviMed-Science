@@ -812,7 +812,7 @@
       "origin": "capability",
       "version": "1.1.4",
       "source": {"kind":"release"},
-      "digest": "sha256:14f687b9120de41de6769aecb36fe3565692796ceda83b97a69cf9882e55c9ae",
+      "digest": "sha256:6a23959bbfde1cf067f6a7f5229d09203d3b583ebbf67bc08f980c8d17387396",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"34e2ca651623b23c110e281f997395a6e0e537b26d834e7537f0e963bdc1275b"}],
       "dependencies": [{"kind":"platform-tool","name":"meta_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}],

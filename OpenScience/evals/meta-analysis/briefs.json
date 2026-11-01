@@ -25,13 +25,15 @@
         "Say which routes and dose bands were merged into the primary comparison and what was left out, so the pooled estimate has a defined population of comparisons.",
         "Report the pooled estimate, its interval, the heterogeneity statistic and the model exactly as the deterministic engine returned them.",
         "Keep the certainty rating traceable: the starting level, each downgrade, and the step that produced it.",
-        "Report the exact releaseStatus, artifact paths, warnings, blockers and next actions from the terminal job response."
+        "Report the exact releaseStatus, artifact paths, warnings, blockers and next actions from the terminal job response.",
+        "Explain the estimand, sources of heterogeneity and model assumptions; interpret leave-one-out effect estimates and intervals rather than significance alone."
       ],
       "mustNotDo": [
         "Pool the venous thromboembolism outcome across trials that did not define or ascertain it the same way, without saying so.",
         "Restate a number in the navigation report that differs from the generated manuscript or figure.",
         "Describe an abstract or a bibliographic record as full text.",
-        "Recommend a dose, a route or a timing for the medicine anywhere in the deliverable."
+        "Recommend a dose, a route or a timing for the medicine anywhere in the deliverable.",
+        "Treat unequal sample sizes, low I-squared or a changed significance label alone as proof of between-study heterogeneity or instability."
       ],
       "gradedOn": "Whether every numerical claim in meta-analysis-report.md matches the generated artifacts, and whether a reader can tell which comparisons the pooled figure is an average of.",
       "generated": {
