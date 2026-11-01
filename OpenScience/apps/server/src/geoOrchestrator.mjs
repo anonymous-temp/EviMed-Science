@@ -989,9 +989,11 @@ export class GeoOrchestrator {
     // step queued on every tick with nothing said (2026-11-01). Only the project's own engines, though: the saved agreement outlives a
     // change of the project's engines, and a round must not spend on an engine the person has since removed. An agreement none of whose
     // engines is selected any more is outside the project's scope and is skipped by name below.
-    const contractScoped = Boolean(contract) && ["baseline", "single_step"].includes(spec.kind) && Array.isArray(contract?.engines) && contract.engines.length > 0;
+    /** @type {string[]} */
+    const contractEngines = Array.isArray(contract?.engines) ? contract.engines : [];
+    const contractScoped = Boolean(contract) && ["baseline", "single_step"].includes(spec.kind) && contractEngines.length > 0;
     const engines = contractScoped
-      ? /** @type {string[]} */ (contract?.engines).filter((/** @type {string} */ engine) => (project.engines ?? []).includes(engine))
+      ? contractEngines.filter((/** @type {string} */ engine) => (project.engines ?? []).includes(engine))
       : spec.engines ?? project.engines;
     if (["weekly", "sentinel", "post_publication", "noise"].includes(spec.kind)
       && (!geoAutomationEnabled(project) || !engines.every((/** @type {string} */ engine) => project.steps.monitoring.automation.engines.includes(engine)))) return null;

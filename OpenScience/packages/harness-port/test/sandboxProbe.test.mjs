@@ -9,7 +9,7 @@ import test from "node:test";
 
 import { probeSandbox } from "../index.mjs";
 
-/** @param {{ enforcement?: string, stderr?: string, sandbox?: Record<string, unknown> }} outcome */
+/** @param {{ enforcement?: string, stderr?: string, sandbox?: Record<string, unknown>, exitCode?: number | null, signal?: string | null }} outcome */
 function shellThatReports({ enforcement = "full", stderr = "", sandbox = {}, exitCode = 0, signal = null }) {
   return {
     resolve: (/** @type {any} */ request) => request,
