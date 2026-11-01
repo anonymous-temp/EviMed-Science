@@ -131,9 +131,9 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh analysis
 # the whole-tree version assertion below verifies the resulting kernel closure
 # rather than trusting the date.
 ARG NPM_REGISTRY=https://registry.npmjs.org
-ARG DSH_VERSION=0.2.1-rc.2
+ARG DSH_VERSION=0.2.1-rc.5
 ARG DSH_CORDIS_VERSION=4.0.5
-ARG DSH_PUBLISHED_BEFORE=2026-10-17T08:52:11.767Z
+ARG DSH_PUBLISHED_BEFORE=2026-10-29T14:24:35.397Z
 COPY --from=install-phases /phases/kernel.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh kernel
 
@@ -304,7 +304,7 @@ COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-con
 # phase below) a boot.
 ARG DSH_CITE_BUNDLE="dsh-cite@0.3.5"
 ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.11"
-ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.2"
+ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.4"
 ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
 COPY deploy/runtime-dsh/install-loopx.mjs /usr/local/lib/evimed/install-loopx.mjs
 COPY packages/contracts/loopx/workflow-skills.json /usr/local/lib/evimed/loopx-workflow-skills.json
