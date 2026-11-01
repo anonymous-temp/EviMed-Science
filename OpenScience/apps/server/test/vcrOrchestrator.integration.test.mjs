@@ -36,7 +36,7 @@ import { VcrAccess } from "../src/vcrAccess.mjs";
 import { createVcrGatewayHandler, vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { backfillResultSubjects } from "../src/vcrSubjects.mjs";
 import { Readable } from "node:stream";
-import { VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
+import { VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -939,8 +939,96 @@ test("R10 a computation of a step the researcher asked for with 「让 AI 做」
   const before = notices_of(module).length;
   await write("assumption", [{ key: "dropout_rate", name: "脱落率", pointValue: 0.15, sourceKind: "expert_set", valueSource: "assumed" }]);
   await drainJobs(module, study);
-  assert.equal((await store.jobs(study.id)).filter((job) => job.kind === "design_simulation").length, 2, "it was recomputed");
+  const simulated = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation");
+  assert.equal(simulated.filter((job) => job.checkpoint.stage === "simulation").length, 2, "it was recomputed");
+  assert.equal(simulated.filter((job) => job.checkpoint.stage === "simulation_null").length, 2, "and so was the zero-effect check that follows it, each time");
   assert.equal(notices_of(module).length, before, "and nobody was told");
+});
+
+/** A design's result for the zero-effect law carries the type I error and not a power, as the engine names it. */
+const nullAware = (/** @type {any} */ job) => (job.method === "design.simulate" && job.scenario.truth?.hazardRatio === 1
+  ? engineResult(job, { measures: [{ name: "type_one_error", value: 0.0246, simulated: true, mcse: 0.0011, source: "synthetic" }], diagnostics: { isNullScenario: true } })
+  : engineResult(job));
+
+test("A1 a two-arm design is also run under no effect, after the alternative: the researcher has the power first, the type I error follows, and a check that fails or is cancelled takes nothing back", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const { study, write } = await computedStudy(module, "nullcheck");
+  const [scenario] = await store.trialScenarios(study.id);
+  const jobs = await store.rows("SELECT id, state, checkpoint, created_at FROM evimed_vcr.jobs WHERE study_id=$1 AND kind='design_simulation' ORDER BY created_at", [study.id]);
+  assert.deepEqual(jobs.map((job) => job.checkpoint.stage), ["simulation", "simulation_null"], "the alternative is queued first and the check after it");
+  assert.ok(jobs.every((job) => job.state === "succeeded"));
+  assert.equal(jobs[1].checkpoint.check, true);
+  assert.equal(jobs[1].scenario ?? null, null);
+  const nullJob = await store.one("SELECT scenario, replicates FROM evimed_vcr.jobs WHERE id=$1", [jobs[1].id]);
+  assert.equal(nullJob.scenario.truth.hazardRatio, 1, "the one key that says no effect");
+  assert.equal(nullJob.scenario.truth.controlMedian, 6, "and the control level is the study's");
+  assert.equal(nullJob.replicates, 20_000, "the null floor of an exploration");
+  const altJob = await store.one("SELECT replicates FROM evimed_vcr.jobs WHERE id=$1", [jobs[0].id]);
+  assert.equal(altJob.replicates, 5_000);
+  // The result is one: the alternative's figures stand, with the check's beside them, the check in its own stage record.
+  const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+  assert.equal(current.measures.find((measure) => measure.name === "power").value, 0.712);
+  assert.equal(current.measures.find((measure) => measure.name === "type_one_error").value, 0.0246);
+  assert.deepEqual(Object.keys(current.diagnostics.stageResults).sort(), ["analytic", "simulation", "simulation_null"]);
+  assert.equal(current.diagnostics.stageResults.simulation_null.diagnostics.replicatePlan.basis, "default");
+  assert.deepEqual(current.diagnostics.stageResults.simulation.diagnostics.appliedDefaults.map((entry) => entry.path).includes("accrual.dropoutAnnual"), false,
+    "the card gave the dropout, so it is not a default");
+  assert.equal(current.diagnostics.isNullScenario, undefined, "the check's summaries are its own");
+  assert.equal(current.conclusion, "estimable");
+  assert.equal((await store.studyById(study.id)).steps.trial.status, "done");
+  // The page reads the check as done, with its error, held against the closed form where one exists.
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  assert.equal(trial.designs[0].nullState, "done");
+  assert.equal(trial.designs[0].measures.type_one_error.mcse, 0.11);
+  assert.equal(trial.designs[0].measures.power.value, 71.2);
+  assert.equal(trial.designs[0].crossCheck, null, "this double's engine states no closed form for it");
+  const dropout = trial.premises.find((row) => row.key === "dropout");
+  assert.deepEqual([dropout.value, dropout.source, dropout.decisive], ["10%", "assumed", true], "the dropout is a premise of the page, from the card that gave it");
+  void write;
+});
+
+test("A1 a zero-effect check that fails leaves the design's result as it was and its step done; one that is cancelled does the same", options, async () => {
+  for (const how of /** @type {const} */ (["failed", "canceled"])) {
+    const module = compose({ resultFor: (job) => (job.method === "design.simulate" && job.scenario.truth?.hazardRatio === 1
+      ? engineResult(job, { status: "failed", conclusion: null, measures: [], counts: {}, diagnostics: { issues: [{ code: "handler_error", field: "scenario", detail: "no" }] } })
+      : engineResult(job)) });
+    const study = await makeStudy(`nullcheck-${how}`);
+    const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+      study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+    await write("definition", definition);
+    await write("assumption", [
+      { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" },
+      { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+      { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" },
+    ]);
+    await write("trial_scenario", trialA);
+    await module.orchestrator.advance(study.id);
+    if (how === "canceled") {
+      // Stop the check while it waits in the queue: the alternative has landed, the check has been queued after it.
+      let queued = null;
+      for (let pass = 0; pass < 20 && !queued; pass += 1) {
+        await module.loops.jobs();
+        await module.orchestrator.advance(study.id);
+        queued = (await store.rows("SELECT id FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null' AND state='queued'", [study.id]))[0] ?? null;
+      }
+      assert.ok(queued, "the check was queued after the alternative landed");
+      await module.jobs.cancel(study.id, queued.id, { actor: "owner" });
+    }
+    await drainJobs(module, study);
+    const [scenario] = await store.trialScenarios(study.id);
+    const nullJob = await store.one("SELECT state FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null'", [study.id]);
+    assert.equal(nullJob?.state, how, `the check ${how}: ${JSON.stringify(await store.rows("SELECT key, state, detail FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND kind='job'", [study.id]))}`);
+    const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+    assert.ok(current, "the design has its result");
+    assert.equal(current.measures.find((measure) => measure.name === "power").value, 0.712, "the power is the alternative's, unchanged");
+    assert.equal(current.measures.some((measure) => measure.name === "type_one_error"), false);
+    assert.equal(current.diagnostics.partial, undefined);
+    assert.ok(current.diagnostics.stageResults.simulation && !current.diagnostics.stageResults.simulation_null);
+    assert.equal(current.conclusion, "estimable");
+    assert.equal((await store.studyById(study.id)).steps.trial.status, "done", "the step is done: what it checks is there");
+    assert.equal((await store.rows("SELECT 1 FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND state='failed' AND key LIKE '%simulation_null'", [study.id])).length, how === "failed" ? 1 : 0,
+      "and a failed check is on record, traceable");
+  }
 });
 
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
@@ -1036,7 +1124,7 @@ test("TU-4 a design's result says the unit its times were settled in, and the jo
   const median = (/** @type {Record<string, any>} */ extra = {}) => ({ key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 26, sourceKind: "expert_set", valueSource: "assumed", ...extra });
 
   const inWeeks = await run("tuweeks", [hazard, dropout, median({ unit: "weeks" })]);
-  assert.equal(inWeeks.jobs.length, 2, "both stages of the design ran");
+  assert.equal(inWeeks.jobs.length, 3, "the design's sizing, its simulation and the zero-effect check that follows it all ran");
   for (const job of inWeeks.jobs) assert.deepEqual([job.scenario.timeUnit, job.scenario.truth.controlMedian], ["weeks", 26], `${job.kind}: the scenario is in the unit its evidence is in`);
   assert.deepEqual(inWeeks.result.diagnostics.timeUnitBasis, { unit: "weeks", basis: "evidence" }, "and the result says where the unit came from");
 
@@ -1053,7 +1141,7 @@ test("AC-16 a changed assumption marks everything downstream stale, recomputes i
   const [scenario] = await store.trialScenarios(study.id);
   const scenarioNode = vcrObjectNode("trial_scenario", scenario);
   const oldNode = lineageNode("result", before[0].id, before[0].version);
-  const firstJobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation");
+  const firstJobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation" && job.checkpoint.stage === "simulation");
   assert.equal(firstJobs.length, 1);
 
   // 脱落率 from 10% to 15%: a new assumption version, and the plan says what it reaches — the object and the result it made.
@@ -1070,9 +1158,9 @@ test("AC-16 a changed assumption marks everything downstream stale, recomputes i
   // A design's two stages land one after the other, each a new version that supersedes the last: the old result leads, by its chain, to the current one.
   assert.equal(await chainEnd(study.id, before[0].id), after[0].id, "the old one is superseded, not deleted");
   assert.equal((await store.result(study.id, before[0].id)).measures.find((measure) => measure.name === "power").value, 0.712, "and it keeps its numbers");
-  const jobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation");
+  const jobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation" && job.checkpoint.stage === "simulation");
   assert.equal(jobs.length, 2, "a second job, not the first one returned again");
-  const rows = await store.rows("SELECT scenario, idempotency_key, inputs FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' ORDER BY created_at", [study.id]);
+  const rows = await store.rows("SELECT scenario, idempotency_key, inputs FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' AND checkpoint->>'stage' = 'simulation' ORDER BY created_at", [study.id]);
   assert.notEqual(rows[0].idempotency_key, rows[1].idempotency_key, "a new key per stale generation");
   assert.equal(rows[0].scenario.accrual.dropoutAnnual, 0.1);
   assert.equal(rows[1].scenario.accrual.dropoutAnnual, 0.15, "the new card version is the number the recomputation used");
@@ -1261,7 +1349,9 @@ for (const lastKind of ["design_analytic", "design_simulation"]) {
     const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
     const simulation = current.diagnostics.stageResults.simulation;
     assert.notEqual(simulation.jobId, retiredJobId);
-    const root = await store.one("SELECT method FROM evimed_vcr.executions WHERE id=$1", [current.executionId]);
+    // The last stage of the result's own to land: the zero-effect check follows them all, and is not what this arrangement is about.
+    const ownLast = current.diagnostics.stages.filter((/** @type {any} */ entry) => !VCR_CHECK_STAGES.includes(entry.stage)).at(-1);
+    const root = await store.one("SELECT method FROM evimed_vcr.executions WHERE study_id=$1 AND job_id=$2", [study.id, ownLast.jobId]);
     assert.equal(root.method, lastKind === "design_analytic" ? "design.analytic" : "design.simulate");
     await store.query("UPDATE evimed_vcr.executions SET method_version='0.9.0' WHERE study_id=$1 AND job_id=$2", [study.id, retiredJobId]);
     // A superseded job mentioned only in the stage list is not a current

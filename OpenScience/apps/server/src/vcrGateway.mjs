@@ -2360,7 +2360,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             ? poolingSummary(result, object(await vcr.store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [job.id]).then((/** @type {any} */ row) => row?.checkpoint))) : null;
           // What a run reads of a result is what a page shows a member, less
           // its small cells (contract §4): the answer passes the boundary once.
-          const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
+          const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress, ...appliedOf(job),
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
           const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result" }),
@@ -2569,13 +2569,26 @@ async function startJob(vcr, study, request) {
   // The programme learns the stage is taken and lands the result on the object when it ends; a failure to say so costs a
   // duplicate computation, never this job.
   if (subject && vcr.orchestrator?.noteRuntimeJob) await vcr.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
-  return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}),
+  return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}), ...appliedOf(job),
     ...(subject ? { subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) } } : {}),
     // A job stopped for budget is the second human stop: the run is
     // told plainly so it goes on with what it can do (§10.1).
     ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}),
     // A job that was queued but may not finish inside its budget (a synthesis): the run is told, with what to reduce.
     ...(notice ? { notice } : {}) };
+}
+
+/**
+ * The fields the platform filled in because the scenario stated none, as the call's answer lists them (`applied`: the field and
+ * the value it took — a dropout of 0, an alpha of 0.025). Frozen with the job when it was queued (`vcrAppliedDefaults`), so a run
+ * that reads it says the values the computation really used; nothing is listed for a job that took no default.
+ * @param {any} job @returns {{ applied?: Array<{ field: string, value: unknown }> }}
+ */
+function appliedOf(job) {
+  const taken = Array.isArray(job?.checkpoint?.appliedDefaults) ? job.checkpoint.appliedDefaults : [];
+  const applied = taken.filter((/** @type {any} */ entry) => entry && typeof entry.path === "string").slice(0, 24)
+    .map((/** @type {any} */ entry) => ({ field: entry.path, value: entry.value }));
+  return applied.length ? { applied } : {};
 }
 
 /** What a run is told of a job only a person can release: it is not coming, so the run does not wait for it or ask again. */

@@ -17,7 +17,7 @@ import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
   VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
-  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario,
+  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -545,10 +545,12 @@ test("an assumption card's point value is the number the scenario uses, and a ne
 test("a trial scenario is an analytic stage, a simulation stage and — when the effect card states a prediction distribution — assurance", () => {
   const row = trialRow({ design: { nTreat: 120, nControl: 60 }, analysis: { method: "logrank", alpha: 0.025 }, accrual: { kind: "uniform", duration: 12, followup: 12 } });
   const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, context));
-  // The assurance stage needs the events the analytic calculation says the design needs: it is planned once that result exists.
-  assert.deepEqual(plan.stages.map((entry) => entry.jobKind), ["design_analytic", "design_simulation"]);
+  // The assurance stage needs the events the analytic calculation says the design needs: it is planned once that result exists. The
+  // zero-effect simulation follows the stages that deliver the result (A1), so the researcher reads the power without waiting for it.
+  assert.deepEqual(plan.stages.map((entry) => `${entry.stage}:${entry.jobKind}`), ["analytic:design_analytic", "simulation:design_simulation", "simulation_null:design_simulation"]);
   const withEvents = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, { ...context, analytic: { measures: [{ name: "required_events", value: 246.2 }] } }));
-  assert.deepEqual(withEvents.stages.map((entry) => `${entry.stage}:${entry.jobKind}`), ["analytic:design_analytic", "simulation:design_simulation", "assurance:assurance"]);
+  assert.deepEqual(withEvents.stages.map((entry) => `${entry.stage}:${entry.jobKind}`),
+    ["analytic:design_analytic", "simulation:design_simulation", "assurance:assurance", "simulation_null:design_simulation"]);
   const assurance = withEvents.stages[2];
   assert.equal(assurance.after, "analytic");
   assert.deepEqual(assurance.scenario.designPrior, { mean: Math.log(0.7), sd: 0.15, kind: "lognormal", basis: "prediction" });
@@ -561,6 +563,51 @@ test("a trial scenario is an analytic stage, a simulation stage and — when the
   assert.equal(vcrDesignPriorFrom([{ key: "hazard_ratio", version: 1, pointValue: 0.7, distribution: { family: "point", params: { point: 0.7 } } }], "time_to_event"), null);
   assert.deepEqual(vcrDesignPriorFrom([{ key: "mean_difference", version: 1, pointValue: 2, distribution: { kind: "normal", mean: 2, sd: 0.5 } }], "continuous")?.prior,
     { mean: 2, sd: 0.5, kind: "normal", basis: "prediction" }, "the flat shape an earlier run wrote is read too");
+});
+
+test("a two-arm design is also run under no effect, after the alternative (A1): the effect cards are not bound into it, the others are, and it is the null case", () => {
+  const plans = /** @type {Array<[string, string, Record<string, any>, Record<string, any>]>} */ ([
+    ["time_to_event", "two_arm_fixed", { design: { nTreat: 120, nControl: 60 }, accrual: { kind: "uniform", duration: 12, followup: 12 }, truth: { hazardRatio: 0.9, controlMedian: 8 } }, { hazardRatio: 1 }],
+    ["binary", "two_arm_fixed", { design: { nTreat: 100, nControl: 100 }, truth: { controlRate: 0.3, treatmentRate: 0.45 } }, { controlRate: 0.3, riskDifference: 0 }],
+    ["continuous", "two_arm_fixed", { design: { nTreat: 100, nControl: 100 }, truth: { effect: 4, sd: 10 } }, { effect: 0, sd: 10 }],
+  ]);
+  for (const [endpoint, design, configuration, expected] of plans) {
+    const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow(configuration, { endpointType: endpoint, design }) },
+      { ...context, definition: { ...definition, endpointType: endpoint }, assumptions: endpoint === "time_to_event" ? cards : [] }));
+    assert.equal(plan.ok, true, endpoint);
+    const names = plan.stages.map((entry) => entry.stage);
+    assert.equal(names.at(-1), "simulation_null", `${endpoint}: the check is the last stage`);
+    assert.ok(names.indexOf("simulation") >= 0 && names.indexOf("simulation") < names.indexOf("simulation_null"), `${endpoint}: after the alternative`);
+    const alternative = plan.stages.find((entry) => entry.stage === "simulation");
+    const nullStage = plan.stages.find((entry) => entry.stage === "simulation_null");
+    // The check waits for the stage that delivers the result; it is a check (the page and the notices read that), and a null case.
+    assert.equal(nullStage.after, "simulation", endpoint);
+    assert.equal(nullStage.detail.check, true);
+    assert.equal(nullStage.jobKind, "design_simulation");
+    assert.deepEqual(validateScenario("design.simulate", nullStage.scenario), [], endpoint);
+    assert.equal(vcrIsNullScenario(nullStage.scenario), true, `${endpoint}: the null stage is the null case`);
+    assert.equal(vcrIsNullScenario(alternative.scenario), false, `${endpoint}: the alternative is not`);
+    for (const [key, value] of Object.entries(expected)) assert.equal(nullStage.scenario.truth[key], value, `${endpoint} ${key}`);
+    // The alternative's own effect is not in the null case, and nothing else of the design is changed.
+    assert.deepEqual(nullStage.scenario.design, alternative.scenario.design);
+  }
+  // The effect card (hazard_ratio 0.7) would overwrite the null case's hazard ratio of 1: it is not bound into it; the control median
+  // and the dropout cards still are, and the alternative still takes all three.
+  const survival = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 60 }, accrual: { kind: "uniform", duration: 12, followup: 12 } }) }, context));
+  const alt = survival.stages.find((/** @type {any} */ entry) => entry.stage === "simulation");
+  const nul = survival.stages.find((/** @type {any} */ entry) => entry.stage === "simulation_null");
+  assert.equal(alt.scenario.truth.hazardRatio, 0.7);
+  assert.equal(nul.scenario.truth.hazardRatio, 1, "the null case states no effect, whatever the effect card says");
+  assert.equal(nul.scenario.truth.controlMedian, 6);
+  assert.equal(nul.scenario.accrual.dropoutAnnual, 0.1);
+  assert.deepEqual(nul.bound.map((/** @type {any} */ entry) => entry.path).sort(), ["accrual.dropoutAnnual", "truth.controlMedian"]);
+  // A design that already is the null case is not run under it twice, and a single-arm design has no second case of this kind.
+  const alreadyNull = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 60 }, truth: { hazardRatio: 1, controlMedian: 6 },
+    accrual: { kind: "uniform", duration: 12, followup: 12 } }) }, { ...context, assumptions: [] }));
+  assert.deepEqual(alreadyNull.stages.map((/** @type {any} */ entry) => entry.stage), ["analytic", "simulation"]);
+  const sizeOnly = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 60 } }, { endpointType: "continuous" }) },
+    { ...context, definition: { ...definition, endpointType: "continuous" }, assumptions: [] }));
+  assert.ok(sizeOnly.stages.some((/** @type {any} */ entry) => entry.stage === "simulation_null"), "a design with no truth at all still gets its null case: the one key it adds");
 });
 
 test("a design the engine does not implement is said in a sentence and never run as something else; a key it does not read is refused by its path", () => {

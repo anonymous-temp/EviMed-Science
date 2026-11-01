@@ -650,6 +650,23 @@ class VcrSimulateTests(_GatewayCase):
         result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_9"})
         self.assertFalse(any("resultEntry" in action for action in result["next_actions"]))
 
+    # A2: the six-value two-arm survival design states six numbers and the platform fills in the rest; the answer lists what it filled in.
+    APPLIED = [{"field": "analysis.alpha", "value": 0.025}, {"field": "analysis.sided", "value": 1}, {"field": "accrual.dropoutAnnual", "value": 0}]
+
+    def test_an_answer_lists_what_the_platform_filled_in_and_tells_the_run_to_say_it(self):
+        for state in ("queued", "running", "succeeded"):
+            _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_7", "state": state, "applied": self.APPLIED}})
+            result = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_simulation", "scenario": {"design": {"kind": "two_arm_fixed"}}})
+            self.assertEqual(result["data"]["applied"], self.APPLIED, state)
+            lines = [action for action in result["next_actions"] if "data.applied" in action]
+            self.assertEqual(len(lines), 1, state)
+            self.assertIn("Say each with its value", lines[0])
+        # Nothing is said when nothing was filled in, and the line does not touch the state of the answer.
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_8", "state": "queued", "applied": []}})
+        plain = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_simulation", "scenario": {"design": {"kind": "two_arm_fixed"}}})
+        self.assertFalse(any("data.applied" in action for action in plain["next_actions"]))
+        self.assertEqual(plain["status"], "success")
+
     def test_a_deployment_that_cannot_give_an_address_still_names_the_page_and_the_model_writes_none(self):
         entry = {key: value for key, value in self.ENTRY.items() if key != "url"}
         _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_9", "state": "succeeded", "resultEntry": entry}})
@@ -845,7 +862,10 @@ class CurveDigitizeTests(_GatewayCase):
         for forbidden in ("curve", "points", "provenance", "origin", "surv"):
             self.assertNotIn(forbidden, schema["properties"])
         arm = schema["properties"]["arms"]["items"]
-        self.assertEqual(arm["required"], ["riskTable"])
+        # The numbers at risk are the best a reconstruction can have and not a condition of one: a paper that prints none gives the arm's size.
+        self.assertNotIn("required", arm)
+        self.assertEqual(arm["anyOf"], [{"required": ["riskTable"]}, {"required": ["initialAtRisk"]}])
+        self.assertIn("initialAtRisk", arm["properties"])
         self.assertEqual(set(arm["properties"]["curve"]["properties"]), {"color", "legendOrder"})
         self.assertEqual(schema["properties"]["calibration"]["properties"]["y"]["properties"]["scale"]["enum"], ["fraction", "percent"])
         text = definition["description"]

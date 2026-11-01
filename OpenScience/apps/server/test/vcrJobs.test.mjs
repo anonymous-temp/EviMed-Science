@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatesForJob,
+  VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatePlanForJob, vcrReplicatesForJob,
   VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrBindScientificInputUnits, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
@@ -181,6 +181,69 @@ test("null and alternative stages retain their own operating characteristics, Mo
   assert.equal(phases.simulation_null.diagnostics.analyticCheck.law, "null");
   assert.equal(phases.simulation.diagnostics.analyticCheck.law, "alternative");
   assert.notEqual(phases.simulation_null.tables[0].sha256, phases.simulation.tables[0].sha256);
+});
+
+test("a zero-effect check that lands after the result adds its figure and never replaces the result's (A1)", () => {
+  const stage = (name) => ({ stage: name, jobId: `job_${name}`, method: "design.simulate", methodVersion: "1.2.0" });
+  const alternative = vcrMergeStageResult(null, { conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0, generatedRecords: 5000 },
+    measures: [{ name: "power", value: 0.81, mcse: 0.0055 }, { name: "expected_sample_size", value: 180, mcse: 0 }],
+    diagnostics: { isNullScenario: false, replicatesPlanned: 5000, powerCurve: { series: [] }, analyticCheck: { name: "power", value: 0.8, withinThreeMcse: true } },
+    tables: [{ name: "replicates", sha256: "a".repeat(64) }] }, stage("simulation"));
+  const filed = (/** @type {any} */ merged) => ({ id: "res_1", ...merged });
+  const check = (/** @type {Record<string, any>} */ over = {}) => ({ conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0, generatedRecords: 20000 },
+    measures: [{ name: "type_one_error", value: 0.0243, mcse: 0.0011 }, { name: "expected_sample_size", value: 175, mcse: 0 }],
+    diagnostics: { isNullScenario: true, replicatesPlanned: 20000, analyticCheck: { name: "type_one_error", value: 0.025, basis: "nominal_alpha", withinThreeMcse: true } },
+    tables: [{ name: "replicates", sha256: "b".repeat(64) }], ...over });
+  const merged = vcrMergeStageResult(/** @type {any} */ (filed(alternative)), check(), stage("simulation_null"));
+  // The figure the check is for is added; the result's own are not taken over by the null run's.
+  assert.deepEqual(merged.measures.map((measure) => measure.name).sort(), ["expected_sample_size", "power", "type_one_error"]);
+  assert.equal(merged.measures.find((measure) => measure.name === "expected_sample_size").value, 180, "the alternative's, not the null run's");
+  assert.equal(merged.diagnostics.isNullScenario, false, "the result's own summaries stand");
+  assert.equal(merged.diagnostics.replicatesPlanned, 5000);
+  assert.deepEqual(merged.counts, { realPatients: 0, generatedRecords: 5000 });
+  assert.equal(merged.conclusion, "estimable");
+  assert.ok(merged.diagnostics.powerCurve, "and so is the power curve");
+  // The check keeps its own record: its measures, its summaries, its closed-form check, its table.
+  const own = merged.diagnostics.stageResults.simulation_null;
+  assert.equal(own.measures.find((measure) => measure.name === "type_one_error").mcse, 0.0011);
+  assert.equal(own.diagnostics.analyticCheck.basis, "nominal_alpha");
+  assert.equal(own.measures.find((measure) => measure.name === "expected_sample_size").value, 175);
+  assert.equal(merged.diagnostics.stageResults.simulation.diagnostics.analyticCheck.name, "power", "the alternative's check is its own");
+  // A check that could not be estimated limits the result and does not void it; one that was limited does the same.
+  const broken = vcrMergeStageResult(/** @type {any} */ (filed(alternative)), check({ conclusion: "not_estimable", notEstimableRule: "design_effect_null", measures: [] }), stage("simulation_null"));
+  assert.equal(broken.conclusion, "limited");
+  assert.equal(broken.notEstimableRule, null, "the check's rule is not the result's");
+  assert.deepEqual(broken.measures.map((measure) => measure.name).sort(), ["expected_sample_size", "power"]);
+  // A cancelled check (a partial run) is a stage record like any other, flagged, and the result is the alternative's still.
+  const partial = vcrMergeStageResult(/** @type {any} */ (filed(alternative)), check({ conclusion: "limited", diagnostics: { partial: true, canceled: true, replicatesCompleted: 8000 } }), stage("simulation_null"));
+  assert.equal(partial.diagnostics.partial, undefined, "the result is not marked partial because its check was");
+  assert.equal(partial.diagnostics.stageResults.simulation_null.diagnostics.partial, true);
+  assert.equal(partial.conclusion, "limited");
+});
+
+test("the null floor rises with the intended use and for a borrowing design; the alternative's does not (decision 3)", () => {
+  const nullCase = { ...scenario, truth: { hazardRatio: 1, controlMedian: 6 } };
+  for (const use of ["exploratory", "design_support"]) assert.equal(vcrReplicatesForJob("design_simulation", nullCase, null, { intendedUse: use }), VCR_REPLICATES_NULL_MIN, use);
+  for (const use of ["specified_analysis", "submission_preparation"]) assert.equal(vcrReplicatesForJob("design_simulation", nullCase, null, { intendedUse: use }), 100_000, use);
+  assert.equal(vcrReplicatesForJob("design_simulation", nullCase, null), VCR_REPLICATES_NULL_MIN, "no use stated is an exploration");
+  // Only the null case is held to the larger number.
+  assert.equal(vcrReplicatesForJob("design_simulation", scenario, null, { intendedUse: "submission_preparation" }), VCR_REPLICATES_ALT_MIN);
+  // An external-control design borrows, whatever it is for; so does the MAP prior's table of operating characteristics.
+  const external = { design: { kind: "single_arm_external", n: 100 }, endpoint: { type: "binary" },
+    truth: { controlRates: [0.3, 0.4], treatmentRates: [0.3, 0.4] }, external: { targetPrevalence: 0.5 } };
+  assert.equal(vcrReplicatesForJob("design_simulation", external, null, { intendedUse: "exploratory" }), 100_000);
+  assert.equal(vcrReplicatesForJob("map_prior", { operatingCharacteristics: { nControl: 100, nTreatment: 100, drifts: [0, 0.5], effect: 0.8 } }, null, { intendedUse: "exploratory" }), 100_000);
+  assert.equal(vcrReplicatesForJob("map_prior", { operatingCharacteristics: {} }, 150_000, { intendedUse: "exploratory" }), 150_000, "what was asked can raise it");
+  assert.equal(vcrReplicatesForJob("map_prior", { historical: {} }, null), null, "a MAP prior with no table has no replicates");
+  // What set the number is kept with the job, and a precision the scenario asked for outranks the use when it needs more.
+  assert.deepEqual(vcrReplicatePlanForJob("design_simulation", nullCase, null, { intendedUse: "specified_analysis" }),
+    { replicates: 100_000, floor: 100_000, basis: "intended_use", intendedUse: "specified_analysis", targetMcse: null });
+  assert.equal(vcrReplicatePlanForJob("design_simulation", nullCase, null, { intendedUse: "exploratory" })?.basis, "default");
+  assert.equal(vcrReplicatePlanForJob("design_simulation", { ...nullCase, targetMcse: 0.0004 }, null, { intendedUse: "specified_analysis" })?.basis, "target_mcse");
+  assert.equal(vcrReplicatePlanForJob("map_prior", { operatingCharacteristics: {} }, null)?.basis, "borrowing");
+  // A grid is held to its worst cell, at the use's floor.
+  const grid = { ...scenario, truths: [{ hazardRatio: 0.7, controlMedian: 6 }, { hazardRatio: 1, controlMedian: 6 }] };
+  assert.equal(vcrReplicatesForJob("design_grid", grid, null, { intendedUse: "specified_analysis" }), 100_000);
 });
 
 // --- robustness methods ---

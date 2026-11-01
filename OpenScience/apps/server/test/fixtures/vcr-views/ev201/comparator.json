@@ -264,6 +264,7 @@
       "passed": true
     }
   ],
+  "reconstruction": null,
   "methods": [
     {
       "label": "生存曲线重建（Guyot）",
@@ -554,6 +555,8 @@
     }
   ],
   "prior": [],
+  "operatingCharacteristics": null,
+  "premises": [],
   "robustness": null,
   "gaps": {
     "title": "真实外部对照：不可估计",

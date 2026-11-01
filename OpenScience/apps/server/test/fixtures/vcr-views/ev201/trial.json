@@ -9,7 +9,7 @@
     {
       "key": "data",
       "label": "怎么生成数据",
-      "text": "事件时间 · 真实 HR 0.6 · 对照组中位 4.1"
+      "text": "事件时间 · 真实 HR 0.6 · 对照组中位 4.1 · 脱落 0%/年（默认）"
     },
     {
       "key": "estimate",
@@ -25,6 +25,64 @@
       "key": "measures",
       "label": "看哪些指标",
       "text": "功效、I 类错误、期望样本量"
+    }
+  ],
+  "premises": [
+    {
+      "key": "effect",
+      "label": "真实效应（风险比）",
+      "value": "0.6",
+      "source": "assumed",
+      "decisive": true,
+      "reason": null
+    },
+    {
+      "key": "control",
+      "label": "对照组中位时间",
+      "value": "4.1 个月",
+      "source": "assumed",
+      "decisive": true,
+      "reason": null
+    },
+    {
+      "key": "dropout",
+      "label": "每年脱落率",
+      "value": "0%",
+      "source": "default",
+      "decisive": true,
+      "reason": null
+    },
+    {
+      "key": "alpha",
+      "label": "显著性水平",
+      "value": "单侧2.5%",
+      "source": "assumed",
+      "decisive": true,
+      "reason": null
+    },
+    {
+      "key": "controlDistribution",
+      "label": "对照组生存分布",
+      "value": "指数分布",
+      "source": "default",
+      "decisive": false,
+      "reason": null
+    },
+    {
+      "key": "method",
+      "label": "分析方法",
+      "value": "log-rank 检验",
+      "source": "assumed",
+      "decisive": false,
+      "reason": null
+    },
+    {
+      "key": "accrualKind",
+      "label": "入组方式",
+      "value": "匀速入组",
+      "source": "default",
+      "decisive": false,
+      "reason": null
     }
   ],
   "designs": [
@@ -310,9 +368,12 @@
         "differencePoints": 0.4,
         "agrees": true
       },
+      "nullState": null,
+      "nullCheck": null,
       "record": {
         "method": "方案的模拟运行",
         "replicates": 16000,
+        "replicateReasons": [],
         "seed": 5,
         "check": {
           "analytic": 80,
@@ -656,9 +717,12 @@
         "differencePoints": 0.4,
         "agrees": true
       },
+      "nullState": null,
+      "nullCheck": null,
       "record": {
         "method": "方案的模拟运行",
         "replicates": 16000,
+        "replicateReasons": [],
         "seed": 5,
         "check": {
           "analytic": 80,
@@ -1002,9 +1066,12 @@
         "differencePoints": 0.4,
         "agrees": true
       },
+      "nullState": null,
+      "nullCheck": null,
       "record": {
         "method": "方案的模拟运行",
         "replicates": 16000,
+        "replicateReasons": [],
         "seed": 5,
         "check": {
           "analytic": 80,
@@ -1031,9 +1098,12 @@
       "method": null,
       "replicates": null,
       "crossCheck": null,
+      "nullState": null,
+      "nullCheck": null,
       "record": {
         "method": "方案的模拟运行",
         "replicates": 16000,
+        "replicateReasons": [],
         "seed": 5,
         "check": {
           "analytic": 80,

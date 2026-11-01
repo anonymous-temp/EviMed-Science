@@ -60,12 +60,12 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
 import {
-  VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
+  VCR_CHECK_STAGES, VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_FORECAST_MODEL_INTERFACES, VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
   VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, knownErrorCodeMessage, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, validateLongitudinalScenario,
   vcrCommonTimeUnit, vcrConvertTime, vcrEventHistoryScopeIssues, vcrModelCardIssues, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf,
-  vcrVisibleQuestion, whenHolds,
+  vcrIsNullScenario, vcrNullTruth, vcrVisibleQuestion, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -1465,6 +1465,22 @@ export function vcrBuildStages(item, context) {
           after: type === "time_to_event" && !configuration.design?.events ? "analytic" : null, detail: { priorAssumption: { key: prior.key, version: prior.version } } }));
       }
     }
+    // A two-arm design that simulates is also run under no effect (remediation plan A1; ICH E20, FDA 2019): a type I error is a
+    // measured number, not a sentence in a skill. It follows the alternative's stage — the researcher reads the power when it lands and
+    // does not wait for this one, the queue has one engine, and the null case asks for four times the alternative's replicates (more
+    // for a specified analysis). A scenario that already is the null case needs no second one.
+    const nullTruth = !simon && stages.some((entry) => entry.built.stage === "simulation") ? vcrNullTruth(base) : null;
+    if (nullTruth && !vcrIsNullScenario(base)) {
+      // The effect cards state the alternative; the null case states none, so they are not bound into it (and the cards that do
+      // bind — the control level, the dropout — still are).
+      const effectPaths = new Set(["truth.hazardRatio", "truth.treatmentRate", "truth.riskDifference", "truth.oddsRatio", "truth.effect"]);
+      const kept = used.filter((card) => {
+        const rule = VCR_ASSUMPTION_BINDINGS.find((entry) => entry.endpoint === type && entry.match.test(String(card.key)));
+        return !rule || !effectPaths.has(rule.path.join("."));
+      });
+      stages.push(stage("design_simulation", { ...base, truth: nullTruth }, { stage: "simulation_null", endpoint: type, cards: kept, snapshot: false, after: "simulation",
+        detail: { check: true } }));
+    }
     return finish(stages);
   }
 
@@ -2480,7 +2496,10 @@ export class VcrOrchestrator {
   #objectStates(read) {
     /** @param {{ kind: string, row: any, node: string, done: boolean }} object_ */
     const stateOf = (object_) => {
-      const marks = read.marksByNode.get(object_.node) ?? [];
+      // A check that failed or was cancelled (the zero-effect simulation) is said by its own figure on the page; it does not make
+      // the object it checks failed, because the result it checks is there.
+      const marks = (read.marksByNode.get(object_.node) ?? []).filter((mark) => !(["failed", "skipped"].includes(String(mark.state))
+        && VCR_CHECK_STAGES.some((check) => String(mark.key ?? "").endsWith(`#${check}`))));
       const failing = marks.find((mark) => mark.state === "failed" || (mark.state === "skipped" && !UNAVAILABLE_REASONS.includes(String(object(mark.detail).reason)) && object(mark.detail).canceled !== true));
       const unavailable = marks.find((mark) => mark.state === "skipped" && UNAVAILABLE_REASONS.includes(String(object(mark.detail).reason)));
       const cancelled = marks.find((mark) => mark.state === "skipped" && object(mark.detail).canceled === true);
@@ -3042,7 +3061,10 @@ export class VcrOrchestrator {
     const resultKind = String(named.resultKind || vcrResultKindFor(String(job.kind)));
     if (!VCR_SUBJECT_KINDS.includes(resultKind) && !["accrual_forecast", "matching"].includes(resultKind)) return;
     const stage = named.stage ? String(named.stage) : null;
-    const planned = list(named.plannedStages).map(String);
+    // The check that follows a result is not the object's last stage: the researcher is told when the result has landed, and the
+    // check says how it went on the page, beside the figure it is for.
+    if (stage && VCR_CHECK_STAGES.includes(stage)) return;
+    const planned = list(named.plannedStages).map(String).filter((name) => !VCR_CHECK_STAGES.includes(name));
     if (job.state === "succeeded" && !conversation && stage && planned.length && planned[planned.length - 1] !== stage) return;
     const owner = named.subjectId ? await this.#subjectLabel(study.id, resultKind, String(named.subjectId)) : null;
     await this.#notice(study, `notice:job:${job.id}`, () => this.notifier.jobFinished(study, {
@@ -3195,6 +3217,8 @@ export class VcrOrchestrator {
    */
   async #registerForecasts(study, job, result) {
     if (job.kind !== "design_simulation") return;
+    // The zero-effect check is not a second prediction of the design: the forecast was registered when the result it checks landed.
+    if (VCR_CHECK_STAGES.includes(String(object(job.checkpoint).stage))) return;
     const claimed = await this.#claim(study, `forecast:${job.id}`, "notice", "done", { detail: { jobId: job.id } });
     if (!claimed) return;
     const measures = list(result.measures).map(object);

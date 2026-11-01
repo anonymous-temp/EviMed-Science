@@ -75,8 +75,13 @@ test('a run states a calibration, a curve and a risk table; a coordinate has no 
   refused({ origin: 'digitizer' }, /origin is not a field/);
   refused({ arms: [{ riskTable: RISK, curve: { color: '#d62728' }, points: [] }] }, /points is not a field of an arm/);
   refused({ arms: [{ riskTable: RISK, curve: { color: '#d62728' }, surv: [1] }] }, /surv is not a field of an arm/);
-  refused({ arms: [{ curve: { color: '#d62728' } }] }, /riskTable is the published numbers at risk/);
+  // A10 (remediation plan): the numbers at risk are the best a reconstruction can have, not a condition of one. A paper that prints
+  // none gives the arm's size at the start; with neither, nobody is counted and the call is refused by name.
+  refused({ arms: [{ curve: { color: '#d62728' } }] }, /state the published numbers at risk \(riskTable\), or initialAtRisk/);
   refused({ arms: [{ curve: { color: '#d62728' }, riskTable: [{ time: 0, atRisk: 5 }] }] }, /at least two rows/);
+  refused({ arms: [{ curve: { color: '#d62728' }, initialAtRisk: 0 }] }, /initialAtRisk is the arm's size/);
+  assert.deepEqual(checkDigitizeRequest({ ...base, arms: [{ curve: { color: '#d62728' }, initialAtRisk: 220, totalEvents: 120 }] }).arms[0],
+    { name: 'control', selector: { color: '#d62728' }, riskTable: undefined, initialAtRisk: 220, totalEvents: 120, reportedMedian: undefined });
   refused({ arms: [] }, /one or two arms/);
   refused({ arms: [arm('a', { color: '#d62728' }), arm('b', { color: '#1f77b4' }), arm('c', { color: '#2ca02c' })] }, /one or two arms/);
   refused({ arms: [arm('a', { color: '#d62728' }), arm('b', { color: '#d62728' })] }, /same curve/);

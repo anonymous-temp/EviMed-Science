@@ -37,7 +37,7 @@ import { documentExportDigest } from "@evimed/domain";
  */
 
 import {
-  VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
+  VCR_CHECK_STAGES, VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_RESULT_KIND_TABS, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
@@ -901,7 +901,7 @@ export function presentDeliverable(row, index, all, now) {
 // --- designs (shared by the overview and the trial tab) ------------------------------------------------------------------
 
 /** The measure names a design's table reads, whichever stage computed them. */
-const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "duration_months", "cost"]);
+const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "bias", "coverage", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "duration_months", "cost"]);
 
 /**
  * What a design has been computed with, by stage: the analytic size, the simulated operating characteristics and the success
@@ -956,6 +956,27 @@ function designStages(scenario, results) {
 }
 
 /**
+ * Where the zero-effect check of a design stands: landed (`done`), waiting in the queue (`queued`: planned and not yet taken up, or
+ * taken up and not started), running, failed or cancelled; null when the design has none to wait for. Read from the jobs the study
+ * holds for this design — the check is a stage of its own, and a page that shows the design's result before it must say so.
+ * @param {ReadonlyArray<Record<string, any>> | undefined} jobs @param {Record<string, any>} scenario
+ * @param {ReturnType<typeof designStages>["stages"]} stages
+ * @returns {'done' | 'queued' | 'running' | 'failed' | 'canceled' | null}
+ */
+function nullStateOf(jobs, scenario, stages) {
+  if (stages.simulation_null) return "done";
+  if (!stages.simulation) return null;
+  const mine = list(jobs).map(object).filter((job) => object(job.checkpoint).subjectId === scenario.id);
+  const check = mine.find((job) => VCR_CHECK_STAGES.includes(String(object(job.checkpoint).stage)));
+  if (check) {
+    return check.state === "running" ? "running" : check.state === "failed" ? "failed" : check.state === "canceled" ? "canceled"
+      : check.state === "succeeded" ? "done" : "queued";
+  }
+  const planned = mine.some((job) => list(object(job.checkpoint).plannedStages).some((name) => VCR_CHECK_STAGES.includes(String(name))));
+  return planned ? "queued" : null;
+}
+
+/**
  * What a design's numbers come from, in the reader's words: the closed form, the simulation, or both.
  * @param {ReturnType<typeof designStages>["stages"]} stages
  */
@@ -980,10 +1001,11 @@ function designNote(stages) {
  * The closed form held against the simulation, when the engine computed both for the same size: the analytic value, the simulated
  * one, how far apart they are in percentage points, and whether the engine calls that within what the simulation's own error (plus a
  * first-order approximation's documented bias) allows.
- * @param {ReturnType<typeof designStages>["stages"]} stages
+ * The same held against the zero-effect simulation (`stage: "simulation_null"`): the type I error against its closed form.
+ * @param {ReturnType<typeof designStages>["stages"]} stages @param {string} [stage]
  */
-function crossCheckOf(stages) {
-  const check = object(stages.simulation?.diagnostics?.analyticCheck);
+function crossCheckOf(stages, stage = "simulation") {
+  const check = object(stages[stage]?.diagnostics?.analyticCheck);
   const analytic = finite(check.value);
   const simulated = finite(check.simulated);
   const difference = finite(check.difference);
@@ -1069,12 +1091,16 @@ export function presentDesigns(bundle) {
     }
     // Analytic first, then the simulation, then the assurance: where two stages state the same measure (the power the closed form
     // gives at the stated size and the one the simulation measures) the simulation's — which carries its error — is the one shown.
-    for (const name of ["analytic", "simulation", "assurance"]) {
+    // The zero-effect simulation is the stage that measures the type I error of a design whose closed form does not state it; where the
+    // closed form does (Simon), its exact figure stays the page's and the simulation is the check on it.
+    for (const name of ["analytic", "simulation", "simulation_null", "assurance"]) {
       const stage = stages[name];
       if (!stage) continue;
       for (const measure of stage.measures) {
         const measureName = String(object(measure).name ?? "");
         if (!DESIGN_MEASURES.includes(measureName) || (measureName === "duration_months" && name !== "simulation")) continue;
+        // Only the figure the check is for: the rest of what the null run measured is its stage's, not the design's.
+        if (name === "simulation_null" && (measureName !== "type_one_error" || measures.type_one_error)) continue;
         measures[measureName === "required_total" ? "sample_size" : measureName] = measureValue(measure, {
           kind: "trial_scenario", result: stage.result, execution: executionOfStage(name) ?? execution, staleMark, tab: "trial" });
       }
@@ -1104,9 +1130,13 @@ export function presentDesigns(bundle) {
       method: beaten ? null : designMethod(stages),
       replicates: beaten ? null : (executionOfStage("simulation")?.replicates ?? null),
       crossCheck: beaten ? null : crossCheckOf(stages),
+      // The zero-effect check after the result (`VCR_CHECK_STAGES`): where it stands, and the closed form it was held against.
+      nullState: beaten ? null : nullStateOf(bundle.jobs, scenario, stages),
+      nullCheck: beaten ? null : crossCheckOf(stages, "simulation_null"),
       ...(computationBasis ? { computationBasis } : {}),
       _scenario: scenario,
       _result: result,
+      _stages: stages,
       _stale: resultMark ?? designMark,
     };
   });
@@ -1116,7 +1146,7 @@ export function presentDesigns(bundle) {
     if (row.dominated) row.dominatedBy = codeOf.get(dominated.get(row.id)?.id) ?? null;
     if (row.dominated) row.note = row.dominatedBy ? `在比较目标的全部指标上都不优于 ${row.dominatedBy}` : "在比较目标的全部指标上不占优";
   }
-  return { rows, designs: rows.map(({ _scenario, _result, _stale, ...design }) => design) };
+  return { rows, designs: rows.map(({ _scenario, _result, _stages, _stale, ...design }) => design) };
 }
 
 /**

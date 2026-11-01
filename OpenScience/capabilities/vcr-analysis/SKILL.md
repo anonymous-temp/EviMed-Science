@@ -289,9 +289,9 @@ Supported designs are fixed two-arm (continuous/binary/time-to-event), group-seq
 
 For these paths, zero-effect scenarios state `responseRate == nullRate` or zero target ATT. `truth.null` is a label and must agree with that law; changing a flag cannot create a null scenario. The usual 20,000/5,000 replicate floors, immutable seeds/checkpoints and cancellation preserve completed batches. New paths use design-method version 1.1.0; prior supported 1.0.0 scenarios remain replayable. Grid overrides use these actual size/rate/boundary keys and every projected cell is validated before enqueue. Single-arm continuous and time-to-event simulation and grids run at design-method version 1.2.0. Every single-arm design compares with a stated benchmark: say in the report where the benchmark came from and that it is held fixed.
 
-**解析优先、仿真复核**：平台对每个方案先算解析结果再仿真，两者差异超出蒙特卡洛误差时结果里带着差值，你在报告里说出来。固定设计的效应有假设卡给出预测分布时，平台还会算成功把握（按证据的不确定性平均后的功效）；成组序贯设计也算，意思是在任一次期中或最终分析越过界值的概率（设计里的 `events` 是最大事件数，`informationRates` 是各次分析的位置）。重复次数不用你定：零假设情景默认不少于 2 万次，备择不少于 5,000 次，`targetMcse` 写了目标精度就按 p(1−p)/MCSE² 自动抬高。
+**解析优先、仿真复核**：平台对每个方案先算解析结果再仿真，两者差异超出蒙特卡洛误差时结果里带着差值，你在报告里说出来。固定设计的效应有假设卡给出预测分布时，平台还会算成功把握（按证据的不确定性平均后的功效）；成组序贯设计也算，意思是在任一次期中或最终分析越过界值的概率（设计里的 `events` 是最大事件数，`informationRates` 是各次分析的位置）。重复次数不用你定：零假设情景默认不少于 2 万次（研究用途是指定分析或以上、或设计借用外部数据时不少于 10 万次），备择不少于 5,000 次，`targetMcse` 写了目标精度就按 p(1−p)/MCSE² 自动抬高。
 
-**必须有一个零效应情景**（`truth.null: true`，或在设计网格的真值列表里放一列），否则 I 类错误无从谈起。比较设计和真值的组合用设计网格，`dimensions.designs` 列出设计，`truthScenarios` 列出真值情景，每一格的数字是引擎填的：
+**零效应情景平台会自己补**：两臂设计在备择的结果出来之后，自动再按“没有真实效应”跑一次，I 类错误和它的蒙特卡洛误差随后补进结果，你不必为此另写一个设计，也不要等它。设计网格里要比较的零效应仍然自己放一列（`truth.null: true`）。比较设计和真值的组合用设计网格，`dimensions.designs` 列出设计，`truthScenarios` 列出真值情景，每一格的数字是引擎填的：
 
 ```json vcr:object:design_grid
 {

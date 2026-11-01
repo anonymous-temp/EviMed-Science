@@ -127,8 +127,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
-  VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
-  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
+  VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
+  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -273,19 +273,42 @@ export function vcrIdempotencyKey({ key, kind, studyId, scenarioHash, inputs, se
 /**
  * How many replicates a job needs: the domain's floor for the scenario (20,000
  * under the null, 5,000 under an alternative, raised to the precision asked for,
- * on the worst truth of a grid), raised again to what the caller asked for.
+ * on the worst truth of a grid, and raised again to 100,000 under the null for a specified analysis, a submission and a
+ * design that borrows), raised again to what the caller asked for.
+ * A MAP prior's operating-characteristics table borrows by definition: its rows, the zero-drift ones above all, are held to the
+ * borrowing floor, where they used to run at the engine's own default of 5,000 and nobody read them.
  * @param {string} kind @param {Record<string, any>} scenario @param {number | null} asked
+ * @param {{ intendedUse?: string | null }} [options] the study's intended use
  * @returns {number | null} null for a method that has no replicates
  */
-export function vcrReplicatesForJob(kind, scenario, asked) {
-  if (kind === "design_simulation") return Math.max(vcrReplicateFloorFor(scenario), Number.isInteger(asked) ? Number(asked) : 0);
+export function vcrReplicatesForJob(kind, scenario, asked, options = {}) {
+  return vcrReplicatePlanForJob(kind, scenario, asked, options)?.replicates ?? null;
+}
+
+/**
+ * `vcrReplicatesForJob`, with what set the number — recorded beside the job so a result can say why it took as many replicates as
+ * it did (the default of its case, the intended use, a borrowing design, or the precision asked for).
+ * @param {string} kind @param {Record<string, any>} scenario @param {number | null} asked @param {{ intendedUse?: string | null }} [options]
+ * @returns {{ replicates: number, floor: number, basis: string, intendedUse: string | null, targetMcse: number | null } | null}
+ */
+export function vcrReplicatePlanForJob(kind, scenario, asked, { intendedUse = null } = {}) {
+  const requested = Number.isInteger(asked) ? Number(asked) : 0;
+  if (kind === "design_simulation") {
+    const plan = vcrReplicatePlanFor(scenario, { intendedUse });
+    return { replicates: Math.max(plan.floor, requested), floor: plan.floor, basis: plan.basis, intendedUse, targetMcse: plan.targetMcse };
+  }
   if (kind === "design_grid") {
     const truths = list(scenario?.truths).filter((truth) => truth && typeof truth === "object");
-    const worst = Math.max(...(truths.length ? truths : [{}]).map((cell) => vcrReplicateFloorFor({
-      ...scenario, truth: { ...object(scenario?.truth), ...cell } })));
-    return Math.max(worst, Number.isInteger(asked) ? Number(asked) : 0);
+    const plans = (truths.length ? truths : [{}]).map((cell) => vcrReplicatePlanFor({
+      ...scenario, truth: { ...object(scenario?.truth), ...cell } }, { intendedUse }));
+    const worst = plans.reduce((a, b) => (b.floor > a.floor ? b : a));
+    return { replicates: Math.max(worst.floor, requested), floor: worst.floor, basis: worst.basis, intendedUse, targetMcse: worst.targetMcse };
   }
-  return Number.isInteger(asked) && Number(asked) > 0 ? Number(asked) : null;
+  if (kind === "map_prior" && scenario?.operatingCharacteristics) {
+    const floor = vcrNullReplicateFloor({ intendedUse, borrowing: true });
+    return { replicates: Math.max(floor.floor, requested), floor: floor.floor, basis: floor.basis, intendedUse, targetMcse: null };
+  }
+  return requested > 0 ? { replicates: requested, floor: requested, basis: "asked", intendedUse, targetMcse: null } : null;
 }
 
 /**
@@ -363,6 +386,11 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   }
   // --- end robustness methods ---
 
+  // A check landing after the result it checks (the zero-effect simulation after the alternative's): the numbers of the result are
+  // not replaced by the check's, and a check that could not be estimated limits the conclusion without voiding it.
+  const late = VCR_CHECK_STAGES.includes(stage.stage) && list(object(prior.diagnostics).stages).some((each) => object(each).stage === "simulation");
+  /** @param {string} name @param {unknown} conclusion */
+  const countedAs = (name, conclusion) => (VCR_CHECK_STAGES.includes(name) && conclusion === "not_estimable" ? "limited" : conclusion);
   const before = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
   const since = staleSince ? Date.parse(staleSince) : Number.NaN;
   /** Stages that landed before the change: their numbers describe the world as it was. */
@@ -385,16 +413,22 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
     else if (carriedNames.has(name)) byName.set(name, { ...object(measure), stale: true });
     else if (!droppedNames.has(name)) byName.set(name, measure);
   }
-  for (const measure of incoming.measures) byName.set(String(object(measure).name), measure);
+  for (const measure of incoming.measures) {
+    const name = String(object(measure).name);
+    // The check's own figure is the type I error; the rest of what the null run measured stays in its stage record.
+    if (late && byName.has(name) && name !== "type_one_error") continue;
+    byName.set(name, measure);
+  }
 
   const counts = { ...object(prior.counts) };
-  for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
+  if (!late) for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
   const kept = [...current, ...carried];
   const keptNames = new Set(kept.map((each) => String(each.stage)));
   const stageResults = Object.fromEntries(Object.entries(object(object(prior.diagnostics).stageResults))
     .filter(([name]) => keptNames.has(name)).map(([name, value]) => [name, { ...object(value), stale: carried.some((each) => each.stage === name) }]));
   stageResults[stage.stage] = stageResult;
-  const conclusions = kept.length ? [incoming.conclusion, ...kept.map((each) => each.conclusion)] : [prior.conclusion, incoming.conclusion];
+  const conclusions = kept.length ? [countedAs(stage.stage, incoming.conclusion), ...kept.map((each) => countedAs(String(each.stage), each.conclusion))]
+    : [prior.conclusion, countedAs(stage.stage, incoming.conclusion)];
   const worst = conclusions.filter(Boolean)
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
   // --- robustness methods ---
@@ -402,7 +436,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   // conclusion and its rule are the ones the object states. Without any such stage the object is what the robustness stages say, and
   // never more than limited: the comparison itself has not been computed.
   const making = [...kept, entry].filter((each) => !robustness.has(String(each.stage)));
-  let verdict = { conclusion: worst ?? null, notEstimableRule: incoming.notEstimableRule ?? prior.notEstimableRule ?? null };
+  let verdict = { conclusion: worst ?? null, notEstimableRule: (late ? null : incoming.notEstimableRule) ?? prior.notEstimableRule ?? null };
   if (robustness.has(stage.stage) || kept.some((each) => robustness.has(String(each.stage)))) {
     const counted = (/** @type {Record<string, any>} */ each) => (making.length && robustness.has(String(each.stage)) && each.conclusion === "not_estimable" ? "limited" : each.conclusion);
     const settled = [...kept, entry].map(counted).filter(Boolean)
@@ -418,7 +452,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const notRerun = [...list(object(prior.diagnostics).notRerun).map(object).filter((each) => each.stage !== stage.stage),
     ...dropped.map((each) => ({ stage: String(each.stage), measures: list(each.measures).map(String) }))];
   /** @type {Record<string, any>} */
-  const diagnostics = { ...prior.diagnostics, ...incoming.diagnostics, stages: [...current, ...carried, entry], stageResults };
+  const diagnostics = { ...prior.diagnostics, ...(late ? {} : incoming.diagnostics), stages: [...current, ...carried, entry], stageResults };
   if (notRerun.length) diagnostics.notRerun = notRerun;
   else delete diagnostics.notRerun;
   return {
@@ -888,7 +922,15 @@ export class VcrJobs {
       pairingKey: pairing.key ?? null, replicate: pairing.replicate ?? 1, seed,
       seedSource: Number.isInteger(input.seed) ? "explicit" : pairing.key ? "population_or_explicit_pairing_key" : "scenario_hash",
       replicateStreams: "L'Ecuyer-CMRG nextRNGStream", causalIndividualEffectIdentified: false } : null;
-    const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
+    // The floor depends on what the study is for: the same simulation is held to a larger null case on a specified analysis than on
+    // an exploration. The plan (floor and what set it) rides on the job so the result can say why it ran as many replicates as it did.
+    const sized = ["design_simulation", "design_grid", "map_prior"].includes(kind);
+    const intendedUse = sized ? ((await this.store.studyById(studyId))?.intendedUse ?? null) : null;
+    const replicatePlan = vcrReplicatePlanForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null, { intendedUse });
+    const replicates = replicatePlan?.replicates ?? null;
+    // What the engine filled in because the scenario stated none (a dropout of 0, an alpha of 0.025): kept with the job, said by its
+    // result, and listed in the answer of the call that started it — a default nobody was told of is a parameter nobody chose.
+    const defaulted = /^(design|population|comparator)\./.test(method) ? vcrAppliedDefaults(method, scenario) : [];
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
     // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: one that could not finish even at the model's
@@ -938,7 +980,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {
@@ -1844,7 +1886,10 @@ export class VcrJobs {
             // The unit the scenario's times were stated in and where it came from (stated, taken from its evidence, or assumed to be
             // months), frozen with the job by the orchestrator: what the numbers of a result are in, said by the result. (The engine's
             // own `timeUnit` is a method's echo of the word it was given; this is the control plane's account of how it was settled.)
-            ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}) },
+            ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}),
+            // Control-plane facts about the run, frozen with the job: the defaults it took, and why it ran as many replicates as it did.
+            ...(list(detail.appliedDefaults).length ? { appliedDefaults: list(detail.appliedDefaults) } : {}),
+            ...(Object.keys(object(detail.replicatePlan)).length ? { replicatePlan: object(detail.replicatePlan) } : {}) },
           tables: list(result.tables),
         };
         let filed = incoming;
@@ -1972,6 +2017,9 @@ export class VcrJobs {
     const detail = object(row.checkpoint);
     const kind = row.method === "population.quality" ? "population_quality" : String(detail.resultKind || this.#resultKind(String(row.kind)));
     const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
+    // A cancelled check is not filed as the object's current result: the partial is not folded into the stages the way a landing is,
+    // and it would take the place of the result the check was checking (the cancel names the job; the page says it was cancelled).
+    if (VCR_CHECK_STAGES.includes(String(detail.stage))) return null;
     return this.store.transaction(async (client) => {
       const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [String(row.id)])).rows[0];
       const has = await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.executions WHERE job_id = $1`, [String(row.id)]);

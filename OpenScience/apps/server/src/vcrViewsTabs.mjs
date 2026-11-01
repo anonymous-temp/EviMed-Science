@@ -40,7 +40,8 @@ import {
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
-  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
+  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_DESIGN_SUPPORT, VCR_INTENDED_USE_LABELS_ZH, knownErrorCodeMessage, vcrAppliedDefaults,
+  vcrAssessmentIssues, vcrAssessmentRows,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -48,6 +49,7 @@ import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
+import { vcrPremises } from "./vcrPremises.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
   presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
@@ -387,6 +389,8 @@ export function presentPopulationTab(bundle) {
     unknownReasons: [...reasons.values()].map((reason) => ({ key: reason.key, label: reason.label, detail: reason.detail, count: reason.count })),
     blockers,
     quality: current ? qualityReportView(Object.keys(object(current.quality)).length ? current.quality : diagnostics.quality) : null,
+    // 「这个结论的前提」 of a generated population: how its variables relate, how far it is the source trial's, how far its parameters moved.
+    premises: current ? vcrPremises("population", { kind: current.kind, diagnostics }) : [],
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier }) : null,
     conclusion: result?.conclusion ?? null,
     headline: outcome && total !== null && outcome.eligible !== null && outcome.insufficient !== null
@@ -646,6 +650,7 @@ export function presentComparatorTab(bundle) {
     const row = qcRow(key, object(check));
     return row && armNames[index] ? { ...row, key: `${key}_${index === 0 ? "control" : "treatment"}`, label: `${armNames[index]}：${row.label}` } : row;
   })).filter((row) => row !== null);
+  const reconstruction = reconstructionLevelView(diagnostics);
   const measureOf = (/** @type {string} */ name) => list(result?.measures).find((measure) => String(object(measure).name) === name);
   const rmstMeasure = measureOf("rmst_difference") ?? measureOf("rmst_control");
   // A two-arm reconstruction names its medians per arm; the comparator page is about the control arm,
@@ -731,6 +736,8 @@ export function presentComparatorTab(bundle) {
     rmst: rmstValue ? { value: rmstValue, tau: numeric(diagnostics.tau), label: numeric(diagnostics.tau) !== null ? `τ = ${diagnostics.tau}${echoedUnit ? ` ${echoedUnit.after}` : ""}` : null } : null,
     median: medianMeasure ? value(medianMeasure) : null,
     qc,
+    // What the paper gave a reconstruction (its information level), shown beside its checks whether they passed or not.
+    reconstruction,
     // The method by its Chinese name (`METHOD_LABELS`); an id the table does not hold is shown as a plain word, never as the engine's own.
     methods: execution ? [{ label: METHOD_LABELS[String(execution.method)] ?? "引擎计算", version: execution.methodVersion ? `v${execution.methodVersion}` : null, note: sensitivityOnly ? "基于输入效应值评估未测量混杂的敏感性，不估计治疗效应，也不建立对照组。" : null, passed: result?.conclusion !== "not_estimable" }] : [],
     e10: e10.map((entry) => ({
@@ -758,6 +765,10 @@ export function presentComparatorTab(bundle) {
     dimensions,
     diagnostics: [...diagnosticRows, ...routeRows],
     prior: priorRows,
+    // A borrowing route's rejection probabilities over the drifts of the true control rate (`comparator.map_prior`), with their errors.
+    operatingCharacteristics: operatingCharacteristicsView(diagnostics),
+    // 「这个结论的前提」: the list and its rules are `vcrPremises`'s; the comparator's facts are filled in beside the route's own rows.
+    premises: vcrPremises("comparator", { route: shown?.route ?? null, diagnostics }),
     robustness: robustnessView(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
@@ -789,11 +800,16 @@ function failureOfNode(bundle, node) {
 
 /** One reconstruction check as a row: the largest difference, the way the paper's own table states it. @param {string} key @param {Record<string, any>} check */
 function qcRow(key, check) {
+  const labels = /** @type {Record<string, string>} */ ({ atRisk: "各时点风险人数", events: "总事件数", median: "中位数", logHazardRatio: "|Δlog HR|" });
+  const label = labels[key] ?? text(check.name) ?? key;
+  // A check the paper gave nothing to check against is listed, not dropped: a reconstruction that passed without it reads differently
+  // from one that passed with it (the information level says which).
+  if (check.status === "not_reported" || check.status === "not_checked") {
+    return { key, label, value: check.status === "not_reported" ? "论文没有给，没有核对" : "没有可比的重建值，没有核对", threshold: null, passed: false, notChecked: true };
+  }
   const reported = check.reported;
   const reconstructed = check.reconstructed;
   const passed = check.pass === true;
-  const labels = /** @type {Record<string, string>} */ ({ atRisk: "各时点风险人数", events: "总事件数", median: "中位数", logHazardRatio: "|Δlog HR|" });
-  const label = labels[key] ?? text(check.name) ?? key;
   if (Array.isArray(reported) && Array.isArray(reconstructed)) {
     const diffs = reported.map((value, index) => Math.abs(Number(reconstructed[index]) - Number(value))).filter((value) => Number.isFinite(value));
     if (!diffs.length) return null;
@@ -813,7 +829,7 @@ function qcRow(key, check) {
  * (`diagnostics.timeUnitBasis`): a result that read an unstated unit as months says so, where the researcher reads the numbers.
  * @param {Record<string, any>} bundle @param {Record<string, any> | null} scenario @param {Record<string, any>} [diagnostics] the headline result's
  */
-function adempOf(bundle, scenario, diagnostics = {}) {
+function adempOf(bundle, scenario, diagnostics = {}, stages = {}) {
   const { study, definition } = bundle;
   const configuration = object(scenario?.configuration);
   const truth = object(configuration.truth);
@@ -824,9 +840,19 @@ function adempOf(bundle, scenario, diagnostics = {}) {
   const lines = [];
   if (text(study.question)) lines.push({ key: "aim", label: "目的", text: String(study.question) });
   if (scenario) {
+    // The data generation says how patients enter and leave, and which of those numbers the platform filled in: a dropout of 0 that
+    // nobody wrote is a part of how the data were made (A2, A12).
+    const defaulted = new Set(list(appliedDefaultsOf(scenario, stages)).map((entry) => String(object(entry).path)));
+    const accrual = object(configuration.accrual);
+    const survival = scenario.endpointType === "time_to_event";
+    const unit = (/** @type {Record<string, { after: string }>} */ (TIME_UNIT_WORDS))[String(object(diagnostics.timeUnitBasis).unit ?? configuration.timeUnit ?? "months")]?.after ?? "个月";
+    const dropout = survival ? (numeric(accrual.dropoutAnnual) ?? (defaulted.has("accrual.dropoutAnnual") ? 0 : null)) : null;
     const dataGeneration = [
       (/** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH))[scenario.endpointType] ?? scenario.endpointType,
       ...Object.entries(truth).filter(([, value]) => typeof value === "number").map(([key, value]) => `${TRUTH_LABELS[key] ?? key} ${value}`),
+      ...(survival && numeric(accrual.duration) !== null ? [`入组 ${accrual.duration} ${unit}`] : []),
+      ...(survival && numeric(accrual.followup) !== null ? [`随访 ${accrual.followup} ${unit}`] : []),
+      ...(dropout !== null ? [`脱落 ${roundTo(dropout * 100, 1)}%/年${defaulted.has("accrual.dropoutAnnual") ? "（默认）" : ""}`] : []),
     ].join(" · ");
     lines.push({ key: "data", label: "怎么生成数据", text: dataGeneration });
   }
@@ -842,7 +868,50 @@ function adempOf(bundle, scenario, diagnostics = {}) {
   const basis = object(diagnostics.timeUnitBasis);
   const unit = TIME_UNIT_WORDS[String(basis.unit)];
   if (unit) lines.push({ key: "timeUnit", label: "时间单位", text: `${unit.bare}（${TIME_UNIT_BASIS_ZH[String(basis.basis)] ?? "按月计算"}）` });
+  const replicates = replicateReasons(bundle, stages);
+  if (replicates.length) lines.push({ key: "replicates", label: "模拟次数", text: replicates.join("；") });
   return lines;
+}
+
+/**
+ * The defaults a design's run took: the run's own record when it has one (`diagnostics.appliedDefaults`, written when the job was
+ * frozen), else what the same scenario would have taken — a result from before the record was kept still says its dropout was 0.
+ * @param {Record<string, any>} scenario @param {Record<string, any>} stages the design's stages (`designStages`)
+ * @returns {Array<{ path: string, value?: unknown }>}
+ */
+function appliedDefaultsOf(scenario, stages) {
+  const recorded = (stages.simulation ?? stages.analytic)?.diagnostics?.appliedDefaults;
+  if (Array.isArray(recorded)) return recorded;
+  const configuration = object(scenario?.configuration);
+  const merged = { ...configuration, design: { ...object(configuration.design), kind: scenario?.design ?? object(configuration.design).kind },
+    endpoint: { ...object(configuration.endpoint), type: scenario?.endpointType ?? object(configuration.endpoint).type } };
+  return vcrAppliedDefaults("design.simulate", merged);
+}
+
+/**
+ * Why each simulated stage ran as many replicates as it did, in the reader's words: the default of its case, the intended use, a
+ * design that borrows, or the precision the scenario asked for. The count is the execution's own; the reason is the plan the job was
+ * frozen with (`replicatePlan`).
+ * @param {Record<string, any>} bundle @param {Record<string, any>} stages
+ */
+function replicateReasons(bundle, stages) {
+  /** @type {string[]} */
+  const out = [];
+  for (const [name, word] of /** @type {const} */ ([["simulation", "备择情景"], ["simulation_null", "零效应情景"]])) {
+    const stage = stages[name];
+    if (!stage) continue;
+    const plan = object(stage.diagnostics?.replicatePlan);
+    const run = stage.jobId ? [...(bundle.executions?.values?.() ?? [])].find((/** @type {any} */ entry) => entry.jobId === stage.jobId) : null;
+    const count = numeric(run?.replicates) ?? numeric(plan.floor);
+    if (count === null) continue;
+    const floor = numeric(plan.floor);
+    const why = plan.basis === "intended_use" ? `${(/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[String(plan.intendedUse)] ?? "该用途"}的零效应情景至少 ${floor?.toLocaleString("en-US")} 次`
+      : plan.basis === "borrowing" ? `借用外部数据的设计，零效应情景至少 ${floor?.toLocaleString("en-US")} 次`
+        : plan.basis === "target_mcse" ? `按要求的蒙特卡洛误差 ${plan.targetMcse} 需要 ${floor?.toLocaleString("en-US")} 次`
+          : floor !== null ? `${name === "simulation_null" ? "零效应" : "备择"}情景的默认下限 ${floor.toLocaleString("en-US")} 次` : null;
+    out.push(`${word} ${count.toLocaleString("en-US")} 次${why ? `（${why}）` : ""}`);
+  }
+  return out;
 }
 
 const TRUTH_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
@@ -880,10 +949,11 @@ export function presentTrialTab(bundle) {
   const decision = decisions[0] ?? null;
   const columnSpec = [
     ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
-    ["type_one_error", "I 类错误", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
+    ["type_one_error", "I 类错误", "%"], ["bias", "偏倚", null], ["coverage", "覆盖率", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
   ];
+  // The type I error is a column as soon as a design waits for one (the check follows the result): a cell that says 排队中 needs its column.
   const columns = columnSpec
-    .filter(([key]) => live.some((design) => design.measures[/** @type {string} */ (key)]))
+    .filter(([key]) => live.some((design) => design.measures[/** @type {string} */ (key)] || (key === "type_one_error" && design.nullState)))
     .map(([key, label, unit]) => ({ key, label, unit }));
   const grids = gridView(grid, designs);
   const powerRaw = object(headlineRow?._result?.diagnostics?.powerCurve);
@@ -903,6 +973,7 @@ export function presentTrialTab(bundle) {
     return {
       method: execution ? METHOD_LABELS[String(execution.method)] ?? null : null,
       replicates: execution?.replicates != null ? Number(execution.replicates) : null,
+      replicateReasons: replicateReasons(bundle, row._stages),
       seed: execution?.seed != null ? Number(execution.seed) : null,
       check: difference === null ? null : {
         analytic: numeric(check.value) !== null ? roundTo(Number(check.value) * 100, 1) : null,
@@ -943,7 +1014,9 @@ export function presentTrialTab(bundle) {
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
     headline: trialHeadline(designs),
-    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics)),
+    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics), headlineRow?._stages ?? {}),
+    // 「这个结论的前提」: the numbers the headline design's result stands on, where each came from, and the defaults among them.
+    premises: headlineRow ? vcrPremises("trial", trialPremiseInput(bundle, headlineRow)) : [],
     designs: recorded,
     columns,
     grid: grids.heat,
@@ -973,6 +1046,90 @@ export function presentTrialTab(bundle) {
     stale: staleNote(marks),
     partial: partialOf(bundle, ["trial_scenario", "design_grid"], "这次模拟"),
   };
+}
+
+/**
+ * What the premises of a trial result are made of: the design's scenario, the cards that were laid over it when it was computed (the
+ * job's own record of them, read through the cards the study holds now), the defaults its stage took, and whether the success
+ * probability is there — and, when it is not, why.
+ * @param {Record<string, any>} bundle @param {Record<string, any>} row a design row of `presentDesigns`
+ */
+function trialPremiseInput(bundle, row) {
+  const scenario = row._scenario;
+  const stages = object(row._stages);
+  const stage = stages.simulation ?? stages.analytic ?? null;
+  const bound = list(bundle.jobs).map(object).filter((job) => object(job.checkpoint).subjectId === scenario.id).flatMap((job) => list(object(job.checkpoint).bound).map(object));
+  const kind = String(scenario.design ?? object(object(scenario.configuration).design).kind ?? "");
+  const supportsAssurance = Boolean(/** @type {Record<string, Record<string, readonly string[]>>} */ (VCR_DESIGN_SUPPORT)["design.assurance"]?.[kind]?.includes(String(scenario.endpointType)));
+  const ran = Boolean(stages.simulation || stages.analytic);
+  return {
+    endpointType: scenario.endpointType,
+    configuration: scenario.configuration,
+    diagnostics: stage?.diagnostics ?? {},
+    bound,
+    cards: list(bundle.assumptions),
+    appliedDefaults: appliedDefaultsOf(scenario, stages),
+    hasAssurance: !(supportsAssurance && ran) || Boolean(stages.assurance),
+    assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布",
+  };
+}
+
+/** What a paper gave a Kaplan-Meier reconstruction, by the name the engine gives the level. */
+const RECONSTRUCTION_LEVEL_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
+  risk_table_and_events: "论文给了风险人数表和总事件数", risk_table: "论文只给了风险人数表", events_only: "论文只给了总事件数（没有风险人数表）",
+  curve_only: "论文只给了曲线和起始人数",
+}));
+
+/**
+ * The information level of a reconstruction (A10): which of the numbers a reconstruction can be held to the paper gave. Levels 3 and 4
+ * have no risk table to check censoring against and say so; at level 4 the hazard ratio is not estimable, while the survival curves and
+ * the medians are delivered.
+ * @param {Record<string, any>} diagnostics
+ */
+function reconstructionLevelView(diagnostics) {
+  const level = object(diagnostics.informationLevel);
+  const key = text(level.key);
+  if (!key || !RECONSTRUCTION_LEVEL_WORDS[key]) return null;
+  const arms = list(level.arms).map(object).filter((arm) => RECONSTRUCTION_LEVEL_WORDS[String(arm.key)]);
+  const names = ["对照组", "试验组"];
+  return {
+    level: numeric(level.level), key, label: RECONSTRUCTION_LEVEL_WORDS[key],
+    arms: arms.length > 1 ? arms.map((arm, index) => ({ name: names[index] ?? String(arm.name ?? ""), label: RECONSTRUCTION_LEVEL_WORDS[String(arm.key)] })) : [],
+    hazardRatio: object(diagnostics.hazardRatio).status === "not_estimable" ? "风险比不可估计：没有风险人数表，也没有总事件数" : null,
+    limited: numeric(level.level) !== null && Number(level.level) >= 3,
+  };
+}
+
+/** The priors of a MAP operating-characteristics table, by the name the engine gives them. */
+const OC_PRIOR_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ none: "不借用（只用本研究对照）" }));
+
+/**
+ * A MAP prior's table of operating characteristics as the comparator page draws it: one row per drift, prior and case (no effect: the
+ * type I error at that drift; an effect: the power), the rejection probability as a percentage with its Monte-Carlo error, and the
+ * replicates behind it — with the reason it ran that many (a borrowing design is held to the null floor). Null where the result has none.
+ * @param {Record<string, any>} diagnostics
+ */
+function operatingCharacteristicsView(diagnostics) {
+  const table = object(diagnostics.operatingCharacteristics);
+  const rows = list(table.rows).map(object).flatMap((row) => {
+    const drift = finite(row.drift);
+    const rejection = finite(row.rejection);
+    const scenario = row.scenario === "null" || row.scenario === "alternative" ? row.scenario : null;
+    if (drift === null || rejection === null || !scenario) return [];
+    const prior = String(row.prior ?? "");
+    const weight = /^robust_(.+)$/.exec(prior)?.[1];
+    const mcse = finite(row.mcse);
+    return [{
+      drift, prior, priorLabel: OC_PRIOR_WORDS[prior] ?? (weight ? `借用（稳健权重 ${weight}）` : prior), scenario,
+      rejection: roundTo(rejection * 100, 2), mcse: mcse === null ? null : roundTo(mcse * 100, 2), replicates: finite(row.replicates),
+    }];
+  });
+  if (!rows.length) return null;
+  const plan = object(diagnostics.replicatePlan);
+  const floor = finite(plan.floor);
+  const reason = plan.basis === "borrowing" && floor !== null ? `借用历史数据的设计，零效应的各行至少 ${floor.toLocaleString("en-US")} 次`
+    : plan.basis === "intended_use" && floor !== null ? `按研究用途，零效应的各行至少 ${floor.toLocaleString("en-US")} 次` : null;
+  return { replicates: finite(table.replicates), asked: finite(table.asked), capped: table.capped === true, reason, rows };
 }
 
 /** What a stage of a design's result is called when it is said not to have been redone. */

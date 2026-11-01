@@ -349,15 +349,14 @@ def _detailed_tool_definitions():
                 "if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each "
                 "arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; "
                 "a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the "
-                "published numbers at risk (riskTable [{time, atRisk}], at least two rows; totalEvents and reportedMedian "
-                "when printed). One arm is the control, two arms are control then treatment. You never state a "
+                "published numbers at risk (riskTable [{time, atRisk}], at least two rows; none printed: initialAtRisk, the arm's "
+                "size; totalEvents and reportedMedian when printed). One arm is the control, two arms are control then treatment. You never state a "
                 "coordinate: points are measured from the pixels and come back recorded with the algorithm version, the "
                 "calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = "
                 "stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a "
                 "receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write "
-                "it as a literature comparator's configuration.provenance.receiptId. Measured against figures drawn from "
-                "known curves: survival within 0.02 (typically 0.002; 0.017 at JPEG quality 60) and time within 0.6% of "
-                "the x range (typically 0.1%), with gridlines, censoring marks, dashes and a legend. Not reliable: curves "
+                "it as a literature comparator's configuration.provenance.receiptId. Measured on figures drawn from "
+                "known curves: survival within 0.02 and time within 0.6% of the x range. Not reliable: curves "
                 "of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, "
                 "text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, "
                 "colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and "
@@ -433,10 +432,11 @@ def _detailed_tool_definitions():
                                         "additionalProperties": False,
                                     },
                                 },
+                                "initialAtRisk": {"type": "integer", "minimum": 1},
                                 "totalEvents": {"type": "number", "minimum": 0},
                                 "reportedMedian": {"type": "number", "exclusiveMinimum": 0},
                             },
-                            "required": ["riskTable"],
+                            "anyOf": [{"required": ["riskTable"]}, {"required": ["initialAtRisk"]}],
                             "additionalProperties": False,
                         },
                     },
@@ -1092,7 +1092,7 @@ def simulate(arguments: dict) -> dict:
         raise
     if action in ("start", "status"):
         data = _wait_for_job(data)
-    return _with_entry(_job_answer(data, action), data)
+    return _with_entry(_with_applied(_job_answer(data, action), data), data)
 
 
 def _status_wait_seconds() -> float:
@@ -1136,6 +1136,21 @@ def _wait_for_job(first: dict) -> dict:
         answer = {**first, **{key: value for key, value in fresh.items() if key != "action"}}
         if not _is_computing(answer):
             return answer
+
+
+def _with_applied(answer: dict, data: dict) -> dict:
+    """The answer with the one action a list of applied defaults adds: say them.
+
+    `data.applied` (field and value) is what the platform filled in because the scenario stated none -- a dropout of 0, an alpha of
+    0.025. They are premises of the result the researcher reads, so the reply names them with their values; one that is not what the
+    study intends is stated in the scenario and the job queued again.
+    """
+    applied = data.get("applied") if isinstance(data, dict) else None
+    if not isinstance(applied, list) or not applied:
+        return answer
+    line = ("data.applied lists what the platform filled in because the scenario did not state it. Say each with its value in your "
+            "reply; one that is not what the study intends is stated in the scenario and the job queued again.")
+    return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
 
 
 def _with_entry(answer: dict, data: dict) -> dict:

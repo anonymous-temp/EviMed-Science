@@ -606,7 +606,7 @@
       "id": "mth_9",
       "name": "MAP 先验",
       "method": "comparator.map_prior",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "二分类 · 连续",
       "numeric": null,
       "validation": {
@@ -788,7 +788,7 @@
       "id": "mth_22",
       "name": "生存曲线重建（Guyot）",
       "method": "evidence.reconstruct_km",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "事件时间",
       "numeric": null,
       "validation": {
@@ -900,7 +900,7 @@
       "id": "mth_30",
       "name": "文献人群",
       "method": "population.literature",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
@@ -928,7 +928,7 @@
       "id": "mth_32",
       "name": "情景人群生成",
       "method": "population.scenario",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": null,
       "numeric": null,
       "validation": {

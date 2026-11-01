@@ -313,6 +313,7 @@
     }
   ],
   "quality": null,
+  "premises": [],
   "counts": {
     "generatedRecords": 0,
     "scope": null
