@@ -340,6 +340,23 @@ class FetchTests(unittest.TestCase):
         self.assertIn("refusal of this server's address", actions)
         self.assertIn("a later call may be served", actions)
 
+    def test_the_gateways_own_pace_for_a_project_is_waited_out_and_never_blamed_on_the_source(self):
+        # The gateway holds one project to a minute's ceiling and an in-flight cap (projectGatewayLimit.mjs, 2026-11-01). The
+        # source was not asked: it must not read as the source rate limiting anyone, and it is worth asking again.
+        paced = {"code": "public_source_gateway_project_rate_limited", "message": "This project may make 600 public-source requests a minute; ask again in 3 s.", "retryAfterSeconds": 3}
+        door, response = self.fetch(http_error(429, paced, retry_after=3), FakeResponse(b"{}"))
+        self.assertEqual((response.attempts, response.waited), (2, 3.0))
+        self.assertEqual(self.clock.sleeps, [3.0])
+
+        # One error object per attempt: the body of a response can be read once.
+        door, error = self.fetch(*[http_error(429, {"code": "public_source_gateway_project_busy", "message": "x"}) for _ in range(3)])
+        self.assertEqual((error.state, error.reason, error.retryable), ("unavailable", "gateway_project_limit", True))
+        self.assertEqual(len(door.calls), transport.ATTEMPTS)
+        self.assertIn("EviMed's own gateway held this project's requests", str(error))
+        self.assertIn("was not asked", str(error))
+        self.assertNotIn("rate limiting this caller", str(error))
+        self.assertIn("do not describe it as", error.next_actions()[0])
+
     def test_a_verification_page_with_status_200_is_a_refusal_never_a_file(self):
         # Recorded 2026-10-04: pmc.ncbi.nlm.nih.gov/articles/instance/<id>/bin/<file>
         # answers a reCAPTCHA page, HTTP 200, text/html, to a plain client.

@@ -1077,6 +1077,8 @@ Only new connections use it. Measure again at the same hour. To take it back: `s
 
 The shell reports it: `evimed_web_vital_p75{route="/app/chat",metric="OPEN_COLD"|"OPEN_WARM"}` in milliseconds, from the surface starting to open to the conversation on screen, with the runtime down or up when it began; `GET /api/ops/web-vitals` gives the same figures for the last 24 hours. The two nginx sites log `rt=` (until the last byte reached the socket, so it holds the reader's network) and `urt=` (the application alone) at the end of each line: a long `rt` with a short `urt` is the line, not the platform. Both conf files have to be reinstalled by hand and nginx reloaded for this (`nginx -t && systemctl reload nginx`). The post-release walk records the warm opening of `/app/home` as `openMs` and fails over `CHAT_OPEN_CEILING_MS`.
 
+The public nginx site hides the control plane's `/internal/` gateways (2026-11-01): reinstall `evimed-science.conf` the same way, and `curl -sk -o /dev/null -w '%{http_code}\n' -X POST https://<host>/internal/memory/v1/search` must print 404 (it printed 401 before), as must the same path written `/x/..\internal/memory/v1/search` with `--path-as-is`.
+
 A job `personal-skill-apply` that ends `failed` now names its `cause` on its result and in the server's stderr (`personal skill proof failed: project=… code=…`); a project with nothing chosen is not proved and not restarted.
 
 ### Runtime slots on a small host
