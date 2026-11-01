@@ -259,6 +259,10 @@ test("what the kernel's runner denies is still denied, and the bytes, exit codes
     ["head -c 1048576 /dev/zero | tr '\\0' 'x' | wc -c"],
     ["cat"],
     ["env | sort"],
+    // The limits and the confinement flags the command inherits: nothing here may differ.
+    ["ulimit -a"],
+    ["grep -E 'NoNewPrivs|Seccomp|CapEff|CapBnd' /proc/self/status"],
+    ["umask; id -u; id -g; pwd"],
   ];
   for (const [script] of probes) {
     const { direct, through } = both(runner, workspace, ["bash", "-c", script], { input: "from stdin\n" });
