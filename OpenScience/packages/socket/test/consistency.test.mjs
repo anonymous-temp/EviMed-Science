@@ -4319,13 +4319,13 @@ test("each dispatch's turn has its own clock, and a turn typed in later has none
   const { f, dispatch, advance, clock } = await clockFixture();
   dispatch("run_a", "req_a", { timeBudgetMinutes: 60 });
   await f.step(1);
-  advance(20);
+  advance(2);
   await f.step(1);
   assert.deepEqual(clock(), [clockLine(60, 0)]);
   await f.endTurn();
 
   // The next dispatch in the conversation: a new run, a new turn, its own budget and its own start.
-  advance(100);
+  advance(118);
   dispatch("run_b", "req_b", { timeBudgetMinutes: 30 });
   await f.step(2);
   assert.deepEqual(clock().slice(1), [clockLine(30, 0)], "the new turn's first step, from the new turn's own start (not 120 minutes in)");
