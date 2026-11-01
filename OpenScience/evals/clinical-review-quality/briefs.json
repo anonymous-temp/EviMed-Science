@@ -201,7 +201,7 @@
       "id": "review-005-aspree-followup-context",
       "inputs": {
         "question": "In adults aged 70 years and older without established cardiovascular disease, what are the cardiovascular and major-bleeding outcomes of aspirin primary prevention during ASPREE and its extended follow-up?",
-        "reviewType": "focused",
+        "reviewType": "narrative",
         "sources": [
           {
             "identifier": "PMID 30221597",
