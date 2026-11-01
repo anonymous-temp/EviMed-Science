@@ -26,8 +26,8 @@ import { useOpenGeoConversation } from "./useOpenGeoConversation";
  * 「下一步」 card, which restated the rail and listed what was **done**: a to-do list is never a log.
  *
  * Each row is one verb and the object it opens — 设置投放预算 opens the budget, 去放行 the articles, 写纠错稿 the correction with
- * the wrong sentence in it — and the row itself goes where its object is read. Nothing here is an approval: a person is asked only
- * for a thing that is theirs to do (money, a safety stop, an act outside the platform) or that went wrong; the programme goes on by
+ * the wrong sentence in it — and the row itself goes where its object is read. A person is asked only for a thing that is theirs to do
+ * (money, releasing an article with an open safety finding, an act outside the platform) or that went wrong; everything else goes on by
  * itself. A project with nothing to ask draws nothing: no sentence says so.
  *
  * One row is the page's own: while no AI engine can be asked, the measurement is paused, and the person is told so here — when it
@@ -154,7 +154,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
     const waiting = item.waiting === "simulated_allowance" ? "simulated_allowance" : "allowance";
     return (
       <ListRow
-        title={`${GEO_STEP_NAMES[step]}在等额度`}
+        title={`${GEO_STEP_NAMES[step]}等你补额度`}
         meta="额度补上之后会自己接着做"
         chevron={false}
         actions={geoActionPermission(project,"run").allowed ? <AllowanceTopUp waiting={waiting} /> : undefined}
@@ -168,7 +168,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
     const held = measuring && pause !== null;
     return (
       <ListRow
-        title={`${GEO_STEP_NAMES[step]}没有做完`}
+        title={`${GEO_STEP_NAMES[step]}未完成`}
         meta={held ? "测量服务暂时不可用，已有结果仍可查看" : project.steps[step]?.summary?.text ? `已保留：${project.steps[step]?.summary?.text}` : project.steps[step]?.error || project.steps[step]?.note || "打开这一步查看对话记录和保留结果"}
         to={geoDestinationPath(geoId, GEO_STEP_HOME[step])}
         actions={held || !geoActionPermission(project,"run").allowed ? undefined : (

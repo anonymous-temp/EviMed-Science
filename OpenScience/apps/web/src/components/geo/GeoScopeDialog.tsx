@@ -52,7 +52,7 @@ export function GeoScopeDialog({ geoId, project, initial = {}, onApply, onClose 
         <option value="common">同一批问题与平台</option><option value="separate">分别查看两个区间</option>
       </Select>}
       <Input label="日期时区" value={scope.timeZone ?? "Asia/Shanghai"} onChange={event => field("timeZone", event.target.value)} />
-      <fieldset><legend className="mb-2 text-ui">AI 平台（不选即全部）</legend><div className="flex flex-wrap gap-1">
+      <fieldset><legend className="mb-2 text-ui">只看这些 AI 平台（不选即全部，不改测量设置）</legend><div className="flex flex-wrap gap-1">
         {engines.map(engine => <FilterChip key={engine} pressed={scope.engines?.includes(engine) ?? false} onClick={() => toggle("engines", engine)}>{engineName(engine)}</FilterChip>)}
       </div></fieldset>
       <fieldset><legend className="mb-2 text-ui">问句池（不选即全部）</legend><div className="flex flex-wrap gap-1">

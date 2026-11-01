@@ -2888,6 +2888,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // under the same lock as an open (`GeoNativeAuthority.readPrimary`), so the next explicit open lands in it instead of beginning
       // another; a member reads only what is already the primary. Null when there is none: the page's open settles it.
       conversationSessionId: async (user, geoId) => geoNativeAuthority ? geoNativeAuthority.readPrimary(user, geoId) : null,
+      // The strip's stop of one programme run (the same stop the run's own page has): the kernel first, then the ledger. Only a run of this project.
+      stopProgrammeRun: async (ownerId, projectId, runId) => {
+        const owner = await store.userById(ownerId);
+        if (!owner) return { root: "not-running" };
+        const project = await store.requireProject(owner, projectId);
+        const run = (await agentRuns.list(project)).find((item) => item.id === runId);
+        if (!run || run.status !== "running") return { root: "not-running" };
+        return { root: (await stopRunForUser(project, run)).root };
+      },
       openConversation: async (user, geoId, target) => geoNativeAuthority.descriptor(user, geoId, target),
       conversationRead: async (user, geoId, sessionId, action, body = undefined) => {
         const resolved = await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: geoId, sessionId }, { ability: action === "start" || body ? "run" : "read" });

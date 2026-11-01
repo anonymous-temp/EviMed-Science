@@ -115,6 +115,8 @@ export const GEO_POOL_NAMES: Readonly<Record<GeoPool, string>> = Object.freeze({
  * 问题与回答 and one answer's page carry it in their browser tab.
  */
 export const GEO_MONITORING_TITLE = "AI 回答监测";
+/** The agreement to measure every week was to these engines and this window: changing either ends it, and it is said at once. */
+export const GEO_AUTOMATION_STOPPED = "自动监测已停止：引擎或周期改过了。需要的话，在可见度页重新开启。";
 
 /** What each pool is for: 存量 / 增量 / 泛增量 / 风险监测. */
 export const GEO_POOL_KINDS: Readonly<Record<GeoPool, string>> = Object.freeze({

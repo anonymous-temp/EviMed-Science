@@ -70,6 +70,7 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  *  - `eyebrow` — a reading page's line over its title (who published the article, when);
  *  - `underTitle` — a reading page's line directly under its title (the article's original title, 2026-10-27), before the band: what
  *    belongs to the title stays with it, and the band's controls come after;
+ *  - `dock` — a module's collapsed conversation, held at the bottom of the window under a body of any length;
  *  - `aside` — a reading page's right column (the frontier reader's actions, 推荐理由, 专科, 标签 and contents, 2026-10-23): from
  *    `lg` a sticky column of 15.5 rem beside everything from the way back down, its top on the back row; below `lg` it follows the
  *    body. The title, the eyebrow and the text share the left column's edge.
@@ -108,6 +109,8 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  * | `data-master-detail` | `MasterDetail` | `split` or `single` |
  * | `data-prose` | `MarkdownViewer`, 前沿动态's cards, rows and reader | a document's or an item's own words; the walk calls it no orphan sentence and reads no back-office vocabulary in it |
  * | `data-show-more` | `ShowMore` | a long list read a page at a time |
+ * | `data-page-dock` | the dock | a module's collapsed conversation |
+ * | `data-workspace` | `WorkspaceSplit` | `split` (results beside the conversation) or `cover` (the conversation alone) |
  *
  * ```tsx
  * <PageShell title="知识库" scope={…} actions={<Button…/>} toolbar={{ views, filters, search }}>
@@ -183,6 +186,8 @@ export interface PageShellProps<V extends string = string> {
   eyebrow?: ReactNode;
   /** A reading page's line directly under its title (the original-language title), before the band. */
   underTitle?: ReactNode;
+  /** What stays at the window's bottom under the body, full width: a module's collapsed conversation (`ConversationBar`). */
+  dock?: ReactNode;
   /** A reading page's right column, sticky beside the page from `lg`. */
   aside?: ReactNode;
   /** The right column's accessible name. */
@@ -229,6 +234,7 @@ export function PageShell<V extends string = string>({
   underTitle,
   aside,
   asideLabel,
+  dock,
   children,
 }: PageShellProps<V>) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -322,11 +328,11 @@ export function PageShell<V extends string = string>({
 
   return (
     // `scroll-pt`: an anchor, a `scrollIntoView` and the browser's scroll to a focused control all stop below the band, not under it.
-    <div ref={scroller} className={cn("h-full min-h-0 overflow-y-auto bg-bg scroll-pt-[var(--page-chrome-h,0px)]", className)}>
+    <div ref={scroller} className={cn("h-full min-h-0 overflow-y-auto bg-bg scroll-pt-[var(--page-chrome-h,0px)]", dock != null && "flex flex-col", className)}>
       {back && backPlacement === "edge" && <div className="px-4 pt-6 md:px-6">{back}</div>}
       {/* One box: the page gutter (16 px, 24 from `md`) and the one column, so
           the header and the body cannot disagree about where the left edge is. */}
-      <div className={cn("mx-auto w-full px-4 pb-6 md:px-6", back && backPlacement === "edge" ? "pt-2" : "pt-6", COLUMN[width], aside != null && "lg:grid lg:grid-cols-[minmax(0,1fr)_15.5rem] lg:gap-x-12")}>
+      <div className={cn("mx-auto w-full px-4 pb-6 md:px-6", dock != null && "flex-1", back && backPlacement === "edge" ? "pt-2" : "pt-6", COLUMN[width], aside != null && "lg:grid lg:grid-cols-[minmax(0,1fr)_15.5rem] lg:gap-x-12")}>
         {aside != null ? (
           <>
             <div className="min-w-0">{page}</div>
@@ -334,6 +340,7 @@ export function PageShell<V extends string = string>({
           </>
         ) : page}
       </div>
+      {dock != null && <div data-page-dock="" className="sticky bottom-0 z-sticky flex-none border-t border-border-hairline bg-bg px-4 py-2 md:px-6">{dock}</div>}
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { geoAutomationEnabled } from "@evimed/domain";
+import { useGeoFrame } from "../geoFrame";
 import { webErrorMessage } from "@/lib/apiClient";
 import { createGeoOwnedLink, getGeoArticleText, type GeoAction, type GeoActionSource } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
@@ -31,6 +33,8 @@ export function OwnedLinkForm({
   articleId: string | null;
   onRegistered: () => void;
 }) {
+  const project = useGeoFrame()?.project;
+  const automatic = project ? geoAutomationEnabled(project) : false;
   const [asking, setAsking] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState<"copy" | "send" | null>(null);
@@ -59,7 +63,8 @@ export function OwnedLinkForm({
       ...(action.group ? { groupId: action.group.id } : {}),
     })
       .then(() => {
-        toast.success("已登记，发布后第 1、2、4、8、12 周会自动复测。");
+        // The re-measurements exist only under the agreement to automatic monitoring: unsaid, a promise the platform would not keep.
+        toast.success(automatic ? "已登记，发布后第 1、2、4、8、12 周会自动复测。" : "已登记。开启自动监测后，发布后第 1、2、4、8、12 周会自动复测。");
         setUrl("");
         setAsking(false);
         onRegistered();

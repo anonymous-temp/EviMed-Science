@@ -1,11 +1,11 @@
 import { Link } from "react-router";
 import { formatRelativeTime } from "@/lib/format";
-import { stepAllowanceWait } from "@/lib/allowanceWait";
-import { GEO_STEP_KEYS, type GeoProjectSummary, type GeoStep } from "@/lib/geoClient";
+import { GEO_STEP_KEYS, type GeoProjectSummary } from "@/lib/geoClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Note } from "@/components/ui/Note";
-import { RAIL_STATE_WORDS, RailMark, type RailState } from "@/components/ui/ProgressRail";
+import { RailMark } from "@/components/ui/ProgressRail";
+import { geoStepView } from "./geoBand";
 import { Section } from "@/components/ui/Section";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
@@ -55,22 +55,6 @@ export function progressLine(project: GeoProjectSummary): string {
 const ALERT_TAB = "accuracy";
 
 /**
- * A step as the project page's rail draws it, from the list's own record of it. The page's rail also knows a budget a person still
- * has to set, which the list does not carry: a step the allowance would not start is the one 「等你」 it can tell.
- */
-export function stepMark(step: GeoStep | undefined): { state: RailState; word: string } {
-  if (stepAllowanceWait(step)) return { state: "waiting", word: RAIL_STATE_WORDS.waiting };
-  switch (step?.status ?? "none") {
-    case "done": return { state: "done", word: RAIL_STATE_WORDS.done };
-    case "running": return { state: "active", word: RAIL_STATE_WORDS.active };
-    case "queued": return { state: "active", word: "排队中" };
-    case "failed": return { state: "attention", word: RAIL_STATE_WORDS.attention };
-    case "minimal": return { state: "partial", word: RAIL_STATE_WORDS.partial };
-    default: return { state: "todo", word: step?.requestOrigin === "legacy" && step.requested ? "待确认" : step?.requested === true ? "待开始" : step?.requested === false ? "未请求" : RAIL_STATE_WORDS.todo };
-  }
-}
-
-/**
  * Why a number is not there yet, said once under the two figures: the diagnosis, which asks the AI engines, is what measures them. Once
  * it has run, the number's own word (「样本不足」, 「未测」) is the reason and nothing more is said.
  */
@@ -97,7 +81,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
   const alert = paused ? null : alertText(project);
   const start = project.startedAt ?? project.createdAt ?? null;
   const week = weekOf(start);
-  const marks = GEO_STEP_KEYS.map((key) => ({ key, ...stepMark(project.steps[key]) }));
+  const marks = GEO_STEP_KEYS.map((key) => ({ key, ...geoStepView(project, key) }));
   const done = marks.filter((mark) => mark.state === "done").length;
 
   const { gvi, mention } = project.headline;
@@ -145,7 +129,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
       )}
 
       <section aria-label="当前工作" data-geo-journey={journey.stage} className="flex flex-col gap-2">
-        <p className="text-caption text-text-3">{journey.requested}</p>
+        {journey.requested && <p className="text-caption text-text-3">{journey.requested}</p>}
         <h3 className="text-section font-semibold text-text">{journey.title}</h3>
         <Note action={<Link className="shrink-0 rounded text-link hover:underline" to={journey.next.step ? geoDestinationPath(project.id, GEO_STEP_HOME[journey.next.step]) : `/app/geo/${encodeURIComponent(project.id)}`}>继续当前工作</Link>}>{journey.detail}</Note>
         {journey.retained.length > 0 && <FactList rows={[{ label: "已保留", value: journey.retained.join("、") }]} ruled={false} />}
@@ -168,10 +152,10 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
         <ol aria-label="八步进度" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           {marks.map((mark) => (
             <li key={mark.key} data-geo-step={mark.key} className="flex min-w-0 items-start gap-2">
-              <span className="mt-0.5"><RailMark state={mark.state} /></span>
+              {mark.work !== null && <span className="mt-0.5"><RailMark state={mark.state} /></span>}
               <Link to={geoDestinationPath(project.id, GEO_STEP_HOME[mark.key])} className="min-w-0 rounded text-ui text-text hover:underline">
                 {GEO_STEP_NAMES[mark.key]}
-                <span className="block text-caption text-text-3">{mark.word}</span>
+                {mark.word && <span className="block text-caption text-text-3">{mark.word}</span>}
               </Link>
             </li>
           ))}

@@ -35,14 +35,24 @@ export function geoJourney(project: JourneyProject) {
   const waitingFor = current ? workflow.steps[current].waitingFor as GeoStepKey[] : [];
   const retained = GEO_STEP_KEYS.flatMap(key => steps[key]?.summary?.text ? [steps[key]!.summary!.text] : []);
   const inputDraft = `请先根据我提供的资料确认产品，再完成我选择的任务。产品名称及适用场景：${product ?? ''}；目标受众（患者、医生或其他）：；本次希望得到：。说明书、证据或已有稿件我会在此对话中附上。缺少会影响工作的资料时请具体指出。`;
-  const requested = legacy.length && !workflow.requested.length ? '历史工作范围待确认' : workflow.full ? '本次工作：完整八步方案' : workflow.requested.length ? `本次工作：${names(workflow.requested)}` : '尚未提交工作';
+  const requested = legacy.length && !workflow.requested.length ? '历史工作范围待确认' : workflow.full ? '本次工作：完整八步方案' : workflow.requested.length ? `本次工作：${names(workflow.requested)}` : '';
+  // What is known so far, from what the project records: the conversation writes these and the page ticks them as it does. Only what is
+  // stored can be ticked, so an audience, which the project does not keep, is said in the sentence and is not a row.
+  const inputs = [
+    {key:'name',label:'产品名称',done:Boolean(product)},
+    {key:'indication',label:'适用场景',done:Boolean((project.product as {indication?:string|null}|null|undefined)?.indication)},
+    {key:'task',label:'这次要做什么',done:workflow.requested.length > 0 || legacy.length > 0},
+  ];
+  const missing = inputs.filter(input => !input.done).length;
   let stage: 'inputs' | 'ready' | 'running' | 'queued' | 'blocked' | 'failed' | 'paused' | 'results' = 'ready';
-  let title = product ? `继续${product}的工作` : '先说明产品与这次要做的事';
-  let detail = product ? '选择本次任务；已有资料可直接附在对话中。' : '产品名称与适用场景、目标受众、本次目标能帮助确定工作范围；说明书、证据或已有稿件可直接附在对话中。';
-  let next: GeoJourneyAction = { kind: 'conversation', label: '在对话中补充产品与任务', draft: inputDraft };
+  let title = product ? `继续${product}的工作` : `还差 ${missing} 项就能开始`;
+  let detail = product ? '选择本次任务；已有资料可直接附在对话中。' : '在对话里直接说，或把说明书、证据、已有稿件发给 AI，受众也可以一起说。读到后这里会自动打勾。';
+  let next: GeoJourneyAction = { kind: 'conversation', label: '让 AI 确认产品', draft: inputDraft };
   if (!product) stage = 'inputs';
   else if (project.steps.questions && ['done', 'minimal'].includes(project.steps.questions.status)) {
-    next = {kind:'step',step:'diagnosis',label:'查看诊断与开始测量'};
+    // The round is started where its questions are read: the diagnosis's own tab holds its results and has nothing to press yet.
+    if (!project.steps.diagnosis || project.steps.diagnosis.status === 'none') next = {kind:'step',step:'questions',label:'去开始诊断'};
+    else next = {kind:'step',step:'diagnosis',label:'查看诊断结果'};
     detail = '测量问题已有结果。核对范围后，可明确开始一轮 AI 回答诊断。';
   } else if (project.steps.evidence && ['done', 'minimal'].includes(project.steps.evidence.status)) {
     next = {kind:'step',step:'questions',label:'查看问题与下一步'};
@@ -75,5 +85,5 @@ export function geoJourney(project: JourneyProject) {
     const starter = GEO_STARTERS.find(item => item.key === key)!;
     return {key,label:starter.label,draft:starter.draft(product)};
   });
-  return {product,workflow,stage,title,detail,requested,current,waitingFor,retained,next,canConverse,runId:current ? workflow.steps[current].runId as string | null : null,intents};
+  return {product,workflow,stage,title,detail,requested,inputs,current,waitingFor,retained,next,canConverse,runId:current ? workflow.steps[current].runId as string | null : null,intents};
 }

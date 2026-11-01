@@ -2,10 +2,11 @@
  * What the fixed band above every GEO tab says, decided before anything is drawn (R19, audit C A.1–A.2): the eight steps as one row
  * and the one sentence at its end. The tabs below it are drawn by the layout; this is only the words and the states.
  */
-import { agendaLocalDate, DISPLAY_TIME_ZONE, geoAutomationEnabled } from "@evimed/domain";
+import { agendaLocalDate, DISPLAY_TIME_ZONE, geoAutomationEnabled, geoWorkflowState, workStateLabel } from "@evimed/domain";
 import { GEO_STEP_KEYS, type GeoMeasurement, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import type { RailState } from "@/components/ui/ProgressRail";
+import type { WorkState } from "@/lib/workState";
 import type { StepRailStep } from "@/components/ui/StepRail";
 import { engineName, GEO_STEP_NAMES, GEO_STEP_WORK, monthDay, parseGeoDate, zh } from "./geoText";
 import { GEO_MARKET_OFF_NOTE, marketConnected } from "./geoOverviewModel";
@@ -23,36 +24,54 @@ function shortNote(note: string | null | undefined): string | null {
 }
 
 /**
- * The eight steps for the rail. One of them may be `waiting`: the programme's single money stop — a placement budget only a person
- * may set — and the one a step the allowance would not start shares with it: both are the reader's. Without a market there is
- * nothing to owe: the step is untouched and its tooltip says it waits for the market, and nothing on the page asks for a budget.
- * A step that did not finish is `attention`; one a single run only half did is `partial`.
+ * Where one step stands, in the platform's one vocabulary (`@evimed/domain` `workState.mjs`), and it is the list's, the preview's and
+ * the rail's all three. A step outside the work that was asked for has no state at all, and says nothing but its name: eight 「未请求」
+ * in a row told the reader nothing, and were wrong for the dependency that was about to run.
  *
- * `summary` is what the step produced — the server's own count (「86 条结论」), else its short note; it is the tooltip and never a
- * second line, so the band is one height whatever the states.
+ * `waiting` is the person's: the placement budget, a step the allowance would not start, automatic monitoring that was asked for and
+ * never agreed to, and a scope an old project still has to confirm.
+ */
+export function geoStepView(project: Pick<GeoProject, "steps"> & Partial<Pick<GeoProject, "budget" | "overview" | "engines" | "coverageDays" | "market">>, key: GeoStepKey): { work: WorkState | null; state: RailState; word: string; waitingFor: string | null } {
+  const steps = stepsOf(project as GeoProject);
+  const step = steps[key];
+  const workflow = geoWorkflowState(steps);
+  const status = step?.status ?? "none";
+  const working = status === "running" || status === "queued";
+  const asked = step?.requested === true && step.requestOrigin !== "legacy";
+  // Placing is the reader's money only once placing was asked for or is moving: a step nobody asked for owes neither budget nor market.
+  const placing = key === "distribution" && status !== "done" && status !== "minimal" && (asked || working || status === "failed");
+  const owesBudget = placing && "budget" in project && marketConnected(project as GeoProject) && !(project.budget && project.budget.totalCny > 0);
+  const owesConsent = key === "monitoring" && asked && status === "none" && "engines" in project && !geoAutomationEnabled(project);
+  const legacy = status === "none" && step?.requested === true && step.requestOrigin === "legacy";
+  const waitingFor = owesBudget ? "设预算" : stepAllowanceWait(step) ? "补额度" : owesConsent ? "开启自动监测" : legacy ? "确认范围" : null;
+  // Without a market a placing that was asked for cannot move, whatever its record says.
+  const heldByMarket = placing && "budget" in project && !marketConnected(project as GeoProject);
+  const work: WorkState | null = waitingFor ? "waiting"
+    : status === "failed" ? "failed"
+      : status === "done" ? "done"
+        : status === "minimal" ? "minimal"
+          : heldByMarket ? "todo"
+            : status === "running" ? "running"
+              : status === "queued" ? "queued"
+                : workflow.steps[key]?.required ? "todo" : null;
+  const state: RailState = work === "waiting" ? "waiting" : work === "failed" ? "attention" : work === "done" ? "done" : work === "minimal" ? "partial" : work === "running" || work === "queued" ? "active" : "todo";
+  return { work, state, word: workStateLabel(work, waitingFor), waitingFor };
+}
+
+/**
+ * The eight steps for the rail. `summary` is what the step produced — the server's own count (「86 条结论」), else its short note; it is
+ * the tooltip and never a second line.
  */
 export function bandSteps(project: GeoProject, hrefOf: (step: GeoStepKey) => string): StepRailStep[] {
   const steps = stepsOf(project);
-  const needsBudget = project.budget === null || !(project.budget.totalCny > 0);
   const market = marketConnected(project);
   return GEO_STEP_KEYS.map((key) => {
     const step = steps[key];
-    const status = step?.status ?? "none";
-    const done = status === "done";
-    const working = status === "running" || status === "queued";
-    // Placing is asked for when the reader requested it or it is already moving; a step nobody asked for owes neither budget nor market.
-    const asked = key === "distribution" && !done && status !== "minimal" && (step?.requested === true && step.requestOrigin !== "legacy" || working || status === "failed");
-    const held = asked && !market;
-    const budget = asked && market && needsBudget;
-    const allowance = stepAllowanceWait(step);
-    const state: RailState = budget || allowance ? "waiting"
-      : status === "failed" ? "attention"
-        : done ? "done"
-          : status === "minimal" ? "partial"
-            : held ? "todo"
-              : working ? "active" : "todo";
-    const summary = budget ? "待你确认预算" : held ? GEO_MARKET_OFF_NOTE : step?.summary?.text ?? shortNote(step?.note);
-    return { id: key, label: GEO_STEP_NAMES[key], state, stateLabel: status === "none" ? step?.requestOrigin === "legacy" && step.requested ? "待确认" : step?.requested === true ? "待开始" : step?.requested === false ? "未请求" : "未开始" : status === "queued" ? "排队中" : undefined, summary, href: hrefOf(key) };
+    const view = geoStepView(project, key);
+    // Without a market there is nothing to owe: the step's tooltip says it waits for the market, and nothing on the page asks for a budget.
+    const held = key === "distribution" && view.work === "todo" && !market && (step?.requested === true || step?.status === "running" || step?.status === "queued");
+    const summary = view.waitingFor === "设预算" ? "待你确认预算" : held ? GEO_MARKET_OFF_NOTE : step?.summary?.text ?? shortNote(step?.note);
+    return { id: key, label: GEO_STEP_NAMES[key], state: view.state, stateLabel: view.word, outside: view.work === null, summary, href: hrefOf(key) };
   });
 }
 
@@ -109,6 +128,8 @@ export function bandNow(
   next: { date: string; kind: string; source?: "queued" | "schedule" } | null | undefined,
   now: Date = new Date(),
   measurement: GeoMeasurement | null = null,
+  /** The activity strip is saying what is going on: the band says only what is coming. */
+  scheduleOnly = false,
 ): string | null {
   const steps = stepsOf(project);
   const working = GEO_STEP_KEYS
@@ -120,12 +141,12 @@ export function bandNow(
     .filter(key => steps[key]?.status === "queued" && !stepAllowanceWait(steps[key]))
     .map(key => GEO_STEP_WORK[key]);
   const parts: string[] = [];
-  if (working.length > 0) parts.push(`正在${working.join("、")}`);
-  if (queued.length > 0) parts.push(`排队中：${queued.join("、")}`);
+  if (!scheduleOnly && working.length > 0) parts.push(`正在${working.join("、")}`);
+  if (!scheduleOnly && queued.length > 0) parts.push(`排队中：${queued.join("、")}`);
   const monitor = steps.monitoring;
-  if (stepAllowanceWait(monitor)) parts.push("复测等待额度");
-  else if (monitor?.status === "running") parts.push("复测进行中");
-  else if (monitor?.status === "queued") parts.push("复测排队中");
+  if (stepAllowanceWait(monitor)) parts.push("复测等你补额度");
+  else if (!scheduleOnly && monitor?.status === "running") parts.push("复测进行中");
+  else if (!scheduleOnly && monitor?.status === "queued") parts.push("复测排队中");
   const pause = measurementPause(measurement);
   if (pause) parts.push(pause.short);
   if ((geoAutomationEnabled(project) || next?.source === "queued") && next?.date && project.status !== "paused" && !pause?.paused) {
@@ -139,4 +160,25 @@ export function bandNow(
     } else parts.push(`下次复测 ${date}`);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/**
+ * The band's strip for what the programme is doing: the step that runs (or, with none, the first in line) and how many stand behind it.
+ * A step the allowance would not start is the person's and not the programme's: it is on the rail as 等你 and in the needs, not here.
+ */
+export function geoActivity(project: GeoProject): { label: string; startedAt?: string | null; waiting?: string; queued?: number; step: GeoStepKey; runId: string | null } | null {
+  const steps = stepsOf(project);
+  if (project.status === "paused") return null;
+  const moving = GEO_STEP_KEYS.filter((key) => (steps[key]?.status === "running" || steps[key]?.status === "queued") && !stepAllowanceWait(steps[key]));
+  if (moving.length === 0) return null;
+  const running = moving.find((key) => steps[key]?.status === "running");
+  const lead = running ?? moving[0];
+  const others = moving.length - 1;
+  return {
+    step: lead,
+    runId: steps[lead]?.runId ?? null,
+    label: GEO_STEP_WORK[lead],
+    ...(running ? { startedAt: steps[lead]?.updatedAt ?? null } : { waiting: "轮到时会自动开始" }),
+    ...(others > 0 ? { queued: others } : {}),
+  };
 }
