@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock, Layers, RotateCw, SearchX } from "lucide-react";
 import { WebApiError, webErrorMessage } from "@/lib/apiClient";
@@ -39,13 +39,17 @@ import { ZoneModules } from "@/components/frontier/zone/ZoneModules";
 import { ZoneRail, railHasContent } from "@/components/frontier/zone/ZoneRail";
 import type { ZoneEditorProps } from "@/components/frontier/zone/zoneEditor";
 import {
+  COLLECTING_BACKOFF_MS,
   EMPTY_ITEMS_VIEW,
+  FILL_TITLE,
   itemsHref,
   itemsParams,
   readItemsView,
   zonePath,
   zoneResearchDraft,
+  zoneIsCollecting,
   zoneTabOf,
+  type ZoneFill,
   type ZoneItemsView,
   type ZoneTab,
 } from "@/components/frontier/zone/zoneText";
@@ -186,6 +190,10 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
     return () => { active = false; };
   }, [zone.id, overviewAttempt]);
   const overview = overviewState.kind === "ready" ? overviewState.overview : null;
+  // The overview again, quietly: a zone that is collecting its first batch takes it when it comes, without the page going to a skeleton.
+  const readOverviewQuietly = useCallback(() => {
+    fetchZoneOverview(zone.id).then((fresh) => { if (fresh.modules.some(moduleHasContent)) setOverviewState({ kind: "ready", overview: fresh }); }, () => { /* The next wait tries again. */ });
+  }, [zone.id]);
 
   // The team's cards: the zone's own count, else what the overview's module says.
   const cardsModule = overview?.modules.find((module) => module.key === "cards");
@@ -199,6 +207,31 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
 
   const items = useZoneItems(zone, view, tab === "items");
   const toolbar = useItemsToolbar({ view, set: setView, items, count: view.week ? items.rows.length : items.total });
+
+  // What an empty zone is doing (audit D6, D7-like): a zone that has been given its first batch is not waiting for one. A new zone that holds
+  // nothing is read again on a bounded backoff — about ten minutes — and says what happened when the wait ends: the first batch came (a
+  // toast), or it did not and the page stops asking and says so. A zone that was made long ago and is empty never claims to be collecting.
+  const overviewEmpty = tab === "overview" && overview !== null && !overview.modules.some(moduleHasContent);
+  const itemsEmpty = tab === "items" && items.status === "ready" && items.rows.length === 0 && !items.hasMore && !view.q && !view.role && !view.picked && !view.week && !view.window;
+  const empty = overviewEmpty || itemsEmpty;
+  const collecting = empty && zoneIsCollecting(zone);
+  const [waits, setWaits] = useState(0);
+  const fill: ZoneFill = collecting ? (waits >= COLLECTING_BACKOFF_MS.length ? "gave-up" : "collecting") : "established";
+  useEffect(() => {
+    if (fill !== "collecting") return undefined;
+    const timer = setTimeout(() => { setWaits((count) => count + 1); if (tab === "items") items.refresh(); else readOverviewQuietly(); }, COLLECTING_BACKOFF_MS[waits]);
+    return () => clearTimeout(timer);
+  // `items.refresh` changes with the query; the wait is one timer per count.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fill, waits, tab]);
+  // The first batch came while this page was waiting for it, on the view it was waiting on: said once.
+  const hasContent = tab === "overview" ? Boolean(overview?.modules.some(moduleHasContent)) : tab === "items" ? items.rows.length > 0 : false;
+  const waitingOn = useRef<ZoneTab | null>(null);
+  useEffect(() => {
+    if (collecting) { waitingOn.current = tab; return; }
+    if (waitingOn.current === tab && hasContent) { toast.success(`“${zone.title}”的第一批内容到了`); setWaits(0); }
+    waitingOn.current = null;
+  }, [collecting, hasContent, tab, zone.title]);
 
   /* ---------------------------------------------------------------- actions */
   const run = async (action: () => Promise<void>) => {
@@ -238,7 +271,7 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
   ];
   const primary = zone.canEdit
     ? (Editor ? { id: "edit", label: "编辑", onSelect: () => setEditing("edit") } : undefined)
-    : { id: "follow", label: zone.following ? "已关注" : "关注", loading: busy, onSelect: toggleFollow };
+    : { id: "follow", label: zone.following ? "已关注" : "关注", kind: "set" as const, loading: busy, onSelect: toggleFollow };
 
   const tabs: PageTabs<ZoneTab> = {
     label: "专区视图",
@@ -262,17 +295,18 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
       actionPlan={{ primary, overflow: more, overflowLabel: "更多操作" }}
       underTitle={<ZoneHeader zone={zone} path={path} cards={cardCount} linked={tab === "overview"} />}
       tabs={tabs}
+      activity={fill === "collecting" ? { label: `搜集“${zone.title}”的第一批内容` } : undefined}
       toolbar={tab === "items" ? toolbar : undefined}
       aside={tab === "overview" && wide && rail ? rail : undefined}
       asideLabel="专区侧栏"
     >
       {tab === "overview" && (
         <>
-          <OverviewTab zone={zone} state={overviewState} from={from} path={path} onReload={() => { setOverviewState({ kind: "loading" }); setOverviewAttempt((value) => value + 1); }} />
+          <OverviewTab zone={zone} state={overviewState} fill={fill} from={from} path={path} onReload={() => { setWaits(0); setOverviewState({ kind: "loading" }); setOverviewAttempt((value) => value + 1); }} />
           {!wide && rail && <div className="mt-10">{rail}</div>}
         </>
       )}
-      {tab === "items" && <ZoneItemsList zone={zone} view={view} items={items} onClear={() => { setView({ role: null, picked: false, window: null, q: "", week: null }); }} />}
+      {tab === "items" && <ZoneItemsList zone={zone} view={view} items={items} fill={fill} onClear={() => { setView({ role: null, picked: false, window: null, q: "", week: null }); }} />}
       {tab === "cards" && <CardsTab zone={zone} from={from} />}
       {editing && Editor && (
         <Editor
@@ -306,22 +340,23 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
 
 /* ------------------------------------------------------------------- overview */
 
-function OverviewTab({ zone, state, from, path, onReload }: { zone: ZoneDetail; state: OverviewState; from: { to: string; label: string }; path: string; onReload: () => void }) {
+function OverviewTab({ zone, state, fill, from, path, onReload }: { zone: ZoneDetail; state: OverviewState; fill: ZoneFill; from: { to: string; label: string }; path: string; onReload: () => void }) {
   if (state.kind === "loading") return <FrontierSkeleton />;
   if (state.kind === "error") return <LoadError message={state.message} onRetry={onReload} />;
   // The server always sends the 最新动态 module, empty for a zone with nothing in it yet: what there is to draw is the modules that hold
   // something, not the modules there are.
   const modules = state.overview.modules.filter(moduleHasContent);
   if (modules.length === 0) {
-    // A zone that went quiet or was archived has nothing new to wait for: the way on is what it holds. A new zone is being filled.
-    if (zone.lifecycle !== "active") {
+    // A zone that went quiet or was archived, or that has held items before, has nothing new to wait for: the way on is what it holds.
+    // Only a new, empty zone is being filled, and it says so for as long as the page is still reading for the first batch (`ZoneFill`).
+    if (fill === "established") {
       return (
-        <EmptyState icon={Layers} title="近期没有新的内容"
+        <EmptyState icon={Layers} title={FILL_TITLE.established}
           action={zone.counts.all > 0 ? <Link to={itemsHref(path, { window: "all" })} className={buttonClasses({ variant: "secondary" })}>看全部动态</Link> : undefined} />
       );
     }
     return (
-      <EmptyState icon={Layers} title="正在为这个专区搜集内容，通常几分钟内出现第一批"
+      <EmptyState icon={Layers} title={FILL_TITLE[fill]}
         action={<Button variant="secondary" onClick={onReload}><RotateCw size={16} aria-hidden="true" />重新加载</Button>} />
     );
   }

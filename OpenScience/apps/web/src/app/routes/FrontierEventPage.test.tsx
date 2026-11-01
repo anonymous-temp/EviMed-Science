@@ -84,7 +84,7 @@ describe("an event", () => {
     renderEvent();
     const title = await screen.findByRole("heading", { level: 1, name: "不饱和磷脂多层多囊脂质体实现亲水药物超缓释" });
     expect(screen.getByRole("link", { name: "前沿动态" })).toHaveAttribute("href", "/app/frontier");
-    expect(title.closest("header")).toContainElement(screen.getByRole("button", { name: "深入研究" }));
+    expect(title.closest("header")).toContainElement(screen.getByRole("button", { name: "让 AI 深入研究" }));
     // The line of facts is the first thing in the page body, directly under the header. How many reports and from how many sources is the
     // record's, so the line does not say it twice.
     const facts = title.closest("header")!.nextElementSibling!.firstElementChild!;
@@ -231,7 +231,7 @@ describe("an event", () => {
 
   it("opens a new conversation with the event and its first-hand sources in the composer", async () => {
     renderEvent();
-    await userEvent.click(await screen.findByRole("button", { name: "深入研究" }));
+    await userEvent.click(await screen.findByRole("button", { name: "让 AI 深入研究" }));
     const location = screen.getByTestId("location");
     expect(location).toHaveTextContent(/^\/app\/chat\|请围绕这个事件做一次深入研究/);
     expect(location).toHaveTextContent("一手来源：");
@@ -260,9 +260,9 @@ describe("an event", () => {
 
   it("has no 就此提问 where the event's first-hand report has no questions, and keeps its own 深入研究", async () => {
     renderEvent();
-    await screen.findByRole("button", { name: "深入研究" });
+    await screen.findByRole("button", { name: "让 AI 深入研究" });
     expect(screen.queryByRole("region", { name: "就此提问" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
+    await userEvent.click(screen.getByRole("button", { name: "让 AI 深入研究" }));
     expect(screen.getByTestId("location")).toHaveAttribute("data-origin", expect.stringMatching(/^frontier-event:ev1$/));
   });
 
@@ -484,7 +484,7 @@ describe("the event page's composition", () => {
     const title = await screen.findByRole("heading", { level: 1, name: "不饱和磷脂多层多囊脂质体实现亲水药物超缓释" });
     expect(title).toHaveClass("text-doc-title");
     expectComposed(container, { tablists: 0, stepRail: false, toolbar: false });
-    expect(title.closest("[data-page-header]")).toContainElement(screen.getByRole("button", { name: "深入研究" }));
+    expect(title.closest("[data-page-header]")).toContainElement(screen.getByRole("button", { name: "让 AI 深入研究" }));
     expect(screen.getByRole("heading", { level: 2, name: "概要" })).toHaveClass("text-section");
   });
 

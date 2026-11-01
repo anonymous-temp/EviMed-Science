@@ -25,9 +25,9 @@ export function continuationIntent(continuation: EvidenceContinuation): RuntimeU
 }
 
 /**
- * 「用这张卡继续研究」: a project, the card's primary sources in its knowledge base and the question, written and not sent. It
- * adds to 「问这条证据」 and replaces nothing — that one asks in the project the reader is in, this one starts a new project — and the
- * hover line says which. A source that could not be saved is said before the conversation opens.
+ * 「新建项目继续研究」: a project, the card's primary sources in its knowledge base and the question, written and not sent. It
+ * adds to 「在当前项目里问这条证据」 and replaces nothing — that one asks in the project the reader is in, this one starts a new project — and
+ * each button's own words say which (2026-11-01 audit D13: the two read as one act). A source that could not be saved is said before the conversation opens.
  */
 export function EvidenceContinueAction({ evidence }: { evidence: Pick<EvidenceCard, "id" | "canResearch"> }) {
   const navigate = useNavigate();
@@ -55,9 +55,9 @@ export function EvidenceContinueAction({ evidence }: { evidence: Pick<EvidenceCa
   };
   return (
     <div className="space-y-2">
-      <Tooltip content="新建研究，并把主要来源存入知识库">
-        <Button variant="secondary" loading={busy} onClick={() => void start()}>
-          用这张卡继续研究
+      <Tooltip content="新建研究项目，并把主要来源存入知识库">
+        <Button variant="secondary" actionKind="start" loading={busy} onClick={() => void start()}>
+          新建项目继续研究
         </Button>
       </Tooltip>
       {error && <p role="alert" className="text-ui text-error">{error}</p>}

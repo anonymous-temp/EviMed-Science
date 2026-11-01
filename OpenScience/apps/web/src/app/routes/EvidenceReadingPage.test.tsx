@@ -69,17 +69,17 @@ describe("reading an evidence card", () => {
     mount();
     const title = await screen.findByRole("heading", { level: 1, name: "试验药能预防卒中吗" });
     expect(title).toHaveClass("text-doc-title");
-    expect(title.closest("[data-page-header]")).toContainElement(screen.getByRole("button", { name: "问这条证据" }));
+    expect(title.closest("[data-page-header]")).toContainElement(screen.getByRole("button", { name: "在当前项目里问这条证据" }));
   });
 
-  it("keeps the two research actions together: 问这条证据 in the header, 用这张卡继续研究 directly under the answer, each with its hover line", async () => {
+  it("keeps the two research actions together: 在当前项目里问这条证据 in the header, 新建项目继续研究 directly under the answer, each with its hover line", async () => {
     mount();
-    const ask = await screen.findByRole("button", { name: "问这条证据" });
+    const ask = await screen.findByRole("button", { name: "在当前项目里问这条证据" });
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
     expect(header).toContainElement(ask);
     const answer = screen.getByRole("heading", { name: "核心回答" }).closest("section")!;
     const row = answer.nextElementSibling!;
-    const next = within(row as HTMLElement).getByRole("button", { name: "用这张卡继续研究" });
+    const next = within(row as HTMLElement).getByRole("button", { name: "新建项目继续研究" });
     expect(next).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText("编写与核查")).toBeInTheDocument();
     await userEvent.hover(ask);
@@ -157,6 +157,37 @@ describe("reading an evidence card", () => {
     expect(await screen.findByText("草稿")).toBeInTheDocument();
   });
 
+  // Module workspace audit D13: 重试 does the failed thing again, and the page says which thing failed.
+  it("names the action that was refused, and 重试 sends that action again rather than reading the card again", async () => {
+    client.fetchZoneEvidence.mockResolvedValue({ ...card, canEdit: true });
+    client.publishEvidenceCard.mockRejectedValueOnce(new WebApiError("busy", { status: 503 })).mockResolvedValue({ ...card, state: "draft", canEdit: true });
+    mount();
+    await screen.findByTestId("evidence-card-header");
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "撤回证据" }));
+    const notice = await screen.findByText(/^撤回没有完成：/);
+    expect(notice).toBeInTheDocument();
+    const reads = client.fetchZoneEvidence.mock.calls.length;
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(client.publishEvidenceCard).toHaveBeenCalledTimes(2));
+    expect(client.fetchZoneEvidence.mock.calls.length).toBe(reads);
+    expect(await screen.findByText("草稿")).toBeInTheDocument();
+    expect(screen.queryByText(/^撤回没有完成：/)).toBeNull();
+  });
+
+  it("still reads the card again when it is the card that could not be read", async () => {
+    client.fetchZoneEvidence.mockRejectedValueOnce(new WebApiError("down", { status: 503 })).mockResolvedValue(card);
+    mount();
+    await userEvent.click(await screen.findByRole("button", { name: "重试" }));
+    expect(await screen.findByTestId("evidence-card-header")).toBeInTheDocument();
+  });
+
+  it("declares the two ways into a conversation by where they go: the current project's draft, a new project's start", async () => {
+    mount();
+    expect(await screen.findByRole("button", { name: "在当前项目里问这条证据" })).toHaveAttribute("data-action-kind", "draft");
+    expect(screen.getByRole("button", { name: "新建项目继续研究" })).toHaveAttribute("data-action-kind", "start");
+  });
+
   it("will not offer to publish a draft that has no body or no source, and says what is missing", async () => {
     client.fetchZoneEvidence.mockResolvedValue({ ...card, state: "draft", canEdit: true, body: "", sources: [] });
     mount();
@@ -166,12 +197,12 @@ describe("reading an evidence card", () => {
     expect(await screen.findByRole("menuitem", { name: "发布证据" })).toBeDisabled();
   });
 
-  it("offers 用这张卡继续研究 only on a card that may be researched", async () => {
+  it("offers 新建项目继续研究 only on a card that may be researched", async () => {
     client.fetchZoneEvidence.mockResolvedValue({ ...card, canResearch: false });
     mount();
     await screen.findByTestId("evidence-card-header");
-    expect(screen.queryByRole("button", { name: "用这张卡继续研究" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "问这条证据" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "新建项目继续研究" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在当前项目里问这条证据" })).not.toBeInTheDocument();
   });
   it("opens a draft made from a result straight in the card editor, for its owner only", async () => {
     client.fetchZoneEvidence.mockResolvedValue({ ...card, state: "draft", canEdit: true });

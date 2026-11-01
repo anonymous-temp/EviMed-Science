@@ -33,6 +33,8 @@ import {
   roleOptions,
   weekLabel,
   weekWindow,
+  FILL_TITLE,
+  type ZoneFill,
   type ZoneItemsView,
 } from "./zoneText";
 
@@ -70,6 +72,8 @@ export interface ZoneItems {
   hasMore: boolean;
   loadingMore: boolean;
   reload: () => void;
+  /** Reads the first page again without taking the list away: a zone that is collecting its first items takes them when they come. */
+  refresh: () => void;
   more: () => void;
   star: (item: FrontierItem) => void;
   hide: (item: FrontierItem) => void;
@@ -168,6 +172,21 @@ export function useZoneItems(zone: Pick<ZoneDetail, "id" | "canEdit">, view: Zon
     }
   }, [enabled, view.week, status, loadingMore, loaded, more]);
 
+  // The first page again, quietly: it lands only if it holds something (an empty answer changes nothing) and no newer read has begun.
+  const refresh = useCallback(() => {
+    if (!enabled) return;
+    const mine = generation.current;
+    fetchZoneItems(zone.id, { role: query.role, picked: query.picked, window: query.window, q: query.q }).then(
+      (page) => {
+        if (mine !== generation.current || page.items.length === 0) return;
+        setLoaded({ items: page.items, roleCounts: page.roleCounts, nextCursor: page.nextCursor, total: page.total });
+        setRemoved(new Set());
+        setStatus("ready");
+      },
+      () => { /* The list stays as it was; the next wait tries again. */ },
+    );
+  }, [enabled, zone.id, query]);
+
   const replace = (item: FrontierItem) => setLoaded((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? item : entry)) }));
   const star = (item: FrontierItem) => {
     void (item.state.starred ? unstarFrontierItem(item.id) : starFrontierItem(item.id)).then(
@@ -223,7 +242,7 @@ export function useZoneItems(zone: Pick<ZoneDetail, "id" | "canEdit">, view: Zon
   return {
     status, error, rows, roleCounts: loaded.roleCounts, total: loaded.total, window,
     hasMore: loaded.nextCursor !== null, loadingMore,
-    reload: () => setAttempt((value) => value + 1), more, star, hide, notIn,
+    reload: () => setAttempt((value) => value + 1), refresh, more, star, hide, notIn,
   };
 }
 
@@ -304,10 +323,12 @@ export function useItemsToolbar({ view, set, items, count }: {
  * The 动态 list: the feed's cards under the Beijing day they belong to, the zone's own entry in each card's ⋯ (「不属于这个专区」), and
  * its four states — a skeleton, an empty list that says where to go from it, an error with 重试, and the content with 「加载更多」.
  */
-export function ZoneItemsList({ zone, view, items, onClear }: {
+export function ZoneItemsList({ zone, view, items, fill = "collecting", onClear }: {
   zone: Pick<ZoneDetail, "id" | "title" | "canEdit">;
   view: ZoneItemsView;
   items: ZoneItems;
+  /** What a zone with nothing in it is doing (`ZoneFill`): the page decides, from the zone's own facts and how long it has waited. */
+  fill?: ZoneFill;
   /** Takes the filters and the search away: the way on from a list they emptied. */
   onClear: () => void;
 }) {
@@ -321,7 +342,7 @@ export function ZoneItemsList({ zone, view, items, onClear }: {
     ) : filtered ? (
       <EmptyState icon={Newspaper} title="没有结果" action={<Button variant="secondary" onClick={onClear}>清除筛选</Button>} />
     ) : (
-      <EmptyState icon={Newspaper} title="正在为这个专区搜集内容，通常几分钟内出现第一批"
+      <EmptyState icon={Newspaper} title={FILL_TITLE[fill]}
         action={<Button variant="secondary" onClick={items.reload}><RotateCw size={16} aria-hidden="true" />重新加载</Button>} />
     );
   }

@@ -21,6 +21,35 @@ import { cardEyebrow, feedDay, feedDayKey, itemLine } from "../frontierText";
 /** The page's three views; the address holds the tab (`?tab=`) and 概览 is the one with none. */
 export type ZoneTab = "overview" | "items" | "cards";
 
+/**
+ * How long a zone with no content at all is taken to be still collecting its first batch, from its last edit: the first items come within
+ * minutes, and a zone that has been empty for longer than this is not waiting for anything (2026-11-01 audit D6: a zone made long ago and
+ * left empty said it was collecting for good). A zone with no last-edit time is new as far as the page can tell.
+ */
+export const COLLECTING_WINDOW_MS = 30 * 60_000;
+/**
+ * When the page reads a collecting zone again, one wait after another: quickly at first, then spread out, about ten minutes in all. After
+ * the last the page stops asking and says so (`ZoneFill` 「gave-up」) rather than waiting for ever.
+ */
+export const COLLECTING_BACKOFF_MS: readonly number[] = [15_000, 30_000, 60_000, 120_000, 120_000, 120_000, 120_000];
+
+/** What an empty zone is doing: still collecting its first batch, has stopped waiting for it, or has simply nothing new. */
+export type ZoneFill = "collecting" | "gave-up" | "established";
+
+/** What an empty zone says it is doing: it says collecting only while it is. */
+export const FILL_TITLE: Readonly<Record<ZoneFill, string>> = {
+  collecting: "正在为这个专区搜集内容，通常几分钟内出现第一批",
+  "gave-up": "还没有搜集到内容，可以稍后再看",
+  established: "近期没有新的内容",
+};
+
+/** Whether a zone that holds nothing is a new one that is being filled: active, never had an item, and edited within `COLLECTING_WINDOW_MS`. */
+export function zoneIsCollecting(zone: Pick<ZoneDetail, "lifecycle" | "counts" | "lastItemAt" | "updatedAt">, now = Date.now()): boolean {
+  if (zone.lifecycle !== "active" || zone.counts.all > 0 || zone.lastItemAt) return false;
+  const edited = Date.parse(zone.updatedAt ?? "");
+  return !Number.isFinite(edited) || now - edited < COLLECTING_WINDOW_MS;
+}
+
 /** The address of a zone: its readable name when it has one, else its id. */
 export function zonePath(zone: Pick<ZoneSummary, "id" | "slug">): string {
   return zone.slug ? `/app/frontier/zones/s/${encodeURIComponent(zone.slug)}` : `/app/frontier/zones/${encodeURIComponent(zone.id)}`;

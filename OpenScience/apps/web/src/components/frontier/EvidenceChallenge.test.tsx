@@ -1,11 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useToastStore } from "@/lib/toast";
 import { WebApiError } from "@/lib/apiClient";
 import { EvidenceChallenge } from "./EvidenceChallenge";
 import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
 
-const client = vi.hoisted(() => ({ submitEvidenceChallenge: vi.fn() }));
+const client = vi.hoisted(() => ({ submitEvidenceChallenge: vi.fn(), listMyEvidenceChallenges: vi.fn() }));
 vi.mock("@/lib/evidenceUpkeepClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/evidenceUpkeepClient")>()),
   ...client,
@@ -69,5 +70,58 @@ describe("challenging one claim", () => {
     expect(screen.queryByRole("button", { name: /质疑结论/ }), "one open challenge per claim").toBeNull();
     rerender(<EvidenceChallenge cardId="ec_1" claimId="CLM-2" existing={challenge({ state: "closed", route: "producer_notice" })} />);
     expect(screen.getByText("出品方已修改这张卡，这条质疑已关闭。")).toBeInTheDocument();
+  });
+});
+
+describe("a challenge that is being reviewed (module workspace audit, D7)", () => {
+  beforeEach(() => { vi.clearAllMocks(); useToastStore.setState({ toasts: [] }); vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
+  const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
+  it("asks again while the review lasts, and shows the result, with a notice, when it comes", async () => {
+    client.listMyEvidenceChallenges.mockResolvedValue([challenge()]);
+    render(<EvidenceChallenge cardId="ec_1" claimId="CLM-2" existing={challenge()} />);
+    expect(screen.getByText("已提交，正在复核。结果会写进变更记录，也会通知你。")).toBeInTheDocument();
+    await advance(9_000);
+    expect(client.listMyEvidenceChallenges).not.toHaveBeenCalled();
+    await advance(1_000);
+    expect(client.listMyEvidenceChallenges).toHaveBeenCalledWith("ec_1");
+    // Still open: the status is as it was, and the next wait is longer than the first.
+    expect(screen.getByText(/正在复核/)).toBeInTheDocument();
+    client.listMyEvidenceChallenges.mockResolvedValue([challenge({ state: "resolved", outcome: "uphold", outcomeLabel: "成立", explanation: "原文确实没有这个数字" })]);
+    await advance(19_000);
+    expect(client.listMyEvidenceChallenges).toHaveBeenCalledTimes(1);
+    await advance(1_000);
+    expect(screen.getByText("复核结果：成立")).toBeInTheDocument();
+    expect(screen.queryByText(/正在复核/)).toBeNull();
+    expect(useToastStore.getState().toasts.map((item) => item.message)).toEqual(["你的质疑有结果了。复核结果：成立"]);
+    // Settled: it asks no more.
+    await advance(600_000);
+    expect(client.listMyEvidenceChallenges).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops asking after a few minutes and says that the answer will come by the inbox", async () => {
+    client.listMyEvidenceChallenges.mockResolvedValue([challenge()]);
+    render(<EvidenceChallenge cardId="ec_1" claimId="CLM-2" existing={challenge()} />);
+    for (let wait = 0; wait < 8; wait += 1) await advance(121_000);
+    expect(client.listMyEvidenceChallenges).toHaveBeenCalledTimes(7);
+    expect(screen.getByText("复核还没有结果，不用等在这里：结果会写进变更记录，也会通知你。")).toBeInTheDocument();
+    expect(screen.queryByText(/正在复核/)).toBeNull();
+  });
+
+  it("keeps the status when a read fails, and watches a challenge filed on the card too", async () => {
+    client.submitEvidenceChallenge.mockResolvedValue(challenge({ id: "ch_new" }));
+    client.listMyEvidenceChallenges.mockRejectedValueOnce(new Error("offline")).mockResolvedValue([challenge({ id: "ch_new", state: "notified", route: "producer_notice" })]);
+    render(<EvidenceChallenge cardId="ec_1" claimId="CLM-2" />);
+    await act(async () => { screen.getByRole("button", { name: "质疑结论 CLM-2" }).click(); });
+    const field = screen.getByRole("textbox");
+    await act(async () => { const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!; setter.call(field, "原文里没有这个数字"); field.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { screen.getByRole("button", { name: "提交质疑" }).click(); await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText(/正在复核/)).toBeInTheDocument();
+    await advance(10_000);
+    expect(screen.getByText(/正在复核/)).toBeInTheDocument();
+    await advance(20_000);
+    expect(screen.getByText(/已通知出品方/)).toBeInTheDocument();
+    expect(useToastStore.getState().toasts.map((item) => item.message)).toEqual(["你的质疑已通知出品方。"]);
   });
 });

@@ -873,8 +873,8 @@ export function ReaderActions({ item, more, onStar }: {
  */
 export function ReaderResearch({ onResearch }: { onResearch: () => void }) {
   return (
-    <Button variant="primary" onClick={onResearch}>
-      <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">深入研究</span>
+    <Button variant="primary" actionKind="draft" onClick={onResearch}>
+      <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">让 AI 深入研究</span>
     </Button>
   );
 }
