@@ -4,6 +4,10 @@ One patient-grouped evaluation of the matching core on real, English clinical no
 86 held-out test patients, after the harness was frozen. It is a measurement of what the shipping matching skill and
 evaluator do on this data set, with the model that ships. It is not a release condition and it is not a clinical validation.
 
+Two measurements are reported. The first, on the official test split, came before the product fixes that its findings led to; the second,
+after them, ran on training patients that were held out from tuning and is **not** the official split (see "Second measurement"). The first
+measurement's numbers below are unchanged.
+
 The notes are not in this repository, are never printed, and nothing here quotes them: the files in this directory hold code,
 a unit test on made-up notes, and aggregate numbers. The data sit under the maintainer's `.evimed-local/acceptance/n2c2-2018-t1/`
 (gitignored); `SHA256SUMS` beside them lists the digests of the files used, and `FROZEN.json` repeats those digests.
@@ -84,6 +88,102 @@ team. This is not a like-for-like comparison. Those systems answered met or not 
 patients and the annotators' conventions, and ours abstains with `unknown` and was tuned for the form of its prompt only. The number to read is the
 unknown share and what the unknowns are, not the distance to 0.91.
 
+## Second measurement: after the fixes, on training patients that were never used to tune
+
+**This is not the official test split.** The first measurement above was run on the 86 test patients before any of the fixes below, and it
+stands: it is not run again. This one ran on the **162 training patients outside the 40 development ones**, which nothing was tuned on, after
+the fixes. They are other patients with other labels, so the two tables are not paired; the paired comparison is the control arm further down.
+
+What was fixed in the product after the first measurement (the causes its findings named, items 1 to 4 under "What the evidence says" below):
+
+1. **A date from the record's own date line.** A fact carries an optional second verbatim quotation of the same document that prints a date whole, with
+   its year (`dateQuote`); it is checked in the document's own bytes like the first quotation. Upload times, dataset years, file metadata, short forms
+   such as `3/14` and anything outside the document still supply nothing. The fact writer, the batch reading (prompt `match-extract-2`) and the
+   evaluator's re-read agree on it, and the skill teaches it in a bullet and an example.
+2. **A unit the quotation does not print drops the unit, not the fact.** For a variable the domain's closed table gives exactly one conventional unit
+   (HbA1c, in percent, for a printed number between 3 and 18; a variable with a conversion row, such as creatinine, has two and is never listed) a
+   bare number reads in that unit, recorded as `unitBasis: conventional` and said beside the quotation on the page, never as if printed.
+   HbA1c is also reported in mmol/mol (values above 18), so the table carries a printed range and a bare number outside it stays without a unit.
+3. **`clinicalUnitInQuote`** judged the word after a unit on a quote with its spaces removed, so `7.2 % this week` failed; it looks at the quote as printed.
+
+How it was measured: `FROZEN-2.json` (digests of the harness, the fixed product and skill, the model and settings, the readings, the 162 patients, and
+the first manifest and result it follows) was committed before any held-out patient was predicted. The product's prompt was developed on the forty
+development patients only, in three more rounds (`results/dev-r4.json` to `dev-r6.json`; six rounds on those forty in all, so they are not unseen for
+either measurement). The same readings (a), (b), (c), the same bootstrap over patients, the same official scorer. The majority baseline is learnt from
+the forty development patients only. The 162 were predicted once and scored once (`score-heldout`); nothing was changed afterwards.
+
+**A control arm.** Because the two measurements are on different patients, the first measurement's own pipeline (its harness, prompt and product,
+unchanged, from a copy of its tree: the prompt digest is the frozen one and its predictions carry the first manifest's file digests) was also run on the
+same 162 patients, and the change between the two is resampled together over patients. It uses a separate model sample for each arm, so the change
+includes the model's run-to-run variation as well as the fixes and the skill's new wording; the frame of the prompt also lost the unit and date sentences
+the skill now carries.
+
+### Before and after
+
+| | Before: first measurement, 86 official test patients | After: second measurement, 162 held-out training patients |
+|---|---|---|
+| Accuracy (a) | 0.30 (0.27 to 0.33) | 0.33 (0.31 to 0.36) |
+| Unknown share | 0.65 (0.62 to 0.68) | 0.63 (0.60 to 0.66) |
+| Accuracy (b) | 0.72 (0.70 to 0.74) | 0.73 (0.72 to 0.74) |
+| Accuracy (c) | 0.84 (0.82 to 0.86) | 0.86 (0.84 to 0.87) |
+| Micro F1 (b) / (c), official scorer | 0.6751 / 0.8293 | 0.6997 / 0.8511 |
+| Macro F1 (b) / (c), official scorer | 0.5833 / 0.6677 | 0.6073 / 0.7200 |
+| Majority baseline: accuracy / micro F1 | 0.76 / 0.7608 | 0.77 / 0.7595 |
+
+### On the same 162 patients: the first pipeline and the fixed one
+
+95% intervals are from the patient-level cluster bootstrap (2,000 resamples); the change is resampled on both arms together.
+
+| | First pipeline (control) | Fixed pipeline | Change | Majority baseline |
+|---|---|---|---|---|
+| Accuracy (a), `unknown` is wrong | 0.32 (0.30 to 0.34) | 0.33 (0.31 to 0.36) | +0.014 (-0.004 to +0.031) | 0.77 (0.75 to 0.78) |
+| Unknown share | 0.65 (0.62 to 0.67) | 0.63 (0.60 to 0.66) | -0.016 (-0.033 to +0.003) | 0.00 (0.00 to 0.00) |
+| Accuracy (b), `unknown` is not met | 0.72 (0.71 to 0.73) | 0.73 (0.72 to 0.74) | +0.011 (-0.001 to +0.023) | 0.77 (0.75 to 0.78) |
+| Accuracy (c) | 0.85 (0.83 to 0.86) | 0.86 (0.84 to 0.87) | +0.008 (-0.003 to +0.019) | 0.77 (0.75 to 0.78) |
+| Micro F1 (b), official scorer | 0.69 (0.67 to 0.70) | 0.70 (0.68 to 0.72) | +0.013 (-0.002 to +0.028) | 0.76 (0.74 to 0.78) |
+| Micro F1 (c), official scorer | 0.84 (0.83 to 0.86) | 0.85 (0.84 to 0.87) | +0.008 (-0.004 to +0.020) | 0.76 (0.74 to 0.78) |
+| Macro F1 (b) | 0.59 (0.57 to 0.61) | 0.61 (0.58 to 0.63) | +0.014 (-0.007 to +0.033) | 0.43 (0.42 to 0.43) |
+| Met read as not met, explicit | 0.01 (0.00 to 0.01) | 0.02 (0.01 to 0.02) |  | 0.33 (0.31 to 0.35) |
+| Not met read as met | 0.05 (0.04 to 0.07) | 0.05 (0.04 to 0.06) |  | 0.16 (0.14 to 0.17) |
+| Right when decided | 0.91 | 0.91 | | |
+
+Official scorer on the 162 (unchanged `track1_eval.py`): the fixed pipeline has micro F1 0.6997 (b) and 0.8511 (c), macro 0.6073 (b) and 0.7200 (c);
+the control 0.6864 (b) and 0.8428 (c), macro 0.5932 (b) and 0.6967 (c). My own computation agrees with the scorer to four decimals.
+
+| Criterion | Gold met (of 162) | Accuracy (a), control | fixed | change | Unknown, control | fixed | Accuracy (b), control | fixed |
+|---|---|---|---|---|---|---|---|---|
+| ABDOMINAL | 64 | 0.30 | 0.27 | -0.037 (-0.086 to +0.012) | 0.56 | 0.59 | 0.77 | 0.72 |
+| ADVANCED-CAD | 101 | 0.52 | 0.45 | -0.074 (-0.130 to -0.018) | 0.44 | 0.52 | 0.83 | 0.78 |
+| ALCOHOL-ABUSE | 4 | 0.62 | 0.54 | -0.080 (-0.142 to -0.018) | 0.34 | 0.42 | 0.96 | 0.95 |
+| ASP-FOR-MI | 135 | 0.77 | 0.72 | -0.049 (-0.099 to +0.000) | 0.15 | 0.21 | 0.86 | 0.82 |
+| CREATININE | 70 | 0.52 | 0.56 | +0.037 (-0.012 to +0.086) | 0.43 | 0.39 | 0.81 | 0.83 |
+| DIETSUPP-2MOS | 84 | 0.00 | 0.02 | +0.018 (+0.000 to +0.043) | 1.00 | 0.96 | 0.48 | 0.49 |
+| DRUG-ABUSE | 8 | 0.49 | 0.47 | -0.025 (-0.074 to +0.019) | 0.49 | 0.52 | 0.99 | 0.99 |
+| ENGLISH | 153 | 0.06 | 0.07 | +0.018 (+0.000 to +0.043) | 0.94 | 0.93 | 0.07 | 0.08 |
+| HBA1C | 56 | 0.06 | 0.38 | +0.327 (+0.253 to +0.395) | 0.94 | 0.59 | 0.70 | 0.92 |
+| KETO-1YR | 1 | 0.01 | 0.02 | +0.012 (-0.012 to +0.037) | 0.99 | 0.98 | 0.99 | 0.99 |
+| MAJOR-DIABETES | 95 | 0.41 | 0.41 | +0.000 (-0.037 to +0.037) | 0.51 | 0.54 | 0.75 | 0.77 |
+| MAKES-DECISIONS | 156 | 0.18 | 0.23 | +0.056 (+0.012 to +0.099) | 0.81 | 0.75 | 0.20 | 0.25 |
+| MI-6MOS | 13 | 0.22 | 0.20 | -0.025 (-0.074 to +0.018) | 0.78 | 0.80 | 0.92 | 0.92 |
+
+### What the fixes did and did not do
+
+- **Units worked.** HBA1C went from strict accuracy 0.06 to 0.38 (+0.327 (+0.253 to +0.395)) and from 0.70 to 0.92 under reading (b).
+  Facts dropped for a unit the note does not print fell from 67 to 0, 83 facts were read in percent by convention and 6 had a claimed unit dropped with the fact kept;
+  HbA1c verdicts with no value fell from 127 to 90 and with no printed unit from 25 to 5.
+- **The date quotation barely moved the windows.** 37 facts were dated through a `dateQuote`, but `undated` unknowns went from 124 to 123 and DIETSUPP-2MOS from 0.00 to 0.02 (+0.018 (+0.000 to +0.043)); MI-6MOS did not improve.
+- **It also cost facts.** The model now writes dates much more often, and a date that is not printed whole in the quotation or in the second quotation still refuses the **whole fact**
+  (the rule that holds the 10-29 invented-date cases): 104 facts were refused for a date against 14 for the control. Of the 157 facts for which the model wrote a date, only 38 were kept;
+  36 of the 157 were myocardial infarction facts (2 of them kept), an event the model dated from partial dates such as `2/2087`. (These counts are a read of the model's answers made after the scoring; no gold is involved and they are not in the frozen code.) A lost fact leaves its criterion `unknown`. This is consistent with the lower strict accuracy of
+  ADVANCED-CAD (-0.074 (-0.130 to -0.018)), ASP-FOR-MI (-0.049 (-0.099 to +0.000)), ALCOHOL-ABUSE and ABDOMINAL; I did not test that cause (no arm drops only the date).
+  The step that follows from it is the one the unit already has: an unsupported date drops the date and keeps the fact. That is a product ruling (it changes what the 10-29 rule refuses) and a third measurement, and neither was done here.
+- **Overall the change is small and not distinguishable from zero**: +0.014 (-0.004 to +0.031) strict, +0.011 (-0.001 to +0.023) under (b), +0.013 (-0.002 to +0.028) micro F1 (b). A gain on HBA1C is offset by losses elsewhere, and some criteria moved by about what one model sample moves them (MAKES-DECISIONS +0.056 (+0.012 to +0.099) has no fix aimed at it).
+- **The standing comparison with the majority baseline is unchanged.** Under (b) the fixed pipeline is 0.73 accuracy and 0.6997 micro F1 against 0.77 and 0.7595 for the baseline learnt from the forty development patients: still below it. Under (c) it is above (0.86, 0.8511), with the same caveat as before that two criteria which are about 95% met carry much of it.
+
+Limits of this measurement, besides those below: the 162 are training patients of the same corpus, annotated by the same people, and nothing was tuned on them, but they are not the official split and their score
+is not comparable with the published one; the control arm is a second model sample, not a replay; one sample per patient per arm; the criteria structure is the same translation as before; 3 of 162 answers were unreadable JSON for the fixed pipeline
+(the control: 2). Total spend for everything, both measurements, the development rounds and the control: CNY 11.70 of the hard budget of 200 (2.96 for the fixed pipeline on the 162, 2.87 for the control).
+
 ## What was measured
 
 For each patient, one DeepSeek call (`deepseek-v4-flash`, temperature 0, JSON output, thinking off; the API served it as `deepseek-flash`) reads the whole
@@ -128,7 +228,7 @@ ones, which is some evidence that nothing was fitted to the forty. Total spend f
 
 ## What the evidence says about the shipping contract
 
-These are readings of this run, not patches. Nothing in the skill or the evaluator was changed, and the harness was not changed after the test.
+These are readings of the first measurement, not patches. Nothing in the skill or the evaluator was changed, and the harness was not changed after the test. (Items 1 to 4 were afterwards fixed in code, see "Second measurement"; the text below describes the product as it was when the test was scored.)
 
 1. **Where the unknowns come from.** Of 730 unknown pairs on the test, 581 had no fact for the variable (the note does not say, or the model wrote none that survived the re-read), 68
    were HbA1c with no usable value, 67 had a fact that a time window could not place, and 14 had a value without a printed unit. On the forty development patients (a breakdown made after the freeze, from the development predictions, and not part of the frozen scoring code), of 215 gold-met pairs the pipeline
@@ -168,6 +268,10 @@ node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --dev-run <name> --rounds <n>  
 node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split test --run <name>                    # refuses without a matching FROZEN.json
 node evals/vcr-matching/n2c2/run_n2c2.mjs score-test --run <name>                              # opens the sealed gold, once
 node --test evals/vcr-matching/n2c2/n2c2.test.mjs                                              # fabricated notes only; data tests skip without the data
+# the second measurement: the 162 training patients outside the development split
+node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 2 --dev-run <name> --rounds <n>    # writes FROZEN-2.json, once
+node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --run <name>                 # refuses without a matching FROZEN-2.json
+node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --run <name> [--control-run <name>]    # scores once; the control run holds the first pipeline's predictions
 ```
 
-The test file is not in any CI script (neither is `../run_matching_evaluation.test.mjs`).
+The tests also run with the server's (`apps/server/test/vcrN2c2Eval.test.mjs`); the data-dependent ones skip when the data is absent.
