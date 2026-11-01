@@ -107,8 +107,8 @@ function PracticeDrawerView({ view }: { view: PracticeView }) {
           </DrawerSection>
         )}
         <div className="mt-auto flex gap-2">
-          {canGoBack && <Button variant="secondary" disabled={view.busy} onClick={view.onGoBack}>回到上一版</Button>}
-          <Button variant="text" disabled={view.busy} onClick={view.onStop}>不再使用</Button>
+          {canGoBack && <Button actionKind="set" variant="secondary" disabled={view.busy} onClick={view.onGoBack}>回到上一版</Button>}
+          <Button actionKind="set" variant="text" disabled={view.busy} onClick={view.onStop}>不再使用</Button>
         </div>
       </div>
     </Drawer>

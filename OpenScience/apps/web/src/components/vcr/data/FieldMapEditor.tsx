@@ -213,8 +213,8 @@ export function FieldMapEditor({ studyId, source, options, canManage, onChanged 
 
       {editable && (
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button variant="secondary" loading={busy === "save"} disabled={busy !== null || blocked !== null} onClick={save}>保存并检查</Button>
-          <Button loading={busy === "confirm"} disabled={busy !== null || !confirmable} onClick={confirm}>
+          <Button variant="secondary" actionKind="set" loading={busy === "save"} disabled={busy !== null || blocked !== null} onClick={save}>保存并检查</Button>
+          <Button actionKind="set" loading={busy === "confirm"} disabled={busy !== null || !confirmable} onClick={confirm}>
             {state === "confirmed" ? "已确认" : "确认字段映射"}
           </Button>
         </div>

@@ -1,3 +1,4 @@
+import { CONVERSATION_SETTLED_EVENT } from "@/lib/runtimeUiBridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { getVcrStudy, isVcrMissing, isVcrOff, type VcrStudy } from "@/lib/vcrClient";
@@ -43,12 +44,13 @@ export function forgetStudies(): void {
  *    four seconds for as long as somebody leaves it open.
  *  - **The conversation view reads a little slower**, and so does a study that is still a draft: a sentence said there names the
  *    study, and the page and the sidebar learn it from this read.
- *  - **A poll that fails does not take the page away.** The study that was on screen stays; only a first read that fails, or an
+ *  - **A poll that fails does not take the page away.** The study that was on screen stays — and the page says its update failed
+ *    (`refreshError`), because a page that silently keeps showing an old answer is a page that looks current. Only a first read that fails, or an
  *    answer that says the study is gone, replaces it.
  *  - **An answer that did not change is not a new object**, so what is memoized on the study (the tab's element, the toolbar)
  *    holds still across reads that found nothing.
  */
-export function useStudy(studyId: string, enabled: boolean, view: string): { loaded: StudyLoad; reload: () => void } {
+export function useStudy(studyId: string, enabled: boolean, view: string): { loaded: StudyLoad; reload: () => void; refreshError: string | null } {
   const [loaded, setLoaded] = useState<StudyLoad>(() => {
     const study = lastRead.get(studyId);
     return study ? { kind: "ready", id: studyId, study } : { kind: "loading" };
@@ -56,6 +58,8 @@ export function useStudy(studyId: string, enabled: boolean, view: string): { loa
   const [reloads, setReloads] = useState(0);
   // Counts the answers that came back, whether or not they changed anything: the next read is scheduled from the last one.
   const [answers, setAnswers] = useState(0);
+  // Why the last read failed, while the page still shows the one before it: said on the page (「更新暂时失败，仍显示上次结果」), with 重试.
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const shown = useRef<VcrStudy | null>(lastRead.get(studyId) ?? null);
   const reload = useCallback(() => setReloads((value) => value + 1), []);
 
@@ -69,6 +73,7 @@ export function useStudy(studyId: string, enabled: boolean, view: string): { loa
         const next = same ? shown.current as VcrStudy : study;
         shown.current = next;
         lastRead.set(studyId, next);
+        setRefreshError(null);
         setLoaded((previous) => (previous.kind === "ready" && previous.study === next ? previous : { kind: "ready", id: studyId, study: next }));
         setAnswers((value) => value + 1);
       },
@@ -77,9 +82,11 @@ export function useStudy(studyId: string, enabled: boolean, view: string): { loa
         if (isVcrOff(error)) { lastRead.delete(studyId); setLoaded({ kind: "off", id: studyId }); }
         else if (isVcrMissing(error)) { lastRead.delete(studyId); setLoaded({ kind: "missing", id: studyId }); }
         else {
-          // A page that has the study keeps it; one that never had it says why.
+          // A page that has the study keeps it, and says the update failed; one that never had it says why.
+          const message = webErrorMessage(error, { fallback: "研究暂时无法读取。" });
+          setRefreshError(shown.current?.id === studyId ? message : null);
           setLoaded((previous) => (previous.kind === "ready" && previous.id === studyId
-            ? previous : { kind: "error", id: studyId, message: webErrorMessage(error, { fallback: "研究暂时无法读取。" }) }));
+            ? previous : { kind: "error", id: studyId, message }));
           setAnswers((value) => value + 1);
         }
       },
@@ -99,6 +106,12 @@ export function useStudy(studyId: string, enabled: boolean, view: string): { loa
     return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", read); };
   }, [loaded, answers, view, studyId, reload]);
 
+  // A turn of the conversation beside the page ended, and may have written what the page shows.
+  useEffect(() => {
+    window.addEventListener(CONVERSATION_SETTLED_EVENT, reload);
+    return () => window.removeEventListener(CONVERSATION_SETTLED_EVENT, reload);
+  }, [reload]);
+
   useEffect(() => {
     const onRefresh = (event: Event) => {
       const detail = (event as CustomEvent<{ studyId?: string }>).detail;
@@ -114,5 +127,5 @@ export function useStudy(studyId: string, enabled: boolean, view: string): { loa
     const remembered = lastRead.get(studyId);
     current = remembered ? { kind: "ready", id: studyId, study: remembered } : { kind: "loading" };
   }
-  return { loaded: current, reload };
+  return { loaded: current, reload, refreshError: current.kind === "ready" ? refreshError : null };
 }

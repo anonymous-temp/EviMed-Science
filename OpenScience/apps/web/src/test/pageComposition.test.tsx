@@ -254,7 +254,8 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     expect(facts.stepRails[0].querySelectorAll("[data-rail-step]")).toHaveLength(8);
     expect(screen.getByRole("navigation", { name: "循证 GEO 进度" })).toBeInTheDocument();
     expect(facts.chrome).toHaveClass("sticky", "top-0");
-    expect(facts.chrome!.children).toHaveLength(1 + facts.toolbars.length);
+    // The rail, the strip while the programme is working, and the toolbar.
+    expect(facts.chrome!.children).toHaveLength(1 + (facts.chrome!.querySelector("[data-activity]") ? 1 : 0) + facts.toolbars.length);
     const railLinks = facts.stepRails[0].querySelectorAll("a[href]");
     expect(railLinks).toHaveLength(8);
     for (const link of railLinks) expect(link.getAttribute("href")).toMatch(/^\/app\/geo\/geo_masi/);
@@ -297,7 +298,7 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     expect(address.searchParams.get("selectionRef")).toBe("gsel_exact");
     expect(address.searchParams.get("questionVersion")).toBe("4");
     expect(address.searchParams.get("session")).toBe("ses_keep");
-    await userEvent.click(screen.getByRole("button", { name: "数据分析" }));
+    await userEvent.click(screen.getByRole("button", { name: "深入分析" }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "方案冻结实测与规划目标" }));
     expect(await screen.findByRole("heading", { name: "方案冻结实测与规划目标" })).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "信源" })).not.toBeInTheDocument();

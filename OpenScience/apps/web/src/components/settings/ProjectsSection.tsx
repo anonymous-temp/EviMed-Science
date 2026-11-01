@@ -233,7 +233,7 @@ export function ProjectsSection() {
               onChange={(event) => setRenameDraft(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Escape") { setRenamingId(null); setRenameError(null); } }}
             />
-            <Button type="submit" loading={busyProjectId === project.id}>保存</Button>
+            <Button actionKind="set" type="submit" loading={busyProjectId === project.id}>保存</Button>
             <Button variant="text" disabled={busyProjectId === project.id} onClick={() => { setRenamingId(null); setRenameError(null); }}>取消</Button>
           </div>
           {renameError && <p role="alert" className="mt-2 text-caption text-error">{renameError}</p>}

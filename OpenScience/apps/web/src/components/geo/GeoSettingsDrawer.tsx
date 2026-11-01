@@ -2,6 +2,9 @@ import { useState, type ReactNode } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { patchGeoProject, type GeoEngine, type GeoProject } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
+import { Note } from "@/components/ui/Note";
+import { geoAutomationEnabled } from "@evimed/domain";
+import { GEO_AUTOMATION_STOPPED } from "./geoText";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { FilterChip } from "@/components/ui/FilterChips";
@@ -49,6 +52,7 @@ export function GeoSettingsDrawer({
     void patchGeoProject(geoId, key === "engines" ? { engines } : { coverageDays: days })
       .then(() => {
         toast.success(key === "engines" ? "测量的 AI 引擎已改，下一轮测量按新的引擎问。" : "覆盖周期已改。");
+        if (geoAutomationEnabled(project)) toast.error(GEO_AUTOMATION_STOPPED);
         onChanged();
       })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "设置暂时无法保存，请稍后重试。" })))
@@ -79,8 +83,8 @@ export function GeoSettingsDrawer({
             ))}
           </div>
           {can("edit") && enginesChanged && (
-            <div className="mt-2">
-              <Button size="sm" loading={busy === "engines"} disabled={engines.length === 0} onClick={() => save("engines")}>保存</Button>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <SaveWithConsequence stops={geoAutomationEnabled(project)}><Button size="sm" actionKind="set" loading={busy === "engines"} disabled={engines.length === 0} onClick={() => save("engines")}>保存</Button></SaveWithConsequence>
             </div>
           )}
         </Row>
@@ -94,10 +98,10 @@ export function GeoSettingsDrawer({
             </div>
           )}
           {can("edit") && days !== project.coverageDays && (
-            <div className="mt-2"><Button size="sm" loading={busy === "days"} onClick={() => save("days")}>保存</Button></div>
+            <div className="mt-2 flex flex-wrap items-center gap-2"><SaveWithConsequence stops={geoAutomationEnabled(project)}><Button size="sm" actionKind="set" loading={busy === "days"} onClick={() => save("days")}>保存</Button></SaveWithConsequence></div>
           )}
         </Row>
-        <Row label="投放预算" action={can("manage_money") && marketConnected(project) ? <Button variant="text" size="sm" onClick={open("budget")}>{project.budget && project.budget.totalCny > 0 ? "修改" : "设置"}</Button> : undefined}>
+        <Row label="投放预算" action={can("manage_money") && marketConnected(project) ? <Button variant="text" size="sm" actionKind="external" onClick={open("budget")}>{project.budget && project.budget.totalCny > 0 ? "修改" : "设置"}</Button> : undefined}>
           <p className="text-ui text-text">{budget}</p>
         </Row>
         <Row label="出品方" action={can("edit") ? <Button variant="text" size="sm" onClick={open("producer")}>修改</Button> : undefined}>
@@ -119,4 +123,9 @@ function Row({ label, action, children }: { label: string; action?: ReactNode; c
       {action ?? <span />}
     </section>
   );
+}
+
+/** A save that would end automatic monitoring says so beside its button, before it is pressed. */
+function SaveWithConsequence({ stops, children }: { stops: boolean; children: ReactNode }) {
+  return stops ? <Note tone="warn" action={children}>保存后自动监测会停止，需要重新开启。</Note> : <>{children}</>;
 }

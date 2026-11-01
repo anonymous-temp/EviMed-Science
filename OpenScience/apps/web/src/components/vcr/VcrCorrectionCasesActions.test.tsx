@@ -11,7 +11,7 @@ describe('correction case actions', () => {
     render(<VcrCorrectionCasesActions studyId="study" />);
     fireEvent.click(screen.getByRole('button', { name: '导出纠正案例' }));
     await waitFor(() => expect(api.download).toHaveBeenCalledWith(JSON.stringify(dataset, null, 2), 'correction-cases-eds_approved.json'));
-    fireEvent.click(screen.getByRole('button', { name: '重放留出案例' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始重放留出案例' }));
     await waitFor(() => expect(api.replay).toHaveBeenCalledWith('study', 'eds_approved'));
     expect(await screen.findByText(/0 条复现了纠正结果/)).toBeInTheDocument();
     expect(screen.getByText(/未重新进行病历抽取/)).toBeInTheDocument();
@@ -21,6 +21,6 @@ describe('correction case actions', () => {
     render(<VcrCorrectionCasesActions studyId="restricted" />);
     fireEvent.click(screen.getByRole('button', { name: '导出纠正案例' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '重放留出案例' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '开始重放留出案例' })).not.toBeInTheDocument();
   });
 });

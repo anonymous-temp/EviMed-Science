@@ -45,6 +45,7 @@ function draw(options: { study?: VcrStudy; view?: StudyView; children?: React.Re
         studyId={STUDY_ID}
         study={value}
         view={options.view ?? "overview"}
+        tab={options.view && options.view !== "chat" ? options.view : "overview"}
         reload={options.reload ?? (() => undefined)}
         menu={[{ label: "变更记录", onSelect: () => undefined }]}
         onChat={options.onChat ?? (() => undefined)}
@@ -102,7 +103,7 @@ describe("the one band over every view of a study", () => {
     // A tab that has none hands the band nothing, and its row stays reserved.
     rerender(
       <MemoryRouter initialEntries={["/app/virtual-research/std_1"]}>
-        <StudyFrame studyId={STUDY_ID} study={study()} view="population" reload={() => undefined} menu={[]} onChat={() => undefined} onPanel={() => undefined} onView={() => undefined}>
+        <StudyFrame studyId={STUDY_ID} study={study()} view="population" tab="population" reload={() => undefined} menu={[]} onChat={() => undefined} onPanel={() => undefined} onView={() => undefined}>
           <ToolbarTab withToolbar={false} />
         </StudyFrame>
       </MemoryRouter>,
@@ -113,10 +114,10 @@ describe("the one band over every view of a study", () => {
 
   it("draws no toolbar row in the conversation view, which has no tab-level controls, and leaves no tab selected", () => {
     draw({ view: "chat" });
-    expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+    // Under the split's breakpoint the conversation covers the results, and what controls them goes with them.
+    expect(screen.queryByRole("button", { name: /^查看：/ })).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByRole("button", { name: "研究对话" })).toBeNull();
+    expect(document.querySelector("[data-conversation-bar]")).toBeNull();
     expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
   });
 });
@@ -159,15 +160,23 @@ describe("a tab's own primary action is the header's", () => {
 });
 
 describe("对话 is a view of the page", () => {
-  it("is a button in the header that opens the study's conversation view in the same page, and is pressed there", async () => {
+  it("is a bar under every result that opens the study's conversation in the same page, and is gone once it is open", async () => {
     const onChat = vi.fn();
     const closed = draw({ onChat });
-    await userEvent.click(screen.getByRole("button", { name: "研究对话" }));
+    expect(document.querySelector("[data-page-dock] [data-conversation-bar]")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "打开对话" }));
     expect(onChat).toHaveBeenCalledOnce(); closed.unmount();
     draw({ view: "chat", onChat });
-    expect(screen.queryByRole("button", { name: "研究对话" })).toBeNull();
-    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+    expect(document.querySelector("[data-conversation-bar]")).toBeNull();
     expect(onChat).toHaveBeenCalledOnce();
+  });
+
+  it("carries what was typed in the bar into the conversation, unsent", async () => {
+    const onChat = vi.fn();
+    draw({ onChat });
+    await userEvent.type(screen.getByRole("textbox", { name: "告诉 AI 接下来要做什么" }), "比较两个方案");
+    await userEvent.click(screen.getByRole("button", { name: "放进对话" }));
+    expect(onChat).toHaveBeenCalledWith("比较两个方案");
   });
 
   it("hands a tab the way in, with a draft that waits in the composer", async () => {
@@ -200,11 +209,13 @@ describe("what the strip says", () => {
     expect(strip).toMatchObject({ label: "构建人群", phase: "检索 6 次 · 结论 4/10 已核对", queued: 2, startedAt: "2026-10-14T01:00:00.000Z" });
     strip?.onCancel?.();
     expect(onCancel).toHaveBeenCalled();
+    // The cancel reaches the run, every open job and the programme; the strip says so and not 「取消」 of the one thing it names.
+    expect(strip?.cancelLabel).toBe("停止整个研究");
   });
 
   it("is a step in line with what it waits for, and it can be stopped: the cancel holds the programme, so what waits is not taken up", () => {
     const strip = activityStripOf(base((raw) => { raw.activity = { run: null, queue: [{ step: "patients", waitingFor: "allowance" }], jobs: [], last: null }; }), { onCancel: () => undefined });
-    expect(strip).toMatchObject({ label: "生成虚拟患者", waiting: "等研究额度" });
+    expect(strip).toMatchObject({ label: "生成虚拟患者", waiting: "等你充值" });
     expect(strip?.onCancel).toBeTypeOf("function");
   });
 
@@ -232,8 +243,7 @@ describe("the server's eight states of activity, drawn", () => {
     const { container } = draw({ study: study((raw) => { raw.activity = state("being-sent"); }), view: "chat" });
     // The conversation is not said to be held for it: `locked` is false and nothing in the frame disables it.
     expect(container.querySelector("[data-activity='strip']")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "研究对话" })).toBeNull();
-    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+    expect(document.querySelector("[data-conversation-bar]")).toBeNull();
   });
 
   it("a run that holds the project's runtime is drawn like any other: the pane, not the strip, says the conversation is held", () => {

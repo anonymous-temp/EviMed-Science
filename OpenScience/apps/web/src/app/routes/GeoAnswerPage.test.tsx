@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useToastStore } from "@/lib/toast";
@@ -35,11 +35,11 @@ function Probe() {
 }
 
 /** The answer in the place the layout gives it: the band's toolbar above it, the project's cache under it. */
-function renderAnswer(snapshotId = "snap_deepseek", search = "") {
+function renderAnswer(snapshotId = "snap_deepseek", search = "", onAnswerBack?: (back: string | null) => void) {
   return render(
     <MemoryRouter initialEntries={[`/app/geo/geo_1/answers/${snapshotId}${search}`]}>
       <Routes>
-        <Route path="/app/geo/:geoId/answers/:snapshotId" element={<><GeoFrameHarness project={geoProject()} tab="questions"><GeoAnswerPage /></GeoFrameHarness><Probe /></>} />
+        <Route path="/app/geo/:geoId/answers/:snapshotId" element={<><GeoFrameHarness project={geoProject()} tab="questions" onAnswerBack={onAnswerBack}><GeoAnswerPage /></GeoFrameHarness><Probe /></>} />
         <Route path="*" element={<Probe />} />
       </Routes>
     </MemoryRouter>,
@@ -62,12 +62,9 @@ beforeEach(() => {
 });
 
 describe("one answer", () => {
-  it("keeps the selected dates, multi-platform scope and session through day, engine and return links", async () => {
+  it("keeps the selected dates, multi-platform scope and session through day and engine links (the way back is the band's, and keeps them there)", async () => {
     renderAnswer("snap_deepseek", "?from=2026-09-01&engines=deepseek&engines=yuanbao&session=s1");
     await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
-    const back = new URL(screen.getByRole("link", { name: "返回准确与安全" }).getAttribute("href")!, "https://example.test");
-    expect(back.searchParams.getAll("engines")).toEqual(["deepseek", "yuanbao"]);
-    expect(back.searchParams.get("session")).toBe("s1");
     await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("from=2026-09-01"));
@@ -75,15 +72,17 @@ describe("one answer", () => {
     expect(sibling.getAttribute("href")).toContain("session=s1");
     expect(sibling.getAttribute("href")).toContain("engines=deepseek&engines=yuanbao");
   });
-  it("heads the page with the way back, the question and its one action; the date switcher and the screenshot are the band's toolbar", async () => {
-    renderAnswer();
+  it("heads the page with the question and its one action; the way back is the band's, and the date switcher and the screenshot are the band's toolbar", async () => {
+    const backs: Array<string | null> = [];
+    renderAnswer("snap_deepseek", "", (back) => backs.push(back));
     expect(await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
-    // Opened from a link, there is no list to go back to: the way back is the tab that holds the finding.
-    expect(screen.getByRole("link", { name: "返回准确与安全" })).toHaveAttribute("href", "/app/geo/geo_1/accuracy");
+    // The page draws no back arrow of its own — the band's back said 项目总览 beside it, two controls with two targets — and says
+    // which tab holds the finding, for the band's back to go to when there is no list to return to.
+    expect(screen.queryByRole("link", { name: /^返回/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "返回" })).not.toBeInTheDocument();
+    expect(backs.at(-1)).toBe("accuracy");
     expect(screen.getByRole("link", { name: /截图/ })).toHaveAttribute("href", expect.stringContaining(`/geo/projects/geo_1/screenshots/${"a".repeat(64)}`));
-    // The header's controls are the primitives' sizes: the way back is the
-    // 36 px icon button, 截图 the 28 px text button beside the 28 px chip.
-    expect(screen.getByRole("link", { name: "返回准确与安全" })).toHaveClass("h-control", "w-9");
+    // The header's controls are the primitives' sizes: 截图 is the 28 px text button beside the 28 px chip.
     expect(screen.getByRole("link", { name: /截图/ })).toHaveClass("h-sm");
     // the controls above what they control: both are in the toolbar, not in the page's body
     const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
@@ -91,9 +90,12 @@ describe("one answer", () => {
     expect(toolbar).toContainElement(screen.getByRole("button", { name: /测量日期/ }));
     // the page has one primary action: with a wrong sentence in the answer it is the correction
     expect(screen.getAllByRole("button").filter((button) => button.hasAttribute("data-geo-answer-primary"))).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "写纠错稿" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "让 AI 写纠错稿" })).toBeInTheDocument();
+    // It fills the composer and sends nothing, so it says 让 AI, carries the pencil and declares itself a draft.
+    expect(screen.getByRole("button", { name: "让 AI 写纠错稿" })).toHaveAttribute("data-action-kind", "draft");
+    expect(screen.getByRole("button", { name: "让 AI 写纠错稿" }).querySelector("svg")).not.toBeNull();
     // The answer's own step, not the module's next one: a secondary button (T3: the module's primary is the band header's).
-    expect(screen.getByRole("button", { name: "写纠错稿" })).not.toHaveClass("bg-accent");
+    expect(screen.getByRole("button", { name: "让 AI 写纠错稿" })).not.toHaveClass("bg-accent");
     // The engine's answer is the record's content, not a sentence of the page's (the walk's orphan-sentence, r19-guards2).
     expect(document.querySelector("[data-geo-answer] [data-prose] p[data-geo-answer-prose=original] [data-geo-wrong]")).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
@@ -101,28 +103,13 @@ describe("one answer", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");
   });
 
-  it("goes back to the list as the reader left it when they came from inside the app, even after switching engine or day", async () => {
-    render(
-      <MemoryRouter initialEntries={["/app/geo/geo_1/accuracy?show=open"]}>
-        <Routes>
-          <Route path="/app/geo/geo_1/accuracy" element={<><Link to="/app/geo/geo_1/answers/snap_deepseek">看回答</Link><Probe /></>} />
-          <Route path="/app/geo/:geoId/answers/:snapshotId" element={<><GeoAnswerPage /><Probe /></>} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    await userEvent.click(screen.getByRole("link", { name: "看回答" }));
-    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
-    // Another engine's answer replaces this one in the history instead of piling on it.
-    await userEvent.click(within(screen.getByRole("navigation", { name: "AI 引擎" })).getByRole("link", { name: /元宝/ }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_yuanbao");
-    await userEvent.click(await screen.findByRole("button", { name: "返回" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/accuracy?show=open");
-  });
-
-  it("with no finding to read, the way back is the questions", async () => {
+  it("with no finding to read, the way back it names is the questions; while it is read or missing, the overview", async () => {
     client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [], facts: { ...answerFilled.facts!, statements: [] } });
-    renderAnswer();
-    expect(await screen.findByRole("link", { name: "返回问题与回答" })).toHaveAttribute("href", "/app/geo/geo_1/questions");
+    const backs: Array<string | null> = [];
+    renderAnswer("snap_deepseek", "", (back) => backs.push(back));
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
+    expect(backs.at(-1)).toBe("questions");
+    expect(backs[0]).toBe("overview");
   });
 
   // The answer is read inside the project's band: the browser tab's name and the page's one `h1` are the layout's
@@ -230,7 +217,7 @@ describe("one answer", () => {
 
   it("offers the correction as the page's action: the records are staged as the conversation's context and the composer holds the sentence, unsent", async () => {
     renderAnswer();
-    await userEvent.click(await screen.findByRole("button", { name: "写纠错稿" }));
+    await userEvent.click(await screen.findByRole("button", { name: "让 AI 写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     const [target, brief] = conversation.open.mock.calls[0] as unknown as [Record<string, unknown>, string];
     expect(target).toEqual({ projectId: "prj_geo_1", geoId: "geo_1", sessionId: staged.sessionId, geoPlanContext: { referenceId: staged.referenceId } });
@@ -248,7 +235,7 @@ describe("one answer", () => {
   it("says so in a toast and opens nothing when the correction's context cannot be staged, then gives the button back", async () => {
     client.stageGeoPlanContext.mockRejectedValueOnce(new Error("network"));
     renderAnswer();
-    const button = await screen.findByRole("button", { name: "写纠错稿" });
+    const button = await screen.findByRole("button", { name: "让 AI 写纠错稿" });
     await userEvent.click(button);
     await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]));
     expect(conversation.open).not.toHaveBeenCalled();
@@ -259,9 +246,9 @@ describe("one answer", () => {
   it("with nothing wrong in the answer, the one action is to talk it over", async () => {
     client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [], facts: { ...answerFilled.facts!, statements: [] } });
     renderAnswer();
-    await userEvent.click(await screen.findByRole("button", { name: "在对话中处理" }));
+    await userEvent.click(await screen.findByRole("button", { name: "让 AI 解读这条回答" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole("button", { name: "写纠错稿" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "让 AI 写纠错稿" })).not.toBeInTheDocument();
   });
 
   it("names the question's group as a link that opens the group's record in place", async () => {

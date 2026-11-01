@@ -67,7 +67,7 @@ describe("WebTasksCard", () => {
 
     await waitFor(() => expect(mocks.cancelWebTask).toHaveBeenCalledWith("task_1"));
     // The state in words, not the English enum value.
-    expect(await screen.findByText("已取消")).toBeInTheDocument();
+    expect(await screen.findByText("已停止")).toBeInTheDocument();
     expect(screen.queryByText("canceled")).not.toBeInTheDocument();
   });
 

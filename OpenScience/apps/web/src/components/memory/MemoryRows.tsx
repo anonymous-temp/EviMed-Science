@@ -56,9 +56,9 @@ export function GroupSection({ title, children }: { title: ReactNode; children: 
 
 /**
  * What 「记住这一条」 asked and the memory has not written yet: the words, marked 「正在记住」, at the head of the list. A row of
- * its own kind, because there is nothing to open yet; when the memory is slow it says so instead of spinning for ever.
+ * its own kind, because there is nothing to open yet; when the memory is slow it says so instead of spinning for ever, and when the page has stopped waiting it says the memory is not finished.
  */
-export function PendingMemoryRows({ items, slow }: { items: readonly WebPendingMemory[]; slow: boolean }) {
+export function PendingMemoryRows({ items, slow, stalled = false }: { items: readonly WebPendingMemory[]; slow: boolean; /** The page has stopped reading: it says the memory is not finished and can be looked at later. */ stalled?: boolean }) {
   return (
     <List label="正在记住的内容">
       {items.map((item) => (
@@ -66,7 +66,7 @@ export function PendingMemoryRows({ items, slow }: { items: readonly WebPendingM
           key={item.id}
           chevron={false}
           title={<span className="line-clamp-2 max-w-measure">{item.text}</span>}
-          trailing={<span role="status" className="text-caption text-text-3">{slow ? "还在记，比平时慢一些" : "正在记住"}</span>}
+          trailing={<span role="status" className="text-caption text-text-3">{stalled ? "还没写完，可以稍后再看" : slow ? "还在记，比平时慢一些" : "正在记住"}</span>}
         />
       ))}
     </List>

@@ -40,8 +40,8 @@ export const RAIL_STATE_WORDS: Record<RailState, string> = {
   done: "已完成",
   active: "进行中",
   waiting: "等你",
-  partial: "部分完成",
-  attention: "需要留意",
+  partial: "简版已完成",
+  attention: "未完成",
   todo: "未开始",
 };
 

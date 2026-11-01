@@ -164,7 +164,7 @@ describe("a number's precision", () => {
 
 describe("a stale sentence", () => {
   it("promises a queue only when one exists", () => {
-    expect(staleSentence(true)).toBe("输入已变更，排队重算中");
+    expect(staleSentence(true)).toBe("输入已变更，数字已过期，排队重算中");
     expect(staleSentence(false)).not.toContain("排队重算中");
     expect(staleSentence(undefined)).not.toContain("排队重算中");
   });

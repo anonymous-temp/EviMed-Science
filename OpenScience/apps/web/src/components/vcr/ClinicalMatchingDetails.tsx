@@ -272,7 +272,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
   // The view's main action is the contact confirmation below; starting an evaluation is the quieter one next to the protocol it is for.
   if (canRun && protocols.length > 0 && roster.length > 0 && !needsPatient) {
     actions.push({
-      key: 'evaluate', label: '开始评估', loading: evaluation.busy || settling,
+      key: 'evaluate', label: '开始评估', kind: 'start', loading: evaluation.busy || settling,
       onSelect: () => { if (!evaluation.busy && !settling) void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, ...scope }); },
     });
   }
@@ -284,8 +284,8 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
         <Note result={['本次选择 ', { n: coverage.requested }, ' 人 · 已评估 ', { n: coverage.evaluated }, ' 人 · 待评估 ', { n: coverage.pending }, ' 人 · 暂不可用 ', { n: coverage.unavailable }, ' 人']} />
       )}
       {data.basisUpdated && canRun && (
-        <Note action={<Button variant="secondary" size="sm" loading={evaluation.busy} disabled={evaluation.busy || settling}
-          onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, subjectKeys: data.basisUpdated?.subjects })}>重新评估</Button>}
+        <Note action={<Button variant="secondary" size="sm" actionKind="start" loading={evaluation.busy} disabled={evaluation.busy || settling}
+          onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, subjectKeys: data.basisUpdated?.subjects })}>重新开始评估</Button>}
         >{`${data.basisUpdated.count} 人的评估依据已更新`}</Note>
       )}
       {data.basisUpdated && !canRun && <Note result={[{ n: data.basisUpdated.count }, ' 人的评估依据已更新']} />}
@@ -298,7 +298,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
         <div className="flex flex-wrap items-start gap-2">
-          {canRun && <Button loading={evaluation.busy} disabled={evaluation.busy || settling || !panel.length || needsPatient}
+          {canRun && <Button actionKind="start" loading={evaluation.busy} disabled={evaluation.busy || settling || !panel.length || needsPatient}
             onClick={() => void evaluation.evaluate({ protocolVersionIds: panel, direction: way, ...scope })}>开始评估所选方案</Button>}
         </div>
         {(data.comparisons ?? []).length > 0 && (

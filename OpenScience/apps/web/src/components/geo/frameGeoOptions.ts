@@ -15,7 +15,6 @@ import {
   GEO_DEFAULT_ENGINES,
   GEO_OPTIONAL_ENGINES,
   GEO_STARTERS,
-  GEO_STEP_NAMES,
 } from "./geoText";
 
 /** What the frame's GEO chip draws beside itself (the bridge's `geo` message). */
@@ -27,8 +26,7 @@ export interface FrameGeoOptions {
   coverageOptions: readonly number[];
   engines: string[];
   offered: Array<{ id: string; name: string }>;
-  starters: Array<{ label: string; draft: string; requirement?: string }>;
-  journey?: { title: string; detail: string; requested: string; nextLabel: string; nextStep: string | null; nextDraft?: string; steps: Array<{key:string;label:string;status:string}> };
+  starters: Array<{ label: string; draft: string }>;
   unavailable?: string;
 }
 
@@ -51,10 +49,8 @@ export function frameGeoOptions(sessionId: string, project: GeoProjectSummary | 
     coverageOptions: GEO_COVERAGE_DAYS,
     engines: chosen.length ? chosen : [...GEO_DEFAULT_ENGINES],
     offered: offered.map((id) => ({ id, name: engineName(id) })),
-    starters: journey && !journey.canConverse ? [] : GEO_STARTERS.map((starter) => ({ label: starter.label, draft: starter.draft(product), requirement: starter.key === "optimize" ? "附上已有稿件，说明受众、场景与修改重点" : "产品与适用场景、目标受众、本次目标；已有资料可附在对话中" })),
-    ...(journey ? {journey:{title:journey.title,detail:journey.detail,requested:journey.requested,nextLabel:journey.next.label,nextStep:journey.next.step ?? null,
-      ...(journey.canConverse && journey.next.draft ? {nextDraft:journey.next.draft} : {}),
-      steps:Object.values(journey.workflow.steps).map((step) => ({key:step.key,label:GEO_STEP_NAMES[step.key as keyof typeof GEO_STEP_NAMES],status:step.status}))}} : {}),
+    // The page beside the conversation says where the work stands and what it lacks; the frame offers only the three ways to begin.
+    starters: journey && !journey.canConverse ? [] : GEO_STARTERS.map((starter) => ({ label: starter.label, draft: starter.draft(product) })),
   };
 }
 

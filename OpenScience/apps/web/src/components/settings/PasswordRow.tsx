@@ -71,7 +71,7 @@ export function PasswordRow() {
             error={mismatch ? "两次输入不一致" : undefined} />
           {problem && <p role="alert" className="text-ui text-error">{problem}</p>}
           <div className="flex gap-2">
-            <Button type="submit" disabled={!ready} loading={busy}>保存</Button>
+            <Button actionKind="set" type="submit" disabled={!ready} loading={busy}>保存</Button>
             <Button variant="text" onClick={close} disabled={busy}>取消</Button>
           </div>
         </form>

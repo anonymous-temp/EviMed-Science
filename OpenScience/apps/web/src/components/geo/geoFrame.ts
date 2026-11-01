@@ -21,7 +21,7 @@ export interface GeoFrameApi {
   tab: GeoTabKey;
   /**
    * The conversation the page holds: the one on screen or named in the address (`?session=`), else the project's own — what the
-   * header's 「对话」 opens, and every 「写纠错稿」 or 「问 AI」 below it that names none.
+   * conversation bar opens, and every 「让 AI …」 below it that names none.
    */
   conversation: string | null;
   /** The business workbench currently viewed; unrelated background work never overrides it. */
@@ -48,7 +48,16 @@ export interface GeoFrameApi {
   data: GeoDataCache;
   /** `useGeoToolbar`'s door; a tab does not call it. */
   setToolbar(toolbar: ToolbarProps | null | undefined): void;
+  /** `useGeoAnswerBack`'s door: where the band's way back goes from an answer opened by a link. Absent outside a layout. */
+  setAnswerBack?(back: GeoAnswerBack | null): void;
 }
+
+/**
+ * Where the way back from one answer goes when the reader did not come from inside the app: the tab that holds the finding, named
+ * for the link's label. The answer knows which (it has findings, or not); the band draws the one back control of the page.
+ */
+export type GeoAnswerBack = "accuracy" | "questions" | "overview";
+export const GEO_ANSWER_BACK_NAMES: Readonly<Record<GeoAnswerBack, string>> = Object.freeze({ accuracy: "准确与安全", questions: "问题与回答", overview: "总览" });
 
 /** The panels the layout opens: the header's 「⋯」 dialogs, the budget's, the settings drawer and the AI-run record. */
 export type GeoPanel = "members" | "producer" | "rename" | "budget" | "settings" | "runs";
@@ -98,4 +107,17 @@ export function useGeoToolbar(toolbar: ToolbarProps | null): void {
   const set = useContext(GeoFrameContext)?.setToolbar;
   useLayoutEffect(() => { set?.(toolbar); });
   useLayoutEffect(() => () => { set?.(undefined); }, [set]);
+}
+
+/**
+ * The answer says where its way back goes (`GeoAnswerBack`); the band draws it. An answer used to draw a back arrow of its own under a
+ * band whose back said 项目总览, two controls with two targets for one page. Registered while the answer is on the page and withdrawn
+ * with it, so the next page finds the band's usual back.
+ */
+export function useGeoAnswerBack(back: GeoAnswerBack): void {
+  const set = useContext(GeoFrameContext)?.setAnswerBack;
+  useLayoutEffect(() => {
+    set?.(back);
+    return () => set?.(null);
+  }, [set, back]);
 }

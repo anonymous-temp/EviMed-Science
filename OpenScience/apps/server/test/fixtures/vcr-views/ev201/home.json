@@ -202,7 +202,7 @@
           "kind": "step_failed",
           "tone": "attention",
           "tab": null,
-          "text": "「患者」这一步没有做完，已算出的部分保留"
+          "text": "「患者」这一步未完成，已算出的部分保留"
         }
       ],
       "updatedAt": "今天 09:09",

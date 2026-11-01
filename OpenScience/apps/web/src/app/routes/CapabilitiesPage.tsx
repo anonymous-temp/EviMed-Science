@@ -1,14 +1,13 @@
 import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { Search } from "lucide-react";
 import { capabilityListed, RESEARCH_TOOLS_NAME, searchMatches } from "@evimed/domain";
 import { drawnAvailability, fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
-import { bindConversationCapability } from "@/lib/dispatch";
 import { formatNumber, formatRange } from "@/lib/format";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { useOpenTool } from "@/app/extensions/useOpenTool";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -82,7 +81,6 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
  * asks for no estimate.
  */
 export function CapabilitiesPage() {
-  const navigate = useNavigate();
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -140,20 +138,10 @@ export function CapabilitiesPage() {
   /**
    * A tool is chosen by opening a conversation that runs it — bound before the
    * conversation exists, because a binding is what makes the router honour the
-   * choice rather than re-decide it with a classifier.
+   * choice rather than re-decide it with a classifier. A binding the control
+   * plane refused is said and nothing opens (`useOpenTool`).
    */
-  const [opening, setOpening] = useState<string | null>(null);
-  const open = (agent: CapabilityUi) => {
-    if (opening) return;
-    setOpening(agent.id);
-    void bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version })
-      .then((bound) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } }))
-      // A binding the control plane refused must not strand the reader on a
-      // dead row: the conversation opens, and the router decides as it did
-      // before there were tools.
-      .catch(() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }))
-      .finally(() => setOpening(null));
-  };
+  const { opening, open } = useOpenTool();
 
   const filtering = category !== "all" || query.trim() !== "";
   const clear = () => { setCategory("all"); setQuery(""); };

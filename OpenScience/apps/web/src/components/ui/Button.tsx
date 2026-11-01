@@ -70,10 +70,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   destructive?: boolean;
   /** Shows a spinner, sets aria-busy and guards activation without losing focus. */
   loading?: boolean;
+  /**
+   * What pressing it does, on a module's action (`@evimed/domain` `WORK_ACTION_KINDS`): `draft` fills the composer, `start` runs now,
+   * `set` changes state where it stands, `external` spends money or goes outside. The walk presses it and holds the result to the kind.
+   */
+  actionKind?: "draft" | "start" | "set" | "external";
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "primary", size = "md", destructive = false, loading, type = "button", disabled, className, children, onClick, onKeyDown, ...rest },
+  { variant = "primary", size = "md", destructive = false, loading, actionKind, type = "button", disabled, className, children, onClick, onKeyDown, ...rest },
   ref,
 ) {
   return (
@@ -83,6 +88,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled && !loading}
       aria-disabled={loading || undefined}
       aria-busy={loading || undefined}
+      data-action-kind={actionKind}
       className={buttonClasses({ variant, size, destructive, className: cn("relative", className) })}
       {...rest}
       onClick={(event) => { if (loading) { event.preventDefault(); event.stopPropagation(); return; } onClick?.(event); }}

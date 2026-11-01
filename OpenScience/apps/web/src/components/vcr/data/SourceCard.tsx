@@ -216,7 +216,7 @@ function GrantsSection({ studyId, source, options, onChanged }: { studyId: strin
               </span>
               {grant.revoked
                 ? <Tag>{grant.revokedAt ? `已于 ${grant.revokedAt} 撤销` : "已撤销"}</Tag>
-                : source.canGrant && <Button size="sm" variant="secondary" disabled={busy !== null} loading={busy === `revoke:${grant.id}`}
+                : source.canGrant && <Button size="sm" variant="secondary" actionKind="set" disabled={busy !== null} loading={busy === `revoke:${grant.id}`}
                   onClick={() => run(`revoke:${grant.id}`, () => revokeVcrGrant(studyId, grant.id), "已撤销授权。", "授权暂时无法撤销，请稍后重试。")}>撤销</Button>}
             </li>
           ))}
@@ -255,7 +255,7 @@ function GrantsSection({ studyId, source, options, onChanged }: { studyId: strin
           <Input label="可读起始日期" type="date" value={start} onChange={(event) => setStart(event.target.value)} />
           <Input label="可读截止日期" type="date" value={end} onChange={(event) => setEnd(event.target.value)} />
           <div className="flex items-end justify-end sm:col-span-2">
-            <Button type="submit" loading={busy === "grant"} disabled={!valid || busy !== null}>授权</Button>
+            <Button actionKind="set" type="submit" loading={busy === "grant"} disabled={!valid || busy !== null}>授权</Button>
           </div>
         </form>
       ) : (
@@ -382,7 +382,7 @@ export function SourceCard({ studyId, source, snapshots, options, canManage, onC
                 <p className="text-caption text-text-3">
                   {source.fieldMap.state === "confirmed" ? "冻结后这一版数据不再改动；更正的数据是新的快照。" : "字段映射确认后才能冻结。"}
                 </p>
-                <Button variant={mine.length ? "secondary" : "primary"} loading={busy === "freeze"} disabled={busy !== null || source.fieldMap.state !== "confirmed"} onClick={freeze}>
+                <Button variant={mine.length ? "secondary" : "primary"} actionKind="set" loading={busy === "freeze"} disabled={busy !== null || source.fieldMap.state !== "confirmed"} onClick={freeze}>
                   {mine.length ? "冻结新版本" : "冻结快照"}
                 </Button>
               </div>

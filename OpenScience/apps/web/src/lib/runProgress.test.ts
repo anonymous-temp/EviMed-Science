@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { WORK_STATE_LABEL } from "@evimed/domain";
 import type { WebAgentRun } from "@/lib/apiClient";
 import type { RunStreamEvent } from "@/lib/runEvents";
 import {
   childrenLine,
   claimSummaryLine,
   currentPhaseLabel,
+  DELIVERABLE_STATUS_LABEL,
   foldRunEvents,
   parseRunProgress,
   progressCountsLine,
@@ -73,5 +75,19 @@ describe("a run's progress", () => {
     expect(claimSummaryLine({ total: 5, verified: 5, unverified: 0 })).toBe("5 条结论，引文全部已核对");
     expect(claimSummaryLine({ total: 0, verified: 0, unverified: 0 })).toBeNull();
     expect(claimSummaryLine(null)).toBeNull();
+  });
+});
+
+describe("the words of a plan item (module workspace audit, D9)", () => {
+  it("is one map in the platform's work-state words, with none of the ledger's gate words", () => {
+    expect(DELIVERABLE_STATUS_LABEL).toEqual({
+      planned: WORK_STATE_LABEL.todo, delegated: WORK_STATE_LABEL.running, submitted: WORK_STATE_LABEL.running, rejected: WORK_STATE_LABEL.running,
+      accepted: WORK_STATE_LABEL.done, delivered: WORK_STATE_LABEL.done, failed: WORK_STATE_LABEL.failed,
+    });
+    expect(Object.values(DELIVERABLE_STATUS_LABEL).join("")).not.toMatch(/核对|需修改|已交付/);
+  });
+
+  it("says a delegated child is 进行中, not 运行中", () => {
+    expect(childrenLine({ ...progress, children: [{ childSessionId: "c1", state: "running", lastActivityAt: null }] } as never)).toContain("进行中");
   });
 });

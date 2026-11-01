@@ -79,7 +79,7 @@ describe("模型评估", () => {
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/patients`]: raw });
     const { container } = draw(<PatientsTab studyId={STUDY_ID} study={study(undefined, { status: "none", requested: false })} />);
     const recipe = await waitFor(() => { const node = container.querySelector("[data-vcr-step-empty='patients']"); if (!node) throw new Error("no recipe"); return node as HTMLElement; });
-    expect(within(recipe).getByRole("button", { name: "生成虚拟患者" })).toBeInTheDocument();
+    expect(within(recipe).getByRole("button", { name: "让 AI 生成虚拟患者" })).toBeInTheDocument();
     expect(screen.queryByText("还没有选定模型")).toBeNull();
     expect(container.querySelector("[data-vcr-not-applicable]")).toBeNull();
     // The assessment is of the model the study already uses, and it is one press from the band.
@@ -101,7 +101,7 @@ describe("模型评估", () => {
       return node as HTMLElement;
     });
     expect(note).toHaveTextContent("这些结果没有选定的模型");
-    await userEvent.click(within(note).getByRole("button", { name: "换一个模型" }));
+    await userEvent.click(within(note).getByRole("button", { name: "让 AI 换一个模型" }));
     expect(spies.openChat).toHaveBeenCalled();
     const drawer = await openRecord(container, "模型评估", "模型评估");
     expect(drawer.querySelector("[data-vcr-assessments]")).not.toBeNull();

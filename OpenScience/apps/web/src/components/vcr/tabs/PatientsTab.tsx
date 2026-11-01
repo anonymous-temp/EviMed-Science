@@ -1,7 +1,7 @@
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
-import { ChevronRight, CircleCheck, CircleDashed, Download } from "lucide-react";
+import { ChevronRight, CircleCheck, CircleDashed, Download, PenLine } from "lucide-react";
 import {
   downloadVcrRecords,
   getVcrPatients,
@@ -28,6 +28,8 @@ import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton
 import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
+import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX } from "../vcrActionWords";
+import { scrollBlockToTop } from "../vcrScroll";
 import { VcrLongitudinalPanel, useLongitudinal } from "../VcrLongitudinalPanel";
 import { CalibrationStrip } from "../patients/CalibrationStrip";
 import { DistributionGrid } from "../patients/DistributionGrid";
@@ -92,6 +94,7 @@ export function PatientsTab({ studyId, study, onStudyChanged }: { studyId: strin
       <VcrLongitudinalPanel
         studyId={studyId}
         canRun={study.abilities.includes("run")}
+        canManage={study.abilities.includes("manage_study")}
         data={forecastData}
         onReload={longitudinal.reload}
         switcher={switcher}
@@ -195,14 +198,14 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
     }
   }
   const actions: VcrToolbarAction[] = [];
-  if (frame && data.sets?.length) actions.push({ key: "compare", label: "比较版本", quiet: true, onSelect: () => setComparing(true) });
+  if (frame && data.sets?.length) actions.push({ key: "compare", label: COMPARE_DRAFT_LABEL, kind: "draft", quiet: true, onSelect: () => setComparing(true) });
   if (data.model || assessed) {
     actions.push({ key: "model", label: data.model ? `模型：${shortName(data.model.name)}` : "模型评估", icon: ChevronRight, quiet: true, onSelect: () => setModelOpen(true) });
   }
   if (!nothing) {
     if (records) actions.push({ key: "download", label: "下载 CSV", icon: Download, loading: downloading, onSelect: download });
-    if (mayRun && !working) actions.push({ key: "regenerate", label: "在对话中生成新版本", onSelect: () => ask("生成一个可配对比较的虚拟患者版本") });
-    if (mayWrite) actions.push({ key: "settings", label: "在对话中调整", quiet: true, onSelect: () => ask("调整虚拟患者设定") });
+    if (mayRun && !working) actions.push({ key: "regenerate", label: `${DRAFT_PREFIX}生成新版本`, kind: "draft", onSelect: () => ask("生成一个可配对比较的虚拟患者版本") });
+    if (mayWrite) actions.push({ key: "settings", label: `${DRAFT_PREFIX}调整设定`, kind: "draft", quiet: true, onSelect: () => ask("调整虚拟患者设定") });
   }
   const any = Object.keys(columns).length > 0 || arm !== null;
   useVcrToolbar(filters.length > 0 || actions.length > 0
@@ -258,7 +261,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
     onAll: clearAll,
     onArm: setArm,
     onEvents: () => setColumn("status", "1"),
-    onCalibration: () => document.getElementById(CALIBRATION_ID)?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+    onCalibration: () => scrollBlockToTop(document.getElementById(CALIBRATION_ID)),
   });
 
   const gridRows: ChartGridCell[][] = [];
@@ -353,7 +356,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
           {!data.model && (
             <Note
               tone="warn"
-              action={frame ? <Button size="sm" variant="secondary" onClick={() => frame.openChat("换一个适用范围覆盖本人群的模型：")}>换一个模型</Button> : undefined}
+              action={frame ? <Button size="sm" variant="secondary" actionKind="draft" onClick={() => frame.openChat("换一个适用范围覆盖本人群的模型：")}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}换一个模型`}</Button> : undefined}
             >
               {NO_MODEL_SENTENCE}
             </Note>

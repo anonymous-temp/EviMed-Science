@@ -32,8 +32,10 @@ export interface StepRailStep {
   state: RailState;
   /** What the step produced, in the reader's words (「86 条事实」): the tooltip, never a second line. */
   summary?: string | null;
-  /** A precise status supplied by the workflow, including unrequested steps. */
+  /** A precise status supplied by the workflow; empty says nothing beside the name. */
   stateLabel?: string;
+  /** Outside the work that was asked for: the name alone, no mark and no word. */
+  outside?: boolean;
   /** The step's home: a route… */
   href?: string;
   /** …or a handler (a tab switch on the same route). */
@@ -69,6 +71,9 @@ export interface StepRailProps {
  */
 export function StepRail({ label, steps, activeSteps = [], trailing, className, visible = false, showState = false }: StepRailProps) {
   const narrow = useNarrow();
+  // A step's word; a stated empty one (work outside what was asked for) stays empty, and a row of names needs no second line.
+  const word = (step: StepRailStep) => step.stateLabel ?? RAIL_STATE_WORDS[step.state];
+  const wordsShown = showState && steps.some((step) => word(step));
   const list = useRef<HTMLOListElement>(null);
   const [overflow, setOverflow] = useState(false);
   const failedAt = useRef(0);
@@ -104,7 +109,7 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className, 
     return () => { observer?.disconnect(); if (!observer) window.removeEventListener('resize', measure); };
   }, [stepKey, activeKey, narrow, visible, overflow]);
   const entries: MenuEntry[] = steps.map(step => ({
-    label: `${step.label} · ${step.stateLabel ?? RAIL_STATE_WORDS[step.state]}`,
+    label: word(step) ? `${step.label} · ${word(step)}` : step.label,
     checked: activeSteps.includes(step.id),
     to: step.href,
     disabled: !step.href && !step.onSelect,
@@ -125,16 +130,16 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className, 
   }
 
   return (
-    <nav data-step-rail="" aria-label={label} className={cn("flex min-w-0 items-stretch gap-x-4", overflow ? "flex-wrap" : showState ? "h-14" : "h-10", className)}>
-      <ol ref={list} className={cn("flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto", showState ? "min-h-14" : "min-h-10")}>
+    <nav data-step-rail="" aria-label={label} className={cn("flex min-w-0 items-stretch gap-x-4", overflow ? "flex-wrap" : wordsShown ? "h-14" : "h-10", className)}>
+      <ol ref={list} className={cn("flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto", wordsShown ? "min-h-14" : "min-h-10")}>
         {steps.map((step) => {
           const active = activeSteps.includes(step.id);
           const body = (
             <>
-              <RailMark state={step.state} />
+              {!step.outside && <RailMark state={step.state} />}
               <span className="whitespace-nowrap">
                 {step.label}
-                <span className={showState ? "block text-caption text-text-3" : "sr-only"}>{showState ? (step.stateLabel ?? RAIL_STATE_WORDS[step.state]) : `，${step.stateLabel ?? RAIL_STATE_WORDS[step.state]}`}</span>
+                {word(step) && <span className={wordsShown ? "block text-caption text-text-3" : "sr-only"}>{wordsShown ? word(step) : `，${word(step)}`}</span>}
               </span>
             </>
           );
@@ -145,7 +150,7 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className, 
             "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-none border-b-2 px-2 text-ui font-normal outline-none transition-colors duration-fast",
             active ? "border-accent text-text" : cn("border-transparent", step.state === "todo" ? "text-text-3" : "text-text-2"),
           );
-          const tip = `${step.stateLabel ?? RAIL_STATE_WORDS[step.state]}${step.summary ? `：${step.summary}` : ""}`;
+          const tip = step.outside ? (step.summary || "不在本次工作范围") : `${word(step)}${step.summary ? `：${step.summary}` : ""}`;
           const control = step.href ? (
             <Link to={step.href} onClick={step.onSelect} aria-current={active ? "step" : undefined} className={cn(look, "hover:bg-surface-2 hover:text-text")}>{body}</Link>
           ) : step.onSelect ? (

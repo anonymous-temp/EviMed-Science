@@ -191,7 +191,7 @@ describe("试验 · the designs", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toHaveTextContent("这次模拟算完了 18,000 / 20,000 次重复就到了计算时间上限，下面是已完成部分的结果。");
     expect(container.querySelector("[data-vcr-step-failed]")).toBeNull();
-    await userEvent.click(within(notes[0] as HTMLElement).getByRole("button", { name: "在对话中继续" }));
+    await userEvent.click(within(notes[0] as HTMLElement).getByRole("button", { name: "让 AI 接着做" }));
     expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "trial" });
     expect(network.productRequest.mock.calls.filter(([, method]) => method === "POST")).toEqual([]);
   });
@@ -228,7 +228,7 @@ describe("试验 · the designs", () => {
       installVcrServer(network.productRequest, { [tab("trial")]: payload });
       const { spies } = draw();
       await trialDrawn();
-      await userEvent.click(screen.getByRole("button", { name: "在对话中调整：方案 B" }));
+      await userEvent.click(screen.getByRole("button", { name: "让 AI 调整：方案 B" }));
       expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("建立新版本"), { kind: "trial_scenario", studyId: STUDY_ID, objectId: "scn_2", version: 2, resultId: "res_2", resultVersion: 1 });
       expect(spies.openChat.mock.calls[0][0]).not.toMatch(/scn_|res_/);
       expect(screen.queryByRole("dialog")).toBeNull();
@@ -280,7 +280,7 @@ describe("试验 · the run behind a row", () => {
     await trialDrawn();
     await userEvent.click(container.querySelector("tr[data-vcr-design='B']") as HTMLElement);
     const drawer = await screen.findByRole("dialog", { name: /方案 B/ });
-    expect(within(drawer).getByRole("button", { name: "在对话中调整" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "让 AI 调整" })).toBeInTheDocument();
   });
 });
 
@@ -290,8 +290,8 @@ describe("试验 · what the band offers", () => {
     const table = await trialDrawn();
     const chips = within(band(container));
     expect(chips.getByRole("button", { name: "改选方案" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "在对话中添加方案" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "在对话中调整假设" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "让 AI 添加方案" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "让 AI 调整假设" })).toBeInTheDocument();
     expect(band(container).compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chips.getByRole("button", { name: /^方案\s*4/ })).toBeInTheDocument();
   });
@@ -313,9 +313,9 @@ describe("试验 · what the band offers", () => {
   it("puts a draft in the study's conversation view for 加一个方案 and for 改假设 — and does not send it, and goes nowhere", async () => {
     const { container, spies } = draw();
     await trialDrawn();
-    await userEvent.click(within(band(container)).getByRole("button", { name: "在对话中添加方案" }));
+    await userEvent.click(within(band(container)).getByRole("button", { name: "让 AI 添加方案" }));
     expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_ADD_DESIGN_DRAFT), { kind: "step", studyId: STUDY_ID, objectId: "trial" });
-    await userEvent.click(within(band(container)).getByRole("button", { name: "在对话中调整假设" }));
+    await userEvent.click(within(band(container)).getByRole("button", { name: "让 AI 调整假设" }));
     expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_CHANGE_ASSUMPTION_DRAFT), { kind: "step", studyId: STUDY_ID, objectId: "trial" });
     expect(network.productRequest.mock.calls.some(([path, method]) => method === "POST" && String(path).includes("/run"))).toBe(false);
   });
@@ -514,12 +514,12 @@ describe("试验 · designs nothing has computed", () => {
     expect(rows.map((row) => row.getAttribute("data-vcr-design"))).toEqual(["A", "B", "C", "D"]);
     for (const row of rows) expect(row.closest("li")).toHaveTextContent("还没算");
     // The state is the recipe and its one button, not a form.
-    expect(within(list).getByRole("button", { name: "模拟试验方案" })).toBeInTheDocument();
+    expect(within(list).getByRole("button", { name: "让 AI 模拟试验方案" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "登记预测" })).toBeNull();
     // What the conversation does stays: another design, another hypothesis.
-    expect(screen.getByRole("button", { name: "在对话中添加方案" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "在对话中调整假设" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "让 AI 添加方案" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "让 AI 调整假设" })).toBeInTheDocument();
   });
 
   it("says the computation is under way while it is, and offers nothing to start", async () => {
@@ -528,7 +528,7 @@ describe("试验 · designs nothing has computed", () => {
     const list = await found(container, "[data-vcr-not-computed]");
     const running = list.querySelector("[data-vcr-step-running='trial']") as HTMLElement;
     expect(running).not.toBeNull();
-    expect(within(running).queryByRole("button", { name: "模拟试验方案" })).toBeNull();
+    expect(within(running).queryByRole("button", { name: "让 AI 模拟试验方案" })).toBeNull();
   });
 
   it("says a step that did not finish once, on top with 接着做 — and does not say it again under the list", async () => {
@@ -537,7 +537,7 @@ describe("试验 · designs nothing has computed", () => {
     const list = await found(container, "[data-vcr-not-computed]");
     expect(container.querySelectorAll("[data-vcr-step-failed]")).toHaveLength(1);
     expect(list.querySelector("[data-vcr-step-failed]")).toBeNull();
-    expect(screen.getAllByRole("button", { name: "在对话中继续" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "让 AI 接着做" })).toHaveLength(1);
   });
 
   it("offers a reader who cannot write no band when there is nothing to conclude", async () => {

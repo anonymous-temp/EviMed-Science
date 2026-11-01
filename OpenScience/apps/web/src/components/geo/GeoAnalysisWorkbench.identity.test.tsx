@@ -78,7 +78,7 @@ it('keeps stale rows readable but locks pagination, chart fallback, export and e
  const requests=read.mock.calls.length;
  fireEvent.click(screen.getByRole('button',{name:'下一批数据'}));
  fireEvent.click(screen.getByRole('button',{name:'导出精确范围'}));
- fireEvent.click(screen.getByRole('button',{name:'在对话中解释'}));
+ fireEvent.click(screen.getByRole('button',{name:'让 AI 解释'}));
  act(()=>interactions.chart.mock.lastCall![0]({rowKey:'row',columnKey:'missing'}));
  expect(read).toHaveBeenCalledTimes(requests);expect(interactions.export).not.toHaveBeenCalled();expect(interactions.current).not.toHaveBeenCalled();
  expect(read.mock.calls.every(call=>call[2].sourceSearch!=='after'||call[1].selectionRef!=='old')).toBe(true);

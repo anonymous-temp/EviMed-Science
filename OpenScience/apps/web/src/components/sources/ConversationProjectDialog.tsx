@@ -22,7 +22,7 @@ export function ConversationProjectDialog({ options, onClose, onChoose }: {
           <Combobox label="项目" hint="在这个项目的对话里使用所选资料。" value={target} onChange={setTarget} options={options} clearable={false} />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={requestClose}>取消</Button>
-            <Button type="submit" disabled={!target}>在对话中使用</Button>
+            <Button actionKind="draft" type="submit" disabled={!target}>在对话中使用</Button>
           </div>
         </form>
       )}

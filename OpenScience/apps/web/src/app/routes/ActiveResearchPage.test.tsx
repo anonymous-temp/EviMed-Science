@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { useTaskPane } from "@/lib/taskPane";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useToastStore } from "@/lib/toast";
 import { ActiveResearchPage } from "./ActiveResearchPage";
 
 const identity = vi.hoisted(() => ({ projectId: "project-a" }));
@@ -16,7 +17,13 @@ vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()),
 vi.mock("@/lib/backend", async (original) => ({ ...(await original<object>()), pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
 vi.mock("@/lib/fileDigest", () => ({ sha256Hex: mocks.sha256Hex }));
 vi.mock("@/lib/knowledgeBaseFiles", async (original) => ({ ...(await original<object>()), partitionKnowledgeBaseFiles: mocks.partition }));
-vi.mock("@/components/autopilot/ResearchObservatory", () => ({ ResearchObservatory: ({ runId }: { runId: string | null }) => <p data-testid="observatory">{runId ?? "no-run"}</p> }));
+// The observatory is drawn elsewhere; what the page needs of it is the run it is shown and what its stream says of that run.
+vi.mock("@/components/autopilot/ResearchObservatory", () => ({ ResearchObservatory: ({ runId, onObserved }: { runId: string | null; onObserved?: (observed: unknown) => void }) => <>
+  <p data-testid="observatory">{runId ?? "no-run"}</p>
+  <button onClick={() => onObserved?.({ runId, state: "succeeded", connected: true })}>stream: ended</button>
+  <button onClick={() => onObserved?.({ runId, state: "running", connected: true })}>stream: running</button>
+  <button onClick={() => onObserved?.(null)}>stream: closed</button>
+</> }));
 vi.mock("@/components/autopilot/MaterialPicker", () => ({ MaterialPicker: ({ onChoose }: { onChoose: (ids: string[]) => void }) => <button onClick={() => onChoose(["src_new"])}>选择示例资料</button> }));
 const task = (id: string, title: string) => ({ id, projectId: "project-a", revision: 1, payload: { title, topics: [], taskTypes: ["routine"], enabled: true, status: "active", materials: [] } });
 const episode = (id: string, agendaId: string, status: string, path?: string) => ({ id, projectId: "project-a", revision: 1, payload: { agendaId, taskType: "routine", status, runId: `run-${id}`, sessionId: `session-${id}`, createdAt: "2026-10-28T01:00:00Z", artifactRefs: path ? [{ projectId: "project-a", runId: `run-${id}`, sessionId: `session-${id}`, path }] : [] } });
@@ -55,14 +62,15 @@ describe("active research workspace", () => {
     await user.click(within(await screen.findByLabelText("研究队列")).getByRole("button", { name: "评估心衰队列的再入院风险" }));
     expect(screen.getByTestId("observatory")).toHaveTextContent("goal-run");
     expect(screen.queryByText("cohort.csv")).not.toBeInTheDocument();
-    const area = screen.getByLabelText("长期研究");
-    expect(within(area).getByRole("link", { name: "打开所属对话" })).toHaveAttribute("href", "/app/chat/goal-session?project=project-a");
-    expect(within(area).getByText(/已推进 1 轮/)).toBeInTheDocument();
+    // What the goal is: its state line, and its views under the observatory; there is no second route to its conversation.
+    expect(within(screen.getByLabelText("当前研究")).getByText(/已推进 1 轮/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "打开所属对话" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在本页打开对话" })).not.toBeInTheDocument();
   });
   it("does not offer to start long research when the deployment does not advertise it", async () => {
     skillMocks.listPlatformSkills.mockResolvedValue({ items: [] }); renderPage();
     expect(await screen.findByText(/长期研究暂未开通/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新建长期研究" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "让 AI 做长期研究" })).toBeDisabled();
   });
   it("does not replay an unacknowledged create restored from browser history", async () => {
     renderPage({ runtimeUiIntent: { kind: "create", projectId: "project-a", requestId: "old-request", sessionId: "old-session", draft: "/loopx " } });
@@ -72,19 +80,19 @@ describe("active research workspace", () => {
   });
   it("opens a new native long-research draft inside the same page", async () => {
     const user = userEvent.setup(); renderPage();
-    await waitFor(() => expect(screen.getByRole("button", { name: "新建长期研究" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "新建长期研究" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "让 AI 做长期研究" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "让 AI 做长期研究" }));
     expect(screen.getByTestId("native-pane")).toHaveTextContent(/^project-a:/);
     expect(screen.getByTestId("intent")).toHaveTextContent('"kind":"create"');
     expect(screen.getByTestId("intent")).toHaveTextContent('/loopx');
     expect(screen.getByRole("region", { name: "原生研究对话" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新建长期研究" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "让 AI 做长期研究" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "stale ack" }));
     expect(screen.getByTestId("intent")).toHaveTextContent('"kind":"create"');
     await user.click(screen.getByRole("button", { name: "ack" }));
     expect(screen.getByTestId("native-pane")).toHaveTextContent("project-a:actual-session");
     expect(screen.getByTestId("intent")).not.toHaveTextContent("runtimeUiIntent");
-    expect(screen.getByRole("button", { name: "新建长期研究" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "让 AI 做长期研究" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "收起对话" }));
     expect(screen.getByTestId("native-pane")).toHaveTextContent("none");
   });
@@ -92,8 +100,12 @@ describe("active research workspace", () => {
     const user = userEvent.setup(); mocks.listWebAgentRuns.mockResolvedValue([{ id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: null }, startedAt: "2026-10-28T01:00:00Z", status: "running" }]);
     renderPage(); await screen.findByText("cohort.csv");
     await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "长期研究" }));
-    await user.click(screen.getByRole("button", { name: "在本页打开对话" }));
+    await user.click(screen.getByRole("tab", { name: "对话" }));
     expect(screen.getByTestId("native-pane")).toHaveTextContent("project-a:goal-session");
+    // Closing it goes back to the goal's results, and the conversation is withdrawn.
+    await user.click(screen.getByRole("button", { name: "收起对话" }));
+    expect(screen.getByTestId("native-pane")).toHaveTextContent("none");
+    expect(screen.getByRole("tab", { name: "结果", selected: true })).toBeInTheDocument();
   });
   it("loads subsequent project episode pages so older running work is not hidden", async () => {
     mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string, cursor?: string) => {
@@ -109,11 +121,12 @@ describe("active research workspace", () => {
     mocks.listWebAgentRuns.mockResolvedValue([round("r-failed", "s-failed", "failed"), round("r-stopped", "s-stopped", "canceled"), round("r-done", "s-done", "succeeded")]);
     renderPage(); await screen.findByText("cohort.csv");
     const queue = within(await screen.findByLabelText("研究队列"));
-    for (const [title, word] of [["目标 failed", "未完成"], ["目标 canceled", "已结束"], ["目标 succeeded", "已完成"]] as const) {
+    for (const [title, word] of [["目标 failed", "未完成"], ["目标 canceled", "已停止"], ["目标 succeeded", "已完成"]] as const) {
       const card = queue.getByRole("button", { name: title });
       expect(card).toHaveTextContent(word);
       await user.click(card);
-      // The record under the queue names the round with the same word.
+      // The record in the 记录 view names the round with the same word.
+      await user.click(screen.getByRole("tab", { name: "记录" }));
       expect(within(screen.getByLabelText("推进记录")).getByText(new RegExp(`第 1 轮 · ${word}`))).toBeInTheDocument();
     }
     expect(queue.getByRole("button", { name: "目标 failed" })).not.toHaveTextContent("已完成");
@@ -245,21 +258,21 @@ describe("active research workspace", () => {
     });
     renderPage(); await screen.findByText("cohort.csv");
     await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即执行" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
     fail = true;
     await user.click(screen.getByRole("button", { name: "从知识库选择" }));
     await user.click(screen.getByRole("button", { name: "选择示例资料" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即执行" })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeDisabled());
     expect(screen.getAllByRole("link", { name: "paper.docx" }).length).toBeGreaterThan(0);
   });
   it("reuses a request id after an uncertain run-now failure", async () => {
     const user = userEvent.setup(); mocks.runAgendaNow.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ episode: { ...running, payload: { ...running.payload, agendaId: "b" } } });
     renderPage(); await screen.findByText("cohort.csv");
     await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即执行" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "立即执行" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "立即运行" }));
     await screen.findByRole("alert");
-    await user.click(screen.getByRole("button", { name: "立即执行" }));
+    await user.click(screen.getByRole("button", { name: "立即运行" }));
     await waitFor(() => expect(mocks.runAgendaNow).toHaveBeenCalledTimes(2));
     expect(mocks.runAgendaNow.mock.calls[0]).toEqual(mocks.runAgendaNow.mock.calls[1]);
   });
@@ -267,8 +280,8 @@ describe("active research workspace", () => {
     const user = userEvent.setup(); mocks.runAgendaNow.mockResolvedValue({ episode: { ...running, payload: { ...running.payload, agendaId: "b" } } });
     renderPage(); await screen.findByText("cohort.csv");
     await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即执行" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "立即执行" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "立即运行" }));
     expect(await screen.findByRole("button", { name: "停止本次" })).toBeInTheDocument();
   });
   it("stops the selected live execution rather than the entire agenda", async () => {
@@ -308,7 +321,7 @@ describe("active research workspace", () => {
     await user.click(screen.getByRole("button", { name: "停止本次" }));
     await waitFor(() => expect(mocks.cancelEpisode).toHaveBeenCalledOnce());
     await act(async () => { releaseProject({ items: [finished, running], nextCursor: null }); releaseHistory({ items: [running], nextCursor: null }); });
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即执行" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "停止本次" })).not.toBeInTheDocument();
   });
   it("sends a direction to the selected research without replacing the current execution", async () => {
@@ -373,9 +386,129 @@ describe("active research workspace", () => {
     renderPage();
     expect(await screen.findByRole("heading", { name: "让 AI 持续为你做研究" })).toBeInTheDocument();
     expect(screen.queryByLabelText("研究队列")).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "新建长期研究" })).toBeEnabled());
-    expect(screen.getAllByRole("button", { name: "新建定时研究" })).toHaveLength(1);
-    await user.click(screen.getByRole("button", { name: "新建长期研究" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "让 AI 做长期研究" })).toBeEnabled());
+    expect(screen.getAllByRole("button", { name: "新建定时任务" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "让 AI 做长期研究" }));
     expect(screen.getByTestId("native-pane")).toHaveTextContent(/^project-a:/);
+  });
+  describe("the page under the observatory (module workspace audit, D2)", () => {
+    it("keeps the observatory first and puts the rest of the research under three views, results first", async () => {
+      renderPage(); await screen.findByText("cohort.csv");
+      const tabs = screen.getAllByRole("tab").map(tab => tab.textContent);
+      expect(tabs).toEqual(["结果", "记录", "对话"]);
+      expect(screen.getByRole("tab", { name: "结果", selected: true })).toBeInTheDocument();
+      // The observatory comes before the views in the page, and the queue before both.
+      const order = [screen.getByLabelText("研究队列"), screen.getByTestId("observatory"), screen.getByRole("tablist")];
+      for (let i = 1; i < order.length; i += 1) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // 结果 holds the findings, the files and the data; the history is not under it.
+      expect(screen.getByLabelText("研究成果")).toBeInTheDocument();
+      expect(screen.getByLabelText("研究资料")).toBeInTheDocument();
+      expect(screen.queryByLabelText("执行记录")).not.toBeInTheDocument();
+    });
+    it("lists the executions under 记录, and joins the controls of the research on show to the observatory's row", async () => {
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      const row = screen.getByLabelText("当前研究");
+      for (const name of ["停止本次", "调整研究方向", "打开对话"]) expect(within(row).getByRole("button", { name })).toBeInTheDocument();
+      await user.click(screen.getByRole("tab", { name: "记录" }));
+      expect(screen.getByLabelText("执行记录")).toBeInTheDocument();
+      expect(screen.queryByLabelText("研究资料")).not.toBeInTheDocument();
+    });
+    it("opens the task's own conversation in the 对话 view by one path, the button or the tab, and never navigates away", async () => {
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      expect(screen.getByTestId("native-pane")).toHaveTextContent("none");
+      await user.click(within(screen.getByLabelText("当前研究")).getByRole("button", { name: "打开对话" }));
+      expect(screen.getByRole("tab", { name: "对话", selected: true })).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId("native-pane")).toHaveTextContent("project-a:session-active"));
+      expect(screen.queryByRole("button", { name: "打开任务对话" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "打开所属对话" })).not.toBeInTheDocument();
+      // Back to the results: the conversation is withdrawn.
+      await user.click(screen.getByRole("tab", { name: "结果" }));
+      expect(screen.getByTestId("native-pane")).toHaveTextContent("none");
+    });
+    it("takes the word on whether the run is going from the open stream, and from the poll where there is none", async () => {
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      // The poll says the execution is running.
+      expect(screen.getByRole("button", { name: "停止本次" })).toBeInTheDocument();
+      const stateOf = () => within(screen.getByLabelText("研究队列")).getByRole("button", { name: "进行中研究" }).querySelector(".rq-state")!;
+      expect(stateOf()).toHaveTextContent("进行中");
+      // The stream says it has ended before the poll caught up: the button, the queue and the strip agree with the stream.
+      await user.click(screen.getByRole("button", { name: "stream: ended" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeInTheDocument());
+      expect(screen.queryByRole("button", { name: "停止本次" })).not.toBeInTheDocument();
+      expect(stateOf()).toHaveTextContent("已完成");
+      expect(document.querySelector("[data-activity]")).toBeNull();
+      // It also reads the records again at once rather than waiting for its next poll.
+      const reads = mocks.listAgendas.mock.calls.length;
+      await user.click(screen.getByRole("button", { name: "stream: closed" }));
+      // The stream is gone: the poll's account stands again.
+      await waitFor(() => expect(screen.getByRole("button", { name: "停止本次" })).toBeInTheDocument());
+      expect(reads).toBeGreaterThan(1);
+    });
+    it("shows the activity strip in the page's band while a run is going, and not otherwise", async () => {
+      renderPage(); await screen.findByText("cohort.csv");
+      const strip = document.querySelector<HTMLElement>("[data-page-chrome] [data-activity='strip']");
+      expect(strip).not.toBeNull();
+      expect(strip).toHaveTextContent("正在运行“进行中研究”");
+    });
+    it("says before the wall that a bounded execution holds the project's conversation, and lets the researcher end it from the note", async () => {
+      const bounded = { ...running, payload: { ...running.payload, interactive: false } };
+      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [bounded] : agendaId === "b" ? [finished] : [finished, bounded], nextCursor: null }));
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      expect(await screen.findByText("运行期间，这个项目的对话会暂停，结束后可继续")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "停止并继续对话" }));
+      await waitFor(() => expect(mocks.cancelEpisode).toHaveBeenCalledWith("a", "active", expect.any(String)));
+    });
+    it("points to the task that holds the conversation when another research is the one on show", async () => {
+      const bounded = { ...running, payload: { ...running.payload, interactive: false } };
+      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [bounded] : agendaId === "b" ? [finished] : [finished, bounded], nextCursor: null }));
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
+      await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-done"));
+      expect(screen.getByRole("link", { name: "查看正在运行的任务" })).toHaveAttribute("href", "/app/autopilot/a");
+    });
+    it("says nothing of a held conversation for an execution in the researcher's own runtime", async () => {
+      renderPage(); await screen.findByText("cohort.csv");
+      expect(screen.queryByText("运行期间，这个项目的对话会暂停，结束后可继续")).not.toBeInTheDocument();
+    });
+  });
+  describe("one verb for one act, and what pressing it does (audit D11)", () => {
+    it("says 立即运行 and 新建定时任务, never 立即执行 or 新建定时研究, and declares what each does", async () => {
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      expect(screen.queryByRole("button", { name: /立即执行|新建定时研究/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "停止本次" })).toHaveAttribute("data-action-kind", "set");
+      expect(screen.getByRole("button", { name: "让 AI 做长期研究" })).toHaveAttribute("data-action-kind", "draft");
+      await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
+      expect(screen.getByRole("button", { name: "立即运行" })).toHaveAttribute("data-action-kind", "start");
+      await user.click(screen.getByRole("button", { name: "新建定时任务" }));
+      expect(await screen.findByRole("dialog", { name: "新建定时任务" })).toBeInTheDocument();
+    });
+    it("says when a run is started that the project's conversation pauses while it runs", async () => {
+      useToastStore.setState({ toasts: [] });
+      mocks.runAgendaNow.mockResolvedValue({ episode: { ...running, payload: { ...running.payload, agendaId: "b" } } });
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: "立即运行" }));
+      await waitFor(() => expect(useToastStore.getState().toasts.map(item => item.message)).toContain("已开始运行。运行期间，这个项目的对话会暂停，结束后可继续"));
+    });
+    it("keeps 调整研究方向 as a form of its own: it sends a structured direction, and 提交方向 starts the run it asks for", async () => {
+      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
+      expect(screen.getByRole("button", { name: "调整研究方向" })).toHaveAttribute("data-action-kind", "set");
+      await user.click(screen.getByRole("button", { name: "调整研究方向" }));
+      expect(screen.getByRole("button", { name: "提交方向" })).toHaveAttribute("data-action-kind", "start");
+    });
+  });
+  describe("a run ends while the page is open (audit D14)", () => {
+    it("announces the end once, as a toast", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      useToastStore.setState({ toasts: [] });
+      renderPage(); await screen.findByText("cohort.csv");
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+      const ended = { ...running, payload: { ...running.payload, status: "merged" } };
+      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [ended] : agendaId === "b" ? [finished] : [finished, ended], nextCursor: null }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(useToastStore.getState().toasts.map(item => item.message)).toEqual(["“进行中研究”已完成"]);
+    });
   });
 });

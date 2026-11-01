@@ -268,7 +268,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
             >
               <Textarea ref={field} disabled={busy} value={value} onChange={(event) => setValue(event.target.value)} aria-label="编辑这条记忆" rows={4} maxLength={entry ? 20_000 : undefined} />
               <div className="flex gap-2">
-                <Button type="submit" size="sm" loading={busy} disabled={!value.trim()}>保存</Button>
+                <Button actionKind="set" type="submit" size="sm" loading={busy} disabled={!value.trim()}>保存</Button>
                 <Button size="sm" variant="text" disabled={busy} onClick={editGuard.requestClose}>取消</Button>
               </div>
             </form>
@@ -303,8 +303,8 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
           {candidate && (
             <div className="flex flex-wrap items-center gap-2">
               <Tag>待确认</Tag>
-              <Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmEntry()}>确认</Button>
-              <Button size="sm" variant="secondary" disabled={busy} onClick={() => void forgetEntry()}>不要</Button>
+              <Button actionKind="set" size="sm" variant="secondary" loading={busy} onClick={() => void confirmEntry()}>确认</Button>
+              <Button actionKind="set" size="sm" variant="secondary" disabled={busy} onClick={() => void forgetEntry()}>不要</Button>
             </div>
           )}
 
@@ -345,7 +345,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
                 {formerly.map((statement) => (
                   <li key={statement.id} className="flex items-baseline justify-between gap-3">
                     <span className="min-w-0">{statement.text}{statement.until ? `（到 ${formatDay(statement.until)}）` : ""}</span>
-                    <Button size="sm" variant="text" destructive disabled={busy} className="shrink-0" onClick={() => setRemovingFormer(statement)}>删掉</Button>
+                    <Button actionKind="set" size="sm" variant="text" destructive disabled={busy} className="shrink-0" onClick={() => setRemovingFormer(statement)}>删掉</Button>
                   </li>
                 ))}
               </ul>
@@ -368,7 +368,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
           {!editing && (
             <div className="mt-auto flex gap-2">
               <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>编辑</Button>
-              <Button variant="text" destructive disabled={busy} onClick={() => void (record ? forgetRecord() : forgetEntry())}>忘记</Button>
+              <Button actionKind="set" variant="text" destructive disabled={busy} onClick={() => void (record ? forgetRecord() : forgetEntry())}>忘记</Button>
             </div>
           )}
         </div>

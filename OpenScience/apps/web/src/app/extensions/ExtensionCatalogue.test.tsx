@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProjectStore } from "@/lib/projects";
 import { ExtensionsPage } from "./ExtensionsPage";
 
@@ -266,6 +266,68 @@ it("an apply under way on a running runtime is re-read with growing waits, then 
     await act(async () => { vi.advanceTimersByTime(30 * 60 * 1000); });
     expect(skills.projectPlatformSkills).toHaveBeenCalledTimes(calls);
   } finally { vi.useRealTimers(); }
+});
+
+// The waits ran out and the change is still not in force: the page used to stop with 「等待当前任务结束后生效」 on screen and nothing to
+// say nobody was looking any more.
+it("says when the waits ran out with the change still not in force, and a press reads once more and waits again", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    // Every read is a new answer, as a server's is: it is what arms the next wait.
+    skills.projectPlatformSkills.mockImplementation(async () => ({ ...project, activation: { ...activation, phase: "waiting", savedRevision: 4, effectiveRevision: 3, live: true } }));
+    open("/app/extensions/installed");
+    expect(await screen.findByText("等待当前任务结束后生效")).toBeInTheDocument();
+    expect(screen.queryByText("还没生效，可以稍后刷新。")).not.toBeInTheDocument();
+    for (let round = 0; round < 12; round++) await act(async () => { vi.advanceTimersByTime(61000); });
+    expect(await screen.findByText("还没生效，可以稍后刷新。")).toBeInTheDocument();
+    const calls = skills.projectPlatformSkills.mock.calls.length;
+    await act(async () => { vi.advanceTimersByTime(30 * 60 * 1000); });
+    expect(skills.projectPlatformSkills).toHaveBeenCalledTimes(calls);
+    await act(async () => { screen.getByRole("button", { name: "刷新" }).click(); });
+    await waitFor(() => expect(skills.projectPlatformSkills.mock.calls.length).toBeGreaterThan(calls));
+    // The press starts the waits afresh: the sentence goes while the page looks again.
+    await waitFor(() => expect(screen.queryByText("还没生效，可以稍后刷新。")).not.toBeInTheDocument());
+  } finally { vi.useRealTimers(); }
+});
+
+it("says nothing of waiting when the change is in force", async () => {
+  open("/app/extensions/installed");
+  expect(await screen.findByRole("button", { name: "科学绘图" })).toBeInTheDocument();
+  expect(screen.queryByText("还没生效，可以稍后刷新。")).not.toBeInTheDocument();
+});
+
+// An installed plugin the project does not use was a drawer away: add, open it, 用于当前项目.
+describe("a plugin the account has and this project does not use", () => {
+  const coordinate = { kind: "npm", name: "one-press", version: "1.0.0" };
+  const installation = { id: "extension:one", catalogueId: "one-press", coordinate, integrity: "sha256:a", revision: 1, effective: false, phase: "ready" };
+  const descriptor = { id: "one-press", title: "一键插件", coordinate, integrity: "sha256:a", settingsSchema: { mode: { type: "string", default: "fast" }, depth: { type: "integer" } } };
+  const serve = (installed = installation) => {
+    plugins.extensionCatalogue.mockResolvedValue({ items: [descriptor], generatedAt: "" });
+    plugins.extensionInstallations.mockResolvedValue({ items: [installed], nextCursor: null });
+    plugins.projectExtensions.mockResolvedValue({ revision: 7, selections: [], effectiveGeneration: null });
+  };
+
+  it("is switched on from the list in one press, with the descriptor's defaults and no account connection", async () => {
+    serve();
+    plugins.saveProjectExtensions.mockResolvedValue({ revision: 8, selections: [{ installationId: "extension:one", enabled: true, effective: false, phase: "waiting", settings: { mode: "fast" }, connectionRefs: [] }], effectiveGeneration: null });
+    open("/app/extensions/installed?type=plugins");
+    const press = await screen.findByRole("button", { name: "用于当前项目" });
+    expect(press).toHaveAttribute("data-action-kind", "set");
+    await userEvent.click(press);
+    expect(plugins.saveProjectExtensions).toHaveBeenCalledTimes(1);
+    expect(plugins.saveProjectExtensions).toHaveBeenCalledWith("one", 7, [{ installationId: "extension:one", enabled: true, settings: { mode: "fast" }, connectionRefs: [] }]);
+    // The row then has its switch, on, like any plugin the project uses.
+    expect(await screen.findByRole("switch", { name: /一键插件/ })).toBeChecked();
+    expect(screen.queryByRole("button", { name: "用于当前项目" })).not.toBeInTheDocument();
+  });
+
+  it("is not offered one press when the copy the account holds is not the catalogue's current one: the drawer updates it first", async () => {
+    serve({ ...installation, integrity: "sha256:old" });
+    open("/app/extensions/installed?type=plugins");
+    expect(await screen.findByRole("button", { name: "一键插件" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用于当前项目" })).not.toBeInTheDocument();
+    expect(plugins.saveProjectExtensions).not.toHaveBeenCalled();
+  });
 });
 
 it("a 循证 GEO project on its shared settings draws no project switch and says the choices do not apply there", async () => {

@@ -139,6 +139,15 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(within(waiting).queryByText("正在记住")).not.toBeInTheDocument();
   });
 
+  it("says a memory that is still not written after ten minutes is not finished, and that it can be looked at later (audit D8)", async () => {
+    const stuck = { id: "p4", text: "以后写英文摘要", at: new Date(Date.now() - 11 * 60_000).toISOString(), state: "retrying" as const };
+    api.fetchMemoryProfile.mockResolvedValue({ ...nativeProfile, pending: [stuck] });
+    open();
+    const waiting = await screen.findByRole("list", { name: "正在记住的内容" });
+    expect(within(waiting).getByText("还没写完，可以稍后再看")).toBeInTheDocument();
+    expect(within(waiting).queryByText("还在记，比平时慢一些")).not.toBeInTheDocument();
+  });
+
   it("reads 记忆服务暂时不可用 in place of the list when the memory service cannot be reached, and breaks nothing else", async () => {
     api.fetchMemoryProfile.mockRejectedValue(new WebApiError("down", { status: 503, code: "memory_engine_unavailable" }));
     open();

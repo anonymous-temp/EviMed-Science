@@ -2,6 +2,7 @@ import { getVcrData, readVcrIntake } from "@/lib/vcrClient";
 import { LoadError } from "@/components/cards/LoadError";
 import { Drawer } from "@/components/ui/Drawer";
 import { IntakePanel } from "./data/IntakePanel";
+import { INTAKE_LABEL } from "./vcrActionWords";
 import { VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad } from "./vcrTabKit";
 
@@ -17,7 +18,7 @@ import { useVcrLoad } from "./vcrTabKit";
 export function VcrIntakeDrawer({ studyId, onClose, onChanged }: { studyId: string; onClose: () => void; onChanged: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:intake`, () => getVcrData(studyId));
   return (
-    <Drawer title="数据接入" onClose={onClose} widthClassName="max-w-2xl">
+    <Drawer title={INTAKE_LABEL} onClose={onClose} widthClassName="max-w-2xl">
       {state.kind === "loading" ? <VcrTabSkeleton rows={3} />
         : state.kind === "error" ? <LoadError message={state.message} onRetry={reload} />
           : <IntakePanel bare studyId={studyId} intake={readVcrIntake(state.data.intake)} onChanged={() => { reload(); onChanged(); }} />}

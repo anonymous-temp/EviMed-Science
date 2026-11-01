@@ -23,7 +23,7 @@ describe("continuing research from a card", () => {
   it("opens the conversation in the new project with the question in the composer, unsent", async () => {
     client.continueResearchFromCard.mockResolvedValue(continuation);
     mount(<EvidenceContinueAction evidence={{ id: "ec_1", canResearch: true }} />);
-    await userEvent.click(screen.getByRole("button", { name: "用这张卡继续研究" }));
+    await userEvent.click(screen.getByRole("button", { name: "新建项目继续研究" }));
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
     expect(client.continueResearchFromCard).toHaveBeenCalledWith("ec_1");
     expect(projects.select).toHaveBeenCalledWith("continue-1", expect.any(Function));
@@ -34,21 +34,21 @@ describe("continuing research from a card", () => {
   it("says which sources could not be saved before it opens, and opens when the researcher goes on", async () => {
     client.continueResearchFromCard.mockResolvedValue({ ...continuation, library: { ...continuation.library, failed: [{ index: 2, code: "project_storage_full" }] } });
     mount(<EvidenceContinueAction evidence={{ id: "ec_1", canResearch: true }} />);
-    await userEvent.click(screen.getByRole("button", { name: "用这张卡继续研究" }));
+    await userEvent.click(screen.getByRole("button", { name: "新建项目继续研究" }));
     expect(await screen.findByRole("status")).toHaveTextContent("已存入 1 个来源，有 1 个没有存成：来源 2");
     expect(screen.getByTestId("where")).toHaveTextContent("/");
     await userEvent.click(screen.getByRole("button", { name: "继续" }));
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
   });
-  it("says what it does when the pointer rests on it, apart from 问这条证据", async () => {
+  it("says what it does when the pointer rests on it, apart from 在当前项目里问这条证据", async () => {
     mount(<EvidenceContinueAction evidence={{ id: "ec_1", canResearch: true }} />);
-    await userEvent.hover(screen.getByRole("button", { name: "用这张卡继续研究" }));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("新建研究，并把主要来源存入知识库");
+    await userEvent.hover(screen.getByRole("button", { name: "新建项目继续研究" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("新建研究项目，并把主要来源存入知识库");
   });
   it("shows a refusal by name and stays where it is; and is not offered on a card that may not be researched", async () => {
     client.continueResearchFromCard.mockRejectedValue(new WebApiError("no", { status: 404, code: "evidence_continue_unavailable" }));
     const { container, rerender } = mount(<EvidenceContinueAction evidence={{ id: "ec_1", canResearch: true }} />);
-    await userEvent.click(screen.getByRole("button", { name: "用这张卡继续研究" }));
+    await userEvent.click(screen.getByRole("button", { name: "新建项目继续研究" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("这个部署没有开通知识库");
     rerender(<MemoryRouter><EvidenceContinueAction evidence={{ id: "ec_1", canResearch: false }} /></MemoryRouter>);
     expect(container.querySelector("button")).toBeNull();

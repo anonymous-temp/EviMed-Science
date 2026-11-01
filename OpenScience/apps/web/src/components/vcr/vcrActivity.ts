@@ -12,7 +12,7 @@
  *    The count of a running job (3 / 10, then 4 / 10) is deliberately not in it — that is the strip's, and a table that refetched on
  *    every tick would never hold still.
  */
-import { RUN_ACTIVITY_PHASE_LABELS_ZH, VCR_STEP_ACTION_LABELS_ZH, VCR_STEP_LABELS_ZH } from "@evimed/domain";
+import { RUN_ACTIVITY_PHASE_LABELS_ZH, VCR_STEP_ACTION_LABELS_ZH, VCR_STEP_LABELS_ZH, workStateLabel } from "@evimed/domain";
 import { VCR_STEP_KEYS, type VcrActivity, type VcrActivityJob, type VcrStepKey, type VcrStudy, type VcrWaitingFor } from "@/lib/vcrClient";
 
 /** How often the study is read while a run, a queue or an engine job moves. */
@@ -67,7 +67,8 @@ export function studyVersion(study: VcrStudy): string {
  */
 export function waitingSentence(waitingFor: VcrWaitingFor | null | undefined, engine = false): string {
   if (engine) return "等计算引擎恢复";
-  if (waitingFor === "allowance" || waitingFor === "simulated_allowance") return "等研究额度";
+  // The allowance is the reader's to top up: the wait is the vocabulary's 等你…, and the strip's 排队中 stays in front of it.
+  if (waitingFor === "allowance" || waitingFor === "simulated_allowance") return workStateLabel("waiting", waitingFor === "allowance" ? "充值" : "模拟充值");
   if (waitingFor === "run") return "等这次运行做完";
   if (waitingFor) return `等“${stepName(waitingFor)}”做完`;
   return "等待开始";

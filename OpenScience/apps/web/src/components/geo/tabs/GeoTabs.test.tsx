@@ -394,7 +394,7 @@ describe("信源", () => {
     expect(conditions.querySelector("[data-geo-condition='newsIndexed:no']")).not.toBeNull();
     expect(conditions.querySelector("[data-geo-condition='medical:unknown']")).toBeNull();
     expect(dialog).not.toHaveTextContent(/未核实/);
-    expect(within(dialog).getByRole("button", { name: "在对话中处理" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "让 AI 处理这个信源" })).toBeInTheDocument();
     // The expansion in the row is gone.
     expect(rowOf("baike.baidu.com").querySelector("[data-geo-source-detail]")).toBeNull();
   });
@@ -478,7 +478,7 @@ describe("信源", () => {
     await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
     const dialog = await screen.findByRole("dialog", { name: "百度百科" });
     await within(dialog).findByRole("region", { name: "讲错的回答" });
-    await userEvent.click(within(dialog).getByRole("button", { name: "在对话中处理" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "让 AI 处理这个信源" }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
     // The draft waits in the composer: the intent carries it, and nothing asks the model.
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string } } | null;
@@ -867,7 +867,7 @@ describe("总览", () => {
     const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(heading.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The wrong statement carries its correction, with the sentence in the draft; the project's conversation is opened with it unsent.
-    await userEvent.click(within(list).getByRole("button", { name: "在对话中写纠错稿" }));
+    await userEvent.click(within(list).getByRole("button", { name: "让 AI 写纠错稿" }));
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("每天注射一次"));
     expectUnsentProjectDraft("每天注射一次");
   });
@@ -928,7 +928,7 @@ describe("总览 while the AI answers cannot be measured", () => {
     // The integrated frame owns the one channel-health message; the needs-you list does not duplicate it.
     expect(screen.queryByRole("heading", {name:"监测状态"})).toBeNull();
     expect(list).not.toHaveTextContent("AI 回答测量暂停中");
-    expect(list).toHaveTextContent("诊断没有做完");
+    expect(list).toHaveTextContent("诊断未完成");
     expect(list).toHaveTextContent("已有结果仍可查看");
     expect(within(list).queryByRole("button", { name: "接着做" })).not.toBeInTheDocument();
     const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
@@ -1173,7 +1173,7 @@ describe("药品价值分析只在依据里", () => {
     await ready();
     await settle();
     for (const title of VALUE_TITLES) expect(screen.queryByRole("heading", { name: title })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "开始药品价值分析" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "让 AI 开始药品价值分析" })).not.toBeInTheDocument();
     expect(client.getGeoValue).not.toHaveBeenCalled();
   });
 
@@ -1209,7 +1209,7 @@ describe("药品价值分析只在依据里", () => {
       coverage: { assessed: 0, represented: 0, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: null } });
     renderEvidence();
     await screen.findByText("还没有药品价值分析");
-    const start = screen.getAllByRole("button", { name: "开始药品价值分析" });
+    const start = screen.getAllByRole("button", { name: "让 AI 开始药品价值分析" });
     expect(start).toHaveLength(1);
     expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
     expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
@@ -1233,12 +1233,12 @@ describe("a hand-off to the conversation that fails", () => {
   beforeEach(() => useToastStore.setState({ toasts: [] }));
   const toasts = () => useToastStore.getState().toasts.map((toast) => toast.message);
 
-  it("写纠错稿: says so in a toast and gives the button back, where it used to end in nothing", async () => {
+  it("让 AI 写纠错稿: says so in a toast and gives the button back, where it used to end in nothing", async () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     native.openGeoConversation.mockRejectedValueOnce(new Error("project is gone"));
     renderTab(<AccuracyTab {...props()} />);
-    const button = (await screen.findAllByRole("button", { name: "写纠错稿" }))[0];
+    const button = (await screen.findAllByRole("button", { name: "让 AI 写纠错稿" }))[0];
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
     expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.anything());
@@ -1248,7 +1248,7 @@ describe("a hand-off to the conversation that fails", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
   });
 
-  it("在对话中处理: says so in a toast and gives the button back", async () => {
+  it("让 AI 处理这个信源: says so in a toast and gives the button back", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
     native.openGeoConversation.mockRejectedValueOnce(new Error("project is gone"));
@@ -1257,7 +1257,7 @@ describe("a hand-off to the conversation that fails", () => {
     await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
     const dialog = await screen.findByRole("dialog", { name: "百度百科" });
     await within(dialog).findByRole("region", { name: "讲错的回答" });
-    const button = within(dialog).getByRole("button", { name: "在对话中处理" });
+    const button = within(dialog).getByRole("button", { name: "让 AI 处理这个信源" });
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
     expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.anything());
@@ -1270,7 +1270,7 @@ describe("a hand-off to the conversation that fails", () => {
 
 describe("a role that may not open the conversation", () => {
   const viewer = () => geoProject({}, { access: { roles: ["viewer"], abilities: ["read"], owner: false } });
-  it("is offered no hand-off it would only be refused: 信源's 在对话中处理", async () => {
+  it("is offered no hand-off it would only be refused: 信源's 让 AI 处理这个信源", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
     renderTab(<SourcesTab {...props(viewer())} />);
@@ -1278,6 +1278,6 @@ describe("a role that may not open the conversation", () => {
     await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
     const dialog = await screen.findByRole("dialog", { name: "百度百科" });
     await within(dialog).findByRole("region", { name: "讲错的回答" });
-    expect(within(dialog).queryByRole("button", { name: "在对话中处理" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "让 AI 处理这个信源" })).not.toBeInTheDocument();
   });
 });

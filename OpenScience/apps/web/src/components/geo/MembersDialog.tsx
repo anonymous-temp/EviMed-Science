@@ -68,7 +68,7 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
             <span className="min-w-0 flex-1 truncate text-text">{member.name || member.userId}</span>
             <span className="shrink-0 text-caption text-text-3">{member.roleLabels.join("、")}</span>
             {!member.owner && manage && (
-              <Button variant="text" size="sm" onClick={() => remove(member)}>移除</Button>
+              <Button variant="text" size="sm" actionKind="set" onClick={() => remove(member)}>移除</Button>
             )}
           </li>
         ))}
@@ -90,7 +90,7 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
             </>
           )}
           <p className="text-caption text-text-3">{ROLE_NOTE[role]}</p>
-          <div className="flex justify-end"><Button type="submit" loading={saving}>添加</Button></div>
+          <div className="flex justify-end"><Button type="submit" actionKind="set" loading={saving}>添加</Button></div>
         </fieldset></form>
       )}
       {error && <p role="alert" className="mt-3 text-ui text-danger">{error}</p>}

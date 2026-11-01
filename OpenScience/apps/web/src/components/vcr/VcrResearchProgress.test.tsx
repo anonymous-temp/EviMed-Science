@@ -20,7 +20,7 @@ describe("VcrResearchProgress", () => {
     expect(screen.getByText("80 人")).toBeInTheDocument(); expect(screen.getByText("52 人")).toBeInTheDocument();
   });
   it("shows failed computation and keeps the conversation accessible", () => {
-    draw({ ...progress, input: "missing", calculation: "failed" }); expect(screen.getByText("计算未完成")).toBeInTheDocument();
+    draw({ ...progress, input: "missing", calculation: "failed" }); expect(screen.getByText("未完成")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回研究对话" })).toBeInTheDocument();
   });
   it("says a result computed on another snapshot is not counted, and draws no count for it", () => {

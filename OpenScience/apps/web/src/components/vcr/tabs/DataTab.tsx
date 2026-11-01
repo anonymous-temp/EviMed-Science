@@ -41,13 +41,14 @@ import { useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { intervalText, reviewKindLabel, valueText } from "../vcrText";
 import { vcrTabPath } from "../vcrTabs";
+import { scrollBlockToTop } from "../vcrScroll";
 
 type Filter = "all" | "key";
 
 // Who set a card and whether a person has signed it are not ways to sort the list (owner ruling 2026-10-10): the one filter is the cards that matter most.
 const CARDS = "[data-vcr-assumptions]";
 const PRECEDENTS = "[data-vcr-precedents]";
-const scrollTo = (selector: string) => () => document.querySelector(selector)?.scrollIntoView({ block: "start", behavior: "smooth" });
+const scrollTo = (selector: string) => () => scrollBlockToTop(document.querySelector<HTMLElement>(selector));
 
 function matches(assumption: VcrAssumption, filter: Filter): boolean {
   switch (filter) {
@@ -519,7 +520,7 @@ function EditCard({ studyId, assumption, onClose, onSaved }: {
       <Textarea label="说明" rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-        <Button type="submit" loading={busy} disabled={!valid || busy}>保存</Button>
+        <Button actionKind="set" type="submit" loading={busy} disabled={!valid || busy}>保存</Button>
       </div>
     </form>
   );
@@ -569,7 +570,7 @@ function SignCard({ studyId, assumption, kinds, onClose, onSigned }: {
       <Input label="备注" value={note} onChange={(event) => setNote(event.target.value)} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-        <Button type="submit" loading={busy} disabled={busy}>签注</Button>
+        <Button actionKind="set" type="submit" loading={busy} disabled={busy}>签注</Button>
       </div>
     </form>
   );

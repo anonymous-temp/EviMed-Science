@@ -120,12 +120,12 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
                   {selection?.activation?.phase !== "not-applicable" && <div className="flex items-center justify-between gap-3">
                     <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={!!currentSelection} disabled={busy || !selection}
                       onChange={checked => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, checked)))} />
-                    {stale && <Button size="sm" variant="text" disabled={busy || !selection} onClick={() => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, true)))}>更新到最新内容</Button>}
+                    {stale && <Button actionKind="set" size="sm" variant="text" disabled={busy || !selection} onClick={() => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>}
                   <div className="flex items-center justify-between gap-3">
                     <Switch showLabel label="新项目默认使用" checked={!!defaultSelection} disabled={busy || !defaults}
                       onChange={checked => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, checked)))} />
-                    {staleDefault && <Button size="sm" variant="text" disabled={busy || !defaults} onClick={() => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, true)))}>更新到最新内容</Button>}
+                    {staleDefault && <Button actionKind="set" size="sm" variant="text" disabled={busy || !defaults} onClick={() => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>
                 </div>
               </DrawerSection></div>
@@ -142,7 +142,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
                   const current = version.revision === skill.revision;
                   return <ListRow key={version.revision} title={`${formatDay(version.recordedAt)} ${formatClock(version.recordedAt)}`} meta={version.payload.title}
                     onOpen={() => setCompared(version)} trailing={current ? <Tag>当前</Tag> : undefined}
-                    actions={!current ? <Button size="sm" variant="text" disabled={busy} onClick={() => void act(async () => { await restorePersonalSkill(skillId, skill.revision, version.revision); if (alive.current) onChanged(); })}>恢复此版本</Button> : undefined} />;
+                    actions={!current ? <Button actionKind="set" size="sm" variant="text" disabled={busy} onClick={() => void act(async () => { await restorePersonalSkill(skillId, skill.revision, version.revision); if (alive.current) onChanged(); })}>恢复此版本</Button> : undefined} />;
                 })}
               </List>
               {compared && (

@@ -52,7 +52,7 @@ import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrSt
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import {
-  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf,
+  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
   vcrCurrentNodes, vcrReviewIsCurrent,
 } from "./vcrViews.mjs";
 import {
@@ -568,7 +568,7 @@ export class VcrService {
         // The home list says what the study page says under 「需要关注」, an export that did not arrive included.
         this.store.exports(study.id),
       ]);
-      const summary = presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions, exports, now });
+      const summary = presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions, exports, roles, now });
       return { study, summary, reviews, roles };
     }));
     const home = { studies: groups.map((group) => ({ ...group.summary,
@@ -1040,6 +1040,10 @@ export class VcrService {
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
       currentNodes,
     };
+    // What the study's data intake waits on a person for: said on the overview, where the study is read, and not only inside 数据接入.
+    if (tab === 'overview') {
+      bundle.intakeNeeds = intakeNeedsOf(await this.packages.dataPlane?.intakeRows?.(study).catch(() => null));
+    }
     if (tab === 'overview' || tab === 'population') {
       let inputs = null;
       try { inputs = await this.packages.dataPlane?.taskInputs?.(study, user) ?? null; }

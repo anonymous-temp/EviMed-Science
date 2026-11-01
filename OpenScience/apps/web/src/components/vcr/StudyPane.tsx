@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useFitToScroller } from "@/components/workspace/WorkspaceSplit";
 import { Loader2, MessageSquare } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { StepState } from "@/components/ui/StepState";
+import { STOP_STUDY_LABEL } from "./vcrActionWords";
 import { useProjectStore } from "@/lib/projects";
 import { registerTaskPane } from "@/lib/taskPane";
 import type { VcrStudy } from "@/lib/vcrClient";
@@ -10,47 +12,8 @@ import { runDetailLine } from "./vcrActivity";
 
 /** The least a conversation is given: below it the page scrolls rather than squeezing the kernel's composer. */
 const MIN_PANE_PX = 360;
-/** The page's own bottom padding (`py-6`), kept under the pane. */
-const BOTTOM_PX = 24;
 /** How long a study without a conversation is waited for before the pane says so. */
 const PREPARING_MS = 20_000;
-
-/** The nearest ancestor that scrolls: `PageShell`'s container, which is where the pane has to fit. */
-function scrollParent(element: HTMLElement): HTMLElement {
-  for (let node = element.parentElement; node; node = node.parentElement) {
-    const overflow = getComputedStyle(node).overflowY;
-    if (overflow === "auto" || overflow === "scroll") return node;
-  }
-  return document.documentElement;
-}
-
-/**
- * Make the pane the rest of the page: its height is what is left of the scroll container below its own top — under the header and the
- * sticky band, whatever height those have just now. The kernel's conversation is an application with its own scroll and composer; it
- * needs a box with a height, not a column that grows, and a page that scrolls under a band while a frame sits over it is the one thing
- * the pane must never be.
- */
-function useFillViewport(ref: RefObject<HTMLElement | null>, enabled: boolean): void {
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element || !enabled) return undefined;
-    const scroller = scrollParent(element);
-    const fit = () => {
-      const top = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-      element.style.height = `${Math.max(MIN_PANE_PX, Math.floor(scroller.clientHeight - top - BOTTOM_PX))}px`;
-    };
-    fit();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
-    observer?.observe(scroller);
-    // The header may wrap and the band gain a strip: both move the pane's top.
-    for (const part of scroller.querySelectorAll("[data-page-header], [data-page-chrome]")) observer?.observe(part);
-    window.addEventListener("resize", fit);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", fit);
-    };
-  }, [ref, enabled]);
-}
 
 /**
  * The study's conversation, as a view of the study's page (R19, plan §5.3; audit B §4.6): one study is one project is one
@@ -100,7 +63,7 @@ export function StudyPane({ study, unreachable, onRetry, onStop }: {
     if (!element || !placed || !sessionId) return undefined;
     return registerTaskPane({ element, projectId: study.projectId, sessionId });
   }, [placed, sessionId, study.projectId]);
-  useFillViewport(pane, placed);
+  useFitToScroller(pane, placed, MIN_PANE_PX);
 
   if (placed) {
     return (
@@ -128,7 +91,7 @@ export function StudyPane({ study, unreachable, onRetry, onStop }: {
     const detail = runDetailLine(run);
     return (
       <div role="region" aria-label="研究对话" data-study-pane="progress" className="mx-auto flex max-w-measure flex-col items-center gap-1 py-10">
-        <StepState phase="running" step={run.label || "推进研究"} phaseName={detail || undefined} startedAt={run.startedAt} onStop={onStop} />
+        <StepState phase="running" step={run.label || "推进研究"} phaseName={detail || undefined} startedAt={run.startedAt} onStop={onStop} stopLabel={STOP_STUDY_LABEL} />
         <p className="text-caption text-text-3">结束后可以在这里继续</p>
       </div>
     );

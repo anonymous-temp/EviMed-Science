@@ -222,7 +222,7 @@ const WALK_TABLES = {
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
       {"view":"autopilot-first","discovered":true,"pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":false,"rowsNote":"the first-use state of 定时任务, a project with no task (found from the account's own project list: the production walk's throwaway account has nothing, and so do the fixture's study projects): the examples fill the new-task form beside them and make nothing, and the form is read as it stands"},
-      {"view":"active-research","route":"/app/active-research","pattern":"/app/active-research","family":"active-research","template":"T4","budget":"data","rows":false,"rowsNote":"Research rows select an execution in place; the generic walk row click expects navigation, while the selection is exercised by ActiveResearchPage tests."},
+      {"view":"active-research","route":"/app/active-research","pattern":"/app/active-research","family":"active-research","template":"T4","templateNote":"the observatory leads the page (owner, 2026-10-28), and the rest of the research on show is one band of three views under it (结果 / 记录 / 对话, module workspace plan of 2026-11-01, D2) with the activity strip over them while a run is going: a data page that carries a tab list, which T4 allows, and the connected workbench of DESIGN.md's October 20 exception (one object, its picture, its results, its history and its conversation). It is not a module page (T3): it has no step rail, and its tabs are views of one object, not steps","budget":"data","budgetOverride":{"borders":4},"budgetNote":"borders: the band of views adds the tab row's hairline and the selected tab's underline, 4 kinds on the fixture walk of 2026-11-01; otherwise the budget stays the data page's: the new composition (the queue, the row of the research's controls, the dark scene, the band of views) has not been measured on a live walk yet, and a number is not raised here to pass a walk nobody ran — raise it, with the measure, from the first fixture walk of this page","rows":false,"rowsNote":"Research rows select an execution in place; the generic walk row click expects navigation, while the selection is exercised by ActiveResearchPage tests."},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true,"budgetOverride":{"controls":9},"budgetNote":"controls: each message row carries its selection checkbox (design system v3.1, 2026-10-26: select messages and mark them read together; the batch actions are in the toolbar only while something is ticked) — a 16 px native checkbox, one look, the ninth beside the shell's, the tabs, the source and kind chips and the rows; 9 on the fixture walk of 2026-10-26 (int/1026-fix)"},
       {"view":"search","route":"/app/search","pattern":"/app/search/:category?","family":"search","template":"T1","rows":false,"rowsNote":"the search home: a composer and three topic buttons that fill it; no list whose row opens anything"},
       {"view":"search-results","route":"/app/search/literature?q=aripiprazole","pattern":"/app/search/:category?","family":"search","template":"T1","rows":false,"rowsNote":"an account with no Evimed login has no results: the page is walked in the state it meets, the sentence and the way forward it gives"},
@@ -1675,7 +1675,7 @@ export function moduleResultProbe() {
   const body = document.querySelector("main [data-page-body]");
   const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
   if (!body) return { status: "unobservable", coverage: false, errors: [], warnings: [], empty: [] };
-  const native = document.querySelector("[data-page-chrome] button[aria-label='查看：对话']") ?? body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
+  const native = body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
   if (native && visible(native)) return { status: "conversation", coverage: false, boundary: "native conversation inspected separately; no runtime started", errors: [], warnings: [], empty: [] };
   const alerts = [...body.querySelectorAll("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']")].filter(visible);
   const retry = alerts.filter((alert) => [...alert.querySelectorAll("button, a")].some((control) => /^(?:重试|重新载入|重新加载)$/u.test(control.textContent?.trim() ?? "")));
@@ -1710,7 +1710,8 @@ export async function readModuleResult(page, target) {
 /** Expected result choices, including the canonical conversation only where it exists. */
 export function moduleViewLabels(module, programme = true, canonical = false) {
   if (module === "geo") return ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
-  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "匹配", "人群与患者", "对照", "试验", "依据"] : ["总览", "匹配", "人群与患者", "依据"])];
+  // The conversation is not a destination since DS23.5: it is the bar under every result, pressed by itself below.
+  return [...(programme ? ["总览", "匹配", "人群与患者", "对照", "试验", "依据"] : ["总览", "匹配", "人群与患者", "依据"])];
 }
 
 /** Standalone walk mirror of vcrTabs.vcrTabPath, studyLocation.vcrChatPath, geoLocation.geoChatPath and
@@ -1762,6 +1763,50 @@ export function geoContextViewLabels(step) {
  * Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. `views: false` is a module whose
  * steps are its navigation (循证 GEO's `rail`, page table): every step is clicked and read, and there is no selector to go through.
  */
+/**
+ * What a module's page says about its work, in the words DS23 fixes: read from the page, judged apart so a test can hold the judgement.
+ * The composition checks above measure how a page looks; these are the ones that notice when its words and its buttons disagree.
+ */
+export function readWorkspaceFacts() {
+  const text = (/** @type {Element} */ el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const visible = (/** @type {Element} */ el) => { const box = el.getBoundingClientRect(); return box.width > 0 && box.height > 0; };
+  const header = document.querySelector("[data-page-header]");
+  return {
+    railWords: [...document.querySelectorAll("[data-rail-step] .text-caption")].map(text).filter(Boolean),
+    primary: header ? [...header.querySelectorAll("[data-action-priority] button, [data-action-priority] a")].filter((el) => visible(el) && /bg-accent/.test(el.className)).map(text) : [],
+    dock: document.querySelectorAll("[data-page-dock] [data-conversation-bar]").length,
+    split: document.querySelector("[data-workspace]")?.getAttribute("data-workspace") ?? null,
+    actions: [...document.querySelectorAll("[data-action-kind]")].filter(visible).map((el) => ({ kind: el.getAttribute("data-action-kind"), label: text(el) })),
+  };
+}
+
+/** Words a state may not be said in any more, and what a kind of action must begin with; both closed lists (principle 5). */
+const RETIRED_STATE_WORDS = ["未请求", "尚未提交工作"];
+const ACTION_WORDS = { draft: /^(让 AI|打开对话|放进对话|在对话中|问这|补充)/, start: /^(开始|生成|重新|立即|继续|接着|添加并继续|比较|为)/ };
+
+/**
+ * @param {string} view
+ * @param {ReturnType<typeof readWorkspaceFacts>} facts
+ * @returns {string[]}
+ */
+export function workspaceFindings(view, facts) {
+  /** @type {string[]} */
+  const found = [];
+  // A page that gave no answer has said nothing against these: the page's own failure is reported where it loads.
+  if (!Array.isArray(facts?.railWords)) return found;
+  for (const word of RETIRED_STATE_WORDS) if (facts.railWords.includes(word)) found.push(`${view}: the rail says “${word}”: work outside the request says only its name (DS23.2)`);
+  const counts = new Map();
+  for (const word of facts.railWords) counts.set(word, (counts.get(word) ?? 0) + 1);
+  for (const [word, count] of counts) if (word !== "已完成" && count > 3) found.push(`${view}: the rail says “${word}” ${count} times, which tells the reader nothing (DS23.2)`);
+  if (facts.primary.includes("对话")) found.push(`${view}: “对话” is the header's primary: the primary is the next step (DS23.3)`);
+  if (facts.dock === 0 && facts.split === null) found.push(`${view}: no conversation on this view, neither a bar nor a column (DS23.5)`);
+  for (const action of facts.actions) {
+    const words = /** @type {Record<string, RegExp>} */ (ACTION_WORDS)[action.kind ?? ""];
+    if (words && !words.test(action.label)) found.push(`${view}: “${action.label}” is a ${action.kind} action and does not say so (DS23.4)`);
+  }
+  return found;
+}
+
 export async function verifyModuleNavigation(page, module, { programme = true, canonical = false, views: selector = true } = {}) {
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
   await readModuleResult(page, `${module} initial view`);
@@ -1823,7 +1868,7 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
     await header.getByRole("button", { name: "项目总览", exact: true }).click();
     await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
     if (!/^\/app\/geo\/[^/]+\/?$/u.test(new URL(page.url()).pathname)) throw new Error("GEO header overview did not reach the project overview");
-    await header.getByRole("button", { name: "对话", exact: true }).click();
+    await page.locator("[data-page-dock] [data-conversation-bar] button").click();
     await page.waitForFunction(() => /\/chat(?:\/|$)/u.test(location.pathname), undefined, { timeout: 15_000 });
     await page.goto(initial, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
@@ -1857,6 +1902,13 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
   }
   await page.goto(initial, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  // The conversation is one press away on any result, and pressing it keeps the result beside it (DS23.5).
+  if (module === "vcr" && programme) {
+    await page.locator("[data-page-dock] [data-conversation-bar] button").click();
+    await page.waitForFunction(() => /\/chat$/u.test(location.pathname) && new URLSearchParams(location.search).has("result"), undefined, { timeout: 15_000 });
+    await page.goto(initial, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  }
   return { destinations, views, notices };
 }
 
@@ -4176,6 +4228,7 @@ async function main() {
           if (templateOf(name).view?.workflow === "compact" && composition.compactWorkflow?.folded) {
             composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
           }
+          if (templateOf(name).view?.module) failures.push(...workspaceFindings(current, await page.evaluate(readWorkspaceFacts)));
           if (composition.viewSelector && /^(?:geo|vcr)-overview(?:@\d+)?$/.test(name)) {
             const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr", { views: templateOf(name).view?.workflow !== "rail" });
             report.pages[current].navigation = navigation;
@@ -4924,7 +4977,7 @@ export function handoffProbe([action]) {
     return {
       path: `${location.pathname}${location.search}`,
       title: heading ? words(heading) : null,
-      button: [...document.querySelectorAll("main button")].some((el) => visible(el) && words(el) === "深入研究"),
+      button: [...document.querySelectorAll("main button")].some((el) => visible(el) && words(el) === "让 AI 深入研究"),
     };
   }
   const state = window.history.state && typeof window.history.state === "object" ? window.history.state.usr : null;
@@ -4985,7 +5038,7 @@ async function walkEventHandoff(page, base, route) {
   await openRoute(page, base, route);
   const before = await page.evaluate(handoffProbe, ["event"]);
   if (!before || !before.button) return { failures: [], notices: handoffFindings(before, null, null).notices, read: { before } };
-  await page.evaluate(clickNamed, ["button", "深入研究", "main"]);
+  await page.evaluate(clickNamed, ["button", "让 AI 深入研究", "main"]);
   await page.waitForTimeout(1_500);
   const after = await page.evaluate(handoffProbe, ["intent"]);
   let back = null;

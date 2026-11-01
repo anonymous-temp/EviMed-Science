@@ -3,6 +3,7 @@ import { batchPageState, runBatch, toggleBatch, type BatchSelection } from "@/li
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
 import { frontierNoticeHref, shareNoticeHref, geoSignalHref } from "@evimed/domain";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { workStateLabel } from "@evimed/domain";
 import { useSearchParams } from "react-router";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -10,6 +11,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
@@ -17,6 +19,7 @@ import { Menu } from "@/components/ui/Menu";
 import { ShowMore } from "@/components/ui/ShowMore";
 import { Tag } from "@/components/ui/Tag";
 import { InboxBody } from "@/components/inbox/InboxBody";
+import { FEISHU_UNBIND_ACTION, FEISHU_UNBIND_CONFIRM } from "@/components/settings/feishuUnbind";
 import {
   announceInboxChanged,
   inboxErrorMessage,
@@ -49,8 +52,14 @@ function pagesOf(value: string | null): number {
   return Math.min(Math.max(pages, 1), MAX_RESTORED_PAGES);
 }
 
-/** What a notice still asks of the reader, in two characters (2026-09-23 inventory §1.9). */
-const WAITING: Record<string, string> = { question: "待回答", review: "待核对" };
+/**
+ * What a notice still asks of the reader (2026-09-23 inventory §1.9). A question is the platform's 「等你…」; a review is 「待你核对」, which
+ * is the inbox's own word — 「待核对」 means one thing only, a run that delivered with a verdict still open (`RUN_STATE_LABEL`).
+ */
+const WAITING: Record<string, string> = { question: workStateLabel("waiting", "回答"), review: "待你核对" };
+
+/** How often an open inbox reads itself again: in step with the bell's poll, so the dot and the list do not disagree for long. */
+const REFRESH_MS = 60_000;
 
 /**
  * The inbox (contract C1): one list, in the column every page shares.
@@ -110,10 +119,39 @@ export function InboxPage() {
   currentBatchScope.current = batchScope;
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchNotice, setBatchNotice] = useState("");
+  /** A decision whose action is a danger asks first, once, whichever notice it is on (audit D4). */
+  const [confirming, setConfirming] = useState<{ item: InboxItem; action: InboxAction } | null>(null);
   const selectedIds = selection.scope === batchScope ? selection.ids : [];
   useEffect(() => { setSelection({ scope: batchScope, ids: [] }); setBatchNotice(""); }, [batchScope]);
   const generation = useRef(0);
   const mutationGeneration = useRef(0);
+
+  /**
+   * The list as the server has it now: the first page and, in turn, as many more as the reader has brought in (a page that cannot be
+   * read ends the restoring there, and 「加载更多」 asks for the rest), with the unread safety findings as a request of their own.
+   */
+  const readList = useCallback(async (pages: number) => {
+    // The pinned class is its own request: a failure there leaves the loaded page to pin what it holds, as before.
+    const pinned = listInbox({ unread: true, severity: "safety" }).catch(() => null);
+    let page = await listInbox({ unread: filter === "unread" });
+    let reached = 1;
+    while (reached < pages && page.nextCursor) {
+      const next = await listInbox({ unread: filter === "unread", cursor: page.nextCursor }).catch(() => null);
+      if (!next) break;
+      const known = new Set(page.items.map((item) => item.id));
+      page = { ...next, items: [...page.items, ...next.items.filter((item) => !known.has(item.id))] };
+      reached += 1;
+    }
+    return { page, reached, found: await pinned };
+  }, [filter]);
+  const show = ({ page, reached, found }: Awaited<ReturnType<typeof readList>>) => {
+    loadedPages.current = reached;
+    setItems(page.items);
+    setCursor(page.nextCursor);
+    setUnreadTotal(typeof page.unreadTotal === "number" ? page.unreadTotal : null);
+    setSafety(found && typeof found.unreadTotal === "number"
+      ? { items: found.items, cursor: found.nextCursor, total: found.unreadTotal } : null);
+  };
 
   const reload = useCallback(async () => {
     const current = ++generation.current;
@@ -123,39 +161,51 @@ export function InboxPage() {
     setBusyId(null);
     mutationGeneration.current++;
     setError(null);
-    // The pinned class is its own request: a failure there leaves the loaded page to pin what it holds, as before.
-    const pinned = listInbox({ unread: true, severity: "safety" }).catch(() => null);
     try {
-      let page = await listInbox({ unread: filter === "unread" });
-      let reached = 1;
       // A reader coming back to page 3 finds page 3: the pages the address names are read in turn, as 「加载更多」 would.
-      while (reached < wantedPages.current && page.nextCursor) {
-        // A page that cannot be read ends the restoring there: the list keeps what it has and 「加载更多」 asks for the rest.
-        const next = await listInbox({ unread: filter === "unread", cursor: page.nextCursor }).catch(() => null);
-        if (current !== generation.current) return;
-        if (!next) break;
-        const known = new Set(page.items.map((item) => item.id));
-        page = { ...next, items: [...page.items, ...next.items.filter((item) => !known.has(item.id))] };
-        reached += 1;
-      }
-      const found = await pinned;
+      const read = await readList(wantedPages.current);
       if (current !== generation.current) return;
-      loadedPages.current = reached;
-      setItems(page.items);
-      setCursor(page.nextCursor);
-      setUnreadTotal(typeof page.unreadTotal === "number" ? page.unreadTotal : null);
-      setSafety(found && typeof found.unreadTotal === "number"
-        ? { items: found.items, cursor: found.nextCursor, total: found.unreadTotal } : null);
+      show(read);
     } catch (caught) {
       if (current === generation.current) { setItems([]); setError(inboxErrorMessage(caught)); }
     }
-  }, [filter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `show` only sets state and a ref.
+  }, [readList]);
+
+  /** Whether nothing of the reader's is under way: a read of the list lands only on a list that is at rest. */
+  const atRest = useRef(true);
+  atRest.current = !busyId && !batchBusy && !markingAll && !busyGroup && !loadingMore && !loadingSafety;
+  /**
+   * The open list reads itself again (2026-11-01 audit D5: it read once, so the bell could show a dot the list did not hold). It keeps
+   * what is on screen — no skeleton, no lost selection, no error banner — and lands only when no other operation has started since it
+   * began; a read that fails leaves the list as it was, and the next one tries again.
+   */
+  const refresh = useCallback(async () => {
+    if (!atRest.current) return;
+    const current = generation.current;
+    const mutation = mutationGeneration.current;
+    try {
+      const read = await readList(loadedPages.current);
+      if (current !== generation.current || mutation !== mutationGeneration.current || !atRest.current) return;
+      show(read);
+    } catch { /* The list stays as it was. */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `show` only sets state and a ref.
+  }, [readList]);
 
   useEffect(() => {
     const requests = generation;
     void reload();
     return () => { requests.current++; };
   }, [reload]);
+
+  // The poll, and the moment the reader comes back to the tab: only while someone is looking.
+  useEffect(() => {
+    const read = () => { if (document.visibilityState === "visible") void refresh(); };
+    const timer = setInterval(read, REFRESH_MS);
+    document.addEventListener("visibilitychange", read);
+    window.addEventListener("focus", read);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", read); window.removeEventListener("focus", read); };
+  }, [refresh]);
 
   const applySaved = (saved: InboxItem, currentFilter: Filter) => {
     if (saved.readAt) setSelection(existing => ({ ...existing, ids: existing.ids.filter(id => id !== saved.id) }));
@@ -358,7 +408,7 @@ export function InboxPage() {
       open={openId === item.id}
       onToggle={() => { setOpen(openId === item.id ? null : item.id); readOnOpen(item); }}
       onRead={() => void update(item, () => markInboxRead(item.id, item.revision))}
-      onResolve={(actionId) => void update(item, () => resolveInboxItem(item.id, actionId, item.revision))}
+      onResolve={(action) => action.style === "danger" ? setConfirming({ item, action }) : void update(item, () => resolveInboxItem(item.id, action.id, item.revision))}
       onOpened={readOnOpen}
     />
   );
@@ -387,7 +437,7 @@ export function InboxPage() {
         // 「全部已读」 is an action on the list below, so it is the toolbar's — a 36 px text button in the header was a kind of control of its
         // own (the owner's inbox drew nine against a budget of eight), and the header is the title, the scope and at most one primary.
         actions: (
-          <Button variant="text" size="sm" loading={markingAll} disabled={!hasUnread || batchBusy} onClick={() => void readAll()}>
+          <Button variant="text" size="sm" actionKind="set" loading={markingAll} disabled={!hasUnread || batchBusy} onClick={() => void readAll()}>
             {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
           </Button>
         ),
@@ -398,7 +448,7 @@ export function InboxPage() {
             <span role="status" className="text-ui tabular-nums text-text-2">已选 {selectedIds.length} 条</span>
             <Button variant="text" size="sm" disabled={pageSelection.checked || batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: eligibleIds })}>全选已加载的 {eligibleIds.length} 条</Button>
             <Button variant="text" size="sm" disabled={batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: [] })}>清除选择</Button>
-            <Button variant="secondary" size="sm" loading={batchBusy} disabled={!!busyId || markingAll || !!busyGroup} onClick={() => void readSelected()}>所选标为已读</Button>
+            <Button actionKind="set" variant="secondary" size="sm" loading={batchBusy} disabled={!!busyId || markingAll || !!busyGroup} onClick={() => void readSelected()}>所选标为已读</Button>
           </div>
         ) : undefined,
         filters: sources.length > 1 ? [{
@@ -430,6 +480,14 @@ export function InboxPage() {
               </>
             )}
       </div>
+      {confirming && (() => {
+        const { item, action } = confirming;
+        // The Feishu notice asks what the settings page asks; any other danger decision says what it will do in general terms.
+        const copy = action.id === FEISHU_UNBIND_ACTION ? FEISHU_UNBIND_CONFIRM
+          : { title: `${action.label}？`, body: `这条消息会按“${action.label}”处理，处理后不能改回来。`, confirmLabel: action.label };
+        return <ConfirmDialog title={copy.title} subject={action.id === FEISHU_UNBIND_ACTION ? undefined : item.title} body={copy.body} confirmLabel={copy.confirmLabel} busy={busyId === item.id}
+          onConfirm={() => { setConfirming(null); void update(item, () => resolveInboxItem(item.id, action.id, item.revision)); }} onCancel={() => setConfirming(null)} />;
+      })()}
       {openGroupEntry && (
         <Drawer
           title={inboxGroupTitle(openGroupEntry.group, projects.find((project) => project.id === openGroupEntry.group.projectId)?.name)}
@@ -437,7 +495,7 @@ export function InboxPage() {
           onClose={() => setGroup(null)}
           widthClassName="max-w-2xl"
           actions={!openGroupEntry.group.safety && openGroupEntry.group.unread > 0 ? (
-            <Button variant="text" size="sm" loading={busyGroup === openGroupEntry.group.key} onClick={() => void readGroup(openGroupEntry.group)}>全部标为已读</Button>
+            <Button actionKind="set" variant="text" size="sm" loading={busyGroup === openGroupEntry.group.key} onClick={() => void readGroup(openGroupEntry.group)}>全部标为已读</Button>
           ) : undefined}
         >
           <List label="这一组的消息">{openGroupEntry.group.items.map(row)}</List>
@@ -512,7 +570,7 @@ function InboxRow({ item, selection, operator, busy, open, onToggle, onRead, onR
   open: boolean;
   onToggle: () => void;
   onRead: () => void;
-  onResolve: (actionId: string) => void;
+  onResolve: (action: InboxAction) => void;
   onOpened: (item: InboxItem) => void;
 }) {
   const unread = !item.readAt;
@@ -559,7 +617,7 @@ function InboxRow({ item, selection, operator, busy, open, onToggle, onRead, onR
             label: action.label,
             destructive: action.style === "danger",
             disabled: busy,
-            onSelect: () => onResolve(action.id),
+            onSelect: () => onResolve(action),
           }))}
         />
       ) : undefined}

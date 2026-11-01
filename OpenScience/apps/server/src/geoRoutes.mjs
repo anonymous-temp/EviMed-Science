@@ -184,6 +184,7 @@ function money(value, field, zero = false) {
  *     conversationSessionId?: (user: any, geoId: string) => Promise<string | null>,
  *     openConversation?: (user: any, geoId: string, target: any) => Promise<any>,
  *     conversationRead?: (user: any, geoId: string, sessionId: string, action: string, body?: any) => Promise<any>,
+ *     stopProgrammeRun?: (ownerId: string, projectId: string, runId: string) => Promise<{ root: string }>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
  *   orchestrator?: { setMonitoringAutomation?: (user: any, project: any, enabled: boolean) => Promise<any>, runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
@@ -722,6 +723,15 @@ export function createGeoRoutes(dependencies) {
       const result = await hooks.orchestrator.setMonitoringAutomation({ ...asOwner(user, project), actorId: user.id }, project, body.enabled);
       await audit("geo.monitoring.automation", "completed", { userId: user.id, code: id, detail: body.enabled ? "confirmed" : "declined" });
       return reply(result);
+    }
+    // 「停止这一项」 on the page's strip: one run of the programme's, stopped the way a run's own cancel stops it. What it had done stays.
+    if (parts.length === 5 && method === "POST" && tab === "runs" && parts[4] === "stop") {
+      await bodyOf(req, maxJsonBytes, []);
+      const project = await service.requireProject(user, id, "run");
+      if (!dependencies.projects?.stopProgrammeRun) throw UNAVAILABLE();
+      const stopped = await dependencies.projects.stopProgrammeRun(project.userId, project.projectId, parts[3]);
+      await audit("geo.run.stop", "completed", { userId: user.id, code: id, detail: `${parts[3]}:${stopped.root}` });
+      return reply(stopped);
     }
     if (parts.length === 3 && method === "POST" && tab === "run") {
       const body = await bodyOf(req, maxJsonBytes, ["step"]);

@@ -62,7 +62,7 @@ it('opens import on an empty set, preserves quoted CSV duplicates and saves only
   show();
   // The step's actions are its block's, not the page's primary (the header's, DESIGN.md T3; the fixture walk of b559d4b7e).
   expect(screen.getByRole('button', { name: '导入问句' })).not.toHaveClass('bg-accent');
-  expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).not.toHaveClass('bg-accent');
+  expect(screen.getByRole('button', { name: '开始第 3 版诊断' })).not.toHaveClass('bg-accent');
   await userEvent.click(screen.getByRole('button', { name: '导入问句' }));
   const csv = new File(['ID,Question\n001,"  A, B\nC  "\n0,"  A, B\nC  "'], 'actual130.csv', { type: 'text/csv' });
   // jsdom File has no text/arrayBuffer; the fixture supplies original bytes.
@@ -84,15 +84,15 @@ it('opens import on an empty set, preserves quoted CSV duplicates and saves only
   expect(input.rows.map((row: { originalId: string }) => row.originalId)).toEqual(['001', '0']);
   expect(input.rows[0].text).toBe('  A, B\nC  ');
   expect(input.requestKey).toBeTruthy();
-  expect(await screen.findByRole('button', { name: '启动第 4 版诊断' })).toBeVisible();
+  expect(await screen.findByRole('button', { name: '开始第 4 版诊断' })).toBeVisible();
 });
 it('reuses a diagnosis request key across network retry and remount, without silently resampling', async () => {
   client.startGeoDiagnosis.mockRejectedValueOnce(new Error('network'));
   const rendered = show();
-  await userEvent.click(screen.getByRole('button', { name: '启动第 3 版诊断' }));
+  await userEvent.click(screen.getByRole('button', { name: '开始第 3 版诊断' }));
   await screen.findByRole('alert');
   const first = client.startGeoDiagnosis.mock.calls[0][2]; rendered.unmount(); show();
-  await userEvent.click(screen.getByRole('button', { name: '启动第 3 版诊断' }));
+  await userEvent.click(screen.getByRole('button', { name: '开始第 3 版诊断' }));
   await screen.findByText(/总任务 102/);
   expect(client.startGeoDiagnosis.mock.calls[1]).toEqual(['g1', 3, first]);
   expect(screen.getByRole('status')).toHaveTextContent('diagnosisRound=r1');
@@ -103,10 +103,10 @@ it('uses global counts, pages progress and only restores explicitly selected unk
   expect(screen.queryByRole('checkbox', { name: /Successful original/ })).toBeNull();
   expect(screen.getByRole('link', { name: '查看回答' })).toHaveAttribute('href', expect.stringContaining('s1'));
   await userEvent.click(screen.getByRole('checkbox', { name: /恢复 0/ }));
-  await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' }));
+  await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('可能已有计费'); expect(client.recoverGeoDiagnosis).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole('checkbox', { name: /我确认/ }));
-  await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' }));
+  await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' }));
   await waitFor(() => expect(client.recoverGeoDiagnosis).toHaveBeenCalledWith('g1', 'r1', expect.objectContaining({ jobIds: ['unknown'], acknowledgeUnknown: true })));
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('diagnosisRound=r2'));
 });
@@ -115,7 +115,7 @@ it('keeps diagnosis on refresh and hides writes for viewers', async () => {
   await screen.findByText(/总任务 102/);
   expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: '导入问句' })).toBeNull();
-  expect(screen.queryByRole('button', { name: /启动第/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /开始第/ })).toBeNull();
   expect(screen.queryByRole('checkbox')).toBeNull();
   await userEvent.click(screen.getByRole('button', { name: '下一页' }));
   await waitFor(() => expect(client.getGeoDiagnosisProgress).toHaveBeenCalledWith('g1', 'r1', 100));
@@ -147,12 +147,12 @@ it('retries an ambiguous selected recovery after remount using the identical req
   const initial = show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
   await userEvent.click(screen.getByRole('checkbox', { name: /恢复 0/ }));
   await userEvent.click(screen.getByRole('checkbox', { name: /我确认/ }));
-  await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' }));
+  await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' }));
   await screen.findByRole('alert'); const request = client.recoverGeoDiagnosis.mock.calls[0][2];
   initial.unmount();
   client.getGeoDiagnosisProgress.mockResolvedValue(progress({ cells: progress().cells.map(cell => ({ ...cell, recoverable: false })) }));
   show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
-  await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' }));
+  await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' }));
   await waitFor(() => expect(client.recoverGeoDiagnosis.mock.calls[1][2]).toEqual(request));
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('diagnosisRound=r2'));
 });
@@ -162,7 +162,7 @@ it('does not ask about unknown charges for known failed jobs', async () => {
   show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
   await userEvent.click(screen.getByRole('checkbox', { name: /恢复 0/ }));
   expect(screen.queryByRole('checkbox', { name: /我确认/ })).toBeNull();
-  await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' }));
+  await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' }));
   await waitFor(() => expect(client.recoverGeoDiagnosis).toHaveBeenCalled());
   expect(client.recoverGeoDiagnosis.mock.calls[0][2]).not.toHaveProperty('acknowledgeUnknown');
 });
@@ -170,7 +170,7 @@ it('keeps native question sets out of the lossful imported-row editor', async ()
   render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={{ ...data, contract: null }} onSaved={vi.fn()} /></MemoryRouter>);
   expect(screen.queryByRole('button', { name: '调整口径' })).toBeNull();
   expect(screen.queryByRole('button', { name: '编辑为新版本' })).toBeNull();
-  expect(screen.queryByRole('button', { name: /启动第/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /开始第/ })).toBeNull();
   expect(screen.getByRole('button', { name: '导入问句' })).toBeVisible();
 });
 it('does not reveal another account pending question import', async () => {
@@ -210,7 +210,7 @@ it('does not restore an editor request when permissions are revoked during the i
 it('never sends start or recovery mutations while durable storage repeatedly fails', async () => {
   const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
   show();
-  const start = await screen.findByRole('button', { name: '启动第 3 版诊断' });
+  const start = await screen.findByRole('button', { name: '开始第 3 版诊断' });
   await waitFor(() => expect(start).toBeEnabled());
   await userEvent.click(start); await screen.findByRole('alert');
   await userEvent.click(start); expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
@@ -219,7 +219,7 @@ it('never sends start or recovery mutations while durable storage repeatedly fai
 it('continues account initialization after quarantining a corrupt pending record', async () => {
   localStorage.setItem('geo-question-import:t1:u1:prj_geo_1:g1', '{broken');
   show();
-  await waitFor(() => expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: '开始第 3 版诊断' })).toBeEnabled());
   expect(screen.queryByRole('button', { name: '保存为新版本' })).toBeNull();
 });
 it('does not send selected recovery after repeated storage quota errors', async () => {
@@ -227,8 +227,8 @@ it('does not send selected recovery after repeated storage quota errors', async 
   await userEvent.click(screen.getByRole('checkbox', { name: /恢复 0/ })); await userEvent.click(screen.getByRole('checkbox', { name: /我确认/ }));
   const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
   try {
-    await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' })); await screen.findByRole('alert');
-    await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' })); await screen.findByRole('alert');
+    await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' })); await screen.findByRole('alert');
+    await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' })); await screen.findByRole('alert');
     expect(client.recoverGeoDiagnosis).not.toHaveBeenCalled();
   } finally { storage.mockRestore(); }
 });
@@ -424,17 +424,17 @@ it.each(['import','edit'] as const)('does not replace a current %s draft when sl
 it('offers no 启动诊断 while a set is being imported or edited — it would start the old saved version', async () => {
   const user = userEvent.setup();
   show();
-  await waitFor(() => expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: '开始第 3 版诊断' })).toBeEnabled());
   await user.click(screen.getByRole('button', { name: '导入问句' }));
-  expect(screen.queryByRole('button', { name: /启动第 \d+ 版诊断/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /开始第 \d+ 版诊断/ })).toBeNull();
   await user.click(screen.getByRole('button', { name: '返回问题列表' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: '开始第 3 版诊断' })).toBeEnabled());
   expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
 });
 
 it('offers no 启动诊断 on a deep link into the mode either', () => {
   show('/questions?questionMode=edit');
-  expect(screen.queryByRole('button', { name: /启动第 \d+ 版诊断/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /开始第 \d+ 版诊断/ })).toBeNull();
   expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
 });
 

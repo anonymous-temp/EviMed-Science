@@ -31,7 +31,7 @@ describe("what a step in line waits for", () => {
   it("names the step, the run, the allowance or the engine", () => {
     expect(waitingSentence("evidence")).toBe("等“证据”做完");
     expect(waitingSentence("run")).toBe("等这次运行做完");
-    expect(waitingSentence("allowance")).toBe("等研究额度");
+    expect(waitingSentence("allowance")).toBe("等你充值");
     expect(waitingSentence(null, true)).toBe("等计算引擎恢复");
   });
 

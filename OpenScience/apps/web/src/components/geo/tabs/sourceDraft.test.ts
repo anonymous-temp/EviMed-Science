@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sourceDraft } from "./geoTabText";
 
-describe("the draft 「在对话中处理」 hands over for a source", () => {
+describe("the draft 「让 AI 处理这个信源」 hands over for a source", () => {
   const base = { product: "信尔美", name: "百度百科", domain: "baike.baidu.com", cited: 69, wrong: 14, mentions: 35 };
 
   it("names the site by its domain and states the count as co-occurrence, with the wrong sentences", () => {

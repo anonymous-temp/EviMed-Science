@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, PenLine } from "lucide-react";
 import { getWebProjectId, listWebAgentRuns, steerWebAgentRun, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { addAgendaMaterials, cancelEpisode, followUpAgenda, getResearchState, listAgendas, listEpisodes, removeAgendaMaterial, runAgendaNow, type AgendaRecord, type EpisodeRecord, type ResearchState } from "@/lib/autopilotClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
@@ -11,25 +11,28 @@ import { KNOWLEDGE_BASE_ACCEPT, partitionKnowledgeBaseFiles } from "@/lib/knowle
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { goalTitle, observedResearchGoals, type ObservedResearchGoal } from "@/lib/observedResearchGoals";
-import { chatPath } from "@/lib/runLocation";
-import { newRuntimeUiIntent, scopedConversationPath } from "@/lib/runtimeUiNavigation";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { registerTaskPane } from "@/lib/taskPane";
 import { snapshotHref } from "@/lib/readPages";
 import { researchDatabaseStatus } from "@/lib/researchDatabaseClient";
 import { listPlatformSkills } from "@/lib/skillLibraryClient";
-import { taskPath } from "@/lib/taskLocation";
+import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { ConversationHeldNote } from "@/components/autopilot/ConversationHeldNote";
 import { MaterialPicker } from "@/components/autopilot/MaterialPicker";
 import { ResearchDatabaseDialog } from "@/components/autopilot/ResearchDatabaseDialog";
 import { ResearchDataPanel } from "@/components/autopilot/ResearchDataPanel";
 import { ResearchObservatory } from "@/components/autopilot/ResearchObservatory";
 import { QUEUE_MODE_WORD, ResearchQueue, type QueueEntry, type QueueMode } from "@/components/autopilot/ResearchQueue";
+import { roundModeOf, runLive, streamEnded, type ObservedRun } from "@/components/autopilot/researchRunState";
 import { TaskForm } from "@/components/autopilot/TaskForm";
-import { activeAgenda, inFlight, latestRun, repeatLine, runState, scheduleOf } from "@/components/autopilot/taskPresentation";
+import { activeAgenda, CONVERSATION_HELD, CONVERSATION_HELD_EACH_RUN, inFlight, latestRun, repeatLine, runState, scheduleOf } from "@/components/autopilot/taskPresentation";
+import { boundedLock, TaskPane } from "@/components/autopilot/TaskPane";
+import { useExecutionFinishToasts } from "@/components/autopilot/useExecutionFinishToasts";
 import { Button } from "@/components/ui/Button";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { Textarea } from "@/components/ui/Input";
@@ -58,14 +61,26 @@ const FOUND_TAG: Record<ResearchState["found"][number]["check"], { label: string
   reproduced: { label: "已复现", tone: "accent" }, stands: { label: "复核成立", tone: "neutral" }, refuted: { label: "已推翻", tone: "warn" },
 };
 
-/** A goal round's state as its own record has it: only a round that ran to its end is 已完成, and one that failed or was stopped is not. */
+/** A goal round's state as its own record has it (the queue's word for it, with no stream to ask). */
 function roundMode(run: WebAgentRun): QueueMode {
-  return run.status === "running" ? "running" : run.status === "succeeded" ? "done" : run.status === "failed" ? "failed" : "ended";
+  return roundModeOf(run, null);
 }
 
-function agendaMode(agenda: AgendaRecord, episodes: readonly EpisodeRecord[]): QueueMode {
-  const live = episodes.find(item => item.payload.agendaId === agenda.id && inFlight(item));
-  if (live) return live.payload.status === "queued" ? "queued" : "running";
+/** The views of the research on show, under the observatory: what it produced, what happened, and its conversation. */
+type ResearchTab = "results" | "records" | "conversation";
+const RESEARCH_TABS = [{ value: "results", label: "结果" }, { value: "records", label: "记录" }, { value: "conversation", label: "对话" }] as const;
+
+/**
+ * An execution's mode in the queue. The run stream, where it is open for the run, says whether it is going (`runLive`); the poll
+ * says it otherwise.
+ */
+function agendaMode(agenda: AgendaRecord, episodes: readonly EpisodeRecord[], observed: ObservedRun | null): QueueMode {
+  const flying = episodes.find(item => item.payload.agendaId === agenda.id && inFlight(item));
+  if (flying) {
+    if (runLive(flying.payload.runId, true, observed)) return flying.payload.status === "queued" ? "queued" : "running";
+    // The poll still has it on its way and the stream has said how it ended: the card says that, as the stream's goal rounds do.
+    return roundModeOf({ id: flying.payload.runId ?? "", status: "running" }, observed);
+  }
   if (!activeAgenda(agenda)) return "paused";
   const last = latestRun(agenda.id, episodes)?.payload.status;
   return last === "merged" ? "done" : last === "failed" ? "failed" : "waiting";
@@ -90,7 +105,11 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const [goalError, setGoalError] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   const [selectedRound, setSelectedRound] = useState<string | null>(null);
+  // The conversation of a new long research, being drafted (or just begun and not yet in the goal list). A goal's own conversation is
+  // not held here: it is the 对话 view of the goal on show.
   const [nativeSession, setNativeSession] = useState<string | null>(null);
+  const [tab, setTab] = useState<ResearchTab>("results");
+  const [observed, setObserved] = useState<ObservedRun | null>(null);
   const [nativePending, setNativePending] = useState(false);
   const [nativeUncertain, setNativeUncertain] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -233,7 +252,9 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const selected = !goal ? agendas?.find(item => item.id === selectedId) ?? null : null;
   const ownEpisodes = history?.agendaId === selectedId ? [...history.items].sort((a, b) => (b.payload.createdAt ?? "").localeCompare(a.payload.createdAt ?? "")) : [];
   const execution = ownEpisodes.find(item => item.id === selectedEpisodeId) ?? ownEpisodes[0] ?? null;
-  const runningEpisode = selectedId ? episodes.find(item => item.payload.agendaId === selectedId && inFlight(item)) ?? ownEpisodes.find(inFlight) ?? null : null;
+  const polledRunning = selectedId ? episodes.find(item => item.payload.agendaId === selectedId && inFlight(item)) ?? ownEpisodes.find(inFlight) ?? null : null;
+  // Whether it is still going is the run stream's word where the stream is open for it, and the poll's otherwise (`runLive`).
+  const runningEpisode = polledRunning && runLive(polledRunning.payload.runId, true, observed) ? polledRunning : null;
   const round = goal ? goal.rounds.find(item => item.id === selectedRound) ?? goal.latest : null;
   const liveSteer = runningEpisode?.payload.status === "running" && runningEpisode.payload.interactive === true && !!runningEpisode.payload.runId;
 
@@ -243,7 +264,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   // chosen before it; and the run list, the heavy one, is read at the sidebar's pace.
   const tasksBusy = episodes.some(inFlight);
   const studyShown = selected !== null;
-  const studyBusy = runningEpisode !== null;
+  const studyBusy = polledRunning !== null;
   const reads = useRef({ tasks: () => {}, runs: () => {}, study: () => {} });
   reads.current = {
     tasks: () => void load(false, true),
@@ -251,21 +272,36 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     study: () => { void loadProgress(); if (!historyBusy) void loadHistory(); },
   };
   useEffect(() => pollEvery(() => reads.current.tasks(), tasksBusy ? POLL_ACTIVE_MS : POLL_IDLE_MS, operating), [tasksBusy]);
+  // The stream says a run is over: the records are read at once, so the page does not wait for the next poll to agree with it.
+  const ended = streamEnded(observed);
+  useEffect(() => { if (ended) { reads.current.tasks(); reads.current.runs(); if (studyShown) reads.current.study(); } }, [ended, observed?.runId, studyShown]);
+  useExecutionFinishToasts(episodes, agendaId => agendas?.find(item => item.id === agendaId)?.payload.title);
   useEffect(() => pollEvery(() => reads.current.runs(), POLL_RUNS_MS, operating), []);
   useEffect(() => (studyShown ? pollEvery(() => reads.current.study(), studyBusy ? POLL_ACTIVE_MS : POLL_IDLE_MS, operating) : undefined), [studyShown, studyBusy, selectedId]);
 
   const queue: QueueEntry[] = [
     ...goals.map(item => ({ key: `goal:${item.key}`, title: goalTitle(item), kind: "长期" as const,
-      mode: roundMode(item.latest),
+      mode: roundModeOf(item.latest, observed),
       meta: item.latest.status === "running" ? `本轮 ${at(item.latest.startedAt)} 开始` : `最近一轮 ${at(item.latest.finishedAt ?? item.latest.startedAt)}` })),
     ...(agendas ?? []).map(item => {
       const last = latestRun(item.id, episodes);
       const schedule = scheduleOf(item);
-      return { key: `agenda:${item.id}`, title: item.payload.title, kind: "定时" as const, mode: agendaMode(item, episodes),
+      return { key: `agenda:${item.id}`, title: item.payload.title, kind: "定时" as const, mode: agendaMode(item, episodes, observed),
         meta: [repeatLine(schedule), last ? `上次 ${at(last.payload.createdAt)}` : ""].filter(Boolean).join(" · ") };
     }),
   ].sort((a, b) => Number(b.mode === "running" || b.mode === "queued") - Number(a.mode === "running" || a.mode === "queued"));
   const queueSelected = goal ? `goal:${goal.key}` : selected ? `agenda:${selected.id}` : null;
+  // Work that is going now, for the band's activity strip: the one on show first. A queued execution has not started, and the queue's card says so.
+  const working = [
+    ...goals.filter(item => roundModeOf(item.latest, observed) === "running").map(item => ({ key: `goal:${item.key}`, label: `推进“${goalTitle(item)}”`, since: item.latest.startedAt })),
+    ...(agendas ?? []).flatMap(item => {
+      const live = episodes.find(entry => entry.payload.agendaId === item.id && inFlight(entry) && entry.payload.status !== "queued" && runLive(entry.payload.runId, true, observed));
+      return live ? [{ key: `agenda:${item.id}`, label: `运行“${item.payload.title}”`, since: live.payload.createdAt }] : [];
+    }),
+  ];
+  const shownWork = working.find(item => item.key === queueSelected) ?? working[0];
+  // A bounded execution holds the project's conversation while it runs: said here, before the researcher meets the wall (audit D1).
+  const holder = boundedLock(episodes);
 
   async function operation(action: () => Promise<unknown>) {
     if (operating.current) return;
@@ -303,6 +339,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     const result = await runAgendaNow(agendaId, requestId);
     recordEpisode(result.episode, agendaId);
     pendingRuns.current.delete(agendaId);
+    toast.success(`已开始运行。${CONVERSATION_HELD}`);
   });
   const stopExecution = (agendaId: string, episodeId: string) => void operation(async () => {
     const requestId = pendingStops.current.get(episodeId) ?? crypto.randomUUID();
@@ -351,9 +388,6 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     const state = location.state && typeof location.state === "object" ? location.state : {};
     navigate(location.pathname + location.search, { replace: true, state: { ...state, runtimeUiIntent: intent } });
   };
-  const openGoalConversation = (sessionId: string) => {
-    pendingNativeIntent.current = null; setNativePending(false); clearNativeIntent(); setNativeSession(sessionId);
-  };
   const onNativeAcknowledged = useCallback((requestId: string, sessionId: string) => {
     if (!mounted.current || pendingNativeIntent.current !== requestId) return;
     pendingNativeIntent.current = null; acknowledgedNativeIntent.current = requestId; setNativePending(false);
@@ -367,7 +401,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   }, [navigate]);
   const choose = (key: string) => {
     if (operating.current) return;
-    closeNative(); setSelectedEpisodeId(null); setSelectedRound(null);
+    closeNative(); setSelectedEpisodeId(null); setSelectedRound(null); setTab("results");
     if (key.startsWith("goal:")) { setSelectedGoal(key.slice(5)); return; }
     setSelectedGoal(null); setSelectedId(key.slice(7));
   };
@@ -379,84 +413,113 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const reading = !error && (!loaded || (agendas.length === 0 && goalRuns === null && !goalError));
   const runId = goal ? round?.id ?? null : execution?.payload.runId ?? null;
   const observedTitle = goal ? goalTitle(goal) : selected?.payload.title;
+  // What is on show is the goal or the task chosen in the queue. A new long research being drafted takes the body for itself.
+  const subject = Boolean(goal || selected);
+  const drafting = nativeSession !== null;
+  const showViews = loaded && !nothing && !reading && subject && !drafting;
   const startButtons = <>
-    <Button disabled={nativePending || longFeature !== "enabled"} onClick={startLongResearch}>新建长期研究</Button>
-    <Button variant="secondary" disabled={!available} onClick={() => setEditor(true)}>新建定时研究</Button>
+    <Button actionKind="draft" disabled={nativePending || longFeature !== "enabled"} onClick={startLongResearch}><PenLine size={16} aria-hidden="true" />让 AI 做长期研究</Button>
+    <Button variant="secondary" disabled={!available} onClick={() => setEditor(true)}>新建定时任务</Button>
   </>;
-  // The header says the same two things as an action plan (design system v3.2): the long research is the primary one.
+  // The header says the same two things as an action plan (design system v3.2): the long research is the primary one. It fills the
+  // conversation's composer with 「/loopx 」 and nothing runs until the researcher sends it, so it is a draft and says so.
   const startPlan: PageActionPlan = {
-    primary: { id: "new-long", label: "新建长期研究", disabled: nativePending || longFeature !== "enabled", onSelect: startLongResearch },
-    secondary: [{ id: "new-scheduled", label: "新建定时研究", disabled: !available, onSelect: () => setEditor(true) }],
+    primary: { id: "new-long", label: "让 AI 做长期研究", kind: "draft", icon: PenLine, disabled: nativePending || longFeature !== "enabled", onSelect: startLongResearch },
+    secondary: [{ id: "new-scheduled", label: "新建定时任务", disabled: !available, onSelect: () => setEditor(true) }],
   };
+  const files = selected ? ownEpisodes.flatMap(item => (item.payload.artifactRefs ?? [])
+    .filter(ref => ref.projectId === projectId && ref.runId === item.payload.runId && ref.sessionId === item.payload.sessionId && SAFE_RUN.test(ref.runId) && safeWorkspacePath(ref.path))
+    .map(ref => ({ runId: ref.runId, path: ref.path, at: item.payload.createdAt }))) : [];
+  const goalFiles = goal ? goalFilesOf(goal) : [];
+  const ledgerRun = holder?.payload.runId ? goalRuns?.find(item => item.id === holder.payload.runId) ?? null : null;
 
-  // With nothing yet the empty state carries the two ways to start; the header does not repeat them.
-  return <PageShell title="主动科研" width="wide" actionPlan={nothing && !nativeSession ? undefined : startPlan}><div className="space-y-6">
+  // The one path to the conversation of what is on show: the 对话 view. For a goal it is the goal's own conversation, for a scheduled task
+  // the task's (the page the three buttons used to open elsewhere).
+  const subline = selected ? (execution ? `${runState(execution.payload)} · ${at(execution.payload.createdAt)}` : historyError ? "执行记录暂不可用" : history ? "还没有执行过" : "正在载入执行记录")
+    : goal ? `长期研究 · 已推进 ${goal.rounds.length} 轮` : "";
+  const subjectRow = subject && <section aria-label="当前研究" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+    <p className="min-w-0 truncate text-caption text-text-3">{subline}</p>
+    <div className="flex flex-wrap items-center gap-2">
+      {selected && (runningEpisode ? <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => stopExecution(selected.id, runningEpisode.id)}>停止本次</Button>
+        : <Button variant="secondary" actionKind="start" disabled={busy || !available || !activeAgenda(selected) || !history || !!historyError || history.agendaId !== selected.id} onClick={() => runNow(selected.id)}>立即运行</Button>)}
+      {selected && <Button variant="secondary" actionKind="set" disabled={busy || !available || !activeAgenda(selected)} onClick={() => { setDirection(""); setSteering(true); }}>调整研究方向</Button>}
+      <Button variant="secondary" onClick={() => setTab("conversation")}>打开对话</Button>
+    </div>
+  </section>;
+
+  const body = drafting
+    ? <NativeResearchPane key={`${projectId}:${nativeSession}`} projectId={projectId} sessionId={nativeSession} draft onAcknowledged={onNativeAcknowledged} onClose={closeNative} />
+    : !showViews ? null
+    : tab === "conversation"
+      ? goal ? <NativeResearchPane key={`${projectId}:${goal.sessionId}`} projectId={projectId} sessionId={goal.sessionId} onAcknowledged={() => undefined} onClose={() => setTab("results")} />
+        : selected ? <TaskPane agenda={selected} execution={execution} lock={holder} ledgerRun={ledgerRun} projectId={projectId} /> : null
+      : tab === "records"
+        ? goal ? <GoalRounds goal={goal} round={round} busy={busy} onRound={setSelectedRound} />
+          : selected ? <section aria-label="执行记录" className="space-y-2">
+            <h3 className="text-ui font-semibold text-text">执行记录</h3>
+            {historyError && <LoadError message={historyError} onRetry={() => void loadHistory()} />}
+            {!history && !historyError ? <p role="status" className="text-ui text-text-3">正在载入</p> : ownEpisodes.length === 0 ? (history ? <p className="text-ui text-text-3">还没有执行过</p> : null)
+              : <List divided>{ownEpisodes.map(item => {
+                const itemFiles = (item.payload.artifactRefs ?? []).filter(ref => ref.projectId === projectId && ref.runId === item.payload.runId && ref.sessionId === item.payload.sessionId && SAFE_RUN.test(ref.runId) && safeWorkspacePath(ref.path));
+                return <ListRow key={item.id} title={`${runState(item.payload)} · ${at(item.payload.createdAt) || "时间未知"}`} selected={execution?.id === item.id} onOpen={() => setSelectedEpisodeId(item.id)}
+                  meta={itemFiles.length ? <span className="flex flex-wrap gap-x-3">{itemFiles.map(file => <Link key={`${file.runId}:${file.path}`} className="break-all text-accent underline" to={snapshotHref(file.runId, file.path)}>{file.path.split("/").pop()}</Link>)}</span> : undefined} />;
+              })}</List>}
+            {history?.nextCursor && <Button variant="text" disabled={historyBusy} onClick={() => void loadHistory(history.nextCursor ?? undefined)}>查看更早记录</Button>}
+          </section> : null
+        : goal ? <ResultsPanel progress={null} files={goalFiles} />
+          : selected ? <div className="grid gap-6 lg:grid-cols-2">
+            <ResultsPanel progress={progress?.agendaId === selectedId ? progress : null} files={files} />
+            <ResearchDataPanel materials={progress?.agendaId === selectedId ? progress.materials : []} loading={!progress && !progressError} error={progressError} busy={busy} databaseAvailable={databaseAvailable} onUpload={upload} onPick={() => setPicking(true)} onDatabase={() => setDatabaseOpen(true)} onRemove={sourceId => void operation(() => removeAgendaMaterial(selected.id, sourceId))} onRetry={() => void loadProgress()} />
+          </div> : null;
+
+  // The observatory leads the page (owner, 2026-10-28); the rest of the research is its views under the tabs.
+  const introduction = <div className="space-y-6">
     {nativeUncertain && <p role="status" className="text-ui text-text">上次新建的长期研究可能已经创建，请先在对话列表里看一眼，再决定是否重新新建。</p>}
     {longFeature === "error" && <LoadError message="长期研究暂时无法使用。" onRetry={() => void loadLongFeature()} />}
-    {longFeature === "disabled" && <p className="text-ui text-text">长期研究暂未开通，定时研究可以正常使用。</p>}
+    {longFeature === "disabled" && <p className="text-ui text-text">长期研究暂未开通，定时任务可以正常使用。</p>}
     {error && <LoadError message={error} onRetry={() => void load()} />}
     {goalError && <LoadError message="长期研究暂时无法载入。" onRetry={() => void loadGoals()} />}
     {!available && <p className="text-ui text-text">定时执行暂不可用，已有成果可以照常查看。</p>}
+    {holder && <ConversationHeldNote onStop={selected && holder.payload.agendaId === selected.id ? () => stopExecution(selected.id, holder.id) : undefined} busy={busy}
+      otherTaskId={!selected || holder.payload.agendaId !== selected.id ? holder.payload.agendaId : undefined} />}
     {reading && <div role="status" aria-label="正在载入研究" className="h-64 animate-pulse rounded-card bg-surface-2" />}
     {nothing && !nativeSession && <EmptyState icon={FlaskConical} titleAs="h2" title="让 AI 持续为你做研究"
-      description={<><span className="block">长期研究：写下一个研究目标，AI 会检索、阅读、分析、撰写，一轮轮推进直到完成。</span><span className="mt-1 block">定时研究：按你设定的时间自动追踪一个问题，每次执行都会留下成果。</span></>}
+      description={<><span className="block">长期研究：写下一个研究目标，AI 会检索、阅读、分析、撰写，一轮轮推进直到完成。</span><span className="mt-1 block">定时任务：按你设定的时间自动做一件事或追踪一个问题，每次执行都会留下成果。</span></>}
       action={<div className="flex flex-wrap justify-center gap-2">{startButtons}</div>} />}
-    {loaded && !nothing && !reading && <div>
+    {loaded && !nothing && !reading && <div className="space-y-2">
       <ResearchQueue entries={queue} selected={queueSelected} disabled={busy} onSelect={choose} />
-      <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} />
-    </div>}
-
-    {selected && <section aria-label="当前研究" className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0"><h2 className="truncate text-section font-semibold text-text">{selected.payload.title}</h2>
-          <p className="text-caption text-text-3">{execution ? `${runState(execution.payload)} · ${at(execution.payload.createdAt)}` : historyError ? "执行记录暂不可用" : history ? "还没有执行过" : "正在载入执行记录"}</p></div>
-        <div className="flex flex-wrap items-center gap-2">
-          {runningEpisode ? <Button variant="secondary" disabled={busy} onClick={() => stopExecution(selected.id, runningEpisode.id)}>停止本次</Button>
-            : <Button variant="secondary" disabled={busy || !available || !activeAgenda(selected) || !history || !!historyError || history.agendaId !== selected.id} onClick={() => runNow(selected.id)}>立即执行</Button>}
-          <Button variant="secondary" disabled={busy || !available || !activeAgenda(selected)} onClick={() => { setDirection(""); setSteering(true); }}>调整研究方向</Button>
-          <Button variant="secondary" onClick={() => navigate(taskPath(selected.id))}>打开任务对话</Button>
-        </div>
-      </div>
+      {subjectRow}
       {actionError && !steering && <p role="alert" className="text-ui text-error">{actionError}</p>}
       {actionNotice && <p role="status" className="text-ui text-text">{actionNotice}</p>}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ResultsPanel progress={progress?.agendaId === selectedId ? progress : null} files={ownEpisodes.flatMap(item => (item.payload.artifactRefs ?? [])
-          .filter(ref => ref.projectId === projectId && ref.runId === item.payload.runId && ref.sessionId === item.payload.sessionId && SAFE_RUN.test(ref.runId) && safeWorkspacePath(ref.path))
-          .map(ref => ({ runId: ref.runId, path: ref.path, at: item.payload.createdAt })))} />
-        <ResearchDataPanel materials={progress?.agendaId === selectedId ? progress.materials : []} loading={!progress && !progressError} error={progressError} busy={busy} databaseAvailable={databaseAvailable} onUpload={upload} onPick={() => setPicking(true)} onDatabase={() => setDatabaseOpen(true)} onRemove={sourceId => void operation(() => removeAgendaMaterial(selected.id, sourceId))} onRetry={() => void loadProgress()} />
-      </div>
-      <section aria-label="执行记录" className="space-y-2">
-        <h3 className="text-ui font-semibold text-text">执行记录</h3>
-        {historyError && <LoadError message={historyError} onRetry={() => void loadHistory()} />}
-        {!history && !historyError ? <p role="status" className="text-ui text-text-3">正在载入</p> : ownEpisodes.length === 0 ? (history ? <p className="text-ui text-text-3">还没有执行过</p> : null)
-          : <List divided>{ownEpisodes.map(item => {
-            const files = (item.payload.artifactRefs ?? []).filter(ref => ref.projectId === projectId && ref.runId === item.payload.runId && ref.sessionId === item.payload.sessionId && SAFE_RUN.test(ref.runId) && safeWorkspacePath(ref.path));
-            return <ListRow key={item.id} title={`${runState(item.payload)} · ${at(item.payload.createdAt) || "时间未知"}`} selected={execution?.id === item.id} onOpen={() => setSelectedEpisodeId(item.id)}
-              meta={files.length ? <span className="flex flex-wrap gap-x-3">{files.map(file => <Link key={`${file.runId}:${file.path}`} className="break-all text-accent underline" to={snapshotHref(file.runId, file.path)}>{file.path.split("/").pop()}</Link>)}</span> : undefined} />;
-          })}</List>}
-        {history?.nextCursor && <Button variant="text" disabled={historyBusy} onClick={() => void loadHistory(history.nextCursor ?? undefined)}>查看更早记录</Button>}
-      </section>
-    </section>}
+      <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} onObserved={setObserved} />
+    </div>}
+  </div>;
 
-    {goal && <GoalWorkbench goal={goal} round={round} projectId={projectId} busy={busy} onRound={setSelectedRound} onOpenConversation={() => openGoalConversation(goal.sessionId)} />}
-    {nativeSession && <NativeResearchPane key={`${projectId}:${nativeSession}`} projectId={projectId} sessionId={nativeSession} onAcknowledged={onNativeAcknowledged} onClose={closeNative} />}
+  // With nothing yet the empty state carries the two ways to start; the header does not repeat them.
+  return <PageShell title="主动科研" width="wide" actionPlan={nothing && !nativeSession ? undefined : startPlan}
+    introduction={introduction}
+    activity={shownWork ? { label: shownWork.label, startedAt: shownWork.since } : undefined}
+    tabs={showViews ? { label: "研究视图", items: RESEARCH_TABS, value: tab, onChange: value => setTab(value as ResearchTab), panelId: "research-view" } : undefined}>
+    <div className="space-y-6">
+      {body}
 
-    {steering && selected && <FormDialog title="调整研究方向" busy={busy} onClose={() => { if (!busy) setSteering(false); }}><div className="space-y-4">
-      <Textarea label="希望研究如何调整" value={direction} maxLength={4000} onChange={event => setDirection(event.target.value)} />
-      <p className="text-ui text-text">{liveSteer ? "研究正在进行，研究员会在下一步按这个方向调整。" : "这条方向会用在下一次执行，不会改变当前执行。"}</p>
-      {actionError && <p role="alert" className="text-ui text-error">{actionError}</p>}
-      <div className="flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setSteering(false)}>取消</Button><Button disabled={busy || !direction.trim()} onClick={submitDirection}>提交方向</Button></div>
-    </div></FormDialog>}
-    {databaseOpen && selected && <ResearchDatabaseDialog key={`${projectId}:${selected.id}`} projectId={projectId} agendaId={selected.id} onClose={() => setDatabaseOpen(false)} onCaptured={() => { void load(true); void loadProgress(true); }} />}
-    {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy} onCancel={() => setPicking(false)} onChoose={sourceIds => { setPicking(false); void operation(() => addAgendaMaterials(selected.id, { sourceIds })); }} /></FormDialog>}
-    {editor && <NewScheduledResearchDialog projectId={projectId} available={available} saving={editorSaving} onBusyChange={setEditorSaving} onClose={() => setEditor(false)}
-      onRecorded={record => { setSelectedGoal(null); setSelectedId(record.id); void load(); }}
-      onSaved={record => { setEditor(false); setSelectedGoal(null); setSelectedId(record.id); void load(); }} />}
-  </div></PageShell>;
+      {steering && selected && <FormDialog title="调整研究方向" busy={busy} onClose={() => { if (!busy) setSteering(false); }}><div className="space-y-4">
+        <Textarea label="希望研究如何调整" value={direction} maxLength={4000} onChange={event => setDirection(event.target.value)} />
+        <p className="text-ui text-text">{liveSteer ? "研究正在进行，研究员会在下一步按这个方向调整。" : "这条方向会用在下一次执行，不会改变当前执行。"}</p>
+        {actionError && <p role="alert" className="text-ui text-error">{actionError}</p>}
+        <div className="flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setSteering(false)}>取消</Button><Button actionKind="start" disabled={busy || !direction.trim()} onClick={submitDirection}>提交方向</Button></div>
+      </div></FormDialog>}
+      {databaseOpen && selected && <ResearchDatabaseDialog key={`${projectId}:${selected.id}`} projectId={projectId} agendaId={selected.id} onClose={() => setDatabaseOpen(false)} onCaptured={() => { void load(true); void loadProgress(true); }} />}
+      {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy} onCancel={() => setPicking(false)} onChoose={sourceIds => { setPicking(false); void operation(() => addAgendaMaterials(selected.id, { sourceIds })); }} /></FormDialog>}
+      {editor && <NewScheduledResearchDialog projectId={projectId} available={available} saving={editorSaving} onBusyChange={setEditorSaving} onClose={() => setEditor(false)}
+        onRecorded={record => { setSelectedGoal(null); setSelectedId(record.id); void load(); }}
+        onSaved={record => { setEditor(false); setSelectedGoal(null); setSelectedId(record.id); setTab("results"); toast.success(`已创建并启用。${CONVERSATION_HELD_EACH_RUN}`); void load(); }} />}
+    </div>
+  </PageShell>;
 }
 
 /**
- * 「新建定时研究」: what to keep doing, and how often, made in place so the new research is the one the console shows. The scheduled-tasks
+ * 「新建定时任务」: what to keep doing, and how often, made in place so the new research is the one the console shows. The scheduled-tasks
  * page makes a task in its main area (`NewTaskPane`); this is the same form (`TaskForm`) in a short dialog over the console, without the
  * examples and opportunities that page keeps beside it.
  */
@@ -465,7 +528,7 @@ function NewScheduledResearchDialog({ projectId, available, saving, onBusyChange
   onRecorded: (record: AgendaRecord) => void; onSaved: (record: AgendaRecord) => void;
 }) {
   const [dirty, setDirty] = useState(false);
-  return <FormDialog title="新建定时研究" busy={saving} dirty={dirty} onClose={() => { if (!saving) onClose(); }}>
+  return <FormDialog title="新建定时任务" busy={saving} dirty={dirty} onClose={() => { if (!saving) onClose(); }}>
     {(requestClose, markSaved) => <TaskForm projectId={projectId} showBudgets={false} schedulingAvailable={available}
       onRecorded={record => { markSaved(); onRecorded(record); }} onBusyChange={onBusyChange} onDirtyChange={setDirty} onCancel={requestClose}
       onSaved={record => { markSaved(); onSaved(record); }} />}
@@ -490,30 +553,22 @@ function ResultsPanel({ progress, files }: { progress: ResearchState | null; fil
   </section>;
 }
 
-/** A long goal: its rounds, the files they handed over, and its own conversation. */
-function GoalWorkbench({ goal, round, projectId, busy, onRound, onOpenConversation }: { goal: ObservedResearchGoal; round: WebAgentRun | null; projectId: string; busy: boolean; onRound: (id: string) => void; onOpenConversation: () => void }) {
-  const files = goal.rounds.flatMap(run => SAFE_RUN.test(run.id) ? [...new Set([...(run.outputFiles ?? []), ...(run.presentedFiles ?? [])])].filter(path => safeWorkspacePath(path)).map(path => ({ runId: run.id, path, at: run.finishedAt ?? run.startedAt })) : []);
-  return <section aria-label="长期研究" className="space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-0"><h2 className="truncate text-section font-semibold text-text">{goalTitle(goal)}</h2><p className="text-caption text-text-3">长期研究 · 已推进 {goal.rounds.length} 轮</p></div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" onClick={onOpenConversation}>在本页打开对话</Button>
-        <Link className="text-ui text-accent underline" to={scopedConversationPath(chatPath(goal.sessionId), projectId)}>打开所属对话</Link>
-      </div>
-    </div>
-    <div className="grid gap-6 lg:grid-cols-2">
-      <ResultsPanel progress={null} files={files} />
-      <section aria-label="推进记录" className="space-y-2">
-        <h3 className="text-ui font-semibold text-text">推进记录</h3>
-        <List divided>{goal.rounds.map((run, index) => <ListRow key={run.id} title={`第 ${goal.rounds.length - index} 轮 · ${QUEUE_MODE_WORD[roundMode(run)]}`}
-          trailing={<span className="text-caption text-text-3">{at(run.startedAt)}</span>} selected={round?.id === run.id} onOpen={busy ? undefined : () => onRound(run.id)} />)}</List>
-      </section>
-    </div>
+/** Every file the rounds of a long goal handed over. */
+function goalFilesOf(goal: ObservedResearchGoal): Array<{ runId: string; path: string; at?: string }> {
+  return goal.rounds.flatMap(run => SAFE_RUN.test(run.id) ? [...new Set([...(run.outputFiles ?? []), ...(run.presentedFiles ?? [])])].filter(path => safeWorkspacePath(path)).map(path => ({ runId: run.id, path, at: run.finishedAt ?? run.startedAt })) : []);
+}
+
+/** A long goal's rounds: the observatory shows the round that is selected. */
+function GoalRounds({ goal, round, busy, onRound }: { goal: ObservedResearchGoal; round: WebAgentRun | null; busy: boolean; onRound: (id: string) => void }) {
+  return <section aria-label="推进记录" className="space-y-2">
+    <h3 className="text-ui font-semibold text-text">推进记录</h3>
+    <List divided>{goal.rounds.map((run, index) => <ListRow key={run.id} title={`第 ${goal.rounds.length - index} 轮 · ${QUEUE_MODE_WORD[roundMode(run)]}`}
+      trailing={<span className="text-caption text-text-3">{at(run.startedAt)}</span>} selected={round?.id === run.id} onOpen={busy ? undefined : () => onRound(run.id)} />)}</List>
   </section>;
 }
 
 /** The shell's resident native conversation, placed inside this page without creating another composer. */
-function NativeResearchPane({ projectId, sessionId, onAcknowledged, onClose }: { projectId: string; sessionId: string; onAcknowledged: (requestId: string, sessionId: string) => void; onClose: () => void }) {
+function NativeResearchPane({ projectId, sessionId, draft = false, onAcknowledged, onClose }: { projectId: string; sessionId: string; /** A new long research being written, rather than a goal's own conversation. */ draft?: boolean; onAcknowledged: (requestId: string, sessionId: string) => void; onClose: () => void }) {
   const pane = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = pane.current;
@@ -524,7 +579,7 @@ function NativeResearchPane({ projectId, sessionId, onAcknowledged, onClose }: {
   }, [projectId, sessionId, onAcknowledged]);
   return <section aria-label="长期研究对话" className="space-y-2">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-ui font-semibold text-text">长期研究对话</h2><Button variant="secondary" onClick={onClose}>收起对话</Button></div>
-    <p className="text-ui text-text">写下研究目标后发送，AI 会一轮轮推进，直到目标完成。</p>
+    {draft && <p className="text-ui text-text">写下研究目标后发送，AI 会一轮轮推进，直到目标完成。</p>}
     <div ref={pane} role="region" aria-label="原生研究对话" className="relative min-h-screen" />
   </section>;
 }

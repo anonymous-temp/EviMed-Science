@@ -437,7 +437,7 @@ describe("行动: the action's drawer", () => {
   it("opens the action's own conversation as a draft, never sent, in a fresh conversation", async () => {
     renderTab(geoProject(), `/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_EFFECT.key)}`);
     const drawer = await screen.findByRole("dialog", { name: "补上缺口 · 缺证据" });
-    await userEvent.click(within(drawer).getByRole("button", { name: "在对话中调整" }));
+    await userEvent.click(within(drawer).getByRole("button", { name: "让 AI 调整这条行动" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalled());
     const [target, draft] = conversation.open.mock.calls[0] as unknown as [{ sessionId: string | null }, string];
     expect(target.sessionId).toBeNull();
@@ -570,13 +570,13 @@ describe("行动: states", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/actions");
   });
 
-  it("says which step a step asked for early waits for, and offers nothing to press", async () => {
+  it("says which step a step asked for early waits for — 待开始, as the rail says, not 排队中 — and offers nothing to press", async () => {
     client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [], control: [] });
     client.getGeoArticles.mockResolvedValue({ articles: [] });
     const project = geoProject({});
     project.steps.content = { status: "none", requested: true };
     renderTab(project);
-    expect(await screen.findByText("写第一批稿件，排队中")).toBeInTheDocument();
+    expect(await screen.findByText("写第一批稿件，待开始")).toBeInTheDocument();
     expect(screen.getByText("“证据”做完后自动开始。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "开始任务：写第一批稿件" })).not.toBeInTheDocument();
   });
@@ -585,7 +585,7 @@ describe("行动: states", () => {
     client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [], control: [] });
     client.getGeoArticles.mockResolvedValue({ articles: [] });
     renderTab(geoProject({ content: "failed" }));
-    expect(await screen.findByText("写第一批稿件没有完成")).toBeInTheDocument();
+    expect(await screen.findByText("写第一批稿件未完成")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "接着做" }));
     await waitFor(() => expect(client.runGeoStep).toHaveBeenCalledWith("geo_1", "content"));
   });

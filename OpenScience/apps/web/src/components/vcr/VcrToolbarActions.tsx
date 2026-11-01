@@ -1,6 +1,6 @@
-import { MoreHorizontal, type LucideIcon } from "lucide-react";
+import { MoreHorizontal, PenLine, type LucideIcon } from "lucide-react";
 import { useNarrow } from "@/lib/useMediaQuery";
-import { Button } from "@/components/ui/Button";
+import { Button, type ButtonProps } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 
@@ -18,7 +18,15 @@ export interface VcrToolbarAction {
   loading?: boolean;
   /** `text` for the quiet ones (a record's opener), `secondary` otherwise. */
   quiet?: boolean;
+  /**
+   * What pressing it does (`WORK_ACTION_KINDS`). A draft fills the composer and is worded 「让 AI …」 (`vcrActionWords`); it takes the
+   * pencil when it names no mark of its own, so the two kinds of button that sat side by side no longer look alike.
+   */
+  kind?: ButtonProps["actionKind"];
 }
+
+/** The mark before an action's words: its own, else the pencil of a draft. */
+const iconOf = (action: VcrToolbarAction): LucideIcon | undefined => action.icon ?? (action.kind === "draft" ? PenLine : undefined);
 
 export function VcrToolbarActions({ actions, label = "更多操作", menu = false }: {
   actions: readonly VcrToolbarAction[];
@@ -29,7 +37,7 @@ export function VcrToolbarActions({ actions, label = "更多操作", menu = fals
   const narrow = useNarrow();
   if (actions.length === 0) return null;
   if (narrow || menu) {
-    const items: MenuEntry[] = actions.map((action) => ({ label: action.label, icon: action.icon, disabled: action.loading, onSelect: action.onSelect }));
+    const items: MenuEntry[] = actions.map((action) => ({ label: action.label, icon: iconOf(action), disabled: action.loading, onSelect: action.onSelect }));
     return (
       <Menu label={label} items={items}>
         <IconButton icon={MoreHorizontal} label={label} size="sm" />
@@ -38,12 +46,15 @@ export function VcrToolbarActions({ actions, label = "更多操作", menu = fals
   }
   return (
     <>
-      {actions.map((action) => (
-        <Button key={action.key} size="sm" variant={action.quiet ? "text" : "secondary"} loading={action.loading} onClick={action.onSelect}>
-          {action.icon && <action.icon size={16} aria-hidden="true" />}
-          {action.label}
-        </Button>
-      ))}
+      {actions.map((action) => {
+        const Icon = iconOf(action);
+        return (
+          <Button key={action.key} size="sm" variant={action.quiet ? "text" : "secondary"} actionKind={action.kind} loading={action.loading} onClick={action.onSelect}>
+            {Icon && <Icon size={16} aria-hidden="true" />}
+            {action.label}
+          </Button>
+        );
+      })}
     </>
   );
 }

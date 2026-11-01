@@ -171,7 +171,7 @@ describe("患者匹配 — what a rule says about a person", () => {
     const changed = (document.querySelector(`[data-vcr-candidate='${payload.candidates[0].id}']`) as HTMLElement).closest("li") as HTMLElement;
     expect(within(changed).getByText("依据已更新")).toBeInTheDocument();
     expect(screen.getByText("1 人的评估依据已更新")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重新评估" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "重新开始评估" })).toBeEnabled();
   });
 
   it("says the recruiting side is not here, and nothing else waits", async () => {
@@ -180,7 +180,7 @@ describe("患者匹配 — what a rule says about a person", () => {
     });
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
     expect(await screen.findByText("暂时无法进行患者匹配")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "匹配患者" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 匹配患者" })).toBeNull();
     // Nothing to switch between while the recruiting side is not here: the band has no row.
     expect(screen.getByRole("group", { name: "匹配方向" })).toBeInTheDocument();
   });
@@ -211,7 +211,7 @@ describe("患者匹配 — a study with protocol versions and nothing evaluated 
     expect(screen.getByText("尚未生成匹配评估")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "开始评估" })).toHaveLength(1);
     expect(container.querySelector("[data-page-chrome]")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "匹配患者" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 匹配患者" })).toBeNull();
     await userEvent.click(start);
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/jobs`, "POST",
       { kind: "match_criteria", selection: { protocolVersionIds: ["prt_1"], direction: "trial_to_patient" } }));
@@ -234,7 +234,7 @@ describe("患者匹配 — a study with protocol versions and nothing evaluated 
   it("keeps the step's own ask when nobody is registered to evaluate — there is nothing for 开始评估 to work on", async () => {
     server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: unevaluated((page) => { page.candidateRoster = []; }) });
     drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
-    expect(await screen.findByRole("button", { name: "匹配患者" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "让 AI 匹配患者" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "开始评估" })).toBeNull();
     expect(screen.queryByRole("group", { name: "患者匹配的视图" })).toBeNull();
   });

@@ -1,8 +1,10 @@
-import { Component, useCallback, useContext, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { isVcrMissing, isVcrOff } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { LoadError } from "@/components/cards/LoadError";
+import { Button } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
 import type { ChartGridCell } from "@/components/ui/ChartGrid";
 import { StudyFrameContext } from "./studyFrameContext";
 
@@ -19,6 +21,29 @@ import { StudyFrameContext } from "./studyFrameContext";
  * result that arrives while the reader is on the tab appears without a button — the page used to promise 「做完会显示在这里」 and
  * keep its word only on a reload. A key that is not the study's (the method library, the precedent register) is never re-read for it.
  */
+
+/**
+ * Where a read that failed after it had answered reports itself, so the page says so once and keeps what it showed. The study page
+ * provides it around everything it draws; a read outside it (the libraries, a test) has nowhere to say it, and its failure replaces
+ * its content as before.
+ *
+ * A re-read is not the same as a first read: the numbers on screen were true when they were read, and an error card in their place
+ * lost them for a failure of the next request (module workspace audit, 2026-11-01). A first read, a read of another address and a
+ * module that is off or a study that is gone still replace the content: there is nothing, or nothing true, to keep.
+ */
+export type VcrRefreshReporter = (id: string, failure: { message: string; retry: () => void } | null) => void;
+export const VcrRefreshContext = createContext<VcrRefreshReporter | null>(null);
+
+export const VCR_REFRESH_FAILED = "更新暂时失败，仍显示上次结果。";
+
+/** The one sentence for a read that failed and left the last answer on screen, with 重试. */
+export function VcrRefreshNote({ message, onRetry }: { message?: string | null; onRetry: () => void }) {
+  return (
+    <div data-vcr-refresh-failed="" className="mb-4">
+      <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={onRetry}>重试</Button>}>{message ? `${VCR_REFRESH_FAILED}${message}` : VCR_REFRESH_FAILED}</Note>
+    </div>
+  );
+}
 
 export type VcrLoad<T> =
   | { kind: "loading" }
@@ -44,6 +69,13 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
   const loader = useRef(load);
   loader.current = load;
   const shownKey = useRef(key);
+  // The key of the answer on screen, if any: a failure of a read of the same key keeps it (and says so), of another key does not.
+  const answeredKey = useRef<string | null>(null);
+  const report = useContext(VcrRefreshContext);
+  const reporter = useRef(report);
+  reporter.current = report;
+  const reportId = useId();
+  const retry = useRef<() => void>(() => undefined);
   const frame = useContext(StudyFrameContext);
   const following = frame && key.startsWith(`${frame.studyId}:`) ? frame.version : null;
   const seenVersion = useRef(following);
@@ -57,9 +89,13 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
     Promise.resolve()
       .then(() => loader.current())
       .then(
-        (data) => { if (live) { setState({ kind: "ready", data }); setLast(data); } },
+        (data) => { if (live) { answeredKey.current = key; setState({ kind: "ready", data }); setLast(data); reporter.current?.(reportId, null); } },
         (error: unknown) => {
           if (!live) return;
+          if (reporter.current && answeredKey.current === key && !isVcrOff(error) && !isVcrMissing(error)) {
+            reporter.current(reportId, { message: webErrorMessage(error, { fallback: "" }), retry: () => retry.current() });
+            return;
+          }
           setState({
             kind: "error",
             message: webErrorMessage(error, { fallback: "暂时无法读取，请稍后重试。" }),
@@ -69,9 +105,15 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
         },
       );
     return () => { live = false; };
-  }, [key, round]);
+  }, [key, round, reportId]);
 
   const reload = useCallback(() => setRound((value) => value + 1), []);
+  retry.current = reload;
+  // Leaving the page takes its failure with it.
+  useEffect(() => {
+    const current = reporter;
+    return () => current.current?.(reportId, null);
+  }, [reportId]);
   useEffect(() => {
     if (seenVersion.current === following) return;
     seenVersion.current = following;

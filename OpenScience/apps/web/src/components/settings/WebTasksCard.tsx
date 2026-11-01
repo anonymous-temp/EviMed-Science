@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { workStateLabel } from "@evimed/domain";
 import { X } from "lucide-react";
 import { webErrorMessage, cancelWebTask, listWebTasks, type WebTask, type WebTaskStatus } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
@@ -11,12 +12,12 @@ import { CopyId, OPS_TONE, OpsBody, OpsCard, OpsNothing, OpsRow, OpsRows, type O
 /** The task states in words: `timed out` and `succeeded` reached the page as
  *  English enum values (review B, WebTasksCard P1). */
 const TASK_STATUS_LABEL: Record<WebTaskStatus, string> = {
-  queued: "排队中",
-  running: "运行中",
+  queued: workStateLabel("queued"),
+  running: workStateLabel("running"),
   canceling: "正在取消",
-  succeeded: "已完成",
+  succeeded: workStateLabel("done"),
   failed: "失败",
-  canceled: "已取消",
+  canceled: workStateLabel("stopped"),
   timed_out: "已超时",
 };
 

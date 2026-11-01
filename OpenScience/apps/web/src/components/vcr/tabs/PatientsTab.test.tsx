@@ -305,7 +305,7 @@ describe("虚拟患者 · the charts", () => {
     const failed = await found(container, "[data-vcr-step-failed='patients']");
     expect(within(failed).getByText("这一步未完成")).toBeInTheDocument();
     expect(failed.querySelector("[data-vcr-partial]")).toHaveTextContent("这次生成算完了 1,200 / 2,000 次重复就停下了，下面是已完成部分的结果。");
-    expect(within(failed).getByRole("button", { name: "在对话中继续" })).toBeInTheDocument();
+    expect(within(failed).getByRole("button", { name: "让 AI 接着做" })).toBeInTheDocument();
     // The data are still there, under it.
     const people = await screen.findByRole("table", { name: "患者" });
     expect(failed.compareDocumentPosition(people) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -393,8 +393,8 @@ describe("虚拟患者 · what the band offers", () => {
     await screen.findByRole("table", { name: "患者" });
     const chips = within(band(container));
     expect(chips.getByRole("button", { name: "下载 CSV" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "在对话中生成新版本" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "在对话中调整" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "让 AI 生成新版本" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "让 AI 调整设定" })).toBeInTheDocument();
     expect(container.querySelectorAll("[data-page-chrome]")).toHaveLength(1);
   });
 
@@ -403,8 +403,8 @@ describe("虚拟患者 · what the band offers", () => {
     await screen.findByRole("table", { name: "患者" });
     const chips = within(band(container));
     expect(chips.getByRole("button", { name: "下载 CSV" })).toBeInTheDocument();
-    expect(chips.queryByRole("button", { name: "在对话中生成新版本" })).toBeNull();
-    expect(chips.queryByRole("button", { name: "在对话中调整" })).toBeNull();
+    expect(chips.queryByRole("button", { name: "让 AI 生成新版本" })).toBeNull();
+    expect(chips.queryByRole("button", { name: "让 AI 调整设定" })).toBeNull();
   });
 
   it("downloads the table through the records route, under the file's own name; a refusal is a toast", async () => {
@@ -441,7 +441,7 @@ describe("虚拟患者 · a study with no people yet", () => {
       if (!node) throw new Error("no recipe");
       return node as HTMLElement;
     });
-    expect(within(recipe).getByRole("button", { name: "生成虚拟患者" })).toBeInTheDocument();
+    expect(within(recipe).getByRole("button", { name: "让 AI 生成虚拟患者" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "预测验证" })).toBeInTheDocument();
     expect(screen.queryByText("预测与验证")).toBeNull();
     expect(screen.queryByText("模型评估")).toBeNull();

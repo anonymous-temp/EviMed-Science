@@ -294,7 +294,7 @@ function MemoryHub({ overviewOn }: { overviewOn: boolean }) {
     </List>
   );
   // Waiting words head the list of memories, but not a search: that is a list of hits.
-  const waiting = pending.length > 0 && !query.trim() ? <PendingMemoryRows items={pending} slow={pendingState.slow} /> : null;
+  const waiting = pending.length > 0 && !query.trim() ? <PendingMemoryRows items={pending} slow={pendingState.slow} stalled={pendingState.stalled} /> : null;
   // An empty list says what will be here and gives the one thing to do about it — or, where nothing can be done (a practice is learned,
   // never typed), why there is no button. A search with no hit has the box's own 「清除搜索」 over it, and says only that.
   const empty = (title: string, description: string, action?: { label: string; onPress: (() => void) | undefined }) => (

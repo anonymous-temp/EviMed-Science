@@ -22,6 +22,13 @@ describe("GEO analytical range form", () => {
     await user.click(screen.getByRole("button", { name: "应用范围" }));
     expect(apply).toHaveBeenCalledWith(expect.objectContaining({ groupIds: [], from: "2026-10-01", clientTags: [" 高龄 "] }));
   });
+  it("says its engines only filter what is read and change no measurement, so they are not taken for the project settings' engines", async () => {
+    render(<MemoryRouter><GeoScopeDialog geoId="g" project={GEO_PROJECT} initial={{}} onApply={vi.fn()} onClose={vi.fn()} /></MemoryRouter>);
+    expect(await screen.findByText("只看这些 AI 平台（不选即全部，不改测量设置）")).toBeVisible();
+    // The dialog's button is the filter's, and it writes nothing: no 保存 is offered beside the platforms.
+    expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
+    expect(screen.getByRole("button", { name: "应用范围" })).not.toHaveAttribute("data-action-kind");
+  });
   it("reads a frozen selection alone while keeping its resolved range editable", async () => {
     const apply = vi.fn();
     render(<MemoryRouter><GeoScopeDialog geoId="g" project={GEO_PROJECT} initial={{ selectionRef: "saved", from: "2026-10-01", groupIds: ["old"] }} onApply={apply} onClose={vi.fn()} /></MemoryRouter>);

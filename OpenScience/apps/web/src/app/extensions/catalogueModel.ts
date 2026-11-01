@@ -43,6 +43,9 @@ export function skillActivationText(enabled: boolean, activation?: SkillActivati
  */
 export const ACTIVATION_POLL_DELAYS_MS: readonly number[] = [3000, 6000, 12000, 24000, 48000, 60000, 60000];
 
+/** What the page says when the waits have run out and the change has still not taken effect: nobody is looking any more, and a press reads once more. */
+export const ACTIVATION_GAVE_UP_TEXT = "还没生效，可以稍后刷新。";
+
 /**
  * The disabled list a switch sends: what the project holds, without the one being switched and without any id the page was
  * not given a row for (a skill a release removed is not re-sent for the server to refuse).

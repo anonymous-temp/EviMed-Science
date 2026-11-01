@@ -38,6 +38,16 @@ describe("statusLine", () => {
     expect(statusLine(status({ ...lone, readable: 0, state: "below_threshold" }), NOW)).toBeNull();
   });
 
+  // Module workspace audit D10: the next automatic round, when the control plane names its time.
+  it("names the time of the next automatic round while documents wait for the quiet period, and 即将开始 once it has passed", () => {
+    const waiting = { state: "queued" as const, pages: 0, typedPages: { wiki: 0, kg: 0 } };
+    const later = new Date(NOW.getTime() + 5 * 60_000).toISOString();
+    expect(statusLine(status({ ...waiting, nextAt: later }), NOW)!.text).toMatch(/^资料有更新，稍后会自动整理 · 约 \d{2}:\d{2} 开始$/u);
+    expect(statusLine(status({ ...waiting, nextAt: new Date(NOW.getTime() - 60_000).toISOString() }), NOW)!.text).toBe("资料有更新，稍后会自动整理 · 即将开始");
+    expect(statusLine(status({ ...waiting, nextAt: null }), NOW)!.text).toBe("资料有更新，稍后会自动整理");
+    expect(statusLine(status({ ...waiting }), NOW)!.text).not.toContain("约");
+  });
+
   it("says the engine is unavailable without naming it, and keeps the pages readable", () => {
     const line = statusLine(status({ state: "engine_unavailable", engine: { ok: false, code: "engine_down" } }), NOW)!;
     expect(line.text).toBe("知识引擎暂不可用，已有的页面仍可阅读，恢复后会继续整理");

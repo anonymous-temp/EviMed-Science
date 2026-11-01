@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PenLine } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { GEO_SIGNAL_STATE_LABELS_ZH } from '@evimed/domain';
 import { getGeoProject, stageGeoPlanContext, type GeoProject } from '@/lib/geoClient';
@@ -55,7 +56,7 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   const [paging, setPaging] = useState(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const query = { limit: expanded ? 20 : 5, ...(step ? { step } : {}), ...(filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
+  const query = { limit: expanded ? 20 : step ? 3 : 5, ...(step ? { step } : {}), ...(filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
   useEffect(() => {
     let current = true;
     void listGeoSignals(geoId, query).then(value => { if (current) { setPage(value); setError(null); } }, failure => { if (current) setError(webErrorMessage(failure, { fallback: '发现与处理暂时读不到，请稍后重试。' })); });
@@ -214,12 +215,13 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
       </>}
       <div className="flex flex-wrap items-center gap-2">
         {signal.basis.orderId ? <Link className="text-ui text-link hover:underline" to={orderHref}>查看订单和可执行操作</Link>
-          : canEdit && !active && signal.availability !== 'unknown' && <Button variant="secondary" loading={busy} disabled={targets.length > 0 && focus.length === 0} onClick={() => void handle(signal.kind === 'error_observed' ? 'correct' : signal.kind === 'source_changed' ? 'review' : 'analyse', attempt?.submitted ? attempt.contextRef : undefined)}>
-            {attempt?.submitted ? '在原对话继续处理' : signal.kind === 'error_observed' ? '准备纠错内容' : signal.kind === 'source_changed' ? '核查所选版本' : '在对话中分析'}
+          : canEdit && !active && signal.availability !== 'unknown' && <Button variant="secondary" loading={busy} disabled={targets.length > 0 && focus.length === 0} {...(attempt?.submitted ? {} : { actionKind: 'draft' as const })} onClick={() => void handle(signal.kind === 'error_observed' ? 'correct' : signal.kind === 'source_changed' ? 'review' : 'analyse', attempt?.submitted ? attempt.contextRef : undefined)}>
+            {/* A first handling only fills the composer, so it is a draft; one already submitted goes back to the conversation that holds it. */}
+            {attempt?.submitted ? '在原对话继续处理' : <><PenLine size={16} aria-hidden="true" />{signal.kind === 'error_observed' ? '让 AI 写纠错稿' : signal.kind === 'source_changed' ? '让 AI 核查所选版本' : '让 AI 分析'}</>}
           </Button>}
         {attempt?.runId && <Button variant="secondary" onClick={() => setRecord(runOf(attempt, signal.title))}>查看本次运行</Button>}
         {active && attempt && <Button variant="text" onClick={() => void open({ geoId, projectId: project.projectId, sessionId: attempt.sessionId, exactSession: true })}>回到正在处理的对话</Button>}
-        {canEdit && <Button variant="text" loading={busy} onClick={() => void disposition()}>{signal.disposition === 'ignored' ? '恢复提醒' : '忽略这条提醒'}</Button>}
+        {canEdit && <Button variant="text" actionKind="set" loading={busy} onClick={() => void disposition()}>{signal.disposition === 'ignored' ? '恢复提醒' : '忽略这条提醒'}</Button>}
       </div>
       {attempt?.result?.artifacts?.map(file => <Link key={file.id} className="text-ui text-link hover:underline" to={geoSignalResultHref(geoId, signalId, { ...file, versionId: file.id })}>{file.path.split('/').at(-1)} · 本次产出版本</Link>)}
       {signal.attempts.length > 1 && <List label="处理历史" divided>{signal.attempts.map(item => <ListRow key={item.contextRef} title={GEO_SIGNAL_STATE_LABELS_ZH[item.state]} meta={time(item.startedAt ?? item.createdAt)} onOpen={item.runId ? () => setRecord(runOf(item, signal.title)) : undefined} />)}</List>}

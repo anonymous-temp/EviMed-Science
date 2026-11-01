@@ -29,7 +29,7 @@ export function VcrCorrectionCasesActions({ studyId }: { studyId: string }) {
   return <section aria-label="纠正案例" className="space-y-2">
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="secondary" disabled={busy} onClick={() => void exportCases()}>导出纠正案例</Button>
-      {dataset?.cases.some(item => item.partition === 'held_out') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void replay()}>重放留出案例</Button>}
+      {dataset?.cases.some(item => item.partition === 'held_out') && <Button actionKind="start" size="sm" variant="secondary" disabled={busy} onClick={() => void replay()}>开始重放留出案例</Button>}
       {dataset?.selection.more && dataset.selection.nextCursor && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void exportCases(dataset.selection.nextCursor ?? '0')}>导出下一页</Button>}
     </div>
     {busy && <p role="status" className="text-caption text-text-3">正在处理纠正案例</p>}

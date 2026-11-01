@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useTaskPane } from "@/lib/taskPane";
+import { useToastStore } from "@/lib/toast";
 import { RECOMMENDATIONS, zoneName } from "@/components/autopilot/taskPresentation";
 import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
 import { AutopilotPage } from "./AutopilotPage";
@@ -299,7 +300,7 @@ describe("scheduled tasks", () => {
       mocks.listAgendas.mockResolvedValue({ items: [agenda], available: false }); render(); await barElement();
       expect(within(bar()).getByText(/定时执行暂不可用/)).toBeInTheDocument();
       expect(bar()).not.toHaveTextContent("下次");
-      expect(screen.queryByRole("region", { name: "即将执行" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "待开始" })).not.toBeInTheDocument();
       expect(within(bar()).getByRole("button", { name: "立即运行" })).toBeDisabled();
       expect(within(bar()).getByRole("button", { name: "切换执行" })).toBeEnabled();
       await userEvent.click(await barMenu());
@@ -520,19 +521,19 @@ describe("scheduled tasks", () => {
         expect(within(header).getByText("波立维 · 9月29日")).toBeInTheDocument();
       } finally { useProjectStore.setState({ projects: [] }); }
     });
-    it("groups the tasks as 即将执行 / 已暂停 / 已完成 and draws only the groups that have rows, with no templates or opportunities on the page", async () => {
+    it("groups the tasks as 待开始 / 已暂停 / 已完成 and draws only the groups that have rows, with no templates or opportunities on the page", async () => {
       const done = { ...agenda, id: "done", payload: { ...agenda.payload, title: "做完的任务", scheduleState: "completed", nextRunAt: null, schedule: { kind: "once", date: "2026-09-29", time: "07:30", timeZone: "Asia/Shanghai" } } };
       mocks.listAgendas.mockResolvedValue({ items: [done, paused({ title: "已停的任务" }, "paused"), agenda] });
       render("/app/autopilot");
-      const upcoming = await screen.findByRole("region", { name: "即将执行" });
+      const upcoming = await screen.findByRole("region", { name: "待开始" });
       expect(within(upcoming).getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
       expect(within(screen.getByRole("region", { name: "已暂停" })).getByRole("link", { name: "已停的任务" })).toBeInTheDocument();
       expect(within(screen.getByRole("region", { name: "已完成" })).getByRole("link", { name: "做完的任务" })).toBeInTheDocument();
-      expect([...list().querySelectorAll("section h2")].map(each => each.textContent)).toEqual(["即将执行", "已暂停", "已完成"]);
+      expect([...list().querySelectorAll("section h2")].map(each => each.textContent)).toEqual(["待开始", "已暂停", "已完成"]);
       // The list holds tasks and nothing else (page structure rule 1): the starting points are in the new-task dialog.
       expect(screen.queryByRole("region", { name: "推荐" })).not.toBeInTheDocument(); expect(screen.queryByRole("region", { name: "研究机会" })).not.toBeInTheDocument();
       cleanup(); mocks.listAgendas.mockResolvedValue({ items: [agenda] }); render("/app/autopilot");
-      await screen.findByRole("region", { name: "即将执行" });
+      await screen.findByRole("region", { name: "待开始" });
       expect(screen.queryByRole("region", { name: "已暂停" })).not.toBeInTheDocument(); expect(screen.queryByRole("region", { name: "已完成" })).not.toBeInTheDocument();
     });
     it("says in each row only when it runs next and how often, that it is running, why it stopped, or that it is done", async () => {
@@ -549,7 +550,7 @@ describe("scheduled tasks", () => {
       expect(rowOf("心衰证据追踪")).toHaveTextContent("下次 周六 07:30 · 每周");
       expect(rowOf("每天的任务")).toHaveTextContent("下次 明天 07:00 · 每天");
       expect(rowOf("正在跑的任务")).toHaveTextContent("进行中 · 每周一 08:00");
-      expect(rowOf("等你补充的任务")).toHaveTextContent("需要你补充：要监测的药品名单");
+      expect(rowOf("等你补充的任务")).toHaveTextContent("等你补充：要监测的药品名单");
       expect(rowOf("你停了的任务")).toHaveTextContent("已暂停");
       expect(rowOf("做完的任务")).toHaveTextContent("已完成 · 9月29日");
       // Internal engine state stays out of the row; the second line keeps the last outcome.
@@ -672,7 +673,7 @@ describe("scheduled tasks", () => {
       expect(screen.getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
       expect(bar()).toHaveTextContent("心衰证据追踪");
     });
-    it("opens the task the list draws first: the soonest of 即将执行, before a paused one", async () => {
+    it("opens the task the list draws first: the soonest of 待开始, before a paused one", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [paused({ title: "已停的任务" }, "paused"), agenda] });
       render("/app/autopilot"); await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
       cleanup(); mocks.listAgendas.mockResolvedValue({ items: [paused({ title: "已停的任务" }, "paused")] });
@@ -828,6 +829,64 @@ describe("scheduled tasks", () => {
       expect(pane).toHaveTextContent("这个项目里另一项任务正在执行"); expect(pane).toHaveTextContent("执行结束后可以在这里继续");
       expect(screen.getByTestId("pane")).toHaveTextContent("none");
     });
+    // The kernel's frame says a held conversation only after the click that met the wall; the page says it first (audit D1).
+    it("says, before the wall, that a bounded execution of this task holds the project's conversation, and lets the researcher end it", async () => {
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: false })] });
+      render();
+      const note = await within(await barElement()).findByText("运行期间，这个项目的对话会暂停，结束后可继续");
+      expect(note.closest("[data-note]")).not.toBeNull();
+      await userEvent.click(within(bar()).getByRole("button", { name: "停止并继续对话" }));
+      await waitFor(() => expect(mocks.cancelEpisode).toHaveBeenCalledWith("agenda-one", "ep-run", expect.any(String)));
+    });
+    it("points to the task that holds the project when it is another task's execution", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [agenda, { ...agenda, id: "second", payload: { ...agenda.payload, title: "第二个任务" } }] });
+      mocks.listEpisodes.mockImplementation((_project: string, id?: string) => Promise.resolve({ items: id === "second" ? [{ ...episode, id: "ep-second", payload: { ...episode.payload, agendaId: "second" } }]
+        : [running({ agendaId: "agenda-one", interactive: false })] }));
+      render("/app/autopilot/second");
+      expect(await within(await barElement()).findByText("运行期间，这个项目的对话会暂停，结束后可继续")).toBeInTheDocument();
+      expect(within(bar()).getByRole("link", { name: "查看正在运行的任务" })).toHaveAttribute("href", "/app/autopilot/agenda-one");
+      expect(within(bar()).queryByRole("button", { name: "停止并继续对话" })).not.toBeInTheDocument();
+    });
+    it("says nothing about a held conversation when the execution runs in the researcher's own runtime", async () => {
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true })] });
+      render();
+      await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("project-one:ses-live"));
+      expect(screen.queryByText("运行期间，这个项目的对话会暂停，结束后可继续")).not.toBeInTheDocument();
+    });
+    it("says when a run is started, enabled or created that the project's conversation pauses while it runs", async () => {
+      useToastStore.setState({ toasts: [] });
+      render();
+      await userEvent.click(await within(await barElement()).findByRole("button", { name: "立即运行" }));
+      await waitFor(() => expect(mocks.runAgendaNow).toHaveBeenCalled());
+      await waitFor(() => expect(useToastStore.getState().toasts.map(item => item.message)).toContain("已开始运行。运行期间，这个项目的对话会暂停，结束后可继续"));
+    });
+    it("says on the new-task form, beside what pressing 创建并启用 will do, that every run holds the conversation", async () => {
+      render("/app/autopilot/new");
+      const form = await screen.findByRole("button", { name: "创建并启用" });
+      expect(form).toHaveAttribute("data-action-kind", "start");
+      expect(within(form.closest("form")!).getByText("每次运行期间，这个项目的对话会暂停，结束后可继续")).toBeInTheDocument();
+    });
+    it("tells the researcher once, as a toast, that an execution they watched has ended", async () => {
+      useToastStore.setState({ toasts: [] });
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true })] });
+      fakeClock(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true, status: "merged" })] });
+      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+      expect(useToastStore.getState().toasts.map(item => item.message)).toEqual(["“心衰证据追踪”已完成"]);
+      // Once: the later reads of the same finished execution say nothing.
+      useToastStore.setState({ toasts: [] });
+      await act(async () => { await vi.advanceTimersByTimeAsync(70_000); });
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+    });
+    it("does not toast an execution that was already over when the page opened, nor one the researcher stopped", async () => {
+      useToastStore.setState({ toasts: [] });
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true })] });
+      fakeClock(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true, status: "canceled" })] });
+      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+    });
     it("says a queued execution's state and when it will be tried again, in the task's zone", async () => {
       mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ status: "queued", runId: null, sessionId: null, resourceDeferrals: { episode: { code: "runtime_busy", status: "waiting", retryAt: "2026-10-01T03:00:00Z" } } })] });
       render();
@@ -847,7 +906,7 @@ describe("scheduled tasks", () => {
       render();
       await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("ses-live"));
       await userEvent.click(within(bar()).getByRole("button", { name: "切换执行" }));
-      expect(await screen.findByRole("menuitemradio", { name: /研究进行中/ })).toBeInTheDocument();
+      expect(await screen.findByRole("menuitemradio", { name: /进行中/ })).toBeInTheDocument();
       expect(document.body).not.toHaveTextContent("核验");
     });
     it("lets the researcher choose which execution's conversation the frame shows, newest first, and keeps the choice in the address", async () => {
@@ -857,7 +916,7 @@ describe("scheduled tasks", () => {
       await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("ses-one"));
       await userEvent.click(within(bar()).getByRole("button", { name: "切换执行" }));
       const options = await screen.findAllByRole("menuitemradio");
-      expect(options.map(option => option.textContent)).toEqual(["2026年9月29日 08:00:00 · 研究结果", "2026年9月22日 08:00:00 · 研究结果"]);
+      expect(options.map(option => option.textContent)).toEqual(["2026年9月29日 08:00:00 · 已完成", "2026年9月22日 08:00:00 · 已完成"]);
       expect(options[0]).toHaveAttribute("aria-checked", "true");
       await userEvent.click(options[1]);
       await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("project-one:ses-old")); expect(here()).toBe("/app/autopilot/agenda-one?execution=ep-old");
@@ -925,7 +984,7 @@ describe("scheduled tasks", () => {
       const stopped = paused({ pauseReason: "问题已经回答", plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" },
         taskTypeState: { "evidence-update": { consecutiveFailures: 2, pausedAt: "2026-10-01T00:00:00Z" }, "literature-sentinel": { consecutiveFailures: 1 } } });
       mocks.listAgendas.mockResolvedValue({ items: [stopped] });
-      render(); expect(await within(await barElement()).findByText("需要你补充：请补充原始数据表", { exact: false })).toBeInTheDocument();
+      render(); expect(await within(await barElement()).findByText("等你补充：请补充原始数据表", { exact: false })).toBeInTheDocument();
       expect(bar()).toHaveTextContent("证据更新连续未能运行，已暂停"); expect(bar()).not.toHaveTextContent("文献追踪连续未能运行");
       expect(within(bar()).getByRole("button", { name: "补充材料并继续" })).toBeEnabled();
       // The planner's other stops are said without the button: nothing is asked of the researcher.
@@ -1041,13 +1100,36 @@ describe("scheduled tasks", () => {
       await waitFor(() => expect(mocks.addAgendaMaterials).toHaveBeenCalledWith(agenda.id, { sourceIds: ["src_b"] }));
       expect(screen.queryByRole("dialog", { name: "从知识库添加资料" })).not.toBeInTheDocument();
     });
+    it("labels the picker's button 添加并继续 as a start when adding the material resumes a task paused for input, and 添加到这个任务 as a setting otherwise", async () => {
+      files.listSources.mockResolvedValue({ items: [{ id: "src_b", projectId: "project-one", revision: 1, payload: { paths: ["knowledge-base/新的.pdf"], status: "complete" } }], nextCursor: null });
+      mocks.listAgendas.mockResolvedValue({ items: [paused({ plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" } })] });
+      render(); await choose(await within(await barElement()).findByRole("button", { name: "更多" }), "研究进展");
+      await userEvent.click(await screen.findByRole("button", { name: "从知识库选择" }));
+      const dialog = await screen.findByRole("dialog", { name: "从知识库添加资料" });
+      await within(dialog).findByText("新的.pdf");
+      const resume = within(dialog).getByRole("button", { name: "添加并继续" });
+      expect(resume).toHaveAttribute("data-action-kind", "start");
+      expect(within(dialog).queryByRole("button", { name: "添加到这个任务" })).not.toBeInTheDocument();
+      mocks.startAgenda.mockResolvedValue({ ...agenda, revision: 4 });
+      mocks.addAgendaMaterials.mockResolvedValue(paused({ plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" } }));
+      await userEvent.click(within(dialog).getByRole("checkbox")); await userEvent.click(resume);
+      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalled());
+    });
+    it("keeps 添加到这个任务 for a task that is not waiting for the material", async () => {
+      files.listSources.mockResolvedValue({ items: [{ id: "src_b", projectId: "project-one", revision: 1, payload: { paths: ["knowledge-base/新的.pdf"], status: "complete" } }], nextCursor: null });
+      render(); await choose(await within(await barElement()).findByRole("button", { name: "更多" }), "研究进展");
+      await userEvent.click(await screen.findByRole("button", { name: "从知识库选择" }));
+      const dialog = await screen.findByRole("dialog", { name: "从知识库添加资料" });
+      await within(dialog).findByText("新的.pdf");
+      expect(within(dialog).getByRole("button", { name: "添加到这个任务" })).toHaveAttribute("data-action-kind", "set");
+    });
     it("says above the sections how the last execution came out, and that the task needs material when it does", async () => {
       const stopped = paused({ plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" } });
       mocks.listAgendas.mockResolvedValue({ items: [stopped] });
       mocks.getResearchState.mockResolvedValue(state({ found: [{ statement: "获益一致", check: "stands", sources: 2, date: "2026-09-28" }] }));
       render(); await choose(await within(await barElement()).findByRole("button", { name: "更多" }), "研究进展");
       const drawer = await screen.findByRole("dialog", { name: "研究进展" });
-      expect(await within(drawer).findByText(/上次 9月29日 \d{2}:\d{2} · 研究结果 · 需要你补充/)).toBeInTheDocument();
+      expect(await within(drawer).findByText(/上次 9月29日 \d{2}:\d{2} · 已完成 · 等你补充/)).toBeInTheDocument();
     });
     it("holds a long unresolved conclusion to three lines with 展开", async () => {
       const long = "这是一条很长的待复核结论。".repeat(40);

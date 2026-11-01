@@ -53,7 +53,7 @@ export function NoteEditor({ source, onSaved }: { source: SourceRecord; onSaved:
       <Input readOnly={historical} label="标题" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} disabled={saving} autoComplete="off" />
       <Textarea readOnly={historical} label="正文" value={body} rows={14} onChange={(event) => setBody(event.target.value)} disabled={saving} error={error} />
       <div className="flex justify-end">
-        <Button type="submit" loading={saving} disabled={historical || !changed || !title.trim()}>保存</Button>
+        <Button actionKind="set" type="submit" loading={saving} disabled={historical || !changed || !title.trim()}>保存</Button>
       </div>
     </form>
   );

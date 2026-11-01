@@ -44,9 +44,9 @@ export function VcrPublishSimulation({ studyId, exportId, defaultTitle, publicat
     <div data-vcr-publish="" className="mt-3 flex flex-col gap-2">
       <p className="flex flex-wrap items-center gap-2">
         {publication.live ? <Tag tone="accent">已发布到模拟研究</Tag> : null}
-        {publication.canPublish && !publication.live && <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>发布到模拟研究</Button>}
+        {publication.canPublish && !publication.live && <Button actionKind="external" size="sm" variant="secondary" onClick={() => setOpen(true)}>发布到模拟研究</Button>}
         {publication.canPublish && publication.live && (
-          <Button size="sm" variant="secondary" loading={busy} onClick={() => run(() => withdrawVcrSimulation(studyId, publication.live?.id ?? ""), "已撤回。", "暂时无法撤回，请稍后重试。")}>撤回</Button>
+          <Button size="sm" variant="secondary" actionKind="set" loading={busy} onClick={() => run(() => withdrawVcrSimulation(studyId, publication.live?.id ?? ""), "已撤回。", "暂时无法撤回，请稍后重试。")}>撤回</Button>
         )}
       </p>
       <p className="text-caption text-text-3">{VCR_SIMULATION_NOT_EVIDENCE_ZH}</p>
@@ -64,7 +64,7 @@ export function VcrPublishSimulation({ studyId, exportId, defaultTitle, publicat
             <Textarea id={summaryId} label="一句话说明" value={summary} maxLength={600} rows={3} onChange={(event) => setSummary(event.target.value)} />
             <div className="flex justify-end gap-2">
               <Button variant="text" disabled={busy} onClick={() => setOpen(false)}>取消</Button>
-              <Button type="submit" loading={busy} disabled={!title.trim()}>发布</Button>
+              <Button actionKind="external" type="submit" loading={busy} disabled={!title.trim()}>发布</Button>
             </div>
           </form>
         </FormDialog>

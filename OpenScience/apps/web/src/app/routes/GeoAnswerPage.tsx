@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useNavigationType, useParams } from "react-router";
-import { ArrowLeft, ExternalLink, Image as ImageIcon, Radar } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router";
+import { ExternalLink, Image as ImageIcon, PenLine, Radar } from "lucide-react";
 import {
   geoScreenshotUrl,
   getGeoAnswer,
@@ -18,10 +18,9 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
-import { Tooltip } from "@/components/ui/Tooltip";
 import { DiagnosisReview } from "@/components/geo/DiagnosisReview";
 import { AnswerChecks } from "@/components/geo/AnswerChecks";
-import { geoMayConverse, useGeoFrame, useGeoToolbar } from "@/components/geo/geoFrame";
+import { geoMayConverse, useGeoAnswerBack, useGeoFrame, useGeoToolbar, type GeoAnswerBack } from "@/components/geo/geoFrame";
 import { useGeoEvidence } from "@/components/geo/geoProjectData";
 import { scrollBlockToTop } from "@/components/geo/geoScroll";
 import { questionGroupIndex, clusterName } from "@/components/geo/spine/clusterModel";
@@ -37,7 +36,7 @@ import { answerFindings, type AnswerFinding } from "@/components/geo/answerFindi
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
 import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
 import { readableSourceRef } from "@/components/geo/tabs/EvidenceTab";
-import { answerPath, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS, tabPath } from "@/components/geo/tabs/geoTabText";
+import { answerPath, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS } from "@/components/geo/tabs/geoTabText";
 import { useGeoPath } from "@/components/geo/useGeoPath";
 import { TabError, TabSkeleton, useGeoLoad } from "@/components/geo/tabs/geoTabKit";
 
@@ -56,7 +55,7 @@ const GEO_OFF_SENTENCE = "循证 GEO 还没有在这个工作空间开放。";
 export function GeoAnswerPage() {
   const { geoId = "", snapshotId = "" } = useParams();
   const answer = useGeoLoad(`answer:${geoId}:${snapshotId}`, () => getGeoAnswer(geoId, snapshotId));
-  // Both only enrich the page: the project names the conversation “问 AI”
+  // Both only enrich the page: the project names the conversation “让 AI …”
   // opens and our product's names; the claims say what is right and where.
   // Inside a project's layout the project is the layout's, and the claims are the project's shared read.
   const frame = useGeoFrame();
@@ -71,14 +70,16 @@ export function GeoAnswerPage() {
   }
   if (answer.state.kind === "error" && answer.state.missing) {
     return (
-      <Shell title="回答" back={<BackLink geoId={geoId} fallback="overview" />}>
+      <Shell title="回答">
+        <AnswerBack to="overview" />
         <EmptyState icon={Radar} title="这条回答不存在或已删除。" />
       </Shell>
     );
   }
   if (answer.state.kind !== "ready") {
     return (
-      <Shell title="回答" back={<BackLink geoId={geoId} fallback="overview" />}>
+      <Shell title="回答">
+        <AnswerBack to="overview" />
         {answer.state.kind === "error" ? <TabError message={answer.state.message} onRetry={answer.reload} /> : <TabSkeleton rows={4} />}
       </Shell>
     );
@@ -97,12 +98,11 @@ export function GeoAnswerPage() {
  * steps, and keeps 问题与回答 selected), so this is only the answer's own heading and body: a second `h1` and a second scroll
  * container here were the "page of its own" that took the band away.
  */
-function Shell({ title, back, header, children }: { title: string; back?: ReactNode; header?: ReactNode; children: ReactNode }) {
+function Shell({ title, header, children }: { title: string; header?: ReactNode; children: ReactNode }) {
   return (
     <div data-geo-answer-page="">
       {header ?? (
         <header className="flex min-h-8 items-center gap-2">
-          {back}
           <h2 className="min-w-0 text-section font-semibold text-text">{title}</h2>
         </header>
       )}
@@ -111,31 +111,10 @@ function Shell({ title, back, header, children }: { title: string; back?: ReactN
   );
 }
 
-const BACK_NAMES = { accuracy: "准确与安全", questions: "问题与回答", overview: "总览" } as const;
-
-/**
- * The way back. A reader who came from inside the app goes back to where they came from — the list as they left it, the filter in
- * its address included; one who opened the answer from a link has no such place, and is taken to the tab that holds it.
- */
-function BackLink({ geoId, fallback }: { geoId: string; fallback: keyof typeof BACK_NAMES }) {
-  const path = useGeoPath();
-  const navigate = useNavigate();
-  const arrived = useNavigationType();
-  const fromInside = arrived !== "POP";
-  const label = fromInside ? "返回" : `返回${BACK_NAMES[fallback]}`;
-  return (
-    <Tooltip content={label} kind="label">
-      {fromInside ? (
-        <button type="button" aria-label={label} onClick={() => navigate(-1)} className={iconButtonClasses()}>
-          <ArrowLeft size={16} aria-hidden="true" />
-        </button>
-      ) : (
-        <Link to={path(tabPath(geoId, fallback))} aria-label={label} className={iconButtonClasses()}>
-          <ArrowLeft size={16} aria-hidden="true" />
-        </Link>
-      )}
-    </Tooltip>
-  );
+/** Registers where the band's way back goes while this answer is on the page (`useGeoAnswerBack`); draws nothing. */
+function AnswerBack({ to }: { to: GeoAnswerBack }) {
+  useGeoAnswerBack(to);
+  return null;
 }
 
 type Project = Awaited<ReturnType<typeof getGeoProject>>;
@@ -239,7 +218,7 @@ function Answer({
   const header = (
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-start gap-2">
-        <BackLink geoId={geoId} fallback={found.findings.length > 0 || found.elsewhere.length > 0 ? "accuracy" : "questions"} />
+        <AnswerBack to={found.findings.length > 0 || found.elsewhere.length > 0 ? "accuracy" : "questions"} />
         <div className="min-w-0">
           <h2 className="min-w-0 text-section font-semibold text-text">{question}</h2>
           <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-caption text-text-3">
@@ -253,7 +232,10 @@ function Answer({
       {target && geoMayConverse(project) && (
         // The answer's own step, not the module's next one: a secondary button in the answer's heading row, as 确认后联系 is in its
         // person's row (T3: the one primary action of a module page is the band header's).
-        <Button data-geo-answer-primary="" variant="secondary" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>
+        <Button data-geo-answer-primary="" variant="secondary" actionKind="draft" loading={asking} onClick={ask}>
+          {!asking && <PenLine size={16} aria-hidden="true" />}
+          {lead ? "让 AI 写纠错稿" : "让 AI 解读这条回答"}
+        </Button>
       )}
     </header>
   );

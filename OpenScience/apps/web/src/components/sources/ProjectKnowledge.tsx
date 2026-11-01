@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronLeft, Download, RefreshCw } from "lucide-react";
 import { hasWebApi, fetchWebMe } from "@/lib/apiClient";
 import { downloadKnowledgeVault, getSourceComposition, listProjectOutputs, vaultErrorMessage, type LibraryComposition as Composition, type ProjectOutput } from "@/lib/knowledgeBaseClient";
 import { listPath, type KnowledgeListState, type KnowledgeView } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
-import { knowledgePagesOffered, requestKnowledgeCompile } from "@/lib/sourceClient";
+import { knowledgePagesOffered, requestKnowledgeCompile, setKnowledgeAutoCompile } from "@/lib/sourceClient";
+import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { buttonClasses } from "@/components/ui/Button";
 import { ActivityStrip } from "@/components/ui/ActivityStrip";
@@ -18,8 +19,15 @@ import { KnowledgeStatusDot } from "./KnowledgeStatusDot";
 import { KnowledgeTree, KnowledgeTreeMissing } from "./KnowledgeTree";
 import { LibraryComposition } from "./LibraryComposition";
 import { ProjectOutputsList } from "./ProjectOutputsList";
+import { formatClock } from "@/lib/format";
 import { groupRows, statusLine } from "./knowledgeView";
 import { roundKey, useKnowledgeStatus, useKnowledgeTree } from "./useKnowledge";
+
+/** What a queued round waits for, in the strip: the quiet period after the last change, with the time it ends when it is named. */
+function queuedWords(nextAt: string | null | undefined): string {
+  const at = nextAt ? Date.parse(nextAt) : Number.NaN;
+  return Number.isFinite(at) && at > Date.now() ? `资料有更新，约 ${formatClock(nextAt)} 自动开始` : "资料有更新，稍后会自动开始";
+}
 
 /** Whether the deployment compiles knowledge pages at all (`features.knowledgePages`), read once. */
 export function usePagesOffered(): boolean {
@@ -38,8 +46,12 @@ export function usePagesOffered(): boolean {
  * the account's and are the other view; this is the pane the project list on the left chooses in.
  *
  * The header is the project's name, the one dot that says when its pages need attention (`KnowledgeStatusDot`) and 「更多」, which holds what
- * is the project's to do: 重新整理知识页, 导出到 Obsidian, 在记忆总览中查看. Under it, the compile's activity while a round runs, the one row
- * of controls — the search, and for the graph the kind of graph — and the view. 「资料组成」, what the project's documents are made of, stands
+ * is the project's to do: 重新整理知识页, 导出到 Obsidian, 在记忆总览中查看. Under it, the compile's activity while a round runs or waits (with
+ * the time of the next automatic round when the control plane names it), the one row of controls — the search, and for the graph the kind of
+ * graph — whose last words are where the compile stands when no round is going (2026-11-01 audit D10: it was said on the 知识页 view alone,
+ * and a reader of the graph or the outputs did not know a round was due), and the view. A round that ends while the page is open says so once.
+ * Turning automatic compiling off per project is not built: a paused project would need its queued round, its idempotency key and its catch-up
+ * pass to agree about what a resume starts, which is more than a switch. 「资料组成」, what the project's documents are made of, stands
  * at the head of the pages. Where the list is not beside the pane (a narrow window) a way back to the projects stands over the title.
  */
 export function ProjectKnowledge({ projectId, label, view, listState, update, pagesOffered, query, onQuery, split, onAddDocuments }: {
@@ -64,6 +76,16 @@ export function ProjectKnowledge({ projectId, label, view, listState, update, pa
   const compiling = line?.busy === true;
   const [asking, setAsking] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // A round that ends while the page is open says so once (audit D14): the strip simply goes, and a reader looking at another view would not
+  // see that the pages had changed. A round this page did not watch begin is no news.
+  const watchedRound = useRef(false);
+  useEffect(() => {
+    if (compiling) { watchedRound.current = true; return; }
+    if (!watchedRound.current || !knowledge) return;
+    watchedRound.current = false;
+    if (knowledge.state === "failed") toast.error("这次整理没有完成，可以重新整理");
+    else if (knowledge.state === "compiled") toast.success(knowledge.pages > 0 ? `知识页整理好了，共 ${knowledge.pages} 页` : "知识页整理好了");
+  }, [compiling, knowledge]);
   const compileNow = async () => {
     setAsking(true);
     try { setKnowledge(await requestKnowledgeCompile(projectId)); toast.success("已开始重新整理，稍后回来即可看到"); }
@@ -132,12 +154,17 @@ export function ProjectKnowledge({ projectId, label, view, listState, update, pa
     kind: "chips", label: "图谱的类型", neutral: "wiki", options: [{ value: "wiki", label: "页面之间" }, { value: "kg", label: "实体和关系" }],
     value: listState.graph === "kg" ? "kg" : "wiki", pinned: true, onChange: (next) => update({ graph: next === "kg" ? "kg" : null, focus: null, depth: null }),
   }];
+  // Where the empty page already says what is missing and what to do (the recipe), the toolbar does not say it a second time.
+  const recipeShown = view !== "outputs" && Boolean(tree) && pageCount === 0;
   const toolbar: ToolbarProps = {
     label: view === "pages" ? "知识页的搜索" : view === "graph" ? "图谱的筛选" : "对话产出的搜索",
     filters: [],
     navigation: view === "graph" ? graphNavigation : [],
     search: { label: view === "outputs" ? "搜索对话产出" : "搜索资料和内容", value: query, onChange: onQuery, onClear: () => onQuery("") },
-    summary: view === "pages" ? (pageCount > 0 ? `${pageCount} 页` : undefined) : view === "outputs" ? (outputs ? `${outputs.length} 个文件` : undefined) : undefined,
+    // The compile's state is said on every view of the project, in the same place (audit D10): while a round runs or waits it is the strip
+    // over the toolbar (with the time of the next one when the control plane names it), and otherwise it is the end of this line.
+    summary: [view === "pages" ? (pageCount > 0 ? `${pageCount} 页` : "") : view === "outputs" ? (outputs ? `${outputs.length} 个文件` : "") : "", pagesOffered && !compiling && !recipeShown ? line?.text ?? "" : ""]
+      .filter(Boolean).join(" · ") || undefined,
   };
   // The tree is searched by what is typed; a typed search stays with the view it was typed in.
   const search = listState.q;
@@ -145,6 +172,13 @@ export function ProjectKnowledge({ projectId, label, view, listState, update, pa
   const pagesBody = treeFailed && !tree ? (
     <KnowledgeTreeMissing onRetry={retryTree} />
   ) : !tree || (compiling && tree.pages.length === 0) ? <FilesSkeleton /> : <KnowledgeTree rows={tree.pages} query={search} listState={listState} empty={recipe} />;
+
+  const toggleAuto = async (enabled: boolean) => {
+    try {
+      setKnowledge(await setKnowledgeAutoCompile(projectId, enabled));
+      toast.success(enabled ? "已恢复自动整理。" : "已暂停自动整理。有更新的资料会等到恢复后，也可以随时手动重新整理。");
+    } catch (error) { toast.error(webErrorMessage(error, { fallback: "暂时无法修改，请稍后重试。" })); }
+  };
 
   const backToProjects = useMemo(() => listPath({ ...listState, scope: null, focus: null, depth: null }), [listState]);
   return (
@@ -166,6 +200,8 @@ export function ProjectKnowledge({ projectId, label, view, listState, update, pa
             <Menu label="更多" items={[
               { label: "在记忆总览中查看", onSelect: () => navigate("/app/memory/overview") },
               ...(pagesOffered && line?.canCompile ? [{ label: asking ? "正在重新整理" : "重新整理知识页", icon: RefreshCw, disabled: asking, onSelect: () => void compileNow() }] : []),
+              // The rounds nobody asked for spend the account's allowance: they can be stopped, and 重新整理 stays the person's own.
+              ...(pagesOffered && knowledge?.enabled && knowledge.state !== "disabled" ? [{ label: knowledge.autoPaused ? "恢复自动整理" : "暂停自动整理", onSelect: () => void toggleAuto(!knowledge.autoPaused) }] : []),
               { label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() },
             ]} />
           </div>
@@ -176,7 +212,7 @@ export function ProjectKnowledge({ projectId, label, view, listState, update, pa
               label="整理知识页"
               phase={[knowledge.pages > 0 ? `已有 ${knowledge.pages} 页` : "", knowledge.typedPages.kg > 0 ? `${knowledge.typedPages.kg} 个实体` : ""].filter(Boolean).join("，") || undefined}
               startedAt={knowledge.stage?.startedAt ?? null}
-              {...(knowledge.state === "queued" ? { waiting: "资料有更新，稍后会自动开始" } : {})}
+              {...(knowledge.state === "queued" ? { waiting: queuedWords(knowledge.nextAt) } : {})}
             />
           </div>
         )}

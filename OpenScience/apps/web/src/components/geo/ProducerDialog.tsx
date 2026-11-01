@@ -65,7 +65,7 @@ export function ProducerDialog({ geoId, initial, onSaved, onCancel }: { geoId: s
         {error && <p role="alert" className="text-ui text-danger">{error}</p>}
         <div className="mt-2 flex justify-end gap-2">
           <Button variant="secondary" onClick={requestClose}>取消</Button>
-          <Button type="submit" loading={saving}>保存</Button>
+          <Button type="submit" actionKind="set" loading={saving}>保存</Button>
         </div>
       </fieldset></form>}
     </FormDialog>

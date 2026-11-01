@@ -185,7 +185,7 @@ function KeyPointsBody({ source, busy, versionPath, onShowPage, onRetry }: {
         <div className="space-y-6">
           <div className="space-y-3">
             <p className="max-w-measure text-ui text-text-2">{sourceFailureMessage(source.payload.error) ?? "这份资料没能读取。"}</p>
-            <Button variant="secondary" disabled={busy} onClick={onRetry}>重新读取</Button>
+            <Button actionKind="start" variant="secondary" disabled={busy} onClick={onRetry}>重新读取</Button>
           </div>
           {meaning}
           {versions}

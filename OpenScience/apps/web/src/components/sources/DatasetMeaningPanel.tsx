@@ -78,7 +78,7 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
       <div className="space-y-2">
         <h3 className="font-semibold">数据含义{asset.title ? ` · ${asset.title}` : ""}</h3>
         {outdated && <p className="max-w-measure font-semibold">这份文件不是记录含义时读的那一版，下面的含义可能已不适用，先核对再用。</p>}
-        {inferred.length > 0 && <div><Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmInferred(inferred)}>确认这些含义</Button></div>}
+        {inferred.length > 0 && <div><Button actionKind="set" size="sm" variant="secondary" loading={busy} onClick={() => void confirmInferred(inferred)}>确认这些含义</Button></div>}
         <DatasetFacts facts={asset.facts} />
       </div>
       {asset.tables.map((table) => (

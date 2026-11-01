@@ -6,7 +6,8 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { Note } from "@/components/ui/Note";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { activeAgenda, cancellationPending, cancellationRetryLabel, executionLabel, instant, needsMaterial, pauseNotes, runState, scheduleLine, scheduleOf, zoneName } from "./taskPresentation";
+import { ConversationHeldNote } from "./ConversationHeldNote";
+import { activeAgenda, cancellationPending, cancellationRetryLabel, executionLabel, instant, needsMaterial, pauseNotes, runState, scheduleLine, scheduleOf, WAITS_FOR_MATERIAL, zoneName } from "./taskPresentation";
 
 /** What the bar's buttons do; the page decides how (a request, a confirmation, a dialog, a drawer). */
 export interface TaskBarActions {
@@ -31,7 +32,7 @@ export interface TaskBarActions {
  * It states no budget and asks for no confirmation to run. A task that waits on the researcher says so in a line of its own, with the
  * way to give it. The conversation is the kernel's, below; the shell draws no input box of its own.
  */
-export function TaskBar({ agenda, available = true, executions, selected, running, stopping = false, latestResultHref, busy, actions, backTo, onResultOpened, error, hasOlder, historyBusy, onOlder }: {
+export function TaskBar({ agenda, available = true, executions, selected, running, stopping = false, heldBy = null, latestResultHref, busy, actions, backTo, onResultOpened, error, hasOlder, historyBusy, onOlder }: {
   agenda: AgendaRecord;
   available?: boolean;
   hasOlder?: boolean;
@@ -45,6 +46,8 @@ export function TaskBar({ agenda, available = true, executions, selected, runnin
   running: EpisodeRecord | null;
   /** That execution was asked to stop and has not yet ended. */
   stopping?: boolean;
+  /** The bounded execution that holds the project's conversation (`boundedLock`): the bar says so before the researcher meets the wall. */
+  heldBy?: EpisodeRecord | null;
   /** The reader's address for the newest execution's file, when one has a file to read. */
   latestResultHref: string | null;
   busy: boolean;
@@ -73,8 +76,8 @@ export function TaskBar({ agenda, available = true, executions, selected, runnin
         <Button variant="text" size="sm" aria-label="切换执行">{executionLabel(selected, zone)}<ChevronDown size={16} aria-hidden="true" /></Button>
       </Menu>}
       {running
-        ? <Button variant="secondary" disabled={busy || stopping} onClick={actions.stop}>{stopping ? "正在停止" : "停止本次"}</Button>
-        : <Button disabled={busy || !canSchedule || !activeAgenda(agenda)} onClick={actions.run}>立即运行</Button>}
+        ? <Button variant="secondary" actionKind="set" disabled={busy || stopping} onClick={actions.stop}>{stopping ? "正在停止" : "停止本次"}</Button>
+        : <Button actionKind="start" disabled={busy || !canSchedule || !activeAgenda(agenda)} onClick={actions.run}>立即运行</Button>}
       <Menu label="更多" items={[
         // The record of what research found and left open: an ordinary job (nothing but routine) has none.
         ...(agenda.payload.taskTypes.every(type => type === "routine") ? [] : [{ label: "研究进展", onSelect: actions.openProgress }]),
@@ -88,14 +91,15 @@ export function TaskBar({ agenda, available = true, executions, selected, runnin
   );
   const retryAt = selected?.payload.resourceDeferrals?.episode?.retryAt;
   const footer = <>
-    {recovering && <Note tone="warn" action={<Button variant="secondary" size="sm" disabled={busy} onClick={actions.recover}>{cancellationRetryLabel(agenda)}</Button>}>{agenda.payload.stopSweep?.archiveRequestedAt ? "删除尚未完成，执行可能仍在进行。" : "停止尚未完成，执行可能仍在进行。"}</Note>}
+    {heldBy && <div className="mt-2"><ConversationHeldNote onStop={running && heldBy.id === running.id ? actions.stop : undefined} stopping={stopping} busy={busy} otherTaskId={heldBy.payload.agendaId !== agenda.id ? heldBy.payload.agendaId : undefined} /></div>}
+    {recovering && <Note tone="warn" action={<Button variant="secondary" size="sm" actionKind="set" disabled={busy} onClick={actions.recover}>{cancellationRetryLabel(agenda)}</Button>}>{agenda.payload.stopSweep?.archiveRequestedAt ? "删除尚未完成，执行可能仍在进行。" : "停止尚未完成，执行可能仍在进行。"}</Note>}
 
     {selected?.payload.status === "retry_pending" && <p className="mt-1 text-ui text-text-2" role="status">{recovering ? "停止尚未完成" : canSchedule ? "等待自动重试" : "定时执行暂不可用"}{canSchedule && retryAt ? ` · 预计 ${instant(retryAt, zone)} ${zoneName(zone)}` : ""}</p>}
     {selected?.payload.status === "failed" && <p className="mt-1 text-ui text-error">{knownErrorCodeMessage(selected.payload.error?.code ?? "") ?? "本次执行未完成，请查看对话后重试。"}</p>}
 
     {notes.map(note => <p key={note} className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-pre-wrap break-words text-ui text-text-2">
       {note}
-      {waiting && note.startsWith("需要你补充：") && <Button variant="secondary" size="sm" disabled={busy} onClick={actions.supply}>{canSchedule ? "补充材料并继续" : "补充材料"}</Button>}
+      {waiting && note.startsWith(WAITS_FOR_MATERIAL) && <Button variant="secondary" size="sm" actionKind={canSchedule ? "start" : "set"} disabled={busy} onClick={actions.supply}>{canSchedule ? "补充材料并继续" : "补充材料"}</Button>}
     </p>)}
     {error && <div role="alert" className="mt-2 text-ui text-error">{error.message}{error.retry && <Button variant="text" disabled={busy} onClick={error.retry}>重试操作</Button>}</div>}
   </>;

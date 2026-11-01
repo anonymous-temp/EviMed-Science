@@ -23,7 +23,7 @@ it('keeps the current route when selected-analysis staging finishes after unmoun
  mocks.stage.mockReturnValue(new Promise(resolve=>{resolveStage=resolve;}));
  const renderTree=(show:boolean)=><MemoryRouter initialEntries={['/app/geo/geo/overview']}>{show&&<GeoAnalysisWorkbench geoId="geo" project={{projectId:'control',sessionId:'session'} as never}/>}<Probe/></MemoryRouter>;
  const mounted=render(renderTree(true));fireEvent.click(screen.getByText('所选数据分析'));
- fireEvent.click(await screen.findByRole('button',{name:'在对话中解释'}));
+ fireEvent.click(await screen.findByRole('button',{name:'让 AI 解释'}));
  await waitFor(()=>expect(mocks.stage).toHaveBeenCalledTimes(1));
  mounted.rerender(renderTree(false));
  expect(screen.getByTestId('path').textContent).toBe('/app/geo/geo/overview');

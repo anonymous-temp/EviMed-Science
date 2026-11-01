@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare } from "lucide-react";
+import { PenLine } from "lucide-react";
 import type { GeoCell } from "@/lib/geoClient";
 import { buttonClasses } from "@/components/ui/Button";
 import { geoCellPhrase } from "./GeoCellText";
@@ -8,7 +8,7 @@ import type { GeoUnit } from "./geoText";
 import { useOpenGeoConversation, type GeoConversationTarget } from "./useOpenGeoConversation";
 
 /**
- * The draft “问 AI” puts in the composer for a number: what it is, its
+ * The draft “让 AI 解读” puts in the composer for a number: what it is, its
  * value with the sample it rests on, and when it was measured — so the
  * conversation starts from the same fact the reader was looking at.
  *
@@ -38,8 +38,8 @@ export function geoNumberDraft({
 }
 
 /**
- * “问 AI” beside a number or an answer: opens the project's conversation with
- * a draft that carries the fact — never sends it.
+ * “让 AI …” beside a number or an answer: opens the project's conversation with a draft that carries the fact — never sends it. It is a
+ * draft, so it says 「让 AI」, carries the pencil and declares itself one (`actionKind="draft"`): nothing starts until the person sends.
  *
  * Pass `draft` for a finished sentence (an answer, an error), or the number's
  * parts (`name`, `cell`, `date` …) and the draft is written by
@@ -54,7 +54,7 @@ export function AskAi({
   cell,
   unit,
   date,
-  label = "问 AI",
+  label = "让 AI 解读",
   className,
 }: {
   project: GeoConversationTarget;
@@ -81,6 +81,7 @@ export function AskAi({
     <button
       type="button"
       data-geo-ask-ai=""
+      data-action-kind="draft"
       disabled={busy}
       aria-busy={busy || undefined}
       onClick={() => {
@@ -89,7 +90,7 @@ export function AskAi({
       }}
       className={buttonClasses({ variant: "text", size: "sm", className: `text-accent hover:text-accent ${className ?? ""}` })}
     >
-      <MessageSquare size={16} aria-hidden="true" />
+      <PenLine size={16} aria-hidden="true" />
       {label}
     </button>
   );

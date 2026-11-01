@@ -14,16 +14,16 @@ import { Tabs } from "./Tabs";
 const ITEMS = [
   { value: "overview", label: "总览" },
   { value: "population", label: "人群", dot: "done" as const, note: "3,412 名", hint: "已完成" },
-  { value: "patients", label: "虚拟患者", dot: "attention" as const, note: "2,000 名", hint: "需要留意：上次没有做完" },
+  { value: "patients", label: "虚拟患者", dot: "attention" as const, note: "2,000 名", hint: "未完成：上次没有做完" },
 ];
 
 describe("Tabs — what a stage found, and what its dot means", () => {
   it("prints the note after the name, reads it with the label, and gives the dot's meaning as the tab's tooltip", () => {
     render(<Tabs label="研究视图" items={ITEMS} value="overview" onChange={() => undefined} />);
     const tab = screen.getByRole("tab", { name: /^虚拟患者/ });
-    expect(tab).toHaveTextContent("虚拟患者2,000 名需要留意");
+    expect(tab).toHaveTextContent("虚拟患者2,000 名未完成");
     expect(tab.querySelector("[data-tab-note]")).toHaveTextContent("2,000 名");
-    expect(document.getElementById(tab.getAttribute("aria-describedby") ?? "")).toHaveTextContent("需要留意：上次没有做完");
+    expect(document.getElementById(tab.getAttribute("aria-describedby") ?? "")).toHaveTextContent("未完成：上次没有做完");
     // A tab with no hint carries none.
     expect(screen.getByRole("tab", { name: "总览" })).not.toHaveAttribute("aria-describedby");
   });

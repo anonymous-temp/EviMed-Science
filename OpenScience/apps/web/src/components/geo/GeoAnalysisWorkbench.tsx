@@ -1,5 +1,6 @@
 import { ensureGeoConversationSession } from "./geoConversationSession";
 import { useEffect, useRef, useState } from "react";
+import { PenLine } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { GEO_METRIC_LABELS_ZH, GEO_SOURCE_KIND_LABELS_ZH } from "@evimed/domain";
 import {
@@ -352,7 +353,7 @@ function AnalysisPage({
         ]}
         search={["V17","V18","V19","V20","V22"].includes(view.viewId)?{label:"搜索引用来源",value:searchText,maxLength:300,onChange:value=>{setSearchText(value);applySearch(value,SEARCH_DEBOUNCE_MS);},onClear:()=>{setSearchText("");applySearch("",0);}}:undefined}
         // The analysis's own action: the toolbar's quiet button, in the band or in the card, never a primary below the header.
-        contextAction={data && mayConverse ? {id:"explain-analysis",label:"在对话中解释",loading:busy,disabled:resultsLocked,onSelect:()=>void explain()} : undefined}
+        contextAction={data && mayConverse ? {id:"explain-analysis",label:"让 AI 解释",loading:busy,disabled:resultsLocked,onSelect:()=>void explain()} : undefined}
       />
       {!!data?.availability?.reasons?.length && (
         <Note
@@ -440,7 +441,7 @@ function AnalysisPage({
                 {row.dimensions.kind === "history_reading" && <p className="text-caption text-text-2">观察区间：{row.dimensions.observedFrom??"未知"} 至 {row.dimensions.observedTo??"未知"}{row.dimensions.unknownTimes?`；另有 ${row.dimensions.unknownTimes} 条时间未保留`:""}</p>}
                 {row.dimensions.kind === "error_history" && <p className="text-caption text-text-2">当前处置：{({open:"待处理",acting:"正在处理",awaiting_remeasure:"等待再次观察",closed:"已关闭"} as Record<string,string>)[row.dimensions.currentStatus??""]??"未知"}；当前判定：{row.dimensions.currentJudgmentState==="withdrawn"?"已撤回":row.dimensions.currentJudgmentState==="active"?"有效":"未知"}</p>}
                 {row.dimensions.kind === "frozen_plan_target" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/plan${geoReadScopeQuery({selectionRef:data!.selection.reference})}&strategyVersion=${row.dimensions.strategyVersion}`)}>查看此版本方案与调整费用目标</Link>}
-                {row.dimensions.kind === "journey_need" && <Button size="sm" variant="text" disabled={!!project.access&&!project.access.abilities.includes("edit")} loading={busy} onClick={()=>void explain({rowKey:row.key,columnKey:"questions"})}>按此需求补充问题与内容</Button>}
+                {row.dimensions.kind === "journey_need" && <Button size="sm" variant="text" actionKind="draft" disabled={!!project.access&&!project.access.abilities.includes("edit")} loading={busy} onClick={()=>void explain({rowKey:row.key,columnKey:"questions"})}><PenLine size={16} aria-hidden="true" />让 AI 按此需求补充问题与内容</Button>}
                 {row.dimensions.kind === "journey_need" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/questions${geoReadScopeQuery({selectionRef:data!.selection.reference})}&group=${encodeURIComponent(row.dimensions.groupId??"")}`)}>查看问题与采集</Link>}
                 {row.dimensions.kind === "journey_unmapped" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/evidence`)}>补充证据与需求关联</Link>}
                 {row.dimensions.kind === "clinical_source_support" && <><p className="text-caption text-text-2">适用条件：{claimConditionsText(row.dimensions.applicability)} · 证据级别：{row.dimensions.evidenceLevel??"未知"}</p><Link className="text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/evidence${geoReadScopeQuery({selectionRef:data!.selection.reference})}`)}>查看或更新证据</Link></>}
@@ -449,7 +450,7 @@ function AnalysisPage({
                 {row.dimensions.kind !== "journey_need" && row.dimensions.groupState === "known" && row.dimensions.groupId && <Link className="text-accent" to={sourceActionPath({group:row.dimensions.groupId})}>查看问题群与行动</Link>}
                 {row.dimensions.kind === "source_relationship" && <Disclosure summary="当前关系注释与编辑">{row.dimensions.annotationContext?.pages.slice(0,10).map(annotation=><p key={annotation.url}><Button size="sm" variant="text" onClick={()=>setRelationshipUrl(annotation.url)}>{annotation.url} · {row.dimensions.annotationContext?.records[annotation.recordIndex].origin??"未知"} · 修订 {row.dimensions.annotationContext?.records[annotation.recordIndex].reference?.revision??"未标记"}</Button></p>)}</Disclosure>}
                 {row.dimensions.kind === "opportunity" && <>
-                  <Button size="sm" variant="text" disabled={!!project.access&&!project.access.abilities.includes("edit")} loading={busy} onClick={()=>void explain({rowKey:row.key,columnKey:"owned"})}>按此问题群拟定方案</Button>
+                  <Button size="sm" variant="text" actionKind="draft" disabled={!!project.access&&!project.access.abilities.includes("edit")} loading={busy} onClick={()=>void explain({rowKey:row.key,columnKey:"owned"})}><PenLine size={16} aria-hidden="true" />让 AI 按此问题群拟定方案</Button>
                   {row.values.owned?.reason === "owned_not_registered" && <Link className="block text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/actions`)}>登记自有发布地址</Link>}
                   {row.dimensions.gaps && <OpportunityLinks gaps={row.dimensions.gaps} openPublication={openPublication}/>}
                 </>}

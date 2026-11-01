@@ -11,6 +11,7 @@ import { Note } from "@/components/ui/Note";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VcrTabSkeleton } from "./VcrStates";
+import { scrollBlockToTop } from "./vcrScroll";
 
 function registryFailure(reason: string | null | undefined): string {
   if (/timeout/i.test(reason ?? "")) return "查询超时，可重试";
@@ -26,7 +27,7 @@ export function VcrReferenceSearch({ query, onApplied, studyId }: { query: strin
   const resultsId = useId();
   return <Section title="检索登记试验">
     {state.kind === "loading" ? <VcrTabSkeleton /> : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} /> : <>
-      <div role="status"><Note result={["本次显示 ", { n: state.data.candidates.length, onOpen: () => document.getElementById(resultsId)?.scrollIntoView({ block: "nearest" }), label: "查看本次检索结果" }, " 项；各来源检索命中数见下方。"]} /></div>
+      <div role="status"><Note result={["本次显示 ", { n: state.data.candidates.length, onOpen: () => scrollBlockToTop(document.getElementById(resultsId)), label: "查看本次检索结果" }, " 项；各来源检索命中数见下方。"]} /></div>
       <div id={resultsId}>
       <DataTable label="登记试验检索结果" columns={[
         { key: "registryId", header: "登记号", cell: row => row.registryId },
@@ -70,10 +71,10 @@ function ReferenceRecord({ candidate, onClose, onApplied, studyId: fixedStudyId 
         { key: "verification", header: "原文核对", cell: row => row.verification === "verified" ? "原文一致" : "待核对" },
       ]} rows={state.data.record?.values ?? []} rowKey={(row) => `${row.parameter}:${row.value}:${row.unit}`} />
       <details><summary className="text-ui text-link">登记原文</summary><pre className="whitespace-pre-wrap text-caption text-text-2">{state.data.record?.text ?? "未提供原文"}</pre></details>
-      {fixedStudyId ? <Button disabled={busy || applied} loading={busy} onClick={() => { void apply(); }}>{applied ? "已用于本研究" : "用于本研究"}</Button> : studies.state.kind === "error" ? <VcrTabError message={studies.state.message} onRetry={studies.reload} /> : studies.state.kind === "ready" && studies.state.data && <>
+      {fixedStudyId ? <Button actionKind="set" disabled={busy || applied} loading={busy} onClick={() => { void apply(); }}>{applied ? "已用于本研究" : "用于本研究"}</Button> : studies.state.kind === "error" ? <VcrTabError message={studies.state.message} onRetry={studies.reload} /> : studies.state.kind === "ready" && studies.state.data && <>
         <label htmlFor={fieldId} className="block text-ui text-text">用于现有研究</label>
         <select id={fieldId} className={inputClasses()} value={studyId} onChange={event => setStudyId(event.target.value)}><option value="">选择研究</option>{studies.state.data.studies.map(study => <option key={study.id} value={study.id}>{study.name}</option>)}</select>
-        <Button disabled={!studyId || busy || applied} loading={busy} onClick={() => { void apply(); }}>保存为研究参考试验</Button>
+        <Button actionKind="set" disabled={!studyId || busy || applied} loading={busy} onClick={() => { void apply(); }}>保存为研究参考试验</Button>
       </>}
       {message && <p role="status" className="text-ui text-text-2">{message}</p>}
     </div>}

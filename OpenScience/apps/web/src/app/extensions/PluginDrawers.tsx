@@ -80,7 +80,7 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
               {timeoutField && (
                 <form className="flex flex-col gap-2" noValidate onSubmit={event => { event.preventDefault(); if (!invalid && dirty) void save({ timeoutMs: value * 1000 }).then(success => { if (success) setEdit(null); }); }}>
                   <Input label="请求超时（秒）" type="number" min={min} max={max} step={1} value={seconds} disabled={busy} error={dirty && invalid ? `请输入 ${min}–${max} 之间的整数。` : undefined} onChange={event => setEdit(event.target.value)} />
-                  <div><Button type="submit" size="sm" variant="secondary" loading={busy} disabled={!dirty || invalid}>保存</Button></div>
+                  <div><Button actionKind="set" type="submit" size="sm" variant="secondary" loading={busy} disabled={!dirty || invalid}>保存</Button></div>
                 </form>
               )}
               {saved && saved.length > 0 && (
@@ -88,7 +88,7 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
                   <List label="配置历史" divided>
                     {saved.map(item => (
                       <ListRow key={item.revision} title={`${formatDay(item.recordedAt)} ${formatClock(item.recordedAt)}`} meta={configurationText(item)}
-                        actions={item.revision !== desired?.revision ? <Button size="sm" variant="text" disabled={busy} onClick={() => void restore(item)}>恢复这一项</Button> : undefined} />
+                        actions={item.revision !== desired?.revision ? <Button actionKind="set" size="sm" variant="text" disabled={busy} onClick={() => void restore(item)}>恢复这一项</Button> : undefined} />
                     ))}
                   </List>
                 </DrawerSection>

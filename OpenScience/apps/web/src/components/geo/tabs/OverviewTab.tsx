@@ -2,7 +2,6 @@ import { Note } from "@/components/ui/Note";
 import { useGeoFrame } from "../geoFrame";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { Link } from "react-router";
-import { GeoJourneySummary } from "../GeoJourneySummary";
 import { geoOverviewNeedsMeasurement } from "../geoFirstUse";
 import { buttonClasses } from "@/components/ui/Button";
 import { useMemo } from "react";
@@ -82,7 +81,6 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const ranked = ranking.length > 0;
 
   if (geoOverviewNeedsMeasurement(project, diagnosis.state, monitoring.state)) return <div data-geo-tab="overview" data-geo-first-use="" className="flex flex-col gap-6">
-    <GeoJourneySummary project={project} />
     <Section title="已有资料与结果">
       <Note action={<div className="flex flex-wrap gap-2"><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"evidence"))}>查看产品依据</Link><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"questions"))}>整理问题</Link></div>}>还没有采样记录。产品依据、问题和方案的已有结果都可继续查看。</Note>
     </Section>
@@ -94,7 +92,6 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-6">
-      <GeoJourneySummary project={project} compact />
       <GeoComparison geoId={geoId} view={project} />
         {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
           「还有 11 条严重讲错」 a moment later is worse than a held line. */}

@@ -53,7 +53,7 @@ export function RememberDialog({ projectId = null, onClose, onAsked }: {
         {error && <p role="alert" className="text-ui text-error">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="text" disabled={busy} onClick={requestClose}>取消</Button>
-          <Button type="submit" loading={busy} disabled={!text.trim()}>记住</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={!text.trim()}>记住</Button>
         </div>
       </form>}
     </FormDialog>
