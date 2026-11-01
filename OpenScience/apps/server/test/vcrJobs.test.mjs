@@ -6,11 +6,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatePlanForJob, vcrReplicatesForJob,
+  VcrJobs, VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatePlanForJob, vcrReplicatesForJob,
   VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrBindScientificInputUnits, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
-import { VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
+import { VCR_MINIMAL_TEMPLATES, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
 
 const scenario = {
   design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 },
@@ -390,4 +390,88 @@ test('frozen observed-table units replace caller labels, while synthetic units s
   const missing=vcrBindScientificInputUnits('model.prognostic_apply',scenario,[{...input,columnUnits:{}}]);assert.equal(missing.scenario.inputUnits.age,'unknown');
   const synthetic=vcrBindScientificInputUnits('model.prognostic_apply',scenario,[{...input,valueSource:'synthetic'}]);assert.equal(synthetic.scenario.inputUnits.age,'years');assert.equal(synthetic.detail.basis,'declared_synthetic_scenario');
   assert.throws(()=>vcrBindScientificInputUnits('model.survival_fit',{inputId:'snp:1',timeColumn:'age',timeUnit:'years'},[input]),{code:'vcr_model_not_applicable'});
+});
+
+// --- the check that queues nothing (C1) ----------------------------------------------------------------------------------------
+
+/** A queue that cannot reach a database: `validate` must not need one beyond the study's intended use. @param {string | null} [intendedUse] */
+const queue = (intendedUse = null) => {
+  /** @type {string[]} */
+  const touched = [];
+  const store = new Proxy({}, { get: (_target, name) => async () => { touched.push(String(name)); if (name === "studyById") return { intendedUse }; throw new Error(`validate reached ${String(name)}`); } });
+  return Object.assign(new VcrJobs({ store, config: { vcrJobCpuSeconds: 600 } }), { touched });
+};
+
+test("validate answers a valid scenario with its defaults, its replicate count and what set it, its cost class, and reaches no store", async () => {
+  const jobs = queue();
+  const answer = await jobs.validate({ kind: "design_simulation", scenario });
+  assert.deepEqual([answer.action, answer.queued, answer.checked, answer.valid, answer.issues], ["validate", false, true, true, []]);
+  assert.deepEqual(answer.scenario, scenario, "a scenario with nothing to canonicalise is returned as stated");
+  assert.equal(answer.replicates.count, 5000);
+  assert.match(answer.replicates.reason, /the default floor for an alternative/);
+  assert.deepEqual(answer.cost, { class: "heavy", cpuSecondsLimit: 600 });
+  assert.equal(answer.seed, vcrSeedFor(vcrScenarioHash(scenario)));
+  // The same list a started job carries as `applied`: the dropout nobody wrote is there.
+  const applied = Object.fromEntries(answer.applied.map((entry) => [entry.field, entry.value]));
+  assert.equal(applied["accrual.dropoutAnnual"], 0);
+  assert.deepEqual(jobs.touched, [], "nothing was read or written");
+  // A zero-effect scenario carries the floor of its case; the study's intended use raises it; what the run asked for raises it again.
+  const nullCase = { ...scenario, truth: { hazardRatio: 1, controlMedian: 6 } };
+  assert.equal((await jobs.validate({ kind: "design_simulation", scenario: nullCase })).replicates.count, VCR_REPLICATES_NULL_MIN);
+  const specified = queue("specified_analysis");
+  const sized = await specified.validate({ kind: "design_simulation", scenario: nullCase, studyId: "std_1" });
+  assert.equal(sized.replicates.count, 100_000);
+  assert.match(sized.replicates.reason, /intended use \(specified_analysis\)/);
+  assert.match((await jobs.validate({ kind: "design_simulation", scenario, replicates: 20_000 })).replicates.reason, /the count you asked for/);
+  // A closed-form size has no replicates.
+  const analytic = await jobs.validate({ kind: "design_analytic", scenario: { design: { kind: "two_arm_fixed" }, endpoint: { type: "binary" }, truth: { controlRate: 0.3, treatmentRate: 0.45 } } });
+  assert.equal(analytic.valid, true);
+  assert.equal(analytic.replicates, undefined);
+  assert.deepEqual(analytic.cost, { class: "light", cpuSecondsLimit: 600 });
+});
+
+test("validate refuses by path what a start would refuse, and an unknown key or a missing fact is the same refusal in both", async () => {
+  const jobs = queue();
+  const refused = await jobs.validate({ kind: "design_simulation", scenario: { ...scenario, accrual: { kind: "uniform", duration: 12, followup: 12, months: 18 } } });
+  assert.equal(refused.valid, false);
+  assert.deepEqual(refused.queued, false);
+  assert.ok(refused.issues.some((issue) => issue.field === "scenario.accrual.months" && issue.code === "scenario_field_unknown"), JSON.stringify(refused.issues));
+  const missing = await jobs.validate({ kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, endpoint: { type: "time_to_event" }, truth: { controlMedian: 12 } } });
+  assert.equal(missing.valid, false);
+  assert.ok(missing.issues.some((issue) => /hazardRatio/.test(issue.field)), JSON.stringify(missing.issues));
+  // The check an enqueue makes of the inputs a caller names is made here too.
+  const forged = await jobs.validate({ kind: "weight_comparator", scenario: { covariates: ["age"] }, inputs: [{ kind: "snapshot", id: "snp_1", location: "../x" }] });
+  assert.equal(forged.valid, false);
+  assert.ok(forged.issues.some((issue) => issue.code === "input_location_forbidden"));
+  assert.ok(forged.issues.length <= 20);
+  await assert.rejects(jobs.validate({ kind: "no_such_kind", scenario: {} }), { code: "vcr_job_kind_invalid" });
+});
+
+test("a kind the platform completes at start is not checked and says so rather than guessing", async () => {
+  const jobs = queue();
+  for (const kind of ["literature_population", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "forecast_trajectories"]) {
+    const answer = await jobs.validate({ kind, scenario: {} });
+    assert.deepEqual([answer.checked, answer.queued, answer.valid], [false, false, undefined], kind);
+    assert.match(answer.message, /启动时/, kind);
+  }
+});
+
+test("validate and enqueue agree on a scenario: what validate accepts, the engine's own validator accepts", async () => {
+  const jobs = queue();
+  for (const [kind, method] of [["design_simulation", "design.simulate"], ["design_analytic", "design.analytic"]]) {
+    for (const template of VCR_MINIMAL_TEMPLATES[method]) {
+      const answer = await jobs.validate({ kind, scenario: template.scenario });
+      assert.equal(answer.valid, true, `${kind} ${template.name}: ${JSON.stringify(answer.issues)}`);
+    }
+  }
+});
+
+test("validate leaves the names of a job's inputs to the start that resolves them, and judges everything else of the scenario", async () => {
+  const jobs = queue();
+  // `inputId` names the snapshot's table, which the platform resolves at start: the key being absent from an empty list is not a refusal.
+  const survival = await jobs.validate({ kind: "fit_survival_model", scenario: { inputId: "snp_1", idColumn: "USUBJID", timeColumn: "AVAL", statusColumn: "CNSR", statusEncoding: "censor", distribution: "weibull", timeUnit: "months", horizons: [6, 12] }, inputs: [{ kind: "snapshot", id: "snp_1" }] });
+  assert.deepEqual([survival.valid, survival.issues], [true, []]);
+  const bad = await jobs.validate({ kind: "fit_survival_model", scenario: { inputId: "snp_1", idColumn: "USUBJID", timeColumn: "AVAL", statusColumn: "CNSR", statusEncoding: "censor", distribution: "gamma", timeUnit: "months", horizons: [6, 12] }, inputs: [{ kind: "snapshot", id: "snp_1" }] });
+  assert.equal(bad.valid, false);
+  assert.ok(bad.issues.every((issue) => issue.field !== "scenario.inputId"));
 });

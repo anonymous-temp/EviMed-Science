@@ -2250,15 +2250,17 @@ export {
   whenHolds,
 } from './src/vcrScenarioSchemas.mjs'
 
-// vcrScenarioHelp — 7 exports: what a model is given to write a scenario from, rendered from the schemas above
+// vcrScenarioHelp — 9 exports: what a model is given to write a scenario from, rendered from the schemas above
 // (`runtime/mcp/evimed-research/vcr_scenario_help.json` is generated from it), and the keys read inside a node
 export {
   VCR_RUN_SCENARIO_FIELDS,
+  VCR_MINIMAL_TEMPLATES,
   VCR_SCENARIO_EXAMPLES,
   VCR_SCENARIO_HELP_VERSION,
   vcrScenarioChildKeys,
   vcrScenarioHelp,
   vcrScenarioParentOf,
+  vcrRowRole,
   vcrScenarioRows,
 } from './src/vcrScenarioHelp.mjs'
 

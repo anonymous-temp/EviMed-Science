@@ -368,6 +368,71 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
 })
 
 // ---------------------------------------------------------------------------
+// What a row asks of the person, and the minimal scenario of each common path (C2, C4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a key of a scenario is a fact of the research or something the model can settle itself, read from the row's own
+ * structure and from nothing kept beside it (remediation plan C2):
+ *
+ * - `research_fact` — the schema requires it (always, in the case the row's gate describes, or as one of the keys a coupled rule
+ *   says one of must be given) and states no default, and it is not a choice among the method's own words: a hazard ratio, a
+ *   control median, a sample size. Only the research can give it, so it is the one kind of key a conversation may ask about, and
+ *   only when the answer would change the next computation.
+ * - `defaultable` — everything else: a key with a default (the platform fills it and says so in `applied`), an optional key (the engine
+ *   goes on without it), and a closed vocabulary with no default (the endpoint, the design: a choice the question itself makes).
+ *   The model settles these, states the assumption in its reply, and does not ask.
+ *
+ * An object has no role of its own — it is only its keys, and a key inside it that depends on a sibling's value is a fact only when
+ * that value says so — and `null` is returned for it; the keys inside carry the roles.
+ * @param {VcrHelpRow} row @param {{ rules?: readonly VcrHelpRule[] }} [context] the method's coupled rules
+ * @returns {'research_fact' | 'defaultable' | null}
+ */
+export function vcrRowRole(row, { rules = [] } = {}) {
+  if (row.type === 'object') return null
+  if (row.default !== undefined) return 'defaultable'
+  const coupled = rules.some((rule) => (rule.kind === 'exactlyOne' || rule.kind === 'atLeastOne') && (rule.keys ?? []).includes(row.path)
+    || rule.kind === 'requires' && (rule.needs ?? []).includes(row.path))
+  const needed = row.required === true || (Array.isArray(row.requiredWhen) && row.requiredWhen.length > 0) || coupled
+  if (!needed) return 'defaultable'
+  const choice = row.type === 'string' && (Array.isArray(row.values) || Boolean(row.valuesBy))
+  return choice ? 'defaultable' : 'research_fact'
+}
+
+/**
+ * One minimal scenario per common path: the facts of the research and the choices the question makes, and nothing the platform
+ * defaults (alpha, power, the analysis, the accrual's shape, the dropout). It is a starting point a model reads, never a form and
+ * never shown to a person; a number in it is a placeholder for the study's own. The test runs every template through
+ * `validateScenario` and holds it to the rule above: no key of a template has a default.
+ * @type {Readonly<Record<string, ReadonlyArray<{ name: string, label: string, scenario: Record<string, any> }>>>}
+ */
+export const VCR_MINIMAL_TEMPLATES = Object.freeze({
+  'design.analytic': [
+    { name: 'two_arm_time_to_event', label: 'sample size of a two-arm time-to-event design', scenario: {
+      design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { duration: 12, followup: 12 } } },
+    { name: 'two_arm_binary', label: 'sample size of a two-arm binary design', scenario: {
+      design: { kind: 'two_arm_fixed' }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 } } },
+    { name: 'two_arm_continuous', label: 'sample size of a two-arm continuous design, the effect in standard-deviation units (truth.sd defaults to 1: state it when the effect is in the outcome\'s own unit)', scenario: {
+      design: { kind: 'two_arm_fixed' }, endpoint: { type: 'continuous' }, truth: { effect: 0.5 } } },
+  ],
+  'design.simulate': [
+    { name: 'two_arm_time_to_event', label: 'operating characteristics of a two-arm time-to-event design', scenario: {
+      design: { kind: 'two_arm_fixed', nTreat: 150, nControl: 150 }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 } } },
+    { name: 'two_arm_binary', label: 'operating characteristics of a two-arm binary design', scenario: {
+      design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 } } },
+    { name: 'two_arm_continuous', label: 'operating characteristics of a two-arm continuous design, the effect in standard-deviation units (truth.sd defaults to 1: state it when the effect is in the outcome\'s own unit)', scenario: {
+      design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'continuous' }, truth: { effect: 0.5 } } },
+  ],
+  'population.literature': [
+    { name: 'literature_population', label: 'a population from a published baseline table', scenario: {
+      baselineTable: [{ variable: 'age', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }] } },
+  ],
+  'comparator.entropy_balance': [
+    { name: 'entropy_balance', label: 'entropy-balance weighting of an external control', scenario: { covariates: ['age', 'ecog'] } },
+  ],
+})
+
+// ---------------------------------------------------------------------------
 // The file
 // ---------------------------------------------------------------------------
 
@@ -443,13 +508,16 @@ function methodEntry(method) {
   const schema = /** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[method]
   const spec = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]
   const notes = [...designNotes(method), .../** @type {Record<string, readonly string[]>} */ (METHOD_NOTES)[method] ?? []]
+  const templates = /** @type {Record<string, any>} */ (VCR_MINIMAL_TEMPLATES)[method]
   return compact({
     endpoints: [...spec.endpoints],
     designs: /** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method] ? JSON.parse(JSON.stringify(/** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method])) : undefined,
     gridCells: schema.gridCells,
     notes: notes.length ? notes : undefined,
-    rows,
+    // Every key says what it asks of a person (research fact or defaultable; an object is only its keys): derived from the row, never kept as a list.
+    rows: rows.map((row) => { const fieldRole = vcrRowRole(row, { rules }); return fieldRole ? { ...row, fieldRole } : row }),
     rules: rules.length ? rules : undefined,
+    templates: templates ? JSON.parse(JSON.stringify(templates)) : undefined,
     examples: (/** @type {Record<string, any>} */ (VCR_SCENARIO_EXAMPLES)[method] ?? []).map((/** @type {any} */ example) => JSON.parse(JSON.stringify(example))),
   })
 }

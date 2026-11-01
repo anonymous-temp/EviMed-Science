@@ -29,6 +29,9 @@ Six tools a 虚拟临床研究 capability's run uses; none is ever forced into a
   platform nothing: it renders, from ``vcr_scenario_help.json`` (generated from
   the domain's scenario schemas), every key a job kind's scenario reads, and a
   refused start carries the keys of the place it was refused from the same file.
+  ``validate`` takes what ``start`` takes and queues nothing and waits for nothing: it answers the scenario as it would be frozen, the
+  defaults the platform would fill in, the replicate count and what set it, the cost class, or the refusal by path -- so a run may
+  validate and start in the same turn.
 - ``trial_registry_record`` fetches one registry record as structured fields --
   eligibility text, arms, endpoints, planned and actual enrolment. The run
   never reaches a registry itself; the control plane does.
@@ -106,7 +109,7 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
-SIMULATE_ACTIONS = ("start", "status", "cancel", "shape")
+SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate")
 # The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
 # platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
 # writing one. `test_vcr_platform.py` holds every name to the domain's job kinds.
@@ -895,6 +898,9 @@ def _row_line(row: dict, by_path: dict) -> str:
     text = "%s: %s; %s" % (row["path"], _type_text(row), need)
     if "default" in row:
         text += "; default %s" % _number(row["default"])
+    # What the key asks of a person, derived by the platform from the schema's structure (an object has no role: its keys do).
+    if row.get("fieldRole") in ("research_fact", "defaultable"):
+        text += "; role: %s" % row["fieldRole"]
     gates = _own_gates(row, parent)
     if gates:
         text += "; read only when %s" % " and ".join(gates)
@@ -1029,8 +1035,17 @@ def shape(arguments: dict) -> dict:
             data["notes"] = notes
         data["examples"] = list(method.get("examples", []))
         summary = "The scenario of %s (method %s) reads %d keys." % (kind, method_id, len(rows))
+    templates = method.get("templates") if platform is None else None
+    if templates:
+        # The smallest valid scenario of each common path: the facts of the research and the choices the question makes, nothing the
+        # platform defaults. Its numbers are placeholders for the study's own.
+        data["templates"] = [{"name": template["name"], "label": template["label"], "scenario": template["scenario"]} for template in templates]
     data["legend"] = ("path: type; required or optional (required whenever the key is read); default; read only when <condition> (the key is refused "
-                      "when the condition does not hold). A path with [] is inside each item of a list. A key not listed is refused by its path.")
+                      "when the condition does not hold); role. A path with [] is inside each item of a list. A key not listed is refused by its path. "
+                      "role research_fact: only the research can give it; ask about it only if the answer would change the next computation, one "
+                      "question at a time, and otherwise go on with a stated assumption. role defaultable: settle it yourself (a default is filled "
+                      "and listed in applied, an optional key may be left out, a choice among words follows from the question) and say which "
+                      "value you took; do not ask. An object has no role: its keys do.")
     return {
         "status": "success",
         "summary": summary,
@@ -1038,6 +1053,8 @@ def shape(arguments: dict) -> dict:
         "warnings": [],
         "next_actions": [
             "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
+            "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
+            "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
             "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
         ],
     }
@@ -1082,7 +1099,7 @@ def simulate(arguments: dict) -> dict:
     if action == "shape":
         return shape(arguments)
     payload = {"action": action}
-    if action == "start":
+    if action in ("start", "validate"):
         kind = arguments.get("kind")
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
@@ -1101,13 +1118,56 @@ def simulate(arguments: dict) -> dict:
         if error.code in _absent_codes():
             return _module_absent(error, "computation", "queue")
         # A refused scenario names the keys of the place it was refused, read from the same help the shape action renders.
-        hint = refusal_hint(payload.get("kind"), error.issues) if action == "start" else ""
+        hint = refusal_hint(payload.get("kind"), error.issues) if action in ("start", "validate") else ""
         if hint:
             raise VcrPlatformError(error.code, "%s %s" % (error, hint), error.retryable, error.issues) from error
         raise
+    if action == "validate":
+        return _validate_answer(data, payload.get("kind"))
     if action in ("start", "status"):
         data = _wait_for_job(data)
     return _with_entry(_with_applied(_job_answer(data, action), data), data)
+
+
+def _validate_answer(data: dict, kind) -> dict:
+    """The answer of ``action: validate``: what the platform would do with this scenario, said without queueing it and without waiting.
+
+    A valid scenario comes back with the defaults the platform would fill in (to be said in the reply with their values, as after a
+    start), the replicate count and what set it, and the job's cost class; a refused one comes back with its issues by path and the
+    keys of the place it was refused. Either way nothing was queued, and the run may go on to start in the same turn.
+    """
+    if data.get("checked") is False:
+        return {
+            "status": "success",
+            "summary": "validate does not check %s: the platform completes its scenario when it starts." % (kind or "this kind"),
+            "data": data,
+            "warnings": [str(data.get("message") or "The platform builds this scenario itself.")],
+            "next_actions": ["Start it with action start; a field that is refused comes back by its path."],
+        }
+    issues = data.get("issues") if isinstance(data.get("issues"), list) else []
+    if data.get("valid") is False:
+        hint = refusal_hint(kind, [issue for issue in issues if isinstance(issue.get("code"), str) and isinstance(issue.get("field"), str)])
+        return {
+            "status": "warning",
+            "summary": "The scenario is not valid as written (%d issue%s); nothing was queued." % (len(issues), "" if len(issues) == 1 else "s"),
+            "data": data,
+            "warnings": [_issue_line(issue) for issue in issues[:20]],
+            "next_actions": [line for line in (
+                "Fix exactly the fields named, then validate again or start; do not ask the researcher about a field the schema defaults.",
+                hint,
+            ) if line],
+        }
+    actions = ["Nothing was queued and nothing was waited on: start with the same scenario in this turn when it is what the study intends."]
+    if isinstance(data.get("applied"), list) and data["applied"]:
+        actions.append("data.applied lists what the platform will fill in because the scenario states none of it. Say each with its value in your reply; "
+                       "one that is not what the study intends is stated in the scenario before it is started.")
+    return {
+        "status": "success",
+        "summary": "The scenario is valid; nothing was queued.",
+        "data": data,
+        "warnings": [],
+        "next_actions": actions,
+    }
 
 
 def _status_wait_seconds() -> float:
@@ -1252,12 +1312,18 @@ def _job_answer(data: dict, action: str) -> dict:
             "summary": "Job %s was cancelled; the completed batches are kept." % job_id,
             "data": data, "warnings": [], "next_actions": [],
         }
+    actions = ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."]
+    result = data.get("result") if isinstance(data.get("result"), dict) else {}
+    if result.get("kind") in ("trial_scenario", "design_grid"):
+        # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
+        actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "
+                       "bound, the target power, the sample size or the duration), from the numbers in the result; the platform does not pick the design.")
     return {
         "status": "success",
         "summary": "Job %s succeeded." % job_id if action != "cancel" else "Job %s is cancelled." % job_id,
         "data": data,
         "warnings": [],
-        "next_actions": ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."],
+        "next_actions": actions,
     }
 
 

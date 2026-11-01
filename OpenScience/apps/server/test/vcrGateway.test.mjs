@@ -712,6 +712,41 @@ test("a refused scenario tells the run where it was refused as a code and a path
   assert.equal("issues" in (await send(plain.handler, "design_analytic")).json(), false);
 });
 
+test("simulate validate asks the queue's own check and answers it: nothing is enqueued, no subject is resolved, a refusal is an answer (C1)", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const base = fixture();
+  const jobs = {
+    ...base.vcr.jobs,
+    async validate(/** @type {any} */ input) { asked.push(input); return input.kind === "design_simulation" ? { action: "validate", kind: input.kind, queued: false, checked: true, valid: true, issues: [], applied: [{ field: "analysis.alpha", value: 0.025 }] }
+      : { action: "validate", kind: input.kind, queued: false, checked: true, valid: false, issues: [{ code: "scenario_value_invalid", field: "scenario.design", message: "x" }] }; },
+    async enqueue() { throw new Error("validate must not queue"); },
+  };
+  const { handler, calls } = fixture({ jobs });
+  const ok = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "validate", kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed" } }, replicates: 7000 }), ok);
+  assert.equal(ok.status, 200, ok.body);
+  assert.deepEqual(ok.json().data.applied, [{ field: "analysis.alpha", value: 0.025 }]);
+  assert.equal(ok.json().data.queued, false);
+  assert.equal(asked[0].studyId, "std_1");
+  assert.deepEqual([asked[0].kind, asked[0].replicates, asked[0].scenario], ["design_simulation", 7000, { design: { kind: "two_arm_fixed" } }]);
+  const refused = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "validate", kind: "design_analytic", scenario: {} }), refused);
+  assert.equal(refused.status, 200, "a refused scenario is the answer, not an error");
+  assert.equal(refused.json().data.valid, false);
+  // A model or a reconstruction named here is bound at start, and says so.
+  const bound = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "validate", kind: "weighted_cox_comparator", scenario: {}, reconstructionResultId: "res_7" }), bound);
+  assert.equal(bound.status, 400, "the reconstruction is for the one kind that reads it, as in start");
+  assert.equal(calls.filter((call) => call[0] === "enqueue").length, 0);
+  // the same body is refused by the same rules: no kind, a malformed scenario
+  for (const body of [{ action: "validate" }, { action: "validate", kind: "design_simulation", scenario: [] }]) {
+    const bad = response();
+    await handler(request("/internal/vcr/v1/simulate", body), bad);
+    assert.equal(bad.json().code, "vcr_simulate_payload_invalid", JSON.stringify(body));
+  }
+});
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler, vcr } = fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } } });
   void vcr;

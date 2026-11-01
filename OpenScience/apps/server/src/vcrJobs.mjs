@@ -128,7 +128,7 @@ import path from "node:path";
 
 import {
   VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
-  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload,
+  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -342,6 +342,33 @@ export function vcrScenarioColumns(scenario) {
 /** Job kinds whose work is heavy enough to be the study's budget question. */
 const HEAVY_KINDS = new Set(["design_simulation", "design_grid", "synthesize_population", "generate_patients",
   "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"]);
+
+/** The kinds whose replicate count is a floor (`vcrReplicatePlanForJob`), which the study's intended use can raise. */
+const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
+
+/**
+ * The kinds whose scenario the platform rewrites when it starts them, so that the scenario as a run states it is not the scenario
+ * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
+ * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
+ */
+const PLATFORM_BOUND_KINDS = new Set(["literature_population", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria"]);
+
+/**
+ * What set a simulation's replicate count, in a sentence a run can repeat: the floor of its case, the study's intended use, a
+ * borrowing design, the precision asked for, or the count the run asked for.
+ * @param {{ replicates: number, floor: number, basis: string, intendedUse: string | null, targetMcse: number | null }} plan
+ * @param {Record<string, any>} scenario @param {number | null | undefined} asked
+ */
+function replicateReasonOf(plan, scenario, asked) {
+  const null_ = vcrReplicatePlanFor(scenario, { intendedUse: plan.intendedUse });
+  const floor = plan.floor.toLocaleString("en-US");
+  const why = plan.basis === "asked" ? "the count you asked for"
+    : plan.basis === "intended_use" ? `the floor for the study's intended use (${plan.intendedUse}) under no effect`
+      : plan.basis === "borrowing" ? "the floor for a design that borrows external data, under no effect"
+        : plan.basis === "target_mcse" ? `raised to reach a Monte-Carlo error of ${plan.targetMcse}`
+          : `the default floor for ${null_.isNull ? "a scenario with no effect" : "an alternative"}`;
+  return Number.isInteger(asked) && Number(asked) > plan.floor ? `${plan.replicates.toLocaleString("en-US")}, the count you asked for (the floor is ${floor}: ${why})` : `${floor}: ${why}`;
+}
 
 /** Weakest first: the worst of two conclusions is the later one. */
 const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
@@ -797,6 +824,58 @@ export class VcrJobs {
   }
 
   // --- enqueue ----------------------------------------------------------------------
+
+  /**
+   * A scenario checked the way `enqueue` checks it and answered, never queued (remediation plan C1; a run asks it and, when it
+   * is valid, starts in the same turn — it is not a wait). It returns the scenario as it would be frozen (the comparator's time unit
+   * in its canonical spelling), the fields the platform would fill in because the scenario stated none (the same list a started job
+   * carries as `applied`), how many replicates a simulation would take and what set the number, and the job's cost class and CPU
+   * ceiling. A refusal is an answer with its issues, not an error: the point is to learn them before the call that would queue it.
+   *
+   * What it does not do: the kinds whose scenario the platform rewrites when it starts them (a literature population's bindings, a
+   * reconstruction's curve receipt, a pooled or matched scenario, a model's equation) are not checked here and say so; the bindings
+   * of the object a job is filed under are not applied; and there is no estimate of how long it would run, because no method has a
+   * measured cost the code can read off a scenario (the one measured model, the synthetic copy's, needs the table's size).
+   *
+   * @param {{ kind: string, scenario?: Record<string, any>, inputs?: unknown[], replicates?: number | null, studyId?: string | null }} input
+   * @returns {Promise<Record<string, any>>}
+   */
+  async validate(input) {
+    const kind = String(input.kind);
+    if (!VCR_JOB_KINDS.includes(kind)) throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
+    const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
+    if (PLATFORM_BOUND_KINDS.has(kind) || Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) {
+      return { action: "validate", kind, queued: false, checked: false,
+        message: "这类计算的场景由平台在启动时补全（来源绑定、曲线回执、模型方程或已保存的记录），这里不检查；直接 start，被拒的字段会按路径回来。" };
+    }
+    const unitBound = vcrCanonicalScenarioTimeUnit(method, object(input.scenario));
+    const scenario = unitBound.scenario;
+    const asked = list(input.inputs);
+    const callerIssues = validateCallerInputs(asked, { kind });
+    // A key that names one of the job's inputs (a snapshot's table) is resolved from the snapshot at start; it is not this call's to judge.
+    const inputKeys = new Set(vcrScenarioRows(method).rows.filter((row) => row.role === "input id").map((row) => row.path));
+    const namesAnInput = (/** @type {string} */ field) => inputKeys.has(field.replace(/^scenario\./, "").replace(/\[\d+\]/g, "[]"));
+    const scenarioHash = vcrScenarioHash(scenario);
+    const intendedUse = SIZED_KINDS.has(kind) && input.studyId ? ((await this.store.studyById(input.studyId))?.intendedUse ?? null) : null;
+    const plan = vcrReplicatePlanForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null, { intendedUse });
+    const skeleton = { jobId: "job_validate", studyId: input.studyId || "std_validate", kind, method,
+      methodVersion: /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]?.version ?? "", protocolVersion: VCR_ENGINE_PROTOCOL_VERSION,
+      seed: vcrSeedFor(scenarioHash), replicates: plan?.replicates ?? null, cpuSecondsLimit: this.jobCpuSeconds, inputs: [], scenario };
+    // The patient-level kinds' table is resolved from the snapshot at start; a missing snapshot is `callerIssues`' to say.
+    const issues = [...(unitBound.issue ? [unitBound.issue] : []), ...callerIssues,
+      ...validateEngineJob(skeleton).filter((issue) => issue.code !== "patient_input_required" && !namesAnInput(issue.field))];
+    const found = issues.slice(0, 20).map((issue) => ({ code: issue.code, field: issue.field, message: issue.detail }));
+    if (found.length) return { action: "validate", kind, queued: false, checked: true, valid: false, issues: found };
+    const applied = /^(design|population|comparator)\./.test(method) ? vcrAppliedDefaults(method, scenario) : [];
+    return {
+      action: "validate", kind, queued: false, checked: true, valid: true, issues: [],
+      scenario,
+      applied: applied.slice(0, 24).map((entry) => ({ field: entry.path, value: entry.value })),
+      ...(plan ? { replicates: { count: plan.replicates, reason: replicateReasonOf(plan, scenario, input.replicates) } } : {}),
+      seed: skeleton.seed,
+      cost: { class: HEAVY_KINDS.has(kind) ? "heavy" : "light", cpuSecondsLimit: this.jobCpuSeconds },
+    };
+  }
 
   /**
    * Freeze a scenario into a job row.

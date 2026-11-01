@@ -195,6 +195,16 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual(definitions["vcr_read"]["inputSchema"]["properties"]["what"]["enum"], list(vcr_platform.READ_WHATS))
         self.assertEqual(definitions["vcr_write"]["inputSchema"]["properties"]["what"]["enum"], list(vcr_platform.WRITE_WHATS))
 
+    def test_the_root_conversation_s_tool_descriptions_do_not_grow(self):
+        # C1/C2/C4/C7 add an action, a role on every row and a template to the answers of shape and validate -- none of it to what rides
+        # every request of the run. The lengths are the ones the root conversation had before validate existed.
+        present = {"vcr_read": 698, "vcr_write": 938, "vcr_simulate": 343, "trial_registry_record": 304, "curve_digitize": 2096, "evidence_pool": 644}
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        for name, length in present.items():
+            self.assertLessEqual(len(definitions[name]["description"]), length, name)
+        self.assertIn("validate", definitions["vcr_simulate"]["inputSchema"]["properties"]["action"]["enum"])
+        self.assertNotIn("validate", definitions["vcr_simulate"]["description"], "it is found in the schema and in the answer of shape, not in the description")
+
     def test_the_job_kinds_are_the_domain_s(self):
         kinds = domain_job_kinds()
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")
@@ -253,7 +263,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
         data = answer["data"]
         self.assertEqual((data["kind"], data["method"]), ("design_analytic", "design.analytic"))
         lines = {line.split(":", 1)[0]: line for line in data["keys"]}
-        self.assertEqual(lines["accrual.duration"], "accrual.duration: number >=0 (time units); required once accrual is given")
+        self.assertEqual(lines["accrual.duration"], "accrual.duration: number >=0 (time units); required once accrual is given; role: research_fact")
         self.assertIn("accrual.followup: number >=0 (time units)", lines["accrual.followup"])
         self.assertIn("number >=0 <1 (proportion per year); optional; default 0", lines["accrual.dropoutAnnual"])
         self.assertEqual(lines["accrual"], "accrual: object; optional; read only when endpoint.type is time_to_event")
@@ -274,6 +284,39 @@ class VcrToolDefinitionTests(unittest.TestCase):
         rules = " ".join(vcr_platform.shape({"kind": "design_simulation"})["data"]["rules"])
         self.assertIn("accrual.rates lists 1 more value than accrual.breaks (when endpoint.type is time_to_event and accrual.kind is piecewise", rules)
         self.assertIn("truth.controlDistribution.rates lists 1 more value than truth.controlDistribution.breaks", rules)
+
+    def test_every_row_of_shape_says_what_it_asks_of_a_person_and_no_object_does(self):
+        # C2: the role is read off the schema by the platform (research_fact: required, no default, not a choice of words; defaultable: the
+        # rest), printed on every key, and explained once.
+        data = vcr_platform.shape({"kind": "design_simulation"})["data"]
+        lines = {line.split(":", 1)[0]: line for line in data["keys"]}
+        self.assertIn("; role: research_fact", lines["truth.hazardRatio"])
+        self.assertIn("; role: research_fact", lines["design.nTreat"])
+        self.assertIn("; role: defaultable", lines["analysis.alpha"])
+        self.assertIn("; role: defaultable", lines["accrual.dropoutAnnual"])
+        self.assertIn("; role: defaultable", lines["endpoint.type"], "a choice among the method's own words follows from the question")
+        self.assertNotIn("role:", lines["truth"], "an object is only its keys")
+        for key, line in lines.items():
+            self.assertTrue(" role: " in line or line.split(": ", 1)[1].startswith("object"), key)
+        self.assertIn("ask about it only if the answer would change the next computation, one question at a time", data["legend"])
+        self.assertIn("do not ask", data["legend"])
+        pool = vcr_platform.shape({"kind": "pool_evidence"})["data"]
+        self.assertTrue(all(" role: " in line for line in pool["keys"]), "the platform-built kinds' keys carry their role too")
+
+    def test_shape_gives_the_minimal_template_of_each_common_path_and_says_where_validate_is(self):
+        # C4: the facts of the research and nothing the platform defaults; the same scenarios the domain's test holds to the validator.
+        names = {kind: [template["name"] for template in vcr_platform.shape({"kind": kind})["data"]["templates"]] for kind in ("design_analytic", "design_simulation")}
+        self.assertEqual(names["design_analytic"], ["two_arm_time_to_event", "two_arm_binary", "two_arm_continuous"])
+        self.assertEqual(names["design_simulation"], names["design_analytic"])
+        survival = vcr_platform.shape({"kind": "design_simulation"})["data"]["templates"][0]["scenario"]
+        self.assertEqual(survival["truth"], {"hazardRatio": 0.7, "controlMedian": 12})
+        self.assertNotIn("analysis", survival, "alpha, power and the analysis are the platform's to default")
+        self.assertEqual([t["name"] for t in vcr_platform.shape({"kind": "literature_population"})["data"]["templates"]], ["literature_population"])
+        self.assertEqual([t["name"] for t in vcr_platform.shape({"kind": "weight_comparator"})["data"]["templates"]], ["entropy_balance"])
+        self.assertNotIn("templates", vcr_platform.shape({"kind": "rmst"})["data"])
+        self.assertNotIn("templates", vcr_platform.shape({"kind": "pool_evidence"})["data"], "a scenario the platform builds has no template to copy")
+        answer = vcr_platform.shape({"kind": "design_simulation"})
+        self.assertTrue(any("action validate" in line and "you may start in the same turn" in line for line in answer["next_actions"]))
 
     def test_shape_of_the_unanchored_maic_says_which_scale_the_aggregate_outcome_is_on(self):
         data = vcr_platform.shape({"kind": "maic_comparator"})["data"]
@@ -721,6 +764,68 @@ class _Clock:
     def sleep(self, seconds):
         self.slept.append(seconds)
         self.now += seconds
+
+
+class VcrValidateTests(_GatewayCase):
+    """C1: ``action: validate`` sends the scenario to the platform's own check, waits for nothing, queues nothing, and says what a start would do."""
+
+    SURVIVAL = {"design": {"kind": "two_arm_fixed", "nTreat": 150, "nControl": 150}, "endpoint": {"type": "time_to_event"}, "truth": {"hazardRatio": 0.7, "controlMedian": 12}}
+
+    def validate(self, **extra):
+        return self.server.call_tool("vcr_simulate", {"action": "validate", "kind": "design_simulation", "scenario": self.SURVIVAL, **extra})
+
+    def test_a_valid_scenario_comes_back_with_its_defaults_its_replicates_and_no_wait(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "design_simulation", "queued": False, "checked": True, "valid": True, "issues": [],
+            "scenario": self.SURVIVAL, "applied": [{"field": "analysis.alpha", "value": 0.025}, {"field": "accrual.dropoutAnnual", "value": 0}],
+            "replicates": {"count": 5000, "reason": "5,000: the default floor for an alternative"}, "seed": 7, "cost": {"class": "heavy", "cpuSecondsLimit": 600}}})
+        before = len(_Gateway.seen)
+        result = self.validate(replicates=2000)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"], "The scenario is valid; nothing was queued.")
+        self.assertEqual(len(_Gateway.seen) - before, 1, "one request: it is not a wait")
+        sent = _Gateway.seen[-1]["body"]
+        self.assertEqual((sent["action"], sent["kind"], sent["replicates"]), ("validate", "design_simulation", 2000))
+        self.assertEqual(sent["scenario"], self.SURVIVAL)
+        self.assertEqual(result["data"]["replicates"]["count"], 5000)
+        self.assertTrue(any("data.applied" in line and "Say each with its value" in line for line in result["next_actions"]))
+        self.assertTrue(any("start with the same scenario in this turn" in line for line in result["next_actions"]))
+        self.assertNotIn("jobId", result["data"])
+
+    def test_a_refused_scenario_comes_back_by_path_with_the_keys_of_the_place_and_still_queues_nothing(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "design_simulation", "queued": False, "checked": True, "valid": False, "issues": [
+            {"code": "scenario_field_unknown", "field": "scenario.accrual.months", "message": "The engine does not read accrual.months."}]}})
+        result = self.validate()
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("not valid as written (1 issue); nothing was queued", result["summary"])
+        self.assertEqual(result["warnings"], ["scenario.accrual.months: The engine does not read accrual.months."])
+        joined = " ".join(result["next_actions"])
+        self.assertIn("do not ask the researcher about a field the schema defaults", joined)
+        self.assertIn("inside accrual the engine reads", joined, "the keys of the place it was refused, from the same help shape renders")
+
+    def test_a_kind_the_platform_completes_at_start_says_so_instead_of_guessing(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "reconstruct_km", "queued": False, "checked": False, "message": "由平台在启动时补全。"}})
+        result = self.server.call_tool("vcr_simulate", {"action": "validate", "kind": "reconstruct_km", "scenario": {}})
+        self.assertEqual(result["status"], "success")
+        self.assertIn("validate does not check reconstruct_km", result["summary"])
+        self.assertTrue(any("action start" in line for line in result["next_actions"]))
+
+    def test_a_validate_without_a_kind_is_refused_before_a_request(self):
+        before = len(_Gateway.seen)
+        result = self.server.call_tool("vcr_simulate", {"action": "validate", "scenario": {}})
+        self.assertEqual(len(_Gateway.seen), before)
+        self.assertNotEqual(result["status"], "success")
+        self.assertIn("kind must be one of", json.dumps(result))
+
+    def test_a_finished_design_asks_the_reply_for_one_recommendation_that_names_the_constraint(self):
+        # C7: the platform draws the bounds and tags what misses them; the sentence that recommends is the reply's, and says what decided it.
+        for kind, asks in (("trial_scenario", True), ("design_grid", True), ("population", False), ("comparator_design", False)):
+            _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_7", "state": "succeeded", "result": {"id": "res_1", "kind": kind}}})
+            result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_7"})
+            lines = [line for line in result["next_actions"] if "one sentence of recommendation" in line]
+            self.assertEqual(len(lines) == 1, asks, kind)
+            if asks:
+                self.assertIn("which constraint decided it", lines[0])
+                self.assertIn("the platform does not pick the design", lines[0])
 
 
 class VcrJobWaitTests(_GatewayCase):

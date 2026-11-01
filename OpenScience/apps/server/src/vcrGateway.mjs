@@ -10,6 +10,7 @@
 //   POST /internal/vcr/v1/read      {what, filter?}                 → aggregates and structure only
 //   POST /internal/vcr/v1/write     {what, items? | data?}          → {ok, ids, issues[]}
 //   POST /internal/vcr/v1/simulate  {action, kind?, scenario?, …}   → {jobId, state, progress}
+//     (action validate: the same scenario checked and answered, never queued → {valid, applied, replicates, cost, issues})
 //   POST /internal/vcr/v1/digitize  {imageArtifactId, calibration, arms, …} → {state, receiptId?, …}
 //
 // Hidden knowledge:
@@ -323,10 +324,11 @@ const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 function simulateRequest(body) {
   onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion"]);
   const action = body.action ?? "start";
-  if (!["start", "status", "cancel"].includes(action)) {
-    throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status or cancel.");
+  if (!["start", "status", "cancel", "validate"].includes(action)) {
+    throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status, cancel or validate.");
   }
-  if (action === "start") {
+  // `validate` takes what `start` takes and queues nothing (C1).
+  if (action === "start" || action === "validate") {
     if (typeof body.kind !== "string" || !VCR_JOB_KINDS.includes(body.kind)) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
     }
@@ -2469,6 +2471,16 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         work = async () => {
           if (!vcr.jobs) {
             throw gatewayError(503, "vcr_gateway_unavailable", "作业队列在本部署尚未接入：这一步暂不可用。");
+          }
+          if (request.action === "validate") {
+            // The scenario as `start` would check it, answered with its defaults and its replicate count and never queued. A model or a
+            // reconstruction named here is a binding the platform makes at start, and is not this call's.
+            const asked = /** @type {any} */ (request);
+            if (asked.modelId || asked.reconstructionResultId) {
+              return { action: "validate", kind: asked.kind, queued: false, checked: false,
+                message: "有模型或曲线重建结果的计算由平台在启动时绑定，这里不检查；直接 start，被拒的字段会按路径回来。" };
+            }
+            return vcr.jobs.validate({ kind: asked.kind, scenario: asked.scenario, inputs: asked.inputs, replicates: asked.replicates, studyId: study.id });
           }
           if (request.action === "start") {
             return withJobEntry(await startJob(vcr, study, /** @type {any} */ (request)), { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
