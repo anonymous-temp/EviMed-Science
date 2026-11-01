@@ -74,7 +74,7 @@ export function TaskList({ agendas, available = true, createLocked = false, epis
       // The dot sits in a gutter every row has, so the names start on one left edge whether or not a task is running.
       leading={running.has(agenda.id) ? <RunStatusDot state="running" labelled /> : <span className="inline-block h-2.5 w-2.5" aria-hidden="true" />}
       meta={<span className="block line-clamp-2 break-words">{rowLine(agenda, running.has(agenda.id), now)}<span className="block text-caption text-text-3">{lastRunLine(agenda, episodes)}</span></span>}
-      actions={recovering ? <Button variant="secondary" size="sm" disabled={busy} onClick={() => actions.recover(agenda)}>{cancellationRetryLabel(agenda)}</Button> : undefined}
+      actions={recovering ? <Button variant="secondary" size="sm" actionKind="set" disabled={busy} onClick={() => actions.recover(agenda)}>{cancellationRetryLabel(agenda)}</Button> : undefined}
       menu={<Menu label={`“${agenda.payload.title}”的更多操作`} items={[
         { label: "立即运行", disabled: recovering || !available || agenda.payload.schedulingAvailable === false || !operable || !activeAgenda(agenda), onSelect: () => actions.run(agenda) },
         ...(completed ? [] : [{ label: activeAgenda(agenda) ? "暂停" : "启用", disabled: recovering || !operable || (!activeAgenda(agenda) && (!available || agenda.payload.schedulingAvailable === false)), onSelect: () => actions.togglePause(agenda) }]),

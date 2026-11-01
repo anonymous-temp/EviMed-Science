@@ -8,6 +8,7 @@ import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { sha256Hex } from "@/lib/fileDigest";
 import { productErrorMessage } from "@/lib/productClient";
+import { toast } from "@/lib/toast";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { snapshotHref } from "@/lib/readPages";
@@ -30,7 +31,8 @@ import { TaskDialog } from "@/components/autopilot/TaskDialog";
 import { TaskExamples } from "@/components/autopilot/TaskExamples";
 import { TaskList, type TaskRowActions } from "@/components/autopilot/TaskList";
 import { boundedLock, TaskPane } from "@/components/autopilot/TaskPane";
-import { activeAgenda, cancellationPending, budgetBlocks, executionsOf, firstTaskOf, inFlight, inLingdou, latestRun, lastRunLine, needsMaterial, recommendationById, revisionConflict, type Recommendation } from "@/components/autopilot/taskPresentation";
+import { useExecutionFinishToasts } from "@/components/autopilot/useExecutionFinishToasts";
+import { activeAgenda, cancellationPending, budgetBlocks, CONVERSATION_HELD, CONVERSATION_HELD_EACH_RUN, executionsOf, firstTaskOf, inFlight, inLingdou, latestRun, lastRunLine, needsMaterial, recommendationById, revisionConflict, type Recommendation } from "@/components/autopilot/taskPresentation";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
 
 /** Where an upload lands: the project's knowledge base, which registers it as a source. */
@@ -227,6 +229,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const selected = agendas?.find(agenda => agenda.id === selectedId);
   const everyEpisode = [...new Map([...episodes, ...(selectedEpisodes ?? [])].map(item => [item.id, item])).values()];
   const pending = everyEpisode.some(inFlight);
+  useExecutionFinishToasts(everyEpisode, agendaId => agendas?.find(agenda => agenda.id === agendaId)?.payload.title);
   // A bounded runtime holds the whole project while it runs: no conversation of it opens until it ends.
   const lock = boundedLock(everyEpisode);
   const lockRunId = lock?.payload.agendaId === selectedId ? lock?.payload.runId ?? null : null;
@@ -324,6 +327,8 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
         if (!live.current) return;
         recordEpisode(result.episode, current.id);
         setRefreshCycle(value => value + 1);
+        // Said when the run starts, before the researcher meets the wall of a held conversation (audit D1).
+        toast.success(`已开始运行。${CONVERSATION_HELD}`);
         // The new execution is the one to look at: its task, with no earlier execution chosen.
         navigate(taskPath(current.id, { search: searchNow.current }), { replace: selection.current === current.id });
       } else if (action.kind === "stop-run") {
@@ -335,15 +340,20 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
       } else if (action.kind === "material") {
         let value = action.remove ? await removeAgendaMaterial(current.id, action.remove) : await addAgendaMaterials(current.id, { sourceIds: action.sourceIds });
         // The task was waiting for exactly this: adding it is the researcher's start, and nothing is set up again.
-        if (available && !cancellationPending(value) && !action.remove && needsMaterial(value)) value = await startAgenda(value.id, value.revision);
+        const resumed = available && !cancellationPending(value) && !action.remove && needsMaterial(value);
+        if (resumed) value = await startAgenda(value.id, value.revision);
         if (!live.current) return;
+        if (resumed) toast.success(`任务已继续。${CONVERSATION_HELD_EACH_RUN}`);
         record(value);
         await Promise.all([load(), loadHistory(), (progressOpen || materialsOpen) ? loadProgress() : undefined]);
       } else {
         const value = await (action.kind === "pause" ? stopAgenda : action.kind === "resume" ? startAgenda : archiveAgenda)(current.id, current.revision);
         if (!live.current) return;
         if (action.kind === "archive") { setAgendas(items => (items ?? []).filter(item => item.id !== current.id)); if (selection.current === current.id) navigate(taskPath(null, { search: searchNow.current }), { replace: true }); }
-        else record(value);
+        else {
+          record(value);
+          if (action.kind === "resume") toast.success(`任务已启用。${CONVERSATION_HELD_EACH_RUN}`);
+        }
         await Promise.all([load(), loadHistory(), (progressOpen || materialsOpen) ? loadProgress() : undefined]);
       }
     } catch (caught) {
@@ -377,8 +387,10 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
       if (names.length === 0) throw new Error("upload unavailable");
       const sha256 = await Promise.all(accepted.map(sha256Hex));
       let value = await addAgendaMaterials(selected.id, { sha256 });
-      if (available && !cancellationPending(value) && needsMaterial(value)) value = await startAgenda(value.id, value.revision);
+      const resumed = available && !cancellationPending(value) && needsMaterial(value);
+      if (resumed) value = await startAgenda(value.id, value.revision);
       if (!live.current) return;
+      if (resumed) toast.success(`任务已继续。${CONVERSATION_HELD_EACH_RUN}`);
       record(value);
       await Promise.all([load(), loadHistory(), (progressOpen || materialsOpen) ? loadProgress() : undefined]);
     } catch (caught) {
@@ -447,7 +459,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
       : !selected ? <EmptyState icon={CalendarClock} title="未找到这个任务" description="它可能已经删除。从列表选择其他任务。" className="min-h-0 flex-1"
         action={split ? undefined : <Link to={taskPath(null, { search })} className={buttonClasses({ variant: "secondary" })}>回到定时任务</Link>} />
         : <>
-          <TaskBar agenda={selected} available={available} executions={executions} selected={execution} running={running} stopping={Boolean(running && stopping === running.id)} busy={busy} backTo={split ? undefined : taskPath(null, { search })}
+          <TaskBar agenda={selected} available={available} executions={executions} selected={execution} running={running} stopping={Boolean(running && stopping === running.id)} heldBy={lock} busy={busy} backTo={split ? undefined : taskPath(null, { search })}
             hasOlder={Boolean(taskEpisodes?.nextCursor)} historyBusy={historyBusy} onOlder={() => void loadOlder()}
             latestResultHref={withResult ? snapshotHref(withResult.episode.payload.runId ?? "", withResult.file!.path) : null}
             onResultOpened={() => openDigest(withResult?.episode.payload.digestId)}
@@ -491,7 +503,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
       onSaved={value => { record(value); closeEditor(); setBudgetRefused(null); }} />}
     {replacing && <ConfirmDialog title="放弃未保存的修改？" subject={replacing.example ? `改用示例“${replacing.example.title}”` : "重新开始新建任务"} consequences="未保存的修改将丢失。" recovery="返回编辑可继续保留修改。" confirmLabel="放弃修改"
       onConfirm={() => { const next = replacing; setReplacing(null); next.go(); }} onCancel={() => setReplacing(null)} />}
-    {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy}
+    {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy} resumes={available && !cancellationPending(selected) && needsMaterial(selected)}
       onCancel={() => setPicking(false)} onChoose={sourceIds => { const target = selected; setPicking(false); void operate({ kind: "material", agenda: target, sourceIds }); }} /></FormDialog>}
     {confirm && <ConfirmDialog title={confirm.kind === "pause" ? "暂停任务？" : "删除任务？"} body={confirm.kind === "pause" ? "暂停后将取消正在进行、排队和等待重试的执行，已产生的结果会保留。" : "删除后停止后续计划，取消正在进行、排队和等待重试的执行，并保留历史结果。"} tone="danger" confirmLabel={confirm.kind === "pause" ? "暂停任务" : "删除任务"} onCancel={() => setConfirm(null)} onConfirm={() => { const action = confirm; setConfirm(null); void operate(action); }} />}
   </MasterDetail>;

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useTaskPane } from "@/lib/taskPane";
+import { useToastStore } from "@/lib/toast";
 import { RECOMMENDATIONS, zoneName } from "@/components/autopilot/taskPresentation";
 import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
 import { AutopilotPage } from "./AutopilotPage";
@@ -828,6 +829,64 @@ describe("scheduled tasks", () => {
       expect(pane).toHaveTextContent("这个项目里另一项任务正在执行"); expect(pane).toHaveTextContent("执行结束后可以在这里继续");
       expect(screen.getByTestId("pane")).toHaveTextContent("none");
     });
+    // The kernel's frame says a held conversation only after the click that met the wall; the page says it first (audit D1).
+    it("says, before the wall, that a bounded execution of this task holds the project's conversation, and lets the researcher end it", async () => {
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: false })] });
+      render();
+      const note = await within(await barElement()).findByText("运行期间，这个项目的对话会暂停，结束后可继续");
+      expect(note.closest("[data-note]")).not.toBeNull();
+      await userEvent.click(within(bar()).getByRole("button", { name: "停止并继续对话" }));
+      await waitFor(() => expect(mocks.cancelEpisode).toHaveBeenCalledWith("agenda-one", "ep-run", expect.any(String)));
+    });
+    it("points to the task that holds the project when it is another task's execution", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [agenda, { ...agenda, id: "second", payload: { ...agenda.payload, title: "第二个任务" } }] });
+      mocks.listEpisodes.mockImplementation((_project: string, id?: string) => Promise.resolve({ items: id === "second" ? [{ ...episode, id: "ep-second", payload: { ...episode.payload, agendaId: "second" } }]
+        : [running({ agendaId: "agenda-one", interactive: false })] }));
+      render("/app/autopilot/second");
+      expect(await within(await barElement()).findByText("运行期间，这个项目的对话会暂停，结束后可继续")).toBeInTheDocument();
+      expect(within(bar()).getByRole("link", { name: "查看正在运行的任务" })).toHaveAttribute("href", "/app/autopilot/agenda-one");
+      expect(within(bar()).queryByRole("button", { name: "停止并继续对话" })).not.toBeInTheDocument();
+    });
+    it("says nothing about a held conversation when the execution runs in the researcher's own runtime", async () => {
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true })] });
+      render();
+      await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("project-one:ses-live"));
+      expect(screen.queryByText("运行期间，这个项目的对话会暂停，结束后可继续")).not.toBeInTheDocument();
+    });
+    it("says when a run is started, enabled or created that the project's conversation pauses while it runs", async () => {
+      useToastStore.setState({ toasts: [] });
+      render();
+      await userEvent.click(await within(await barElement()).findByRole("button", { name: "立即运行" }));
+      await waitFor(() => expect(mocks.runAgendaNow).toHaveBeenCalled());
+      await waitFor(() => expect(useToastStore.getState().toasts.map(item => item.message)).toContain("已开始运行。运行期间，这个项目的对话会暂停，结束后可继续"));
+    });
+    it("says on the new-task form, beside what pressing 创建并启用 will do, that every run holds the conversation", async () => {
+      render("/app/autopilot/new");
+      const form = await screen.findByRole("button", { name: "创建并启用" });
+      expect(form).toHaveAttribute("data-action-kind", "start");
+      expect(within(form.closest("form")!).getByText("每次运行期间，这个项目的对话会暂停，结束后可继续")).toBeInTheDocument();
+    });
+    it("tells the researcher once, as a toast, that an execution they watched has ended", async () => {
+      useToastStore.setState({ toasts: [] });
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true })] });
+      fakeClock(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true, status: "merged" })] });
+      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+      expect(useToastStore.getState().toasts.map(item => item.message)).toEqual(["“心衰证据追踪”已完成"]);
+      // Once: the later reads of the same finished execution say nothing.
+      useToastStore.setState({ toasts: [] });
+      await act(async () => { await vi.advanceTimersByTimeAsync(70_000); });
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+    });
+    it("does not toast an execution that was already over when the page opened, nor one the researcher stopped", async () => {
+      useToastStore.setState({ toasts: [] });
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true })] });
+      fakeClock(); render(); await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+      mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ interactive: true, status: "canceled" })] });
+      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+      expect(useToastStore.getState().toasts).toHaveLength(0);
+    });
     it("says a queued execution's state and when it will be tried again, in the task's zone", async () => {
       mocks.listEpisodes.mockResolvedValue({ items: [episode, running({ status: "queued", runId: null, sessionId: null, resourceDeferrals: { episode: { code: "runtime_busy", status: "waiting", retryAt: "2026-10-01T03:00:00Z" } } })] });
       render();
@@ -1040,6 +1099,29 @@ describe("scheduled tasks", () => {
       await userEvent.click(within(dialog).getByRole("checkbox")); await userEvent.click(within(dialog).getByRole("button", { name: "添加到这个任务" }));
       await waitFor(() => expect(mocks.addAgendaMaterials).toHaveBeenCalledWith(agenda.id, { sourceIds: ["src_b"] }));
       expect(screen.queryByRole("dialog", { name: "从知识库添加资料" })).not.toBeInTheDocument();
+    });
+    it("labels the picker's button 添加并继续 as a start when adding the material resumes a task paused for input, and 添加到这个任务 as a setting otherwise", async () => {
+      files.listSources.mockResolvedValue({ items: [{ id: "src_b", projectId: "project-one", revision: 1, payload: { paths: ["knowledge-base/新的.pdf"], status: "complete" } }], nextCursor: null });
+      mocks.listAgendas.mockResolvedValue({ items: [paused({ plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" } })] });
+      render(); await choose(await within(await barElement()).findByRole("button", { name: "更多" }), "研究进展");
+      await userEvent.click(await screen.findByRole("button", { name: "从知识库选择" }));
+      const dialog = await screen.findByRole("dialog", { name: "从知识库添加资料" });
+      await within(dialog).findByText("新的.pdf");
+      const resume = within(dialog).getByRole("button", { name: "添加并继续" });
+      expect(resume).toHaveAttribute("data-action-kind", "start");
+      expect(within(dialog).queryByRole("button", { name: "添加到这个任务" })).not.toBeInTheDocument();
+      mocks.startAgenda.mockResolvedValue({ ...agenda, revision: 4 });
+      mocks.addAgendaMaterials.mockResolvedValue(paused({ plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" } }));
+      await userEvent.click(within(dialog).getByRole("checkbox")); await userEvent.click(resume);
+      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalled());
+    });
+    it("keeps 添加到这个任务 for a task that is not waiting for the material", async () => {
+      files.listSources.mockResolvedValue({ items: [{ id: "src_b", projectId: "project-one", revision: 1, payload: { paths: ["knowledge-base/新的.pdf"], status: "complete" } }], nextCursor: null });
+      render(); await choose(await within(await barElement()).findByRole("button", { name: "更多" }), "研究进展");
+      await userEvent.click(await screen.findByRole("button", { name: "从知识库选择" }));
+      const dialog = await screen.findByRole("dialog", { name: "从知识库添加资料" });
+      await within(dialog).findByText("新的.pdf");
+      expect(within(dialog).getByRole("button", { name: "添加到这个任务" })).toHaveAttribute("data-action-kind", "set");
     });
     it("says above the sections how the last execution came out, and that the task needs material when it does", async () => {
       const stopped = paused({ plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" } });

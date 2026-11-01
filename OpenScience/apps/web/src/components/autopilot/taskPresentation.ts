@@ -82,6 +82,14 @@ export const RUN_STATES: Record<string, string> = {
 };
 /** A run held back because the allowance cannot pay for it. A simulated wallet refuses under its own code, and its run waits, and reads, the same way. */
 const waitsForBalance = (code: string) => BALANCE_REFUSAL_CODES.includes(code);
+/**
+ * What a bounded scheduled execution does to the rest of the project, said where it starts and where it runs (2026-11-01 audit D1): the
+ * runtime is reserved for it, so the project's conversation waits until it ends and then goes on. The kernel's own frame says it too,
+ * but only after the click that met the wall.
+ */
+export const CONVERSATION_HELD = "运行期间，这个项目的对话会暂停，结束后可继续";
+/** The same, for a task that has been created, enabled or resumed and will run on its schedule. */
+export const CONVERSATION_HELD_EACH_RUN = `每次${CONVERSATION_HELD}`;
 /** The runs still on their way: nothing of theirs is a result yet. */
 export const RUN_IN_FLIGHT = ["queued", "running", "retry_pending", "verifying"];
 /**

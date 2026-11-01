@@ -24,6 +24,8 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
   if (error) return <LoadError message={error} onRetry={onRetry} />;
   if (!state) return null;
   const waiting = needsMaterial(agenda);
+  // Material added to a task that waits for it starts the task again, unless scheduling is unavailable or its stop is not finished.
+  const resumes = waiting && agenda.payload.schedulingAvailable !== false && !cancellationPending(agenda);
   const section = (label: string, items: string[]) => items.length > 0 && <section aria-label={label} className="space-y-1">
     <h3 className="text-caption text-text-3">{label}</h3>
     <ul className="space-y-1 text-ui text-text">{items.map(item => <li key={item} className="leading-relaxed"><ClampedText text={item} lines={3} /></li>)}</ul>
@@ -41,7 +43,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
         <IconButton icon={X} label={`移除 ${item.name}`} size="sm" disabled={busy} onClick={() => onRemove(item.sourceId)} />
       </li>)}</ul>}
       <div className="flex flex-wrap gap-1">
-        <Button variant={waiting ? "secondary" : "text"} size="sm" disabled={busy} onClick={onAdd}>{waiting ? (agenda.payload.schedulingAvailable === false || cancellationPending(agenda)) ? "补充材料" : "补充材料并继续" : "添加材料"}</Button>
+        <Button variant={waiting ? "secondary" : "text"} size="sm" actionKind={resumes ? "start" : "set"} disabled={busy} onClick={onAdd}>{waiting ? resumes ? "补充材料并继续" : "补充材料" : "添加材料"}</Button>
         <Button variant="text" size="sm" disabled={busy} onClick={onPick}>从知识库选择</Button>
       </div>
     </section>

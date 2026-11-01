@@ -16,8 +16,14 @@ const nameOf = (source: SourceRecord) => (source.payload.paths[0] ?? source.id).
  * uploaded or registered here: these are documents already in the knowledge
  * base, and choosing them only says which question they are for.
  */
-export function MaterialPicker({ projectId, taken, initialChosen = [], busy, onChoose, onCancel }: {
-  projectId: string; taken: string[]; initialChosen?: string[]; busy: boolean; onChoose: (sourceIds: string[]) => void; onCancel: () => void;
+export function MaterialPicker({ projectId, taken, initialChosen = [], busy, resumes = false, onChoose, onCancel }: {
+  projectId: string; taken: string[]; initialChosen?: string[]; busy: boolean;
+  /**
+   * Adding the material resumes the task: it is paused for input and the page starts it again with what is added (2026-11-01 audit D3).
+   * The button then says so — it is a start, not just a filing of documents.
+   */
+  resumes?: boolean;
+  onChoose: (sourceIds: string[]) => void; onCancel: () => void;
 }) {
   const [sources, setSources] = useState<SourceRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +52,7 @@ export function MaterialPicker({ projectId, taken, initialChosen = [], busy, onC
     {chosen.length >= 10 && <p className="text-caption text-text-3" role="status">每次最多选择 10 份资料。</p>}
     <div className="flex justify-end gap-2 border-t border-border pt-4">
       <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
-      <Button loading={busy} disabled={chosen.length === 0} onClick={() => onChoose(chosen)}>添加到这个任务</Button>
+      <Button loading={busy} actionKind={resumes ? "start" : "set"} disabled={chosen.length === 0} onClick={() => onChoose(chosen)}>{resumes ? "添加并继续" : "添加到这个任务"}</Button>
     </div>
   </div>;
 }
