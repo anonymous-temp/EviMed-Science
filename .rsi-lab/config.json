@@ -1,6 +1,6 @@
 {
   "mode": "lanes",
-  "batch": "b022",
+  "batch": "b023",
   "sourceRef": "main",
   "labFrom": "branch",
   "imageRunId": 41307417699,
@@ -8,10 +8,27 @@
   "idleExitMin": 30,
   "arms": [
     {
-      "key": "cand-c0",
+      "key": "cand-c1",
+      "jobs": 2,
+      "workers": 3,
+      "patch": "rsi-lab/patch-c1"
+    },
+    {
+      "key": "cand-c2",
       "jobs": 1,
       "workers": 3,
-      "patch": "rsi-lab/patch-c0"
+      "patch": "rsi-lab/patch-c2"
+    },
+    {
+      "key": "cand-c3",
+      "jobs": 2,
+      "workers": 3,
+      "patch": "rsi-lab/patch-c3"
+    },
+    {
+      "key": "base",
+      "jobs": 2,
+      "workers": 3
     }
   ],
   "sandboxCheck": false,
