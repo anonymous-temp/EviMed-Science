@@ -259,7 +259,7 @@ describe("CapabilitiesPage", () => {
     // The categories in the product's order, not the order the catalogue came in, and a count after each.
     expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["临床证据", "药学评价", "写作与传播"]);
     const evidence = screen.getByRole("heading", { level: 2, name: "临床证据" }).closest("section")!;
-    expect(within(evidence).getAllByRole("button").map((button) => button.textContent)).toEqual(["自动化 Meta 分析"]);
+    expect(within(evidence).getAllByRole("button").map((button) => button.textContent)).toEqual(["Meta 分析"]);
     const pharmacy = screen.getByRole("heading", { level: 2, name: "药学评价" }).closest("section")!;
     expect(within(pharmacy).getAllByRole("button").map((button) => button.textContent)).toEqual(["药品安全性分析", "超说明书用药分析"]);
     expect(within(pharmacy).getByText("2")).toBeInTheDocument();
@@ -283,7 +283,7 @@ describe("CapabilitiesPage", () => {
     await screen.findByRole("button", { name: /药品安全性分析/ });
 
     await userEvent.type(screen.getByLabelText("搜索工具"), "氨甲环酸");
-    expect(screen.getByRole("button", { name: /自动化 Meta 分析/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Meta 分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("搜索工具"), "不存在的工具");
@@ -300,10 +300,10 @@ describe("CapabilitiesPage", () => {
     await userEvent.click(within(filters).getByRole("button", { name: "药学评价" }));
     expect(within(filters).getByRole("button", { name: "药学评价" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /自动化 Meta 分析/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Meta 分析/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 2, name: "临床证据" })).not.toBeInTheDocument();
     await userEvent.click(within(filters).getByRole("button", { name: "临床证据" }));
-    expect(screen.getByRole("button", { name: /自动化 Meta 分析/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Meta 分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
   });
 
@@ -430,7 +430,7 @@ describe("CapabilitiesPage", () => {
       mocks.listWebResearchAgents.mockResolvedValue(labelled());
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
-      for (const name of ["药品安全性分析", "超说明书用药分析", "自动化 Meta 分析", "论文审稿"]) {
+      for (const name of ["药品安全性分析", "超说明书用药分析", "Meta 分析", "论文审稿"]) {
         expect(tool(name)).not.toHaveAttribute("aria-describedby");
         expect(card(name).querySelector("[data-tag]")).toBeNull();
       }
@@ -445,8 +445,8 @@ describe("CapabilitiesPage", () => {
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
       expect(document.querySelector("[data-tag]")).toBeNull();
-      expect(card("自动化 Meta 分析")).toHaveTextContent(CAPABILITY_DISPLAY["meta-analysis"].description);
-      expect(card("自动化 Meta 分析")).not.toHaveTextContent(/受限|没有成功/);
+      expect(card("Meta 分析")).toHaveTextContent(CAPABILITY_DISPLAY["meta-analysis"].description);
+      expect(card("Meta 分析")).not.toHaveTextContent(/受限|没有成功/);
     });
 
     it("says what the reader can mend — a connector they have not given a key for — as a word, its sentence and the way to add it", async () => {
@@ -491,8 +491,8 @@ describe("CapabilitiesPage", () => {
       );
       await screen.findByRole("button", { name: /药品安全性分析/ });
       expect(screen.getAllByRole("listitem").filter((item) => item.querySelector("button"))).toHaveLength(4);
-      expect(tool("自动化 Meta 分析")).toBeEnabled();
-      await userEvent.click(tool("自动化 Meta 分析"));
+      expect(tool("Meta 分析")).toBeEnabled();
+      await userEvent.click(tool("Meta 分析"));
       await waitFor(() => expect(mocks.putWebResearchSession).toHaveBeenCalledWith(
         expect.stringMatching(/^web-/), { mode: "specialist", agentId: "meta-analysis", agentVersion: "1.0.0" }));
       await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
@@ -758,7 +758,7 @@ it("keeps virtual clinical research methods and links out of the research catalo
   expect(mocks.getVcrModels).not.toHaveBeenCalled();
   expect(screen.queryByRole("list", { name: "选择计算任务" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "参考试验检索" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "自动化 Meta 分析" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Meta 分析" })).toBeInTheDocument();
 });
 
 it("lists only the twelve owner-selected research workflows and preserves hidden display metadata", () => {

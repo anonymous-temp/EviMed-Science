@@ -93,9 +93,9 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
-  title: "药品遴选评价"
+  title: "药品遴选"
   category: "药学评价"
-  description: "把同类候选药品横向比较，按你给的标准评分，辅助遴选决策。"
+  description: "依据临床需求和评价标准，比较候选药品并形成遴选建议。"
   starterPrompts:
   - "在阿哌沙班、利伐沙班、达比加群之间为非瓣膜性房颤抗凝遴选一个品种。"
   - "比较候选药品的证据；没有明确量表时先给分维度比较，有量表时再计算条件评分与敏感性分析。"

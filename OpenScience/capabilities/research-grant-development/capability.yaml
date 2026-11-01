@@ -114,9 +114,9 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
-  title: "基金申报书开发"
+  title: "基金申报"
   category: "写作与传播"
-  description: "把申报指南和研究方向写成具体目标、申报书大纲和里程碑表。"
+  description: "根据申请要求和研究构想，协助撰写研究目标、方案与实施计划。"
   starterPrompts:
   - "这是基金申报指南和我的研究方向，帮我把具体目标和里程碑写出来，并逐条对照评审要点自查。"
   - "按国自然面上项目指南，把我的研究方向写成立项依据和研究目标。"

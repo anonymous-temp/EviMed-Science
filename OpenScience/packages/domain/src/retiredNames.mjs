@@ -33,6 +33,17 @@ export const RETIRED_MODULE_NAMES = Object.freeze([
   Object.freeze({ retired: '虚拟临研', now: '虚拟临床研究' }), // retired-word-ok
 ])
 
+// Research-tool titles changed on 2026-11-01. Keep familiar searches working
+// for three months without changing saved identifiers or historical titles.
+const RESEARCH_TOOL_SEARCH_UNTIL = '2027-02-01'
+const RETIRED_TOOL_NAMES = Object.freeze([
+  Object.freeze({ retired: '临床证据深度分析', now: '文献综述' }),
+  Object.freeze({ retired: '自动化 meta 分析', now: 'meta 分析' }),
+  Object.freeze({ retired: '综合药品评价', now: '药品综合评价' }),
+  Object.freeze({ retired: '药品遴选评价', now: '药品遴选' }),
+  Object.freeze({ retired: '基金申报书开发', now: '基金申报' }),
+])
+
 /**
  * The strings a search over product text should try for what the researcher
  * typed: the query as typed, lowercased, and — while the alias lasts — the
@@ -47,11 +58,12 @@ export function searchNeedles(query, now = Date.now()) {
   const typed = String(query ?? '').trim().toLowerCase()
   if (!typed) return []
   const needles = [typed]
-  if (now <= Date.parse(`${RETIRED_NAME_SEARCH_UNTIL}T23:59:59Z`)) {
-    let read = typed
+  let read = typed
+  if (now <= Date.parse(`${RETIRED_NAME_SEARCH_UNTIL}T23:59:59Z`))
     for (const { retired, now: current } of RETIRED_MODULE_NAMES) read = read.split(retired).join(current.toLowerCase())
-    if (read !== typed) needles.push(read)
-  }
+  if (now <= Date.parse(`${RESEARCH_TOOL_SEARCH_UNTIL}T23:59:59Z`))
+    for (const { retired, now: current } of RETIRED_TOOL_NAMES) read = read.split(retired).join(current.toLowerCase())
+  if (read !== typed) needles.push(read)
   return needles
 }
 

@@ -209,9 +209,9 @@
       "origin": "capability",
       "version": "1.3.1",
       "source": {"kind":"release"},
-      "digest": "sha256:b5471729c593ecbbb7f3c54718b558f3243533d64f9cfb740b41ab3ef621ac9a",
+      "digest": "sha256:52e52ae29fb3c1f5b69778cb2a0c50d45ca526aedaf5173fc4c916d809419214",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"1517263bb755e7ac905949ac452d8e0a51ff45b77e26f569c528eb949b65c1d4"}],
+      "references": [{"path":"capability.yaml","sha256":"b5992dca09f2a561b6197c5c4a3ddb735cb73427c8c0a1cb69f8a83b4934e74b"}],
       "dependencies": [
         {"kind":"platform-tool","name":"adr_case_query","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"adr_signal_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -230,7 +230,7 @@
           "name": "adr-analysis-report",
           "kind": "deliverable",
           "summary": "Mine adverse-event signals, compare labels, and synthesize drug-safety evidence.",
-          "summaryZh": "从 FAERS 不良事件报告里挖掘安全信号，汇总成安全性证据报告。",
+          "summaryZh": "基于 FAERS 不良事件报告识别药物安全信号，并说明数据局限。",
           "accepts": [
             "drug",
             "adverseEvent",
@@ -256,9 +256,9 @@
       "origin": "capability",
       "version": "1.1.1",
       "source": {"kind":"release"},
-      "digest": "sha256:1742cb21ff0afa132a26bbf697eaf43bb98790116317b1d27a747c12dbe48e44",
+      "digest": "sha256:e155eab69eb814160dec44f246cf0214b60d8c830736e2a8c589d4926e63b565",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"0fe560a61f4ea259092b6ddf8d652dbbfadf240ac7e0f8e2acf81da3a5f51063"}],
+      "references": [{"path":"capability.yaml","sha256":"170fd17c9874c8669bdfd75f2d0365c3d76f2b2fe1a528c8316f8edc75bd3413"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -272,7 +272,7 @@
           "name": "bibliometric-analysis-report",
           "kind": "deliverable",
           "summary": "基于可追溯的 PubMed 检索与清洗，分析发文趋势、合作网络、突现主题、演化路径和研究前沿。",
-          "summaryZh": "分析一个研究领域的发文趋势、合作网络、主题演化和研究前沿。",
+          "summaryZh": "分析研究领域的发文趋势、合作网络、主题热点及其演变。",
           "accepts": ["topic","dateFrom","dateTo","maxRecords","outputLanguage"],
           "produces": ["bibliometric-analysis-report.md","bibliometric-analysis-run.json","agenda-delta.json"],
           "limits": ["独立复核发现过正文里手写的百分比与底层数据不一致；引用数字前请以分析记录为准。"]
@@ -286,9 +286,9 @@
       "origin": "capability",
       "version": "3.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:9e33cf43d21191cc1d6c0f7dcb762b754745afb31bae93d4189ec6a7d311b1fe",
+      "digest": "sha256:e03d6a64c0ee8bcb8f33c7830bcefa31e6ad51b828c5a9470871e016021b020e",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"c5ab22f4a58543bc9b0885b6f48a5a7565b59a28a542eead46755520d4cdf042"}],
+      "references": [{"path":"capability.yaml","sha256":"040478455daf29240d2dcf8d02232ad7185507215aa8dd443b186e5dd3d72fec"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_snapshot","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -313,7 +313,7 @@
           "name": "clinical-evidence-report",
           "kind": "deliverable",
           "summary": "Transform an open-domain clinical question into a publication-grade deep evidence analysis with reproducible searches, verified citations, claim-level traceability, and a separate safety-first practical answer.",
-          "summaryZh": "把一个临床问题做成可复现的检索，逐条核对引文，写成证据报告。",
+          "summaryZh": "检索并综合研究文献，撰写有来源依据的叙述性或范围综述。",
           "accepts": ["question","reviewType","population","intervention","comparator","outcomes","careSetting","jurisdiction","outputLanguage"],
           "produces": ["clinical-evidence-report.md","clinical-evidence-matrix.json","agenda-delta.json"],
           "limits": ["只读取可公开获取的全文；付费墙后的文献只能用摘要。","报告里标 ⚠ 的结论没能在保存的原文中逐字核对到，引用前请核对。","不提供个体诊疗建议。"]
@@ -327,9 +327,9 @@
       "origin": "capability",
       "version": "2.5.1",
       "source": {"kind":"release"},
-      "digest": "sha256:e3f5d81f960877948671710f60c24cf00e3d8f4df46be2e3a334038dd763fd4c",
+      "digest": "sha256:8178427483e01b295b6529a3043dd38915fc04205a67661afb6c62a63febf549",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"dd1507ee79bae9136365b0373277cbbf776a4a5e53a308443d4a94b3aa51e4ea"}],
+      "references": [{"path":"capability.yaml","sha256":"7373d33de03735b26e928a06e9f78fdaa1b6a58beb8beaff2d9b77074242597e"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -353,7 +353,7 @@
           "name": "drug-evaluation-report",
           "kind": "deliverable",
           "summary": "Synthesize labels, guidelines, trials, literature, HTA, effectiveness, safety, and economic evidence for a medicine and indication.",
-          "summaryZh": "从有效性、安全性、适用性、经济性等维度写出可追溯的药品评价报告。",
+          "summaryZh": "从有效性、安全性、经济性等维度汇总证据，形成药品综合评价。",
           "accepts": [
             "drug",
             "indication",
@@ -441,9 +441,9 @@
       "origin": "capability",
       "version": "2.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:249d3486293f07c178509f5f4a807f9371bb0afc0a914c8ba3d39a5e78c79175",
+      "digest": "sha256:e055791e5a24341df818ff6db2dab676779088853c3acac30a5dd575b23e39f0",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"410ee13d5b3a8c13db8948ec61e281ebbbc3bf91dce9e164e317d0a1a916bcb7"}],
+      "references": [{"path":"capability.yaml","sha256":"f198211ef1092e2cda98cd127160387e344e4f657e163d40888359eb7560c6f4"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -466,7 +466,7 @@
           "name": "drug-selection-report",
           "kind": "deliverable",
           "summary": "Compare candidate medicines across pharmaceutical properties, effectiveness, safety, economics, and other formulary attributes.",
-          "summaryZh": "把同类候选药品横向比较，按你给的标准评分，辅助遴选决策。",
+          "summaryZh": "依据临床需求和评价标准，比较候选药品并形成遴选建议。",
           "accepts": [
             "candidateDrugs",
             "indication",
@@ -495,9 +495,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:53cde5eeff7bc0d1af9ca01693074f6dd2ba142eab2f413abedd0be28e4c5052",
+      "digest": "sha256:e0371ae9a2bb6a18200c08f40b3795e02a189211839dbe5c9d253850f0e41e4c",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"2028d0c805ee68ee9f82d939339ce929fb43c8df58c72343ab05018889ffa8a6"}],
+      "references": [{"path":"capability.yaml","sha256":"cae0ca0464f33bdfe432f547667c468ce9280a0ea9d944583352b69f1763dd75"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -520,7 +520,7 @@
           "summaryZh": "逐篇评价你手上一组研究的偏倚风险，并按结局汇总证据确定性。",
           "accepts": ["studies","question","population","intervention","comparator","outcomes","appraisalInstrument","outputLanguage"],
           "produces": ["appraisal-table.json","appraisal-table.md","appraisal-table.csv","citation-ledger.csv","delivery-summary.md","revision-notes.md"],
-          "limits": ["只评价你给出的研究，不负责找全文献；需要检索请用「临床证据深度分析」或「自动化 Meta 分析」。"]
+          "limits": ["只评价你给出的研究，不负责找全文献；需要检索请用「文献综述」或「Meta 分析」。"]
         }
       ]
     },
@@ -782,9 +782,9 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:3a65460d9ec032b2048635af85c6b2f77445ff049050e24a982a4274daf1c99e",
+      "digest": "sha256:5a19d041baa94524369d4476d36ba696d3a82c99f72a1fd21c06472cf91b28a3",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"4bfd0255d107d5e6b6df487cb7108076453d4ca837010ffa730552eb32574dea"}],
+      "references": [{"path":"capability.yaml","sha256":"7d83e6da9d56c8a30b71078a9f84032c5359cf51712d6ebd8e4f7869e449e123"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -798,7 +798,7 @@
           "name": "mendelian-randomization-report",
           "kind": "deliverable",
           "summary": "使用 GWAS 工具变量开展可追溯的孟德尔随机化、敏感性分析和 STROBE-MR 报告，并生成完整研究包。",
-          "summaryZh": "用 GWAS 工具变量做因果推断和敏感性分析，写成 STROBE-MR 报告。",
+          "summaryZh": "利用遗传变异作为工具变量，评估暴露与结局的潜在因果关系。",
           "accepts": ["exposure","outcome","outputLanguage","analysisDirection","exposureSource","outcomeSource"],
           "produces": ["mendelian-randomization-report.md","mendelian-randomization-run.json","mendelian-randomization-inputs.json"],
           "limits": ["GWAS Catalog 公开的汇总数据无需令牌即可使用；OpenGWAS 数据需要在「数据源」里配置令牌，令牌每 14 天过期。","结论依赖工具变量假设；敏感性分析能检验部分假设，但不能替代随机对照试验。"]
@@ -812,16 +812,16 @@
       "origin": "capability",
       "version": "1.1.4",
       "source": {"kind":"release"},
-      "digest": "sha256:54935347ea97e37cbcfbfb95c189970b295f542ce98c29a761cc73f12909efc9",
+      "digest": "sha256:14f687b9120de41de6769aecb36fe3565692796ceda83b97a69cf9882e55c9ae",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"7335c284d7467d6ffcd667847e963645637be157624bd279ca7989df4a026aa7"}],
+      "references": [{"path":"capability.yaml","sha256":"34e2ca651623b23c110e281f997395a6e0e537b26d834e7537f0e963bdc1275b"}],
       "dependencies": [{"kind":"platform-tool","name":"meta_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}],
       "operations": [
         {
           "name": "meta-analysis-report",
           "kind": "deliverable",
           "summary": "Run a traceable systematic review and deterministic meta-analysis pipeline, with risk-of-bias, GRADE, manuscript, figures, and release gates.",
-          "summaryZh": "自动完成检索、筛选、统计合并与 GRADE 分级，生成图表和论文初稿。",
+          "summaryZh": "检索和筛选相关研究，合并适用数据并生成图表与分析报告。",
           "accepts": ["topic","population","intervention","comparator","outcomes","studyDesign","analysisType","uploadedFiles","ipdData"],
           "produces": ["meta-analysis-report.md","meta-analysis-run.json","agenda-delta.json"],
           "limits": ["完整流程可能需要数小时；超过运行时限会中止，已写出的文件保留在工作区。","统计合并由程序完成，但纳入研究的数据提取仍需人工抽查。"]
@@ -875,9 +875,9 @@
       "origin": "capability",
       "version": "2.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:0346733116a47aa07d37168a2c9035269bcd9357ebb9fe7e4ba006d08695486f",
+      "digest": "sha256:9f1be8cba6412f159f6f88186175e38152deeb2b89aca1a0176776cf340be2ea",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"6e4d51d1e02819b242ec7ac82b0f70a18e00c3c0d7bc6714df4f3bcd9bf7259a"}],
+      "references": [{"path":"capability.yaml","sha256":"a969edb240327086246c3a2fdef26b5c16761adc23ba217240634142711a3711"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -900,7 +900,7 @@
           "name": "off-label-report",
           "kind": "deliverable",
           "summary": "Assist item-level label comparison and evidence-support scoring for a proposed use.",
-          "summaryZh": "对照说明书检索一种超说明书用法的证据，评价它的证据支持度。",
+          "summaryZh": "对照药品说明书，检索并评价特定超说明书用法的研究证据。",
           "accepts": ["drug","proposedUse","product","population","dose","route","frequency","duration","formulation","jurisdiction","decisionDate","uploadedFiles"],
           "produces": ["off-label-report.md","evidence-table.csv","assessment-result.json","evidence-snapshot.json"],
           "limits": ["给出的是证据支持度评价，不替代医疗机构的超说明书用药审批流程。"]
@@ -914,9 +914,9 @@
       "origin": "capability",
       "version": "1.0.2",
       "source": {"kind":"release"},
-      "digest": "sha256:09a286418c64f8d233dc93d3148e354ef2aabf2baecd86cbb4f1375cefea7f47",
+      "digest": "sha256:aa0f7fe9e09aa489186b30f44cce0da67cdf1d612f4341f969cec724c47b650b",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"136a2478be427275a75c2d104d72887251bdc69e2d035fd475c4a706b05208f8"}],
+      "references": [{"path":"capability.yaml","sha256":"0f4a538b1b5859c4f56dc30270a4eb280d5a087bee29f26b250108ccfaa52394"}],
       "dependencies": [
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -929,7 +929,7 @@
           "name": "peer-review-report",
           "kind": "deliverable",
           "summary": "按研究类型匹配报告规范，对上传论文的方法学、统计学、完整性和证据位置进行审查，并给出可执行的修改建议。",
-          "summaryZh": "按研究类型审查稿件的方法学、统计与报告规范，给出修改意见。",
+          "summaryZh": "按研究类型审阅论文的方法、统计和报告，提出具体修改建议。",
           "accepts": ["manuscript","articleType","outputLanguage"],
           "produces": ["peer-review-report.md","peer-review-run.json"],
           "limits": ["按报告规范清单逐项审查；学科前沿与创新性的判断仍需同行专家。"]
@@ -943,9 +943,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:2b4831024b0fea43270fc2cdd8612cf420e05512518b2325c9ad799670a729d4",
+      "digest": "sha256:3154170b1b8130d9d31e9f3d13e69e8467295235e88ae67aed76c54cbf976a12",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"0c578a32a7044a84c1a21ec05ad5ddfa783ea92df16dfb8aa06e04cada5e6dca"}],
+      "references": [{"path":"capability.yaml","sha256":"b48b0b1fdae482fd07ddcbbb35d2642f634482375ebcf7808edb9728a7eb95f5"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -966,7 +966,7 @@
           "name": "grant-proposal-package",
           "kind": "deliverable",
           "summary": "Turn a funding call and a research direction into specific aims, a proposal outline, a milestone table and a reviewer-oriented audit — with every stated call requirement quoted from the call itself.",
-          "summaryZh": "把申报指南和研究方向写成具体目标、申报书大纲和里程碑表。",
+          "summaryZh": "根据申请要求和研究构想，协助撰写研究目标、方案与实施计划。",
           "accepts": ["callDocument","researchDirection","institution","budgetCeiling","deadline","outputLanguage"],
           "produces": [
             "call-requirements.json",
@@ -991,13 +991,13 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:95688f245e7b86e1c794a536037cf2dd2b01238fcbca9dc3b47c63bfac1f8842",
+      "digest": "sha256:1c71a84935df8ff443210deed0c8ed47d5ba789e871a63d88245c1ac26ab7011",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
         {"path":"scripts/preflight.py","sha256":"f263b76c7a42afe7cd2b06375299889df21181cd0f1534305e57fee0a8faff2c"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"021ef9f97cf274d576e005933fb54a9b3f28cc79f67ce177fb2563600e27919c"}],
+      "references": [{"path":"capability.yaml","sha256":"2afeee1ce56d565323fa002014a207f8852589428ecb6c43d40c9b6b1a733605"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1017,7 +1017,7 @@
           "name": "research-topic-report",
           "kind": "deliverable",
           "summary": "梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。",
-          "summaryZh": "从一个宽泛方向找出证据空白，提出可执行的研究问题。",
+          "summaryZh": "梳理已有研究和证据缺口，提出有依据、可执行的科研选题。",
           "accepts": ["researchDirection","availableData","population","studySetting","resourceConstraints","outputLanguage","uploadedFiles"],
           "produces": ["research-topic-report.md","evidence-map.md","research-topic-run.json","research-portfolio.json","evidence-records.json","agenda-delta.json"],
           "limits": ["可执行性按公开证据判断；你所在机构的资源、病例量与伦理条件需要你在问题里说明。"]
@@ -1051,7 +1051,7 @@
       "origin": "capability",
       "version": "1.4.1",
       "source": {"kind":"release"},
-      "digest": "sha256:cd9eb6653b98cdf7d938ada2faf071c0c73913be64426b9727e7a5e07cf81a58",
+      "digest": "sha256:8386616a00bff95bc55dfb511a49e4834e4ba5e5a17a59c630c4c2f45216618e",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/analysis_checks.py","sha256":"5665d82b867efabb6d899aeed263555e52b59e149f05915a8b9be62f98d61268"},
@@ -1060,7 +1060,7 @@
         {"path":"scripts/run_analysis.py","sha256":"ec1666014d8a9bcb4cb223653977601d2449f41fb485ceca0334e9fb634ff321"}
       ],
       "references": [
-        {"path":"capability.yaml","sha256":"30800c185c59ac26aac0951509f70b5616e8dda5d3b77d4c5e12869d772c2d38"},
+        {"path":"capability.yaml","sha256":"9d980528dc0a8bca5e7edcf960e36e030442e9c984b213507ed76975726a9f65"},
         {"path":"scripts/analysis_method_records.json","sha256":"6dac24227531b26c8f8822ea660340104ad3c17a13c6ca15d1ddb298c87e6bc8"}
       ],
       "dependencies": [
@@ -1077,7 +1077,7 @@
           "name": "statistical-analysis-package",
           "kind": "deliverable",
           "summary": "Analyze supplied research data with executed Python or R, preserving reproducible code, numerical results, uncertainty and partial findings.",
-          "summaryZh": "分析你的研究数据，解释统计结果、效应大小与不确定性。",
+          "summaryZh": "上传研究数据，用自然语言提出问题，完成统计分析并生成可复现结果。",
           "accepts": ["datasetPath","analysisQuestion","analysisPreferences","priorAnalysisPath","outputLanguage"],
           "produces": ["statistical-report.md","analysis-results.json","analysis-run.json","analysis.py","analysis.R"],
           "limits": ["结论取决于数据质量与研究设计；缺少有效输入的计算会注明限制。"]
