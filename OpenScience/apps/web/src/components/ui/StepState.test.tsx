@@ -72,7 +72,7 @@ describe("StepState", () => {
   it("keeps what a failed step kept, and offers to go on from there", async () => {
     const resume = vi.fn();
     render(inRouter(<StepState phase="failed" step="生成虚拟患者" failure="计算在第 1,200 名时中断。" kept="已算出的 1,200 名保留。" onResume={resume} to="/app/runs?run=r1" />));
-    expect(screen.getByText("生成虚拟患者没有完成")).toBeInTheDocument();
+    expect(screen.getByText("生成虚拟患者未完成")).toBeInTheDocument();
     expect(screen.getByText("已算出的 1,200 名保留。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "接着做" }));
     expect(resume).toHaveBeenCalledTimes(1);

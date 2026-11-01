@@ -49,12 +49,12 @@ describe("Tabs", () => {
     // The dot is decoration; the words carry the state to a screen reader, after the tab's own name.
     expect(screen.getByRole("tab", { name: "试验 进行中" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "定义与证据 已完成" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "对照 需要留意" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "对照 未完成" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "总览" }), "a tab with no dot is named by its label alone").toBeInTheDocument();
   });
 
   // 2026-10-07: 「定义与证据」 read 进行中 on a study where nothing was running — the ring said work under way for "some steps done".
-  it("has a fifth dot for a stage that is partly done and not running, spoken 「部分完成」, a different mark from the running ring", () => {
+  it("has a fifth dot for a stage that is partly done and not running, spoken 「简版已完成」, a different mark from the running ring", () => {
     render(
       <Tabs
         label="研究视图"
@@ -66,7 +66,7 @@ describe("Tabs", () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByRole("tab", { name: "定义与证据 部分完成" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "定义与证据 简版已完成" })).toBeInTheDocument();
     const [partial, active] = [...document.querySelectorAll("[data-tab-dot]")];
     expect(partial).toHaveAttribute("data-tab-dot", "partial");
     expect(partial).toHaveClass("ring-2", "ring-info", "bg-info-soft");

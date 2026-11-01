@@ -585,7 +585,7 @@ describe("行动: states", () => {
     client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [], control: [] });
     client.getGeoArticles.mockResolvedValue({ articles: [] });
     renderTab(geoProject({ content: "failed" }));
-    expect(await screen.findByText("写第一批稿件没有完成")).toBeInTheDocument();
+    expect(await screen.findByText("写第一批稿件未完成")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "接着做" }));
     await waitFor(() => expect(client.runGeoStep).toHaveBeenCalledWith("geo_1", "content"));
   });

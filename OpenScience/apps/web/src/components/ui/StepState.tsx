@@ -181,7 +181,7 @@ export function StepState(props: StepStateProps) {
       <div data-step-state="failed" role="status" className={SHELL}>
         <p className="flex items-center gap-2 text-ui font-semibold text-text">
           <TriangleAlert size={20} aria-hidden="true" className="text-warn" />
-          {`${step}没有完成`}
+          {`${step}未完成`}
         </p>
         {failure && <p className="max-w-measure text-ui text-text-2">{failure}</p>}
         {kept && <p className="text-caption text-text-3">{kept}</p>}

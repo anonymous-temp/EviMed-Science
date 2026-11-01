@@ -85,7 +85,8 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
   return (
     <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-info-soft px-3 py-1.5 text-ui text-text", className)}>
       {dot}
-      <span className="min-w-0 truncate">{waiting ? `${label} · 排队中` : `正在${label}`}</span>
+      {/* A wait on the person (等你确认预算) is said by `waiting` alone: it is not a place in a queue. */}
+      <span className="min-w-0 truncate">{waiting ? (waiting.startsWith("等你") ? label : `${label} · 排队中`) : `正在${label}`}</span>
       {waiting ? <span>{waiting}</span> : detail && <span className="tabular-nums">{detail}</span>}
       {elapsed && <span className="text-caption tabular-nums text-text-3">{elapsed}</span>}
       {queued !== undefined && queued > 0 && <span className="text-caption text-text-2">{`另有 ${queued} 项排队`}</span>}

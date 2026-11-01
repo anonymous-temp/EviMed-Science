@@ -1355,7 +1355,7 @@ describe("知识库", () => {
       renderPage("/app/files?scope=default&kind=wiki");
       await screen.findByText("概念");
       await userEvent.click(screen.getByRole("button", { name: "更多" }));
-      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["在记忆总览中查看", "重新整理知识页", "导出到 Obsidian"]);
+      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["在记忆总览中查看", "重新整理知识页", "暂停自动整理", "导出到 Obsidian"]);
       await userEvent.click(screen.getByRole("menuitem", { name: "导出到 Obsidian" }));
       expect(mocks.downloadKnowledgeVault).toHaveBeenCalledWith("default");
       expect(mocks.toastError).not.toHaveBeenCalled();

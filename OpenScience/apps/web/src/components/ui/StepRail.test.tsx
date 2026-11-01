@@ -43,7 +43,7 @@ describe("StepRail", () => {
     expect(nav).toHaveClass("h-10");
     const items = within(nav).getAllByRole("listitem");
     expect(items.map((item) => item.getAttribute("data-rail-state"))).toEqual(["done", "done", "active", "attention", "waiting", "todo"]);
-    expect(screen.getByRole("link", { name: /^信源\s*，需要留意$/ })).toHaveAttribute("href", "/app/geo/g1/sources");
+    expect(screen.getByRole("link", { name: /^信源\s*，未完成$/ })).toHaveAttribute("href", "/app/geo/g1/sources");
     expect(screen.getByRole("link", { name: /^投放\s*，等你$/ })).toBeInTheDocument();
     // A step with nowhere to go is text, not a dead link.
     expect(within(items[5]).queryByRole("link")).toBeNull();
@@ -64,7 +64,7 @@ describe("StepRail", () => {
   it("underlines the steps the open tab is built from, and says so to assistive technology", () => {
     render(rail({ activeSteps: ["questions", "sources"] }));
     expect(screen.getByRole("link", { name: /^问题\s*，进行中$/ })).toHaveAttribute("aria-current", "step");
-    expect(screen.getByRole("link", { name: /^信源\s*，需要留意$/ })).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("link", { name: /^信源\s*，未完成$/ })).toHaveAttribute("aria-current", "step");
     expect(screen.getByRole("link", { name: /^证据\s*，已完成$/ })).not.toHaveAttribute("aria-current");
   });
 
@@ -89,7 +89,7 @@ describe("StepRail", () => {
     expect(chip).toHaveTextContent("已完成 2/6 步");
     await userEvent.click(chip);
     const items = await screen.findAllByRole("menuitemradio");
-    expect(items.map((item) => item.textContent)).toEqual(["证据 · 已完成", "旅程 · 已完成", "问题 · 进行中", "信源 · 需要留意", "投放 · 等你", "监测 · 未开始"]);
+    expect(items.map((item) => item.textContent)).toEqual(["证据 · 已完成", "旅程 · 已完成", "问题 · 进行中", "信源 · 未完成", "投放 · 等你", "监测 · 未开始"]);
     expect(items[2]).toHaveAttribute("aria-checked", "true");
   });
 
