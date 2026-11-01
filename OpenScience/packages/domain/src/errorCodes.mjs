@@ -17,6 +17,7 @@ const EVIMED_SEARCH_MESSAGES = Object.freeze({
   evimed_search_topics_unavailable: "主题推荐暂时无法加载，请稍后重试；你也可以直接输入检索词。",
   evimed_search_login_required: "请重新登录 EviMed 账号后继续检索。",
   evimed_search_credential_expired: "检索授权已失效，请重新登录 EviMed 账号。",
+  evimed_search_forbidden: "当前 EviMed 账号没有使用这项功能的权限。",
   evimed_search_invalid_input: "请检查检索词、筛选条件和页码后重试。",
   evimed_search_reference_invalid: "这条详情链接已失效，请返回检索结果重新打开。",
   evimed_search_rate_limited: "检索请求较多，请稍后重试。",

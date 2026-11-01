@@ -1,7 +1,7 @@
 import { HttpError } from "./security.mjs";
 import { validateEvimedAccountSettings } from "./evimedAccountService.mjs";
 import { evimedSessionEncryptionAvailable, openEvimedSearchReference, sealEvimedSearchReference } from "./evimedSessionCredentials.mjs";
-import { evimedSearchAction, evimedCollectionStatus, EVIMED_ACTION_PATHS } from "./evimedSearchActions.mjs";
+import { evimedSearchAction, evimedCollectionStatus, evimedSearchForbidden, EVIMED_ACTION_PATHS } from "./evimedSearchActions.mjs";
 
 export const EVIMED_SEARCH_CATEGORIES = Object.freeze(["literature", "guidelines", "drugs", "trials"]);
 const SEARCH_TYPES = { literature: "paper", guidelines: "guide", drugs: "instruction", trials: "" };
@@ -368,7 +368,8 @@ export class EvimedSearchService {
       throw diagnosed(new HttpError(503, "evimed_search_upstream_unavailable", "The search service is unreachable."), path, "network");
     }
     const expired = async (answer = null) => { await this.store.clearEvimedSearchCredential(req); throw diagnosed(new HttpError(403, "evimed_search_credential_expired", "The account search authorization expired. Sign in again."), path, "authorization", response.status, answer); };
-    if ([401, 403].includes(response.status)) return expired();
+    if (response.status === 401) return expired();
+    if (response.status === 403) throw diagnosed(evimedSearchForbidden(), path, "permission", response.status);
     if (action && response.status === 402) throw new HttpError(402, "evimed_search_balance_insufficient", "The download allowance is insufficient.");
     if (response.status === 429) throw diagnosed(new HttpError(429, "evimed_search_rate_limited", "The search service rate limit was reached."), path, "rate_limit", response.status);
     if (!response.ok) throw diagnosed(new HttpError(503, "evimed_search_upstream_unavailable", "The search service is unavailable."), path, "http", response.status);
@@ -382,7 +383,8 @@ export class EvimedSearchService {
       throw diagnosed(malformed(), path, "response_shape", response.status);
     }
     if (!object(answer)) throw diagnosed(malformed(), path, "response_shape", response.status);
-    if (["401", "403"].includes(String(answer.code))) return expired(answer);
+    if (String(answer.code) === "401") return expired(answer);
+    if (String(answer.code) === "403") throw diagnosed(evimedSearchForbidden(), path, "permission", response.status, answer);
     if (action && String(answer.code) === "402") throw new HttpError(402, "evimed_search_balance_insufficient", "The download allowance is insufficient.");
     if (action && !["0", "200"].includes(String(answer.code)) && /实名|身份|完善.{0,8}(?:资料|信息)|profile/i.test(String(answer.msg ?? answer.message ?? ""))) throw new HttpError(409, "evimed_search_profile_required", "Complete the EviMed account profile before downloading.");
     if (String(answer.code) === "429") throw diagnosed(new HttpError(429, "evimed_search_rate_limited", "The search service rate limit was reached."), path, "rate_limit", response.status, answer);
@@ -481,7 +483,8 @@ export class EvimedSearchService {
     for (let index = 0; index < answers.length; index++) {
       const answer = answers[index];
       if (answer.status === "rejected") {
-        if (answer.reason?.status === 401 || answer.reason?.status === 403) throw answer.reason;
+        // A facet the account may not use is a facet that is unavailable to it; only the authorization going away ends the request.
+        if (answer.reason?.status === 401 || answer.reason?.code === "evimed_search_credential_expired") throw answer.reason;
         const key = paths[index][0];
         output.unavailable.push(...(key === "filters" ? ["sType", "zdzs", "keywords"] : key === "departments" ? ["secondLevelDepartment"] : [key]));
       } else {

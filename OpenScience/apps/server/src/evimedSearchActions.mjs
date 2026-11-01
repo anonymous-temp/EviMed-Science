@@ -12,6 +12,12 @@ export const EVIMED_ACTION_PATHS = {
 };
 const invalid = () => new HttpError(400, "evimed_search_invalid_input", "The search action is invalid.");
 const malformed = () => new HttpError(502, "evimed_search_response_invalid", "The search action returned an invalid response.");
+/**
+ * The upstream said 403 to this request: the account is signed in and is not allowed this function (a member-only facet, a download it has no
+ * right to). It is that request's refusal, so the credential stays: only a 401 means the authorization is gone, and one member-only call must not
+ * force a re-login for everything else the account may do.
+ */
+export const evimedSearchForbidden = () => new HttpError(403, "evimed_search_forbidden", "The EviMed account is not allowed to use this search function.");
 const unavailable = () => new HttpError(409, "evimed_search_download_unavailable", "The full text is not available for download.");
 /** @type {WeakMap<object,Map<string,Promise<any>>>} */
 const CONFIRMATIONS = new WeakMap();
@@ -117,7 +123,8 @@ async function exportRecords(service, req, res, session, ids, format) {
   let response;
   try { response = await service.fetch(new URL(EVIMED_ACTION_PATHS.export, settings.baseUrl), { method: "POST", headers: { accept: "application/octet-stream", "content-type": "application/json", client: "pc", token: session.credential }, body: JSON.stringify({ ids, type: format }), redirect: "error", signal }); }
   catch { throw new HttpError(signal.aborted ? 504 : 503, signal.aborted ? "evimed_search_timeout" : "evimed_search_upstream_unavailable", "The citation export is unavailable."); }
-  if ([401, 403].includes(response.status)) { await service.store.clearEvimedSearchCredential(req); throw new HttpError(403, "evimed_search_credential_expired", "Sign in again to export."); }
+  if (response.status === 401) { await service.store.clearEvimedSearchCredential(req); throw new HttpError(403, "evimed_search_credential_expired", "Sign in again to export."); }
+  if (response.status === 403) throw evimedSearchForbidden();
   if (response.status === 402) throw new HttpError(402, "evimed_search_balance_insufficient", "The export allowance is insufficient.");
   if (!response.ok) throw new HttpError(503, "evimed_search_upstream_unavailable", "The citation export is unavailable.");
   const limit = 10 * 1024 * 1024;
@@ -130,7 +137,8 @@ async function exportRecords(service, req, res, session, ids, format) {
   const contentType = String(response.headers.get("content-type") ?? "").split(";")[0].toLowerCase();
   if (contentType === "application/json") {
     let answer; try { answer = JSON.parse(bytes.toString("utf8")); } catch { throw malformed(); }
-    if ([401, 403].includes(Number(answer?.code))) { await service.store.clearEvimedSearchCredential(req); throw new HttpError(403, "evimed_search_credential_expired", "Sign in again to export."); }
+    if (Number(answer?.code) === 401) { await service.store.clearEvimedSearchCredential(req); throw new HttpError(403, "evimed_search_credential_expired", "Sign in again to export."); }
+    if (Number(answer?.code) === 403) throw evimedSearchForbidden();
     if (Number(answer?.code) === 402) throw new HttpError(402, "evimed_search_balance_insufficient", "The export allowance is insufficient.");
     throw malformed();
   }
@@ -159,7 +167,7 @@ async function confirmDownload(service, req, res, session, category, approved, p
     try {
       await call(service, req, session, EVIMED_ACTION_PATHS.confirm, { ...fullTextParameters(category, parameters), name: parameters.title || parameters.name || "" });
     } catch (error) {
-      if (!["evimed_search_balance_insufficient", "evimed_search_profile_required", "evimed_search_credential_expired", "evimed_search_rate_limited"].includes(error?.code)) {
+      if (!["evimed_search_balance_insufficient", "evimed_search_profile_required", "evimed_search_credential_expired", "evimed_search_rate_limited", "evimed_search_forbidden"].includes(error?.code)) {
         const uncertain = UNCERTAIN.get(service) ?? new Map(); UNCERTAIN.set(service, uncertain);
         for (const [pendingKey, until] of uncertain) if (until <= Date.now()) uncertain.delete(pendingKey);
         uncertain.set(key, session.expiresAt);
