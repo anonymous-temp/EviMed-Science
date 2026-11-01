@@ -34,7 +34,7 @@ export const SearchComposer = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLA
       </div>
       <div id={panelId} role="tabpanel" aria-labelledby={`${panelId}-tab-${categories.value}`}>
         <div className="px-4 pb-2 pt-4 md:px-6">
-          <Textarea ref={input} role="searchbox" aria-label={label} aria-multiline="true" rows={2}
+          <Textarea ref={input} aria-label={label} aria-multiline="true" rows={2}
             className="min-h-20 max-h-60 resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-ui focus:outline-transparent focus-visible:outline-transparent"
             onKeyDown={event => {
               onKeyDown?.(event);

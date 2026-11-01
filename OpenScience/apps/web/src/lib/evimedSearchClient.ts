@@ -218,7 +218,12 @@ export function evimedSourceUrl(value: string | null | undefined): string | null
   }
 }
 
-export interface EvimedSearchFailure { message: string; action: "login" | "search" | "retry" }
+/**
+ * What the person can do next: sign in again, search again from the home, retry the same request, or — where the deployment has no
+ * medical search at all (`evimed_search_unavailable`, the page reached by its address) — go back to the conversation, because a retry
+ * of a service that is not there never works.
+ */
+export interface EvimedSearchFailure { message: string; action: "login" | "search" | "retry" | "home" }
 
 export function evimedSearchFailure(error: unknown): EvimedSearchFailure {
   const message = webErrorMessage(error, { fallback: "暂时无法读取检索结果，请重试。", codes: {
@@ -236,6 +241,9 @@ export function evimedSearchFailure(error: unknown): EvimedSearchFailure {
     }
     if (error.code === "evimed_search_reference_invalid") {
       return { message, action: "search" };
+    }
+    if (error.code === "evimed_search_unavailable") {
+      return { message, action: "home" };
     }
   }
   return { message, action: "retry" };

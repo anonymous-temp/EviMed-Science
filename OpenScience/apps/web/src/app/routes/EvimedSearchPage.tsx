@@ -22,7 +22,9 @@ function SearchError({ error, currentPath, onRetry, onSearch }: {
 }) {
   const action = error.action === "login"
     ? <Link to={`/login?reauth=evimed&next=${encodeURIComponent(currentPath)}`} className={buttonClasses()}>重新登录</Link>
-    : <Button onClick={error.action === "search" ? onSearch : onRetry}>{error.action === "search" ? "重新检索" : "重试"}</Button>;
+    : error.action === "home"
+      ? <Link to="/app/home" className={buttonClasses()}>回到对话</Link>
+      : <Button onClick={error.action === "search" ? onSearch : onRetry}>{error.action === "search" ? "重新检索" : "重试"}</Button>;
   return <StateScreen icon={SearchX} title={error.message} role="alert" action={action} />;
 }
 
@@ -101,9 +103,15 @@ export function EvimedSearchPage() {
       search: { label: "检索关键词", placeholder: category === "drugs" ? "药品名称" : "输入关键词", value: draft, maxLength: 200,
         onChange: setDraft, onClear: clearSearch, onSubmit: submitSearch,
         inputProps: { onCompositionStart: () => { composing.current = true; }, onCompositionEnd: () => { composing.current = false; } } },
-      actions: <Button size="sm" disabled={!draft.trim()} loading={busy && draft.trim() === query} onClick={submitSearch}>检索</Button>,
+      // Secondary: the page's main thing is its results, and a primary action belongs to the header's row, which a phone's wrapped
+      // toolbar is not (the walk's composition rule). Enter in the box submits as well.
+      actions: <Button size="sm" variant="secondary" disabled={!draft.trim()} loading={busy && draft.trim() === query} onClick={submitSearch}>检索</Button>,
     }}>
       {busy && searchMode === "submit" ? <EvimedSearchTransition category={category} query={query} onEdit={returnToEdit} />
+        // An account that cannot search at all (no EviMed login, or no medical search on this deployment) has no results to sort,
+        // select or refine: the answer stands alone under the keyword row, not inside a filter rail that cannot load either.
+        : state.status === "error" && (state.error.action === "login" || state.error.action === "home")
+          ? <SearchError error={state.error} currentPath={currentPath} onRetry={retryCurrentWithTransition} onSearch={retrySearchWithTransition} />
         : <EvimedSearchResults category={category} result={result} pending={busy} page={page} sort={sortControl}
           selection={{ items: selectedItems, limit: 20, onChange: selectItems, onClear: clearSelection }}
           refinements={{ collapsed: filtersCollapsed, onCollapsedChange: setFiltersCollapsed,

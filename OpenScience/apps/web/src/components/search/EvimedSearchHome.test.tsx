@@ -51,7 +51,7 @@ it("reads the current project's topics and only fills and focuses the composer",
   expect(readTopics).toHaveBeenCalledWith("project-one", "literature", expect.any(AbortSignal));
   await userEvent.click(topic);
   expect(handlers.onDraftChange).toHaveBeenCalledWith("检索主题");
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveFocus();
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveFocus();
   expect(handlers.onSubmit).not.toHaveBeenCalled();
   expect(screen.queryByText("示例主题")).toBeNull();
 });
@@ -67,7 +67,7 @@ it("keeps manual search available during a topic request and shows no static fal
   readTopics.mockReturnValue(pending<EvimedSearchTopics>().promise);
   render(page());
   expect(screen.getByLabelText("正在读取检索主题")).toHaveAttribute("aria-busy", "true");
-  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "新研究");
+  await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), "新研究");
   expect(handlers.onDraftChange).toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "高血压" })).toBeNull();
   expect(handlers.onSubmit).not.toHaveBeenCalled();
@@ -230,7 +230,7 @@ it("does not create a project or read a feed without a selected project", async 
   render(page());
   expect(screen.getByText("选择项目后查看主题")).toBeInTheDocument();
   expect(readTopics).not.toHaveBeenCalled();
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toBeEnabled();
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toBeEnabled();
 });
 
 it("refreshes topic identity when an account session changes", async () => {
