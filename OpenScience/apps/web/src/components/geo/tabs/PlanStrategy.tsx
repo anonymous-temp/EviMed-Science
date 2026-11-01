@@ -468,7 +468,7 @@ export function Assumptions({ project, plan }: { project: GeoProject; plan: GeoS
                     actionKind="draft"
                     onClick={() => { void open({ projectId: project.projectId }, `方案里有一条假设：“${line}”。我想改成：`); }}
                   >
-                    <PenLine size={14} aria-hidden="true" />
+                    <PenLine size={16} aria-hidden="true" />
                     让 AI 修改
                   </Button>
                 ) : undefined}

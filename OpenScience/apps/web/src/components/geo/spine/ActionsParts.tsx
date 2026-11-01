@@ -310,8 +310,8 @@ export function OtherArticles({
                 )}
                 trailing={article.groupIsControl ? <Tag tone="warn">对照群</Tag> : undefined}
                 actions={canEdit ? <>
-                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" actionKind="draft" onClick={() => onContinue(article)}><PenLine size={14} aria-hidden="true" />让 AI 修改</Button>}
-                  {article.currentResultVersionId && onHumanize && <Button variant="text" size="sm" actionKind="draft" onClick={() => onHumanize(article)}><PenLine size={14} aria-hidden="true" />让 AI 润色语言</Button>}
+                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" actionKind="draft" onClick={() => onContinue(article)}><PenLine size={16} aria-hidden="true" />让 AI 修改</Button>}
+                  {article.currentResultVersionId && onHumanize && <Button variant="text" size="sm" actionKind="draft" onClick={() => onHumanize(article)}><PenLine size={16} aria-hidden="true" />让 AI 润色语言</Button>}
                   {article.status !== "withdrawn" && <Button variant="text" size="sm" actionKind="external" onClick={() => onWithdraw(article)}>撤回</Button>}
                 </> : undefined}
               />
