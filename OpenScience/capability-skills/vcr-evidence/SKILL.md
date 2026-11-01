@@ -108,6 +108,8 @@ keep earlier useful outputs and show their specific limitation.
 ```
 
 `parameter` 用平台认识的名字，合并才认得：`median_time`、`hazard_ratio`、`odds_ratio`、`risk_ratio`、`control_event_rate`、`response_rate`、`survival_at_time`、`dropout_rate`、`mean_value`、`mean_difference`、`risk_difference`、`accrual_to_primary_completion_months`。核对不过的项会记下来但值被清空，返回的 `issues` 里有原因（`quote_not_found`、`quote_missing_number` 等），**不要为了通过核对改引文**。
+每个参数合并要用的项由参数的种类决定：比例要数值加样本量（或区间的两端），比值、时间和连续量要数值加区间的两端。缺哪项，这一条写入的答复会点名，条目照样保存；论文里有就补进同一条（数要在引文里），论文没有报告就**另写一条同一来源、同一参数、同一组的 `notReported: true`**，不带数值、文字和区间，引文可写可不写（写了就写表里报告了什么）。「论文未报告」是一个结果，不是缺漏：它永远不会有数值，不进合并和假设卡，页面写成「未取到」；不要为了凑齐而估一个值，也不要因此放弃这项研究。
+
 `historicalBaseline: true` 只在这个值确实是历史基线时写；`enrollmentKind` 用 `estimated` 或 `actual`。不写 `verification`：核对结果是平台的，你写不了。
 
 三条硬规矩：

@@ -957,7 +957,12 @@ test("a time-to-event MAIC takes its comparator from the reconstruction result, 
 });
 
 test("every example in the skill is a shape the platform accepts: the objects build, and the direct scenarios validate", () => {
-  const skill = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capabilities/vcr-analysis/SKILL.md"), "utf8");
+  // The skill is split by task (C3): the entry and the references it sends the model to are the text its examples live in.
+  const wholeSkill = (/** @type {string} */ tree) => {
+    const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..", tree, "vcr-analysis");
+    return [fs.readFileSync(path.join(dir, "SKILL.md"), "utf8"), ...fs.readdirSync(path.join(dir, "references")).filter((name) => name.endsWith(".md")).sort().map((name) => fs.readFileSync(path.join(dir, "references", name), "utf8"))].join("\n");
+  };
+  const skill = wholeSkill("capabilities");
   const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));
   assert.ok(blocks.length >= 7, `the skill teaches supported designs by example (${blocks.length} blocks)`);
   const t2 = { ...context, study: { ...seedStudy, dataTier: "T2" },
@@ -1002,8 +1007,7 @@ test("every example in the skill is a shape the platform accepts: the objects bu
   assert.doesNotMatch(skill, /§\s?\d|\bAC-\d|\bEB-\d|\bPA-\d/);
   assert.doesNotMatch(skill, /isNull|dropoutRate/);
   assert.match(skill, /mcp__evimed__vcr_write/);
-  assert.equal(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capability-skills/vcr-analysis/SKILL.md"), "utf8"), skill,
-    "the capability's skill and the shared copy are one file");
+  assert.equal(wholeSkill("capability-skills"), skill, "the capability's skill and the shared copy are one text");
 });
 
 test("two assumptions that cannot both hold are found by closed-form identities and named with their versions", () => {

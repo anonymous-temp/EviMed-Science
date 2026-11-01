@@ -42,6 +42,8 @@ Highlight prerequisites per operation, not for the entire platform:
 - Individual prediction needs an executable model within its endpoint, population,
   units and horizon. Preserve partial results and state the specific missing input.
 
+Ask only what would change the next computation, one thing at a time, and otherwise go on with a stated assumption. The answer of `vcr_simulate` action shape marks each key `research_fact` (only the research can give it) or `defaultable` (settle it yourself and say which value you took); action validate shows, without queueing or waiting, what the platform would fill in and refuse, so validating and starting can be one turn.
+
 No contact, referral, site CRM, recruitment funnel, coordinator assignment,
 recruitment materials or follow-up operations are part of this workflow. Retain
 scientific visit schedules, longitudinal observations, criterion feasibility

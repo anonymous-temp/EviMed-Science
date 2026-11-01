@@ -19,7 +19,7 @@
 // to make impossible: it looks like nothing having happened — the run follows
 // its instructions and is refused, item by item, for something the skill said.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { dirname, join, normalize } from "node:path";
@@ -40,7 +40,17 @@ import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SKILLS = ["vcr-protocol", "vcr-analysis", "vcr-evidence", "vcr-matching", "vcr-package"];
-const read = (/** @type {string} */ path) => readFileSync(join(root, path), "utf8");
+/**
+ * A file of the repository; for a skill's SKILL.md, the whole skill — the entry and the references it sends the model to
+ * (`references/*.md` beside it), because a skill split by task (C3) teaches its examples and its rules in all of them.
+ * @param {string} path
+ */
+const read = (path) => {
+  const text = readFileSync(join(root, path), "utf8");
+  if (!path.endsWith("/SKILL.md")) return text;
+  const references = join(root, dirname(path), "references");
+  return [text, ...(existsSync(references) ? readdirSync(references).filter((name) => name.endsWith(".md")).sort().map((name) => readFileSync(join(references, name), "utf8")) : [])].join("\n");
+};
 
 test("every VCR skill resolves one mirrored shared operating contract", () => {
   const shared = read("capabilities/vcr-protocol/references/operating-contract.md");

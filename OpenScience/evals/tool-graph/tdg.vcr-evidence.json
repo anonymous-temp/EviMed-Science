@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:457876d6739b32d03fcd6c0a7d49d36cf45fa1183584e1b5993a08cc7cc5add1",
+  "version": "sha256:eba1745edd8ebeee4796ba8f98fcf66456a3d48c27081674b01e42b4b0e28fdc",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -1691,7 +1691,8 @@
               "start",
               "status",
               "cancel",
-              "shape"
+              "shape",
+              "validate"
             ],
             "default": "start"
           },
