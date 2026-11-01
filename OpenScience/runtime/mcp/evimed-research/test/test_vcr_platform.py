@@ -293,6 +293,10 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("accrual.rates lists 1 more value than accrual.breaks (when endpoint.type is time_to_event and accrual.kind is piecewise", rules)
         self.assertIn("truth.controlDistribution.rates lists 1 more value than truth.controlDistribution.breaks", rules)
 
+    def test_the_literature_population_says_where_a_pasted_table_goes(self):
+        notes = vcr_platform.shape({"kind": "literature_population"})["data"]["notes"]
+        self.assertTrue(any("generate_population" in note for note in notes))
+
     def test_every_row_of_shape_says_what_it_asks_of_a_person_and_no_object_does(self):
         # C2: the role is read off the schema by the platform (research_fact: required, no default, not a choice of words; defaultable: the
         # rest), printed on every key, and explained once.

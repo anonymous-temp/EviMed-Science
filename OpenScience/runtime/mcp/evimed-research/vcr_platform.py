@@ -1079,6 +1079,10 @@ def shape(arguments: dict) -> dict:
             data["rules"] = [_rule_line(rule) for rule in method["rules"]]
         if method.get("gridCells"):
             notes.append("A grid has at most %s cells (designs x truths), and every cell is a valid scenario of its own." % method["gridCells"])
+        if kind == "literature_population":
+            # On 2026-11-01 the run read this path's evidence bindings, saw no source to bind a pasted table to, and left for its own R.
+            notes.append("A baseline table the person pasted, with no paper preserved to bind its numbers to, goes through generate_population with the "
+                         "same numbers: the same engine and the same page, no bindings. Say the numbers are theirs and were not checked against a paper.")
         if notes:
             data["notes"] = notes
         data["examples"] = list(method.get("examples", []))
