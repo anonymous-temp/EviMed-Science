@@ -247,8 +247,10 @@ const briefStudy = { name: "EV-201", question: "单臂试验能否用外部对�
 
 test("an export run's brief names the one document it is for, in words and by kind, for each of the four", () => {
   const labels = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH);
-  assert.deepEqual(Object.keys(VCR_EXPORT_OUTLINES).sort(), [...VCR_EXPORT_KINDS].sort(), "every document has an outline, and nothing else does");
-  for (const kind of VCR_EXPORT_KINDS) {
+  // a result record is written by the platform from one result (D7): no run is briefed for it, so it has no outline
+  const written = VCR_EXPORT_KINDS.filter((kind) => kind !== "result_record");
+  assert.deepEqual(Object.keys(VCR_EXPORT_OUTLINES).sort(), [...written].sort(), "every document a run writes has an outline, and nothing else does");
+  for (const kind of written) {
     const brief = vcrDefaultBrief({ study: briefStudy, scope: [], detail: { kind, exportId: "exp_1" } });
     assert.ok(brief.startsWith("研究：EV-201。\n研究问题：单臂试验能否用外部对照？\n数据档位：T0；预期用途：exploratory。\n"), kind);
     assert.ok(brief.includes(`「${labels[kind]}」（kind: ${kind}）`), `the brief says which document (${kind})`);
@@ -256,7 +258,7 @@ test("an export run's brief names the one document it is for, in words and by ki
     assert.ok(brief.includes(`data.kind 写 ${kind}。`), `and the kind its report is written under (${kind})`);
     assert.ok(brief.includes("写成别的 kind 会被拒绝"), "and that another kind is refused, which the gateway holds it to");
     // Every other document's name is absent: a brief that listed all four would not have said which.
-    for (const other of VCR_EXPORT_KINDS.filter((entry) => entry !== kind && entry !== "study_package")) {
+    for (const other of written.filter((entry) => entry !== kind && entry !== "study_package")) {
       assert.equal(brief.includes(labels[other]), false, `${kind} does not mention ${other}`);
     }
     assert.equal(brief.includes("本次要做的步骤"), false, "an export run has no steps to be told");

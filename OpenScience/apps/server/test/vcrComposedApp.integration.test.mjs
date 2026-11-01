@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { roleAllows, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, DOCUMENT_EXPORT_MIME } from "@evimed/domain";
+import { roleAllows, VCR_RUN_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, DOCUMENT_EXPORT_MIME } from "@evimed/domain";
 import { exportHash } from "../src/documentExport.mjs";
 import { documentExportDirectory } from "../src/documentRenderController.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
@@ -183,9 +183,6 @@ function requests(target, ids) {
     "GET /studies/of-project/:project": async () => ["GET", `/api/vcr/studies/of-project/${target.projectId}`, undefined],
     "GET /studies/:id/:tab": async () => ["GET", `${S}/overview`, undefined],
     "GET /studies/:id/runs": async () => ["GET", `${S}/runs`, undefined],
-    "GET /studies/:id/cards": async () => ["GET", `${S}/cards?kind=criteria`, undefined],
-    // A request that no card answers: the point of the grid is who is refused, and a write that reaches nothing proves that as well.
-    "POST /studies/:id/cards": async () => ["POST", `${S}/cards`, { kind: "criteria", set: { "99.requirement.value": 1 } }],
     "GET /studies/:id/longitudinal": async () => ["GET", `${S}/longitudinal`, undefined],
     "GET /studies/:id/followup-history": async () => ["GET", `${S}/followup-history`, undefined],
     "POST /studies/:id/longitudinal/histories": async () => ["POST", `${S}/longitudinal/histories`, {}],
@@ -794,7 +791,7 @@ test("shared exports serve all VCR kinds to current members without a new resear
   const current = await context.app.vcr.store.studyById(study.id);
   const beforeRuns = dispatches.length;
   let lastId;
-  for (const kind of VCR_EXPORT_KINDS) {
+  for (const kind of VCR_RUN_EXPORT_KINDS) {
     // The two model documents take their words by named section: the first and the last of the sections a run writes.
     const model = VCR_MODEL_DOCUMENT_KINDS.includes(kind);
     const [first, last] = model ? [VCR_MODEL_DOCUMENT_SECTIONS[kind].prose[0], VCR_MODEL_DOCUMENT_SECTIONS[kind].prose.at(-1)] : ["Methods", "Limitations"];

@@ -1237,6 +1237,17 @@ test("paper-source previews use study read authorization before resolving a sour
 });
 
 
+test("D7: a result record names the result it is of, and no other document does", async () => {
+  const asked = [];
+  const f = fixture({ overrides: { exporter: { requestExport: async (_user, _study, kind, options) => { asked.push({ kind, options }); return { export: { id: "exp_1" } }; } } } });
+  await f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "result_record", resultId: "res_1" }), response());
+  assert.deepEqual(asked, [{ kind: "result_record", options: { resultId: "res_1" } }]);
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "result_record" }), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "study_package", resultId: "res_1" }), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "result_record", resultId: "../x" }), response()), { status: 400 });
+  assert.equal(asked.length, 1);
+});
+
 test("Start requires run and write; naming also requires the lead and the original brief stays exact", async () => {
   const received = [];
   const f = fixture({ who: "data-manager", roles: { "data-manager": ["data_manager"] },

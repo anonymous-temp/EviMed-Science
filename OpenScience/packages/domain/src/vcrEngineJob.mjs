@@ -185,8 +185,8 @@ export const VCR_JOB_METHODS = Object.freeze({
   tipping_point: 'comparator.tipping_point',
   prognostic_adjustment_comparator: 'comparator.prognostic_adjustment',
   // --- end robustness methods ---
-  population_check: 'population.check',
   generate_patients_longitudinal: 'patients.longitudinal',
+  population_check: 'population.check',
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
   ...VCR_LONGITUDINAL_JOBS,
 })

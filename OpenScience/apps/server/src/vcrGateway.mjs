@@ -78,7 +78,7 @@ import {
 
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
-import { withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
+import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
@@ -1544,6 +1544,23 @@ const WRITERS = {
   },
 
   /**
+   * One result as a short record (「结果记录」, D7): asked for by name and written by the platform from the stored result, so the run
+   * writes no words and no number into it. The answer says where the export is, like any export's.
+   */
+  async result_record(item, { study, orchestrator, service }, extra) {
+    // `resultId` is spelled like an engine output and is a reference to one of this study's results: a plain string, checked by the export
+    if (!item.only(VCR_WRITE_FIELDS.result_record, { ids: ["resultId"] })) return null;
+    const resultId = item.str("resultId", { max: 120, required: true });
+    if (!item.ok) return null;
+    if (typeof orchestrator?.requestExport !== "function") return void item.bad("resultId", "结果记录暂时不能生成。", "vcr_write_refused");
+    const asked = await orchestrator.requestExport({ id: study.userId }, study, "result_record", { resultId });
+    const entry = vcrResultEntry({ studyId: study.id, tab: "overview", publicUrl: service?.config?.publicUrl ?? null });
+    extra.results.push({ index: item.index, id: asked.export.id, state: asked.export.state, kind: "result_record",
+      note: "结果记录已经写好，在总览的交付物里；它只含这条结果的假设、种子、版本、一个示例试验和回到哪里看。", ...(entry ? { resultEntry: entry } : {}) });
+    return asked.export.id;
+  },
+
+  /**
    * One regulatory contact (「监管沟通记录」): when, with which agency, what kind, what was discussed, what the agency concluded in its
    * own words and what it left. A record is added, never edited; a contact written twice exactly is one contact.
    */
@@ -1918,6 +1935,8 @@ const WRITERS = {
     const template = item.str("template", { max: 200_000 }) ?? item.str("text", { max: 200_000 });
     if (!template?.trim()) return void item.bad("template", "报告文字不能为空。");
     const named = item.choice("kind", VCR_EXPORT_KINDS);
+    // a result record is written by the platform from one result; a run has no words to put in it
+    if (named === "result_record") return void item.bad("kind", "结果记录由平台从结果写成，不由运行写：用 what=result_record 并给 resultId。");
     const section = item.str("section", { max: 60 }) ?? "main";
     if (!item.ok) return null;
     const dispatched = typeof orchestrator?.exportDispatch === "function" ? await orchestrator.exportDispatch(study.id, caller ?? {}) : null;

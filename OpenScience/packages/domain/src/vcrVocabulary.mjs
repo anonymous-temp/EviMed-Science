@@ -522,7 +522,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
-  accrual_forecast: 'trial', matching: 'matching', evidence_pool: 'data', snapshot_profile: 'data',
+  accrual_forecast: 'trial', matching: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
 })
 /**
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
@@ -843,11 +843,11 @@ export const VCR_JOB_KINDS = frozen([
   // --- appended (2026-10-04): the robustness methods ---
   'negative_control_comparator', 'tipping_point', 'prognostic_adjustment_comparator',
   // --- end robustness methods ---
-  // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
-  'population_check',
   // --- appended (2026-10-07): longitudinal virtual patients (plan 5.2) ---
   'generate_patients_longitudinal',
   // --- end longitudinal ---
+  // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
+  'population_check',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
 /**
@@ -942,10 +942,14 @@ export const VCR_LINEAGE_NODE_KINDS = frozen([
 /** Deliverables this module exports (§8.3). */
 export const VCR_EXPORT_KINDS = frozen([
   'study_package', 'cde_communication_pack', 'simulation_report', 'validation_pack', 'model_analysis_plan', 'model_analysis_report',
+  // one result as a short record, written by the platform from the result itself (remediation plan D7); only on request
+  'result_record',
 ])
+/** The documents a run writes the words of. A result record is the platform's own, from one result, and no run is sent out for it. */
+export const VCR_RUN_EXPORT_KINDS = frozen(VCR_EXPORT_KINDS.filter((kind) => kind !== 'result_record'))
 export const VCR_EXPORT_KIND_LABELS_ZH = Object.freeze({
   study_package: '研究包', cde_communication_pack: 'CDE 沟通交流资料包', simulation_report: '模拟报告', validation_pack: '系统验证文档包',
-  model_analysis_plan: '模型分析计划', model_analysis_report: '模型分析报告',
+  model_analysis_plan: '模型分析计划', model_analysis_report: '模型分析报告', result_record: '结果记录',
 })
 
 /** The module's own capability packages (§11.2 layer 8). */

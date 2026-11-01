@@ -93,7 +93,7 @@ export type VcrComparatorRoute =
   | "prognostic_adjustment" | "external_control" | "literature_control" | "model_comparator" | "hybrid_control";
 export type VcrExportKind =
   | "study_package" | "cde_communication_pack" | "simulation_report" | "validation_pack"
-  | "model_analysis_plan" | "model_analysis_report";
+  | "model_analysis_plan" | "model_analysis_report" | "result_record";
 export type VcrStoredMemberRole = VcrMemberRole | "recruiter" | "site";
 export type VcrMemberRole =
   | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "viewer";

@@ -82,6 +82,7 @@ import { vcrRequestedSteps, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
 import { vcrExportHoldsDocument, vcrReportReviewRevision } from "./vcrRender.mjs";
+import { buildResultRecord } from "./vcrResultRecord.mjs";
 import { vcrQueueOf } from "./vcrStudyStatus.mjs";
 
 export { vcrModelApplicabilityIssues, vcrPopulationVariables };
@@ -2166,10 +2167,11 @@ export class VcrOrchestrator {
    * one (§10.2, AC-21); the cover states what is reviewed and what is not.
    * @param {{ id: string }} user @param {{ id: string }} input @param {string} kind
    */
-  async requestExport(user, input, kind) {
+  async requestExport(user, input, kind, options = {}) {
     const study = await this.store.getStudy(String(user.id), String(input.id));
     if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
     if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
+    if (kind === "result_record") return this.#requestResultRecord(user, study, options);
     // A document stands on what it was written from. A model document stands on one frozen version of the plan: a draft written before
     // the plan froze, or against an older version, is not the one asked for once a newer version exists. Every other kind records the
     // digest of the study's version nodes it was written from (`inputDigest`, `vcrInputDigest`): the same digest is the same document,
@@ -2190,6 +2192,43 @@ export class VcrOrchestrator {
       { detail: { purpose: "export", kind, exportId: row.id, requestedBy: String(user.id) } });
     const result = await this.advance(study.id, { attended: true });
     return { export: row, ...(await this.#answer(study, result, { step: null })) };
+  }
+
+  /**
+   * One result as a short record (remediation plan D7): written by the platform from the stored result, so there is no run to wait for
+   * and nothing a model could type into it. The same record asked for twice is the same export; the document service converts it like
+   * any other, and a conversion that cannot be queued leaves the record readable.
+   * @param {{ id: string }} user @param {any} study @param {{ resultId?: unknown }} options
+   */
+  async #requestResultRecord(user, study, options) {
+    const resultId = typeof options.resultId === "string" ? options.resultId : "";
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,120}$/.test(resultId)) throw new HttpError(400, "vcr_payload_invalid", "resultId is the id of one of the study's results.");
+    const result = await this.store.result(study.id, resultId);
+    if (!result) throw new HttpError(404, "vcr_result_not_found", "这条结果不在这个研究里。");
+    const execution = result.executionId ? await this.store.one(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, output_hash, environment, inputs
+      FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 AND id = $2`, [study.id, result.executionId]) : null;
+    const job = execution?.job_id ? await this.store.one(`SELECT scenario, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND id = $2`, [study.id, execution.job_id]) : null;
+    const record = buildResultRecord({ study, result, publicUrl: this.config.publicUrl ?? null,
+      execution: execution ? { method: execution.method, methodVersion: execution.method_version, scenarioHash: execution.scenario_hash, seed: execution.seed == null ? null : Number(execution.seed),
+        replicates: execution.replicates == null ? null : Number(execution.replicates), outputHash: execution.output_hash, environment: object(execution.environment), inputs: list(execution.inputs) } : null,
+      scenario: job?.scenario ?? null, checkpoint: object(job?.checkpoint) });
+    const existing = (await this.store.exports(study.id)).find((row) => row.kind === "result_record" && object(row.cover.record).digest === record.digest);
+    if (existing) {
+      const conversion = this.queueExport ? await this.queueExport(user, study, existing).catch(() => null) : null;
+      return { export: existing, conversion, accepted: true, runId: null, step: null, queuedBehind: [] };
+    }
+    const cover = {
+      exportKind: "result_record", intendedUse: study.intendedUse, inputDigest: record.digest,
+      // the shape every document of the study has, so that the reader, the conversion and the exports list read it like the others
+      results: { study: { id: study.id, name: study.name, intendedUse: study.intendedUse }, intendedUse: study.intendedUse, stale: [], seal: null, review: { records: [] } },
+      reports: [{ section: "main", template: "", rendered: record.markdown }],
+      record: { resultId: result.id, resultKind: result.kind, resultVersion: Number(result.version ?? 1), digest: record.digest, title: record.title, hasExampleTrial: record.hasExampleTrial, sections: record.sections },
+    };
+    const created = await this.store.createExport({ studyId: study.id, userId: study.userId, kind: "result_record", cover });
+    const row = (await this.store.updateExport(created.id, { state: "ready", sha256: record.digest })) ?? created;
+    const ready = await this.store.exportRow(study.id, created.id) ?? row;
+    const conversion = this.queueExport ? await this.queueExport(user, study, ready).catch(() => null) : null;
+    return { export: ready, conversion, accepted: true, runId: null, step: null, queuedBehind: [] };
   }
 
   /**

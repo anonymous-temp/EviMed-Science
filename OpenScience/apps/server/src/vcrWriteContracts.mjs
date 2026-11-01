@@ -134,6 +134,9 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "procedures",
     "remove"
   ],
+  "result_record": [
+    "resultId"
+  ],
   "regulatory_contact": [
     "date",
     "agency",

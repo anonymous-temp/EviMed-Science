@@ -1536,9 +1536,21 @@ export function presentExport(row, bundle) {
           { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) }, reviewContextOf(bundle))),
       status: coverStatus({ cover, row, bundle, model }),
       // The two model documents read as their own structure (M15's sections, the platform's tables); every other export as the nine parts of §8.3.
-      sections: modelSections(row, cover, model) ?? packageSections({ cover, row, bundle, model }),
+      sections: modelSections(row, cover, model) ?? recordSections(row, cover) ?? packageSections({ cover, row, bundle, model }),
     },
   };
+}
+
+/**
+ * The sections of a result record (D7): the platform's own short lines, one section each; null for any other export.
+ * @param {Record<string, any>} row @param {Record<string, any>} cover
+ */
+function recordSections(row, cover) {
+  if (row.kind !== "result_record") return null;
+  return list(object(cover.record).sections).map((section, index) => ({
+    id: String(object(section).id ?? `section_${index}`), number: String(index + 1), title: String(object(section).title ?? ""),
+    body: list(object(section).lines).map(String).join("\n"),
+  }));
 }
 
 /**

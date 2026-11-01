@@ -8,7 +8,10 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS } from "@evimed/domain";
+import { VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS } from "@evimed/domain";
+
+/** The documents a run writes. A result record is the platform's own, from one result (D7): no run is sent out for it and none fills it. */
+const VCR_EXPORT_KINDS = ALL_EXPORT_KINDS.filter((kind) => kind !== "result_record");
 import {
   VCR_GATEWAY_OPERATIONS, VCR_GATEWAY_PATH, VCR_GATEWAY_WINDOW_LIMITS, createVcrGatewayHandler, vcrGatewayProviderUrl,
   vcrGatewayRoutePattern, vcrRuntimeWrite,
@@ -1430,4 +1433,33 @@ test("the programme's quiet run is given no entry: nobody reads its reply", asyn
   assert.equal(status.status, 200);
   assert.equal(status.json().data.jobId, "job_1");
   assert.equal(status.json().data.resultEntry, undefined);
+});
+
+test("D7: a run asks for a result record by the result's id and is told where the export is; it cannot write the record's words", async () => {
+  /** @type {any[]} */ const asked = [];
+  const orchestrator = { async requestExport(/** @type {any} */ user, /** @type {any} */ target, /** @type {string} */ kind, /** @type {any} */ options) {
+    asked.push({ user, target: target.id, kind, options });
+    if (options.resultId === "res_nobody") throw new HttpError(404, "vcr_result_not_found", "这条结果不在这个研究里。");
+    return { export: { id: "exp_9", kind, state: "ready" } };
+  } };
+  const written = await vcrRuntimeWrite({ store: {}, service: { config: { publicUrl: "https://app.example.org" } }, orchestrator, study, what: "result_record", items: [{ resultId: "res_1" }], data: null });
+  assert.equal(written.ok, true, JSON.stringify(written));
+  assert.deepEqual(written.ids, ["exp_9"]);
+  assert.deepEqual(asked, [{ user: { id: "u1" }, target: "std_1", kind: "result_record", options: { resultId: "res_1" } }]);
+  assert.equal(written.results[0].state, "ready");
+  assert.match(written.results[0].note, /假设、种子、版本、一个示例试验和回到哪里看/);
+  assert.equal(written.results[0].resultEntry.url, "https://app.example.org/app/virtual-research/std_1/overview");
+  // an unknown field, a missing id and a result that is not the study's are each refused by name, and nothing else is made
+  const loose = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "result_record", items: [{ resultId: "res_1", text: "我写的话" }], data: null });
+  assert.equal(loose.ok, false);
+  const none = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "result_record", items: [{}], data: null });
+  assert.equal(none.ok, false);
+  const missing = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "result_record", items: [{ resultId: "res_nobody" }], data: null });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.issues.some((entry) => entry.code === "vcr_write_refused"));
+  assert.equal(asked.length, 2, "only the two well-formed asks reached the orchestrator");
+  // and a report cannot be of this kind: its words would be the record's
+  const report = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "report", items: null, data: { kind: "result_record", template: "写进去的话" } });
+  assert.equal(report.ok, false);
+  assert.ok(report.issues.some((entry) => /结果记录由平台从结果写成/.test(String(entry.message))), JSON.stringify(report.issues));
 });

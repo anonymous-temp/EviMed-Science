@@ -1872,6 +1872,18 @@ vcr_analytic_sensitivity <- function(e, tr, alpha, power, alloc, sided, measures
        rows = list(list(label = "两组事件率之差", range = sprintf("%.3g–%.3g", 0.8 * (p1 - p0), 1.2 * (p1 - p0)), low = ceiling(min(n)), high = ceiling(max(n)))))
 }
 
+#' The first replicate of a simulation as one example trial: what that single simulated trial concluded, from the run's seed (replicate 1
+#' of a seed is always the same trial). It is the first row of the per-replicate table the run already computed, rounded to what a reader
+#' can use and nothing more; NULL when the run kept no replicate. Remediation plan D7: a short record shows one trial beside the
+#' operating characteristics so that the numbers are not the only thing a reader sees.
+vcr_example_trial <- function(values, seed) {
+  if (is.null(values) || !nrow(values)) return(NULL)
+  row <- values[1L, ]
+  keep <- c("estimate", "se", "statistic", "p", "reject", "events", "sampleSize", "duration", "look")
+  shown <- lapply(row[intersect(keep, names(row))], function(x) if (is.finite(x)) as.numeric(signif(x, 6)) else NULL)
+  list(replicate = 1L, seed = as.integer(seed), values = shown[!vapply(shown, is.null, logical(1))])
+}
+
 vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, progress = NULL) {
   cp <- if (is.null(output_dir)) NULL else file.path(output_dir, "checkpoint.rds")
   if (!is.null(output_dir)) dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
@@ -1899,7 +1911,9 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
        notEstimableRule = res$notEstimableRule,
        conclusion = res$diagnostics$conclusion,
        counts = vcr_counts(realPatients = 0, generatedRecords = generated),
-       diagnostics = c(res$diagnostics, list(analyticCheck = check, powerCurve = curve)),
+       diagnostics = c(res$diagnostics, list(analyticCheck = check, powerCurve = curve),
+                       # from the release that has it: one trial of the run, the first replicate, as a record can show it (remediation plan D7)
+                       if (utils::compareVersion(as.character(job$methodVersion %||% "1.0.0"), "1.3.0") >= 0) list(exampleTrial = vcr_example_trial(res$values, job$seed))),
        tables = tables)
 }
 

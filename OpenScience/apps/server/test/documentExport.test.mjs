@@ -34,7 +34,7 @@ test('render plan exposes only input and output with bounded offline isolation',
 });
 
 import { canonicalVcrDocument } from '../src/vcrDocumentExport.mjs';
-import { VCR_EXPORT_KINDS } from '@evimed/domain';
+import { VCR_RUN_EXPORT_KINDS as VCR_EXPORT_KINDS } from '@evimed/domain';
 test('all four VCR formats assemble every section against the same frozen result, including unreviewed work', () => {
   const study = { id: 'study', name: 'Research', intendedUse: 'exploratory' };
   const model = { study, counts: { sample: 42 }, review: { records: [{ kind: 'clinical', state: 'failed', reviewer: 'AI', nodes: ['result:one@1'] }] }, stale: [{ node: 'result:one@1', reason: 'source_changed' }] };

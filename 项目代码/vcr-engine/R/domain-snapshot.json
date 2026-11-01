@@ -563,8 +563,8 @@
     "negative_control_comparator": "comparator.negative_control",
     "tipping_point": "comparator.tipping_point",
     "prognostic_adjustment_comparator": "comparator.prognostic_adjustment",
-    "population_check": "population.check",
-    "generate_patients_longitudinal": "patients.longitudinal"
+    "generate_patients_longitudinal": "patients.longitudinal",
+    "population_check": "population.check"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -8968,8 +8968,8 @@
     "negative_control_comparator",
     "tipping_point",
     "prognostic_adjustment_comparator",
-    "population_check",
-    "generate_patients_longitudinal"
+    "generate_patients_longitudinal",
+    "population_check"
   ],
   "endpointTypes": [
     "continuous",

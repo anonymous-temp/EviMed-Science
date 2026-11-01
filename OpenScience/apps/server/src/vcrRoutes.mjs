@@ -1536,15 +1536,19 @@ export function createVcrRoutes(dependencies) {
     // --- export -----------------------------------------------------------------------
     if (section === "export") {
       if (parts.length === 3 && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["kind"]);
+        const body = await bodyOf(req, maxJsonBytes, ["kind", "resultId"]);
         const kind = word(body.kind, VCR_EXPORT_KINDS, "vcr_export_kind_invalid", "kind");
+        // a short record is of ONE result; every other document is of the whole study
+        if (kind === "result_record" ? typeof body.resultId !== "string" || !ID.test(body.resultId) : body.resultId !== undefined) {
+          throw new HttpError(400, "vcr_payload_invalid", kind === "result_record" ? "resultId is the id of the result the record is of." : "resultId belongs to a result record only.");
+        }
         // Export is never withheld for want of a review (§10.2, AC-21): the
         // cover says what is reviewed and what is not, and the intended-use
         // ceiling is what an unreviewed package cannot claim.
         const { study } = await authorize(id, "export");
         if (!hooks.exporter?.requestExport) throw UNAVAILABLE();
         const result = await audited("vcr.export.request", (requested) => ({ code: String(requested?.export?.id ?? ""), detail: kind }),
-          { code: id, detail: kind }, () => hooks.exporter.requestExport(user, study, kind));
+          { code: id, detail: kind }, () => hooks.exporter.requestExport(user, study, kind, kind === "result_record" ? { resultId: body.resultId } : {}));
         return reply(result, 201);
       }
       if (parts.length === 4 && method === "GET") {

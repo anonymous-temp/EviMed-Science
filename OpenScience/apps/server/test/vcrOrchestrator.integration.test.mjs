@@ -36,7 +36,7 @@ import { VcrAccess } from "../src/vcrAccess.mjs";
 import { createVcrGatewayHandler, vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { backfillResultSubjects } from "../src/vcrSubjects.mjs";
 import { Readable } from "node:stream";
-import { VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
+import { VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_RUN_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -428,7 +428,7 @@ test("an export run fills the export it was sent for, whichever of the six docum
   const study = await makeStudy("exportbind");
   /** @param {Record<string, any>} data */
   const report = (data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "report", items: null, data });
-  for (const kind of VCR_EXPORT_KINDS) {
+  for (const kind of VCR_RUN_EXPORT_KINDS) {
     const asked = await module.orchestrator.requestExport({ id: study.userId }, study, kind);
     assert.deepEqual([asked.export.kind, asked.export.state], [kind, "queued"]);
     const dispatch = module.dispatched[module.dispatched.length - 1];
@@ -451,12 +451,12 @@ test("an export run fills the export it was sent for, whichever of the six docum
     assert.deepEqual([row.kind, row.state], [kind, "ready"]);
     assert.equal(row.cover.report.rendered, "方法与局限。");
   }
-  assert.deepEqual((await store.exports(study.id)).map((row) => row.kind).sort(), [...VCR_EXPORT_KINDS].sort(), "six documents asked for, six exports, no orphan");
+  assert.deepEqual((await store.exports(study.id)).map((row) => row.kind).sort(), [...VCR_RUN_EXPORT_KINDS].sort(), "six documents asked for, six exports, no orphan");
 
   // With no export run out the write is the researcher's own conversation: it opens a row of the kind it names, as before.
   const own = await report({ kind: "simulation_report", section: "appendix", template: "补充说明。" });
   assert.equal(own.ok, true);
-  assert.equal((await store.exports(study.id)).length, VCR_EXPORT_KINDS.length + 1);
+  assert.equal((await store.exports(study.id)).length, VCR_RUN_EXPORT_KINDS.length + 1);
 });
 
 test("a model document stands on one frozen plan version: asked for again after a newer version is frozen it is a new document, and with none newer it is the same one", options, async () => {
@@ -1928,4 +1928,60 @@ test("G12 a patient set naming an event-history model is queued on the longitudi
   assert.equal(call.extra.detail.resultKind, undefined, "not filed as the patient set's own table");
   const running = patientMark(await marks());
   assert.deepEqual([running.state, running.job_id], ["running", "job_forecast_1"]);
+});
+
+test("D7 a result is exported as a short record only on request: written from the stored result, ready at once, the same record once, and its document is the record", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("record");
+  const scenario = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+    accrual: { kind: "uniform", duration: 12, followup: 12 }, analysis: { method: "logrank", alpha: 0.025, sided: 1 } };
+  const { job } = await module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, inputs: [], internal: true,
+    idempotencyKey: `record:${Math.random()}`, detail: { subjectId: null, origin: "runtime" } });
+  await store.query(`UPDATE evimed_vcr.jobs SET checkpoint = checkpoint || $2::jsonb WHERE id = $1`, [job.id,
+    JSON.stringify({ appliedDefaults: [{ path: "accrual.dropoutAnnual", value: 0 }], replicatePlan: { replicates: 5000, reason: "备择情景的默认下限 5,000 次" } })]);
+  const execution = await store.recordExecution({ jobId: job.id, studyId: study.id, userId: study.userId, method: job.method, methodVersion: "1.3.0", scenarioHash: "a1b2c3d4e5f60708".repeat(4),
+    inputs: [{ kind: "assumption", id: "hazard_ratio@2" }], environment: { engineVersion: "1.0.0", rVersion: "4.3.3", packageLockHash: "56edc6432ad4aaaaaaaa" }, seed: 777, replicates: 5000, outputHash: "9f".repeat(32),
+    receipt: {}, cpuSeconds: 3, startedAt: null, finishedAt: null });
+  const result = await store.recordResult({ studyId: study.id, userId: study.userId, executionId: execution.id, kind: "trial_scenario", subjectId: null, conclusion: "estimable", counts: {},
+    measures: [{ name: "power", value: 0.9, simulated: true, mcse: 0.004, source: "synthetic" }],
+    diagnostics: { exampleTrial: { replicate: 1, seed: 777, values: { estimate: -0.3421, se: 0.1, statistic: -3.42, p: 0.0003, reject: 1, events: 201, sampleSize: 300, duration: 24 } } }, tables: [] });
+  const user = { id: study.userId };
+
+  // nothing built a record by itself
+  assert.equal((await store.exports(study.id)).filter((row) => row.kind === "result_record").length, 0);
+  await assert.rejects(module.orchestrator.requestExport(user, study, "result_record", {}), { code: "vcr_payload_invalid" });
+  await assert.rejects(module.orchestrator.requestExport(user, study, "result_record", { resultId: "res_nobody" }), { code: "vcr_result_not_found" });
+
+  const asked = await module.orchestrator.requestExport(user, study, "result_record", { resultId: result.id });
+  assert.equal(asked.export.state, "ready", "no run to wait for");
+  assert.equal(asked.runId, null);
+  const row = await store.exportRow(study.id, asked.export.id);
+  assert.equal(row.kind, "result_record");
+  assert.equal(row.cover.record.resultId, result.id);
+  assert.equal(row.cover.record.hasExampleTrial, true);
+  assert.deepEqual(row.cover.record.sections.map((section) => section.id), ["what", "assumptions", "versions", "example", "links"]);
+  const markdown = row.cover.reports[0].rendered;
+  assert.match(markdown, /^# EV-201 record — 结果记录/);
+  assert.match(markdown, /- truth\.hazardRatio = 0\.7\n/);
+  assert.match(markdown, /- accrual\.dropoutAnnual = 0（默认）/);
+  assert.match(markdown, /- 随机种子：777/);
+  assert.match(markdown, /- 重复次数：5,000（备择情景的默认下限 5,000 次）/);
+  assert.match(markdown, /- 方法版本：design\.simulate 1\.3\.0/);
+  assert.match(markdown, /- 计算引擎：1\.0\.0，R 4\.3\.3，包锁定 56edc6432ad4/);
+  assert.match(markdown, /第 1 次重复（种子 777）/);
+  assert.match(markdown, /- 估计值：-0\.3421/);
+  assert.match(markdown, /- 用到的假设卡和证据：hazard_ratio@2/);
+  assert.match(markdown, new RegExp(`/app/virtual-research/${study.id}/trial`));
+
+  // the same record is the same export; a changed result is another
+  const again = await module.orchestrator.requestExport(user, study, "result_record", { resultId: result.id });
+  assert.equal(again.export.id, asked.export.id);
+  assert.equal((await store.exports(study.id)).filter((entry) => entry.kind === "result_record").length, 1);
+
+  // and its document is the record, not a rendering of the study's package
+  const { canonicalVcrDocument } = await import("../src/vcrDocumentExport.mjs");
+  const document = canonicalVcrDocument(study, row);
+  assert.equal(document.canonicalMarkdown, markdown);
+  assert.equal(document.title, "EV-201 record — 结果记录");
+  assert.doesNotMatch(document.canonicalMarkdown, /未计算/, "no typed number was blanked by the report's number template");
 });
