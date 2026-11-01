@@ -219,6 +219,13 @@ function holdings(objectKind, current) {
   return `本研究现有的${OBJECT_WORDS_ZH[objectKind]}：${named.join("、")}。`;
 }
 
+/** The objects a scenario said without an id could be about. @param {string} objectKind @param {string} kind @param {Record<string, any>} scenario @param {ReadonlyArray<Record<string, any>>} current */
+function fittingObjects(objectKind, kind, scenario, current) {
+  return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current)
+    : objectKind === "population" ? current.filter((entry) => POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
+      : current;
+}
+
 /**
  * Say which object a job computes. `null` for a job that is not about one.
  *
@@ -251,9 +258,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
     }
   } else {
     // Said without an id: the one object that fits what the scenario states is the one it is about.
-    const fitting = objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current)
-      : objectKind === "population" ? current.filter((entry) => POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
-        : current;
+    const fitting = fittingObjects(objectKind, kind, scenario, current);
     if (fitting.length !== 1) {
       throw new VcrSubjectError("vcr_simulate_subject_required",
         `这项计算要说明它算的是本研究的哪一个${OBJECT_WORDS_ZH[objectKind]}：把它的 id 作为 subjectId 传进来。`
@@ -271,6 +276,28 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
       ...(VCR_KEPT_TABLES[kind] ? { keepTables: [...VCR_KEPT_TABLES[kind]] } : {}),
     },
   };
+}
+
+/** The computations a conversation may start with nothing written first: what they compute is all in the scenario they send. */
+const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population"]);
+
+/**
+ * A conversation's research has no form to fill in. A design or a population the run computes with no object to file it under gets one,
+ * written from the scenario it sent, through the same writer as the method workbench. On 2026-11-01 the refusal that asked for the object
+ * first sent a real run back to its own R, one write short of the engine. Nothing is made when something the study holds fits (the
+ * resolver then takes it or says which), for a study with a page of its own, or for a kind whose input is another object.
+ *
+ * @param {{ store: any, study: any, userId: string, kind: string, subjectId?: string | null, scenario?: Record<string, any> }} input
+ * @returns {Promise<string | null>} the id to compute under, when one was made
+ */
+export async function vcrConversationSubject({ store, study, userId, kind, subjectId = null, scenario = {} }) {
+  if (subjectId || study.scope !== "conversation" || !VCR_SELF_FILED_KINDS.has(kind)) return null;
+  const objectKind = /** @type {string} */ (vcrJobObjectKind(kind));
+  const current = vcrCurrentObjects(objectKind, await objectRows(store, study.id, objectKind));
+  if (fittingObjects(objectKind, kind, scenario, current).length) return null;
+  const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
+  const name = `${OBJECT_WORDS_ZH[objectKind]} ${current.length + 1}`;
+  return (await prepareVcrMethodConfiguration({ store, study, userId, method, name, scenario })).subjectId;
 }
 
 /** Freeze the exact selected cohort for both conversation and browser jobs. No newest-snapshot substitution.

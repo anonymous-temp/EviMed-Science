@@ -7,6 +7,7 @@ import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { composeVcr } from '../src/vcrComposition.mjs';
 import { vcrOpeningName } from '../src/vcrStore.mjs';
 import { vcrStudyName } from '../src/vcrNotify.mjs';
+import { resolveJobSubject, vcrConversationSubject } from '../src/vcrSubjects.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 // F1/F2 (VCR remediation 2026-11-01): the studies a conversation makes are named from its first sentence and listed on the module's home
@@ -240,4 +241,25 @@ test('the way back from a conversation study\'s page is the conversation it was 
     packages.conversations = { resolve: async () => ({ sessionId: 'found_for_project', exists: true }) };
     assert.equal((await vcr.service.studyView(user, own.id)).conversation.sessionId, 'found_for_project');
   } finally { packages.conversations = original; }
+});
+
+test('a conversation computes a design or a population with nothing written first; a study with its own page does not', options, async () => {
+  const study = await vcr.store.taskContext({ userId: 'selffiled', projectId: 'default', rootSessionId: 'selffiled_root', runId: 'r', callId: 'c', dispatchId: null, routeReason: null, programme: false }, { create: true });
+  assert.equal(study.scope, 'conversation');
+  const design = { design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.75, controlMedian: 12 } };
+  const made = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'design_analytic', scenario: design });
+  assert.ok(made, 'the scenario is the object');
+  assert.equal((await resolveJobSubject({ store: vcr.store, study, kind: 'design_analytic', subjectId: made, scenario: design })).row.id, made);
+  // The same design again is the one the study holds: not a second object.
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'design_analytic', scenario: design }), null);
+  assert.equal((await resolveJobSubject({ store: vcr.store, study, kind: 'design_analytic', scenario: design })).row.id, made);
+  const people = { n: 100, population: { variables: [{ name: 'age', family: 'normal', mean: 60, sd: 10 }] } };
+  const population = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_population', scenario: people });
+  assert.ok(population);
+  // A kind whose input is another object still asks for it, and a named id is left alone.
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_patients', scenario: {} }), null);
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'design_analytic', subjectId: made, scenario: design }), null);
+  // A scenario the engine would refuse is refused here, by what is wrong with it.
+  await assert.rejects(vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'design_grid', scenario: {} }), { code: 'vcr_job_scenario_invalid' });
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study: { ...study, scope: 'study' }, userId: study.userId, kind: 'design_simulation', scenario: design }), null);
 });

@@ -87,7 +87,7 @@ import { VCR_MATCHING_VOCABULARY_VERSION, settleFactEvidence, storedExclusion } 
 import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
 import { candidateRequest } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
-import { resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
+import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
@@ -2781,7 +2781,8 @@ async function startJob(vcr, study, request) {
   // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier
   // results. The id the run gave is checked against the study; with none, the one object the scenario fits is taken, and several
   // (or none) are refused by name with what the study holds.
-  const subject = await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: request.subjectId, scenario });
+  const madeFor = await vcrConversationSubject({ store: vcr.store, study, userId: String(study.userId), kind: request.kind, subjectId: request.subjectId, scenario });
+  const subject = await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: madeFor ?? request.subjectId, scenario });
   const population = await prepareVcrSubjectPopulation({ store: vcr.store, study, kind: request.kind, subject, scenario,
     inputs: /** @type {any[]} */ (inputs), sourceModel: detail.sourceModel });
   const designBinding = await prepareVcrModelDesign({ store: vcr.store, study, subject, scenario: population.scenario, inputs: population.inputs });
