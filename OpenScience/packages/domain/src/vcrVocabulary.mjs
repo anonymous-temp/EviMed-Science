@@ -34,6 +34,8 @@
  */
 
 /** @param {readonly string[]} list */
+import { WORK_STATE_LABEL, workStateLabel } from './workState.mjs'
+
 const frozen = (list) => Object.freeze([...list])
 
 // ---------------------------------------------------------------------------
@@ -438,9 +440,41 @@ export const VCR_STEP_LABELS_ZH = Object.freeze({
 })
 /** A step's state, on the study record (`studies.steps`). */
 export const VCR_STEP_STATUSES = frozen(['none', 'queued', 'running', 'done', 'minimal', 'stale', 'failed'])
-export const VCR_STEP_STATUS_LABELS_ZH = Object.freeze({
-  none: '未开始', queued: '排队中', running: '进行中', done: '已完成', minimal: '已完成', stale: '已过期', failed: '未完成',
-})
+
+/** What a queued step waits for, as the person's part of it (`workStateLabel`'s `等你…`): the wallet that refused its start. */
+const STEP_WAIT_DETAIL = Object.freeze({ allowance: '充值', simulated_allowance: '模拟充值' })
+
+/**
+ * A step's state as the one vocabulary of module work says it (`workState.mjs`), from its record on the study. The seven-step page,
+ * the home list and its preview, and the overview's record each had a table of their own (`未开始`, `还没开始`, `未请求`, `等你`,
+ * `需要留意`, `没有做完`): there is this function and no table, so a step has one word wherever it is drawn.
+ *
+ * `state: null` is a step outside what was asked for, which says nothing but its name. A step that is asked for and not started — a
+ * held one too, which a person's press starts like one never asked for — is `todo`. A queued step the allowance refused is the
+ * person's to put right and so `waiting`, with the wallet named in `detail`.
+ * @param {{ status?: string | null, requested?: boolean | null, held?: boolean | null, waiting?: string | null } | null | undefined} step
+ * @returns {{ state: string | null, detail: string | null }}
+ */
+export function vcrStepWorkState(step) {
+  switch (step?.status) {
+    case 'running': return { state: 'running', detail: null }
+    case 'queued': {
+      const detail = /** @type {Record<string, string>} */ (STEP_WAIT_DETAIL)[String(step.waiting)]
+      return detail ? { state: 'waiting', detail } : { state: 'queued', detail: null }
+    }
+    case 'done': return { state: 'done', detail: null }
+    case 'minimal': return { state: 'minimal', detail: null }
+    case 'stale': return { state: 'stale', detail: null }
+    case 'failed': return { state: 'failed', detail: null }
+    default: return step?.requested === true ? { state: 'todo', detail: null } : { state: null, detail: null }
+  }
+}
+
+/** The word for a step's state, or the empty string for a step outside what was asked for. @param {Parameters<typeof vcrStepWorkState>[0]} step */
+export function vcrStepStateLabel(step) {
+  const { state, detail } = vcrStepWorkState(step)
+  return workStateLabel(state, detail)
+}
 /** What each step needs before it can run (the orchestrator's `NEEDS`). */
 export const VCR_STEP_NEEDS = Object.freeze({
   definition: frozen([]),
@@ -539,7 +573,16 @@ export const VCR_ACTION_LABELS_ZH = Object.freeze({
  * never sets it (`VCR_USER_STUDY_STATUSES`).
  */
 export const VCR_STUDY_STATUSES = frozen(['draft', 'active', 'paused', 'archived'])
-export const VCR_STUDY_STATUS_LABELS_ZH = Object.freeze({ draft: '未命名', active: '进行中', paused: '已暂停', archived: '已归档' })
+export const VCR_STUDY_STATUS_LABELS_ZH = Object.freeze({ draft: '未命名', active: WORK_STATE_LABEL.running, paused: WORK_STATE_LABEL.paused, archived: '已归档' })
+/**
+ * A study's own state in the vocabulary of module work: only a pause is one, and it outranks the state of every step under it (one
+ * project, one pause). An active, draft or archived study has no state of its own to say.
+ * @param {string | null | undefined} status
+ * @returns {string | null}
+ */
+export function vcrStudyWorkState(status) {
+  return status === 'paused' ? 'paused' : null
+}
 /** The statuses a lead may move a study between. */
 export const VCR_USER_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
 /** What a draft study is called until its definition names it. */
@@ -792,8 +835,26 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
-  queued: '排队中', running: '进行中', succeeded: '已完成', failed: '未完成', canceled: '已取消', awaiting_budget: '待确认预算',
+  queued: WORK_STATE_LABEL.queued, running: WORK_STATE_LABEL.running, succeeded: WORK_STATE_LABEL.done, failed: WORK_STATE_LABEL.failed,
+  canceled: WORK_STATE_LABEL.stopped, awaiting_budget: workStateLabel('waiting', '确认预算'),
 })
+/**
+ * An engine job in the vocabulary of module work. A job past the budget is the lead's to confirm, so it is a wait on a person and
+ * not a failure: the page offers the budget panel and no retry, because a retry would queue a second job behind the first.
+ * @param {string | null | undefined} state
+ * @returns {{ state: string | null, detail: string | null }}
+ */
+export function vcrJobWorkState(state) {
+  switch (state) {
+    case 'queued': return { state: 'queued', detail: null }
+    case 'running': return { state: 'running', detail: null }
+    case 'succeeded': return { state: 'done', detail: null }
+    case 'failed': return { state: 'failed', detail: null }
+    case 'canceled': return { state: 'stopped', detail: null }
+    case 'awaiting_budget': return { state: 'waiting', detail: '确认预算' }
+    default: return { state: null, detail: null }
+  }
+}
 
 /**
  * Why a job that is live is not moving, when the reason is not the researcher's to
