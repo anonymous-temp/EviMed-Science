@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { matchBatchUnitKey } from "@evimed/domain";
+import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import {
   createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor, extractScenario, extractSelection, matchExtractDigest, planBatch, recordView,
 } from "../src/vcrMatchBatch.mjs";
@@ -307,4 +308,39 @@ test("D4: starting states the cost and queues the reading with the conversation'
   assert.match(nothing.statement, /没有要读的病历/);
   await assert.rejects(() => createMatchBatch({ jobs, matchStore: matchStoreDouble({ async listCriteria() { return []; } }), documents: { roster: async () => ROSTER }, config }).start(study, {}),
     { code: "vcr_criteria_missing" });
+});
+
+test("D4: what the reading proposes goes through the ordinary fact writer: positions and quotations are checked against the record's own bytes", async () => {
+  /** @type {any[]} */ const saved = [];
+  const store = ledger();
+  const matchStore = { ...matchStoreDouble(), ...store,
+    async saveFact({ fact }) { saved.push(fact); return { id: `fact_${saved.length}` }; },
+    async listFacts() { return []; }, async matchingFactsByIds() { return []; } };
+  const documents = {
+    async roster() { return ROSTER; },
+    async runtimeRead(_study, { subjectKey, documentId }) { return { id: documentId, text: RECORDS[documentId], subjectKey, visibleAt: "2026-10-01T00:00:00.000Z", sourceHash: `h_${documentId}` }; },
+  };
+  // a model that proposes one fact the record supports and one whose number is not printed in the quotation it cites
+  const extractor = { model: "deepseek-flash", async extract({ text }) {
+    return { answer: { facts: [
+      { variable: "creatinine", value: 1.1, unit: "mg/dL", surface: "1.1", quote: "肌酐 1.1 mg/dL" },
+      { variable: "age", value: 99, unit: "year", surface: "63岁", quote: "63岁" },
+    ].filter(() => text.includes("63岁")) }, inputTokens: 10, outputTokens: 5 };
+  } };
+  const reported = [];
+  const run = createMatchExtractExecutor({
+    store: { async studyById() { return STUDY; }, async one() { return { checkpoint: {} }; } }, matchStore, documents, extractor, config: { vcrMatchExtractConcurrency: 1 }, report: (c) => reported.push(c),
+    writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store: {}, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report: () => {}, caller }),
+  });
+  const scenario = { protocolVersionId: "pv_1", asOf: "2026-11-01T00:00:00.000Z", subjects: ["P-001"], variables: ["age", "creatinine"], estimate: {}, chain: "c" };
+  const result = await run({ job: { id: "job_w", jobId: "job_w", studyId: STUDY.id, scenario, scenarioHash: "b".repeat(64), seed: 1 }, async onProgress() {}, isCanceled: async () => false });
+  assert.equal(result.diagnostics.recordsRead, 1);
+  assert.equal(saved.length, 1, "the fact the record supports is saved; the one whose number is not in its quotation is refused by the writer");
+  assert.deepEqual([saved[0].variable, saved[0].value, saved[0].unit, saved[0].polarity, saved[0].extractedBy], ["creatinine", 1.1, "mg/dL", "affirmed", "model"]);
+  assert.equal(RECORDS.d1.slice(saved[0].source.start, saved[0].source.end), "肌酐 1.1 mg/dL");
+  assert.equal(saved[0].provenance.status, "batch_extraction");
+  assert.equal(saved[0].visibleAt, "2026-10-01T00:00:00.000Z", "no earlier than the record entered the platform");
+  assert.equal(result.diagnostics.factsKept, 1);
+  assert.equal(result.diagnostics.factsRefused, 1);
+  assert.equal(store.rows.length, 1, "the record is read even though one of its facts was refused");
 });
