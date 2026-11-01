@@ -309,9 +309,11 @@ function coverTakesText(intent: RuntimeUiIntent | null, scope: unknown): boolean
  * A new conversation has nothing to show but its composer, and that composer is the kernel's, so it cannot exist until the runtime and
  * the kernel's application have (up to a minute over a poor line, 2026-10-31). What is typed here goes to the composer as its draft when
  * the conversation opens, by the path a capability card's brief takes, and this box goes away: there is still one composer, and nothing
- * here sends. It takes focus only from nobody and never on a touch screen, where focus would raise a keyboard over the page.
+ * here sends. The box stays editable until the opening is acknowledged: whatever it holds then that the composer was not handed (text
+ * typed before the hand-over's acknowledgement, or after it) goes to the opened conversation as one more draft (`coverFollowUp`).
+ * It takes focus only from nobody and never on a touch screen, where focus would raise a keyboard over the page.
  */
-function ConversationCover({ line, draft, onDraft, handedOver }: { line?: string; draft: string; onDraft: (value: string) => void; handedOver: boolean }) {
+function ConversationCover({ line, draft, onDraft }: { line?: string; draft: string; onDraft: (value: string) => void }) {
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (document.activeElement === document.body && window.matchMedia("(hover: hover)").matches) box.current?.focus();
@@ -325,7 +327,6 @@ function ConversationCover({ line, draft, onDraft, handedOver }: { line?: string
         rows={3}
         maxLength={COVER_DRAFT_MAX_CHARS}
         value={draft}
-        readOnly={handedOver}
         onChange={(event) => onDraft(event.target.value)}
         className="w-full max-w-content-narrow resize-none rounded-composer border border-border-control bg-surface px-4 py-3 text-body text-text placeholder:text-text-3"
       />
@@ -454,7 +455,9 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   const [coverDraft, setCoverDraft] = useState("");
   const coverDraftRef = useRef("");
   coverDraftRef.current = coverDraft;
-  const [coverHandedOver, setCoverHandedOver] = useState(false);
+  // What the frame was handed of it for this opening (`frameId:requestId`), and the follow-up draft sent at the acknowledgement.
+  const coverHanded = useRef<{ key: string; text: string } | null>(null);
+  const coverFollowUp = useRef<string | null>(null);
   // The runtime's settings are being applied, so the opening is tried again by
   // itself (`PREPARING_CODE`): said on the cover instead of an alert, until the
   // conversation opens or the tries run out.
@@ -597,6 +600,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     recoveryAttempted.current = false;
     nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
+    coverHanded.current = null; coverFollowUp.current = null;
     void (scope ? createWebRuntimeUiFrame(projectId, scope) : createWebRuntimeUiFrame(projectId)).then(value => {
       if (!live) { release(value.frameId); return; }
       frameId = value.frameId;
@@ -1015,6 +1019,13 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         incoming.current = message.seq;
         vcrOptionsHandler.current?.({ sessionId: message.sessionId, start: message.start, intendedUse: message.intendedUse });
       } else if (message.type === "evimed.runtime-ui.ack") {
+        // The answer to the cover's follow-up draft: the text is in the composer, or the reader is told it is not.
+        if (coverFollowUp.current && message.requestId === coverFollowUp.current) {
+          incoming.current = message.seq; coverFollowUp.current = null;
+          if (message.ok === true) setCoverDraft("");
+          else toast.error("刚输入的内容没能带进输入框，请重新输入。");
+          return;
+        }
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
           || (message.ok && (typeof message.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(message.sessionId)
@@ -1023,6 +1034,17 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: !scope && request.kind === "open" }); return; }
         if (request.restoreDraft && message.draftRestored === false) toast.error("输入框已有内容或暂不能确认草稿状态，旧草稿仍已保留。可先查看当前输入，再返回恢复。");
         currentRequest.current = null; setPending(false); setNavigated(true);
+        // What the cover holds now differs from what the composer was handed (nothing yet, or an earlier state of the box): the
+        // opened conversation gets the box as its draft, so nothing typed while it opened is lost with the cover.
+        const handed = coverHanded.current;
+        if (handed?.key === `${binding.frameId}:${request.requestId}` && coverTakesText(request, scope)) {
+          const text = coverDraftRef.current.trim() ? coverDraftRef.current : "";
+          if (text !== handed.text) {
+            const followUp = crypto.randomUUID();
+            coverFollowUp.current = followUp;
+            postToFrame("navigate", { requestId: followUp, intent: { kind: "open", sessionId: message.sessionId, draft: text } });
+          }
+        }
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         setFrameTask(message.sessionId);
         if (!mirrorAddress && roomHold.current.active && !roomHold.current.suspended) onPaneAcknowledgedRef.current?.(request.requestId, message.sessionId);
@@ -1081,10 +1103,13 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       if (intent.originReference) await putConversationReference(intent.sessionId, projectId, intent.originReference);
       const stagedReference = intent.vcrReference ? await stageVcrConversationReference(intent.sessionId, projectId, intent.vcrReference) : undefined;
       if (!alive) return;
-      // What the reader typed while this was opening travels as the composer's draft; the box stops taking text at this moment.
-      const typed = coverTakesText(intent, scope) && coverDraftRef.current.trim() ? coverDraftRef.current : undefined;
+      // What the reader typed while this was opening travels as the composer's draft. The frame takes one draft per request, so the
+      // first hand-over of an opening is the one recorded and re-sent; text typed after it travels at the acknowledgement.
+      if (coverTakesText(intent, scope) && coverHanded.current?.key !== key) {
+        coverHanded.current = { key, text: coverDraftRef.current.trim() ? coverDraftRef.current : "" };
+      }
+      const typed = coverTakesText(intent, scope) && coverHanded.current?.text ? coverHanded.current.text : undefined;
       const draft = intent.draft ?? typed;
-      if (typed !== undefined) setCoverHandedOver(true);
       iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
@@ -1218,11 +1243,11 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     return () => clearTimeout(timeout);
   }, [pending, error, attempt, intent?.requestId]);
 
-  // The conversation is open: what the cover held is in the composer now. A failed opening keeps it for the retry.
+  // The conversation is open: what the cover held is in the composer now, unless a follow-up draft is still on its way (its
+  // acknowledgement clears the box). A failed opening keeps it for the retry.
   useEffect(() => {
-    if (navigated) { setCoverDraft(""); setCoverHandedOver(false); }
-    else if (error) setCoverHandedOver(false);
-  }, [navigated, error]);
+    if (navigated && !coverFollowUp.current) setCoverDraft("");
+  }, [navigated]);
 
   // How long this opening took, reported once (`OPEN_COLD`, `OPEN_WARM`): the browser's own measures cannot see inside the frame.
   const openStartedAt = useRef(0);
@@ -1254,7 +1279,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   const waitLine = waiting === "room" ? ROOM_FULL_LINE : cleaning ? CLEANUP_LINE : null;
   const coverLine = waitLine ?? (preparing ? PREPARING_LINE : undefined);
   const cover = navigated ? null : coverTakesText(intent, scope) && !sessionId
-    ? <ConversationCover line={coverLine} draft={coverDraft} onDraft={setCoverDraft} handedOver={coverHandedOver} />
+    ? <ConversationCover line={coverLine} draft={coverDraft} onDraft={setCoverDraft} />
     : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={coverLine} />;
   // A renewal that failed is only worth saying once the lease it renews has
   // actually run out — or when it is an expired login, which no retry fixes.
