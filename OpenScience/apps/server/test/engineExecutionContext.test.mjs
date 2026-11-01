@@ -90,7 +90,9 @@ test('waiting never turns an unowned session into the only active run', async ()
     config: { deepseekModel: 'deepseek-flash' },
     store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
     agentRuns: { activeRuns: async () => { reads++; return [{ id: 'other-run', sessionId: 'other' }]; }, runIdForSession: () => null },
-    runtimeManager: { sessionModelSelection: async () => { throw new Error('must not read'); } },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'foreign', turns: [{ startSeq: 10, end: null }],
+      messages: [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-foreign' }] }] }),
+      sessionModelSelection: async () => { throw new Error('must not read'); } },
     adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
   });
   await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('foreign', 'high')), { code: 'engine_model_session_unowned' });
@@ -112,4 +114,22 @@ test('an older tool call cannot attach to a newer turn of the same session while
     adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
   });
   await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+});
+
+
+test('a missing or completed call is never admitted by adoption waiting', async () => {
+  const project = { id: 'p', userId: 'u' };
+  for (const ended of [true, false]) {
+    let reads = 0;
+    const resolve = createEngineExecutionContextResolver({
+      config: { deepseekModel: 'deepseek-flash' },
+      store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+      agentRuns: { activeRuns: async () => { reads++; return []; }, runIdForSession: () => null },
+      runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: ended ? { kind: 'completed' } : null }],
+        messages: ended ? [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine' }] }] : [] }) },
+      adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+    });
+    await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+    assert.equal(reads, 1, 'without exact live call evidence there is no adoption wait');
+  }
 });
