@@ -421,10 +421,12 @@ test("the comparator-effect methods are appended, read patients, and every rule 
   for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
     assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);
-    // 1.2.0: the weighted balance is read, not a rule (owner decision 2026-11-01) and the E-value follows the estimate; 1.1.0 results replay
-    const version = { "comparator.weighted_cox": "1.2.0", "comparator.covariate_sets": "1.2.0", "comparator.aipw": "1.1.0", "comparator.maic_time_to_event": "1.1.0" };
+    // 1.2.0: the weighted balance is read, not a rule (owner decision 2026-11-01) and the E-value follows the estimate; 1.3.0: the enrolment-year
+    // row when the field map has a time-zero date (D6). AIPW is at 1.2.0 for the same row; older results replay.
+    const version = { "comparator.weighted_cox": "1.3.0", "comparator.covariate_sets": "1.2.0", "comparator.aipw": "1.2.0", "comparator.maic_time_to_event": "1.1.0" };
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, /** @type {Record<string, string>} */ (version)[method] ?? "1.0.0", method);
-    if (/** @type {Record<string, string>} */ (version)[method] === "1.2.0") assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], ["1.0.0", "1.1.0"], `${method}: older results replay`);
+    const older = { "1.2.0": ["1.0.0", "1.1.0"], "1.3.0": ["1.0.0", "1.1.0", "1.2.0"] }[/** @type {Record<string, string>} */ (version)[method]];
+    if (older) assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], older, `${method}: older results replay`);
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
     assert.ok(VCR_OBSERVED_ONLY_METHODS.includes(method), `${method} refuses synthetic, aggregate and predicted rows`);

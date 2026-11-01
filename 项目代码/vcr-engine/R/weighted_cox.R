@@ -131,6 +131,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   }
   w <- fit$allWeights
   balance <- vcr_balance_table(X, treat, w, estimand)
+  enrolment <- vcr_enrolment_year(subj, tabs, sc, treat, w, estimand)
   ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
   support <- vcr_common_support(ps, treat)
   ess <- vcr_ess(w[treat == 0L])
@@ -143,7 +144,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess, events = sum(status)),
-                diagnostics = list(detail = rule$detail, balance = balance, support = support, weights = wdiag,
+                diagnostics = list(detail = rule$detail, balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag,
                                    thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used)))
   }
 
@@ -262,7 +263,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
                          else c(list(available = FALSE), tau_rule),
          curves = vcr_arm_curves(time, status, treat, weights = w, source = data_src, tau = if (with_rmst) tau else NULL),
          eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent("no_hazard_ratio"),
-         estimandChanged = changed, balance = balance, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
+         estimandChanged = changed, balance = balance, enrolmentYear = enrolment, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
          sensitivity = list(truncatedWeights = list(quantile = 0.99, hazardRatio = if (is.finite(trunc_beta)) exp(trunc_beta) else NULL)),
          limitedBy = as.list(limited_by), targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
          valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions),

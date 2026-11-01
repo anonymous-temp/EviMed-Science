@@ -1217,6 +1217,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   }
   w <- fit$allWeights
   balance <- vcr_balance_table(X, treat, w, estimand)
+  enrolment <- vcr_enrolment_year(subj, tabs, sc, treat, w, estimand)
   ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
   support <- vcr_common_support(ps, treat)
   ess <- vcr_ess(w[treat == 0L])
@@ -1231,7 +1232,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
                                     events = if (identical(endpoint, "time_to_event")) sum(outcome$status) else NULL),
-                diagnostics = list(detail = rule$detail, balance = balance, support = support, weights = wdiag,
+                diagnostics = list(detail = rule$detail, balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag,
                                    thresholds = limits_used, cohort = cohort$info)))
   }
 
@@ -1316,7 +1317,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
                           else NULL,
                           valueSourcesUsed = vcr_value_sources_used(used),
                           estimandChanged = changed,
-                          balance = balance, support = support, weights = wdiag,
+                          balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag,
                           thresholds = limits_used,
                           bootstrapReplicates = boot$replicates, bootstrapFailureShare = boot$failureShare,
                           sensitivity = list(truncatedWeights = list(quantile = 0.99, primaryEstimate = trunc_est)),

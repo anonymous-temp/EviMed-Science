@@ -122,6 +122,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   w_ctl <- core$w[treat == 0L]
   w_scaled <- core$w; w_scaled[treat == 1L] <- 1; w_scaled[treat == 0L] <- w_scaled[treat == 0L] * sum(treat == 1L) / sum(w_scaled[treat == 0L])
   balance <- vcr_balance_table(Xall, treat, w_scaled, "ATT")
+  enrolment <- vcr_enrolment_year(subj, tabs, sc, treat, w_scaled, "ATT")
   support <- vcr_common_support(core$e, treat)
   ess <- vcr_ess(w_ctl)
   rule <- vcr_not_estimable_weighting(ess = ess, support = support)
@@ -131,7 +132,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   counts <- vcr_counts(realPatients = n, effectiveSampleSize = ess)
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(), counts = counts,
-                diagnostics = list(detail = rule$detail, balance = balance, support = support, weights = wdiag, thresholds = limits_used,
+                diagnostics = list(detail = rule$detail, balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag, thresholds = limits_used,
                                    cohort = cohort$info, valueSourcesUsed = sources_used)))
   }
 
@@ -214,7 +215,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
          varianceComparison = list(influenceSe = se_if, bootstrapSe = bs$se, ratioInfluenceToBootstrap = se_if / bs$se,
                                    note = "a metric, never a gate: the influence-function standard error ignores the estimation of the two models"),
          eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(if (binary) "no_risk_ratio" else "continuous_outcome"),
-         balance = balance, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
+         balance = balance, enrolmentYear = enrolment, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
          sensitivity = list(truncatedWeights = list(quantile = 0.99, primaryEstimate = if (isTRUE(trunc$ok)) trunc$tau else NULL)),
          limitedBy = as.list(limited_by), targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
          valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions),

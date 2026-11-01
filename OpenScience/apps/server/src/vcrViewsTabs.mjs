@@ -678,6 +678,7 @@ export function presentComparatorTab(bundle) {
   // Why the newest version has no numbers, in the compute's own words.
   const failure = lastGood ? failureOfNode(bundle, vcrObjectNode("comparator", /** @type {any} */ (current))) : null;
   const balance = list(diagnostics.balance).map(object);
+  const enrolmentYear = enrolmentYearView(diagnostics.enrolmentYear);
   // The gap list belongs to the route that could not be estimated, which is
   // not always the route the page is about.
   const blocked = notEstimableDesign(comparators, allResultsOf(bundle));
@@ -786,15 +787,20 @@ export function presentComparatorTab(bundle) {
       note: targetTrial?.note ?? null,
       source: "assumed",
     } : null,
-    comparability: balance.map((row, index) => {
-      const smd = finite(row.smdAdjusted);
-      return {
-        key: text(row.covariate) ?? `row_${index}`, label: text(row.covariate) ?? `特征 ${index + 1}`,
-        ours: plainValue(null, { source: "observed" }), theirs: plainValue(null, { source: "observed" }),
-        smd, smdBefore: finite(row.smdUnadjusted), flagged: smd !== null && Math.abs(smd) > VCR_SMD_FLOOR, note: null,
-      };
-    }),
-    comparabilityNote: balance.length ? `标准化差异是加权之后的；界值 ${VCR_SMD_FLOOR}，超过 ${VCR_SMD_SEVERE} 为严重失衡。` : null,
+    comparability: [
+      ...balance.map((row, index) => {
+        const smd = finite(row.smdAdjusted);
+        return {
+          key: text(row.covariate) ?? `row_${index}`, label: text(row.covariate) ?? `特征 ${index + 1}`,
+          ours: plainValue(null, { source: "observed" }), theirs: plainValue(null, { source: "observed" }),
+          smd, smdBefore: finite(row.smdUnadjusted), flagged: smd !== null && Math.abs(smd) > VCR_SMD_FLOOR, note: null,
+        };
+      }),
+      ...(enrolmentYear.row ? [enrolmentYear.row] : []),
+    ],
+    comparabilityNote: balance.length || enrolmentYear.row
+      ? [balance.length ? `标准化差异是加权之后的；界值 ${VCR_SMD_FLOOR}，超过 ${VCR_SMD_SEVERE} 为严重失衡。` : null, enrolmentYear.note].filter(Boolean).join("")
+      : enrolmentYear.note,
     dimensions,
     diagnostics: [...diagnosticRows, ...routeRows],
     prior: priorRows,
@@ -1195,6 +1201,41 @@ function trialPremiseInput(bundle, row) {
     assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布",
     // The power the design keeps at the effect reduced by the published gap, from the analytic stage (C6); absent where there is none.
     effectDiscount: object(stages.analytic?.diagnostics?.sensitivity).discount ?? null,
+  };
+}
+
+/**
+ * The enrolment-year row of the balance plot (remediation plan D6): the two arms' mean calendar year of the time-zero date, the
+ * difference before and after the weights, and how many external controls entered outside the trial's own years. The year is not
+ * part of the weighting, so the row says that it is beside the balance and not in it; a result with no date column has no row and no
+ * sentence, and a date column nobody could read a year from has the one sentence.
+ * @param {unknown} raw `diagnostics.enrolmentYear`
+ * @returns {{ row: Record<string, any> | null, note: string | null }}
+ */
+function enrolmentYearView(raw) {
+  const entry = object(raw);
+  if (!Object.keys(entry).length) return { row: null, note: null };
+  if (entry.status !== "computed") {
+    return { row: null, note: entry.status === "unreadable" ? "入组年份没有算：日期列里读不出年份。" : "入组年份没有算：读得出年份的人太少。" };
+  }
+  const treated = object(entry.treated);
+  const control = object(entry.control);
+  const smd = finite(entry.smdAdjusted);
+  const outside = finite(object(entry.controlOutsideTrialYears).share);
+  const treatedYears = finite(treated.min) !== null && finite(treated.max) !== null
+    ? (treated.min === treated.max ? `${treated.min}` : `${treated.min}–${treated.max}`) : null;
+  // The means ride in the sentence: a year is not a number the plot may format (2,020.1), and the two levels of a covariate row are for
+  // covariates.
+  const year = (/** @type {unknown} */ mean) => (finite(mean) === null ? null : String(roundTo(/** @type {number} */ (mean), 1)));
+  const levels = year(treated.mean) !== null && year(control.mean) !== null ? `平均入组年份：本研究 ${year(treated.mean)}，外部对照 ${year(control.mean)}。` : "";
+  return {
+    row: {
+      key: "enrolment_year", label: "入组年份",
+      ours: plainValue(null, { source: "observed" }), theirs: plainValue(null, { source: "observed" }),
+      smd, smdBefore: finite(entry.smdUnadjusted), flagged: smd !== null && Math.abs(smd) > VCR_SMD_FLOOR,
+      note: `${levels}没有按它加权${outside !== null && treatedYears ? `；外部对照有 ${Math.round(outside * 100)}% 的人入组年份不在本研究的 ${treatedYears} 年之内` : ""}。`,
+    },
+    note: null,
   };
 }
 

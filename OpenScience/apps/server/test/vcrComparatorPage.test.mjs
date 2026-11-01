@@ -203,3 +203,33 @@ test("A13: an effect card says its role in its summary, first; a card of no effe
   assert.equal(assumptionSummary({ effectRole: null, pooling: { k: 3 } }), "3 项");
   assert.equal(assumptionSummary({ effectRole: "bogus", pooling: { k: 3 } }), "3 项", "a word outside the closed ones is not drawn");
 });
+
+test("D6: the enrolment year is a row beside the balance when the engine computed it, and nothing when there is no date column", () => {
+  const entry = {
+    status: "computed", column: "STARTDT", unit: "calendar year", readable: { treated: 120, control: 300 },
+    treated: { min: 2019, median: 2020, max: 2021, mean: 2020.054, weightedMean: 2020.054 }, control: { min: 2010, median: 2015, max: 2021, mean: 2015.56, weightedMean: 2019.9 },
+    smdUnadjusted: 5.4427, smdAdjusted: 0.31, controlOutsideTrialYears: { share: 0.726, weightedShare: 0.2 }, byYear: [],
+  };
+  const dated = page({ result: { diagnostics: { balance: balance([["age", 0.7, 0.04]]), balanceVerdict: { band: "balanced", worst: 0.04, variable: "age" }, enrolmentYear: entry } } });
+  assert.deepEqual(dated.comparability.map((row) => row.key), ["age", "enrolment_year"], "the year follows the covariates");
+  const row = dated.comparability[1];
+  assert.equal(row.label, "入组年份");
+  assert.equal(row.smd, 0.31);
+  assert.equal(row.smdBefore, 5.4427);
+  assert.equal(row.flagged, true);
+  assert.equal(row.note, "平均入组年份：本研究 2020.1，外部对照 2015.6。没有按它加权；外部对照有 73% 的人入组年份不在本研究的 2019–2021 年之内。");
+  assert.deepEqual(dated.limits, [], "the year is beside the balance and not in its verdict: the estimate is not limited by it");
+
+  // a trial that enrolled in one year says that year once
+  const oneYear = page({ result: { diagnostics: { balance: balance([["age", 0.7, 0.04]]), enrolmentYear: { ...entry, treated: { ...entry.treated, min: 2020, max: 2020 } } } } });
+  assert.match(oneYear.comparability[1].note, /没有按它加权；外部对照有 73% 的人入组年份不在本研究的 2020 年之内。$/);
+
+  // no date column: no row, no sentence, and the covariates are as they were
+  const none = page({ result: { diagnostics: { balance: balance([["age", 0.7, 0.04]]) } } });
+  assert.deepEqual(none.comparability.map((item) => item.key), ["age"]);
+  assert.doesNotMatch(none.comparabilityNote ?? "", /入组年份/);
+  // a date column nobody could read: one sentence and no row
+  const unreadable = page({ result: { diagnostics: { balance: balance([["age", 0.7, 0.04]]), enrolmentYear: { status: "unreadable", column: "STARTDT", readable: { treated: 0, control: 0 } } } } });
+  assert.deepEqual(unreadable.comparability.map((item) => item.key), ["age"]);
+  assert.match(unreadable.comparabilityNote, /入组年份没有算：日期列里读不出年份。/);
+});
