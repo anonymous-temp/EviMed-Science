@@ -22,6 +22,9 @@ on:
       - "OpenScience/scripts/ops/verify-harness-seams.mjs"
       - "OpenScience/scripts/ops/kernel-install.mjs"
       - "OpenScience/scripts/ops/wire-surface.mjs"
+      - "OpenScience/scripts/ops/sandbox-profile.mjs"
+      - "OpenScience/deploy/runtime-dsh/evimed-landlock-run.sh"
+      - "OpenScience/deploy/runtime-dsh/fixtures/sandbox-profile.json"
       - ".github/workflows/kernel-seams.yml"
   push:
     branches: ["main", "master", "codex/**"]
@@ -30,6 +33,8 @@ on:
       - "OpenScience/packages/harness-port/seam-manifest.json"
       - "OpenScience/packages/contracts/dsh/**"
       - "OpenScience/deploy/runtime-dsh/dump-config.baseline.json"
+      - "OpenScience/deploy/runtime-dsh/evimed-landlock-run.sh"
+      - "OpenScience/deploy/runtime-dsh/fixtures/sandbox-profile.json"
       - ".github/workflows/kernel-seams.yml"
   workflow_dispatch:
 
@@ -63,3 +68,15 @@ jobs:
 
       - name: Verify the seams against the pinned closure
         run: node scripts/ops/verify-harness-seams.mjs --install
+
+      # The sandbox row's runner (deploy/runtime-dsh/evimed-landlock-run.sh) accepts exactly the profile this kernel builds and
+      # nothing else. This replays the recorded profile through it against the installed kernel, and, where the runner of the
+      # job enforces Landlock, holds it to the kernel's own Landlock runner on the real launcher (the test skips those parts
+      # when the job's kernel cannot enforce it; the profile check above does not depend on it).
+      - name: The sandbox runner holds against the installed kernel
+        run: |
+          mkdir -p "$RUNNER_TEMP/kernel"
+          node scripts/ops/kernel-install.mjs install --dir "$RUNNER_TEMP/kernel"
+          EVIMED_LANDLOCK_RUN="$(ls "$RUNNER_TEMP"/kernel/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/landlock-run)" \
+            EVIMED_KERNEL_MODULES="$RUNNER_TEMP/kernel/node_modules" \
+            node --test apps/server/test/runtimeLandlockRunner.test.mjs

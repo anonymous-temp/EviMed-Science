@@ -348,10 +348,11 @@ test("the patch's override rows are collected as host-row references, not lost",
   // the product-usage pair joined on 2026-10-14 (0.2.0), disabled by value. The kernel's own schedule, the
   // working-directory tool, the harness developers' context and both DeepSeek search providers joined on 2026-10-17
   // (0.2.1), disabled by value, with `subagent` carrying the run's concurrency budget.
+  // `sandbox` joined on 2026-11-01: the row is configured with the runner that makes /dev/shm writable to a command.
   assert.deepEqual(hostRows.sort(), [
     "account-controller", "agent-preset-registry", "deepseek-account", "desktop-product-telemetry", "harness-dev-context", "hmr", "llm-deepseek-account", "loopx-driver", "loopx-goalbar", "loopx-init-command", "mcp-resources",
     "open-in-app", "openviking-memory-runtime", "otel", "plugin-manager", "plugin-package-inventory-deepseek",
-    "preset-cordis", "preset-minimal", "preset-ptc", "preset-standard", "product-analytics", "schedule", "session-log-deepseek", "session-telemetry-otel",
+    "preset-cordis", "preset-minimal", "preset-ptc", "preset-standard", "product-analytics", "sandbox", "schedule", "session-log-deepseek", "session-telemetry-otel",
     "subagent", "terminal-controller", "tool-web", "tool-working-directory", "ui-open-in-app", "ui-plugin-manager", "ui-settings-account", "ui-sidebar-browser", "ui-sidebar-terminal",
     "web", "web-deepseek-api", "web-fetch-http", "web-runtime", "web-search-deepseek", "webserver",
   ]);

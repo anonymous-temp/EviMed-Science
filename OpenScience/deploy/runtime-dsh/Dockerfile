@@ -349,6 +349,9 @@ ENV NARB_DISABLE_NATIVE_CACHE=1
 # migration as startup and proves the native loader can import that immutable
 # closure while profile/session state stays on its writable runtime volume.
 ARG SOCKET_VERSION=0.1.0
+# The runner the sandbox row of the sealed profile names (packages/socket/cordis.patch.yml): in place before the smoke, which
+# runs a command through it where the builder's kernel can enforce Landlock.
+COPY deploy/runtime-dsh/evimed-landlock-run.sh /usr/local/lib/evimed/evimed-landlock-run
 COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
 COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
 COPY --from=install-phases /phases/smoke.sh /usr/local/lib/evimed/install-runtime.sh

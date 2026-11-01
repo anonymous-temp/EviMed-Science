@@ -346,10 +346,11 @@ RUN set -eux; \
   chmod 0755 /usr/local/bin/open-science-dsh-serve /usr/local/bin/evimed-oom-guard /usr/local/lib/evimed/tool-bin/timeout; \
   chmod 0644 /usr/local/lib/evimed/evimed-tool-env.sh
 
+COPY deploy/runtime-dsh/evimed-landlock-run.sh /usr/local/lib/evimed/evimed-landlock-run
 COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
 COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
 RUN set -eux; \
-  chmod 0755 /usr/local/bin/evimed-build-smoke; \
+  chmod 0755 /usr/local/bin/evimed-build-smoke /usr/local/lib/evimed/evimed-landlock-run; \
   SOCKET_VERSION="${SOCKET_VERSION}" /usr/local/bin/evimed-build-smoke
 
 ARG RELEASE_ID=untracked

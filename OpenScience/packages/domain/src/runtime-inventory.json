@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "f8074ffb1235e39e69155350d502b7e0fde7c61147e7536fd78de0b3f316b535",
+    "sha256": "d1eefe6d8e92117297c6329cef717ef41d66db2888a0614538e0d4cb518e70e5",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -309,7 +309,9 @@
         "id": "sandbox",
         "name": "@deepseek-ai/dsh-sandbox-local",
         "bundle": "@deepseek-ai/dsh-base",
-        "patchedBy": [],
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
         "state": "enabled"
       },
       {

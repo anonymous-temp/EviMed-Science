@@ -146,6 +146,7 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
 RUN node /usr/local/bin/runtime-yaml-security.mjs verify
 
 ENV NARB_DISABLE_NATIVE_CACHE=1
+COPY deploy/runtime-dsh/evimed-landlock-run.sh /usr/local/lib/evimed/evimed-landlock-run
 COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
 COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
 RUN bash /usr/local/lib/evimed/install-runtime.sh smoke

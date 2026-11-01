@@ -421,6 +421,25 @@ if (methods.size) {
         unreadable.length ? `no client bundle: ${unreadable.join(", ")}` : ""].filter(Boolean).join("; "));
 }
 
+// The profile the kernel's local sandbox hands a custom runner, which `deploy/runtime-dsh/evimed-landlock-run.sh` (the sandbox row's
+// `runnerCommand`, there to make /dev/shm writable) accepts word for word and refuses otherwise. A closure whose profile moved would
+// stop every command of a running session at its first one; this is where it is noticed instead.
+{
+  const sandboxLocal = installed.get("@deepseek-ai/dsh-sandbox-local");
+  if (!sandboxLocal?.dir) {
+    report("the sandbox runner's profile is the kernel's", false, "@deepseek-ai/dsh-sandbox-local is not in the closure");
+  } else {
+    const { recordProfiles, FIXTURE } = await import("./sandbox-profile.mjs");
+    const recorded = JSON.parse(readFileSync(FIXTURE, "utf8"));
+    const { cases } = await recordProfiles(sandboxLocal.dir);
+    const same = JSON.stringify(cases) === JSON.stringify(recorded.cases);
+    report("the argv the kernel gives a custom sandbox runner equals deploy/runtime-dsh/fixtures/sandbox-profile.json",
+      same && recorded.pin === pins.dsh.version,
+      same ? (recorded.pin === pins.dsh.version ? "" : `recorded at ${recorded.pin}, pin is ${pins.dsh.version}`)
+        : "the profile moved: re-read deploy/runtime-dsh/evimed-landlock-run.sh against it, then re-record with scripts/ops/sandbox-profile.mjs");
+  }
+}
+
 (jsonMode ? process.stderr : process.stdout).write(`\n${failures.length ? `${failures.length} seam check(s) failed` : "every seam in the manifest matches the shipped harness"}\n`);
 if (jsonMode) {
   process.stdout.write(`${JSON.stringify({ candidate: candidateMode, dsh: dsh?.version ?? null, cordis: cordis?.version ?? null, failures, checks: results, wire: wireFindings })}\n`);

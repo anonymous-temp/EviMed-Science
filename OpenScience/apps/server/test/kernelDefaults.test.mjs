@@ -204,6 +204,16 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "preset-ptc.disabled=true",
       "preset-standard.disabled=true",
       "product-analytics.disabled=true",
+      // The sandbox row's runner (deploy/runtime-dsh/evimed-landlock-run.sh): the kernel's Landlock launcher plus /dev/shm, so that
+      // Python's process pools work in a command, and the launcher's own fatal lines as the failure signatures that make it fail closed.
+      "sandbox.config.runnerCommand[0]=/usr/local/lib/evimed/evimed-landlock-run",
+      "sandbox.config.runnerFailureSignatures[0]=evimed-landlock-run: ",
+      "sandbox.config.runnerFailureSignatures[1]=landlock-run: usage error",
+      "sandbox.config.runnerFailureSignatures[2]=landlock-run: cannot open rule path",
+      "sandbox.config.runnerFailureSignatures[3]=landlock-run: landlock ruleset error",
+      "sandbox.config.runnerFailureSignatures[4]=landlock-run: landlock is not enforced",
+      "sandbox.config.runnerFailureSignatures[5]=landlock-run: exec failed",
+      "sandbox.config.runnerFailureSignatures[6]=landlock-run: out of memory",
       // 0.2.1 brought the kernel's own cron-like prompts back into the web app; scheduled work is the control plane's.
       "schedule.disabled=true",
       // 0.1.7 flipped its default on: the whole session log with every request.
