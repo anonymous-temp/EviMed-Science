@@ -4403,6 +4403,36 @@ test('authenticated module primary grants ordinary GEO writes only for the initi
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
 });
 
+test('a dispatch that lands mid-turn does not leave the module grant standing for the next turn, nor the sentence told', async () => {
+  const f = await nativePolicyFixture({ registered: ['mcp__evimed__geo_read', 'mcp__evimed__geo_write', 'bash'], capabilities: [] });
+  const message = (/** @type {string} */ id) => ({ role: 'user', source: { kind: 'user', rpcId: id }, content: [{ type: 'text', text: id }] });
+  const told = () => f.injected.filter((/** @type {any} */ item) => JSON.stringify(item).includes('这是当前循证 GEO 项目的原生对话')).length;
+  f.ctx.provide('evimedNativeRoute', async (/** @type {string} */ _session, /** @type {any[]} */ inputs) => inputs.map(input => ({ ...input, digest: 'd'.repeat(64), route: {
+    effectiveAgentId: 'open-domain-answer', geoModuleScope: { version: 1, geoProjectId: 'geo_owned', rootSessionId: 'native-session' },
+  } })));
+  f.start(); await f.step(1, { inputs: [message('product-only')] });
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
+  assert.equal(told(), 1);
+  // A new dispatch index arrives while the turn is still going: its run state is reset, and the scope with it.
+  f.ctx.provide('evimedNativeRoute', async () => []);
+  f.files.set('/workspace/.evimed-brief/sessions/native-session/index.json', JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId: 'run_next', contextRevision: 'req_next' }));
+  await f.step(1, { inputs: [message('steer')] });
+  await f.endTurn();
+  // The next turn has no route at all: nothing may be left of the grant.
+  await f.step(2, { inputs: [message('ordinary')] });
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'), 'geo_write is not visible to a turn that was never routed to the project');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  assert.ok(f.requests.at(-1)?.tools.includes('bash'), 'the root keeps its own tools');
+  // And the project's conversation is told again when a later turn is routed to it.
+  f.ctx.provide('evimedNativeRoute', async (/** @type {string} */ _session, /** @type {any[]} */ inputs) => inputs.map(input => ({ ...input, digest: 'd'.repeat(64), route: {
+    effectiveAgentId: 'open-domain-answer', geoModuleScope: { version: 1, geoProjectId: 'geo_owned', rootSessionId: 'native-session' },
+  } })));
+  await f.endTurn();
+  await f.step(3, { inputs: [message('project-again')] });
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
+  assert.equal(told(), 2);
+});
+
 test('module scope from foreign or expanded snapshots cannot authorize project tools', async () => {
   for (const scope of [
     { version: 1, geoProjectId: 'geo_owned', rootSessionId: 'foreign' },
