@@ -329,6 +329,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   run_children_outlived_turn: '一轮结束时仍有子任务在运行',
   run_children_reminder_failed: '未能提醒运行等待子任务',
   run_concurrent_write: '两个子任务先后写了同一文件',
+  run_concurrent_attribution_uncertain: '并发任务的文件归属待核对',
   run_capsule_recall_off: '方法胶囊召回未启用',
   run_web_providers_missing: '网页检索通道未注册',
   run_answer_persona_missing: '回答规范未能载入',
