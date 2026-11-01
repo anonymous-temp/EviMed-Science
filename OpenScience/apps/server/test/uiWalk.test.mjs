@@ -2977,7 +2977,15 @@ test("the memory page's lists stack one shape of section, and 记忆地图 is he
 
 test("总览 is a data page, walked at both widths: the five tiles are read by the page, the first row of its table and its drawer are checked", () => {
   assert.equal(budgetKey("memory-overview"), "memory-overview");
-  assert.equal(SECTION_SHAPES_BY_PAGE["memory-overview"], 2);
+  // Three kinds of section, since the 记忆星图 (owner, 2026-10-31) is a card of its own at the head: the tiles, the cards of charts, the sky.
+  assert.equal(SECTION_SHAPES_BY_PAGE["memory-overview"], 3);
+  // What the night window spends and nothing else may: 8 text colours, 5 kinds of border, 6 size × weight pairs; one more of any is a finding.
+  const sky = { controlKinds: 10, colorKinds: 8, borderKinds: 5, sectionShapes: ["section>div+ul", "section>div", "section>header+div"], sizeWeightPairs: ["12px/400", "14px/400", "18px/600", "20px/400", "24px/600", "32px/600"] };
+  assert.deepEqual(pageFindings("memory-overview", "desktop", clean(sky), []), { failures: [], notices: [] });
+  assert.deepEqual(pageFindings("memory-overview", "desktop", clean({ ...sky, colorKinds: 9, borderKinds: 6 }), []).failures,
+    ["memory-overview@desktop: 9 text colours (budget 8)", "memory-overview@desktop: 6 kinds of border (budget 5)"]);
+  assert.deepEqual(pageFindings("memory-overview", "desktop", clean({ ...sky, sectionShapes: [...sky.sectionShapes, "table>thead+tbody"] }), []).failures,
+    [`memory-overview@desktop: the page stacks 4 kinds of section (budget 3): ${[...sky.sectionShapes, "table>thead+tbody"].join(", ")}`]);
   assert.ok(ROW_CLICK_PAGES.has("memory-overview"), "a row that opens nothing fails the page");
   assert.ok(ROUTES.some(([name, route]) => name === "memory-overview" && route === "/app/memory/overview"));
   assert.ok(ROUTES.some(([name, route]) => name === "memory" && route === "/app/memory?tab=self"), "the row-list probe names the list tab rather than the overview landing");

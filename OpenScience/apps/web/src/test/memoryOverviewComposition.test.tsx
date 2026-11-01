@@ -208,12 +208,13 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange, tablists, toolbars) => 
     }
   });
 
-  it("stacks at most the page table's two kinds of section: the numbers and the charts' and table's blocks", async () => {
+  it("stacks two kinds of section where the sky cannot be drawn (the numbers, and the charts' and table's blocks); the page table allows the sky its third", async () => {
     const { container } = draw();
     await loaded();
     const shapes = sectionShapes(container);
-    expect(entry.shapes).toBe(2);
-    expect(shapes.length, shapes.join(", ")).toBeLessThanOrEqual(entry.shapes!);
+    // jsdom has no GPU, so this is the flat page; the night window of 记忆星图 (owner, 2026-10-31) is the third kind the table allows.
+    expect(entry.shapes).toBe(3);
+    expect(shapes.length, shapes.join(", ")).toBeLessThanOrEqual(2);
   });
 
   it("is a page the walk's own judge reads as right: the tiles in order, the sentence their numbers, a table behind them or one recipe", async () => {
