@@ -1404,6 +1404,8 @@ function nativeWorkflowEvidence(run, history) {
   let kernelRunId = null;
   const submissions = new Map();
   const delegates = new Set();
+  /** @type {Set<string>} */
+  const writtenPlanIds = new Set();
   /** The ids of the current plan's ordinary files: what a submission of one of them is not evidence of. @type {Set<string>} */
   let ordinaryFiles = new Set();
   for (const message of history) for (const part of message.parts ?? []) {
@@ -1426,6 +1428,9 @@ function nativeWorkflowEvidence(run, history) {
       if (typeof result.data?.runId !== "string" || !result.data.runId || result.data.runId.length > 256) continue;
       if (kernelRunId && kernelRunId !== result.data.runId) return null;
       kernelRunId = result.data.runId;
+      if (args.action === "write") for (const item of definitions) {
+        if (writtenPlanIds.size < 256) writtenPlanIds.add(item.id);
+      }
       plan = { revision: result.data.revision, written: args.action === "write", items: definitions, ...span };
     }
     if (part.tool === "evimed_submit_deliverable" && typeof args.deliverableId === "string"
@@ -1456,7 +1461,7 @@ function nativeWorkflowEvidence(run, history) {
   ), run.nativeTurn.startSeq);
   return { turnStartSeq: run.nativeTurn.startSeq, throughSeq, throughMessage: messageId(history.at(-1)), endTime: history.at(-1)?.info?.turnEnd?.time ?? null,
     ...(kernelRunId ? { kernelRunId } : {}),
-    plan, submissions: [...submissions.values()], delegates: [...delegates] };
+    plan, writtenPlanIds: [...writtenPlanIds], submissions: [...submissions.values()], delegates: [...delegates] };
 }
 
 function nativeWorkflowNotices(proof) {
@@ -8449,4 +8454,9 @@ export function delegatedDocumentReadsForTest(messages) {
  *  @param {any[]} issues @param {any} [shrinkage] @param {boolean} [revisionRequired] @returns {string} */
 export function clinicalEvidenceRepairPromptForTest(issues, shrinkage = null, revisionRequired = true) {
   return clinicalEvidenceRepairPrompt(issues, shrinkage, revisionRequired);
+}
+
+/** @param {any} run @param {any[]} history */
+export function nativeWorkflowEvidenceForTest(run, history) {
+  return nativeWorkflowEvidence(run, history);
 }

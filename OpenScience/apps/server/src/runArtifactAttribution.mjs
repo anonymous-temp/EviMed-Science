@@ -6,7 +6,8 @@ function witnessedIds(run) {
   const delegated = new Set(Array.isArray(proof.delegates) ? proof.delegates : []);
   const invoked = new Set([...submissions.map((item) => item?.id), ...delegated]);
   const items = Array.isArray(proof.plan?.items) ? proof.plan.items : [];
-  const ids = items.filter((item) => proof.plan?.written || invoked.has(item.id)).map((item) => item.id);
+  const ids = [...(Array.isArray(proof.writtenPlanIds) ? proof.writtenPlanIds : []),
+    ...items.filter((item) => proof.plan?.written || invoked.has(item.id)).map((item) => item.id)];
   for (const item of submissions) if (item?.accepted) ids.push(item.id);
   return new Set(ids.filter(validId));
 }
