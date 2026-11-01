@@ -9153,6 +9153,7 @@ test("concurrent deliverables with independent ownership are not attributed to t
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.ok(run.artifacts.includes("deliverables/own/report.md"));
     assert.ok(!run.artifacts.includes("deliverables/peer/report.md"));
+    assert.ok(run.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
   });
 });
 
@@ -9170,5 +9171,6 @@ test("a canceled run retains its own partial files but not a concurrent run's fi
     const run = await store.finishInternal(project, started.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
     assert.ok(run.unverifiedArtifacts.includes("deliverables/own/partial.md"));
     assert.ok(!run.unverifiedArtifacts.includes("deliverables/peer/partial.md"));
+    assert.ok(run.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
   });
 });
