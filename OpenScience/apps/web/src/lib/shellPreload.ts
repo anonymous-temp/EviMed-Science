@@ -68,8 +68,12 @@ let started = false;
 
 /**
  * Once a tab, as soon as sign-in is known: the runtime's start and the downloads begin here, not once the sidebar and the page's chunk
- * have loaded (five seconds of the owner's opening over a slow line, 2026-10-31). The start is speculative, because this project is only
- * the last one used: it stops nothing, and the frame's own opening joins it. A module's conversation starts its own runtime.
+ * have loaded (five seconds of the owner's opening over a slow line, 2026-10-31). This call's own start is speculative, because the
+ * project is only the last one used: the control plane starts it in free room only and stops nothing for it, and the frame's own
+ * opening joins it. It is not the only start a load makes. Off the conversation page `SessionFrameHost` asks for the current project (as a rule the same one)
+ * without the flag (`warmWebRuntime(admitted)`, a separate once-a-minute ledger), and that start, when the account or the deployment
+ * is at its ceiling, may retire this account's own idle runtime of another project that no tab holds (`makeRoomFor`, first pass) and,
+ * for the deployment's ceiling, other researchers' runtimes idle past the yield age. A module's conversation starts its own runtime.
  * A head start, never a precondition: nothing here may reach the caller.
  *
  * @returns whether this call started it
