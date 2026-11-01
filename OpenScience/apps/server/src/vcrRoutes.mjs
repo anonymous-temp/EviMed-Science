@@ -73,7 +73,6 @@ import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
 import { prepareVcrMethodConfiguration, resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
-import { VCR_CARD_KINDS, createVcrCardEdits } from "./vcrCardEdits.mjs";
 import { zhTime } from "./vcrViewsKit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
 import { VCR_ROWS_PAGE_MAX } from "./vcrRows.mjs";
@@ -168,8 +167,6 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/of-project/:project": ["read"],
   "GET /studies/:id/:tab": ["read"],
   "GET /studies/:id/runs": ["read"],
-  "GET /studies/:id/cards": ["read"],
-  "POST /studies/:id/cards": ["write"],
   "PATCH /studies/:id name,question,action": ["write"],
   "PATCH /studies/:id dataTier,intendedUse,status": ["manage_study"],
   "DELETE /studies/:id": ["manage_study"],
@@ -271,7 +268,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -394,7 +391,7 @@ function wholeNumber(value, field, max) {
  *     rename?: (ownerId: string, projectId: string, name: string, previousName: string) => Promise<unknown>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, records?: any, cards?: any, startStudy?: (user: any, study: any, input: any) => Promise<any> }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, records?: any, startStudy?: (user: any, study: any, input: any) => Promise<any> }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -438,8 +435,6 @@ export function createVcrRoutes(dependencies) {
       get publications() { return dependencies.publications ?? null; },
       // Filing a prediction with the registry (`vcrPredictions.mjs`); null while no registry is composed.
       get predictions() { return dependencies.predictions ?? null; },
-      // The page's own edits of a population, a design and the criteria (`vcrCardEdits.mjs`); composed here from the module's store unless given.
-      get cards() { return dependencies.cards ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -880,32 +875,6 @@ export function createVcrRoutes(dependencies) {
           at: zhTime(run.startedAt ?? null, now),
         })),
       });
-    }
-
-    // --- the cards a person edits on the page: population, a design, the criteria -------------------------------------------
-    // GET answers the numbers a form may change; POST writes the object's next version and marks what stood on the old one stale.
-    if (parts.length === 3 && section === "cards" && (method === "GET" || method === "POST")) {
-      const cards = hooks.cards ?? createVcrCardEdits({
-        store: data(), matchStore: service.packages?.matchStore ?? null, orchestrator: hooks.orchestrator,
-        audit: (event, status, details) => audit(event, status, details),
-      });
-      if (method === "GET") {
-        const { study } = await authorize(id, "read");
-        const kind = String(url.searchParams.get("kind") ?? "");
-        if (!VCR_CARD_KINDS.includes(kind)) throw new HttpError(400, "vcr_payload_invalid", `kind is one of: ${VCR_CARD_KINDS.join(", ")}.`);
-        const objectId = url.searchParams.get("object");
-        if (objectId != null && !ID.test(objectId)) throw new HttpError(400, "vcr_payload_invalid", "object is the id of one of the study's objects.");
-        return reply(await cards.read(study, kind, objectId));
-      }
-      const body = await bodyOf(req, maxJsonBytes, ["kind", "objectId", "set", "regenerate"]);
-      if (typeof body.kind !== "string" || !VCR_CARD_KINDS.includes(body.kind)) throw new HttpError(400, "vcr_payload_invalid", `kind is one of: ${VCR_CARD_KINDS.join(", ")}.`);
-      if (body.objectId != null && (typeof body.objectId !== "string" || !ID.test(body.objectId))) throw new HttpError(400, "vcr_payload_invalid", "objectId is the id of one of the study's objects.");
-      if (body.regenerate != null && typeof body.regenerate !== "boolean") throw new HttpError(400, "vcr_payload_invalid", "regenerate is true or false.");
-      if (body.regenerate !== true && (!body.set || typeof body.set !== "object" || Array.isArray(body.set))) throw new HttpError(400, "vcr_payload_invalid", "set is { setting: number }.");
-      const { study } = await authorize(id, "write");
-      const written = await audited("vcr.card.edit", (result) => ({ code: id, detail: `${result.kind}@${result.version}` }), { code: id, detail: body.kind },
-        () => cards.apply(study, user, { kind: body.kind, objectId: body.objectId ?? null, set: body.set, regenerate: body.regenerate === true }));
-      return reply(written, 201);
     }
 
     // --- the study's pack and the definitions of the account's library ------------------------

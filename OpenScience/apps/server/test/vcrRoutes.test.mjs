@@ -477,8 +477,6 @@ const REQUESTS = {
   "GET /studies/of-project/:project": ["GET", "/api/vcr/studies/of-project/prj_1", undefined],
   "GET /studies/:id/:tab": ["GET", "/api/vcr/studies/std_1/overview", undefined],
   "GET /studies/:id/runs": ["GET", "/api/vcr/studies/std_1/runs", undefined],
-  "GET /studies/:id/cards": ["GET", "/api/vcr/studies/std_1/cards?kind=population", undefined],
-  "POST /studies/:id/cards": ["POST", "/api/vcr/studies/std_1/cards", { kind: "population", set: { n: 2000 } }],
   "PATCH /studies/:id name,question,action": ["PATCH", "/api/vcr/studies/std_1", { name: "改名" }],
   "PATCH /studies/:id dataTier,intendedUse,status": ["PATCH", "/api/vcr/studies/std_1", { status: "paused" }],
   "DELETE /studies/:id": ["DELETE", "/api/vcr/studies/std_1", undefined],
@@ -562,7 +560,6 @@ function composedHooks() {
       rows: async () => ({ result: "res_1", rows: [], total: 0, all: 0, columns: [], offset: 0, limit: 100, sort: null, arms: [] }),
       record: async () => ({ result: "res_1", id: "vp_1", baseline: [], outcome: [] }) },
     // The page's own edits of the numbers a study rests on: what the form is built from, and the next version.
-    cards: { read: async () => ({ kind: "population", objectId: "pop_1", title: "人群设定", settings: [] }), apply: async () => ({ kind: "population", id: "pop_2", version: 2, changed: 1 }) },
     // The public 「模拟研究」 column: the lead's publish and withdraw.
     predictions: { file: async () => ({ filed: true, existing: false }) },
     publications: { forStudy: async () => [], publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: false }), withdraw: async () => ({ id: "sim_1" }) },

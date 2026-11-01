@@ -42,15 +42,15 @@ import { productRequest } from "./productClient";
 import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
 import {
   assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody,
-  definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody,
+  definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody,
   studyPatchBody, trialSearchBody,
-  type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
+  type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
   type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody, type VcrQualityBasis,
   type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrRegulatoryContactBody, type VcrReviewBody,
 } from "./vcrBodies";
 
 export type {
-  VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
+  VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
   VcrDefinitionUseBody, VcrJobBody, VcrQualityBasis, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
   VcrPatchBody, VcrRegulatoryContactBody, VcrReviewBody,
 } from "./vcrBodies";
@@ -627,7 +627,6 @@ export interface VcrStudy {
   holds?: VcrTabKey[];
   /** What is going on right now, or null when nothing is: the page reads again while it is not null and stops when it is. */
   activity: VcrActivity | null;
-  /** The step to offer as the primary action, computed once on the server (`vcrNext`); null when there is none to offer. */
   /** One finding with one number per step (≤ 12 characters); a step with nothing to say is absent. */
   stepSummaries: Partial<Record<VcrStepKey, VcrStepSummary>>;
   /** What the definition says, as words; null until one has been written. */
@@ -2538,34 +2537,6 @@ export async function getVcrHome(): Promise<VcrHome> {
   return readVcrHome(await productRequest<unknown>("/vcr/studies"));
 }
 
-/**
- * 「新建研究」: a draft study, its project and its conversation — nothing on the list until the first definition names it. A study
- * made with a name or a question is an active one.
- */
-export function createVcrStudy(input: VcrCreateBody = {}) {
-  return productRequest<{ id: string; projectId: string; sessionId: string | null; status?: VcrStudyStatus }>("/vcr/studies", "POST", studyCreateBody(input));
-}
-
-export interface VcrStartBody {
-  brief: string;
-  requestId: string;
-  name?: string;
-  action?: "definition" | "auto" | "cohort" | "patients" | "comparator" | "trial";
-}
-export interface VcrStartAnswer {
-  studyId: string;
-  sessionId: string;
-  runId: string;
-  status: string;
-  dispatchStatus: string;
-  errorCode: string | null;
-  state: "accepted" | "confirming" | "rejected" | "awaiting_input";
-}
-/** Retry the same immutable payload and request id after an uncertain receipt. */
-export function startVcrStudy(studyId: string, input: VcrStartBody) {
-  return productRequest<VcrStartAnswer>(`${study(studyId)}/start`, "POST", input);
-}
-
 export async function getVcrStudy(studyId: string): Promise<VcrStudy> {
   return readVcrStudy(await productRequest<unknown>(study(studyId)));
 }
@@ -2639,48 +2610,6 @@ export async function getVcrBackgroundRuns(studyId: string): Promise<VcrBackgrou
   return arr(value.runs).filter((item) => typeof item.sessionId === "string").map((item) => ({
     sessionId: String(item.sessionId), ...(text(item.runId) ? { runId: text(item.runId)! } : {}), label: text(item.label) ?? "后台分析", state: programmeRunState(item.state), at: text(item.at),
   }));
-}
-
-/** What a page form may change in one of the study's objects: the numbers it offers, named, with the range each takes. */
-export type VcrCardKind = "population" | "trial_scenario" | "criteria";
-
-export interface VcrCardSetting {
-  /** The setting's address inside the object; sent back as it came. */
-  path: string;
-  label: string;
-  value: number;
-  unit: string | null;
-  integer: boolean;
-  min: number | null;
-  max: number | null;
-}
-
-export interface VcrCardSettings {
-  kind: VcrCardKind;
-  objectId: string;
-  title: string;
-  settings: VcrCardSetting[];
-}
-
-export async function getVcrCardSettings(studyId: string, kind: VcrCardKind, objectId?: string | null): Promise<VcrCardSettings> {
-  const query = new URLSearchParams({ kind, ...(objectId ? { object: objectId } : {}) });
-  const value = obj(await productRequest<unknown>(`${study(studyId)}/cards?${query}`));
-  return {
-    kind, objectId: text(value.objectId) ?? "", title: text(value.title) ?? "",
-    settings: arr(value.settings).filter((item) => typeof item.path === "string" && finite(item.value) !== null).map((item) => ({
-      path: String(item.path), label: text(item.label) ?? String(item.path), value: Number(item.value), unit: text(item.unit),
-      integer: item.integer === true, min: finite(item.min), max: finite(item.max),
-    })),
-  };
-}
-
-/** Write the object's next version with the typed numbers; what stood on the old version is recomputed. */
-export function editVcrCard(studyId: string, input: { kind: VcrCardKind; objectId?: string | null; set?: Record<string, number>; regenerate?: boolean }) {
-  return productRequest<{ kind: VcrCardKind; id: string; version: number; changed: number }>(`${study(studyId)}/cards`, "POST", {
-    kind: input.kind, ...(input.objectId ? { objectId: input.objectId } : {}),
-    // `regenerate` is the population again with the settings it has; otherwise the typed numbers.
-    ...(input.regenerate ? { regenerate: true } : { set: input.set ?? {} }),
-  });
 }
 
 /** One tab's payload. The tab key is the route's own word (contract §3.1). */

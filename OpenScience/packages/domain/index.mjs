@@ -1987,14 +1987,11 @@ export {
   vcrKnown,
   vcrWeakestSource,
   VCR_STEP_ACTION_LABELS_ZH,
-  VCR_NEXT_REASONS,
-  VCR_NEXT_REASON_LABELS_ZH,
   VCR_WAITING_FOR_KINDS,
   VCR_RUN_PLACEMENTS,
   VCR_JOB_KIND_STEPS,
   vcrVisibleQuestion,
 } from './src/vcrVocabulary.mjs'
-// vcrNext — which step of a study is the next one: one pure function for the page, the route and every sentence that names "next"
 export {
   VCR_APPLICABILITY_LIMITS,
   VCR_APPLICABILITY_LIMIT_LABELS_ZH,
@@ -2027,7 +2024,6 @@ export {
   vcrTargetTrialEngineItems,
   vcrTargetTrialStored,
 } from './src/vcrComparability.mjs'
-export { vcrNext } from './src/vcrNext.mjs'
 
 // vcrModelAssessment — 「虚拟临床研究」's model assessment record (ICH M15 Appendix 1: question of interest, context
 // of use, model influence, consequence of a wrong decision, the model risk derived from the two, model impact,

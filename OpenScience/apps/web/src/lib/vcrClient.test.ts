@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createVcrStudy, queueVcrJob, saveVcrMethodConfiguration, getVcrMethodResult, getVcrMethodConfiguration, cancelVcrJob, confirmVcrBudget, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
+  queueVcrJob, saveVcrMethodConfiguration, getVcrMethodResult, getVcrMethodConfiguration, cancelVcrJob, confirmVcrBudget, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
   getVcrPatients, getVcrPopulation, getVcrPrecedents, getVcrStudy, getVcrTrial, patchVcrStudy, readVcrCounts, readVcrValue, recordVcrDecision,
   saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers,
   adoptVcrModel, overrideVcrJudgment, reviewVcrAssessment,
@@ -284,10 +284,8 @@ describe("study membership", () => {
 
 
 describe("method workbench requests", () => {
-  it("sends calculation purpose and queue subject through the actual body builders", async () => {
+  it("sends the queue subject through the actual body builder", async () => {
     network.productRequest.mockResolvedValue({ id: "calculation_1" });
-    await createVcrStudy({ name: "Independent", purpose: "calculation" });
-    expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies", "POST", { name: "Independent", purpose: "calculation" });
     await queueVcrJob("calculation_1", { kind: "generate_patients_binary", subjectId: "patient_set_1", modelId: "source_model", scenario: { n: 40 }, seed: 42, inputs: [] });
     expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/calculation_1/jobs", "POST", { kind: "generate_patients_binary", subjectId: "patient_set_1", modelId: "source_model", scenario: { n: 40 }, seed: 42, inputs: [] });
   });

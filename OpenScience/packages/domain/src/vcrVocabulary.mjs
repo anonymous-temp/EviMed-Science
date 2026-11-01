@@ -579,13 +579,6 @@ export function vcrVisibleQuestion({ purpose = null, steps = [], exportKind = nu
 }
 
 /**
- * Why a step is the study's next one: `start` (never done), `retry` (the last attempt left it unfinished) or `refresh` (what it was
- * computed from changed). The server says which; the words are here, once.
- */
-export const VCR_NEXT_REASONS = frozen(['start', 'retry', 'refresh'])
-export const VCR_NEXT_REASON_LABELS_ZH = Object.freeze({ start: '', retry: '上次没有做完', refresh: '输入已变更，结果已过期' })
-
-/**
  * What a step of the activity strip is waiting for, when it is queued: another step's run (the step's key), the research allowance
  * (`allowance`, or `simulated_allowance` for the simulated wallet), or a run that covers no step — an export, a patient's trial search
  * (`run`).
