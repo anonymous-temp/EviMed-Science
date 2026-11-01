@@ -1090,6 +1090,15 @@ test("the data tab counts its cards and says nothing of who set them: no AI-set 
   assert.deepEqual(data.assumptions.map((entry) => entry.value.review), ["ai_set", "ai_set", "reviewed"]);
 });
 
+test("a trial whose paper does not report a parameter says 未取到 beside it and does not list the parameter as used (C8)", () => {
+  const row = { id: "p1", registry_id: "NCT1", registry: "clinicaltrials.gov", title: "t", pico: {}, design: {}, enrollment: {}, sites: {} };
+  const item = (/** @type {string} */ parameter, /** @type {string} */ verification) => ({ id: `e_${parameter}`, precedent_id: "p1", parameter, locator: { verification } });
+  const data = presentDataTab({ ...emptyBundle(), evidence: { precedents: [row], items: [item("hazard_ratio", "verified"), item("outcome_sd", "not_reported"), item("median_survival_months", "not_reported")] } });
+  assert.equal(data.precedents[0].usedFor, "风险比", "a parameter the paper does not report is not one it was used for");
+  assert.deepEqual(data.precedents[0].notReported, ["outcome_sd", "中位生存时间"]);
+  assert.equal("notReported" in presentDataTab({ ...emptyBundle(), evidence: { precedents: [row], items: [item("hazard_ratio", "verified")] } }).precedents[0], false);
+});
+
 test("a precedent keeps planned and actual apart and shows a rate only when its three inputs exist", () => {
   const precedent = presentPrecedent({ id: "p", registry_id: "NCT1", registry: "clinicaltrials.gov", title: "t",
     pico: { conditions: ["NSCLC"] }, design: { phases: ["PHASE3"] }, enrollment: { planned: 420, actual: 400, accrualToPrimaryCompletionMonths: 20 }, sites: { count: 10, countries: ["中国"] },

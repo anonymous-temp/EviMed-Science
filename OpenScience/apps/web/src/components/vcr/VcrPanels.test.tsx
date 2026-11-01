@@ -7,7 +7,7 @@ import { readVcrStudy } from "@/lib/vcrClient";
 import { cpuTimeText, VcrBudgetDialog } from "./VcrBudgetDialog";
 import { VcrModelRecord } from "./VcrModelRecord";
 import { runFilePath, VcrPackageReader } from "./VcrPackageReader";
-import { VcrPrecedentsPanel } from "./VcrPrecedentsPanel";
+import { VcrPrecedentsPanel, VcrPrecedentTable } from "./VcrPrecedentsPanel";
 import { fixture, installVcrServer, STUDY_ID } from "./__fixtures__/serverFixtures";
 import { fakeRoom, ToolbarSlotFrame } from "./__fixtures__/tabFrame";
 
@@ -58,6 +58,13 @@ describe("参考试验", () => {
     expect(within(opened).getByText("人群（标准化）").nextElementSibling).toHaveTextContent("非小细胞肺癌");
     expect(opened.querySelector("[data-vcr-eligibility-text]")).toHaveTextContent("组织学或细胞学确诊的晚期 NSCLC；一线含铂化疗后进展。");
     expect(within(opened).getByRole("link", { name: /打开登记记录/ })).toHaveAttribute("href", "https://example.org/CTR20990001");
+  });
+
+  it("says 未取到 beside a trial whose paper does not report a parameter, and draws no value for it (C8)", () => {
+    draw(<VcrPrecedentTable withUse rows={[{ id: "p1", registryId: "NCT01", usedFor: "风险比", notReported: ["outcome_sd", "中位生存时间"] }]} />);
+    const row = document.querySelector('[data-vcr-precedent="NCT01"]') as HTMLElement;
+    expect(within(row).getByText("风险比")).toBeInTheDocument();
+    expect(row.querySelector("[data-vcr-not-reported]")).toHaveTextContent("未取到：outcome_sd、中位生存时间");
   });
 
   it("says a trial's design in words — 「3 期 · 随机 · 开放」 — and never as the registry's enumerations", async () => {

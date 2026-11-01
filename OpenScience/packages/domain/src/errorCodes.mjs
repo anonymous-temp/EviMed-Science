@@ -790,6 +790,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // the answer of the write that saved the object. The object is saved and computed as it stands.
   "vcr_comparator_record_incomplete",
   "vcr_assumption_role_missing",
+  "vcr_evidence_item_incomplete",
   "vcr_report_section_invalid",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
@@ -1583,6 +1584,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_model_assessment_incomplete',
   'vcr_comparator_record_incomplete',
   'vcr_assumption_role_missing',
+  'vcr_evidence_item_incomplete',
   'vcr_report_section_invalid',
 ])
 
@@ -2434,6 +2436,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_card_incomplete: '这张模型卡缺少它所用接口要求的内容；模型已保存，适用性检查会逐项说明缺什么，补齐后再写一个版本。',
   vcr_comparator_record_incomplete: '这项对照的记录（目标试验的七个要素、适用性）还有没写的项；这一版已保存并照常计算，补上后再写一个版本。',
   vcr_assumption_role_missing: '这张效应卡没有写它是“重要差异”还是“现实预期”；已保存，补上后再写一个版本。',
+  vcr_evidence_item_incomplete: '这条抽取值还缺合并要用的项（置信区间或样本量）；已保存，论文里有就补进同一条，论文没有报告就另写一条“未报告”。',
   vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
   vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
   // The trial registry channel.

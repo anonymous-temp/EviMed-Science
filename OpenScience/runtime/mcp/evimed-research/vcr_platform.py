@@ -757,7 +757,7 @@ def write(arguments: dict) -> dict:
 
 
 # The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
-_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing"})
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete"})
 
 
 def _issue_line(issue: dict) -> str:

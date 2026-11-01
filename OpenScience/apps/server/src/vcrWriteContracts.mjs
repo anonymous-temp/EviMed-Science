@@ -72,7 +72,8 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "timepoint",
     "literatureSource",
     "evidenceKind",
-    "trialIdentity"
+    "trialIdentity",
+    "notReported"
   ],
   "pack": [
     "use",

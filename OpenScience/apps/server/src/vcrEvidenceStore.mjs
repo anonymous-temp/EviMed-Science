@@ -219,7 +219,9 @@ export class VcrEvidenceStore extends VcrStoreBase {
         const id = vcrId("evidence");
         const verification = String(item?.locator?.verification ?? "no_quote");
         const accepted = verification === "verified";
-        if (!accepted) refused += 1;
+        // A paper that does not report a parameter (C8) is an answer, not a refusal: it keeps no number and is not counted against the run.
+        const notReported = verification === "not_reported";
+        if (!accepted && !notReported) refused += 1;
         await handle.query(
           `INSERT INTO ${VCR_SCHEMA}.evidence_items
              (id, user_id, study_id, precedent_id, parameter, arm, value, value_text, unit, ci_low, ci_high,
@@ -233,7 +235,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
             // A refused value never reaches the numeric column: a number that
             // could not be found in its source must not be readable as one.
             accepted ? numeric(item?.value) : null,
-            accepted ? String(item?.valueText ?? "") : "unknown",
+            accepted ? String(item?.valueText ?? "") : notReported ? "not_reported" : "unknown",
             String(item?.unit ?? ""),
             accepted ? numeric(item?.ciLow) : null, accepted ? numeric(item?.ciHigh) : null,
             accepted ? whole(item?.sampleSize) : null, accepted ? whole(item?.events) : null,
@@ -253,9 +255,9 @@ export class VcrEvidenceStore extends VcrStoreBase {
       await this.audit({
         client: handle, studyId, userId, actor: "system", action: "vcr.evidence.extract",
         object: precedentId ?? "", outcome: refused ? "partial" : "ok",
-        detail: { written: rows.length, verified: rows.length - refused, refused },
+        detail: { written: rows.length, verified: verifiedIds.length, refused },
       });
-      return { written: rows.length, verified: rows.length - refused, refused, ids, verifiedIds };
+      return { written: rows.length, verified: verifiedIds.length, refused, ids, verifiedIds };
     };
     return client ? run(client) : this.transaction(run);
   }
@@ -348,7 +350,8 @@ export class VcrEvidenceStore extends VcrStoreBase {
       `SELECT parameter,
               COUNT(*)::int AS extracted,
               COUNT(*) FILTER (WHERE value IS NOT NULL AND locator->>'verification' = 'verified')::int AS verified,
-              COUNT(*) FILTER (WHERE locator->>'verification' <> 'verified')::int AS refused,
+              COUNT(*) FILTER (WHERE locator->>'verification' NOT IN ('verified', 'not_reported'))::int AS refused,
+              COUNT(*) FILTER (WHERE locator->>'verification' = 'not_reported')::int AS not_reported,
               COUNT(DISTINCT precedent_id)::int AS precedents
        FROM ${VCR_SCHEMA}.evidence_items
        WHERE user_id = $1 AND study_id = $2

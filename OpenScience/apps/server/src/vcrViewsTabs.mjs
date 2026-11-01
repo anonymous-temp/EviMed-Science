@@ -1643,7 +1643,12 @@ export function presentDataTab(bundle, query = {}) {
   });
   const precedents = (evidence?.precedents ?? []).map((/** @type {any} */ row) => {
     const items = (evidence?.items ?? []).filter((/** @type {any} */ item) => item.precedent_id === row.id);
-    return { ...presentPrecedentRow(row), usedFor: [...new Set(items.map((/** @type {any} */ item) => PARAMETER_LABELS[String(item.parameter)]).filter(Boolean))].slice(0, 3).join("、") || null };
+    const isNotReported = (/** @type {any} */ item) => item.locator?.verification === "not_reported";
+    // What the paper was read for and does not report (C8): said as 未取到 beside the trial, never as a value and never as a refusal.
+    const notReported = [...new Set(items.filter(isNotReported).map((/** @type {any} */ item) => PARAMETER_LABELS[String(item.parameter)] ?? String(item.parameter)))];
+    return { ...presentPrecedentRow(row),
+      usedFor: [...new Set(items.filter((/** @type {any} */ item) => !isNotReported(item)).map((/** @type {any} */ item) => PARAMETER_LABELS[String(item.parameter)]).filter(Boolean))].slice(0, 3).join("、") || null,
+      ...(notReported.length ? { notReported: notReported.slice(0, 6) } : {}) };
   });
   const snapshots = presentDataSnapshots(dataPlane, now);
   return {

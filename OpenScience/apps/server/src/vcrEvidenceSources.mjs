@@ -31,8 +31,9 @@ function exactSpan(text, span, quote) {
  * @param {{sources:any}} dependencies */
 export function createVcrEvidenceSources({ sources }) {
   return {
-    /** @param {{userId:string,projectId:string,source:any,quote:string,locator:any,unit?:string}} input */
-    async resolve({ userId, projectId, source: asked, quote, locator, unit = "" }) {
+    /** @param {{userId:string,projectId:string,source:any,quote:string,locator:any,unit?:string,identityOnly?:boolean}} input
+     * `identityOnly`: the source is named and checked, no span of it is (a paper that does not report a parameter has nothing to quote). */
+    async resolve({ userId, projectId, source: asked, quote, locator, unit = "", identityOnly = false }) {
       const source = await sources.get(String(userId), String(asked?.sourceId ?? ""));
       if (!projectId || source.projectId !== projectId || String(source.userId) !== String(userId)) {
         throw new HttpError(404, "source_not_found", "Source not found in this study project.");
@@ -42,6 +43,10 @@ export function createVcrEvidenceSources({ sources }) {
       const sourceHash = digest(text);
       if (!capture || source.payload?.generation !== asked?.generation || source.payload?.analysis?.textSha256 !== sourceHash
         || asked?.textSha256 !== sourceHash) throw new HttpError(409, "source_changed", "Read the current preserved source before extracting evidence.");
+      if (identityOnly) {
+        return { text, sourceRef: `source:${source.id}:g${source.payload.generation}:${sourceHash}`,
+          locator: { kind: "literature_text", sourceId: source.id, generation: source.payload.generation, sourceHash, textSha256: sourceHash, offsetUnit: "utf16", parts: {}, inputs: [] } };
+      }
       const span = exactSpan(text, locator, quote);
       const parts = {};
       for (const field of ["ciLow", "ciHigh", "sampleSize", "events", "unit", "trialIdentity"]) {

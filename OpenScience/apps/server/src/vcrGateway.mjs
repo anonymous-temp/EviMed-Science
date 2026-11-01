@@ -86,7 +86,7 @@ import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultK
 import { resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
-import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
+import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
 const operations = Object.freeze(["read", "write", "simulate", "digitize"]);
@@ -1222,9 +1222,17 @@ const WRITERS = {
     const parameter = item.str("parameter", { max: 120, required: true });
     const arm = item.str("arm", { max: 200 });
     const armRole = item.choice("armRole", EVIDENCE_ARM_ROLES, { required: true });
+    // 「论文未报告」 (C8): the paper was read and does not give this parameter. The item names the source, the parameter and the arm and
+    // carries no number, no text and no interval: it never gets a value, and it is read back as 未取到.
+    if (item.row.notReported != null && item.row.notReported !== true) item.bad("notReported", "notReported 写 true：这篇论文没有报告这个参数；报告了就写数值，不要写这个字段。");
+    const notReported = item.row.notReported === true;
     const value = item.num("value");
     const valueText = item.str("valueText", { max: 200 });
-    if (value == null && !valueText) item.bad("value", "value（数）和 valueText（文字）至少写一个。");
+    if (notReported) {
+      for (const field of ["value", "valueText", "ciLow", "ciHigh", "sampleSize", "events"]) {
+        if (item.row[field] != null && item.row[field] !== "") item.bad(field, "论文没有报告的参数不带数值：去掉这个字段；论文报告了就写数值和引文，不要写 notReported。");
+      }
+    } else if (value == null && !valueText) item.bad("value", "value（数）和 valueText（文字）至少写一个。");
     const unit = item.str("unit", { max: 40 });
     const ciLow = item.num("ciLow");
     const ciHigh = item.num("ciHigh");
@@ -1232,7 +1240,9 @@ const WRITERS = {
     const events = item.num("events", { min: 0, integer: true });
     if (ciLow != null && ciHigh != null && ciLow >= ciHigh) item.bad("ciLow", "ciLow 要小于 ciHigh。");
     const valueSource = item.choice("valueSource", ["extracted", "calculated"], { fallback: "extracted" });
-    const quote = item.str("quote", { max: 3000, required: true });
+    // The one thing a paper that does not report a parameter cannot give is a sentence that states it: the quotation is asked for a
+    // value and optional for its absence (a line saying what the table does report is welcome, never required).
+    const quote = item.str("quote", { max: 3000, required: !notReported });
     const locator = item.obj("locator", { bytes: 4096 });
     const endpointKey = item.token("endpointKey", TOKEN, "终点口径的短标识，例如 pfs-blinded");
     const enrollmentKind = item.choice("enrollmentKind", ["estimated", "actual"]);
@@ -1255,12 +1265,25 @@ const WRITERS = {
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, projectId: study.projectId, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
+      ...(notReported ? { notReported: true } : {}),
       trialIdentity, timepoint: item.row.timepoint, ...(literatureSource ? { literatureSource } : {}), evidenceKind, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
     } });
     if (written.status !== "ok") return void item.bad(written.code === "vcr_precedent_not_in_study" ? "registryId" : "quote", written.message ?? "没有写入。",
       written.code === "vcr_precedent_not_in_study" ? "vcr_write_value_invalid" : "vcr_evidence_unverified");
     const verified = written.state === "verified";
-    extra.results.push({ index: item.index, id: written.id, verified, state: written.state });
+    extra.results.push({ index: item.index, id: written.id, verified, state: written.state, ...(notReported ? { notReported: true } : {}) });
+    // What a pool needs of this parameter that the item does not carry: said once, in the answer of the write. The item is saved as it
+    // stands (it is the paper that decides what it reports), and the run either reads the rest off the paper or records that the paper
+    // does not report it.
+    if (verified) {
+      const gaps = evidenceItemGaps(parameter, { value, ciLow, ciHigh, sampleSize });
+      if (gaps.length) {
+        const words = /** @type {Record<string, string>} */ (EVIDENCE_ITEM_WORDS_ZH);
+        item.issues.push(issue(item.index, "value", "vcr_evidence_item_incomplete",
+          `${parameter} 还缺：${gaps.map((gap) => words[gap]).join("、")}。论文里有就补进同一条（数要出现在引文里）；论文没有报告，就另写一条同一来源、同一参数、notReported: true、不带数值。这一条已保存。`));
+      }
+    }
+    if (notReported) return written.id;
     if (!verified) {
       item.issues.push(issue(item.index, "quote", "vcr_evidence_unverified",
         `已记录，但没有通过原文核对（${written.state}），不会进入假设卡：引文要逐字出现在保全原文里，值、区间和样本量都要出现在引文里。`));

@@ -154,6 +154,48 @@ export function parameterKindOf(parameter) {
 }
 
 /**
+ * What a paper has to give for a value of one parameter to be usable, by the kind of the parameter and by what the pool reads
+ * (`analysisScaleInput`): the value, and with it the error that makes it a weight — an interval at both ends, or for a proportion the
+ * number of people it was measured on. The kind decides, never a list kept beside it (C8).
+ * @param {string} parameter @returns {{ value: true, interval: boolean, sampleSize: 'or_interval' | false }}
+ */
+export function evidenceRequiredItems(parameter) {
+  return parameterKindOf(parameter) === "proportion"
+    ? { value: true, interval: false, sampleSize: "or_interval" }
+    : { value: true, interval: true, sampleSize: false };
+}
+
+/** The words of the items an extraction can lack, as the answers say them. */
+export const EVIDENCE_ITEM_WORDS_ZH = Object.freeze({
+  value: "数值", ciLow: "置信区间下限", ciHigh: "置信区间上限", sampleSize: "样本量",
+});
+
+/**
+ * Which of the required items a stored or incoming extraction does not carry, by the field name (`ciLow`, `ciHigh`, `sampleSize`,
+ * `value`). Empty for a row that is complete, and for a row that says the paper does not report the parameter at all: that is an
+ * answer, not a gap.
+ * @param {string} parameter @param {Record<string, any>} row an incoming item (camelCase) or a stored row (snake_case)
+ * @returns {Array<keyof typeof EVIDENCE_ITEM_WORDS_ZH>}
+ */
+export function evidenceItemGaps(parameter, row) {
+  if (row?.notReported === true || row?.locator?.verification === "not_reported") return [];
+  const has = (/** @type {string} */ camel, /** @type {string} */ snake) => finite(row?.[camel] ?? row?.[snake]) !== null;
+  const need = evidenceRequiredItems(parameter);
+  /** @type {Array<keyof typeof EVIDENCE_ITEM_WORDS_ZH>} */
+  const gaps = [];
+  if (need.value && !has("value", "value")) gaps.push("value");
+  const low = has("ciLow", "ci_low");
+  const high = has("ciHigh", "ci_high");
+  if (need.sampleSize === "or_interval") {
+    if (!(low && high) && !has("sampleSize", "sample_size")) gaps.push("sampleSize");
+  } else if (need.interval) {
+    if (!low) gaps.push("ciLow");
+    if (!high) gaps.push("ciHigh");
+  }
+  return gaps;
+}
+
+/**
  * The scale a parameter is pooled on unless the request names another one: the
  * scale on which its estimates are roughly normal.
  * @param {string} kind
@@ -1489,7 +1531,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const registryName = String(item.registry ?? "clinicaltrials.gov");
       const registryId = String(item.registryId ?? "");
       const literature = item.literatureSource ? await literatureSources?.resolve({ userId, projectId,
-        source: item.literatureSource, quote: String(item.quote ?? ""), locator: item.locator, unit: String(item.unit ?? "") }) : null;
+        source: item.literatureSource, quote: String(item.quote ?? ""), locator: item.locator, unit: String(item.unit ?? ""), identityOnly: item.notReported === true }) : null;
       if (item.literatureSource && !literature) return { status: "refused", code: "vcr_evidence_unverified", message: "Preserved literature sources are unavailable." };
       const precedent = literature ? null : await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
       if (!literature && !precedent) {
@@ -1511,7 +1553,22 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const targetVerified = checkedTarget?.verified === true && Number.isFinite(timepoint?.value) && timepoint.value > 0
         && timeUnit != null && quoteIsPresent(String(timepoint.quote),String(timepoint.unit))
         && !!item.arm && quoteIsPresent(String(timepoint.quote),String(item.arm));
-      const checked = verifyExtraction({
+      // 「论文未报告」 is a state of its own (C8): the source was read and the parameter is not in it. It carries no number and nothing
+      // to check one against, so it is stored as it was said, can never be pooled, and is read back as 未取到.
+      const checked = item.notReported === true ? {
+        state: "not_reported", verified: false,
+        item: {
+          parameter: String(item.parameter), arm: item.arm ?? null,
+          armRole: EVIDENCE_ARM_ROLES.includes(String(item.armRole)) ? item.armRole : "unknown",
+          value: null, valueText: "not_reported", unit: "", ciLow: null, ciHigh: null, sampleSize: null, events: null, valueSource: "extracted",
+          quote: String(item.quote ?? ""), sourceRef: literature?.sourceRef ?? `${registryName}:${registryId}`,
+          locator: { ...(literature?.locator ?? { kind: "registry_field", recordHash: precedent?.record_hash ?? null }), authoredBy: "run",
+            verification: "not_reported", checkedAt },
+          endpointKey: String(item.endpointKey ?? ""), enrollmentKind: item.enrollmentKind ?? null, historicalBaseline: false,
+          applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
+          detail: { notReported: true, note: item.note ?? null, trialIdentity, evidenceKind: ["baseline", "outcome", "design"].includes(item.evidenceKind) ? item.evidenceKind : "outcome" },
+        },
+      } : verifyExtraction({
         extraction: {
           parameter: String(item.parameter), arm: item.arm ?? null,
           armRole: EVIDENCE_ARM_ROLES.includes(String(item.armRole)) ? item.armRole : "unknown",
@@ -1543,7 +1600,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         checkedAt,
       });
       const appended = await store.appendEvidenceItems({ userId, studyId, precedentId: precedent?.id ?? null, items: [checked.item] });
-      if (item.candidateFrom) {
+      if (item.candidateFrom && !item.notReported) {
         counters.cardCandidates += 1;
         if (checked.verified) counters.cardCandidatesVerified += 1;
       }
@@ -1845,6 +1902,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           ciLow: row.ci_low === null ? null : Number(row.ci_low), ciHigh: row.ci_high === null ? null : Number(row.ci_high),
           sampleSize: row.sample_size, events: row.events, valueSource: row.value_source,
           verification: row.locator?.verification ?? "no_quote", historicalBaseline: row.historical_baseline,
+          // What the pool needs of this parameter that the row does not carry (or, for a paper that does not report it, that it says so).
+          ...(row.locator?.verification === "not_reported" ? { notReported: true } : { missing: evidenceItemGaps(String(row.parameter), row) }),
           enrollmentKind: row.enrollment_kind, quote: row.quote, sourceRef: row.source_ref,
           locator: row.locator, evidenceKind: row.detail?.evidenceKind ?? null, sourceStanding: row.detail?.sourceStanding ?? null,
           verificationScope: row.detail?.verificationScope ?? null,

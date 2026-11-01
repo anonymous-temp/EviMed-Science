@@ -1402,6 +1402,8 @@ export interface VcrPrecedent {
   actualMonths?: number | null;
   perSitePerMonth?: number | null;
   usedFor?: string | null;
+  /** The parameters the paper was read for and does not report (「未取到」): never a value. */
+  notReported?: string[];
   countries?: string[];
   eligibilityText?: string | null;
   interventions?: string[];
