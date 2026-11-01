@@ -1,6 +1,6 @@
 {
   "mode": "lanes",
-  "batch": "b009",
+  "batch": "b010",
   "sourceRef": "main",
   "labFrom": "branch",
   "imageRunId": 41307417699,
@@ -14,7 +14,7 @@
       "patch": "rsi-lab/patch-probe1"
     }
   ],
-  "sandboxCheck": false,
+  "sandboxCheck": true,
   "promptMarkers": [
     "RSI-LAB-DELTA-PROBE-1"
   ]

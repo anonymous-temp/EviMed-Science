@@ -186,7 +186,12 @@ jobs:
           # A swap file for the build only: it is taken away again before any request runs, so the lane's own memory is what it is.
           fallocate -l 24G /swap-build && chmod 600 /swap-build && mkswap /swap-build >/dev/null && swapon /swap-build
           python3 -B "$LAB/stack.py" build-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}" || status=$?
+          # dockerd holds about 12 GB while it exports the new image's layers; a restart gives that back (nothing runs yet, the images are on
+          # disk), and only then can the swap file go: taking it away while dockerd still sits in it killed the runner (2026-11-01).
+          systemctl restart docker
+          for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
           swapoff /swap-build && rm -f /swap-build
+          free -m | sed -n 2p
           exit "${status:-0}"
 
       - name: Write the environment and the secret files
@@ -203,6 +208,8 @@ jobs:
           bash "$LAB_SRC/deploy/runtime-dsh/check-tool-sandbox.sh" "$image" 2>&1 | tail -60
           # What the kernel reports for Landlock on this runner (the level production demands is "full").
           docker run --rm --entrypoint sh "$image" -c 'ls /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/node-addon-system-*/bin/landlock-run >/dev/null && echo "landlock launcher present"'
+          # The Landlock ABI version the runner's kernel offers (landlock_create_ruleset with the version flag), as the image's own Python asks it.
+          docker run --rm "$image" python3 -c "import ctypes; print('landlock ABI', ctypes.CDLL(None, use_errno=True).syscall(444, None, 0, 1))"
           cat /sys/kernel/security/lsm; echo; uname -r
 
       - name: Lab checks
