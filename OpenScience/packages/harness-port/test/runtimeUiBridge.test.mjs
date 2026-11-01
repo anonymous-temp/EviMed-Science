@@ -735,12 +735,11 @@ test('whole-file conversation context leaves the existing native draft intact', 
   f.ctx.dispose();
 });
 
-test('GEO journey facts stay bounded, and untrusted destinations cannot become navigation',async()=>{
+test('the frame takes no account of where a GEO project stands: the page beside it says that',async()=>{
   const f=fixture();const hub=createHub(f.target);
   /** @type {any[]} */
   const delivered=[];
   hub.on('geo',data=>delivered.push(data));apply(f.ctx,{},f.target,undefined,{hub});await settle();
-  shellSends(f,{type:'evimed.runtime-ui.geo',seq:1,sessionId:'session-a',journey:{title:'t'.repeat(1000),detail:'d'.repeat(1000),requested:'content only',nextLabel:'continue',nextStep:'https://evil.test',nextDraft:'Draft',steps:[{key:'content',label:'内容',status:'running'},{key:'private',label:'drop',status:'done'}]},starters:[]});
-  assert.equal(delivered[0].journey.title.length,100);assert.equal(delivered[0].journey.detail.length,500);assert.equal(delivered[0].journey.nextStep,null);
-  assert.deepEqual(delivered[0].journey.steps,[{key:'content',label:'内容',status:'running'}]);assert.equal(delivered[0].journey.nextDraft,'Draft');
+  shellSends(f,{type:'evimed.runtime-ui.geo',seq:1,sessionId:'session-a',journey:{title:'t',nextStep:'https://evil.test'}});
+  assert.equal(delivered[0].journey,undefined);
 });

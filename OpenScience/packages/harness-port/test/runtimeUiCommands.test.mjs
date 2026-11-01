@@ -406,7 +406,7 @@ test('a 虚拟临床研究 conversation reads 「虚拟临床研究」 whichever
   assert.doesNotMatch(drawn, /起点|预期用途|aria-haspopup/, 'no settings before the shell has found the study');
 });
 
-test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu once the shell has found the study, and four task starters with visible minimum inputs on the blank conversation', () => {
+test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu once the shell has found the study, and four task starters on the blank conversation', () => {
   const f = frame();
   const chip = toolbarChip(f);
   const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
@@ -428,9 +428,7 @@ test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu on
   assert.match(blank, /虚拟临床研究/);
   const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
   assert.deepEqual(labels, ['患者匹配', '人群与患者', '合成对照', '虚拟试验']);
-  assert.match(blank, /需要原始病例或真实患者数据/);
-  assert.match(blank, /<summary[^>]*>查看最低字段<\/summary>/);
-  assert.doesNotMatch(blank, /<button[^>]*>[^<]*需要原始病例或真实患者数据/);
+  assert.doesNotMatch(blank, /需要原始病例或真实患者数据/);
 
   // A reader who may neither write nor lead has no menu at all: the settings
   // are not theirs, and a control the server would refuse is not offered.
@@ -458,14 +456,14 @@ test('without the command or trigger services the rest still stands', () => {
   assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset'));
 });
 
-test('ordinary GEO journey shows actual scope and product inputs without creating a capability or another composer', () => {
+test('a GEO conversation offers its three ways to begin as small pills that fill the composer, and says nothing of the project itself', () => {
   const f=frame();
   f.kit.hub.deliver('capability',{capabilityId:null,sessionId:'session-a'});
-  f.kit.hub.deliver('geo',{...GEO_OPTIONS,starters:[{label:'诊断 AI 回答',draft:'Diagnose',requirement:'Product and audience'},{label:'修改已有稿件',draft:'Edit'},{label:'制定策略与方案',draft:'Plan'}],journey:{title:'先说明产品与这次要做的事',detail:'产品名称、目标受众与本次任务；资料可附在对话中',requested:'尚未提交工作',nextLabel:'在对话中补充产品与任务',nextDraft:'Product and task',nextStep:null,steps:[]}});
+  f.kit.hub.deliver('geo',{...GEO_OPTIONS,journey:{title:'先说明产品',detail:'d',requested:'r',nextLabel:'n',nextStep:null,steps:[]},starters:[{label:'诊断 AI 回答',draft:'Diagnose',requirement:'Product and audience'},{label:'修改已有稿件',draft:'Edit'},{label:'制定策略与方案',draft:'Plan'}]});
   const hero=f.ctx.slots.registrations.find((/** @type {any} */ entry)=>entry.name==='conversation.hero.agentPreset');
   const drawn=renderStatic(hero.component);
-  assert.match(drawn,/尚未提交工作/);assert.match(drawn,/目标受众/);assert.match(drawn,/修改已有稿件/);
-  assert.doesNotMatch(drawn,/data-evimed-tool-chip|textarea|contenteditable|移除/);
-  assert.match(renderStatic(toolbarChip(f).component),/当前工作：先说明产品/);
+  assert.match(drawn,/修改已有稿件/);assert.match(drawn,/data-evimed-module-hero/);
+  assert.doesNotMatch(drawn,/先说明产品|Product and audience|data-evimed-tool-chip|textarea|contenteditable|移除/);
+  assert.doesNotMatch(renderStatic(toolbarChip(f).component),/当前工作/);
   assert.equal(f.sent.filter(([type])=>type==='bind-capability').length,0);
 });
