@@ -40,7 +40,7 @@ import {
   VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
-  VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
+  VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
   allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
@@ -49,7 +49,7 @@ import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { contactsTable, scheduleTable } from "./vcrScheduleView.mjs";
-import { vcrObjectNode } from "./vcrStore.mjs";
+import { vcrObjectNode, vcrStudyNameFrom } from "./vcrStore.mjs";
 import { vcrStepSummaries } from "./vcrStudyStatus.mjs";
 import {
   allResultsOf, countsView, dominatedScenarioMap, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
@@ -529,6 +529,29 @@ export function presentSummary({ study, results, allResults, stale, jobs, scenar
     steps: study.purpose === "calculation" ? [] : publicSteps(study.steps),
     conclusion: conclusionOf({ designs, results, allResults, comparators }),
     attention: attentionOf({ comparators, results, allResults, stale, jobs, steps: study.steps, exports, abilities: roles ? abilitiesOf(roles) : null }),
+    updatedAt: zhTime(study.updatedAt, now) ?? "",
+    createdAt: study.createdAt,
+  };
+}
+
+/**
+ * One row of the home's 「对话里的研究」: a study a conversation made, as light as a row can be -- its name, the question when it has
+ * one, the tabs that hold something and when it last moved. None of the home list's per-study rows (steps, attention, conclusion)
+ * is read for it. A row that still carries the placeholder name is called by its question when it has one.
+ * @param {Record<string, any>} study the store's row with `heldTabs` @param {Date} now
+ */
+export function presentConversationStudy(study, now) {
+  const question = text(study.question);
+  const placeholder = study.name === VCR_CONVERSATION_STUDY_NAME;
+  const tabs = list(study.heldTabs).map(String).filter((tab) => /** @type {readonly string[]} */ (VCR_TABS).includes(tab));
+  return {
+    id: study.id,
+    projectId: study.projectId,
+    name: placeholder ? vcrStudyNameFrom({ question }) ?? VCR_DRAFT_STUDY_NAME : study.name,
+    question,
+    status: study.status,
+    originatingSessionId: study.conversationSessionId ?? null,
+    tabs,
     updatedAt: zhTime(study.updatedAt, now) ?? "",
     createdAt: study.createdAt,
   };

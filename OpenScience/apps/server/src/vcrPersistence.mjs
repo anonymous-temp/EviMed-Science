@@ -173,6 +173,8 @@ ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS purpose text NOT NULL DE
 -- conversation bound to the study's first capability.
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS conversation_session_id text;
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'project' CHECK (scope IN ('project', 'conversation'));
+-- 'opening': a conversation's study was named from the first sentence said in it and nobody has named it since (a definition may).
+ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS name_basis text;
 ALTER TABLE evimed_vcr.studies DROP CONSTRAINT IF EXISTS studies_user_id_project_id_key;
 CREATE UNIQUE INDEX IF NOT EXISTS vcr_studies_project_scope_idx ON evimed_vcr.studies (user_id, project_id) WHERE scope = 'project';
 CREATE UNIQUE INDEX IF NOT EXISTS vcr_studies_conversation_scope_idx ON evimed_vcr.studies (user_id, project_id, conversation_session_id) WHERE scope = 'conversation';

@@ -2166,9 +2166,9 @@ function poolingSummary(result, about) {
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
- *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
+ *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, conversationOpening?: ((origin:any)=>Promise<string|null>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
  */
-export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null }) {
+export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null, conversationOpening = null }) {
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   const registryDeadline = Number(config?.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : REGISTRY_DEADLINE_MS;
@@ -2251,7 +2251,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       }
       if (origin && !programmeStudy && (!study || study.conversationSessionId!==origin.rootSessionId)) {
         const create=operation==='write' || operation==='digitize' || operation==='simulate' && (body.action ?? 'start')==='start';
-        study=await vcr.store.taskContext(origin,{create}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};
+        // The study is named from the first thing the person said in this conversation, looked up only when a study is made or still unnamed.
+        study=await vcr.store.taskContext(origin,{create,opening:create && conversationOpening ? () => conversationOpening(origin) : null}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};
       }
       if (!study) throw gatewayError(403,'vcr_invocation_unavailable','Use this research tool from the current conversation.');
       study.executionOrigin = origin;

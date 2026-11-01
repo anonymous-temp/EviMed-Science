@@ -52,7 +52,7 @@ import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrSt
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import {
-  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
+  presentConversationStudy, presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
   vcrCurrentNodes, vcrReviewIsCurrent,
 } from "./vcrViews.mjs";
 import {
@@ -571,7 +571,13 @@ export class VcrService {
       const summary = presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions, exports, roles, now });
       return { study, summary, reviews, roles };
     }));
-    const home = { studies: groups.map((group) => ({ ...group.summary,
+    // The studies the account's conversations made: their own light query, for the home alone. `studies` stays what it was -- the
+    // sidebar, the knowledge base and the pickers read it, and a conversation's study sits in the person's own project.
+    // A list that cannot be read is said so (`conversationStudiesUnreadable`), never drawn as an empty one, and never takes the rest of the home with it.
+    const conversation = await Promise.resolve().then(() => this.store.conversationStudies(String(user.id))).catch(() => null);
+    /** @type {Record<string, any>} */
+    const home = { ...(conversation ? { conversationStudies: conversation.map((study) => presentConversationStudy(study, now)) } : { conversationStudiesUnreadable: true }),
+      studies: groups.map((group) => ({ ...group.summary,
       originatingSessionId: group.study.conversationSessionId ?? null,
       ...(group.study.status === "draft" && String(group.study.question ?? "").trim() ? { draftText: group.study.question } : {}) })) };
     /** @type {Record<string, any>} */ const taskInputs = Object.fromEntries(["matching", "cohort", "patient", "comparator", "trial"].map(key => [key, { status: "missing", sources: [] }]));

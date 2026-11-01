@@ -30,7 +30,7 @@
  */
 
 import {
-  VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_TAB_LABELS_ZH, errorCodeMessage,
+  VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_TAB_LABELS_ZH, errorCodeMessage,
 } from "@evimed/domain";
 
 /** The seven kinds, by the key each notice is counted under. */
@@ -54,9 +54,10 @@ function clip(value, max) {
   return [...text].length > max ? `${[...text].slice(0, max - 1).join("")}…` : text;
 }
 
-/** What a study is called in a notice. @param {any} study */
+/** What a study is called in a notice: its name (the first sentence of its conversation, or what a definition called it), else its question. @param {any} study */
 export function vcrStudyName(study) {
-  return clip(study?.name || study?.question || "虚拟临床研究", 30);
+  const name = study?.name === VCR_CONVERSATION_STUDY_NAME ? "" : study?.name;
+  return clip(name || study?.question || "虚拟临床研究", 30);
 }
 
 /** The inbox refuses a replay whose content moved; that event was sent. @param {unknown} error */

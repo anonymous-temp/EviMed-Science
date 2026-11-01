@@ -5907,6 +5907,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         resolveSession: (ownedProject, sessionId) => runtimeEventPump.sessionOwner(ownedProject, sessionId),
         runs: (await agentRuns.list(project)).filter(run=>run.status==="running"),readBenchmark:readVcrBenchmarkFile,authenticatedUserId:String(identity.userId) });
     },
+    // What the person said first in a conversation, from the run ledger: the words a conversation's study is named by (`vcrOpeningName`).
+    // The ledger keeps a bounded preview of each request and not the platform's own turns, so this is the person's sentence.
+    conversationOpening: async (origin) => {
+      const runs = (await agentRuns.list(await sourceProject(origin)))
+        .filter((run) => run.sessionId === origin.rootSessionId && run.automated !== true && runRoleOf(run) !== "programme" && typeof run.question === "string" && run.question.trim());
+      runs.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      return runs[0]?.question ?? null;
+    },
     report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
     readProducerRun: async (study, runId) => {
       const project = await sourceProject({ userId: study.userId, projectId: study.projectId });

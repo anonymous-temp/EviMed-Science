@@ -1806,7 +1806,7 @@ export { shareNoticeHref } from './src/shareNotice.mjs';
 
 export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence, AGENDA_WEEKDAY_WORDS, describeAgendaSchedule, agendaZoneName, agendaInstantText } from "./src/agendaSchedule.mjs";
 
-// vcrVocabulary — 135 exports: 「虚拟临床研究」's closed vocabularies (nine value sources, three scientific
+// vcrVocabulary — 136 exports: 「虚拟临床研究」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
 // the study's seven steps and tabs)
 export {
@@ -1939,6 +1939,7 @@ export {
   VCR_STUDY_STATUSES,
   VCR_STUDY_STATUS_LABELS_ZH,
   VCR_USER_STUDY_STATUSES,
+  VCR_CONVERSATION_STUDY_NAME,
   VCR_DRAFT_STUDY_NAME,
   VCR_LEGACY_DEFAULT_STUDY_NAME,
   VCR_STUDY_NAME_FROM_QUESTION_MAX,

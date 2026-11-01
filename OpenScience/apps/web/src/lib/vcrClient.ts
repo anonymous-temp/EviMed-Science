@@ -297,8 +297,31 @@ export interface VcrReviewNote {
   state: VcrReviewState;
 }
 
+/**
+ * One row of the home's 「对话里的研究」: a study a conversation made, which holds at least one saved object. A light summary of its own
+ * (`GET /api/vcr/studies` → `conversationStudies`) and only the module's home reads it: these studies live in the person's own
+ * project, so they are in no list the sidebar, the knowledge base or the pickers read (`VcrHome.studies`).
+ */
+export interface VcrConversationStudy {
+  id: string;
+  projectId: string;
+  /** The first sentence said in the conversation, or what a definition called the study. */
+  name: string;
+  question: string | null;
+  status: VcrStudyStatus;
+  /** The conversation the study was made in. */
+  originatingSessionId: string | null;
+  /** The tabs that hold something, in the tabs' order; the first is where the study opens. */
+  tabs: VcrTabKey[];
+  updatedAt: string;
+  createdAt?: string | null;
+}
+
 /** The home page's payload. */
 export interface VcrHome {
+  /** The studies the account's conversations made. Absent when the list could not be read (`conversationStudiesUnreadable`). */
+  conversationStudies?: VcrConversationStudy[];
+  conversationStudiesUnreadable?: boolean;
   taskInputs?: Partial<Record<"matching" | "cohort" | "patient" | "comparator" | "trial", { status: "available" | "missing" | "unknown"; sources: Array<{ studyId: string; snapshotId: string; label: string; kind: string }>; reason?: string }>>;
   studies: VcrStudySummary[];
   reviews?: VcrReviewNote[];
@@ -1795,9 +1818,27 @@ export function readVcrSummary(raw: unknown): VcrStudySummary {
   };
 }
 
+const VCR_TAB_KEYS: ReadonlySet<string> = new Set(["overview", "population", "patients", "comparator", "trial", "matching", "data"]);
+
+function readConversationStudy(raw: Loose): VcrConversationStudy {
+  return {
+    id: text(raw.id) ?? "",
+    projectId: text(raw.projectId) ?? "",
+    name: text(raw.name) ?? "",
+    question: text(raw.question),
+    status: (text(raw.status) ?? "active") as VcrStudyStatus,
+    originatingSessionId: text(raw.originatingSessionId),
+    tabs: strings(raw.tabs).filter((tab): tab is VcrTabKey => VCR_TAB_KEYS.has(tab)),
+    updatedAt: text(raw.updatedAt) ?? "",
+    createdAt: text(raw.createdAt),
+  };
+}
+
 export function readVcrHome(raw: unknown): VcrHome {
   const value = obj(raw);
   return {
+    ...(Array.isArray(value.conversationStudies) ? { conversationStudies: arr(value.conversationStudies).map(readConversationStudy).filter((study) => study.id) } : {}),
+    ...(value.conversationStudiesUnreadable === true ? { conversationStudiesUnreadable: true } : {}),
     studies: arr(value.studies).map(readVcrSummary),
     taskInputs: value.taskInputs as VcrHome["taskInputs"],
     ...(Array.isArray(value.reviews) ? { reviews: arr(value.reviews) as unknown as VcrReviewNote[] } : {}),

@@ -589,6 +589,8 @@ export const VCR_USER_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
 export const VCR_DRAFT_STUDY_NAME = '未命名研究'
 /** The name every study carried before the draft state existed; one that still has it is named on its next definition write. */
 export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究' // retired-word-ok
+/** What a conversation's study is called until the conversation's first sentence (or a definition) names it; rows made before that still carry it. */
+export const VCR_CONVERSATION_STUDY_NAME = '对话研究'
 /** The longest a study's name is taken from its question, in characters. */
 export const VCR_STUDY_NAME_FROM_QUESTION_MAX = 24
 
