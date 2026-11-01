@@ -220,6 +220,7 @@ import {
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearch, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { createDeepSeekTools, deepseekToolMetricFamilies } from "./deepseekTools.mjs";
 import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
+import { projectGatewayLimitMetricFamily } from "./projectGatewayLimit.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { GeoProbeRequests } from "./geoProbeRequests.mjs";
@@ -11092,6 +11093,10 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // EvimedEvidenceRefused).
   const credentialMissing = publicSourceCredentialMissingMetricFamily();
   addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
+  // What the per-project limits of the public-source and web-search gateways held back: requests over a project's minute, and
+  // buffered requests queued or refused behind its in-flight cap (projectGatewayLimit.mjs).
+  const projectLimits = projectGatewayLimitMetricFamily();
+  addMetric(lines, projectLimits.name, projectLimits.help, projectLimits.type, projectLimits.series);
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
   // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);

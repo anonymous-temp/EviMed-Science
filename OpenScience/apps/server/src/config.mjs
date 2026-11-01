@@ -2638,6 +2638,17 @@ export function loadConfig(overrides = {}) {
     publicSourceDownloadTimeoutMs: Number(
       overrides.publicSourceDownloadTimeoutMs ?? (MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS),
     ),
+    // What one project's runtime may ask of the public-source gateway (`projectGatewayLimit.mjs`). A runtime's token is
+    // readable from its shell, so these bound a loop or a fan-out of sub-agents; web reading keeps its own per-site and
+    // per-runtime limits besides. 0 turns a limit off. Counted in open_science_gateway_project_limits_total{gateway="sources"}.
+    //  - a minute: 600 is NCBI's keyed tier (10 a second), the heaviest source one honest runtime reaches (its own pacing
+    //    keeps NCBI to 3 a second unkeyed), and a deep run's 30 sub-agents at one tool call every eight seconds (an estimate, not
+    //    a measurement) make about 230 calls a minute, a few requests each;
+    //  - in flight: 16 buffered bodies of up to 16 MiB are 256 MiB at the very most; the kernel's 30 children seldom ask at
+    //    once, and thirty-two more wait their turn in the project's own queue (web reads are not counted here, their gate is
+    //    web reading's own).
+    publicSourceProjectRatePerMinute: boundedInteger(overrides.publicSourceProjectRatePerMinute ?? process.env.OPEN_SCIENCE_PUBLIC_SOURCE_PROJECT_RATE_PER_MINUTE, 600, 0, 100_000, "OPEN_SCIENCE_PUBLIC_SOURCE_PROJECT_RATE_PER_MINUTE"),
+    publicSourceProjectConcurrency: boundedInteger(overrides.publicSourceProjectConcurrency ?? process.env.OPEN_SCIENCE_PUBLIC_SOURCE_PROJECT_CONCURRENCY, 16, 0, 1_000, "OPEN_SCIENCE_PUBLIC_SOURCE_PROJECT_CONCURRENCY"),
     // The self-hosted metasearch origin. Empty means the deployment has no
     // open-web channel; the tool then refuses with a stated reason instead of
     // the runtime silently getting nothing back.
@@ -2651,6 +2662,11 @@ export function loadConfig(overrides = {}) {
     webSearchTimeoutMs: Number(
       overrides.webSearchTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS ?? 30_000,
     ),
+    // Searches in one minute from one project's runtime. 300 is DeepSeek's own pacer (five a second, the whole process's) over a
+    // minute: no single project can use more than the platform's engine allowance, and 30 sub-agents at one tool call every
+    // eight seconds (an estimate, not a measurement) make about 230 searches. 0 turns it off.
+    // Counted in open_science_gateway_project_limits_total{gateway="search"}.
+    webSearchProjectRatePerMinute: boundedInteger(overrides.webSearchProjectRatePerMinute ?? process.env.OPEN_SCIENCE_WEB_SEARCH_PROJECT_RATE_PER_MINUTE, 300, 0, 100_000, "OPEN_SCIENCE_WEB_SEARCH_PROJECT_RATE_PER_MINUTE"),
     // The Tokyo node (edgeProxy.mjs): a TLS forward proxy for the upstreams this
     // host cannot reach. No URL or no credentials means no node, and every
     // request goes direct exactly as before.

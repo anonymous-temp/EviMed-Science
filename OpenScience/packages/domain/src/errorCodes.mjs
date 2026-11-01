@@ -122,6 +122,10 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_unavailable",
   "public_source_gateway_timeout",
   "public_source_gateway_rate_limited",
+  // One project's runtime asking the public-source gateway faster, or at once more, than a project may (2026-11-01,
+  // `projectGatewayLimit.mjs`): the run asks again after the stated wait, or elsewhere.
+  "public_source_gateway_project_rate_limited",
+  "public_source_gateway_project_busy",
   // A source that said no to this caller (HTTP 401 or 403): the item exists and
   // the source will not serve it, so it is a limitation to report and retrying
   // cannot change it. The gateway names it apart from `..._upstream_error` so
@@ -207,6 +211,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "web_search_unconfigured",
   "web_search_unavailable",
   "web_search_rate_limited",
+  "web_search_project_rate_limited",
   "web_search_upstream_error",
   "web_search_timeout",
   "web_search_response_invalid",
@@ -2116,6 +2121,10 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  // A project's runtime held by the per-project limit of a gateway that spends outside resources (`projectGatewayLimit.mjs`).
+  public_source_gateway_project_rate_limited: '这个项目一分钟内读取公共数据源的次数已达上限，稍等片刻再继续；已读到的内容不受影响。',
+  public_source_gateway_project_busy: '这个项目同时在读的公共数据源请求过多，等当前的读完再继续。',
+  web_search_project_rate_limited: '这个项目一分钟内的网页检索次数已达上限，稍等片刻再继续。',
   // c3-ask: the feed holds no such item (withdrawn, or an id nobody published) — a reader's page, or the run asked by id.
   frontier_item_not_found: '这条动态已不再提供。',
   vcr_split_invalid: '请为验证指定患者、时间或中心划分，并检查日期顺序。',
