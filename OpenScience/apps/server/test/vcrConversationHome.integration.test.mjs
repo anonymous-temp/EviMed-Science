@@ -204,3 +204,40 @@ test('the study page says which tabs hold something, so a study with only matchi
   await vcr.store.savePopulation({ studyId: matched.id, userId: user.id, name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
   assert.deepEqual((await vcr.service.studyView(user, matched.id)).holds, ['population', 'matching'], 'in the tabs\' order, not in the order they were made');
 });
+
+test('the way back from a conversation study\'s page is the conversation it was made in, whatever a resolver would name for the project (F6)', options, async () => {
+  const user = { id: 'back_owner' };
+  const study = await vcr.store.taskContext(origin('orig_conv', user.id), { opening: saying('调整一个设计') });
+  await vcr.store.savePopulation({ studyId: study.id, userId: user.id, name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
+  const packages = vcr.service.packages;
+  const original = packages.conversations;
+  /** @type {any[]} */ const asked = [];
+  try {
+    // The resolver a project study falls back to names the oldest conversation of the project: someone else's work, for a study that sits in the person's own project.
+    packages.conversations = { resolve: async (/** @type {any} */ target, /** @type {any} */ options) => { asked.push([target.id, options]); return { sessionId: 'oldest_of_project', exists: true }; } };
+    let view = await vcr.service.studyView(user, study.id);
+    assert.equal(view.conversation.sessionId, 'orig_conv');
+    assert.equal(view.sessionId, 'orig_conv', 'the readers that predate `conversation` read the same one');
+    assert.equal(view.conversation.exists, false, 'the kernel was not shown to have this one');
+    assert.deepEqual(asked, [[study.id, { create: false }]], 'looking at a study never makes a conversation');
+
+    // The resolver confirms it, or says the kernel no longer has it.
+    packages.conversations = { resolve: async (/** @type {any} */ target) => ({ sessionId: target.conversationSessionId, exists: true }) };
+    view = await vcr.service.studyView(user, study.id);
+    assert.deepEqual([view.conversation.sessionId, view.conversation.exists], ['orig_conv', true]);
+    packages.conversations = { resolve: async (/** @type {any} */ target) => ({ sessionId: target.conversationSessionId, exists: false }) };
+    view = await vcr.service.studyView(user, study.id);
+    assert.deepEqual([view.conversation.sessionId, view.conversation.exists], ['orig_conv', false]);
+
+    // A resolver that fails, or none at all: the conversation the study was made in is still the answer.
+    packages.conversations = { resolve: async () => { throw new Error('kernel unreachable'); } };
+    assert.equal((await vcr.service.studyView(user, study.id)).conversation.sessionId, 'orig_conv');
+    packages.conversations = null;
+    assert.equal((await vcr.service.studyView(user, study.id)).conversation.sessionId, 'orig_conv');
+
+    // A study of the module's own keeps its resolver: it is the project's conversation the resolver finds.
+    const own = await vcr.store.createStudy({ userId: user.id, projectId: 'own_project', name: '模块自己的研究', question: 'q' });
+    packages.conversations = { resolve: async () => ({ sessionId: 'found_for_project', exists: true }) };
+    assert.equal((await vcr.service.studyView(user, own.id)).conversation.sessionId, 'found_for_project');
+  } finally { packages.conversations = original; }
+});

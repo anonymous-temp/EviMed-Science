@@ -1098,3 +1098,27 @@ describe("where a study opens", () => {
     expect(located()).toBe(`/app/virtual-research/${STUDY_ID}`);
   });
 });
+
+// F6 (VCR remediation 2026-11-01): 调整 on a conversation's study goes back to the conversation the study was made in, with the draft and the
+// saved version it is about -- the intent names that conversation and the study's own project, and the page it comes from stays beside it.
+describe("调整 on a study a conversation made", () => {
+  it("opens that conversation with the unsent draft and the exact saved design, and keeps the trial page beside it", async () => {
+    const study = fixture("ev201/study.json");
+    study.purpose = "task"; study.projectId = "prj_ev201"; study.conversation = { sessionId: "sess_orig", exists: true }; study.sessionId = "sess_orig"; study.activity = null;
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    function State() { const location = useLocation(); return <pre data-testid="state">{JSON.stringify({ path: `${location.pathname}${location.search}`, state: location.state })}</pre>; }
+    render(
+      <MemoryRouter initialEntries={[`/app/virtual-research/${STUDY_ID}/trial`]}>
+        <Routes><Route path="/app/virtual-research/:studyId/:tab?" element={<><VcrStudyPage /><State /></>} /></Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click((await screen.findAllByRole("button", { name: /^让 AI 调整：方案/ }))[0]);
+    const { path, state } = JSON.parse(screen.getByTestId("state").textContent!);
+    expect(path).toBe(`/app/virtual-research/${STUDY_ID}/chat?result=trial`);
+    expect(state.runtimeUiIntent).toMatchObject({ kind: "open", projectId: "prj_ev201", sessionId: "sess_orig" });
+    expect(state.runtimeUiIntent.draft).toMatch(/^调整试验方案/);
+    expect(state.runtimeUiIntent.vcrReference).toMatchObject({ kind: "trial_scenario", studyId: STUDY_ID });
+    // Nothing is sent from here: the draft waits in that conversation's composer.
+    expect(server.calls.filter((call) => call.method === "POST")).toEqual([]);
+  });
+});

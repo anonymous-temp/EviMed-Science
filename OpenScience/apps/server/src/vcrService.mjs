@@ -813,6 +813,16 @@ export class VcrService {
   async #conversation(study, user) {
     if (study.purpose === "calculation") return { sessionId: study.conversationSessionId ?? null, exists: Boolean(study.conversationSessionId) };
     const resolver = this.packages.conversations;
+    // A conversation's study is that conversation: the one it was made in, which is where 调整 and every other way back from its page
+    // goes. It sits in the person's own project, among all their other conversations, so no resolver gets to name another one for it
+    // (the "oldest conversation of the project" a project study falls back to would be someone else's work); the resolver is asked only
+    // whether the kernel still has this one.
+    if (study.scope === "conversation" && study.conversationSessionId) {
+      const recorded = String(study.conversationSessionId);
+      if (!resolver?.resolve) return { sessionId: recorded, exists: true };
+      const found = await resolver.resolve(study, { create: false }).catch(() => null);
+      return { sessionId: recorded, exists: found ? String(found.sessionId ?? "") === recorded && found.exists === true : true };
+    }
     if (resolver?.resolve) {
       const found = await resolver.resolve(study, { create: String(study.userId) === String(user.id) }).catch(() => null);
       if (found?.sessionId) return { sessionId: String(found.sessionId), exists: found.exists === true };
