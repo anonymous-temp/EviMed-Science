@@ -45,7 +45,8 @@
       "PROBE_CIRCUIT_BREAK_CONSECUTIVE": "catalogue.yaml PROBE_CIRCUIT_BREAK_CONSECUTIVE: suspect or failed answers in a row that pause an engine (probe_client.py ask_batch)"
     },
     "documentation_only": {
-      "PROBE_BASELINE_QUESTION_TARGET": "The plan's target for the measured questions of a baseline. The size of a question set is the researcher's and the run's to choose: the lock refuses an empty set only and advises a range, so nothing reads the target.",
+      "ACCURACY_HARD_LINE": "The plan's universal 98% accuracy line. Owner review of the GEO connected journey removed it as an admission floor (targets are a project's own explicit goals, `accuracyTarget`), so nothing reads it; it stays here as what the standard states.",
+"PROBE_BASELINE_QUESTION_TARGET": "The plan's target for the measured questions of a baseline. The size of a question set is the researcher's and the run's to choose: the lock refuses an empty set only and advises a range, so nothing reads the target.",
       "PROBE_PROVIDER_COUNT": "Engines per round in the baseline plan. A project asks the engines it chose that the probe host has a tab for, so nothing reads the count.",
       "STD_MIN_ENGINES": "T/CAACCHINA sampling disclosure (engines per round). No report states its sampling yet, and the collection city is not recorded (surface.city is always null), so there is nothing to hold the disclosure to.",
       "STD_ENGINE_SHARE_MAX": "T/CAACCHINA sampling disclosure (the largest share one engine may have of the sample). No report states its sampling yet, so there is no disclosure to hold to it.",
