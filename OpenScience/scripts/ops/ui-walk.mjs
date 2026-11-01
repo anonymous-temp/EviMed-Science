@@ -1762,6 +1762,48 @@ export function geoContextViewLabels(step) {
  * Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. `views: false` is a module whose
  * steps are its navigation (循证 GEO's `rail`, page table): every step is clicked and read, and there is no selector to go through.
  */
+/**
+ * What a module's page says about its work, in the words DS23 fixes: read from the page, judged apart so a test can hold the judgement.
+ * The composition checks above measure how a page looks; these are the ones that notice when its words and its buttons disagree.
+ */
+export function readWorkspaceFacts() {
+  const text = (/** @type {Element} */ el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const visible = (/** @type {Element} */ el) => { const box = el.getBoundingClientRect(); return box.width > 0 && box.height > 0; };
+  const header = document.querySelector("[data-page-header]");
+  return {
+    railWords: [...document.querySelectorAll("[data-rail-step] .text-caption")].map(text).filter(Boolean),
+    primary: header ? [...header.querySelectorAll("[data-action-priority] button, [data-action-priority] a")].filter((el) => visible(el) && /bg-accent/.test(el.className)).map(text) : [],
+    dock: document.querySelectorAll("[data-page-dock] [data-conversation-bar]").length,
+    split: document.querySelector("[data-workspace]")?.getAttribute("data-workspace") ?? null,
+    actions: [...document.querySelectorAll("[data-action-kind]")].filter(visible).map((el) => ({ kind: el.getAttribute("data-action-kind"), label: text(el) })),
+  };
+}
+
+/** Words a state may not be said in any more, and what a kind of action must begin with; both closed lists (principle 5). */
+const RETIRED_STATE_WORDS = ["未请求", "尚未提交工作"];
+const ACTION_WORDS = { draft: /^(让 AI|打开对话|放进对话|在对话中|问这|补充)/, start: /^(开始|生成|重新|立即|继续|接着|添加并继续|比较|为)/ };
+
+/**
+ * @param {string} view
+ * @param {ReturnType<typeof readWorkspaceFacts>} facts
+ * @returns {string[]}
+ */
+export function workspaceFindings(view, facts) {
+  /** @type {string[]} */
+  const found = [];
+  for (const word of RETIRED_STATE_WORDS) if (facts.railWords.includes(word)) found.push(`${view}: the rail says “${word}”: work outside the request says only its name (DS23.2)`);
+  const counts = new Map();
+  for (const word of facts.railWords) counts.set(word, (counts.get(word) ?? 0) + 1);
+  for (const [word, count] of counts) if (word !== "已完成" && count > 3) found.push(`${view}: the rail says “${word}” ${count} times, which tells the reader nothing (DS23.2)`);
+  if (facts.primary.includes("对话")) found.push(`${view}: “对话” is the header's primary: the primary is the next step (DS23.3)`);
+  if (facts.dock === 0 && facts.split === null) found.push(`${view}: no conversation on this view, neither a bar nor a column (DS23.5)`);
+  for (const action of facts.actions) {
+    const words = /** @type {Record<string, RegExp>} */ (ACTION_WORDS)[action.kind ?? ""];
+    if (words && !words.test(action.label)) found.push(`${view}: “${action.label}” is a ${action.kind} action and does not say so (DS23.4)`);
+  }
+  return found;
+}
+
 export async function verifyModuleNavigation(page, module, { programme = true, canonical = false, views: selector = true } = {}) {
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
   await readModuleResult(page, `${module} initial view`);
@@ -4176,6 +4218,7 @@ async function main() {
           if (templateOf(name).view?.workflow === "compact" && composition.compactWorkflow?.folded) {
             composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
           }
+          if (templateOf(name).view?.module) failures.push(...workspaceFindings(current, await page.evaluate(readWorkspaceFacts)));
           if (composition.viewSelector && /^(?:geo|vcr)-overview(?:@\d+)?$/.test(name)) {
             const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr", { views: templateOf(name).view?.workflow !== "rail" });
             report.pages[current].navigation = navigation;
