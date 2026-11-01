@@ -205,6 +205,14 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("validate", definitions["vcr_simulate"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertNotIn("validate", definitions["vcr_simulate"]["description"], "it is found in the schema and in the answer of shape, not in the description")
 
+    def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
+        # "Go on without the study" is for a module that is not there, not for a sentence that says what to write first.
+        fixable = vcr_platform.VcrPlatformError("vcr_simulate_subject_required", "first write a trial_scenario", status=400)
+        self.assertEqual(fixable.stop_reason(), "invalid_input")
+        self.assertEqual(vcr_platform.VcrPlatformError("vcr_invocation_unavailable", "x", status=403).stop_reason(), "unsupported")
+        self.assertEqual(vcr_platform.VcrPlatformError("vcr_gateway_token_invalid", "x", status=400).stop_reason(), "unsupported")
+        self.assertEqual(vcr_platform.VcrPlatformError("vcr_gateway_unreachable", "x", retryable=True).stop_reason(), "retry")
+
     def test_the_job_kinds_are_the_domain_s(self):
         kinds = domain_job_kinds()
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")

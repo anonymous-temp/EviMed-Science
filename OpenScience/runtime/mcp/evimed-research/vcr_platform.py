@@ -167,10 +167,11 @@ AUTH_CODES = ("vcr_gateway_token_invalid", "vcr_gateway_token_missing", "vcr_unc
 
 
 class VcrPlatformError(Exception):
-    def __init__(self, code: str, message: str, retryable: bool = False, issues: list | None = None):
+    def __init__(self, code: str, message: str, retryable: bool = False, issues: list | None = None, status: int | None = None):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        self.status = status
         # The gateway's per-field findings of a refused job ({code, field}), when it sent them.
         self.issues = issues or []
 
@@ -178,11 +179,14 @@ class VcrPlatformError(Exception):
         """What the run should do next: fix the call, retry, or go on without.
 
         A code ending ``_invalid`` names a field the run got wrong -- except the
-        credential's, which is the deployment's to fix (``unsupported``).
+        credential's, which is the deployment's to fix (``unsupported``). So does
+        any 400 from the gateway, whose sentence says what to send: a design that
+        names no trial scenario was told to "go on without the study" here, and
+        the run did, on 2026-11-01, one write short of the engine.
         """
         if self.code in AUTH_CODES:
             return "unsupported"
-        if self.code.endswith("_invalid"):
+        if self.code.endswith("_invalid") or self.status == 400:
             return "invalid_input"
         return "retry" if self.retryable else "unsupported"
 
@@ -605,6 +609,7 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
             # A module that is off, or a deployment with no digitizer, is not an outage that passes.
             retryable=error.code in (429, 502, 503, 504) and code not in ("vcr_disabled", "vcr_curve_digitizer_unavailable"),
             issues=issues,
+            status=error.code,
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise VcrPlatformError("vcr_gateway_unreachable", "The 虚拟临床研究 gateway is unreachable.", retryable=True) from error
