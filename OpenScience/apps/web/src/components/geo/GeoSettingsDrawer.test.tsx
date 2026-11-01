@@ -19,7 +19,7 @@ function renderDrawer(overrides: Partial<typeof project> = {}) {
 
 /** The project with the agreement to monitor automatically in force: for these engines and this window. */
 const agreed = (): Partial<typeof project> => {
-  const steps = { ...project.steps, monitoring: { ...project.steps.monitoring, automation: { state: "confirmed" as const, actorId: "actor", at: "2026-10-01T00:00:00Z", engines: [...project.engines], coverageDays: project.coverageDays } } };
+  const steps = { ...project.steps, monitoring: { status: "running" as const, requested: true, automation: { state: "confirmed" as const, actorId: "actor", at: "2026-10-01T00:00:00Z", engines: [...project.engines], coverageDays: project.coverageDays } } };
   return { steps };
 };
 const toasts = () => useToastStore.getState().toasts.map((toast) => toast.message);

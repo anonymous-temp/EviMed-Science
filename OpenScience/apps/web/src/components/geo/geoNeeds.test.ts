@@ -57,6 +57,6 @@ describe("geoNeeds: what the work waits for from this reader", () => {
   });
 
   it("is empty for a project the server told nothing about", () => {
-    expect(geoNeeds({ needsYou: undefined }, abilities("run"))).toEqual([]);
+    expect(geoNeeds({ needsYou: undefined as unknown as GeoNeedsYou[] }, abilities("run"))).toEqual([]);
   });
 });

@@ -11,13 +11,14 @@ import { OwnedLinkForm } from "./OwnedLinkForm";
 const client = vi.hoisted(() => ({ createGeoOwnedLink: vi.fn() }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...client }));
 
-const action = actionFixture({ key: "a1", kind: "brand" });
+const action = actionFixture({ key: "a1", kind: "fill_gap" });
 const source = { domain: "example.org", channel: "own_site", name: "官网", kind: "own", layer: null, why: null, citedFor: {}, conditions: {}, price: null, placeable: true } as never;
 
 /** The project, with or without the agreement to monitor automatically (for these engines and this window). */
 const withAgreement = (agreed: boolean) => {
-  if (!agreed) return { ...GEO_PROJECT, steps: { ...GEO_PROJECT.steps, monitoring: { ...GEO_PROJECT.steps.monitoring, automation: undefined } } };
-  return { ...GEO_PROJECT, steps: { ...GEO_PROJECT.steps, monitoring: { ...GEO_PROJECT.steps.monitoring, automation: { state: "confirmed" as const, actorId: "actor", at: "2026-10-01T00:00:00Z", engines: [...GEO_PROJECT.engines], coverageDays: GEO_PROJECT.coverageDays } } } };
+  const monitoring = { status: "running" as const, requested: true };
+  if (!agreed) return { ...GEO_PROJECT, steps: { ...GEO_PROJECT.steps, monitoring } };
+  return { ...GEO_PROJECT, steps: { ...GEO_PROJECT.steps, monitoring: { ...monitoring, automation: { state: "confirmed" as const, actorId: "actor", at: "2026-10-01T00:00:00Z", engines: [...GEO_PROJECT.engines], coverageDays: GEO_PROJECT.coverageDays } } } };
 };
 
 async function register(agreed: boolean) {
