@@ -168,3 +168,24 @@ test('a completed tool call in an otherwise active turn cannot wait for adoption
   await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
   assert.equal(reads, 1);
 });
+
+test('a real normalized pending kernel call can bridge delayed run adoption', async () => {
+  const { normalizeTranscript } = await import('../src/dshRuntimeAdapter.mjs');
+  const project = { id: 'p', userId: 'u' };
+  const transcript = normalizeTranscript('mine', [
+    { type: 'turn/start', seq: 10, time: 100, data: { turn: 1 } },
+    { type: 'tool/call', seq: 11, time: 110, data: { turn: 1, name: 'mcp__evimed__bibliometric_analysis',
+      callId: 'call-mine', arguments: { action: 'start' } } },
+  ]);
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => (++reads === 1 ? [] : [{ id: 'own-run', sessionId: 'mine', nativeTurn: { startSeq: 10 } }]),
+      runIdForSession: (id, runs) => runs.find((run) => run.sessionId === id)?.id ?? null },
+    runtimeManager: { sessionTranscript: async () => transcript,
+      sessionModelSelection: async () => ({ lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' } }) },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  assert.equal((await resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high'))).runId, 'own-run');
+});
