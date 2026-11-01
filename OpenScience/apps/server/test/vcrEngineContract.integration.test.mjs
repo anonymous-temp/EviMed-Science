@@ -339,7 +339,9 @@ test("AC-02 AC-35 the T0 chain runs on the real engine: population, patients, co
       ["assurance", "design_analytic", "design_simulation", "generate_patients", "generate_population", "reconstruct_km", "rmst"],
       `every step the T0 study asks for was computed by a job the orchestrator built; marks: ${JSON.stringify(marks.map((mark) => [mark.key, mark.state, mark.detail.message ?? mark.detail.error ?? null]))}`);
     assert.equal(byKind("design_analytic").length, 2);
-    assert.equal(byKind("design_simulation").length, 2);
+    // Each design is simulated under its alternative and, after it, under no effect (the zero-effect check, A1).
+    assert.equal(byKind("design_simulation").length, 4);
+    assert.deepEqual(byKind("design_simulation").map((job) => job.checkpoint.stage).sort(), ["simulation", "simulation", "simulation_null", "simulation_null"]);
     // the fixed design, whose effect card states a prediction distribution, and the group-sequential one: the engine computes its assurance now
     // (design.assurance 1.1.0), so the orchestrator builds the stage instead of reporting the combination as not implemented
     assert.equal(byKind("assurance").length, 2, "assurance for the fixed design and for the group-sequential one");
@@ -494,7 +496,7 @@ test("the lineage the chain wrote is what a change would follow, and a changed a
   for (let hops = 0; tip.supersededBy && hops < 20; hops += 1) tip = await store.result(study.id, tip.supersededBy);
   assert.equal(tip.id, newA.id);
   const rerun = await store.rows(`SELECT scenario, idempotency_key FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation'
-    AND checkpoint ->> 'subjectId' = $2 ORDER BY created_at`, [study.id, seed.scenarioA.id]);
+    AND checkpoint ->> 'subjectId' = $2 AND checkpoint ->> 'stage' = 'simulation' ORDER BY created_at`, [study.id, seed.scenarioA.id]);
   assert.equal(rerun.length, 2, "a second job, not the first one returned again");
   assert.notEqual(rerun[0].idempotency_key, rerun[1].idempotency_key);
   assert.equal(rerun[0].scenario.accrual.dropoutAnnual, 0.1);
@@ -695,8 +697,8 @@ test("C2-5 C2-6 the assurance stage of a continuous and a binary design runs on 
   const jobs = await store.jobs(study.id, 100);
   for (const job of jobs) assert.equal(job.state, "succeeded", `${job.kind} ${job.id} ended ${job.state}: ${JSON.stringify(job.error)}`);
   assert.deepEqual(jobs.map((job) => job.kind).sort(), ["assurance", "assurance", "design_analytic", "design_analytic", "design_analytic",
-    "design_simulation", "design_simulation", "design_simulation", "design_simulation"],
-    "both fixed designs have their assurance, and Simon has one analytic selection and both operating-characteristic laws");
+    "design_simulation", "design_simulation", "design_simulation", "design_simulation", "design_simulation", "design_simulation"],
+    "both fixed designs have their assurance and, after the alternative, their zero-effect check; Simon has one analytic selection and both operating-characteristic laws");
   const marks = await store.rows("SELECT key, state, detail FROM evimed_vcr.schedule_marks WHERE study_id = $1 AND kind = 'job'", [study.id]);
   assert.ok(marks.every((mark) => mark.state === "done"), `every mark is done: ${JSON.stringify(marks.map((mark) => [mark.key, mark.state, mark.detail.message ?? mark.detail.error]))}`);
 
@@ -763,7 +765,12 @@ test("C2-5 C2-6 the assurance stage of a continuous and a binary design runs on 
     assert.equal(raw.refused, false);
     assert.deepEqual(retained.measures, raw.result.measures, "the stored law's measures and MCSE are exactly the verified engine output");
     assert.deepEqual(retained.counts, raw.result.counts);
-    assert.deepEqual(retained.diagnostics, raw.result.diagnostics, "each law retains its own diagnostics rather than the last stage's");
+    // The engine's own diagnostics, exactly; beside them the two facts the control plane froze with the job (the defaults it took, and
+    // why it ran as many replicates as it did), which the engine never wrote.
+    const { appliedDefaults, replicatePlan, ...engineOwn } = retained.diagnostics;
+    assert.deepEqual(engineOwn, raw.result.diagnostics, "each law retains its own diagnostics rather than the last stage's");
+    assert.equal(appliedDefaults, undefined, "a design that states everything it reads took no default, and says none");
+    assert.equal(typeof replicatePlan.floor, "number", "and why it ran as many replicates as it did");
     const expected = { [nullLaw ? "type_one_error" : "power"]: reference.rejection,
       early_stop_probability: reference.earlyStop, expected_sample_size: reference.expectedN };
     for (const [name, value] of Object.entries(expected)) {
