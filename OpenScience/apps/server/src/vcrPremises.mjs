@@ -114,7 +114,7 @@ function timeWord(configuration, diagnostics) {
  * @param {{ endpointType?: string | null, configuration?: Record<string, any>, diagnostics?: Record<string, any>,
  *   bound?: ReadonlyArray<{ key?: string, path?: string }>, cards?: ReadonlyArray<Record<string, any>>,
  *   appliedDefaults?: ReadonlyArray<{ path: string, value?: unknown }>, hasAssurance?: boolean, assuranceReason?: string | null,
- *   design?: string | null }} input
+ *   designKind?: string | null }} input
  * `bound`: the cards that were laid over the scenario (the job's own record), by the path each filled; `cards`: the study's cards.
  * @returns {Array<Partial<VcrPremise>>}
  */
@@ -141,8 +141,16 @@ function trialPremises(input) {
   const rows = [];
   const time = timeWord(configuration, diagnostics);
 
+  // A single-arm binary design (exact, Simon) has no control arm: it is held to a response rate it must beat and sized for the one it is
+  // expected to have.
+  const single = ["single_arm", "simon_two_stage"].includes(String(input.designKind ?? object(configuration.design).kind)) && type === "binary";
   // The effect the design is sized for.
-  if (type === "time_to_event") {
+  if (single) {
+    const alternative = stand("truth.alternativeRate", truth.alternativeRate ?? truth.responseRate);
+    const nullRate = stand("truth.nullRate", truth.nullRate);
+    if (alternative && numeric(alternative.value) !== null) rows.push({ key: "effect", label: "预期应答率（备择）", value: percent(Number(alternative.value)), source: alternative.source, decisive: true });
+    if (nullRate && numeric(nullRate.value) !== null) rows.push({ key: "control", label: "要超过的应答率（零假设）", value: percent(Number(nullRate.value)), source: nullRate.source, decisive: true });
+  } else if (type === "time_to_event") {
     const hr = stand("truth.hazardRatio", truth.hazardRatio);
     if (hr && numeric(hr.value) !== null) rows.push({ key: "effect", label: "真实效应（风险比）", value: plain(Number(hr.value)), source: hr.source, decisive: true });
   } else if (type === "continuous") {
@@ -166,7 +174,9 @@ function trialPremises(input) {
   }
 
   // The level the effect is measured against.
-  if (type === "time_to_event") {
+  if (single) {
+    // stated above
+  } else if (type === "time_to_event") {
     const median = stand("truth.controlMedian", truth.controlMedian);
     if (median && numeric(median.value) !== null) rows.push({ key: "control", label: "对照组中位时间", value: `${plain(Number(median.value))} ${time}`, source: median.source, decisive: true });
     const shape = defaults.has("truth.controlDistribution.kind") ? "指数分布" : null;

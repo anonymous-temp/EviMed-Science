@@ -76,6 +76,14 @@ test("the other endpoints: a binary design states its rates, and says plainly th
   assert.deepEqual([continuous.control.label, continuous.control.value, continuous.control.source], ["结局的标准差", "1", "default"]);
 });
 
+test("a single-arm binary design is held to a response rate it must beat; there is no control arm to describe", () => {
+  const simon = { design: { kind: "simon_two_stage", maxN: 60 }, endpoint: { type: "binary" }, truth: { nullRate: 0.2, alternativeRate: 0.4 }, analysis: { alpha: 0.05, power: 0.8, sided: 1 } };
+  const rows = byKey(vcrPremises("trial", { endpointType: "binary", designKind: "simon_two_stage", configuration: simon, appliedDefaults: vcrAppliedDefaults("design.analytic", simon), hasAssurance: true }));
+  assert.deepEqual([rows.effect.label, rows.effect.value], ["预期应答率（备择）", "40%"]);
+  assert.deepEqual([rows.control.label, rows.control.value], ["要超过的应答率（零假设）", "20%"]);
+  assert.deepEqual([rows.alpha.value, rows.alpha.source], ["单侧5%", "assumed"]);
+});
+
 test("a success probability that is not there says why, in one line, and a design that cannot have one says nothing", () => {
   const absent = byKey(vcrPremises("trial", trialInput({ hasAssurance: false, assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布" })));
   assert.equal(absent.assurance.label, "成功把握");

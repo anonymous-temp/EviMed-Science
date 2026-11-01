@@ -1064,6 +1064,7 @@ function trialPremiseInput(bundle, row) {
   const ran = Boolean(stages.simulation || stages.analytic);
   return {
     endpointType: scenario.endpointType,
+    designKind: kind,
     configuration: scenario.configuration,
     diagnostics: stage?.diagnostics ?? {},
     bound,
