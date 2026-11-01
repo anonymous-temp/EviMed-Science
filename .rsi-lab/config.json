@@ -1,16 +1,16 @@
 {
   "mode": "lanes",
-  "batch": "b011",
+  "batch": "b012",
   "sourceRef": "main",
   "labFrom": "branch",
   "imageRunId": 41307417699,
   "imageArtifact": "rsi-lab-images-5c740327bb8c",
-  "idleExitMin": 4,
+  "idleExitMin": 3,
   "arms": [
     {
       "key": "base",
       "jobs": 1,
-      "workers": 3
+      "workers": 2
     }
   ],
   "sandboxCheck": false,
