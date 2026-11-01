@@ -9137,3 +9137,38 @@ test('durable stop intent invalidates existing work across restart and leaves a 
   assert.equal(await restarted.promptStopRequested(project,'root',human.id),false);assert.equal(await restarted.promptStopRequested(project,'other',original.id),false);
  }finally{await first.closeProject(project);await restarted.closeProject(project);await rm(root,{recursive:true,force:true});}
 });
+
+test("concurrent deliverables with independent ownership are not attributed to the other run", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+    const started = await dispatch("concurrent-artifacts");
+    const originalList = store.list.bind(store);
+    const peer = { id: "peer-run", sessionId: "other-session", startedAt: started.startedAt, finishedAt: null,
+      nativeWorkflow: { plan: { written: true, items: [{ id: "peer" }] }, submissions: [], delegates: [] } };
+    store.list = async (projectArg) => [...await originalList(projectArg), peer];
+    for (const id of ["own", "peer"]) {
+      await mkdir(path.join(project.workspaceDir, "deliverables", id), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, "deliverables", id, "report.md"), id);
+    }
+    appendHistory([bashPart("python3 report.py"), { type: "text", text: "Done." }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.ok(run.artifacts.includes("deliverables/own/report.md"));
+    assert.ok(!run.artifacts.includes("deliverables/peer/report.md"));
+  });
+});
+
+test("a canceled run retains its own partial files but not a concurrent run's files", async () => {
+  await withAnswerModeRun(async ({ project, dispatch, store }) => {
+    const started = await dispatch("concurrent-cancel");
+    const originalList = store.list.bind(store);
+    const peer = { id: "peer-run", sessionId: "other-session", startedAt: started.startedAt, finishedAt: null,
+      nativeWorkflow: { plan: { written: true, items: [{ id: "peer" }] }, submissions: [], delegates: [] } };
+    store.list = async (projectArg) => [...await originalList(projectArg), peer];
+    for (const id of ["own", "peer"]) {
+      await mkdir(path.join(project.workspaceDir, "deliverables", id), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, "deliverables", id, "partial.md"), id);
+    }
+    const run = await store.finishInternal(project, started.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+    assert.ok(run.unverifiedArtifacts.includes("deliverables/own/partial.md"));
+    assert.ok(!run.unverifiedArtifacts.includes("deliverables/peer/partial.md"));
+  });
+});

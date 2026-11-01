@@ -14,8 +14,9 @@
  * returned, because the workspace is the model's and the model may have installed a package into it.
  *
  * Known limit, said once: two conversations running in one project at the same moment share a workspace, and a file one
- * writes inside the other's window is attributed to both. The tool-call witnesses (`artifactCandidates`) do not have that
- * limit and stay the first source; this is the second, for what they cannot see.
+ * writes inside the other's window can be attributed to both. Known foreign deliverable directories can be excluded by
+ * their independently witnessed identifiers; shared identifiers and other files remain ambiguous. Tool-call witnesses
+ * (`artifactCandidates`) stay the first source; this is the second, for what they cannot see.
  *
  * @module runWorkspaceChanges
  */
@@ -34,12 +35,12 @@ export const WORKSPACE_WALK_FILES = 64;
  * The files under `root` last written in `[since, until]`, as workspace-relative paths, sorted.
  *
  * @param {string} root the workspace directory on the host
- * @param {{ since: number, until?: number, maxEntries?: number, maxDepth?: number, limit?: number }} window
+ * @param {{ since: number, until?: number, maxEntries?: number, maxDepth?: number, limit?: number, excludedDeliverableIds?: ReadonlySet<string> }} window
  *   `since` and `until` are epoch milliseconds. A file's own mtime decides; `until` carries the one millisecond of slack the
  *   ledger's other freshness checks allow.
  * @returns {Promise<string[]>}
  */
-export async function workspaceChangedFiles(root, { since, until = Number.POSITIVE_INFINITY, maxEntries = WORKSPACE_WALK_ENTRIES, maxDepth = WORKSPACE_WALK_DEPTH, limit = WORKSPACE_WALK_FILES }) {
+export async function workspaceChangedFiles(root, { since, until = Number.POSITIVE_INFINITY, maxEntries = WORKSPACE_WALK_ENTRIES, maxDepth = WORKSPACE_WALK_DEPTH, limit = WORKSPACE_WALK_FILES, excludedDeliverableIds = new Set() }) {
   if (!Number.isFinite(since)) return [];
   /** @type {string[]} */
   const found = [];
@@ -63,6 +64,7 @@ export async function workspaceChangedFiles(root, { since, until = Number.POSITI
       // A link is neither followed nor listed: it can name anything on the host.
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
+        if (relative === "deliverables" && excludedDeliverableIds.has(entry.name)) continue;
         if (depth + 1 <= maxDepth && isOrdinaryOutputDirectory(entry.name, relative === "")) queue.push({ relative: child, depth: depth + 1 });
         continue;
       }
