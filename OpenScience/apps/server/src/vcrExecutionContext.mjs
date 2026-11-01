@@ -15,7 +15,7 @@ function projected(tool, operation, actual, body) {
     : {action:actual.action,jobId:actual.jobId};
   if (tool !== `vcr_${operation}`) throw unavailable();
   const keys = operation === 'read' ? ['what', 'filter'] : operation === 'write' ? ['what', 'data', 'items']
-    : (actual.action ?? 'start') === 'start' ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion'] : ['action', 'jobId'];
+    : ['start', 'validate'].includes(actual.action ?? 'start') ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion'] : ['action', 'jobId'];
   const result = Object.fromEntries(keys.filter(key => operation === 'write' ? Object.hasOwn(actual,key) : actual[key] != null).map(key => [key, actual[key]]));
   if (operation === 'simulate') result.action ??= 'start';
   if (operation === 'read' && object(result.filter) && !Object.keys(result.filter).length && !body.filter) delete result.filter;

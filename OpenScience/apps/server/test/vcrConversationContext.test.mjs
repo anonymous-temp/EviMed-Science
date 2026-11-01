@@ -21,6 +21,17 @@ test('VCR rejects forged arguments, ended calls and missing execution context', 
     await assert.rejects(verifyVcrInvocation({ ...fixture(options), header: header('root'), operation: 'read', body: { what: 'study' }, ...options }), { code: 'vcr_invocation_unavailable' });
   }
 });
+test('a validate call is proved by the scenario it carries, as a start is', async () => {
+  // Found on a real kernel: validate was read as a status call, so its proof compared {action, jobId} with what was sent, and
+  // every validate in a live conversation answered vcr_invocation_unavailable and sent the run away from the engine.
+  const input = { action: 'validate', kind: 'design_analytic', scenario: { truth: { hazardRatio: 0.75 } } };
+  const f = fixture({ input });
+  f.runtimeManager.sessionTranscript = async (_project, sessionId) => ({ sessionId, truncated: false, turns: [{ startSeq: 1, end: null }],
+    messages: [{ turnStartSeq: 1, role: 'assistant', parts: [{ type: 'tool', callId: 'call', status: 'pending', tool: 'mcp__evimed__vcr_simulate', input }] }] });
+  const result = await verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: input });
+  assert.equal(result.runId, 'run');
+  await assert.rejects(verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: { ...input, kind: 'design_simulation' } }), { code: 'vcr_invocation_unavailable' });
+});
 test('native trial-benchmark file expansion is verified against exact control-plane bytes',async()=>{
  const actual={what:'trial_benchmark',data:{predictionsFile:'predictions.json'}};
  const f=fixture({input:actual});f.runtimeManager.sessionTranscript=async(_p,sessionId)=>({sessionId,truncated:false,turns:[{startSeq:1,end:null}],messages:[{turnStartSeq:1,parts:[{type:'tool',callId:'call',status:'pending',tool:'mcp__evimed__vcr_write',input:actual}]}]});
