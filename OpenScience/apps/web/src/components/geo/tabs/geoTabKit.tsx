@@ -1,7 +1,13 @@
+import { geoWorkflowState } from "@evimed/domain";
+import { Button } from "@/components/ui/Button";
+import { geoActionPermission, geoJourney } from "../geoJourney";
+import { GeoStepRunButton } from "../GeoStepRunButton";
+import { useOpenGeoConversation } from "../useOpenGeoConversation";
+import { GEO_STEP_NAMES } from "../geoText";
 import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { runGeoStep, type GeoCell, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
@@ -68,7 +74,7 @@ export function stepInProgress(project: GeoProject, step: GeoStepKey): boolean {
 /** Whether the step was asked for and waits for the one before it. */
 export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
   const state = project.steps[step];
-  return state?.status === "none" && state.requested === true;
+  return state?.status === "none" && geoWorkflowState(project.steps).steps[step].required;
 }
 
 /**
@@ -81,44 +87,50 @@ export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
  */
 export function StepPending({ geoId, project, step }: { geoId: string; project: GeoProject; step: GeoStepKey }) {
   const geoDestinationPath = useGeoDestinationPath();
+  const navigate = useNavigate();
   const frame = useGeoFrame();
   const [busy, setBusy] = useState(false);
+  const open = useOpenGeoConversation();
   const recipe = GEO_STEP_RECIPES[step];
   const state = project.steps[step];
-  // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
+  const workflow = geoWorkflowState(project.steps);
+  const projected = workflow.steps[step];
+  const permission = geoActionPermission(project, "run");
+  const journey = geoJourney(project);
   const allowanceWait = stepAllowanceWait(state);
   const start = () => {
+    if (!permission.allowed || busy) return;
+    if (step === "monitoring") {
+      navigate(geoDestinationPath(geoId, { tab: "visibility", section: "geo-automation" }));
+      return;
+    }
     setBusy(true);
     void runGeoStep(geoId, step)
-      .then(() => frame?.reload())
+      .then(answer => {
+        toast.success(answer.accepted === false ? "没有新增任务，请查看当前工作状态。" : answer.runId ? `已开始${recipe.verb}。` : `已提交${recipe.verb}，等待开始。`, {action: frame ? {label:"查看运行记录",onClick:() => frame.openPanel("runs")} : undefined});
+        frame?.reload();
+      })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一步无法开始，请稍后重试。" })))
       .finally(() => setBusy(false));
   };
-  const inputs: StepInput[] = recipe.uses.map((input) => ({ label: input.label, to: geoDestinationPath(geoId, GEO_STEP_HOME[input.step]) }));
-  if (allowanceWait) {
-    return <StepState phase="credits" step={recipe.verb} waiting={allowanceWait} topUp={<AllowanceTopUp waiting={allowanceWait} />} />;
-  }
-  if (stepInProgress(project, step)) {
-    return <StepState phase="running" step={recipe.verb} startedAt={state?.updatedAt ?? null} />;
-  }
-  if (stepWaiting(project, step)) {
-    return <StepState phase="queued" step={recipe.verb} after={recipe.after ?? undefined} />;
-  }
-  if (state?.status === "failed") {
-    return <StepState phase="failed" step={recipe.verb} onResume={start} resuming={busy} />;
-  }
-  return (
-    <StepState
-      phase="empty"
-      step={recipe.verb}
-      noun={recipe.noun}
-      uses={inputs}
-      gives={recipe.gives}
-      onStart={project.access && !project.access.abilities.includes("run") ? undefined : start}
-      starting={busy}
-      reason={project.access && !project.access.abilities.includes("run") ? "你在这个项目里只有查看权限。" : undefined}
-    />
-  );
+  // The workflow owns dependencies; the eight destinations do not imply eight mandatory tasks.
+  const inputs: StepInput[] = (projected.dependencies as GeoStepKey[]).map(key => ({ label: GEO_STEP_NAMES[key], to: geoDestinationPath(geoId, GEO_STEP_HOME[key]) }));
+  const record = projected.runId ? <GeoStepRunButton project={project} runId={projected.runId} /> : null;
+  let body;
+  if (state?.status === "failed") body = <StepState phase="failed" step={recipe.verb} failure={projected.error ?? undefined} kept={state.summary?.text ? `已保留：${state.summary.text}` : undefined} onResume={permission.allowed ? start : undefined} resuming={busy} />;
+  else if (project.status !== "active") body = <StepState phase="empty" step={recipe.verb} noun={recipe.noun} reason={permission.reason} />;
+  else if (allowanceWait) body = <StepState phase="credits" step={recipe.verb} waiting={allowanceWait} topUp={permission.allowed ? <AllowanceTopUp waiting={allowanceWait} /> : undefined} />;
+  else if (state?.status === "running") body = <StepState phase="running" step={recipe.verb} startedAt={state?.updatedAt ?? null} />;
+  else if (state?.status === "queued" || stepWaiting(project, step)) body = <StepState phase="queued" step={recipe.verb} after={(projected.waitingFor as GeoStepKey[]).map(key => GEO_STEP_NAMES[key]).join("、") || undefined} />;
+
+  else if (!journey.product || project.product.identityStatus === "ambiguous") body = <div className="flex flex-col items-start gap-3 py-6">
+    <h2 className="text-section font-semibold">先确认产品与资料</h2>
+    <p className="max-w-measure text-ui text-text-2">请在现有对话中说明产品名称、适用场景、目标受众和本次要做的工作，附上说明书、证据或稿件。已有资料会优先用于确认产品。</p>
+    {journey.canConverse && <Button variant="secondary" onClick={() => void open({geoId,projectId:project.projectId,sessionId:frame?.conversation,primarySessionId:project.sessionId},journey.next.draft)}>在对话中补充产品与资料</Button>}
+  </div>;
+  else body = <StepState phase="empty" step={step === "monitoring" ? "设置自动监测" : `开始任务：${recipe.verb}`} noun={recipe.noun} uses={inputs} gives={recipe.gives} onStart={permission.allowed ? start : undefined} starting={busy} reason={permission.reason} />;
+  return <div>{body}{record && <div className="flex justify-center">{record}</div>}{!permission.allowed && state?.status === "failed" && <p className="text-center text-caption text-text-3">{permission.reason}</p>}</div>;
+
 }
 
 /* ------------------------------------------------------------------ layout */

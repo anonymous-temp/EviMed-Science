@@ -186,7 +186,7 @@ function money(value, field, zero = false) {
  *     conversationRead?: (user: any, geoId: string, sessionId: string, action: string, body?: any) => Promise<any>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
- *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
+ *   orchestrator?: { setMonitoringAutomation?: (user: any, project: any, enabled: boolean) => Promise<any>, runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   selectedExporter?: any,
  *   signals?: import('./geoSignals.mjs').GeoSignals | null,
  *   signalResults?: import('./geoSignalResults.mjs').GeoSignalResults | null,
@@ -714,12 +714,21 @@ export function createGeoRoutes(dependencies) {
       await audit("geo.order.cancel", "completed", { userId: user.id, code: order.id, detail: id });
       return reply(result);
     }
+    if (parts.length === 4 && method === "POST" && tab === "monitoring" && parts[3] === "automation") {
+      const body = await bodyOf(req, maxJsonBytes, ["enabled"]);
+      if (typeof body.enabled !== "boolean") throw new HttpError(400, "geo_payload_invalid", "enabled must be boolean.");
+      const project = await service.requireProject(user, id, "run");
+      if (!hooks.orchestrator?.setMonitoringAutomation) throw UNAVAILABLE();
+      const result = await hooks.orchestrator.setMonitoringAutomation({ ...asOwner(user, project), actorId: user.id }, project, body.enabled);
+      await audit("geo.monitoring.automation", "completed", { userId: user.id, code: id, detail: body.enabled ? "confirmed" : "declined" });
+      return reply(result);
+    }
     if (parts.length === 3 && method === "POST" && tab === "run") {
       const body = await bodyOf(req, maxJsonBytes, ["step"]);
       if (typeof body.step !== "string" || !GEO_STEPS.includes(body.step)) throw new HttpError(400, "geo_step_invalid", `step must be one of: ${GEO_STEPS.join(", ")}.`);
       const project = await service.requireProject(user, id, "run");
       if (!hooks.orchestrator?.runStep) throw UNAVAILABLE();
-      return reply(await hooks.orchestrator.runStep(asOwner(user, project), project, body.step));
+      return reply(await hooks.orchestrator.runStep({ ...asOwner(user, project), actorId: user.id }, project, body.step));
     }
     if (parts.length === 3 && method === "POST" && tab === "export") {
       const body = await bodyOf(req, maxJsonBytes, ["kind", "selectionRef", "view", "expectedDigest", "formats"]);

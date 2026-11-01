@@ -89,6 +89,7 @@ export class GeoNativeInputs {
   #nativeOperations = new WeakMap();
   // Inputs of a project its owner works in alone, passed through without a receipt (`prepare`), with the outcome of their admission.
   #owned = new WeakMap();
+  #moduleRequests = new WeakMap();
   constructor({ database, documents, authority, policies, resolveLaunchedContext, proveSession, contexts = null, revisions = null, previewContext = null, previewSelections = null, now = () => new Date() }) {
     this.database = database; this.documents = documents; this.authority = authority; this.policies = policies;
     this.resolveLaunchedContext = resolveLaunchedContext; this.proveSession = proveSession;
@@ -144,7 +145,29 @@ export class GeoNativeInputs {
     if (this.previewContext) await this.previewContext(project, forwarded);
     return { ...nativeInputCandidate(forwarded), bindings };
   }
-  async prepare({ user, project, claims, request, operation = 'prompt' }) {
+  async prepare(input) {
+    const result = await this.prepareReceipt(input);
+    if (!input.operation || input.operation === 'prompt') {
+      const { user, project, claims, request } = input;
+      const identity = await this.authority.resolve(user, { kind: 'geo', geoProjectId: claims.delegation.geoProjectId,
+        sessionId: request.sessionId }, { claims: claims.delegation });
+      if (await this.authority.primary(identity) === request.sessionId) this.#moduleRequests.set(request, { user, project, claims });
+    }
+    return result;
+  }
+  /** Only the verified delegated frame's original request object can qualify a module-local route. */
+  async routingScopeForRequest(project, request) {
+    const prepared = request && this.#moduleRequests.get(request);
+    if (!prepared) return null;
+    if (prepared.project.userId !== project.userId || prepared.project.id !== project.id) throw conflict();
+    const identity = await this.authority.resolve(prepared.user, { kind: 'geo', geoProjectId: prepared.claims.delegation.geoProjectId,
+      sessionId: request.sessionId }, { claims: prepared.claims.delegation });
+    if (await this.authority.primary(identity) !== request.sessionId) throw conflict();
+    const brand = identity.geo.product?.brandName || identity.geo.product?.genericName;
+    return { scope: { version: 1, geoProjectId: identity.geo.id, rootSessionId: request.sessionId },
+      suppliedInputs: typeof brand === 'string' && brand.trim() ? { brandEntity: brand.trim().slice(0, 240) } : {} };
+  }
+  async prepareReceipt({ user, project, claims, request, operation = 'prompt' }) {
     if (this.database.transactionScope?.()) throw new HttpError(409, 'geo_native_prepare_in_transaction', 'Prepare the shared input before admission.');
     // A GEO project with no member is its owner's (owner ruling 2026-10-25: `GeoSharedContext.forProject` answers `owned`). It has no
     // shared namespace or context launch to journal an input under, and its frame is issued to its owner alone, whose input is their

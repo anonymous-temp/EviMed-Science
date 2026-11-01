@@ -135,7 +135,7 @@ describe("循证 GEO home — the list", () => {
       { ...GEO_SUMMARIES[0], id: "geo_c", name: "停了的项目", status: "paused", updatedAt: "2026-10-13T00:00:00Z", alert: { wrongOurs: 0, severe: 0, safety: 0 } },
     ]);
     const { unmount } = renderHome("/app/geo?project=geo_b");
-    const names = () => within(screen.getByRole("list", { name: "循证 GEO 项目" })).getAllByRole("link").map((link) => link.textContent);
+    const names = () => within(screen.getByRole("list", { name: "循证 GEO 项目" })).getAllByRole("link").filter(link => link.textContent !== "继续工作").map((link) => link.textContent);
     await list();
     expect(names()).toEqual(["停了的项目", "安静的项目", "有严重讲错的项目"]);
     const toolbar = screen.getByRole("group", { name: "项目排序" });
@@ -198,10 +198,10 @@ describe("循证 GEO home — the preview beside the list", () => {
     renderHome();
     await list();
     const view = within(preview());
-    expect(within(view.getByRole("group", { name: "综合可见度指数" })).getByText("—")).toBeInTheDocument();
-    expect(view.getAllByText(GEO_STEP_EMPTY.diagnosis)).toHaveLength(1);
+    expect(view.queryByRole("group", { name: "综合可见度指数" })).toBeNull();
+    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("尚未提交工作");
     await userEvent.click(screen.getByRole("link", { name: "已排上诊断的项目" }));
-    expect(view.getAllByText(GEO_STEP_WAITING.diagnosis)).toHaveLength(1);
+    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("已排队");
     expect(view.queryByText(GEO_STEP_EMPTY.diagnosis)).toBeNull();
     // A project whose diagnosis has run is not told to wait for it: the number's own word is the reason.
     await userEvent.click(screen.getByRole("link", { name: "注射用重组人脑利钠肽" }));
@@ -244,7 +244,7 @@ describe("循证 GEO home — the preview beside the list", () => {
     await list();
     const open = within(preview()).getByRole("link", { name: "打开项目" });
     expect(open).toHaveAttribute("href", "/app/geo/geo_mitiao");
-    await userEvent.click(within(preview()).getByRole("button", { name: "继续对话" }));
+    await userEvent.click(within(preview()).getByRole("button", { name: "在对话中继续" }));
     await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_mitiao", projectId: "p-mitiao" }));
     await userEvent.click(open);
     expect(where()).toBe("/app/geo/geo_mitiao");

@@ -409,3 +409,13 @@ test("the instruction of a GEO run rides in the run's context as one platform bl
   assert.equal(sentence, "整理产品证据\n\n<evimed-geo-run>geo-insight-a1</evimed-geo-run>");
   assert.equal(carriesPlatformContext(unwrapUserWrappers(sentence)), true);
 });
+
+
+test("programme insight briefs write only scoped objects and leave measurement ownership explicit", () => {
+  const evidence = insightBrief(project, { scope: [{ step: "evidence", fidelity: "full" }], target: "evidence", full: false });
+  assert.match(evidence, /仅写回本次范围：geo_write product、claims，/);
+  assert.doesNotMatch(evidence, /geo_write product、claims、journey|锁定之后平台会自己测基线/);
+  assert.match(evidence, /不调用 start_diagnosis/);
+  const journey = insightBrief(project, { scope: [{ step: "journey", fidelity: "full" }], target: "journey", full: false });
+  assert.match(journey, /仅写回本次范围：geo_write journey，/);
+});

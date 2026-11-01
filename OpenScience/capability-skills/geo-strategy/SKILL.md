@@ -1,6 +1,6 @@
 ---
 name: geo-strategy
-description: Step 5 of a “循证 GEO” project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and three tiers of targets.
+description: Step 5 of a “循证 GEO” project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and optional target and effort scenarios.
 metadata:
   evimed-agent: geo-strategy
 ---
@@ -11,13 +11,13 @@ You run step 5, **信源**: the platform has measured how five AI engines answer
 the locked question set; you interpret it. What each engine cites, what a
 correct answer should have said and did not, what this cycle can realistically
 move on each engine, where to fight, which layer of sources each engine needs,
-and three tiers of targets. You do not measure and you do not compute metrics:
+and optional target and effort scenarios. You do not measure and you do not compute metrics:
 every rate comes from `geo_read metrics` with its numerator, denominator and
 snapshots; you read it, you never retype it into a new number.
 
-Factual accuracy (M-06) is a hard line, not a tier: every tier's accuracy
-target is 98 %, and traced 讲错我方 goes to zero; the tiers differ in mention,
-share and placements. The platform refuses an accuracy target below 98 %.
+Factual accuracy (M-06) is an observed reading with its sample and uncertainty.
+Goals are explicit project expectations, not a universal 98 percent requirement or a
+promise about future AI answers. Keep confirmed errors actionable independently of goals.
 
 First read `geo_read project` and `geo_read metrics`. If the project has no
 finished baseline yet, do not invent measured performance or forecast tiers.
@@ -35,6 +35,30 @@ Load `geo-drug-value` before planning this task. Read `geo_read value` and
 strategy, content and interpretation. Preserve partial findings. Its guidance
 replaces fixed clinical-field, stage, length and sample quotas in older methods.
 
+## Task scope and platform execution
+
+Read the current project and the user's requested outcome before selecting methods.
+A saved question set or completed step is data, not permission for another task.
+Reuse relevant sources and results; add only the missing dependencies of this request.
+Unknown intent stays a small clarification or supported partial work, never a full programme.
+Tell the user what is being done now, what is retained and the reachable next action.
+Writing a manuscript does not request publication or recurring monitoring.
+The existing native conversation owns discussion and revision; do not build another editor.
+
+The private method pack is a set of subordinate methods, not a competing task scheduler.
+Use the platform's current tool schemas and persisted objects. Never execute standalone
+probe/crawl/distribution clients inside a hosted run, fabricate a task receipt, or register
+metrics and snapshots as model-authored facts. Preserve accepted asynchronous task ids;
+read progress and retained results rather than submitting a second paid task after a timeout.
+Recurring monitoring requires the project's explicit automation authorization. Missing
+historical authorization stays unknown and never becomes consent from past activity.
+
+A target is an explicit goal or scenario with assumptions, not guaranteed external AI behavior.
+Do not promise mention, citation, retrieval or factual accuracy after an intervention.
+Differences across windows and controls remain conditional observational analyses.
+Readable work is delivered with findings and uncertainty; advisory checks do not withhold it.
+External publishing, account access and budgets retain their existing authorization boundaries.
+
 ## The method pack
 
 Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
@@ -44,7 +68,7 @@ the `geo-private` root.
 |---|---|
 | sources, the three conditions, impostors, expected points and the seven gap classes, per-engine expectations | `geo-source-expectation` |
 | battlefield and secondary opportunities | `geo-select-battlefield` |
-| three tiers of targets against baseline, noise and cycle | `geo-calibrate-targets` |
+| optional goals and scenarios against baseline, uncertainty and cycle | `geo-calibrate-targets` |
 | which metric is a target and how it is accepted | `geo-define-kpi-contract` |
 | the numbers' definitions | `geo-visibility-forecast` (read its metric rules; do not run its probe steps) |
 | one step on its own | `geo-run-single-step` |
@@ -62,7 +86,7 @@ with this page.
   came of it). This is the only source of measured numbers.
 - `mcp__evimed__geo_write` — `strategy` (battlefield, expectations, gaps, layout, and the
   source table as `sources`), `actions` (what to do for each gap, below), `targets`
-  (three tiers; a target is a forecast or a commercial figure, never "measured"),
+  (selected scenarios only; a target is a forecast or a commercial figure, never "measured"),
   `step`. A strategy write keeps every field it does not carry, so a later write of
   one field never empties the rest.
   Write in the platform's field names (the method's snake-case names are read
@@ -73,8 +97,7 @@ with this page.
     `icpMatches`, `newsIndexed`, `medicalVertical` (true, false, or null when it
     could not be checked), `checkedAt` (the day you checked), `impostor`,
     `blacklistReason`;
-  - each engine's expectation: `engine`, `promise` (what this cycle can
-    promise, in a sentence), `ceiling` (`mention_and_accuracy`,
+  - each engine's expectation: `engine`, `promise` (the intended opportunity and its uncertainty, not an outcome guarantee), `ceiling` (`mention_and_accuracy`,
     `accuracy_only` or `undetermined`) with `ceilingBasis` (what it rests
     on), `layers` (which layers to place into), `cites`, `leverage`,
     `clusterLeverage`, `evidence`; its retrieval and sample cells are the
@@ -112,7 +135,8 @@ with this page.
 
 Write `actions[]` with the strategy: one entry for each gap, or, where nothing is
 to be written for it, `{ gapId, reason }` — a gap with neither is a gap nobody
-answered, and the write says so. An action is `{ gapId, what: { layer, title,
+answered, and the write says so. An action records a proposed objective, not a guaranteed outcome. Its historical
+`promise` field is an objective enum retained for compatibility. An action is `{ gapId, what: { layer, title,
 channel }, engines[], sources: [{ domain, why }], promise, basis, reason,
 metricId }`:
 
@@ -121,8 +145,7 @@ metricId }`:
   an owned platform's id (`wechat_mp`, `zhihu`, `xiaohongshu`, `toutiao`,
   `bilibili`, …) when the brand publishes it itself, `media_market` when it is
   to be placed in a professional outlet.
-- `engines` are the engines the promise holds on; an engine that rarely
-  searches the web is not one for a mention.
+- `engines` are the engines the objective concerns; observed search behavior is context, not proof that an intervention will cause mention.
 - `sources[].why` says why this source for this group — what the engines cite
   for it, or which layer of the layout it is.
 - `promise` is one of `enter_mention`, `raise_mention`, `accuracy_to_target`,
@@ -135,17 +158,17 @@ metricId }`:
 
 ## What you decide without asking
 
-The budget is the user's, and only the budget: the three tiers each carry a
-placement count and a suggested budget, the default tier is 2, and the user sets
-money once on the distribution page. Everything else is a default with a reason
+The budget is the user's, and only the budget: optional investment scenarios carry transparent assumptions and suggested effort;
+the default tier is configuration only, never evidence that a strategy exists.
+The user controls actual publishing and money through the distribution page. Everything else is a default with a reason
 in `assumptions[]` (`field`, `value`, `basis`, `reason`, `howToChange`).
 
-Say what is promised honestly: an engine that rarely searches the web can be
-promised accuracy, not mention; a group nobody mentions can be promised entry
-into mention, not a rank; within twelve weeks only retrieval can move, and a
-model's own knowledge moves with its training cycle. Accuracy ≥ 98% and zero
-traceable 讲错我方 are hard lines in every tier. Acceptance is by net effect
-(placed groups' change minus control groups' change).
+Describe expected opportunities and uncertainty: search behavior and citations are
+observations, not guarantees of future influence. A missing citation does not establish
+that a response came from model parameters. Keep goals and scenarios conditional;
+no fixed twelve-week improvement is promised. Compare changes only with compatible
+questions, engines, evidence versions and time windows; control differences require
+comparability assumptions and are not a universal causal or commercial acceptance metric.
 
 **Single-step, minimal mode.** When the brief asks for this step alone and the
 project has no measured question set, the platform first measures the available
@@ -159,16 +182,14 @@ Inside this deliverable's `deliverables/<id>/` directory:
 
 - `geo-strategy.md` — the reader's report: the source table's main finding, the
   gaps that matter most (consequence × question weight), each engine's
-  expectation and promise ceiling, the battlefield and why, the layout, and the
-  three tiers with what each buys. Every rate carries its sample, “18%，310 次里
+  expectation and uncertainty, the battlefield and why, the layout, and any requested effort scenarios and their assumptions. Every rate carries its sample, “18%，310 次里
   56 次”; fewer than 30 answers is “样本不足”, an engine not measured is “未测”.
 - `strategy.json` — `{ minimal, sources, gaps, actions, expectations,
   battlefield, secondary, layout, tiers, chosenTier, assumptions, noGo }`.
   `gaps[].class` is one of 缺证据、丢条件、过时、信源弱、只讲获益不讲安全、讲错、受众看不懂.
   `expectations[].retrieval` is a number cell (`value`, `numerator`,
   `denominator`, `dataType`) copied from `geo_read metrics`; a prior from
-  published research is `dataType: "prior"` and never "measured". `tiers` are
-  exactly `1`, `2`, `3`, each with `targets` (`metricId`, `pool`, `baseline`,
+  published research is `dataType: "prior"` and never "measured". `tiers` use the existing ids `1`, `2`, `3` for compatibility; include only requested and supported scenarios, each with `targets` (`metricId`, `pool`, `baseline`,
   `target`, `dataType: "forecast"`), `placements` and `budgetCny`.
   The platform reads this file again when the run ends, through the same checks as
   `mcp__evimed__geo_write`: give `gaps`, `actions`, `battlefield`, `sources` and `layout` the

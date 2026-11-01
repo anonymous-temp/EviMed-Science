@@ -713,7 +713,7 @@ test("no strategy, tiers or 信源 step before the project has a finished baseli
   assert.equal((await write(project, "strategy", { data: { summary: "测完了" } })).ok, true);
 });
 
-test("factual accuracy is a hard line of 98 % in every tier", options, async () => {
+test("accuracy goals are explicit project expectations rather than a universal 98 percent promise", options, async () => {
   const project = await measured(await freshProject());
   const result = await write(project, "targets", { items: [
     { tier: "1", metricId: "M-06", pool: "P1", baseline: 67.6, target: 76, dataType: "forecast" },
@@ -721,9 +721,9 @@ test("factual accuracy is a hard line of 98 % in every tier", options, async () 
     { tier: "2", metricId: "M-01", pool: "P2", baseline: 12.5, target: 20, dataType: "forecast" },
   ] });
   assert.deepEqual(result.issues.filter((/** @type {any} */ issue) => issue.code !== "notice").map((/** @type {any} */ issue) => [issue.index, issue.code]),
-    [[0, "below_hard_line"]]);
+    []);
   assert.deepEqual((await store.latestTargets(project.id))?.rows.map((row) => [row.tier, row.metricId, row.target]).sort(),
-    [["2", "M-01", 20], ["2", "M-06", 98]]);
+    [["1", "M-06", 76], ["2", "M-01", 20], ["2", "M-06", 98]]);
 });
 
 test("a strategy written in the method's words is stored in the platform's: three conditions, source types, promises, layers, layout", options, async () => {

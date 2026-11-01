@@ -9,7 +9,11 @@ import { GEO_STEP_HOME, geoDestinationPath } from "./geoTabs";
  * for want of a market, which an allowance refused — and one thing more: where each step's result is read, and 「现在」.
  */
 const href = (step: keyof typeof GEO_STEP_HOME) => geoDestinationPath("geo_1", GEO_STEP_HOME[step]);
-const project = (steps: Parameters<typeof geoProject>[0] = {}, overrides: Partial<GeoProject> = {}) => geoProject(steps, overrides);
+const project = (steps: Parameters<typeof geoProject>[0] = {}, overrides: Partial<GeoProject> = {}) => {
+  const p=geoProject(steps, overrides);
+  p.steps.monitoring={status:'none',requested:false,...p.steps.monitoring,automation:{state:'confirmed',actorId:'actor',at:'2026-10-01T00:00:00Z',engines:[...p.engines],coverageDays:p.coverageDays}};
+  return p;
+};
 
 describe("the steps in the band", () => {
   it("is the eight steps, in the programme's order, each with the address of its result", () => {
@@ -90,7 +94,7 @@ describe("「现在」", () => {
     const quiet = project({ evidence: "done", diagnosis: "done" });
     expect(bandNow(quiet, { date: "2026-10-19", kind: "weekly" }, NOW)).toBe("下次复测 周一 10月19日");
     const measured = project({ diagnosis: "done" });
-    measured.overview.steps.monitoring = { status: "done", requested: true, summary: { text: "2 轮测量", count: 2, unit: "rounds" } };
+    measured.overview.steps.monitoring = { ...measured.steps.monitoring, status: "done", requested: true, summary: { text: "2 轮测量", count: 2, unit: "rounds" } };
     expect(bandNow(measured, { date: "2026-10-14", kind: "weekly" }, NOW)).toBe("待复测 10月14日");
     expect(bandNow(project(), { date: "2026-10-14", kind: "baseline" }, NOW)).toBe("待复测 10月14日");
   });
@@ -124,8 +128,8 @@ describe("the measurement's own state", () => {
 
   it("says a paused measurement with the day it stopped and what happens next, in plain words", () => {
     expect(measurementPause(PAUSED)).toEqual({
-      paused: true, short: "AI 回答测量暂停中（10月20日起）", detail: "测量服务暂时连不上，恢复后自动继续",
-      sentence: "AI 回答测量暂停中（10月20日起）：测量服务暂时连不上，恢复后自动继续。",
+      paused: true, short: "AI 回答测量暂停中（10月20日起）", detail: "测量服务暂时不可用，产品依据和已有结果仍可查看",
+      sentence: "AI 回答测量暂停中（10月20日起）：测量服务暂时不可用，产品依据和已有结果仍可查看。",
     });
     expect(measurementPause({ state: "paused", since: null, engines: [] })?.short).toBe("AI 回答测量暂停中");
   });
@@ -138,11 +142,17 @@ describe("the measurement's own state", () => {
 
   it("promises no next round for a paused project or a paused measurement, whatever the read says", () => {
     const next = { date: "2026-10-26", kind: "weekly" };
-    expect(nextMeasurement({ status: "active" }, { next })).toEqual(next);
-    expect(nextMeasurement({ status: "paused" }, { next })).toBeNull();
-    expect(nextMeasurement({ status: "active" }, { next, measurement: PAUSED })).toBeNull();
+    expect(nextMeasurement(project(), { next })).toEqual(next);
+    expect(nextMeasurement(project({}, {status:"paused"}), { next })).toBeNull();
+    expect(nextMeasurement(project(), { next, measurement: PAUSED })).toBeNull();
     expect(bandNow(project({ evidence: "done" }, { status: "paused" }), next, NOW)).toBeNull();
     expect(bandNow(project({ evidence: "done" }), next, NOW, PAUSED)).toBe("AI 回答测量暂停中（10月20日起）");
     expect(bandNow(project({ evidence: "done" }), next, NOW, { state: "measuring", since: null, engines: ["doubao"] })).toBe("豆包暂停测量 · 下次复测 周一 10月26日");
   });
+});
+
+it('retains an accepted queued measurement without authorization for future schedules',()=>{
+  const p=geoProject({monitoring:'queued'});
+  expect(nextMeasurement(p,{next:{date:'2026-11-01',kind:'baseline',source:'queued'}})?.date).toBe('2026-11-01');
+  expect(nextMeasurement(p,{next:{date:'2026-11-01',kind:'weekly',source:'schedule'}})).toBeNull();
 });

@@ -58,7 +58,7 @@ describe("GEO association discovered by native conversation options", () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "ses_primary", controls: true, starters: expect.any(Array) })));
     expect(api.get).toHaveBeenCalledWith("geo_explicit");
     expect(api.list).not.toHaveBeenCalled();
-    expect(post.mock.calls.at(-1)?.[0].starters).toHaveLength(6);
+    expect(post.mock.calls.at(-1)?.[0].starters).toHaveLength(3);
     view.unmount();
   });
 
@@ -102,4 +102,26 @@ describe("GEO association discovered by native conversation options", () => {
     expect(api.list).not.toHaveBeenCalled();
     view.unmount();
   });
+});
+
+it('revokes settings writes and reports an unavailable project instead of default confirmed values',async()=>{
+  api.get.mockReset().mockRejectedValue(new Error('Offline'));
+  api.patch.mockReset();
+  const post=vi.fn();
+  const view=renderHook(()=>useFrameGeoOptions({projectId:'p',geoId:'g',sessionId:'s',capabilityId:null,enabled:true,post}));
+  await waitFor(()=>expect(post).toHaveBeenCalledWith(expect.objectContaining({controls:false,unavailable:expect.any(String),engines:[],starters:[]})));
+  act(()=>view.result.current({sessionId:'s',coverageDays:180}));
+  await act(async()=>{await Promise.resolve();});
+  expect(api.patch).not.toHaveBeenCalled();
+  view.unmount();
+});
+it('does not offer or submit settings writes without edit ability',async()=>{
+  api.get.mockReset().mockResolvedValue({id:'g',projectId:'p',status:'active',product:{},engines:['kimi'],coverageDays:90,steps:{},access:{abilities:['run'],roles:['runner'],owner:false}});
+  api.patch.mockReset();
+  const post=vi.fn();
+  const view=renderHook(()=>useFrameGeoOptions({projectId:'p',geoId:'g',sessionId:'s',capabilityId:null,enabled:true,post}));
+  await waitFor(()=>expect(post).toHaveBeenCalledWith(expect.objectContaining({controls:false})));
+  act(()=>view.result.current({sessionId:'s',coverageDays:180}));
+  await act(async()=>{await Promise.resolve();});
+  expect(api.patch).not.toHaveBeenCalled();view.unmount();
 });

@@ -90,12 +90,17 @@ export interface GeoCell {
 
 /** One step of the program (`projects.steps[key]`, SPEC §2.2). */
 export interface GeoStep {
+  requestOrigin?: "legacy" | "browser" | "conversation";
+  requestedBy?: string;
+  requestedAt?: string;
+  automation?: {state: "confirmed" | "declined";actorId:string;at:string;engines:string[];coverageDays:number};
   status: GeoStepStatus;
   requested: boolean;
   runId?: string | null;
   roundId?: string | null;
   updatedAt?: string | null;
   note?: string | null;
+  error?: string | null;
   /** What a queued step is waiting on when the allowance refused its start; it starts by itself once that is put right. */
   waiting?: "allowance" | "simulated_allowance" | null;
   /** What the step produced, as one short count for the rail (「86 条结论」); null when there is nothing to count. */
@@ -139,8 +144,13 @@ export interface GeoCompetitor {
   reason?: string | null;
 }
 
+export interface GeoActiveMeasurement { id:string; kind:string; status:'queued'|'running' }
+
 /** One row of the home list (`GET /api/geo/projects`). */
 export interface GeoProjectSummary {
+  /** Actual accepted work, independent of whether future monitoring is enabled. */
+  activeMeasurement?: GeoActiveMeasurement | null;
+  access?: { roles: string[]; abilities: string[]; owner: boolean };
   id: string;
   projectId: string;
   name: string;
@@ -197,6 +207,8 @@ export interface GeoOverview {
 
 /** One project (`GET /api/geo/projects/:id`). */
 export interface GeoProject extends GeoScopedView {
+  /** Actual accepted work, independent of whether future monitoring is enabled. */
+  activeMeasurement?: GeoActiveMeasurement | null;
   id: string;
   projectId: string;
   name: string;
@@ -734,6 +746,8 @@ export interface GeoSeriesPoint {
   analysisMembers?: GeoAnalysisMembers | null;
 }
 export interface GeoMonitoring extends GeoScopedView {
+  /** Actual accepted work, independent of whether future monitoring is enabled. */
+  activeMeasurement?: GeoActiveMeasurement | null;
   series: Array<{ key: string; points: GeoSeriesPoint[] }>;
   arms: {
     pilot: Array<{ date: string; value: number | null; coverage?: string | null }>;
@@ -748,7 +762,7 @@ export interface GeoMonitoring extends GeoScopedView {
   cited: Array<{ articleId: string; title: string; engine: GeoEngine; firstSeen: string }>;
   newErrors: GeoErrorRow[];
   /** The next full measurement; null when none is coming (the project paused by its owner, measurement paused, monitoring not asked for). */
-  next: { date: string; kind: string } | null;
+  next: { date: string; kind: string; source?: "queued" | "schedule" } | null;
   /**
    * Whether the AI answers can be measured now: `paused` when no engine of the project can be asked (the measuring service cannot be
    * reached, or the breaker holds every engine), with `since` the time the pause began as the stored answers show it (ISO, else null);
@@ -1505,6 +1519,11 @@ export interface GeoStartAnswer {
   accepted: boolean;
   runId: string | null;
   step: string | null;
+}
+
+/** Explicitly choose whether to schedule future measurements within the current project scope. */
+export function setGeoMonitoringAutomation(geoId: string, enabled: boolean) {
+  return productRequest<{enabled:boolean}>(`${project(geoId)}/monitoring/automation`, "POST", {enabled});
 }
 
 /** “让 AI 做”: starts one step now. The person stays where they are. */

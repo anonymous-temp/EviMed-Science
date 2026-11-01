@@ -56,6 +56,10 @@ test("immutable originals, concurrent save/start retries, runtime parity and mem
   const starts = await Promise.all([service.startDiagnosis({ id: "editor" }, p.id, { version: 1, requestKey: "start" }), service.startDiagnosis(owner, p.id, { version: 1, requestKey: "start" })]);
   assert.equal(starts[0].roundId, starts[1].roundId);
   assert.equal(starts[0].planned, 2);
+  const nativeStart = await geoRuntimeWrite({ store, project: await store.getProject(owner.id, p.id), what: "start_diagnosis",
+    body: { data: { version: 1, requestKey: "start" } } });
+  assert.equal(nativeStart.roundId, starts[0].roundId, "explicit native start retries reuse the accepted one-shot task");
+  assert.equal((await store.query("SELECT id FROM evimed_geo.rounds WHERE geo_project_id=$1", [p.id])).rows.length, 1);
   await assert.rejects(service.startDiagnosis(owner, p.id, { version: 2, requestKey: "start" }), { code: "geo_request_key_conflict" });
   const jobs = (await store.query("SELECT * FROM evimed_geo.probe_jobs WHERE round_id=$1", [starts[0].roundId])).rows;
   assert.equal(jobs.length, 2);
@@ -336,6 +340,8 @@ test("unmeasure refuses a stale base when an import commits after its source was
 
 test("automatic recurring confirmations honor the saved repeat agreement", options, async () => {
   const p = await project("recurring-confirm");
+  await store.setStep(p.id, "monitoring", { automation: { state: "confirmed", actorId: owner.id,
+    at: new Date().toISOString(), engines: p.engines, coverageDays: p.coverageDays } });
   await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, samplingMode: "recurring", repeats: 2 }, rows: [{ text: "Recurring question" }] });
   const questionId = (await store.questionMap(p.id, 1))[0].questions[0].id;
   const started = await enqueueRound({ store: measure }, { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"], repeat: 10 });
@@ -441,5 +447,65 @@ test("URL client tags are exact literal labels through PostgreSQL selection and 
     assert.equal(view.selection.counts.snapshots, 1);
     const native = await service.runtimeRead(await store.getProject(owner.id, p.id), "questions", { round: started.roundId, clientTags: [tag] });
     assert.equal(native.selection.reference, view.selection.reference);
+  }
+});
+
+
+test("automatic confirmation needs current engine consent while explicit diagnosis and accepted rounds survive withdrawal", options, async () => {
+  const p = await project("confirm-consent");
+  await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, samplingMode: "recurring" }, rows: [{ text: "Confirmation question" }] });
+  const questionId = (await store.questionMap(p.id, 1))[0].questions[0].id;
+  const spec = { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"] };
+  const start = () => enqueueRound({ store: measure }, spec);
+  await assert.rejects(start(), { code: "geo_monitoring_authorization_required" });
+  const authorize = async (engines = p.engines) => store.setStep(p.id, "monitoring", { automation: { state: "confirmed", actorId: owner.id,
+    at: new Date().toISOString(), engines, coverageDays: p.coverageDays } });
+  await authorize();
+  const accepted = await start();
+  await store.setStep(p.id, "monitoring", { automation: { state: "declined", actorId: owner.id,
+    at: new Date().toISOString(), engines: p.engines, coverageDays: p.coverageDays } });
+  await assert.rejects(start(), { code: "geo_monitoring_authorization_required" });
+  assert.ok(await measure.round(accepted.roundId));
+  await authorize();
+  await store.updateProject(owner.id, p.id, { engines: ["qianwen"] });
+  await assert.rejects(start(), { code: "geo_monitoring_authorization_required" });
+  await authorize(["qianwen"]);
+  await assert.rejects(start(), { code: "geo_monitoring_authorization_required" });
+  await store.updateProject(owner.id, p.id, { engines: ["deepseek"], status: "paused" });
+  await authorize();
+  await assert.rejects(start(), { code: "geo_monitoring_authorization_required" });
+  await store.updateProject(owner.id, p.id, { engines: ["deepseek"], status: "active" });
+  await service.saveQuestions(owner, p.id, { ...input, requestKey: "explicit-only", rows: [{ text: "Explicit diagnosis" }] });
+  await store.setStep(p.id, "monitoring", { automation: { state: "declined", actorId: owner.id,
+    at: new Date().toISOString(), engines: p.engines, coverageDays: p.coverageDays } });
+  const explicit = await service.startDiagnosis(owner, p.id, { version: 2, requestKey: "explicit-start" });
+  assert.ok(explicit.roundId);
+  await assert.rejects(enqueueRound({ store: measure }, { ...spec, questionIds: [(await store.questionMap(p.id, 2))[0].questions[0].id] }), { code: "geo_round_question_invalid" });
+});
+
+test("confirmation acceptance rechecks withdrawal and scope changes after the initial project read", options, async () => {
+  const p = await project("confirm-race");
+  await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, samplingMode: "recurring" }, rows: [{ text: "Race question" }] });
+  const questionId = (await store.questionMap(p.id, 1))[0].questions[0].id;
+  for (const mutation of ["withdraw", "change_scope"]) {
+    await store.updateProject(owner.id, p.id, { engines: ["deepseek"] });
+    await store.setStep(p.id, "monitoring", { automation: { state: "confirmed", actorId: owner.id,
+      at: new Date().toISOString(), engines: ["deepseek"], coverageDays: p.coverageDays } });
+    const raced = new Proxy(measure, {
+      get(target, key) {
+        if (key === "createRound") return async (round, jobs) => {
+          if (mutation === "withdraw") await store.setStep(p.id, "monitoring", { automation: { state: "declined", actorId: owner.id,
+            at: new Date().toISOString(), engines: ["deepseek"], coverageDays: p.coverageDays } });
+          else await store.updateProject(owner.id, p.id, { engines: ["qianwen"] });
+          return target.createRound(round, jobs);
+        };
+        const value = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    await assert.rejects(enqueueRound({ store: raced }, { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"] }),
+      { code: "geo_monitoring_authorization_required" }, mutation);
+    assert.equal((await store.query("SELECT id FROM evimed_geo.rounds WHERE geo_project_id=$1", [p.id])).rows.length, 0);
+    assert.equal((await store.query("SELECT id FROM evimed_geo.probe_jobs WHERE geo_project_id=$1", [p.id])).rows.length, 0);
   }
 });

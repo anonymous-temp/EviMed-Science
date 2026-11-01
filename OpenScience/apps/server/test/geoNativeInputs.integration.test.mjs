@@ -289,3 +289,15 @@ test('canonical consumed-input pagination retains contributors omitted by an old
   assert.equal(recovered.count,101);assert.equal(recovered.inputs.length,64);assert.equal(recovered.complete,false);
   assert.equal(recovered.throughSeq,101);assert.equal(recovered.observedThroughSeq,1);
 });
+
+test('module routing scope requires the original verified primary request and current membership', options, async t => {
+  const f = await fixture(t), request = f.request('module-scope');
+  assert.equal(await f.journal.routingScopeForRequest(f.project, { ...request, geoModuleScope: { version: 1, geoProjectId: f.geo.id, rootSessionId: 'root' } }), null);
+  await f.prepare(request);
+  assert.deepEqual((await f.journal.routingScopeForRequest(f.project, request)).scope,
+    { version: 1, geoProjectId: f.geo.id, rootSessionId: 'root' });
+  assert.equal(await f.journal.routingScopeForRequest(f.project, structuredClone(request)), null);
+  await assert.rejects(f.journal.routingScopeForRequest({ ...f.project, id: 'foreign' }, request), { code: 'geo_native_input_conflict' });
+  await f.store.removeMember({ geoId: f.geo.id, userId: 'editor', role: 'editor' });
+  await assert.rejects(f.journal.routingScopeForRequest(f.project, request));
+});

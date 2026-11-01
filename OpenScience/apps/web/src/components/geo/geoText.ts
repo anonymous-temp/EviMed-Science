@@ -336,14 +336,12 @@ export const GEO_STABILITY_WORDS: Readonly<Record<string, string>> = Object.free
 });
 
 /**
- * What an engine's measured retrieval lets the strategy promise there (the method's `promise_ceiling`, `GEO_PROMISE_CEILINGS`): an
- * engine that searches the web for most questions can be promised to mention and to get the product right; one that rarely does can
- * only be promised accuracy.
+ * What an engine's measured retrieval lets the strategy promise there (the method's `promise_ceiling`, `GEO_PROMISE_CEILINGS`): retrieval scope supports opportunity estimates, never guarantees of mentions or accuracy.
  */
 export const GEO_PROMISE_CEILING_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  mention_and_accuracy: "能承诺被提及，也能承诺讲对",
-  accuracy_only: "只承诺讲对，不承诺被提及",
-  undetermined: "还不能承诺",
+  mention_and_accuracy: "存在被提及与表述改善的机会",
+  accuracy_only: "以表述纠错为主，提及机会有限",
+  undetermined: "机会与适用范围尚待评估",
 });
 
 /** Where a plan's assumption comes from (`strategy.assumptions[].basis`): what a person said, a default, an inference, a measurement. */
@@ -377,12 +375,9 @@ export interface GeoStarter {
 const naming = (product: string | null) => (product ? `产品是${product}。` : "产品是：");
 
 export const GEO_STARTERS: readonly GeoStarter[] = Object.freeze([
-  { key: "full", label: "完整方案", draft: (product) => `做一套完整的循证 GEO 方案，从证据、问题、诊断到内容、投放和监测，${naming(product)}` },
-  { key: "answers", label: "AI 怎么说我的产品", draft: (product) => `看看各家 AI 怎么回答我的产品，哪里讲对了、哪里讲错了，${naming(product)}` },
-  { key: "sources", label: "信源分析与预期", draft: (product) => `看看 AI 回答里引用了谁、我们投内容能做到什么程度，${naming(product)}` },
-  { key: "optimize", label: "优化已有稿件", draft: () => "把我已有的稿件逐篇优化，让 AI 更愿意引用，稿件我附在下面：" },
-  { key: "humanize", label: "去 AI 味", draft: () => "给这批稿件去 AI 味，只改语言，数字、引文、出处和药名保持不变，稿件我附在下面：" },
-  { key: "monitor", label: "持续监测", draft: (product) => `持续监测各家 AI 怎么回答我的产品，每周告诉我变化，${naming(product)}` },
+  { key: "answers", label: "诊断 AI 回答", draft: (product) => `诊断各家 AI 如何回答我的产品，说明回答里的事实、引用与缺口。${naming(product)}目标受众与适用场景：。请先利用已有资料，必要时明确还缺什么，再开始本次诊断。` },
+  { key: "optimize", label: "修改已有稿件", draft: () => "修改我附上的已有稿件。目标受众与发布场景：；希望修改的重点：。请保留可核对的数字、引文、出处与药名；可调整语言以减少模板感。稿件附在此对话中。" },
+  { key: "strategy", label: "制定策略与方案", draft: (product) => `为产品制定循证 GEO 策略与实施方案。${naming(product)}目标受众：；希望解决的问题：；已有资料与约束：。先区分已有证据、待测信息和探索性机会，不保证提及或准确率。` },
 ]);
 
 /* -------------------------------------------------------------------- dates */

@@ -23,12 +23,12 @@ it('recognizes the complete default server shapes as first use without claiming 
  expect(screen.queryByText(/暂停测量|测量暂停中/)).toBeNull();
 });
 it.each([
- [{state:'measuring',since:null,engines:['kimi']},/Kimi\s*暂停测量，其余 AI 照常测量/],
- [{state:'paused',since:'2026-10-01T00:00:00Z',engines:['kimi','deepseek']},/AI 回答测量暂停中.*测量服务暂时连不上/],
+ [{state:'measuring',since:null,engines:['kimi']},/Kimi\s*暂停测量.*这些引擎暂时不可用/],
+ [{state:'paused',since:'2026-10-01T00:00:00Z',engines:['kimi','deepseek']},/AI 回答测量暂停中.*测量服务暂时不可用/],
 ] as const)('keeps independent pause cause and impact visible in the aggregate first-use guide %#',(measurement,notice)=>{
  const {container}=show({...measurement,engines:[...measurement.engines]});
  expect(container.querySelector('[data-geo-first-use]')).toBeInTheDocument();expect(screen.getByText(notice)).toBeVisible();
- if(measurement.state==='paused') expect(screen.getByText(/测量恢复后再开始诊断/)).toBeVisible();
+ expect(screen.queryByText(/其余 AI 照常测量|恢复后自动继续/)).toBeNull();
 });
 it('keeps actual sampling history outside the first-use guide even with default measurement metadata',()=>{
  const {monitoring,container}=show({state:'measuring',since:null,engines:[]},true);

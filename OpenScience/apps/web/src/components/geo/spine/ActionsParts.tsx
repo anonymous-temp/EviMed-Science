@@ -275,6 +275,7 @@ export function OtherArticles({
   onOpen,
   onWithdraw,
   onContinue,
+  onHumanize,
   canEdit,
 }: {
   articles: readonly GeoArticle[];
@@ -283,6 +284,7 @@ export function OtherArticles({
   onOpen: (article: GeoArticle) => void;
   onWithdraw: (article: GeoArticle) => void;
   onContinue?: (article: GeoArticle) => void;
+  onHumanize?: (article: GeoArticle) => void;
   canEdit: boolean;
 }) {
   if (articles.length === 0) return null;
@@ -307,7 +309,8 @@ export function OtherArticles({
                 )}
                 trailing={article.groupIsControl ? <Tag tone="warn">对照群</Tag> : undefined}
                 actions={canEdit ? <>
-                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" onClick={() => onContinue(article)}>继续在对话中处理</Button>}
+                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" onClick={() => onContinue(article)}>在对话中修改</Button>}
+                  {article.currentResultVersionId && onHumanize && <Button variant="text" size="sm" onClick={() => onHumanize(article)}>在对话中润色语言</Button>}
                   {article.status !== "withdrawn" && <Button variant="text" size="sm" onClick={() => onWithdraw(article)}>撤回</Button>}
                 </> : undefined}
               />

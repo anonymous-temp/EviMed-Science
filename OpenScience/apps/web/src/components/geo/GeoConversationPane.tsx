@@ -41,5 +41,5 @@ export function GeoConversationPane({ projectId, sessionId, geoId, canRun = true
   }, [projectId, sessionId, scope, owner]);
   if (!canRun) return <PreservedConversation projectId={projectId} sessionId={sessionId} scope={{kind:"geo",geoProjectId:geoId,sessionId}} />;
   if (error) return <LoadError message={error} onRetry={() => setAttempt(value => value + 1)} />;
-  return <div ref={pane} aria-label="项目对话" className="min-h-96 flex-1" />;
+  return <div ref={pane} aria-label="项目对话" className="min-h-96 flex-none" />;
 }

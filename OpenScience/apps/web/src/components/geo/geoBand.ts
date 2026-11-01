@@ -2,7 +2,7 @@
  * What the fixed band above every GEO tab says, decided before anything is drawn (R19, audit C A.1–A.2): the eight steps as one row
  * and the one sentence at its end. The tabs below it are drawn by the layout; this is only the words and the states.
  */
-import { agendaLocalDate, DISPLAY_TIME_ZONE } from "@evimed/domain";
+import { agendaLocalDate, DISPLAY_TIME_ZONE, geoAutomationEnabled } from "@evimed/domain";
 import { GEO_STEP_KEYS, type GeoMeasurement, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import type { RailState } from "@/components/ui/ProgressRail";
@@ -41,7 +41,7 @@ export function bandSteps(project: GeoProject, hrefOf: (step: GeoStepKey) => str
     const done = status === "done";
     const working = status === "running" || status === "queued";
     // Placing is asked for when the reader requested it or it is already moving; a step nobody asked for owes neither budget nor market.
-    const asked = key === "distribution" && !done && status !== "minimal" && (step?.requested === true || working || status === "failed");
+    const asked = key === "distribution" && !done && status !== "minimal" && (step?.requested === true && step.requestOrigin !== "legacy" || working || status === "failed");
     const held = asked && !market;
     const budget = asked && market && needsBudget;
     const allowance = stepAllowanceWait(step);
@@ -52,7 +52,7 @@ export function bandSteps(project: GeoProject, hrefOf: (step: GeoStepKey) => str
             : held ? "todo"
               : working ? "active" : "todo";
     const summary = budget ? "待你确认预算" : held ? GEO_MARKET_OFF_NOTE : step?.summary?.text ?? shortNote(step?.note);
-    return { id: key, label: GEO_STEP_NAMES[key], state, stateLabel: status === "none" ? step?.requested === true ? "待开始" : step?.requested === false ? "未请求" : "未开始" : status === "queued" ? "排队中" : undefined, summary, href: hrefOf(key) };
+    return { id: key, label: GEO_STEP_NAMES[key], state, stateLabel: status === "none" ? step?.requestOrigin === "legacy" && step.requested ? "待确认" : step?.requested === true ? "待开始" : step?.requested === false ? "未请求" : "未开始" : status === "queued" ? "排队中" : undefined, summary, href: hrefOf(key) };
   });
 }
 
@@ -76,7 +76,7 @@ export function measurementPause(measurement: GeoMeasurement | null | undefined)
   if (measurement.state === "paused") {
     const day = monthDay(measurement.since ?? null);
     const short = `AI 回答测量暂停中${day ? `（${day}起）` : ""}`;
-    const detail = "测量服务暂时连不上，恢复后自动继续";
+    const detail = "测量服务暂时不可用，产品依据和已有结果仍可查看";
     return { paused: true, short, detail, sentence: `${short}：${detail}。` };
   }
   const engines = Array.isArray(measurement.engines)
@@ -84,7 +84,7 @@ export function measurementPause(measurement: GeoMeasurement | null | undefined)
     : [];
   if (engines.length === 0) return null;
   const short = zh`${engines.map((engine) => engineName(engine)).join("、")}暂停测量`;
-  const detail = "其余 AI 照常测量，恢复后自动继续";
+  const detail = "这些引擎暂时不可用；是否有测量任务以当前工作记录为准";
   return { paused: false, short, detail, sentence: `${short}，${detail}。` };
 }
 
@@ -93,10 +93,10 @@ export function measurementPause(measurement: GeoMeasurement | null | undefined)
  * paused — the server says the same, and the page does not promise a round on an older server's word.
  */
 export function nextMeasurement(
-  project: Pick<GeoProject, "status">,
-  watch: { next?: { date: string; kind: string } | null; measurement?: GeoMeasurement | null } | null | undefined,
+  project: Pick<GeoProject, "status"> & Partial<Pick<GeoProject, "steps" | "engines" | "coverageDays">>,
+  watch: { next?: { date: string; kind: string; source?: "queued" | "schedule" } | null; measurement?: GeoMeasurement | null } | null | undefined,
 ): { date: string; kind: string } | null {
-  if (!watch?.next?.date || project.status === "paused" || watch.measurement?.state === "paused") return null;
+  if ((!geoAutomationEnabled(project) && watch?.next?.source !== "queued") || !watch?.next?.date || project.status === "paused" || watch.measurement?.state === "paused") return null;
   return watch.next;
 }
 
@@ -106,7 +106,7 @@ export function nextMeasurement(
  */
 export function bandNow(
   project: GeoProject,
-  next: { date: string; kind: string } | null | undefined,
+  next: { date: string; kind: string; source?: "queued" | "schedule" } | null | undefined,
   now: Date = new Date(),
   measurement: GeoMeasurement | null = null,
 ): string | null {
@@ -128,7 +128,7 @@ export function bandNow(
   else if (monitor?.status === "queued") parts.push("复测排队中");
   const pause = measurementPause(measurement);
   if (pause) parts.push(pause.short);
-  if (next?.date && project.status !== "paused" && !pause?.paused) {
+  if ((geoAutomationEnabled(project) || next?.source === "queued") && next?.date && project.status !== "paused" && !pause?.paused) {
     const today = agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString());
     const day = parseGeoDate(next.date);
     const date = `${day ? `${WEEKDAYS[day.getDay()]} ` : ""}${monthDay(next.date) ?? next.date}`.trim();

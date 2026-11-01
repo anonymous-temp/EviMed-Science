@@ -52,7 +52,8 @@ test("the pause is read from the probe's state: held engines, every probe engine
 test("the monitoring view says the measurement is paused, since when, and names no next re-measure; 本周 and the rail count only rounds with answers", options, async () => {
   const userId = `u-${randomUUID().slice(0, 8)}`;
   const project = await store.createProject({ userId, projectId: "p-pause", engines: ["deepseek", "kimi"], coverageDays: 90, product: { brandName: "玛仕度肽" } });
-  await store.setStep(project.id, "monitoring", { requested: true });
+  await store.setStep(project.id, "monitoring", { requested: true, automation: { state: "confirmed", actorId: userId,
+    at: new Date().toISOString(), engines: project.engines, coverageDays: project.coverageDays } });
   const service = new GeoService({ store, config: CONFIG });
   const user = { id: userId };
   // A baseline that heard an answer, and this week's re-measure that heard none (its engines paused).

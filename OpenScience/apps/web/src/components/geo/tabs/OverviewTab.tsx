@@ -1,6 +1,8 @@
+import { useGeoFrame } from "../geoFrame";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { Link } from "react-router";
-import { geoOverviewFirstUse } from "../geoFirstUse";
+import { GeoJourneySummary } from "../GeoJourneySummary";
+import { geoOverviewNeedsMeasurement } from "../geoFirstUse";
 import { buttonClasses } from "@/components/ui/Button";
 import { useMemo } from "react";
 import { Radar } from "lucide-react";
@@ -14,7 +16,7 @@ import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue } from "../GeoCellText";
 import { NeedsYou } from "../NeedsYou";
 import { LoadError } from "@/components/cards/LoadError";
-import { measurementPause, nextMeasurement } from "../geoBand";
+import { nextMeasurement } from "../geoBand";
 import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag } from "@/components/ui/Tag";
@@ -56,13 +58,13 @@ import { useGeoPath } from "../useGeoPath";
  */
 export function OverviewTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const path = useGeoPath();
+  const frame = useGeoFrame();
   const diagnosis = useGeoDiagnosis(geoId);
   const monitoring = useGeoMonitoring(geoId);
   // The plan gives each target the day it falls due; without it the band still reads, just without that date.
   const strategy = useGeoStrategy(geoId);
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
-  const pause = measurementPause(watch?.measurement);
   const plan = strategy.state.kind === "ready" ? strategy.state.data : null;
   // The open errors and the rivals are the diagnosis's: when it did not come, the band says so instead of reading as none.
   const diagnosisFailed = readFailure(diagnosis);
@@ -78,19 +80,23 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const cells = tiles.length + 1;
   const ranked = ranking.length > 0;
 
-  if (geoOverviewFirstUse(project, diagnosis.state, monitoring.state, strategy.state)) return <div data-geo-tab="overview" data-geo-first-use="" className="flex flex-col gap-4">
-    <h2 className="text-section font-semibold">从现有资料和问题开始</h2>
-    <p className="text-ui text-text-2">{pause?.paused ? "还没有采样记录。现在可以核对产品依据、整理现有问句；测量恢复后再开始诊断。" : "还没有采样记录。先核对产品依据，或导入已有问句；确认采样口径后再开始诊断。"}</p>
-    {pause && <p role="status" className="text-ui text-text-2">{pause.sentence}</p>}
-    <div className="flex flex-wrap gap-2"><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"evidence"))}>查看产品依据</Link><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"questions"))}>整理问题</Link></div>
+  if (geoOverviewNeedsMeasurement(project, diagnosis.state, monitoring.state)) return <div data-geo-tab="overview" data-geo-first-use="" className="flex flex-col gap-6">
+    <GeoJourneySummary project={project} />
+    <Section title="已有资料与结果">
+      <p className="mb-3 text-ui text-text-2">还没有采样记录。产品依据、问题和方案的已有结果都可继续查看。</p>
+      <div className="flex flex-wrap gap-2"><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"evidence"))}>查看产品依据</Link><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"questions"))}>整理问题</Link></div>
+    </Section>
+    {strategy.state.kind === "error" && <LoadError message={strategy.state.message} onRetry={strategy.reload} />}
+    {strategy.state.kind === "ready" && strategy.state.refreshError && <LoadError message={strategy.state.refreshError} onRetry={strategy.reload} />}
+    <NeedsYou geoId={geoId} project={project} showMeasurement={!frame} />
     <GeoAnalysisEntry geoId={geoId} project={project} />
   </div>;
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-6">
+      <GeoJourneySummary project={project} compact />
       <GeoComparison geoId={geoId} view={project} />
-      {pause && <p role="status" className="text-ui text-text-2">{pause.sentence}</p>}
-      {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
+        {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
           「还有 11 条严重讲错」 a moment later is worse than a held line. */}
       {diagnosis.state.kind === "loading" ? (
         <div role="status" aria-label="正在读取" className="flex h-7 items-center"><div className="h-7 w-2/3 animate-pulse rounded bg-surface-1" /></div>
@@ -152,7 +158,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
 
       {diagnosisFailed && <LoadError message={`用药安全和同类药排名没有读到：${diagnosisFailed.message}`} onRetry={diagnosisFailed.retry} />}
 
-      <NeedsYou geoId={geoId} project={project} />
+      <NeedsYou geoId={geoId} project={project} showMeasurement={!frame} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <TrendCard
@@ -260,6 +266,11 @@ function TrendCard({
     nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [watch, next, metric?.target, project.name]);
+
+  if (monitoring.state.kind === "ready" && points.length === 0) return <section aria-label="监测趋势" className={className}>
+    <p className="text-ui text-text-2">还没有持续监测趋势。已有测量和其他结果仍可查看。</p>
+    <Link className="mt-2 inline-block rounded text-ui text-link hover:underline" to={geoTabPath(project.id,"visibility")}>查看测量与监测</Link>
+  </section>;
 
   return (
     <ChartCard

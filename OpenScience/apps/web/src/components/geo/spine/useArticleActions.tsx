@@ -64,6 +64,18 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
     </>
   );
 
+  const reviseArticle = async (article: ArticleRef, instruction?: string) => {
+      if (!article.currentResultVersionId) return;
+      try {
+        const version = await getResultVersion(article.currentResultVersionId);
+        if (version.projectId !== project.projectId || article.contentSha256 && version.digest !== article.contentSha256) throw new Error("The selected article version changed.");
+        const sessionId = version.producer.sessionId;
+        if (!sessionId) throw new Error("Article conversation unavailable");
+        const prepared = await requestResultRevision(version, { kind: "file", elementId: "file", selectedText: "" }, sessionId);
+        await openConversation({ projectId: project.projectId, geoId, sessionId, resultRevision: { referenceId: prepared.referenceId } }, instruction);
+      } catch (error: unknown) { toast.error(webErrorMessage(error, { fallback: "稿件对话暂时无法打开，请稍后重试。" })); }
+    };
+
   return {
     /** Whether the article has anything to open, and the word for the button that opens it. */
     reachable: (article: ArticleRef): { label: string } | null => (article.runId && article.path ? { label: "打开稿件" } : article.cardId ? { label: "查看稿件" } : null),
@@ -71,16 +83,8 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
       if (openFile(article)) return;
       if (article.cardId) setReading(article);
     },
-    continueInConversation: async (article: ArticleRef) => {
-      if (!article.currentResultVersionId) return;
-      try {
-        const version = await getResultVersion(article.currentResultVersionId);
-        const sessionId = version.producer.sessionId;
-        if (!sessionId) throw new Error("Article conversation unavailable");
-        const prepared = await requestResultRevision(version, { kind: "file", elementId: "file", selectedText: "" }, sessionId);
-        await openConversation({ projectId: project.projectId, geoId, sessionId, resultRevision: { referenceId: prepared.referenceId } });
-      } catch (error: unknown) { toast.error(webErrorMessage(error, { fallback: "稿件对话暂时无法打开，请稍后重试。" })); }
-    },
+    continueInConversation: (article: ArticleRef) => reviseArticle(article),
+    humanizeInConversation: (article: ArticleRef) => reviseArticle(article, "请仅修改所选稿件版本的语言，减少模板感和生硬表达。保留数字、引文、出处、药名与限定条件；有疑问请指出，不自行补充医学结论。把修改后的稿件另存为新版本。"),
     release: (article: ArticleRef) => setPending({ kind: "release", article: { ...article } }),
     withdraw: (article: ArticleRef) => setPending({ kind: "withdraw", article }),
     busy,

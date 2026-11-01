@@ -529,7 +529,7 @@ describe("行动: a read that failed is not an empty page (owner, 2026-10-19)", 
     const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent(/^稿件没有读到：/);
     expect(alert.closest("section")).toHaveAttribute("id", "geo-review");
-    expect(screen.queryByRole("button", { name: "写第一批稿件" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始任务：写第一批稿件" })).not.toBeInTheDocument();
     client.getGeoArticles.mockResolvedValue({ articles: [ARTICLES[3]] });
     await userEvent.click(within(alert).getByRole("button", { name: /重试/ }));
     expect(await screen.findByRole("region", { name: "等你放行的稿件" })).toBeInTheDocument();
@@ -564,7 +564,7 @@ describe("行动: states", () => {
     client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [], control: [], counts: { total: 0, byKind: {}, byStatus: {}, gapsWithoutEntry: 0 } });
     client.getGeoArticles.mockResolvedValue({ articles: [] });
     renderTab(geoProject({ content: "done" }));
-    const button = await screen.findByRole("button", { name: "写第一批稿件" });
+    const button = await screen.findByRole("button", { name: "开始任务：写第一批稿件" });
     await userEvent.click(button);
     await waitFor(() => expect(client.runGeoStep).toHaveBeenCalledWith("geo_1", "content"));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/actions");
@@ -577,8 +577,8 @@ describe("行动: states", () => {
     project.steps.content = { status: "none", requested: true };
     renderTab(project);
     expect(await screen.findByText("写第一批稿件，排队中")).toBeInTheDocument();
-    expect(screen.getByText("“信源”做完后自动开始。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "写第一批稿件" })).not.toBeInTheDocument();
+    expect(screen.getByText("“证据”做完后自动开始。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始任务：写第一批稿件" })).not.toBeInTheDocument();
   });
 
   it("says what it kept and offers to go on when the step did not finish", async () => {
@@ -594,8 +594,7 @@ describe("行动: states", () => {
     client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: [], control: [] });
     client.getGeoArticles.mockResolvedValue({ articles: [] });
     renderTab(geoProject({ content: "done" }));
-    await screen.findByRole("button", { name: "写第一批稿件" });
-    expect(screen.getByRole("link", { name: "信源分析" })).toHaveAttribute("href", "/app/geo/geo_1/sources");
+    await screen.findByRole("button", { name: "开始任务：写第一批稿件" });
     expect(screen.getByText("得到 面向各问题群的稿件")).toBeInTheDocument();
   });
 

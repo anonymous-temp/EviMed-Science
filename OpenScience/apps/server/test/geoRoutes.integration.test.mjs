@@ -378,6 +378,8 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
 test("measured rows become the diagnosis, the answer page, the overview and monitoring — and nothing is computed", options, async () => {
   const { project } = await seededProject();
   const id = project.id;
+  await store.setStep(id, "monitoring", { requested: true, automation: { state: "confirmed", actorId: ALICE,
+    at: new Date().toISOString(), engines: project.engines, coverageDays: project.coverageDays } });
   const map = await store.questionMap(id, 1);
   const question = map[0].questions[0];
   const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);

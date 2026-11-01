@@ -18,7 +18,7 @@ import type { FilterOption } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Button } from "@/components/ui/Button";
-import { useGeoFrame, useGeoToolbar } from "../geoFrame";
+import { geoMayConverse, useGeoFrame, useGeoToolbar } from "../geoFrame";
 import { LoadError } from "@/components/cards/LoadError";
 import { readFailure, useGeoMonitoring, useSharedGeoLoad } from "../geoProjectData";
 import { marketConnected } from "../geoOverviewModel";
@@ -352,7 +352,8 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
         reachable={articleActions.reachable}
         onOpen={articleActions.open}
         onWithdraw={articleActions.withdraw}
-        onContinue={articleActions.continueInConversation}
+        onContinue={geoMayConverse(project) ? articleActions.continueInConversation : undefined}
+        onHumanize={geoMayConverse(project) ? articleActions.humanizeInConversation : undefined}
         canEdit={can("edit")}
       />}
 

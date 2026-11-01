@@ -186,6 +186,12 @@ async function measured(roundId) {
     VALUES ($1, $2, $3, $4, 'project', 'M-19', 'ok', 31.5, NULL, NULL)`, [`m-${roundId}`, round.user_id, round.geo_project_id, roundId]);
 }
 
+/** A fixture's explicit recurring choice, independent of requested step flags. */
+async function authorizeAutomation(project) {
+  await store.setStep(project.id, "monitoring", { automation: { state: "confirmed", actorId: project.userId,
+    at: "2026-09-20T00:00:00Z", engines: [...project.engines], coverageDays: project.coverageDays } });
+}
+
 /** A program that wants the diagnosis and the strategy, its full question set locked. */
 async function lockedProgram() {
   const world = harness();
@@ -193,6 +199,7 @@ async function lockedProgram() {
   for (const step of ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]) {
     await store.setStep(made.project.id, step, { requested: true });
   }
+  await authorizeAutomation(made.project);
   await insightRunWrites(made.project);
   for (const step of ["evidence", "journey"]) await store.setStep(made.project.id, step, { status: "done" });
   await world.orchestrator.advance(made.project.id);
@@ -212,6 +219,7 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
     await store.setStep(project.id, step, { requested: true });
   }
 
+  await authorizeAutomation(project);
   // Steps 1–3: one insight run.
   let result = await world.orchestrator.advance(project.id);
   assert.equal(world.dispatched.length, 1);
@@ -268,7 +276,7 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   assert.equal(world.dispatched.length, 3, "the battlefield is covered: no second first-round batch");
   assert.equal(world.notices.filter((notice) => notice.title === "玛仕度肽：首批稿件可发布").length, 1);
   steps = await statuses(project.id);
-  assert.deepEqual([steps.distribution, steps.monitoring], ["none", "running"], "no order yet; monitoring armed once the diagnosis is in");
+  assert.deepEqual([steps.distribution, steps.monitoring], ["none", "queued"], "no order yet; the accepted noise round is queued");
 
   // Step 7 is the market's: a published order makes it done.
   const article = (await store.listArticles(project.id))[0];
@@ -332,8 +340,8 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   await finishRound(weekly.id);
   await world.orchestrator.advance(project.id);
   steps = await statuses(project.id);
-  assert.equal(steps.monitoring, "done");
-  assert.equal((await reload(project.id)).steps.monitoring.note, "第 1 周");
+  assert.equal(steps.monitoring, "queued", "accepted recurring work supersedes completed weekly history");
+  assert.equal((await reload(project.id)).steps.monitoring.note ?? null, null);
   assert.equal(world.dispatched.length, 5);
   assert.deepEqual([world.dispatched[4].capabilityId, world.dispatched[4].reason, world.dispatched[4].dispatchId],
     ["geo-proposal", "geo:export-weekly", "geo-export-weekly-2026-10-05-a1"]);
@@ -369,7 +377,7 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   assert.equal(world.dispatched.length, 5);
 });
 
-test("a tiny question set locked in conversation is a diagnosis, not the full programme (D-30)", options, async () => {
+test("a locked question set remains data until diagnosis is explicitly requested", options, async () => {
   // Three measured questions in two groups, no control group, nothing requested: the lock is allowed (the owner's rule: nothing is
   // refused), and used to be recorded `done`, which made the project's idle orchestrator request all eight steps from it.
   const world = harness();
@@ -389,8 +397,11 @@ test("a tiny question set locked in conversation is a diagnosis, not the full pr
 
   await world.orchestrator.advance(project.id);
   const requested = Object.entries((await reload(project.id)).steps).filter(([, step]) => step.requested).map(([name]) => name);
-  assert.deepEqual(requested, ["diagnosis"], "a diagnosis, not eight steps");
-  assert.deepEqual(world.enqueued.map((round) => round.kind), ["single_step"], "one single-step round: no baseline, no noise round");
+  assert.deepEqual(requested, [], "locking data requests no work");
+  assert.deepEqual(world.enqueued, []);
+  assert.deepEqual(world.dispatched, []);
+  await world.orchestrator.runStep({ id: userId }, project, "diagnosis");
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["single_step"], "only the requested diagnosis runs");
   assert.ok(world.dispatched.every((run) => run.capabilityId === "geo-insight"), `only the minimal upstream may run: ${world.dispatched.map((run) => run.capabilityId)}`);
 
   // The same tiny set in a project that asked for the whole programme is still measured as a minimal set: the lock is the same, the round the same.
@@ -424,8 +435,10 @@ test("a locked set with no control group is a diagnosis only: content and distri
   assert.equal(locked.measuredCount, 48);
   assert.equal((await statuses(project.id)).questions, "minimal", "full size, but no control group: a diagnosis");
 
-  // The orchestrator's ticks: one round for the diagnosis, and nothing else however many ticks pass or whatever finishes.
   await world.orchestrator.advance(project.id);
+  assert.deepEqual(world.enqueued, [], "saving questions alone creates no paid asks");
+  // Only the explicitly requested diagnosis is measured; later work stays unrequested.
+  await world.orchestrator.runStep(user, project, "diagnosis");
   assert.deepEqual(world.enqueued.map((round) => round.kind), ["single_step"]);
   await finishRound(world.enqueued[0].id);
   for (let tick = 0; tick < 4; tick += 1) await world.orchestrator.advance(project.id);
@@ -653,6 +666,7 @@ test("a weekly round that heard no answer is no week: monitoring is not done by 
   await store.setStep(project.id, "monitoring", { requested: true });
   await insightRunWrites(project);
   for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  await authorizeAutomation(project);
   await world.orchestrator.advance(project.id);
   // The set is the diagnosis' minimal one: its round is a single step.
   const diagnosis = world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.step === "diagnosis");
@@ -670,7 +684,7 @@ test("a weekly round that heard no answer is no week: monitoring is not done by 
   await finishRound(weeklyOf("2026-10-05").id, { answers: 0, finishedAt: "2026-10-04T19:20:00Z" });
   await world.orchestrator.advance(project.id);
   await world.orchestrator.advance(project.id);
-  assert.equal((await statuses(project.id)).monitoring, "running", "a week with no answer is not 「第 1 周」");
+  assert.equal((await statuses(project.id)).monitoring, "none", "a week with no answer is neither an active round nor 「第 1 周」");
   assert.deepEqual(reports(), [], "no weekly report of a week nothing was measured in");
 
   // The next week is heard: it is the first week, and it gets its report.
@@ -690,6 +704,7 @@ test("a one-shot import leaves the weekly round on the monitored set; with only 
   await store.setStep(project.id, "monitoring", { requested: true });
   await insightRunWrites(project);
   for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  await authorizeAutomation(project);
   await world.orchestrator.advance(project.id);
   const diagnosis = world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.step === "diagnosis");
   await finishRound(diagnosis.id, { finishedAt: "2026-09-28T00:00:00Z" });
@@ -866,7 +881,7 @@ test("a pause that lands while a tick is under way still holds the run it was ab
   assert.equal(world.dispatched.length, 1, "and it goes out once the project is resumed");
 });
 
-test("a conversation that locks a set with nothing requested starts the program; the worker's leases and daily claims hold", options, async () => {
+test("completed questions do not start a programme; explicit requests and worker leases remain effective", options, async () => {
   const world = harness();
   const { project } = await newProject();
   // A map written in plain conversation is held to the full program's rules (geoProgramMinimal);
@@ -879,7 +894,10 @@ test("a conversation that locks a set with nothing requested starts the program;
   }
   await world.orchestrator.advance(project.id);
   const steps = (await reload(project.id)).steps;
-  assert.ok(Object.values(steps).every((step) => step.requested), "a full set locked in conversation is the full program");
+  assert.ok(Object.values(steps).every((step) => !step.requested), "completed data does not expand task scope");
+  assert.deepEqual(world.enqueued, []);
+  for (const step of ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]) await store.setStep(project.id, step, { requested: true });
+  await world.orchestrator.advance(project.id);
   assert.deepEqual(world.enqueued.map((round) => round.kind), ["baseline"]);
   assert.equal(world.dispatched.length, 0, "steps 1–3 are done by the conversation; nothing to dispatch before the baseline");
 
@@ -1059,6 +1077,12 @@ test("a page the brand published itself gets the post-publication rounds a place
   assert.equal(mine().length, 0, "a week has not passed");
   world.setClock("2026-09-27T01:00:00Z");
   await world.orchestrator.tickSchedules();
+  assert.equal(mine().length, 0, "publication and saved questions do not authorize recurring measurement");
+  await store.setStep(project.id, "monitoring", { requested: true });
+  await world.orchestrator.tickSchedules();
+  assert.equal(mine().length, 0, "a requested flag alone is not recurring authorization");
+  await authorizeAutomation(project);
+  await world.orchestrator.tickSchedules();
   const [week1] = mine();
   assert.deepEqual([week1?.ref?.ownedLinkId, week1?.ref?.week, week1?.engines], [live, 1, ENGINES]);
   const groupQuestions = first.questions.map((/** @type {any} */ question) => question.id).sort();
@@ -1202,6 +1226,7 @@ test("the next round takes the groups short of their pool's target and those wit
   for (const step of ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]) {
     await store.setStep(project.id, step, { requested: true });
   }
+  await authorizeAutomation(project);
   await world.orchestrator.advance(project.id);
   await insightRunWrites(project);
   await finishRun(world, control, 0);
@@ -1319,4 +1344,120 @@ test("the first round does not write for a group a person set aside, and its bat
   const brief = world.dispatched[2].brief;
   assert.equal(brief.includes("语义群“语义群1”"), false, "the group a person set aside is not written for");
   assert.equal(brief.includes("语义群“语义群2”"), true, "the rest of the battlefield is");
+});
+
+
+test("legacy expanded steps preserve results but neither dispatch future work nor authorize automation", options, async () => {
+  const world = harness();
+  const {project,user} = await newProject();
+  const legacy = Object.fromEntries(["evidence","journey","questions","diagnosis","sources","content","distribution","monitoring"].map(step=>[step,{status:"none",requested:true}]));
+  legacy.evidence.status="done";
+  await q(`UPDATE evimed_geo.projects SET steps=$2::jsonb WHERE id=$1`,[project.id,JSON.stringify(legacy)]);
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.tickSchedules();
+  assert.deepEqual(world.dispatched,[]);
+  assert.deepEqual(world.enqueued.filter(row=>row.geoProjectId===project.id),[]);
+  assert.equal((await reload(project.id)).steps.evidence.status,"done");
+  assert.equal((await reload(project.id)).steps.content.requestOrigin,"legacy");
+  await world.orchestrator.runStep(user,project,"content");
+  assert.equal(world.dispatched.length,1);
+  assert.equal(world.dispatched[0].capabilityId,"geo-content");
+  assert.equal((await reload(project.id)).steps.content.requestOrigin,"browser");
+});
+
+test("automation withdrawal and changed scope block new rounds without deleting accepted work", options, async () => {
+  const {world,project,user}=await lockedProgram();
+  const baseline=world.enqueued[0].id;
+  await finishRound(baseline,{finishedAt:"2026-09-20T12:00:00Z"});
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.setMonitoringAutomation(user,project,false);
+  const mine=()=>world.enqueued.filter(row=>row.geoProjectId===project.id);
+  const before=mine().length;
+  world.setClock("2026-10-05T00:10:00Z");
+  await world.orchestrator.tickSchedules();
+  assert.equal(mine().length,before);
+  assert.equal((await q(`SELECT id FROM evimed_geo.rounds WHERE id=$1`,[baseline])).length,1);
+  await world.orchestrator.setMonitoringAutomation(user,project,true);
+  await store.updateProject(user.id,project.id,{engines:["deepseek"]});
+  const after=mine().length;
+  await world.orchestrator.tickSchedules();
+  assert.equal(mine().length,after,"new engine scope requires a fresh explicit recurring choice");
+});
+
+
+test("recurring consent refuses incompatible contracts and narrowed scope reaches the actual queue unchanged", options, async () => {
+  const { world, project, user } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  const agreement = { samplingMode: "recurring", engines: ENGINES, repeats: 2, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  await q(`UPDATE evimed_geo.question_sets SET contract=$2::jsonb WHERE geo_project_id=$1`, [project.id, JSON.stringify(agreement)]);
+  await world.orchestrator.setMonitoringAutomation(user, project, false);
+  await store.updateProject(user.id, project.id, { engines: ["qianwen"] });
+  await assert.rejects(world.orchestrator.setMonitoringAutomation(user, project, true), { status: 409, code: "geo_monitoring_scope_changed" });
+  assert.equal((await reload(project.id)).steps.monitoring.automation.state, "declined");
+  // Even a stale/forged matching project consent cannot send engines outside the immutable agreement.
+  await authorizeAutomation({ ...project, engines: ["qianwen"] });
+  world.setClock("2026-10-05T00:10:00Z");
+  const before = world.enqueued.length;
+  await world.orchestrator.tickSchedules();
+  assert.equal(world.enqueued.filter(row => row.geoProjectId === project.id && row.engines.includes("qianwen")).length, 0);
+  assert.equal(world.enqueued.length, before);
+  await store.updateProject(user.id, project.id, { engines: ["deepseek"] });
+  await world.orchestrator.setMonitoringAutomation(user, project, true);
+  await world.orchestrator.tickSchedules();
+  const recurring = world.enqueued.filter(row => row.geoProjectId === project.id && row.kind !== "baseline");
+  assert.ok(recurring.length > 0);
+  for (const row of recurring) assert.deepEqual(row.engines, ["deepseek"]);
+  assert.deepEqual((await store.questionSets(project.id))[0].contract, agreement);
+});
+
+test("stopping monitoring preserves accepted rounds and exposes their actual execution independently", options, async () => {
+  const { world, project, user } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  const active = (await store.activeMeasurements([project.id])).get(project.id);
+  assert.ok(active);
+  await world.orchestrator.setMonitoringAutomation(user, project, false);
+  assert.deepEqual((await store.activeMeasurements([project.id])).get(project.id), active);
+  await q(`UPDATE evimed_geo.rounds SET status='done', finished_at=now() WHERE geo_project_id=$1`, [project.id]);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await store.activeMeasurements([project.id])).get(project.id), undefined);
+  assert.equal((await reload(project.id)).steps.monitoring.status, "none");
+});
+
+test("programme preparation locks questions and enqueues exactly one baseline across repeated advances", options, async () => {
+  const world = harness();
+  const { project, user, control } = await newProject();
+  await world.orchestrator.runStep(user, project, "diagnosis");
+  assert.equal(world.dispatched.length, 1);
+  assert.match(world.dispatched[0].brief, /不调用 start_diagnosis/);
+  assert.doesNotMatch(world.dispatched[0].brief, /geo_write product、claims、journey、questions/);
+  await insightRunWrites(project, { minimal: true });
+  await finishRun(world, control, 0);
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.enqueued.filter(row => row.geoProjectId === project.id).length, 1);
+  assert.equal(world.enqueued[0].kind, "single_step");
+});
+
+
+test("a new monitoring round supersedes completed weekly status without being hidden by another active lane", options, async () => {
+  const { world, project } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  await q(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,finished_at)
+    VALUES ($1,$2,$3,'weekly','done',now())`, [`prior-week-${project.id}`, project.userId, project.id]);
+  await q(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status)
+    VALUES ($1,$2,$3,$4,'deepseek','valid')`, [`prior-answer-${project.id}`,project.userId,project.id,`prior-week-${project.id}`]);
+  await world.orchestrator.advance(project.id);
+  await q(`UPDATE evimed_geo.rounds SET status='done' WHERE geo_project_id=$1 AND status='queued'`,[project.id]);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await reload(project.id)).steps.monitoring.status,"done");
+  const queued=`next-week-${project.id}`;
+  await q(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status) VALUES
+    ($1,$2,$3,'weekly','queued'), ($4,$2,$3,'confirm','running')`,[queued,project.userId,project.id,`confirm-${project.id}`]);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await reload(project.id)).steps.monitoring.status,"queued");
+  assert.equal((await store.activeMeasurements([project.id])).get(project.id).id,queued);
+  await q(`UPDATE evimed_geo.rounds SET status='running' WHERE id=$1`,[queued]);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await reload(project.id)).steps.monitoring.status,"running");
 });

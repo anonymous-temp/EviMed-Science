@@ -162,7 +162,7 @@ describe("a tab with nothing yet", () => {
   ] as const)("%s: a finished step with nothing to show is a recipe with one button, %s, which starts it and keeps the person here", async (step, verb, Tab, arrange) => {
     arrange();
     renderTab(<Tab {...props(geoProject({ [step]: "done" }))} />);
-    const button = await screen.findByRole("button", { name: verb });
+    const button = await screen.findByRole("button", { name: `开始任务：${verb}` });
     expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
     await userEvent.click(button);
     await waitFor(() => expect(client.runGeoStep).toHaveBeenCalledWith("geo_1", step));
@@ -687,7 +687,9 @@ describe("信源", () => {
 /** A project whose index fell from 46.4 to 44 between two full measurements, the mention rate by two points (inside its ±3 band). */
 function fallingProject() {
   const base = geoProject();
+  base.steps.monitoring={status:'done',requested:true,automation:{state:'confirmed',actorId:'actor',at:'2026-10-01T00:00:00Z',engines:[...base.engines],coverageDays:base.coverageDays}};
   return geoProject({}, {
+    steps:base.steps,
     overview: {
       ...base.overview,
       metrics: [
@@ -715,6 +717,7 @@ function enginesChangedProject() {
   const base = fallingProject();
   const withKeys = (trend: Array<{ date: string; value: number | null; n?: number | null }>) => trend.map((point, index) => ({ ...point, coverage: index === trend.length - 1 ? THREE_ENGINES : TWO_ENGINES }));
   return geoProject({}, {
+    steps:base.steps,
     overview: {
       ...base.overview,
       metrics: base.overview.metrics.map((metric) => ({
@@ -864,7 +867,7 @@ describe("总览", () => {
     const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(heading.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The wrong statement carries its correction, with the sentence in the draft; the project's conversation is opened with it unsent.
-    await userEvent.click(within(list).getByRole("button", { name: "写纠错稿" }));
+    await userEvent.click(within(list).getByRole("button", { name: "在对话中写纠错稿" }));
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("每天注射一次"));
     expectUnsentProjectDraft("每天注射一次");
   });
@@ -922,16 +925,11 @@ describe("总览 while the AI answers cannot be measured", () => {
     renderTab(<OverviewTab {...props(diagnosisFailed(fallingProject()))} />);
     const heading = await screen.findByRole("heading", { name: "需要你" });
     const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
-    const status = await screen.findByRole("heading", { name: "监测状态" });
-    const paused = status.closest("section")!;
-    expect(paused).toHaveTextContent("AI 回答测量暂停中（10月20日起）");
-    expect(paused).toHaveTextContent("测量服务暂时连不上，恢复后自动继续");
-    // The sentence carries its action: the trend says what the last round measured.
-    const trendLink = within(paused as HTMLElement).getByRole("link", { name: "查看监测走势" });
-    expect(trendLink.getAttribute("href")).toBe("/app/geo/geo_1/visibility#geo-trend");
+    // The integrated frame owns the one channel-health message; the needs-you list does not duplicate it.
+    expect(screen.queryByRole("heading", {name:"监测状态"})).toBeNull();
     expect(list).not.toHaveTextContent("AI 回答测量暂停中");
     expect(list).toHaveTextContent("诊断没有做完");
-    expect(list).toHaveTextContent("恢复后再接着做");
+    expect(list).toHaveTextContent("已有结果仍可查看");
     expect(within(list).queryByRole("button", { name: "接着做" })).not.toBeInTheDocument();
     const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(trend.parentElement).not.toHaveTextContent("下次");
@@ -946,7 +944,7 @@ describe("总览 while the AI answers cannot be measured", () => {
     const heading = await screen.findByRole("heading", { name: "需要你" });
     const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(1);
-    expect(list).toHaveTextContent("上一轮没有拿到 AI 的回答，接着做会重新测一轮");
+    expect(list).toHaveTextContent("打开这一步查看运行记录和保留结果");
     expect(within(list).getByRole("button", { name: "接着做" })).toBeInTheDocument();
   });
 

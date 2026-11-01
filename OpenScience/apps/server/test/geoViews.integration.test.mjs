@@ -261,7 +261,7 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
   // Nothing measured yet: neither line is met, neither is failed.
   const none = await lines();
   assert.equal(none.met, null);
-  assert.deepEqual([none.accuracy.met, none.accuracy.status, none.accuracy.line], [null, null, 0.98]);
+  assert.deepEqual([none.accuracy.met, none.accuracy.status, none.accuracy.line], [null, null, null]);
   assert.deepEqual([none.retrievalErrors.open, none.retrievalErrors.met], [0, true]);
   assert.equal(none.roundId, roundId);
 
@@ -273,7 +273,7 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
   // Fifty answers, 49 right: 98 % is the line.
   await accuracy("ok", 49, 50, 98);
   const held = await lines();
-  assert.deepEqual([held.met, held.accuracy.met, held.accuracy.value], [true, true, 98]);
+  assert.deepEqual([held.met, held.accuracy.met, held.accuracy.value], [null, null, 98]);
 
   // Errors: seven open ones traced to a cited source (the list carries five), one the model's own, one traced but closed.
   const question = (await store.questionMap(project.id, 1))[0].questions[0];
@@ -288,11 +288,11 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
   await addError("open", null);
   await addError("closed", { url: "https://farm.example/x", domain: "farm.example", attribute: "farm" });
   const parametricOnly = await lines();
-  assert.deepEqual([parametricOnly.met, parametricOnly.retrievalErrors.open, parametricOnly.parametricErrors.open], [true, 0, 1], "the model's own error never blocks, a closed one does not count");
+  assert.deepEqual([parametricOnly.met, parametricOnly.retrievalErrors.open, parametricOnly.parametricErrors.open], [null, 0, 1], "no target is invented; a closed error does not count");
   for (let index = 0; index < 7; index += 1) await addError(index % 2 ? "acting" : "open", { url: `https://farm.example/${index}`, domain: "farm.example", attribute: "farm" });
   const diagnosis = await service.diagnosis(USER, project.id);
   assert.equal(diagnosis.errors.length, 5, "the list is capped");
-  assert.deepEqual([diagnosis.hardLines.met, diagnosis.hardLines.accuracy.met, diagnosis.hardLines.retrievalErrors.open, diagnosis.hardLines.retrievalErrors.met], [false, true, 7, false],
+  assert.deepEqual([diagnosis.hardLines.met, diagnosis.hardLines.accuracy.met, diagnosis.hardLines.retrievalErrors.open, diagnosis.hardLines.retrievalErrors.met], [false, null, 7, false],
     "the line reads every open error, not the page of them");
   assert.equal(diagnosis.hardLines.retrievalErrors.ids.length, 7);
   assert.deepEqual(diagnosis.hardLines.retrievalErrors.bySeverity, { S3: 7 });
@@ -312,4 +312,46 @@ test("the diagnosis says how many valid answers the round left out unjudged, and
   await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, judged_at, mentions_ours) VALUES ($1, $2, $3, now(), false)`,
     [`heard-ru-${project.id}`, ALICE, project.id]);
   assert.equal((await service.diagnosis(USER, project.id)).round?.unparsed, 0);
+});
+
+
+test("diagnosis compares only an explicit current project goal and never borrows it for a historical selection", options, async () => {
+  const {project}=await seededProject();
+  const roundId=`goal-${project.id}`;
+  await insertRound(roundId,project.id,"baseline",{finishedAt:"2026-09-24T10:00:00Z"});
+  await heard(roundId,project.id);
+  assert.equal((await service.diagnosis(USER,project.id)).hardLines.accuracy.line,null);
+  await store.writeTargets(ALICE,project.id,[{tier:project.tier,metricId:"M-06",pool:"all",target:75,dataType:"forecast"}]);
+  const current=await service.diagnosis(USER,project.id);
+  assert.equal(current.hardLines.accuracy.line,0.75);
+  assert.equal(current.hardLines.goalVersion,1);
+  const historical=await service.diagnosis(USER,project.id,{round:roundId});
+  assert.equal(historical.hardLines.accuracy.line,null);
+  assert.equal(historical.hardLines.goalBasis,"not_bound_to_selection");
+});
+
+test("list and detail expose actual accepted measurement separately from stopped automation in one batched list query", options, async () => {
+  const first = (await seededProject()).project;
+  const second = (await seededProject()).project;
+  await store.setStep(first.id, "monitoring", { status: "none", automation: { state: "declined", actorId: ALICE,
+    at: new Date().toISOString(), engines: first.engines, coverageDays: first.coverageDays } });
+  const roundId = `active-${first.id}`;
+  await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status) VALUES ($1,$2,$3,'weekly','queued')`, [roundId, ALICE, first.id]);
+  const query = store.query.bind(store);
+  const batches = [];
+  store.query = async (sql, values) => {
+    if (sql.includes("SELECT DISTINCT ON (geo_project_id) geo_project_id, id, kind, status")) batches.push(values[0]);
+    return query(sql, values);
+  };
+  let listed;
+  try { listed = await service.listProjects(USER); } finally { store.query = query; }
+  assert.equal(batches.length, 1);
+  assert.ok(batches[0].includes(first.id) && batches[0].includes(second.id));
+  const expected = { id: roundId, kind: "weekly", status: "queued" };
+  assert.deepEqual(listed.projects.find(row => row.id === first.id).activeMeasurement, expected);
+  assert.equal(listed.projects.find(row => row.id === second.id).activeMeasurement, null);
+  assert.deepEqual((await service.projectView(USER, first.id)).activeMeasurement, expected);
+  assert.deepEqual((await service.monitoring(USER, first.id)).activeMeasurement, expected);
+  await database.query(`UPDATE evimed_geo.rounds SET status='done', finished_at=now() WHERE id=$1`, [roundId]);
+  assert.equal((await service.projectView(USER, first.id)).activeMeasurement, null);
 });

@@ -36,7 +36,7 @@ const routeDigest = (/** @type {unknown} */ value) => textDigest(String(value).r
 const validRequestId = (/** @type {unknown} */ value) => typeof value === "string" && value.length > 0 && value.length <= 512 && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const validSession = (/** @type {unknown} */ value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const validRequestIdentity = (/** @type {any} */ request) => validSession(request?.sessionId) && validRequestId(request?.requestId);
-const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes", "geoContextRef", "geoAnalysisRead", "geoInputRead"];
+const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes", "geoContextRef", "geoAnalysisRead", "geoInputRead", "geoModuleScope"];
 
 export class NativeInputRoute {
   /** @param {{route:(project:any,sessionId:string,text:string,input?:{requestIds:string[],request:any})=>Promise<any>,now?:()=>number,ttlMs?:number}} options */

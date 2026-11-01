@@ -437,9 +437,9 @@ describe("a GEO project's page", () => {
     const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
     // The chips of the marker's own filter are pressed-or-not buttons; the text button that continues the step is the one that is not.
     const buttons = () => [...toolbar().querySelectorAll("button:not([aria-pressed]):not([aria-haspopup])")].map((button) => button.textContent);
-    await waitFor(() => expect(buttons()).toContain("让 AI 补充结论"));
+    await waitFor(() => expect(buttons()).toContain("在对话中补充结论"));
     // It asks in the project's conversation, with the brief waiting unsent.
-    await userEvent.click(within(toolbar()).getByRole("button", { name: "让 AI 补充结论" }));
+    await userEvent.click(within(toolbar()).getByRole("button", { name: "在对话中补充结论" }));
     expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi", primarySessionId: "ses_geo_masi" }, expect.stringContaining("补充信尔美还没有覆盖的说明书内容"));
 
     await chooseResult("信源");
@@ -460,7 +460,7 @@ describe("a GEO project's page", () => {
 
     // 行动 reads the range too (its analysis of articles and placing), so it says so.
     await chooseResult("行动");
-    await waitFor(() => expect(buttons()).toEqual(["分析范围", "让 AI 写下一批"]));
+    await waitFor(() => expect(buttons()).toEqual(["分析范围", "在对话中写下一批"]));
   });
 
   it("offers the budget in distribution where a market is connected, with the tier's suggestion", async () => {
@@ -631,7 +631,7 @@ describe("a GEO project's page", () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, access: { roles: ["viewer"], abilities: ["read"], owner: false } });
     renderProject("/app/geo/geo_masi/evidence");
     await screen.findByTestId("evidence-tab");
-    expect(screen.queryByRole("button", { name: "让 AI 补充结论" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在对话中补充结论" })).not.toBeInTheDocument();
   });
 
   it("“对话” opens the project's own conversation; “周报” and the pack start the work and keep the reader where they are", async () => {
@@ -793,10 +793,10 @@ describe("a GEO project's page", () => {
     renderProject();
     await screen.findByRole("heading", { level: 1 });
     expect(document.querySelectorAll('[data-rail-state="todo"]')).toHaveLength(8);
-    expect(await screen.findByText(/还没有测过各家 AI 怎么回答这个产品/)).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "品类问题可见率" })).toHaveTextContent("—");
+    expect(await screen.findByText(/还没有采样记录/)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "品类问题可见率" })).toBeNull();
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
-    const first = screen.getByRole("button", { name: "开始项目" });
+    const first = screen.getByRole("button", { name: "在对话中开始" });
     expect(first).toHaveClass("bg-accent");
     expect(screen.queryByRole("button", { name: "周报" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "对话" })).not.toBeInTheDocument();
@@ -876,7 +876,7 @@ describe("a GEO project that is not being measured", () => {
   });
 
   it("names the engines that are paused while the others are measured, and keeps the next round", async () => {
-    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, next: { date: "2099-01-05", kind: "weekly" }, measurement: { state: "measuring", since: null, engines: ["doubao", "kimi"] } });
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, next: { date: "2099-01-05", kind: "weekly", source:"queued" }, measurement: { state: "measuring", since: null, engines: ["doubao", "kimi"] } });
     renderProject();
     await waitFor(() => expect(band()).toHaveTextContent("豆包、Kimi 暂停测量"));
     expect(band()).toHaveTextContent("下次复测");
@@ -1027,7 +1027,7 @@ it('declares analysis scope separately from its frequent step action and keeps n
  expect(toolbar.querySelector('[data-toolbar-scope]')).toHaveTextContent('分析范围 · 已筛选');
  // The step's action is the toolbar's own quiet button beside what it acts on; the page's one primary is the header's 「对话」
  // (DESIGN.md 「页面结构」 rule 3: the fixture walk of df17091ad read a solid 「加问」 at 156 px as a second one).
- const step=within(toolbar).getByRole('button',{name:'加问'});
+ const step=within(toolbar).getByRole('button',{name:'在对话中补充问题'});
  expect(step).toHaveAttribute('data-toolbar-context');
  expect(step).not.toHaveClass('bg-accent');
  expect(toolbar.querySelectorAll('.bg-accent')).toHaveLength(0);

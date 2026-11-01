@@ -1,6 +1,6 @@
 import { withGeoSignalLease } from "./geoSignalProgress.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
-import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
+import { geoWorkflowState, geoAutomationEnabled, GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { GEO_NOTIFY_SEVERITIES, errorNoticeKey } from "./geoErrors.mjs";
 import { GEO_PROBE_HOST_FAILURE_CODES } from "./geoProbeQueue.mjs";
@@ -27,9 +27,8 @@ import { HttpError, randomId } from "./security.mjs";
  *   requested step needs upstream is wanted too, as a *minimal* version when
  *   it was not itself requested (plan §5.5: 「只做信源分析与预期」 = identity +
  *   available clinical context + useful questions → one round → the strategy run). A
- *   conversation that locks a question set with nothing requested starts the
- *   program itself: a full set is the full program, a minimal set is a
- *   diagnosis.
+ *   conversation that only locks a question set has saved data; diagnosis,
+ *   content, publishing and recurrence require their own requested scope.
  * - **One run per project at a time**, and "run" means any run in the
  *   project — the researcher's own conversation included (the dispatcher
  *   refuses while one is running). A refused or capacity-limited dispatch
@@ -82,11 +81,6 @@ export const GEO_RUN_CAPABILITIES = Object.freeze({
   export: "geo-proposal",
 });
 
-/** What a step needs done (or minimal) before it can be worked. */
-const NEEDS = Object.freeze({
-  evidence: [], journey: ["evidence"], questions: ["evidence"], diagnosis: ["questions"], sources: ["diagnosis"],
-  content: ["evidence"], distribution: ["content"], monitoring: ["diagnosis"],
-});
 const INSIGHT_STEPS = Object.freeze(["evidence", "journey", "questions"]);
 const FINISHED = new Set(["done", "minimal"]);
 const TERMINAL_RUN = new Set(["succeeded", "failed", "canceled", "cancelled"]);
@@ -160,41 +154,21 @@ const stepLabel = (step) => /** @type {Record<string, string>} */ (GEO_STEP_LABE
  * @param {Record<string, { status: string, requested: boolean }>} steps
  */
 export function wantedSteps(steps) {
-  const requested = new Set(GEO_STEPS.filter((step) => steps?.[step]?.requested === true));
-  const full = GEO_STEPS.every((step) => requested.has(step));
-  const want = new Set();
-  /** @param {string} step */
-  const add = (step) => {
-    if (want.has(step)) return;
-    want.add(step);
-    for (const need of [...(/** @type {Record<string, string[]>} */ (NEEDS)[step] ?? []), ...(full && step === "content" ? ["sources"] : [])]) add(need);
-  };
-  for (const step of requested) add(step);
+  const view = geoWorkflowState(steps);
+  const requested = new Set(view.requested);
   return {
-    want, requested, full,
+    want: new Set(view.required), requested, full: view.full,
     /** @param {string} step @returns {"full" | "minimal"} */
     fidelity: (step) => (requested.has(step) ? "full" : "minimal"),
   };
 }
 
-/**
- * The steps as the program will read them on its next tick: a step a run
- * marked `queued` is requested, and a project nothing was requested for whose
- * questions are locked has started the program itself — the full program for
- * a full set, a diagnosis for a minimal one (`#implicitProgram`, without the
- * writes). What a page may promise is what this says.
+/** Normalize legacy queued work without treating completed data as a new request.
  * @param {Record<string, { status: string, requested: boolean }>} steps
  */
 export function programSteps(steps) {
-  /** @type {Record<string, { status: string, requested: boolean }>} */
-  const out = Object.fromEntries(GEO_STEPS.map((step) => {
-    const entry = steps?.[step] ?? { status: "none", requested: false };
-    return [step, { ...entry, requested: entry.requested === true || entry.status === "queued" }];
-  }));
-  if (GEO_STEPS.some((step) => out[step].requested)) return out;
-  if (out.questions.status === "done") for (const step of GEO_STEPS) out[step].requested = true;
-  else if (out.questions.status === "minimal") out.diagnosis.requested = true;
-  return out;
+  const view = geoWorkflowState(steps);
+  return Object.fromEntries(GEO_STEPS.map(step => [step, { ...(steps?.[step] ?? { status: "none" }), requested: view.requested.includes(step) }]));
 }
 
 // ------------------------------------------------------------------ calendar arithmetic
@@ -422,7 +396,11 @@ export function insightBrief(project, { scope, target, full }) {
   }
   lines.push("先读 geo_read value 与 research，从药品综合评价的获益、风险、适用性、经济负担、可及性与临床创新出发组织本次工作；已完成研究先复用，缺什么补什么，不要求六个维度都有数据。用 geo_write value 增量记录发现、机会和下一步。");
   lines.push(DATA_LINE);
-  lines.push("写回顺序：geo_write product、claims、journey、questions，锁定问句后用 step 标记做完的步骤。锁定之后平台会自己测基线。");
+  const writes = [scope.some(({ step }) => step === "evidence") ? "product、claims" : null,
+    scope.some(({ step }) => step === "journey") ? "journey" : null,
+    scope.some(({ step }) => step === "questions") ? "questions、lock_questions" : null].filter(Boolean);
+  lines.push(`仅写回本次范围：geo_write ${writes.join("、")}，用 step 标记本次做完的步骤；复用其余已有研究。`);
+  lines.push("这是平台编排的准备任务：只准备并锁定本次范围需要的问句，不调用 start_diagnosis、不另建 one_shot 测量。平台编排器独占本方案的诊断启动；只有方案明确请求诊断或其下游时才安排基线。");
   return lines.join("\n");
 }
 
@@ -651,12 +629,17 @@ export class GeoOrchestrator {
    * @param {any} project @param {string} key @param {string} kind @param {string} state @param {Record<string, any>} [fields]
    */
   async #claim(project, key, kind, state, fields = {}) {
+    const automatic = kind === "round" && state === "claimed" && ["weekly", "sentinel", "post_publication", "noise"].includes(fields.detail?.kind);
+    if (automatic && !geoAutomationEnabled(project)) return null;
     const result = await this.store.query(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, round_id, detail, done_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, CASE WHEN $5 IN ('done', 'failed', 'skipped') THEN now() END)
+      SELECT $1, $2, $3, $4, $5, $6, $7::jsonb, CASE WHEN $5 IN ('done', 'failed', 'skipped') THEN now() END
+      WHERE NOT $9::boolean OR EXISTS (SELECT 1 FROM evimed_geo.projects p WHERE p.id = $1 AND p.deleted_at IS NULL AND p.status = 'active'
+        AND p.steps #> '{monitoring,automation}' = $10::jsonb AND to_jsonb(p.engines) = $11::jsonb AND p.coverage_days = $12::integer)
       ON CONFLICT (geo_project_id, key) DO UPDATE SET state = EXCLUDED.state, detail = schedule_marks.detail || EXCLUDED.detail, updated_at = now()
         WHERE schedule_marks.state = 'claimed' AND schedule_marks.updated_at < now() - make_interval(mins => $8)
       RETURNING *`,
-    [project.id, key, project.userId, kind, state, fields.roundId ?? null, JSON.stringify(fields.detail ?? {}), GEO_RUN_RULES.staleClaimMinutes]);
+    [project.id, key, project.userId, kind, state, fields.roundId ?? null, JSON.stringify(fields.detail ?? {}), GEO_RUN_RULES.staleClaimMinutes, automatic, JSON.stringify(project.steps?.monitoring?.automation ?? null),
+      JSON.stringify(project.engines ?? []), project.coverageDays ?? null]);
     return result.rows[0] ?? null;
   }
 
@@ -719,7 +702,7 @@ export class GeoOrchestrator {
   /**
    * 「让 AI 做」: the step is requested, what serves it gets a fresh try, and
    * the project is advanced now — a run dispatched at once when one can be.
-   * @param {{ id: string }} user @param {{ id: string }} input @param {string} step
+   * @param {{ id: string, actorId?: string }} user @param {{ id: string }} input @param {string} step
    */
   async runStep(user, input, step) {
     if (!GEO_STEPS.includes(step)) throw new HttpError(400, "geo_step_invalid", `step must be one of: ${GEO_STEPS.join(", ")}.`);
@@ -734,10 +717,39 @@ export class GeoOrchestrator {
         WHERE round_id = $1 AND status IN ('valid', 'refusal')`, [project.steps.diagnosis.roundId])).rows[0]?.n ?? 0);
       again = answers === 0;
     }
-    await this.store.setStep(project.id, step, { requested: true, ...(again ? { status: "queued" } : {}) });
+    await this.store.setStep(project.id, step, { requested: true, requestOrigin: "browser", requestedBy: user.actorId ?? user.id, ...(again ? { status: "queued" } : {}) });
     await this.#allowRetries(project, step);
     const result = await this.advance(project.id);
     return this.#answer(result, { step });
+  }
+
+  /** Explicit browser action; runtime step writes cannot grant recurring authorization.
+   * @param {{id: string, actorId?: string}} user @param {{id: string}} input @param {boolean} enabled */
+  async setMonitoringAutomation(user, input, enabled) {
+    if (enabled) {
+      await this.#exclusive(input.id, async () => {
+        const project = await this.#project(input.id);
+        if (!project || project.userId !== user.id) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+        if (project.status !== "active") throw new HttpError(409, "geo_project_paused", "This GEO project is paused.");
+        const monitored = await geoMonitoringSet(this.store, project.id);
+        if (monitored.contract && !project.engines.every((/** @type {string} */ engine) => monitored.contract?.engines?.includes(engine))) {
+          throw new HttpError(409, "geo_monitoring_scope_changed", "Save a recurring question contract covering the selected engines before enabling monitoring.");
+        }
+        await this.store.setStep(project.id, "monitoring", { automation: { state: "confirmed", actorId: user.actorId ?? user.id,
+          at: this.now().toISOString(), engines: [...project.engines], coverageDays: project.coverageDays } });
+      });
+      return this.runStep(user, input, "monitoring");
+    }
+    return this.#exclusive(input.id, async () => {
+      const project = await this.#project(input.id);
+      if (!project || project.userId !== user.id) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+      const active = (await this.store.activeMeasurements([project.id])).get(project.id);
+      const executionStatus = active && ["weekly", "sentinel", "post_publication", "noise"].includes(active.kind) ? active.status
+        : FINISHED.has(project.steps.monitoring.status) ? project.steps.monitoring.status : "none";
+      const updated = await this.store.setStep(project.id, "monitoring", { status: executionStatus, automation: { state: "declined", actorId: user.actorId ?? user.id,
+        at: this.now().toISOString(), engines: [...project.engines], coverageDays: project.coverageDays } });
+      return { steps: updated?.steps ?? project.steps };
+    });
   }
 
   /**
@@ -940,20 +952,15 @@ export class GeoOrchestrator {
   }
 
   /**
-   * A conversation that locked a question set with nothing requested starts
-   * the program: a full set is the full program, a minimal set a diagnosis.
-   * A step a run marked `queued` is a request.
+   * Preserve legacy queued requests. Completed questions are data, not consent
+   * to start a programme, publishing or a recurring schedule.
    * @param {any} project
    */
   async #implicitProgram(project) {
     let current = project;
     for (const step of GEO_STEPS) {
-      if (current.steps[step].status === "queued" && !current.steps[step].requested) current = await this.#step(current, step, { requested: true });
+      if (current.steps[step].status === "queued" && !current.steps[step].requested) current = await this.#step(current, step, { requested: true, requestOrigin: "conversation" });
     }
-    if (GEO_STEPS.some((step) => current.steps[step].requested)) return current;
-    const questions = current.steps.questions.status;
-    if (questions === "done") for (const step of GEO_STEPS) current = await this.#step(current, step, { requested: true });
-    else if (questions === "minimal") current = await this.#step(current, "diagnosis", { requested: true });
     return current;
   }
 
@@ -975,6 +982,12 @@ export class GeoOrchestrator {
     const existing = await this.#mark(project.id, key);
     if (existing && existing.state !== "claimed") return existing.round_id ?? null;
     if (!this.enqueueRound) return null;
+    const monitored = await geoMonitoringSet(this.store, project.id);
+    const engines = spec.engines ?? project.engines;
+    // The stored agreement is immutable; the actual round can narrow it, never expand it.
+    if (monitored.contract && !engines.every((/** @type {string} */ engine) => monitored.contract?.engines?.includes(engine))) return null;
+    if (["weekly", "sentinel", "post_publication", "noise"].includes(spec.kind)
+      && (!geoAutomationEnabled(project) || !engines.every((/** @type {string} */ engine) => project.steps.monitoring.automation.engines.includes(engine)))) return null;
     const claimed = await this.#claim(project, key, "round", "claimed", { detail: { kind: spec.kind } });
     if (!claimed) return null;
     const made = (await this.store.query(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND ref ->> 'scheduleKey' = $2
@@ -986,7 +999,6 @@ export class GeoOrchestrator {
     // A recurring round measures the set monitoring reads (the newest recurring or locked set), never a newer one-shot import:
     // the newest set used to decide, and importing a one-shot set stopped every recurring round with nothing said (2026-10-25).
     // With only one-shot sets left there is nothing to monitor, and the key says so.
-    const monitored = await geoMonitoringSet(this.store, project.id);
     if (!spec.questionIds && monitored.version == null && monitored.oneShot.length) {
       await this.#update(project.id, key, { state: "skipped", detail: { reason: "one_shot_questions_only" } }, ["claimed"]);
       this.counters.roundsSkipped += 1;
@@ -997,7 +1009,7 @@ export class GeoOrchestrator {
     try {
       const out = await this.enqueueRound({ geoProjectId: project.id, kind: spec.kind,
         ...(spec.questionIds ? { questionIds: spec.questionIds } : {}), ...(spec.engines ? { engines: spec.engines } : {}),
-        ...(agreement ? { engines: agreement.engines, repeat: agreement.repeats, contract: { ...agreement, questionVersion: Number(monitored.version) } } : spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
+        ...(agreement ? { engines, repeat: agreement.repeats, contract: { ...agreement, questionVersion: Number(monitored.version) } } : spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
       const roundId = typeof out === "string" ? out : String(out?.roundId ?? out?.id ?? out?.round?.id ?? "") || null;
       await this.#update(project.id, key, { state: "done", roundId });
       this.counters.roundsEnqueued += 1;
@@ -1102,7 +1114,7 @@ export class GeoOrchestrator {
    * @param {any} project @param {ReturnType<typeof wantedSteps>} plan @param {{ enqueued: string[] }} result
    */
   async #noise(project, plan, result) {
-    if (!plan.full || project.steps.questions.status !== "done" || project.steps.diagnosis.status !== "done" || !this.enqueueRound) return;
+    if (!geoAutomationEnabled(project) || !plan.full || project.steps.questions.status !== "done" || project.steps.diagnosis.status !== "done" || !this.enqueueRound) return;
     const prior = (await this.#marksWith(project.id, "round:noise")).filter((mark) => mark.key === "round:noise" || String(mark.key).startsWith("round:noise:r"));
     let key = "round:noise";
     if (prior.length) {
@@ -1138,7 +1150,9 @@ export class GeoOrchestrator {
     // A week counts when its round heard an answer.
     const weeks = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = 'weekly'
       AND r.status IN ('done', 'partial') AND ${holdsAnswer("r")}`, [project.id])).rows[0]?.n ?? 0);
-    return this.#step(project, "monitoring", weeks > 0 ? { status: "done", note: `第 ${weeks} 周` } : { status: "running" });
+    const active = (await this.store.activeMeasurements([project.id])).get(project.id);
+    return this.#step(project, "monitoring", active && ["weekly", "sentinel", "post_publication", "noise"].includes(active.kind)
+      ? { status: active.status, note: null } : weeks > 0 ? { status: "done", note: `第 ${weeks} 周` } : { status: "none", note: null });
   }
 
   // --- the one run -----------------------------------------------------------------------------------
@@ -1833,6 +1847,7 @@ export class GeoOrchestrator {
     if (!this.enqueueRound) return counts;
     const now = this.now();
     const plan = wantedSteps(project.steps);
+    if (!geoAutomationEnabled(project) || !plan.want.has("monitoring")) return counts;
     // The baseline the weekly rest is counted from is the first that heard an answer: one that measured nothing (a diagnosis asked
     // again after it) dated the rest from a round that was no baseline, and a weekly round could follow the real one within days.
     const baseline = (await this.store.query(`SELECT r.id, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
@@ -1873,8 +1888,9 @@ export class GeoOrchestrator {
       }
       if (sentinel.due) counts.sentinel += await this.#sentinelMakeUp(project, sentinelKey, sentinel.day);
     }
-    // Every published article, whatever else the project asked for, and
-    // every live link the brand published itself (gap E6): the same
+    if (!plan.want.has("monitoring")) return counts;
+    // Publication is not a request for more paid measurements. Only a project
+    // explicitly requesting monitoring checks its published links at the same
     // checkpoints from the day it went live, asking its question group's
     // questions — the one it names, or its article's.
     const [articles, owned] = await Promise.all([

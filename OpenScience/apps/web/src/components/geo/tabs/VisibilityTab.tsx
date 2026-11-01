@@ -1,3 +1,4 @@
+import { GeoMonitoringAutomation } from "../GeoMonitoringAutomation";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { useMemo, useState } from "react";
 import {
@@ -123,9 +124,9 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
     onClear: narrowed ? () => change({ [GEO_ENGINE_PARAM]: null, [GEO_POOL_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }) : undefined,
   } : null);
 
-  if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <TabSkeleton />;
+  if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <><GeoMonitoringAutomation project={project} /><TabSkeleton /></>;
   if (monitoring.state.kind === "error" && diagnosis.state.kind === "error") {
-    return <TabError message={monitoring.state.message} onRetry={() => { monitoring.reload(); diagnosis.reload(); }} />;
+    return <><GeoMonitoringAutomation project={project} /><TabError message={monitoring.state.message} onRetry={() => { monitoring.reload(); diagnosis.reload(); }} /></>;
   }
 
   const denominator = denominatorLine(project, diag);
@@ -136,6 +137,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
+      <GeoMonitoringAutomation project={project} />
       <GeoComparison geoId={geoId} view={project} />
       <GeoAnalysisEntry geoId={geoId} project={project} initialView="V02" />
       <MetricTrend
