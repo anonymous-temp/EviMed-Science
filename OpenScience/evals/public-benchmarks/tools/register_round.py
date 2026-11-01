@@ -10,7 +10,10 @@ The file is written before any confirmation run exists and decides nothing about
 ordered, and the parameters the lab will hold the campaign to. What it fixes:
   rows        the pool's registered development / confirmation ids (evals/public-benchmarks/tools/register_pools.py), minus the
               ids of --ppc (the tasks the task-level recursion has already read; removed from BOTH roles) and minus any id on the
-              other role's list, ordered by ascending sha256("<salt>|<id>") (ties: natural id order), the first N and M kept
+              other role's list, ordered by ascending sha256("<salt>|<id>") (ties: natural id order), the first N and M kept.
+              --development-salt orders the DEVELOPMENT role by another salt: development rows that were chosen and run before
+              the registration (a round's screen) keep the order they were chosen by, and the registration says which salt that
+              was (`hashOrder.developmentSalt`); the confirmation role is always ordered by --salt
   repeats     per role (the lab holds the confirmation to the repeats registered here)
   scorer      an id of the lab's closed scorer table, consistent with the benchmark
   failure slice, margin, cost ratio (the registered procedure's targeted-repair bound is 1.1 and the registration cannot ask
@@ -97,7 +100,10 @@ def read_pool(path, name):
 
 def ppc_ids(data, prefixes):
     """The ids of a ppc-tasks file: a list, {"tasks": [...]} or {"<family|bench|domain>": [...]}; an entry is an id, "<bench>/<id>",
-    "<bench>:<id>" (the prefix is stripped when it names this family or pool) or {"id": ...}."""
+    "<bench>:<id>" (the prefix is stripped when it names this family or pool) or {"id": ...}. The file evals/harness-adaptation writes
+    (`rsi1-ppc-tasks/1`: {"domains": {"<family>": {"ids": [...], ...}}}) contributes the ids of this family's entry only: an id of another
+    family (a MedBrowseComp index, a DeepResearch Bench id) must never remove a row here, and a file with no entry for this family is an
+    error, never an empty exclusion."""
     def one(entry):
         if isinstance(entry, dict):
             entry = entry.get('id')
@@ -112,6 +118,16 @@ def ppc_ids(data, prefixes):
     if isinstance(data, list):
         return [one(e) for e in data]
     if isinstance(data, dict):
+        if isinstance(data.get('domains'), dict):
+            mine = [value for key, value in data['domains'].items() if key in prefixes]
+            if not mine:
+                raise RegistrationError(f'the ppc file has no entry for {" or ".join(sorted(map(str, prefixes)))} under "domains"')
+            out = []
+            for entry in mine:
+                if not isinstance(entry, dict) or not isinstance(entry.get('ids'), list):
+                    raise RegistrationError('a ppc "domains" entry must be {"ids": [...]}')
+                out += [one(e) for e in entry['ids']]
+            return out
         if 'tasks' in data:
             if not isinstance(data['tasks'], list):
                 raise RegistrationError('ppc "tasks" must be a list')
@@ -125,14 +141,14 @@ def ppc_ids(data, prefixes):
     raise RegistrationError('the ppc file must be a list, {"tasks": [...]} or {"<family or bench or domain>": [...]}')
 
 
-def select_rows(pool, salt, ppc, development_rows, confirmation_rows):
-    """(rows by role, available by role, ppc ids actually removed)."""
+def select_rows(pool, salt, ppc, development_rows, confirmation_rows, development_salt=None):
+    """(rows by role, available by role, ppc ids actually removed). The development role is ordered by `development_salt` when given."""
     removed = sorted((set(ppc) & (set(pool['development']) | set(pool['confirmation']))), key=natural_key)
     skip = set(ppc)
     rows, available = {}, {}
     for role, other in (('development', 'confirmation'), ('confirmation', 'development')):
         keep = [i for i in dict.fromkeys(pool[role]) if i not in skip and i not in set(pool[other])]
-        ordered = hash_order(salt, keep)
+        ordered = hash_order(development_salt if role == 'development' and development_salt else salt, keep)
         available[role] = len(ordered)
         want = development_rows if role == 'development' else confirmation_rows
         if want is None:
@@ -228,12 +244,13 @@ def register(args):
     if args.ppc:
         ppc = ppc_ids(read_json(args.ppc, 'the ppc file'), {args.family, str(pool_file.get('bench'))})
         ppc_name, ppc_sha = pathlib.Path(args.ppc).name, sha256_hex(pathlib.Path(args.ppc).read_bytes())
-    rows, available, removed = select_rows(pool, salt, ppc, args.development_rows, args.confirmation_rows)
+    development_salt = args.development_salt if args.development_salt not in (None, salt) else None
+    rows, available, removed = select_rows(pool, salt, ppc, args.development_rows, args.confirmation_rows, development_salt)
     judge = judge_block(args)
     doc = {
         'schema': SCHEMA, 'tool': TOOL, 'round': args.round, 'family': args.family, 'benchmark': args.benchmark, 'scorer': args.scorer,
         'pool': {'file': pathlib.Path(args.pools).name, 'name': pool_name, 'digest': pool_digest},
-        'hashOrder': {'salt': salt, 'rule': HASH_RULE},
+        'hashOrder': {'salt': salt, 'rule': HASH_RULE, **({'developmentSalt': development_salt} if development_salt else {})},
         'rows': rows, 'available': available,
         'excluded': {'ppc': removed, 'ppcFile': ppc_name, 'ppcFileSha256': ppc_sha},
         'repeats': {'development': args.repeats_development, 'confirmation': args.repeats_confirmation},
@@ -263,11 +280,13 @@ def check(path, pools, pool_name, ppc_path):
     if doc.get('digest') != content_digest(doc):
         problems.append('digest differs from the content')
     salt = doc.get('hashOrder', {}).get('salt')
+    development_salt = doc.get('hashOrder', {}).get('developmentSalt')
     rows = doc.get('rows') or {}
     for role in ('development', 'confirmation'):
         ids = [str(i) for i in rows.get(role, [])]
-        if ids != hash_order(salt, ids):
-            problems.append(f'{role} rows are not in ascending sha256({salt}|id) order')
+        role_salt = development_salt if role == 'development' and development_salt else salt
+        if ids != hash_order(role_salt, ids):
+            problems.append(f'{role} rows are not in ascending sha256({role_salt}|id) order')
         if len(set(ids)) != len(ids):
             problems.append(f'{role} rows repeat an id')
     if set(rows.get('development', [])) & set(rows.get('confirmation', [])):
@@ -280,7 +299,7 @@ def check(path, pools, pool_name, ppc_path):
         if ppc_path:
             ppc = ppc_ids(read_json(ppc_path, 'the ppc file'), {doc.get('family'), str(pool_file.get('bench'))})
         try:
-            again, _, removed = select_rows(pool, salt, ppc, len(rows['development']), len(rows['confirmation']))
+            again, _, removed = select_rows(pool, salt, ppc, len(rows['development']), len(rows['confirmation']), development_salt)
         except RegistrationError as error:
             problems.append(f'rows cannot be re-derived: {error}')
         else:
@@ -302,6 +321,7 @@ def build_parser():
     p.add_argument('--pool', help='the pool inside the pools file (default main)')
     p.add_argument('--ppc')
     p.add_argument('--salt')
+    p.add_argument('--development-salt', help='order the development role by this salt instead of --salt (rows chosen and run before the registration)')
     p.add_argument('--development-rows', type=int)
     p.add_argument('--confirmation-rows', type=int)
     p.add_argument('--repeats-development', type=int, default=1)

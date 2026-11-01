@@ -120,6 +120,26 @@ class Selection(Fixture):
             self.assertEqual(doc['excluded']['ppcFile'], f'ppc-{name}.json')
             self.assertEqual(len(doc['excluded']['ppcFileSha256']), 64)
 
+    def test_the_ppc_file_of_the_harness_adaptation_package_is_read_for_this_family_only(self):
+        ppc = {'schema': 'rsi1-ppc-tasks/1', 'salt': 'x', 'domains': {'drb': {'ids': ['3', '4'], 'facts': {'3': {}}}, 'mbc': {'ids': ['5', '6']}}}
+        doc = self.register(extra=['--ppc', str(self.write('ppc.json', ppc))])
+        self.assertEqual(doc['excluded']['ppc'], ['3', '4'])  # another family's ids (5, 6) remove nothing here
+        self.assertEqual(doc['available'], {'development': 38, 'confirmation': 40})
+        for bad in ({'domains': {'mbc': {'ids': ['5']}}}, {'domains': {'drb': ['3']}}, {'domains': {'drb': {'ids': '3'}}}):
+            code, _, err = self.run_main(self.args(out='bad.json', extra=['--ppc', str(self.write('bad-ppc.json', bad))]))
+            self.assertEqual(code, 2, bad)
+            self.assertIn('ppc', err)
+
+    def test_a_development_salt_orders_the_development_role_only_and_is_recorded(self):
+        doc = self.register(extra=['--development-rows', '10', '--confirmation-rows', '12', '--development-salt', 'screen'])
+        self.assertEqual(doc['rows']['development'], sorted(DEV, key=lambda i: h('screen', i))[:10])
+        self.assertEqual(doc['rows']['confirmation'], sorted(CONF, key=lambda i: h(SALT, i))[:12])
+        self.assertEqual(doc['hashOrder'], {'salt': SALT, 'rule': 'ascending sha256(salt|id)', 'developmentSalt': 'screen'})
+        same = self.register(out='same.json', extra=['--development-salt', SALT])
+        plain = self.register(out='plain.json')
+        self.assertEqual(same['hashOrder'], plain['hashOrder'])  # the same salt is no second salt, and the digest does not move
+        self.assertEqual(same['digest'], plain['digest'])
+
     def test_ppc_ids_outside_the_pool_are_not_listed_as_removed(self):
         doc = self.register(extra=['--ppc', str(self.write('ppc.json', ['3', '999', 'other/77']))])
         self.assertEqual(doc['excluded']['ppc'], ['3'])
@@ -298,6 +318,19 @@ class Check(Fixture):
         self.assertEqual(self.run_main(['--check', str(tampered(lambda d: d.__setitem__('margin', 0.5), 'margin.json'))])[0], 1)
         both = tampered(lambda d: (d['rows']['confirmation'].append(d['rows']['development'][0]), d.__setitem__('digest', rr.content_digest(d))), 'both.json')
         self.assertEqual(self.run_main(['--check', str(both)])[0], 1)
+
+    def test_a_development_salt_is_checked_and_re_derived(self):
+        self.register(extra=['--development-rows', '8', '--confirmation-rows', '8', '--development-salt', 'screen'])
+        path = self.dir / 'reg.json'
+        self.assertEqual(self.run_main(['--check', str(path), '--pools', str(self.pools)])[0], 0)
+        doc = json.loads(path.read_text())
+        doc['hashOrder']['developmentSalt'] = 'other'
+        doc['digest'] = rr.content_digest(doc)
+        path.write_text(json.dumps(doc))
+        code, _, err = self.run_main(['--check', str(path), '--pools', str(self.pools)])
+        self.assertEqual(code, 1)
+        self.assertIn('sha256(other|id)', err)
+        self.assertIn('differ', err)
 
     def test_rederiving_from_the_pools_finds_a_changed_pool_or_ppc(self):
         self.register(extra=['--development-rows', '8', '--confirmation-rows', '8', '--ppc', str(self.write('ppc.json', ['3']))])
