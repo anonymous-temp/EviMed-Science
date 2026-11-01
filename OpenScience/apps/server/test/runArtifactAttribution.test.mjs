@@ -18,6 +18,7 @@ test('only overlapping, independently owned deliverable IDs are excluded', () =>
   assert.deepEqual([...foreignDeliverableIds(current, peers)].sort(), ['adr', 'selection']);
   assert.deepEqual([...foreignDeliverableIds(current, [run('r2', 's2', 'statistics')])], [], 'a shared ID is ambiguous, not foreign-only');
   assert.deepEqual([...foreignDeliverableIds(current, [run('r2', 's2', 'old-plan', { nativeWorkflow: { plan: { written: false, items: [{ id: 'old-plan' }] }, submissions: [], delegates: [] } })])], [], 'a read-only stale projection is not ownership proof');
+  assert.deepEqual([...foreignDeliverableIds(current, [run('r2', 's2', 'adr', { nativeWorkflow: { plan: { written: false, items: [{ id: 'adr' }] }, writtenPlanIds: ['adr'], submissions: [], delegates: [] } })])], ['adr'], 'a previous witnessed write remains evidence after status');
 });
 
 test('ordinary workspace scanning excludes known foreign directories before its file limit', async () => {

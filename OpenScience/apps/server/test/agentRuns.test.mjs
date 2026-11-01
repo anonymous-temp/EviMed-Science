@@ -20,6 +20,7 @@ import {
   readDelegatedAssistantMessagesForTest,
   requiredSpecialistArtifactsForTest,
   MAX_RUN_CORRECTIONS,
+  nativeWorkflowEvidenceForTest,
   scopeNativeProjectionForTest, scopeNativeReceiptForTest,
   snapshotAcceptedPackageForRepairForTest,
   recoverableEvidenceSourceErrorCodes,
@@ -9173,4 +9174,17 @@ test("a canceled run retains its own partial files but not a concurrent run's fi
     assert.ok(!run.unverifiedArtifacts.includes("deliverables/peer/partial.md"));
     assert.ok(run.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
   });
+});
+
+
+test("a later plan status does not erase this turn's witnessed plan write", () => {
+  const item = { id: "adr", contractKind: "adr-analysis-report", capability: "adr-analysis" };
+  const message = (id, action, data, input) => ({ info: { id, role: "assistant", time: { created: 100 } },
+    parts: [{ type: "tool", tool: "evimed_plan", state: { status: "completed", completedAt: 120,
+      input: { action, ...input }, output: kernelToolText({ ok: true, data }) } }] });
+  const history = [message("seq_2", "write", { runId: "native-1", revision: 1, deliverables: [item] }, { deliverables: [item] }),
+    message("seq_3", "status", { runId: "native-1", revision: 1, items: [item] }, {})];
+  const evidence = nativeWorkflowEvidenceForTest({ nativeTurn: { startSeq: 1 } }, history);
+  assert.equal(evidence.plan.written, false, "status remains a read for projection scoping");
+  assert.deepEqual(evidence.writtenPlanIds, ["adr"], "the earlier write remains ownership evidence");
 });
