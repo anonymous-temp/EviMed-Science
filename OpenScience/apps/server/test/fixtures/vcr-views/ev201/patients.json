@@ -59,6 +59,7 @@
     "shape": "baseline_to_outcome",
     "shapeLabel": "基线 → 结局分布",
     "shapeMissing": [],
+    "tripod": [],
     "inputs": [
       "中位 PFS",
       "形状参数"
