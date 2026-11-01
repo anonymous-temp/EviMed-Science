@@ -118,3 +118,19 @@ test("the worker makes the pass on its own timer, once at a time, and a worker g
   assert.equal(bare.catchUp(), null);
   await bare.close();
 });
+
+// Module workspace audit D10: the status names when the next round starts by itself.
+test("the status says when the next automatic round starts: the quiet period after the last change, and nothing otherwise", async () => {
+  const queued = fixture({ readable: ["src_a"], state: { round: 2, pending: { src_a: "added" }, lastChangeAt: "2026-10-14T07:55:00Z", compiledAt: null, lastRound: null, lastError: null, run: null } });
+  const waiting = await queued.service.summary("u1", "p1");
+  assert.equal(waiting.state, "queued");
+  assert.equal(waiting.nextAt, "2026-10-14T08:05:00.000Z", "the last change at 07:55 plus the 10 minute quiet period");
+
+  const idle = fixture({ readable: ["src_a"], state: { round: 1, pending: {}, lastChangeAt: null, compiledAt: null, lastRound: null, lastError: null, run: null } });
+  assert.equal((await idle.service.summary("u1", "p1")).nextAt, null, "nothing waits: no time to give");
+
+  const running = fixture({ readable: ["src_a"], state: { round: 1, pending: { src_a: "added" }, lastChangeAt: "2026-10-14T07:55:00Z", run: { step: "wiki", startedAt: "2026-10-14T07:59:00Z" } } });
+  const compiling = await running.service.summary("u1", "p1");
+  assert.equal(compiling.state, "compiling");
+  assert.equal(compiling.nextAt, null, "a round that runs has no next one to name");
+});

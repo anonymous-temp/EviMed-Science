@@ -1297,21 +1297,58 @@ describe("知识库", () => {
       expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
     });
 
-    it("says nothing of the compile while it is no trouble: the dot is for a fault, and 重新整理 is in the project's menu", async () => {
+    it("says where the compile stands as the toolbar's last words on every project view, with no dot while it is no trouble, and 重新整理 in the project's menu", async () => {
       mocks.requestKnowledgeCompile.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
       renderPage("/app/files?scope=default&kind=wiki");
       await screen.findByText("概念");
       await waitFor(() => expect(mocks.getKnowledgeStatus).toHaveBeenCalledWith("default"));
+      // The dot is for a fault; the line is for the reader who wants to know (module workspace audit, D10).
       expect(document.querySelector("[data-knowledge-status]")).toBeNull();
-      expect(screen.queryByText(/已整理 · 上次整理于/u)).toBeNull();
+      const toolbar = document.querySelector<HTMLElement>("[data-toolbar]")!;
+      expect(await within(toolbar).findByText(/已整理 · 上次整理于/u)).toBeInTheDocument();
+      cleanup();
+      for (const view of ["graph", "outputs"]) {
+        renderPage(`/app/files?scope=default&view=${view}`);
+        expect(await within(await waitFor(() => { const found = document.querySelector<HTMLElement>("[data-toolbar]"); if (!found) throw new Error("no toolbar yet"); return found; })).findByText(/已整理 · 上次整理于/u)).toBeInTheDocument();
+        cleanup();
+      }
+      renderPage("/app/files?scope=default&kind=wiki");
+      await screen.findByText("概念");
       await userEvent.click(screen.getByRole("button", { name: "更多" }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "重新整理知识页" }));
       await waitFor(() => expect(mocks.requestKnowledgeCompile).toHaveBeenCalledWith("default"));
       await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
-      // The round that was asked for is said where the person is looking: a strip over the pane, not a line in the list.
+      // The round that was asked for is said where the person is looking: a strip over the pane, and the toolbar's line gives way to it.
       const strip = await screen.findByText("正在整理知识页");
       expect(strip.closest("[data-activity='strip']")).not.toBeNull();
       expect(strip.closest("[data-activity='strip']")).toHaveTextContent("已有 13 页，53 个实体");
+      expect(screen.queryByText(/已整理 · 上次整理于/u)).toBeNull();
+    });
+
+    it("names the time of the next automatic round in the strip while documents wait for the quiet period, and falls back to words without one", async () => {
+      const soon = new Date(Date.now() + 5 * 60_000).toISOString();
+      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "queued", pending: 1, nextAt: soon });
+      renderPage("/app/files?scope=default&kind=wiki");
+      const strip = await screen.findByText(/资料有更新，约 \d{2}:\d{2} 自动开始/u);
+      expect(strip.closest("[data-activity='strip']")).toHaveAttribute("data-activity-state", "queued");
+      cleanup();
+      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "queued", pending: 1, nextAt: null });
+      renderPage("/app/files?scope=default&kind=wiki");
+      expect(await screen.findByText("资料有更新，稍后会自动开始")).toBeInTheDocument();
+    });
+
+    it("tells the reader once, with a toast, that a round they watched has ended", async () => {
+      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      try {
+        renderPage("/app/files?scope=default&kind=wiki");
+        await screen.findByText("正在整理知识页");
+        expect(mocks.toastSuccess).not.toHaveBeenCalled();
+        mocks.getKnowledgeStatus.mockResolvedValue(statusCompiled);
+        await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+        await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("知识页整理好了，共 13 页"));
+        expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+      } finally { vi.useRealTimers(); }
     });
 
     it("keeps the project's own actions in its menu: 重新整理知识页, 导出到 Obsidian and 在记忆总览中查看, and 「添加」 stays the one solid button", async () => {

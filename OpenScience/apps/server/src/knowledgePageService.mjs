@@ -1835,6 +1835,9 @@ export class KnowledgePageService {
       quotations: wiki.reduce((sum, row) => ({ present: sum.present + (row.payload.quotations?.counts?.present ?? 0), absent: sum.absent + (row.payload.quotations?.counts?.absent ?? 0),
         none: sum.none + (row.payload.quotations?.counts?.noQuotation ?? 0) }), { present: 0, absent: 0, none: 0 }),
       held: 0, pending, readable, minSources: this.config.knowledgePagesMinSources, round: value.round, language: value.language ?? null,
+      // When the next round starts by itself: the quiet period after the last change, while documents wait for it. Null when nothing waits, a
+      // round runs, or the threshold is not met — those have no time to give. A time already past means the round is about to be claimed.
+      nextAt: state === "queued" && value.lastChangeAt ? new Date(Date.parse(value.lastChangeAt) + this.config.knowledgePagesDebounceMs).toISOString() : null,
       // Why no round runs, in the words a person reads: a request for one below the threshold is accepted (the next document asks
       // for a new round by itself) and then closed, and a status that only said `below_threshold` left the person who had just
       // pressed 「重新整理」 with nothing to say why.

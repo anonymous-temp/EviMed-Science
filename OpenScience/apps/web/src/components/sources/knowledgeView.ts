@@ -1,5 +1,5 @@
 import { knowledgePageTypeLabel } from "@evimed/domain";
-import { formatDay } from "@/lib/format";
+import { formatClock, formatDay } from "@/lib/format";
 import type {
   KnowledgePage, KnowledgePageLink, KnowledgeStaleReason, KnowledgeStatus, KnowledgeTreeRow,
 } from "@/lib/sourceClient";
@@ -44,8 +44,12 @@ export function statusLine(status: KnowledgeStatus | null, now: Date = new Date(
       const words = stageWords(status.stage) || "正在整理";
       return { text: `整理中 · ${words}${counts ? ` · 已有 ${counts}` : ""}`, busy: true, canCompile: false, attention: false };
     }
-    case "queued":
-      return { text: `资料有更新，稍后会自动整理${counts ? ` · 已有 ${counts}` : ""}`, busy: true, canCompile: false, attention: false };
+    case "queued": {
+      // The next automatic round, when the control plane names its time: a time still to come is said as the clock, one already past as 「即将开始」.
+      const at = status.nextAt ? Date.parse(status.nextAt) : Number.NaN;
+      const when = Number.isFinite(at) ? (at > now.getTime() ? ` · 约 ${formatClock(status.nextAt)} 开始` : " · 即将开始") : "";
+      return { text: `资料有更新，稍后会自动整理${when}${counts ? ` · 已有 ${counts}` : ""}`, busy: true, canCompile: false, attention: false };
+    }
     case "compiled": {
       const when = status.compiledAt ? ` · 上次整理于 ${formatDay(status.compiledAt, now)}` : "";
       return { text: `已整理${when}${counts ? ` · ${counts}` : ""}`, busy: false, canCompile: true, attention: false };
