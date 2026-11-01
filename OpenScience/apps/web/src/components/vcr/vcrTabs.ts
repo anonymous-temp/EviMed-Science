@@ -66,3 +66,21 @@ export const VCR_HOME_PATH = "/app/virtual-research";
 export function vcrStepPath(studyId: string, step: VcrStepKey): string {
   return `${vcrTabPath(studyId, VCR_STEP_TABS[step])}?${new URLSearchParams({ step, ...(step === "patients" ? { level: "individual" } : {}) })}`;
 }
+
+/**
+ * Whether the study's overview has nothing of its own to say: no question, no finding, no count, no package and no saved population.
+ * What the study holds then is on the tabs (`VcrStudy.holds`), and the overview lists them -- or, when it holds nothing at all, asks
+ * for the first sentence. A study with only matching results is this: it was never asked a question and defined no population.
+ */
+export function overviewIsEmpty(study: Pick<VcrStudy, "question" | "overview">): boolean {
+  const { headline, counts, deliverables, researchProgress } = study.overview;
+  return !study.question?.trim() && !headline && !counts && deliverables.length === 0 && researchProgress?.definition !== "saved";
+}
+
+/**
+ * Where a study opens when the address names no tab: the first tab that holds something, when the overview has nothing of its own.
+ * Null when the overview is the place (it has something to say, or the study holds nothing yet).
+ */
+export function landingTab(study: Pick<VcrStudy, "question" | "overview" | "holds">): VcrTabKey | null {
+  return overviewIsEmpty(study) ? study.holds?.[0] ?? null : null;
+}

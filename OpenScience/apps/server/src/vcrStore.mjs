@@ -162,6 +162,10 @@ const VCR_CONVERSATION_STUDY_CONTENT = Object.freeze([
     "source_files", "snapshots", "analysis_tables", "study_packs"]],
 ]);
 
+/** The tabs of the study `s` that hold something: one `EXISTS` per table, an array of the tab names in order. */
+const VCR_HELD_TABS_SQL = `ARRAY_REMOVE(ARRAY[${VCR_CONVERSATION_STUDY_CONTENT.map(([tab, tables]) =>
+  `CASE WHEN ${tables.map((table) => `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} x WHERE x.study_id = s.id)`).join(" OR ")} THEN '${tab}' END`).join(", ")}], NULL)`;
+
 /** The longest a study's name is, in characters: the project's own limit (`projectDisplayName`), because the project carries the same name. */
 const VCR_STUDY_NAME_MAX = 40;
 
@@ -638,13 +642,22 @@ export class VcrStore extends VcrStoreBase {
    * @returns {Promise<Array<ReturnType<typeof vcrStudyFromRow> & { heldTabs: string[] }>>}
    */
   async conversationStudies(userId, limit = 50) {
-    const held = VCR_CONVERSATION_STUDY_CONTENT.map(([tab, tables]) => `CASE WHEN ${tables.map((table) =>
-      `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} x WHERE x.study_id = s.id)`).join(" OR ")} THEN '${tab}' END`).join(", ");
     const rows = await this.rows(`SELECT * FROM (
-        SELECT s.*, ARRAY_REMOVE(ARRAY[${held}], NULL) AS held_tabs FROM ${VCR_SCHEMA}.studies s
+        SELECT s.*, ${VCR_HELD_TABS_SQL} AS held_tabs FROM ${VCR_SCHEMA}.studies s
         WHERE s.user_id = $1 AND s.scope = 'conversation' AND s.deleted_at IS NULL) listed
       WHERE cardinality(held_tabs) > 0 ORDER BY updated_at DESC, id LIMIT $2`, [String(userId), Math.max(1, Math.min(200, Math.floor(Number(limit)) || 50))]);
     return rows.map((row) => ({ .../** @type {NonNullable<ReturnType<typeof vcrStudyFromRow>>} */ (vcrStudyFromRow(row)), heldTabs: Array.isArray(row.held_tabs) ? row.held_tabs.map(String) : [] }));
+  }
+
+  /**
+   * The tabs of one study that hold something saved, in the tabs' order (`VCR_CONVERSATION_STUDY_CONTENT`): where a study opens when
+   * the address names no tab, and what its overview lists when it has nothing of its own to say.
+   * @param {string} studyId
+   * @returns {Promise<string[]>}
+   */
+  async heldTabs(studyId) {
+    const row = await this.one(`SELECT ${VCR_HELD_TABS_SQL} AS held_tabs FROM ${VCR_SCHEMA}.studies s WHERE s.id = $1`, [String(studyId)]);
+    return Array.isArray(row?.held_tabs) ? row.held_tabs.map(String) : [];
   }
 
   /**

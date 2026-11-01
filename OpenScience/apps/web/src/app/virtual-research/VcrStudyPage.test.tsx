@@ -1046,3 +1046,55 @@ it("keeps a truly unsubmitted saved draft in the brief even when its canonical s
   expect(screen.queryByRole("button", { name: "开始研究" })).toBeNull();
   await waitFor(() => expect(pane.requests.at(-1)).toMatchObject({ sessionId: "unsubmitted_canonical" }));
 });
+
+// F4 (VCR remediation 2026-11-01): a study opens on what it holds. A conversation's study that only did a matching was never asked a
+// question and defined nothing; its overview has nothing to say, so the bare address lands on 匹配 once.
+describe("where a study opens", () => {
+  const matchingOnly = () => {
+    const study = fixture("empty/study.json");
+    study.id = STUDY_ID; study.projectId = "prj_ev201"; study.name = "帮我匹配患者和临床试验"; study.purpose = "task";
+    study.question = null; study.definition = null; study.steps = {}; study.stepSummaries = {}; study.activity = null; study.holds = ["matching"];
+    return study;
+  };
+  const located = () => screen.getByTestId("location").textContent;
+
+  it("lands a study that holds only matching results on 匹配, and does not ask for a question", async () => {
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: matchingOnly() });
+    draw();
+    await waitFor(() => expect(located()).toBe(`/app/virtual-research/${STUDY_ID}/matching`));
+    expect(await screen.findByRole("heading", { level: 1, name: "帮我匹配患者和临床试验" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "说明研究问题" })).toBeNull();
+  });
+
+  it("honours an address that names a tab, and a study with a question of its own stays on its overview", async () => {
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: matchingOnly() });
+    const page = draw(`/app/virtual-research/${STUDY_ID}/data`);
+    await screen.findByRole("heading", { level: 1, name: "帮我匹配患者和临床试验" });
+    expect(located()).toBe(`/app/virtual-research/${STUDY_ID}/data`);
+    page.unmount(); forgetStudies();
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: { ...matchingOnly(), question: "核对这位患者的试验入排条件" } });
+    draw();
+    await screen.findByRole("heading", { level: 1, name: "帮我匹配患者和临床试验" });
+    expect(located()).toBe(`/app/virtual-research/${STUDY_ID}`);
+  });
+
+  it("does not send the reader back to 匹配 when they open 总览 afterwards: it lists where the results are", async () => {
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: matchingOnly() });
+    draw();
+    await waitFor(() => expect(located()).toBe(`/app/virtual-research/${STUDY_ID}/matching`));
+    await screen.findByRole("heading", { level: 1, name: "帮我匹配患者和临床试验" });
+    await userEvent.click(screen.getByRole("button", { name: "查看：匹配" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "总览" }));
+    expect(await screen.findByRole("list", { name: "已有结果的页签" })).toBeInTheDocument();
+    expect(located()).toBe(`/app/virtual-research/${STUDY_ID}`);
+    expect(screen.queryByRole("button", { name: "说明研究问题" })).toBeNull();
+  });
+
+  it("keeps a study that holds nothing on its overview, asking for the first sentence", async () => {
+    const empty = matchingOnly(); empty.holds = [];
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: empty });
+    draw();
+    expect(await screen.findByRole("button", { name: "说明研究问题" })).toBeInTheDocument();
+    expect(located()).toBe(`/app/virtual-research/${STUDY_ID}`);
+  });
+});

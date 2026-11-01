@@ -189,3 +189,18 @@ test('a row made before the first sentence named studies is called by its questi
   await vcr.store.query("UPDATE evimed_vcr.studies SET question = '二线治疗是否延长生存' WHERE id = $1", [study.id]);
   assert.equal((await vcr.service.listStudies(user)).conversationStudies[0].name, '二线治疗是否延长生存');
 });
+
+test('the study page says which tabs hold something, so a study with only matching results can open on 匹配 (F4)', options, async () => {
+  const user = { id: 'held_owner' };
+  const matched = await vcr.store.taskContext(origin('held_matching', user.id), { opening: saying('只做了匹配') });
+  assert.deepEqual((await vcr.service.studyView(user, matched.id)).holds, [], 'a study that holds nothing says so');
+  await vcr.matchStore.saveProtocolVersion({ studyId: matched.id, userId: user.id, title: '方案 v1', criteria: [
+    { kind: 'inclusion', criterionType: 'demographic', sourceText: '年龄 ≥ 18 岁', sourceLocator: { page: 1 }, requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18 }, evidenceNeeded: [] },
+  ] });
+  const view = await vcr.service.studyView(user, matched.id);
+  assert.deepEqual(view.holds, ['matching']);
+  assert.equal(view.question, null, 'nothing was asked of the study: it still holds its results');
+  assert.deepEqual(await vcr.store.heldTabs(matched.id), ['matching']);
+  await vcr.store.savePopulation({ studyId: matched.id, userId: user.id, name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
+  assert.deepEqual((await vcr.service.studyView(user, matched.id)).holds, ['population', 'matching'], 'in the tabs\' order, not in the order they were made');
+});

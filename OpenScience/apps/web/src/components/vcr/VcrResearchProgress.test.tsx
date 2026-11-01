@@ -33,3 +33,19 @@ describe("VcrResearchProgress", () => {
     draw({ ...progress, calculation: "stale" }); expect(screen.getByText("结果已过期，需重新计算")).toBeInTheDocument();
   });
 });
+
+describe("VcrResearchProgress on the overview", () => {
+  const none: Progress = { ...progress, populationId: null, populationVersion: null, definition: "none", input: "unknown", counts: { sourcePatients: null, realPatients: null, observations: null, generatedRecords: null, reconstructedPseudoPatients: null }, profileStatistics: [] };
+  it("says nothing of a population the study never had", () => {
+    const { container } = render(<MemoryRouter><VcrResearchProgress progress={none} studyId="s1" onlyWithPopulation /></MemoryRouter>);
+    expect(container.textContent).toBe("");
+  });
+  it("is still the population tab's card, which says the definition is not saved yet", () => {
+    draw(none);
+    expect(screen.getByText("尚未保存")).toBeInTheDocument();
+  });
+  it("is drawn for a study that has a population", () => {
+    render(<MemoryRouter><VcrResearchProgress progress={progress} studyId="s1" onlyWithPopulation /></MemoryRouter>);
+    expect(screen.getByText("已保存")).toBeInTheDocument();
+  });
+});

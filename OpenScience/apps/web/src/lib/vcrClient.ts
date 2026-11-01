@@ -580,6 +580,8 @@ export interface VcrStudy {
   sessionId: string | null;
   /** The study's one conversation: the kernel's session the 「对话」 view shows, and whether the kernel knows it yet. */
   conversation: VcrConversationRef;
+  /** The tabs that hold something saved, in the tabs' order: where a study opens when the address names no tab. Absent from a server that predates it. */
+  holds?: VcrTabKey[];
   /** What is going on right now, or null when nothing is: the page reads again while it is not null and stops when it is. */
   activity: VcrActivity | null;
   /** The step to offer as the primary action, computed once on the server (`vcrNext`); null when there is none to offer. */
@@ -1790,6 +1792,7 @@ export function readVcrStudy(raw: unknown): VcrStudy {
     purpose: value.purpose === "calculation" || value.purpose === "task" ? value.purpose : "programme",
     conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true,
       ...(conversation.submitted === true ? { submitted: true } : {}), ...(conversation.awaitingInput === true ? { awaitingInput: true } : {}) },
+    holds: strings(value.holds).filter((tab): tab is VcrTabKey => VCR_TAB_KEYS.has(tab)),
     activity: readVcrActivity(value.activity),
     stepSummaries: readStepSummaries(value.stepSummaries),
     steps: readSteps(value.steps),

@@ -268,3 +268,39 @@ it("shows a task question and its matching result without requiring a full progr
   expect(screen.getByRole("list", { name: "已开展的任务" })).toHaveTextContent("匹配");
   expect(screen.queryByRole("button", { name: "说明研究问题" })).toBeNull();
 });
+
+// F4 (VCR remediation 2026-11-01): a study a conversation made holds results and has nothing of its own to say on the overview. It must
+// not ask for a first sentence it was never going to get, nor tell the reader about a population definition it never had.
+describe("a study that holds results and was never asked a question", () => {
+  const matchingOnly = () => readVcrStudy({ ...fixture<Record<string, unknown>>("empty/study.json"), purpose: "task", question: null, definition: null,
+    holds: ["matching"], steps: {}, stepSummaries: {} });
+
+  it("lists where its results are, and does not ask for a question or mention a population definition", () => {
+    draw(matchingOnly(), null, EMPTY_STUDY_ID);
+    expect(screen.queryByRole("button", { name: "说明研究问题" })).toBeNull();
+    expect(document.querySelector("[data-vcr-no-definition]")).toBeNull();
+    const rows = screen.getByRole("list", { name: "已有结果的页签" });
+    expect(within(rows).getByRole("link", { name: "匹配" })).toHaveAttribute("href", `/app/virtual-research/${EMPTY_STUDY_ID}/matching`);
+    expect(document.body.textContent).not.toMatch(/人群定义|队列输入|尚未保存|尚无计算结果/);
+  });
+
+  it("lists each tab once: virtual patients are read on the population tab", () => {
+    const value = readVcrStudy({ ...fixture<Record<string, unknown>>("empty/study.json"), purpose: "task", question: null, definition: null,
+      holds: ["population", "patients", "data"], steps: {}, stepSummaries: {} });
+    draw(value, null, EMPTY_STUDY_ID);
+    const rows = screen.getByRole("list", { name: "已有结果的页签" });
+    expect(within(rows).getAllByRole("link").map((link) => link.textContent)).toEqual(["人群与患者", "依据"]);
+  });
+
+  it("still asks for the first sentence when it holds nothing at all", () => {
+    draw(readVcrStudy({ ...fixture<Record<string, unknown>>("empty/study.json"), purpose: "task", question: null, definition: null, holds: [], steps: {}, stepSummaries: {} }), null, EMPTY_STUDY_ID);
+    expect(screen.getByRole("button", { name: "说明研究问题" })).toBeInTheDocument();
+  });
+
+  it("keeps its own sentence and progress card for a study that has a population", () => {
+    const value = readVcrStudy({ ...fixture<Record<string, unknown>>("ev201/study.json") });
+    draw(value);
+    expect(screen.queryByRole("list", { name: "已有结果的页签" })).toBeNull();
+    expect(screen.getByText("人群定义")).toBeInTheDocument();
+  });
+});

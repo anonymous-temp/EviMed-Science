@@ -137,6 +137,7 @@
   },
   "updatedAt": "今天 09:18",
   "createdAt": "2026-09-27T01:14:00.000Z",
+  "holds": [],
   "activity": null,
   "conversation": {
     "sessionId": null,

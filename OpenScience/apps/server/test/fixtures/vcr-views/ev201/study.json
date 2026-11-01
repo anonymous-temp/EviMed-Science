@@ -1715,6 +1715,14 @@
   },
   "updatedAt": "今天 09:09",
   "createdAt": "2026-09-27T01:07:00.000Z",
+  "holds": [
+    "population",
+    "patients",
+    "comparator",
+    "trial",
+    "matching",
+    "data"
+  ],
   "activity": {
     "run": null,
     "queue": [],
