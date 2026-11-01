@@ -791,6 +791,9 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_comparator_record_incomplete",
   "vcr_assumption_role_missing",
   "vcr_evidence_item_incomplete",
+  // A candidate trial written for a registry record that has no original eligibility wording (ChiCTR is a listing): saved, every criterion
+  // unknown for 缺登记原文. A warning on the item the run wrote, not a refusal.
+  "registry_text_missing",
   "vcr_report_section_invalid",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
@@ -1585,6 +1588,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_comparator_record_incomplete',
   'vcr_assumption_role_missing',
   'vcr_evidence_item_incomplete',
+  'registry_text_missing',
   'vcr_report_section_invalid',
 ])
 
@@ -1641,7 +1645,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
-  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed',
+  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_parsed_criteria_unreadable', 'vcr_parsed_criteria_unsaved',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
@@ -2436,6 +2440,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_card_incomplete: '这张模型卡缺少它所用接口要求的内容；模型已保存，适用性检查会逐项说明缺什么，补齐后再写一个版本。',
   vcr_comparator_record_incomplete: '这项对照的记录（目标试验的七个要素、适用性）还有没写的项；这一版已保存并照常计算，补上后再写一个版本。',
   vcr_assumption_role_missing: '这张效应卡没有写它是“重要差异”还是“现实预期”；已保存，补上后再写一个版本。',
+  registry_text_missing: '这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）；条件已保存，评估时一律按未知算，原因是缺登记原文，不会判成满足或不满足。',
   vcr_evidence_item_incomplete: '这条抽取值还缺合并要用的项（置信区间或样本量）；已保存，论文里有就补进同一条，论文没有报告就另写一条“未报告”。',
   vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
   vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
@@ -2563,6 +2568,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_assessment_save_failed: '匹配评估没有保存成功，下一轮会重试。',
   vcr_evaluation_failed: '匹配判定在这位受试者上出错，其余照常。',
   vcr_recheck_failed: '到期复评没有完成，下一轮会重试。',
+  vcr_parsed_criteria_unreadable: '本账户以前对这份登记记录的解析现在读不出来；这次需要重新写入选排除条件，其余照常。',
+  vcr_parsed_criteria_unsaved: '这次写的条件没能记到账户里供下一个研究沿用；这个试验本身已保存，下一个研究需要重新写条件。',
   vcr_derived_table_missing: '这项计算需要的派生数据表不存在。',
   vcr_derived_table_unsupported: '这种派生数据表不能作为这项计算的输入。',
   vcr_engine_table_invalid: '统计引擎返回的数据表与它的记录对不上，已拒绝。',
