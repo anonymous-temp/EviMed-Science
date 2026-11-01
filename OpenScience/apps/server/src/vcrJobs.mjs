@@ -137,6 +137,7 @@ import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
 import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues, vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
+import { populationCheckIndependence, populationCheckRows } from "./vcrPopulationCheck.mjs";
 import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
 import { vcrSynthesisIssue } from "./vcrSynthesisGuard.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
@@ -351,7 +352,7 @@ const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
  * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
  * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
  */
-const PLATFORM_BOUND_KINDS = new Set(["literature_population", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria"]);
+const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria"]);
 
 /**
  * What set a simulation's replicate count, in a sentence a run can repeat: the floor of its case, the study's intended use, a
@@ -506,6 +507,9 @@ export function vcrResultKindFor(kind) {
   if (kind === "fit_survival_model") return "model_fit";
   if (kind === "apply_prognostic_model") return "model_prediction";
   if (kind === "population_quality") return "population_quality";
+  // The check of a generated population against a second baseline table is its own result, filed under the population it is about and
+  // replacing only an earlier check of that population: it is not a version of the population.
+  if (kind === "population_check") return "population_check";
   if (["build_cohort", "generate_population", "literature_population", "synthesize_population"].includes(kind)) return "population";
   if (["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind)) return "patient_set";
   if (method.startsWith("comparator.") || kind === "procova") return "comparator";
@@ -529,7 +533,7 @@ export const VCR_SUBJECT_KINDS = Object.freeze(["population", "patient_set", "co
  * @param {string} kind
  */
 export function vcrJobObjectKind(kind) {
-  if (kind === "population_quality") return "population";
+  if (kind === "population_quality" || kind === "population_check") return "population";
   const filed = vcrResultKindFor(kind);
   return VCR_SUBJECT_KINDS.includes(filed) ? filed : null;
 }
@@ -918,11 +922,14 @@ export class VcrJobs {
     let asked = list(input.inputs);
     /** @type {Record<string, any>} */
     let baselineDetail = {};
-    if (kind === "literature_population") {
+    if (kind === "literature_population" || kind === "population_check") {
+      const checking = kind === "population_check";
       const direct = scenario.baselineBindings;
       const configured = object(input.detail).baselineBindings;
       if (!this.baselineVerifier || direct != null && configured != null && canonicalScenarioJson(direct) !== canonicalScenarioJson(configured)) {
-        throw new HttpError(400, "vcr_job_scenario_invalid", "Literature population statistics require exact source bindings; use a scenario population for explicitly assumed distributions.");
+        throw new HttpError(400, "vcr_job_scenario_invalid", checking
+          ? "The second baseline table needs exact source bindings (baselineBindings): its numbers are checked against the quoted passages before they are compared."
+          : "Literature population statistics require exact source bindings; use a scenario population for explicitly assumed distributions.");
       }
       const checked = await this.baselineVerifier({ userId: String(input.userId), studyId, correlationSource: scenario.correlationSource,
         baselineTable: scenario.baselineTable, bindings: direct ?? configured });
@@ -931,8 +938,28 @@ export class VcrJobs {
       const { baselineBindings: _metadata, ...numeric } = scenario;
       scenario = numeric;
       asked = [...asked.filter(entry => object(entry).kind !== "evidence"), ...checked.evidenceIds.map(id => ({ kind: "evidence", id }))];
-      baselineDetail = { baselineBindings: checked.bindings, literatureBaseline: { verification: "marginals_source_verified", correlation: "assumed", bindings: checked.bindings,
-        evidenceIds: checked.evidenceIds, scope: "quoted_statistics_only", transportability: "not_validated" } };
+      if (checking) {
+        // The generated side is the population's own profile, copied here and never typed by a caller.
+        if (scenario.generated != null && input.internal !== true) {
+          throw new HttpError(400, "vcr_job_scenario_invalid", "generated is filled in from the population the check is about; send the second baseline table and its bindings only.");
+        }
+        const subjectId = object(input.detail).subjectId;
+        const population = subjectId ? (await this.store.populations(studyId, 1000)).find(row => row.id === subjectId) : null;
+        const populationResult = population?.resultId ? await this.store.result(studyId, population.resultId) : null;
+        const generated = populationCheckRows(object(populationResult?.diagnostics).profile);
+        if (!population || !populationResult || !generated.length) {
+          throw new HttpError(409, "vcr_population_profile_missing", "这份人群还没有可以对照的生成结果：先生成人群，再和第二份基线表对照。");
+        }
+        scenario = { ...scenario, generated };
+        const independence = populationCheckIndependence({
+          populationEvidenceIds: object(object(populationResult.diagnostics).literatureBaseline).evidenceIds, referenceEvidenceIds: checked.evidenceIds });
+        baselineDetail = { baselineBindings: checked.bindings, populationCheck: { populationId: String(population.id), populationVersion: Number(population.version),
+          populationResultId: String(populationResult.id), populationKind: String(population.kind ?? ""), independent: independence.independent,
+          populationSourced: independence.populationSourced, sharedEvidenceIds: independence.shared, referenceEvidenceIds: checked.evidenceIds } };
+      } else {
+        baselineDetail = { baselineBindings: checked.bindings, literatureBaseline: { verification: "marginals_source_verified", correlation: "assumed", bindings: checked.bindings,
+          evidenceIds: checked.evidenceIds, scope: "quoted_statistics_only", transportability: "not_validated" } };
+      }
     }
     /** @type {Record<string, any>} */
     let curveDetail = {};
@@ -1973,7 +2000,9 @@ export class VcrJobs {
             // Control-plane facts about the run, frozen with the job: the defaults it took, and why it ran as many replicates as it did.
             ...(list(detail.appliedDefaults).length ? { appliedDefaults: list(detail.appliedDefaults) } : {}),
             ...(recordLimits.length ? { applicabilityLimits: recordLimits.map((entry) => ({ code: String(entry.code), reason: String(entry.reason ?? "") })) } : {}),
-            ...(Object.keys(object(detail.replicatePlan)).length ? { replicatePlan: object(detail.replicatePlan) } : {}) },
+            ...(Object.keys(object(detail.replicatePlan)).length ? { replicatePlan: object(detail.replicatePlan) } : {}),
+            // What a population check was about and whether its second table was made from other evidence: the control plane's account.
+            ...(Object.keys(object(detail.populationCheck)).length ? { populationCheck: object(detail.populationCheck) } : {}) },
           tables: list(result.tables),
         };
         let filed = incoming;

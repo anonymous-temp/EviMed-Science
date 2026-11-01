@@ -106,6 +106,8 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'population.literature': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
   'population.synthpop': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['synthpop']), modelTier: 'data' },
   'population.quality': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'data' },
+  // A generated population held against a second baseline table (remediation plan D2): margins only, no model, so no tier.
+  'population.check': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['base-R recomputation of the standardized differences']), modelTier: null },
   'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.binary': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv']), modelTier: 'scenario' },
@@ -183,6 +185,7 @@ export const VCR_JOB_METHODS = Object.freeze({
   tipping_point: 'comparator.tipping_point',
   prognostic_adjustment_comparator: 'comparator.prognostic_adjustment',
   // --- end robustness methods ---
+  population_check: 'population.check',
   generate_patients_longitudinal: 'patients.longitudinal',
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
   ...VCR_LONGITUDINAL_JOBS,

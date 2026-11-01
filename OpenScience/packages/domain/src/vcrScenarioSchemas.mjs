@@ -357,6 +357,22 @@ const POPULATION_VARIABLES = array({
   variantGroups: { gamma: { exactlyOne: [['rate', 'mean']] } },
 }, { min: 1, max: 100 })
 
+/**
+ * A baseline table: one row per variable of a published population, a continuous variable's mean and SD, a binary variable's proportion
+ * or a categorical variable's proportions. `population.literature` generates from one; `population.check` holds a generated population
+ * against a second one.
+ */
+const BASELINE_TABLE = req(array(object({
+  variable: req(COLUMN),
+  label: VARIABLE_LABEL,
+  mean: number(), sd: number({ gt: 0 }), proportion: number({ min: 0, max: 1 }),
+  // A categorical row: its proportions (which sum to one — the handler checks), and optionally what each level is called.
+  proportions: array(number({ min: 0, max: 1 }), { min: 2, max: 50 }),
+  levels: array(string({ maxLength: 64 }), { min: 2, max: 50 }),
+  min: { ...number(), nullable: true }, max: { ...number(), nullable: true },
+  distribution: string({ values: ['normal', 'lognormal'], default: 'normal' }),
+}, { exactlyOne: [['proportion', 'mean', 'proportions']], requires: { mean: ['sd'], levels: ['proportions'] } }), { min: 1, max: 100 }))
+
 const MISSINGNESS = array({
   t: 'variant', on: 'kind', default: 'MCAR',
   variants: {
@@ -480,20 +496,28 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   }),
 
   'population.literature': object({
-    baselineTable: req(array(object({
-      variable: req(COLUMN),
-      label: VARIABLE_LABEL,
-      mean: number(), sd: number({ gt: 0 }), proportion: number({ min: 0, max: 1 }),
-      // A categorical row: its proportions (which sum to one — the handler checks), and optionally what each level is called.
-      proportions: array(number({ min: 0, max: 1 }), { min: 2, max: 50 }),
-      levels: array(string({ maxLength: 64 }), { min: 2, max: 50 }),
-      min: { ...number(), nullable: true }, max: { ...number(), nullable: true },
-      distribution: string({ values: ['normal', 'lognormal'], default: 'normal' }),
-    }, { exactlyOne: [['proportion', 'mean', 'proportions']], requires: { mean: ['sd'], levels: ['proportions'] } }), { min: 1, max: 100 })),
+    baselineTable: BASELINE_TABLE,
     n: integer({ min: 1, max: 1_000_000, default: 1000 }),
     correlation: { t: 'matrix', min: -1, max: 1, size: 'baselineTable' },
     correlationSource: string({ values: ['assumed', 'cited'], default: 'assumed' }),
     parameterDraws: integer({ min: 1, max: 1000, default: 1 }),
+  }),
+
+  // A generated population held against a second baseline table (remediation plan D2). `generated` is the population job's own
+  // profile, copied in by the control plane from the population the check is about; a caller does not type it.
+  'population.check': object({
+    baselineTable: BASELINE_TABLE,
+    // not `req`: the platform writes it before the job is queued, and a row of the shape help marked required would be a field a caller thinks is theirs
+    generated: array(object({
+      variable: req(COLUMN),
+      label: VARIABLE_LABEL,
+      kind: req(string({ values: ['continuous', 'binary', 'categorical'] })),
+      n: integer({ min: 0 }),
+      mean: { ...number(), nullable: true }, sd: { ...number({ min: 0 }), nullable: true },
+      levels: array(object({ level: req(string({ maxLength: 64 })), p: { ...number({ min: 0, max: 1 }), nullable: true } }), { min: 1, max: 100 }),
+    }), { min: 1, max: 200 }),
+    // the second table's own sample size, when its source says it: with it a row carries the standard error of the difference
+    referenceN: integer({ min: 2, max: 100_000_000 }),
   }),
 
   'population.synthpop': object({

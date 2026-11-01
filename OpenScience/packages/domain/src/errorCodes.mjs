@@ -1642,7 +1642,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
   'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_parsed_criteria_unreadable', 'vcr_parsed_criteria_unsaved',
   // jobs, derived tables and the orchestrator's step notes
-  'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
+  'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
   'vcr_model_not_applicable', 'vcr_model_not_found', 'vcr_model_interface_not_hosted',
   // a computation that is not about the population it is filed under, and one the engine's budget cannot finish (vcrSnapshotBinding.mjs, vcrSynthesisLimits.mjs)
@@ -2561,6 +2561,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_parsed_criteria_unreadable: '本账户以前对这份登记记录的解析现在读不出来；这次需要重新写入选排除条件，其余照常。',
   vcr_parsed_criteria_unsaved: '这次写的条件没能记到账户里供下一个研究沿用；这个试验本身已保存，下一个研究需要重新写条件。',
   vcr_derived_table_missing: '这项计算需要的派生数据表不存在。',
+  vcr_population_profile_missing: '这份人群还没有可以对照的生成结果；先生成人群，再和第二份基线表对照。',
   vcr_derived_table_unsupported: '这种派生数据表不能作为这项计算的输入。',
   vcr_engine_table_invalid: '统计引擎返回的数据表与它的记录对不上，已拒绝。',
   vcr_job_attempts_exhausted: '这项计算已重试到上限，不再重跑。',

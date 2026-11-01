@@ -71,6 +71,7 @@ vcr_engine_handlers <- function() list(
   "population.literature" = vcr_job_population_literature,
   "population.synthpop" = vcr_job_synthesize_population,
   "population.quality" = vcr_job_population_quality,
+  "population.check" = vcr_job_population_check,
   "patients.continuous" = vcr_job_generate_patients,
   "patients.binary" = vcr_job_generate_patients,
   "patients.time_to_event" = vcr_job_generate_patients,
@@ -108,6 +109,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "negative_control", "tippi
 # --- longitudinal virtual patients (2026-10-07): the linear mixed model's generator, in its own file ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "longitudinal")
 # --- end longitudinal ---
+
+# --- the population check (2026-11-01, remediation plan D2): a generated population against a second baseline table ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "population_check")
+# --- end population check ---
 
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")

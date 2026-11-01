@@ -35,6 +35,7 @@
     "negative_control_comparator": {"method":"comparator.negative_control"},
     "tipping_point": {"method":"comparator.tipping_point"},
     "prognostic_adjustment_comparator": {"method":"comparator.prognostic_adjustment"},
+    "population_check": {"method":"population.check"},
     "generate_patients_longitudinal": {"method":"patients.longitudinal"},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -593,6 +594,48 @@
         {"path":"generator.seed","type":"integer","min":0,"max":2147483647,"within":"generator","fieldRole":"defaultable"}
       ],
       "examples": [{"label":"a synthetic table against its training table","scenario":{"trainingInputId":"snp_1:subject","syntheticInputId":"pop_synth@1"}}]
+    },
+    "population.check": {
+      "endpoints": [],
+      "notes": [
+        "subjectId is the existing population the check is about. `generated` is the population's own profile, filled in by the platform: do not write it (a scenario that carries one is refused). baselineTable is a SECOND baseline table, one that did not make the population, and baselineBindings bind each of its numbers to a verified evidence item exactly as a literature population's do; a table from the same evidence the population was built on is a comparison with the inputs, and the result says so.",
+        "Each variable of the table is held against the same variable of the population, by its own distribution: a standardized difference for a continuous or binary variable, the total variation distance for a categorical one, \"close\" at or under 0.1 and \"apart\" above it. The joint structure, the shape and the tails of the distributions and any subgroup are not compared, so the result is not a validation of the population; say what it covered and what it did not. referenceN (the second table's sample size, when its source gives it) adds the standard error of each difference."
+      ],
+      "rows": [
+        {"path":"baselineTable","type":"list","count":{"min":1,"max":100},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
+        {"path":"baselineTable[].variable","type":"string","maxLength":64,"role":"column","required":true,"fieldRole":"research_fact"},
+        {"path":"baselineTable[].label","type":"string","maxLength":80,"fieldRole":"defaultable"},
+        {"path":"baselineTable[].mean","type":"number","fieldRole":"research_fact"},
+        {"path":"baselineTable[].sd","type":"number","gt":0,"fieldRole":"research_fact"},
+        {"path":"baselineTable[].proportion","type":"number","min":0,"max":1,"fieldRole":"research_fact"},
+        {"path":"baselineTable[].proportions","type":"list","count":{"min":2,"max":50},"items":{"type":"number","min":0,"max":1},"fieldRole":"research_fact"},
+        {"path":"baselineTable[].levels","type":"list","count":{"min":2,"max":50},"items":{"type":"string","maxLength":64},"fieldRole":"defaultable"},
+        {"path":"baselineTable[].min","type":"number","nullable":true,"fieldRole":"defaultable"},
+        {"path":"baselineTable[].max","type":"number","nullable":true,"fieldRole":"defaultable"},
+        {"path":"baselineTable[].distribution","type":"string","values":["normal","lognormal"],"default":"normal","fieldRole":"defaultable"},
+        {"path":"generated","type":"list","count":{"min":1,"max":200},"items":{"type":"object"},"fieldRole":"defaultable"},
+        {"path":"generated[].variable","type":"string","maxLength":64,"role":"column","required":true,"within":"generated","fieldRole":"research_fact"},
+        {"path":"generated[].label","type":"string","maxLength":80,"within":"generated","fieldRole":"defaultable"},
+        {"path":"generated[].kind","type":"string","values":["continuous","binary","categorical"],"required":true,"within":"generated","fieldRole":"defaultable"},
+        {"path":"generated[].n","type":"integer","min":0,"within":"generated","fieldRole":"defaultable"},
+        {"path":"generated[].mean","type":"number","within":"generated","nullable":true,"fieldRole":"defaultable"},
+        {"path":"generated[].sd","type":"number","min":0,"within":"generated","nullable":true,"fieldRole":"defaultable"},
+        {"path":"generated[].levels","type":"list","count":{"min":1,"max":100},"items":{"type":"object"},"within":"generated","fieldRole":"defaultable"},
+        {"path":"generated[].levels[].level","type":"string","maxLength":64,"required":true,"within":"generated[].levels","fieldRole":"research_fact"},
+        {"path":"generated[].levels[].p","type":"number","min":0,"max":1,"within":"generated[].levels","nullable":true,"fieldRole":"defaultable"},
+        {"path":"referenceN","type":"integer","min":2,"max":100000000,"fieldRole":"defaultable"}
+      ],
+      "rules": [
+        {"kind":"exactlyOne","keys":["baselineTable[].proportion","baselineTable[].mean","baselineTable[].proportions"]},
+        {"kind":"requires","key":"baselineTable[].mean","needs":["baselineTable[].sd"]},
+        {"kind":"requires","key":"baselineTable[].levels","needs":["baselineTable[].proportions"]}
+      ],
+      "examples": [
+        {
+          "label": "a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)",
+          "scenario": {"baselineTable":[{"variable":"age","mean":63,"sd":10},{"variable":"male","proportion":0.58}],"referenceN":412}
+        }
+      ]
     },
     "patients.continuous": {
       "endpoints": ["continuous"],

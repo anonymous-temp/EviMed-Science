@@ -104,6 +104,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "weighted_cox_comparator", "maic_time_to_event_comparator", "aipw_comparator", "covariate_set_comparator",
     # robustness methods (2026-10-04)
     "negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator",
+    # a generated population against a second baseline table (2026-11-01)
+    "population_check",
     # longitudinal virtual patients (2026-10-07)
     "generate_patients_longitudinal",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",

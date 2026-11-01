@@ -77,6 +77,14 @@
       "crossChecks": [],
       "modelTier": "data"
     },
+    "population.check": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "base-R recomputation of the standardized differences"
+      ],
+      "modelTier": null
+    },
     "patients.continuous": {
       "version": "1.1.0",
       "endpoints": [
@@ -546,6 +554,7 @@
     "negative_control_comparator": "comparator.negative_control",
     "tipping_point": "comparator.tipping_point",
     "prognostic_adjustment_comparator": "comparator.prognostic_adjustment",
+    "population_check": "population.check",
     "generate_patients_longitudinal": "patients.longitudinal"
   },
   "patientLevelJobKinds": [
@@ -1842,6 +1851,162 @@
           "min": 1,
           "max": 1000,
           "default": 1
+        }
+      }
+    },
+    "population.check": {
+      "t": "object",
+      "fields": {
+        "baselineTable": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "variable": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "label": {
+                "t": "string",
+                "maxLength": 80
+              },
+              "mean": {
+                "t": "number"
+              },
+              "sd": {
+                "t": "number",
+                "gt": 0
+              },
+              "proportion": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "proportions": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 50
+              },
+              "levels": {
+                "t": "array",
+                "items": {
+                  "t": "string",
+                  "maxLength": 64
+                },
+                "min": 2,
+                "max": 50
+              },
+              "min": {
+                "t": "number",
+                "nullable": true
+              },
+              "max": {
+                "t": "number",
+                "nullable": true
+              },
+              "distribution": {
+                "t": "string",
+                "values": [
+                  "normal",
+                  "lognormal"
+                ],
+                "default": "normal"
+              }
+            },
+            "exactlyOne": [
+              [
+                "proportion",
+                "mean",
+                "proportions"
+              ]
+            ],
+            "requires": {
+              "mean": [
+                "sd"
+              ],
+              "levels": [
+                "proportions"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 100,
+          "req": true
+        },
+        "generated": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "variable": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "label": {
+                "t": "string",
+                "maxLength": 80
+              },
+              "kind": {
+                "t": "string",
+                "values": [
+                  "continuous",
+                  "binary",
+                  "categorical"
+                ],
+                "req": true
+              },
+              "n": {
+                "t": "integer",
+                "min": 0
+              },
+              "mean": {
+                "t": "number",
+                "nullable": true
+              },
+              "sd": {
+                "t": "number",
+                "min": 0,
+                "nullable": true
+              },
+              "levels": {
+                "t": "array",
+                "items": {
+                  "t": "object",
+                  "fields": {
+                    "level": {
+                      "t": "string",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "p": {
+                      "t": "number",
+                      "min": 0,
+                      "max": 1,
+                      "nullable": true
+                    }
+                  }
+                },
+                "min": 1,
+                "max": 100
+              }
+            }
+          },
+          "min": 1,
+          "max": 200
+        },
+        "referenceN": {
+          "t": "integer",
+          "min": 2,
+          "max": 100000000
         }
       }
     },
@@ -8566,6 +8731,7 @@
     "negative_control_comparator",
     "tipping_point",
     "prognostic_adjustment_comparator",
+    "population_check",
     "generate_patients_longitudinal"
   ],
   "endpointTypes": [

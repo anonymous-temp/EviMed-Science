@@ -54,7 +54,7 @@ const shortName = (name: string) => (name.length > 14 ? `${name.slice(0, 13)}…
  * 2,000 名虚拟患者 · 试验 1,000 · 对照 1,000 · 事件 1,210 · 对照组中位时间 3.9 个月（设定 4.1 ✓）
  * ┌ 两种情景下的推演 ───────────┐ ┌ 每个变量的分布，对照设定 ──────────┐
  * ┌ 患者 2,000 ─ 编号 分组 年龄 ECOG 时间 结局事件 …（排序·分页；点行 → 记录）┐
- * ┌ 设定、生成值与证据区间 ┐   哪些假设影响最大（折叠）
+ * ┌ 与输入对照 ┐   哪些假设影响最大（折叠）
  * ```
  *
  * Hidden knowledge:
@@ -416,7 +416,7 @@ function headlineParts({ records, arms, eventsCanFilter, lead, generated, onAll,
   }
   if (lead && lead.generated !== null) {
     const unit = lead.unit ? ` ${lead.unit}` : "";
-    parts.push(` · ${lead.label} `, { n: numberText(lead.generated), onOpen: onCalibration, label: `${lead.label} ${numberText(lead.generated)}，看设定与证据区间` });
+    parts.push(` · ${lead.label} `, { n: numberText(lead.generated), onOpen: onCalibration, label: `${lead.label} ${numberText(lead.generated)}，看与输入对照` });
     parts.push(`${unit}`);
     if (lead.declared !== null) parts.push(`（设定 ${numberText(lead.declared)}${lead.status === "within" ? " ✓" : lead.status === "outside" ? " ⚠" : ""}）`);
   }

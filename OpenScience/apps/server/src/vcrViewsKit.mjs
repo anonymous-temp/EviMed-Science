@@ -762,7 +762,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
-  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "patients.continuous": "虚拟患者（连续终点）",
+  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.map_prior": "MAP 先验",

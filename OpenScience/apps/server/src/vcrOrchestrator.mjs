@@ -3146,7 +3146,8 @@ export class VcrOrchestrator {
    * @param {any} study @param {any} job @param {any} result @param {string} node
    */
   async #landResult(study, job, result, node) {
-    if (job.kind === "population_quality") return;
+    // A quality report and a population check are results about a population, not the population's own: neither is pointed at by it.
+    if (job.kind === "population_quality" || job.kind === "population_check") return;
     return this.store.transaction(client=>this.store.database.withTransactionClient(client,async()=>{
       // Lock the immutable result generation while repairing its observer state.
       // A newer commit cannot be overwritten by an older durable callback.

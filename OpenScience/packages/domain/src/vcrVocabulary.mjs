@@ -843,6 +843,8 @@ export const VCR_JOB_KINDS = frozen([
   // --- appended (2026-10-04): the robustness methods ---
   'negative_control_comparator', 'tipping_point', 'prognostic_adjustment_comparator',
   // --- end robustness methods ---
+  // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
+  'population_check',
   // --- appended (2026-10-07): longitudinal virtual patients (plan 5.2) ---
   'generate_patients_longitudinal',
   // --- end longitudinal ---
@@ -857,7 +859,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   fit_survival_model: 'patients', apply_prognostic_model: 'patients',
   pool_evidence: 'evidence', reconstruct_km: 'evidence', map_prior: 'evidence',
   profile_snapshot: 'population', build_cohort: 'population', generate_population: 'population', literature_population: 'population',
-  synthesize_population: 'population', population_quality: 'population',
+  synthesize_population: 'population', population_quality: 'population', population_check: 'population',
   generate_patients: 'patients', generate_patients_continuous: 'patients', generate_patients_binary: 'patients',
   generate_patients_longitudinal: 'patients',
   weight_comparator: 'comparator', propensity_weight_comparator: 'comparator', maic_comparator: 'comparator', evalue: 'comparator',

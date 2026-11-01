@@ -266,7 +266,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
   return {
     objectKind, row,
     detail: {
-      subjectId: String(row.id), resultKind: kind === "population_quality" ? "population_quality" : objectKind, node: lineageNode(/** @type {any} */ (nodeKind), String(row.id), Number(row.version)),
+      subjectId: String(row.id), resultKind: kind === "population_quality" || kind === "population_check" ? kind : objectKind, node: lineageNode(/** @type {any} */ (nodeKind), String(row.id), Number(row.version)),
       step: STEP_OF[objectKind], ...(stage ? { stage } : {}), supersedes: await vcrObjectLine(store, study.id, objectKind, row),
       ...(VCR_KEPT_TABLES[kind] ? { keepTables: [...VCR_KEPT_TABLES[kind]] } : {}),
     },
@@ -479,8 +479,8 @@ export async function prepareVcrMethodConfiguration({ store, study, userId, meth
   if (previous && objectKind === "population" && POPULATION_KIND_OF_JOB[kind] && previous.kind !== POPULATION_KIND_OF_JOB[kind]) {
     throw new VcrSubjectError("vcr_simulate_subject_unknown", "The population kind does not match this method.");
   }
-  if (method === "population.quality") {
-    if (!subjectId || !previous) throw new VcrSubjectError("vcr_simulate_subject_required", "Select the existing population whose quality this method evaluates.");
+  if (method === "population.quality" || method === "population.check") {
+    if (!subjectId || !previous) throw new VcrSubjectError("vcr_simulate_subject_required", "Select the existing population this method evaluates.");
     return { subjectId: String(previous.id), objectKind, version: Number(previous.version) };
   }
   const previousScenario = previous ? objectKind === "patient_set" ? previous.scenario
@@ -493,7 +493,7 @@ export async function prepareVcrMethodConfiguration({ store, study, userId, meth
   }
   const schema = object(/** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[method]);
   if (objectKind === "population" && !POPULATION_KIND_OF_JOB[kind] && !previous) {
-    throw new VcrSubjectError("vcr_simulate_subject_required", "Select the existing population whose quality this method evaluates.");
+    throw new VcrSubjectError("vcr_simulate_subject_required", "Select the existing population this method evaluates.");
   }
   const base = { studyId: study.id, userId, name };
   let saved;

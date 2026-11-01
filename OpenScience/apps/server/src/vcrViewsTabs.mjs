@@ -53,6 +53,7 @@ import { decidedShare } from "./vcrMatching.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
+import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
   presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
@@ -392,6 +393,9 @@ export function presentPopulationTab(bundle) {
     unknownReasons: [...reasons.values()].map((reason) => ({ key: reason.key, label: reason.label, detail: reason.detail, count: reason.count })),
     blockers,
     quality: current ? qualityReportView(Object.keys(object(current.quality)).length ? current.quality : diagnostics.quality) : null,
+    // The generated population against a second baseline table (D2): the newest check filed under this population, when there is one.
+    check: current ? presentPopulationCheck(allResultsOf(bundle).find((/** @type {any} */ entry) => entry.kind === "population_check" && entry.subjectId === current.id && !entry.supersededBy),
+      { currentResultId: current.resultId ?? null }) : null,
     // 「这个结论的前提」 of a generated population: how its variables relate, how far it is the source trial's, how far its parameters moved.
     premises: current ? vcrPremises("population", { kind: current.kind, diagnostics }) : [],
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier }) : null,

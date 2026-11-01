@@ -2853,6 +2853,58 @@
           }
         ]
       }
+    },
+    {
+      "name": "population check: a generated profile against a second baseline table",
+      "job": {
+        "jobId": "job_check",
+        "studyId": "std_1",
+        "kind": "population_check",
+        "method": "population.check",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "baselineTable": [
+            {
+              "variable": "age",
+              "mean": 63,
+              "sd": 10
+            },
+            {
+              "variable": "male",
+              "proportion": 0.58
+            }
+          ],
+          "generated": [
+            {
+              "variable": "age",
+              "kind": "continuous",
+              "n": 1000,
+              "mean": 62.1,
+              "sd": 9.4
+            },
+            {
+              "variable": "male",
+              "kind": "binary",
+              "n": 1000,
+              "levels": [
+                {
+                  "level": "0",
+                  "p": 0.45
+                },
+                {
+                  "level": "1",
+                  "p": 0.55
+                }
+              ]
+            }
+          ],
+          "referenceN": 412
+        },
+        "inputs": []
+      }
     }
   ],
   "invalid": [
@@ -16613,6 +16665,63 @@
       },
       "expected": [
         "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "population check: a profile kind the check does not read, and a key the schema does not list",
+      "job": {
+        "jobId": "job_check_bad",
+        "studyId": "std_1",
+        "kind": "population_check",
+        "method": "population.check",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "baselineTable": [
+            {
+              "variable": "age",
+              "mean": 63,
+              "sd": 10
+            },
+            {
+              "variable": "male",
+              "proportion": 0.58
+            }
+          ],
+          "generated": [
+            {
+              "variable": "age",
+              "kind": "ordinal",
+              "n": 1000,
+              "mean": 62.1,
+              "sd": 9.4
+            },
+            {
+              "variable": "male",
+              "kind": "binary",
+              "n": 1000,
+              "levels": [
+                {
+                  "level": "0",
+                  "p": 0.45
+                },
+                {
+                  "level": "1",
+                  "p": 0.55
+                }
+              ]
+            }
+          ],
+          "referenceN": 412,
+          "unexpected": 1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.generated[0].kind",
+        "scenario_field_unknown@scenario.unexpected"
       ]
     }
   ],

@@ -755,6 +755,24 @@ export interface VcrQualityReport {
   copies: number | null;
 }
 
+/** The generated population against a second baseline table (remediation plan D2): the server's rows and sentences, nothing to work out. */
+export interface VcrPopulationCheck {
+  title: string;
+  /** Whether the second table was made from other evidence than the population was. */
+  independent: boolean;
+  sentence: string;
+  /** What the check did not look at. */
+  covered: string;
+  rows: Array<{
+    key: string; label: string; ours: string | null; theirs: string | null; smd: number | null; totalVariation: number | null;
+    state: "close" | "apart" | "not_comparable"; stateLabel: string; note: string | null;
+  }>;
+  floor: number;
+  /** The check was about an earlier version of the population than the one shown. */
+  ofEarlierVersion: boolean;
+  resultId: string;
+}
+
 export interface VcrPopulationTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -790,6 +808,8 @@ export interface VcrPopulationTab {
   /** 「最卡人的三条」. */
   blockers: Array<{ code: string; label: string; /** The protocol's own words for the rule. */ quote?: string | null; text: string; tone?: "attention" | "neutral" }>;
   quality: VcrQualityReport | null;
+  /** The newest check of this population against a second baseline table; null when there is none. */
+  check?: VcrPopulationCheck | null;
   counts: VcrCounts | null;
   conclusion?: VcrConclusion | null;
   headline?: string | null;
@@ -2123,10 +2143,26 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
       trainingRecords: finite(quality.trainingRecords),
       copies: finite(quality.copies),
     } : null,
+    check: readPopulationCheck(value.check),
     counts: readVcrCounts(value.counts),
     stale: readStale(value.stale),
     partial: readPartial(value.partial),
     knowledge: readVcrKnowledge(value.knowledge),
+  };
+}
+
+function readPopulationCheck(raw: unknown): VcrPopulationCheck | null {
+  const value = obj(raw);
+  const rows: VcrPopulationCheck["rows"] = arr(value.rows).filter((row) => typeof row.key === "string" && row.key).map((row) => ({
+    key: String(row.key), label: text(row.label) ?? String(row.key), ours: text(row.ours), theirs: text(row.theirs),
+    smd: finite(row.smd), totalVariation: finite(row.totalVariation),
+    state: row.state === "close" || row.state === "apart" ? row.state : "not_comparable",
+    stateLabel: text(row.stateLabel) ?? "", note: text(row.note),
+  }));
+  if (!rows.length) return null;
+  return {
+    title: text(value.title) ?? "与第二份基线表对照", independent: value.independent === true, sentence: text(value.sentence) ?? "", covered: text(value.covered) ?? "",
+    rows, floor: finite(value.floor) ?? 0.1, ofEarlierVersion: value.ofEarlierVersion === true, resultId: text(value.resultId) ?? "",
   };
 }
 

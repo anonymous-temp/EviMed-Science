@@ -25,6 +25,7 @@ import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton
 import { VcrDefinitionsSection } from "../VcrKnowledge";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { DistributionGrid } from "../patients/DistributionGrid";
+import { PopulationCheckCard } from "../patients/PopulationCheckCard";
 import { boundsText, limitState } from "../patients/distribution";
 import { PatientTable } from "../patients/PatientTable";
 import { variableLabels } from "../patients/patientFilters";
@@ -97,7 +98,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
   const progress = study.overview.researchProgress;
   const currentProgress = progress && (data.selection ? progress.populationId === data.selection.objectId && progress.populationVersion === data.selection.version : progress.populationId === null) ? progress : null;
   const nothing = !data.version && data.criteria.length === 0 && data.attrition.length === 0 && data.profile.length === 0
-    && data.generated.length === 0 && !data.outcome && !data.quality && !data.records;
+    && data.generated.length === 0 && !data.outcome && !data.quality && !data.check && !data.records;
   // A generated population is read as a table of its variables; a real cohort as the rules that selected it and what each did to the count.
   const generated = isGenerated(data);
   const mayWrite = study.abilities.includes("write");
@@ -155,6 +156,8 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
           {data.quality && (data.quality.groups.length > 0 || data.quality.trainingRecords != null || data.quality.copies != null) && (
             <QualityCard quality={data.quality} />
           )}
+
+          {data.check && <PopulationCheckCard check={data.check} />}
         </div>
       </Stale>
       {templates}
