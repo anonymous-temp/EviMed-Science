@@ -1129,9 +1129,11 @@ const WRITERS = {
     }
     if (!item.ok) return null;
     if (!evidence?.candidateRecord || !patientTrials?.writeTrial) return void item.bad("registryId", "给患者找试验在本部署尚未接入。", "vcr_write_refused");
-    if (checked === null && typeof patientTrials.holds === "function" && !(await patientTrials.holds(study, { registry, registryId }))) {
-      return void item.bad("criteria", "这个试验本研究里还没有：第一次写它要同时写入它的入排条件（criteria）。");
-    }
+    const newHere = checked === null && typeof patientTrials.holds === "function" && !(await patientTrials.holds(study, { registry, registryId }));
+    // A trial this study has not met, named without criteria: if this account structured the same record (same hash) in another study, that
+    // structuring is read again instead of asked for; a record that changed since, or a trial never structured, needs the criteria written.
+    const needCriteria = () => item.bad("criteria", "这个试验本研究里还没有：第一次写它要同时写入它的入排条件（criteria）。账户里没有这份登记记录（同一版本）的解析可沿用。");
+    if (newHere && typeof patientTrials.parsedCriteria !== "function") return void needCriteria();
     const fetched = await evidence.candidateRecord({ userId: study.userId, registry, registryId });
     if (fetched?.status !== "ok") {
       const missing = fetched?.status === "registry_not_found";
@@ -1139,6 +1141,18 @@ const WRITERS = {
         missing ? "registry_not_found" : "registry_unavailable");
     }
     const trial = fetched.trial;
+    let reused = false;
+    if (newHere) {
+      const earlier = await patientTrials.parsedCriteria(study, { registry: trial.registry ?? registry, registryId: trial.registryId ?? registryId, recordHash: trial.recordHash ?? null });
+      /** @type {Array<Record<string, any>>} */
+      const again = [];
+      const scratch = [];
+      // The grammar is read again: a vocabulary that has moved since the parse was kept makes it a parse to ask for anew, not a trial lost.
+      for (const raw of earlier ?? []) { const criterion = checkedCriterion(deps, raw, item.index, "", scratch); if (criterion) again.push(criterion); else break; }
+      if (!earlier?.length || scratch.length || again.length !== earlier.length) return void needCriteria();
+      checked = again;
+      reused = true;
+    }
     /** @type {any[]} */
     const warnings = [];
     let located = 0;
@@ -1208,6 +1222,7 @@ const WRITERS = {
     const unavailable = saved.evaluation?.unavailable ?? [];
     extra.results.push({
       index: item.index, id: saved.trial.id, registryId, created: saved.created, criteria: saved.criteria.length,
+      ...(reused ? { reused: true, note: "沿用了本账户先前对这条登记记录（同一版本）的解析，没有重新解析；记录一旦有变，需要重新写条件。" } : {}),
       ...(criteria ? { located } : {}), evaluated: saved.evaluation?.evaluated ?? [],
       ...(unavailable.length ? { unavailable } : {}), ...(warnings.length ? { warnings } : {}),
       // The trial's criteria are the set this write carried: a corrected criterion is written with the whole set again.

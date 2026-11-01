@@ -86,7 +86,7 @@ export const VCR_TABLES = Object.freeze([
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
   "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers",
-  "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments",
+  "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
@@ -1258,6 +1258,23 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_judgments (
 );
 
 -- The answer to a language criterion of a candidate trial is bound to the trial, not to a protocol version.
+
+-- The structuring of a registry trial's eligibility text, kept per account by the registry id and the hash of the record it was made
+-- from (M2): a second study of the same account that meets the same record reads it instead of asking for the parse again, and a
+-- record whose hash changed is parsed again. It belongs to the account and to no study — the criteria come from a public record, the
+-- row is deleted with the account, and nobody else's lookup reaches it (every read names the user). One row per registry id: a
+-- newer record replaces the older parse, which a study that holds it keeps in its own criteria.
+CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria (
+  user_id       text NOT NULL,
+  registry      text NOT NULL,
+  registry_id   text NOT NULL,
+  record_hash   text NOT NULL,
+  criteria      jsonb NOT NULL DEFAULT '[]'::jsonb,
+  criteria_hash text NOT NULL DEFAULT '',
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, registry, registry_id)
+);
 ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS candidate_trial_id text;
 CREATE INDEX IF NOT EXISTS vcr_language_candidate_idx ON evimed_vcr.language_judgments
   (study_id, candidate_trial_id, subject_key, criterion_key, created_at DESC) WHERE candidate_trial_id IS NOT NULL;

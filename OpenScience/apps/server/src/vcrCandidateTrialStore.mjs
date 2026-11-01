@@ -26,7 +26,7 @@
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
-import { languageKeysOf, matchingInputDigest, publicMatchingProvenance } from "./vcrMatching.mjs";
+import { languageKeysOf, matchingInputDigest, publicMatchingProvenance, statedRequirement } from "./vcrMatching.mjs";
 import { languageCriterionHash, languageInput } from "./vcrMatchingSnapshot.mjs";
 
 /** @param {unknown} value @returns {string | null} */
@@ -228,6 +228,64 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
     for (const row of rows) byTrial.get(String(row.candidate_trial_id))?.push(criterionOf(row));
     return byTrial;
   }
+  // ------------------------------------------- the account's earlier parse
+
+  /**
+   * Keep the structuring of a trial's eligibility text for the account, against the record it was made from. What is kept is what the
+   * evaluator reads (kind, type, requirement as the run wrote it, applicability, the original wording, what is needed) and not where the
+   * wording stood in a record: a reader of the same record locates it again. A newer record's parse replaces the older one; the same parse written again
+   * changes nothing.
+   * @param {{ userId: string, registry: string, registryId: string, recordHash: string, criteria: readonly any[] }} input
+   */
+  async saveParsedCriteria({ userId, registry, registryId, recordHash, criteria }) {
+    if (!userId || !registry || !registryId || !recordHash || !criteria?.length) return false;
+    const kept = criteria.map((criterion) => ({
+      kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterionType: criterion?.criterionType ?? "other",
+      // As a run writes it: an exclusion is stored negated and the write negates it, so the kept form is the stated one (`statedRequirement`).
+      requirement: statedRequirement(criterion) ?? {}, applicability: criterion?.applicability ?? null, sourceText: String(criterion?.sourceText ?? ""),
+      evidenceNeeded: Array.isArray(criterion?.evidenceNeeded) ? criterion.evidenceNeeded : [],
+    }));
+    await this.query(
+      `INSERT INTO ${VCR_SCHEMA}.parsed_trial_criteria (user_id, registry, registry_id, record_hash, criteria, criteria_hash)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+       ON CONFLICT (user_id, registry, registry_id) DO UPDATE SET
+         record_hash = EXCLUDED.record_hash, criteria = EXCLUDED.criteria, criteria_hash = EXCLUDED.criteria_hash, updated_at = now()
+       WHERE ${VCR_SCHEMA}.parsed_trial_criteria.record_hash IS DISTINCT FROM EXCLUDED.record_hash
+          OR ${VCR_SCHEMA}.parsed_trial_criteria.criteria_hash IS DISTINCT FROM EXCLUDED.criteria_hash`,
+      [userId, registry, registryId, recordHash, JSON.stringify(kept), candidateCriteriaHash(kept)]);
+    return true;
+  }
+
+  /**
+   * The account's parse of this trial, made from this very record — or null: another account's parse is never read, and a record whose
+   * hash is not the one the parse was made from is parsed again.
+   * @param {{ userId: string, registry: string, registryId: string, recordHash: string }} input
+   * @returns {Promise<{ criteria: any[], updatedAt: string | null } | null>}
+   */
+  async parsedCriteriaFor({ userId, registry, registryId, recordHash }) {
+    if (!userId || !registry || !registryId || !recordHash) return null;
+    const row = await this.one(
+      `SELECT criteria, updated_at FROM ${VCR_SCHEMA}.parsed_trial_criteria
+        WHERE user_id = $1 AND registry = $2 AND registry_id = $3 AND record_hash = $4`, [userId, registry, registryId, recordHash]);
+    if (!row || !Array.isArray(row.criteria) || !row.criteria.length) return null;
+    return { criteria: row.criteria, updatedAt: iso(row.updated_at) };
+  }
+
+  /**
+   * Which of these trials the account has a parse of at all, whatever record it was made from (the record's hash is not known until it is
+   * read): a candidate list says "parsed before" and the write finds out whether the record is still the same.
+   * @param {{ userId: string, trials: ReadonlyArray<{ registry: string, registryId: string }> }} input
+   * @returns {Promise<Set<string>>} `registry\u0000registryId` of each
+   */
+  async parsedCriteriaHeld({ userId, trials }) {
+    if (!userId || !trials.length) return new Set();
+    const rows = await this.rows(
+      `SELECT registry, registry_id FROM ${VCR_SCHEMA}.parsed_trial_criteria
+        WHERE user_id = $1 AND registry_id = ANY($2::text[])`, [userId, [...new Set(trials.map((trial) => trial.registryId))]]);
+    const wanted = new Set(trials.map((trial) => `${trial.registry}\u0000${trial.registryId}`));
+    return new Set(rows.map((row) => `${row.registry}\u0000${row.registry_id}`).filter((key) => wanted.has(key)));
+  }
+
   // ------------------------------------------------------- assessments
 
   /**

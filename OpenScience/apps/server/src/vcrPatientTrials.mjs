@@ -372,7 +372,7 @@ function listed(about, assessment) {
  */
 export function createPatientTrials({ candidateStore, matchStore = null, documents = null, subjectTable = null, config = {}, report = () => {}, now = () => new Date() }) {
   /** What the seam did since this process started (`open_science_vcr_patient_trials_total`). */
-  const counters = { written: 0, updated: 0, refused: 0, capReached: 0, evaluated: 0, evaluationFailed: 0, searches: 0 };
+  const counters = { written: 0, updated: 0, refused: 0, capReached: 0, evaluated: 0, evaluationFailed: 0, searches: 0, parsedReused: 0, parsedKept: 0 };
   /** The most candidate trials one study holds: each costs an evaluation per patient. */
   const max = () => (Number(config.vcrCandidateTrialsMax) > 0 ? Number(config.vcrCandidateTrialsMax) : 60);
 
@@ -533,9 +533,45 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         throw error;
       }
       if (saved.created) counters.written += 1; else counters.updated += 1;
+      // The parse is kept for the account against the record it was made from, so the next study that meets this record reads it. A parse
+      // that cannot be kept costs the next study a parse and this one nothing.
+      if (criteria !== null && trial.recordHash) {
+        try {
+          if (await candidateStore.saveParsedCriteria({ userId: study.userId, registry: trial.registry, registryId: trial.registryId, recordHash: trial.recordHash, criteria })) counters.parsedKept += 1;
+        } catch (error) { report(String(/** @type {any} */ (error)?.code ?? "vcr_parsed_criteria_unsaved")); }
+      }
       const who = [...new Set([...subjectKeys, ...(saved.criteriaChanged ? saved.reassess : [])])];
       const evaluation = who.length ? await self.evaluate(study, { subjectKeys: who, trialIds: [saved.trial.id] }) : { evaluated: [], unavailable: [], notes: [] };
       return { ...saved, evaluation };
+    },
+
+    /**
+     * The account's earlier parse of this trial, made from this very record (same registry id, same record hash): what a second study
+     * of the same account reads instead of asking for the parse again. `null` when there is none or the record has changed since — the
+     * run then structures the text again. Never another account's.
+     * @param {any} study @param {{ registry: string, registryId: string, recordHash: string | null }} key
+     * @returns {Promise<any[] | null>}
+     */
+    async parsedCriteria(study, { registry, registryId, recordHash }) {
+      if (!recordHash) return null;
+      try {
+        const held = await candidateStore.parsedCriteriaFor({ userId: study.userId, registry, registryId, recordHash });
+        if (held) counters.parsedReused += 1;
+        return held?.criteria ?? null;
+      } catch (error) {
+        report(String(/** @type {any} */ (error)?.code ?? "vcr_parsed_criteria_unreadable"));
+        return null;
+      }
+    },
+
+    /**
+     * Which of these registry trials the account has already parsed, whatever record the parse came from: a candidate list says so and the
+     * write finds out whether the record is still the same one.
+     * @param {any} study @param {ReadonlyArray<{ registry: string, registryId: string }>} trials @returns {Promise<Set<string>>}
+     */
+    async parsedHeld(study, trials) {
+      try { return await candidateStore.parsedCriteriaHeld({ userId: study.userId, trials }); }
+      catch { return new Set(); }
     },
 
     /** The language keys of a candidate trial's criteria. @param {any} study @param {string} candidateTrialId */
