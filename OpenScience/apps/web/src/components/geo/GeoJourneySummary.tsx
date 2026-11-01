@@ -27,9 +27,6 @@ export function GeoJourneySummary({project, compact = false}: {project: GeoProje
       {journey.runId && <GeoStepRunButton project={project} runId={journey.runId} />}
     </span>}>{journey.detail}</Note>
     {journey.retained.length > 0 && <FactList ruled={false} rows={[{label:'已保留',value:journey.retained.join('、')}]} />}
-    {!compact && journey.canConverse && !['running','queued','paused'].includes(journey.stage) && <div className="flex flex-col gap-2">
-      <p className="text-caption text-text-3">在对话中交代任务并附上资料。</p>
-      <div className="flex flex-wrap gap-2">{journey.intents.map(intent => <Button key={intent.key} variant="text" size="sm" onClick={() => void open(target,intent.draft)}>{`在对话中${intent.label}`}</Button>)}</div>
-    </div>}
+    {!compact && journey.canConverse && !['running','queued','paused'].includes(journey.stage) && <Note action={<span className="flex flex-wrap gap-2">{journey.intents.map(intent => <Button key={intent.key} variant="text" size="sm" onClick={() => void open(target,intent.draft)}>{`在对话中${intent.label}`}</Button>)}</span>}>在同一对话中交代任务和附上资料，发送后开始。</Note>}
   </section>;
 }

@@ -30,7 +30,8 @@ beforeEach(async () => {
   if (database) await database.query("TRUNCATE evimed_geo.projects CASCADE");
 });
 
-/** Active projects of one account, oldest first. @param {number} count */
+/** Active, explicitly opted-in projects of one account, oldest first. Fairness is measured after authorization.
+ * @param {number} count */
 async function projects(count) {
   const userId = `turn-${randomUUID().slice(0, 8)}`;
   const made = [];
@@ -38,7 +39,7 @@ async function projects(count) {
     const project = await store.createProject({ userId, projectId: `p${index}-${randomUUID().slice(0, 6)}`, engines: ["deepseek"], coverageDays: 90 });
     // A project is scheduled only when recurring measurement was asked for and confirmed for its own engines and coverage.
     await store.setStep(project.id, "monitoring", { requested: true, requestOrigin: "browser", requestedAt: new Date().toISOString(), requestedBy: userId,
-      automation: { state: "confirmed", actorId: userId, at: new Date().toISOString(), engines: ["deepseek"], coverageDays: 90 } });
+      automation: { state: "confirmed", actorId: userId, at: new Date().toISOString(), engines: [...project.engines], coverageDays: project.coverageDays } });
     made.push(await store.getProject(userId, project.id));
   }
   return made;

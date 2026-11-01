@@ -25,7 +25,7 @@ export function GeoStepRunButton({project,runId}: {project:GeoProject;runId:stri
       }
       if (!found) throw new Error('This execution is unavailable.');
       setRun(found);
-    } catch(error:unknown) { toast.error(webErrorMessage(error,{fallback:'这次对话记录暂时无法打开，请稍后重试。'})); }
+    } catch(error:unknown) { toast.error(webErrorMessage(error,{fallback:'这次执行详情暂时无法打开，请稍后重试。'})); }
     finally {setBusy(false);}
   };
   return <>

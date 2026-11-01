@@ -53,12 +53,21 @@ test('older snapshots cannot erase contributors or hide unresolved canonical que
 });
 
 test('an owned project\'s input passes through its frame unjournaled, for its owner and its frame\'s session only, and settles its admission', async () => {
-  const owner = { id: 'owner' }, project = { userId: 'owner', id: 'control' }, claims = { frameId: 'frame', delegation: { rootSessionId: 'root' } };
+  const owner = { id: 'owner' }, project = { userId: 'owner', id: 'control' }, claims = { frameId: 'frame', delegation: { rootSessionId: 'root', geoProjectId: 'geo' } };
   // After the receipt step the module-routing scope is read from the same authority the project's frame was issued by: it proves the
-  // frame's session is the project's primary one (the real authority does this for an owned project and a shared one alike).
-  const resolved = [];
-  const authority = { resolve: async (user, scope, options) => { resolved.push({ user, scope, options }); return { geo: { id: 'geo-1', product: { brandName: ' Acme ' } } }; },
-    primary: async () => 'root' };
+  // frame's session is the project's primary one (the real authority does this for an owned project and a shared one alike), for this
+  // user, this project's GEO id and the frame's own delegation.
+  let resolved = 0;
+  const authority = {
+    resolve: async (user, scope, options) => {
+      resolved += 1;
+      assert.equal(user, owner);
+      assert.deepEqual(scope, { kind: 'geo', geoProjectId: 'geo', sessionId: 'root' });
+      assert.equal(options.claims, claims.delegation);
+      return { project, geo: { id: 'geo', product: { brandName: ' Acme ' } } };
+    },
+    primary: async identity => { assert.equal(identity.project, project); return 'root'; },
+  };
   const journal = new GeoNativeInputs({ database: {}, documents: { get: async () => assert.fail('an owned input writes no receipt') },
     authority, policies: { forProject: async () => ({ kind: 'owned', ownerId: 'owner', controlProjectId: 'control' }) } });
   const request = () => ({ requestId: 'r', sessionId: 'root', content: [{ type: 'text', text: 'Hi' }] });
@@ -69,8 +78,9 @@ test('an owned project\'s input passes through its frame unjournaled, for its ow
   assert.equal(journal.disposition(accepted), 'pending');
   // The owned input is also the original verified primary request of its project: the module-local route may be qualified from it.
   assert.deepEqual(await journal.routingScopeForRequest(project, accepted),
-    { scope: { version: 1, geoProjectId: 'geo-1', rootSessionId: 'root' }, suppliedInputs: { brandEntity: 'Acme' } });
-  assert.equal(resolved.length, 2, 'prepare and the scope each asked the authority');
+    { scope: { version: 1, geoProjectId: 'geo', rootSessionId: 'root' }, suppliedInputs: { brandEntity: 'Acme' } });
+  assert.equal(resolved, 2, 'prepare and the scope each asked the authority');
+  assert.equal(await journal.routingScopeForRequest(project, structuredClone(accepted)), null, 'only the prepared request object itself has a scope');
   assert.equal(await journal.routingScopeForRequest(project, request()), null, 'a request that was never prepared has no scope');
   await journal.beforeForward(accepted);
   assert.deepEqual(await journal.execute(accepted, admission, async () => 'sent'), { value: 'sent', error: null, disposition: 'accepted' });

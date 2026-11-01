@@ -28,6 +28,11 @@ it('does not offer an enable action to paused or read-only projects',()=>{
   render(<GeoMonitoringAutomation project={geoProject({}, {access:{abilities:['read'],roles:['viewer'],owner:false}})}/>);
   expect(screen.queryByRole('button',{name:'开始自动监测'})).toBeNull();
 });
+it('points a member who cannot change monitoring at the scope the measurements cover',()=>{
+  render(<GeoMonitoringAutomation project={geoProject({}, {access:{abilities:['read'],roles:['viewer'],owner:false}})}/>);
+  expect(screen.getByRole('link',{name:'查看测量范围'})).toHaveAttribute('href','/app/geo/geo_1/questions');
+  expect(screen.queryByRole('link',{name:'查看这轮测量'})).toBeNull();
+});
 it('requires the confirmed engine/window scope to match before calling monitoring enabled',()=>{
   const p=geoProject({monitoring:'done'});
   p.steps.monitoring!.automation={state:'confirmed',actorId:'actor',at:'2026-10-31T10:00:00Z',engines:[...p.engines],coverageDays:p.coverageDays};
@@ -45,4 +50,23 @@ it('allows stopping confirmed automation while the project is paused',async()=>{
   await userEvent.click(screen.getByRole('button',{name:'停止自动监测'}));
   await waitFor(()=>expect(api.set).toHaveBeenCalledWith('geo_1',false));
   expect(screen.queryByRole('button',{name:'开始自动监测'})).toBeNull();
+});
+
+it('lets a read-only member inspect the exact accepted round without offering new work',()=>{
+  const p=geoProject({}, {access:{abilities:['read'],roles:['viewer'],owner:false},activeMeasurement:{id:'round_weekly_1',kind:'weekly',status:'running'}});
+  render(<GeoMonitoringAutomation project={p}/>);
+  expect(screen.getByRole('link',{name:'查看这轮测量'})).toHaveAttribute('href','/app/geo/geo_1/questions?diagnosisRound=round_weekly_1');
+  expect(screen.queryByRole('button',{name:'开始自动监测'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'在对话中调整监测范围'})).toBeNull();
+  expect(api.set).not.toHaveBeenCalled();
+});
+
+it('keeps the addressed conversation and analysis context when opening an accepted round',()=>{
+ const p=geoProject({}, {activeMeasurement:{id:'round_weekly_2',kind:'weekly',status:'queued'}});
+ rtlRender(<MemoryRouter initialEntries={['/app/geo/geo_1/visibility?session=history-session&engines=kimi']}><GeoMonitoringAutomation project={p}/></MemoryRouter>);
+ const href=screen.getByRole('link',{name:'查看这轮测量'}).getAttribute('href')!;
+ const target=new URL(href,'https://geo.invalid');
+ expect(target.searchParams.get('session')).toBe('history-session');
+ expect(target.searchParams.get('engines')).toBe('kimi');
+ expect(target.searchParams.get('diagnosisRound')).toBe('round_weekly_2');
 });

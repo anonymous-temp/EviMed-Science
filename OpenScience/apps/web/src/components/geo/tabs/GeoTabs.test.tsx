@@ -944,7 +944,7 @@ describe("总览 while the AI answers cannot be measured", () => {
     const heading = await screen.findByRole("heading", { name: "需要你" });
     const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(1);
-    expect(list).toHaveTextContent("打开这一步查看对话记录和保留结果");
+    expect(list).toHaveTextContent("打开这一步查看执行详情和保留结果");
     expect(within(list).getByRole("button", { name: "接着做" })).toBeInTheDocument();
   });
 

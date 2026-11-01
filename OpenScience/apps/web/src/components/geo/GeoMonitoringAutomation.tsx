@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useState } from 'react';
 import { geoAutomationEnabled } from '@evimed/domain';
 import { setGeoMonitoringAutomation, type GeoProject } from '@/lib/geoClient';
@@ -7,12 +8,15 @@ import { FactList, type Fact } from '@/components/ui/FactList';
 import { Note } from '@/components/ui/Note';
 import { LoadError } from '@/components/cards/LoadError';
 import { geoActionPermission } from './geoJourney';
+import { geoTabPath } from './geoTabs';
 import { useGeoFrame } from './geoFrame';
 import { engineName } from './geoText';
 import { AskAi } from './AskAi';
+import { useGeoPath } from './useGeoPath';
 
 /** Recurring measurement is optional and scoped to the engines and coverage the person actually selected. */
 export function GeoMonitoringAutomation({project}: {project:GeoProject}) {
+  const path=useGeoPath();
   const enabled=geoAutomationEnabled(project);
   const consent=project.steps.monitoring?.automation;
   const requested=project.steps.monitoring?.requested;
@@ -36,13 +40,14 @@ export function GeoMonitoringAutomation({project}: {project:GeoProject}) {
     {label:'会安排',value:'每周复测、每日风险抽查和发布后检查；完整方案还包括噪声复测'},
     {label:'额度',value:'这些任务均按实际调用使用项目额度'},
     {label:'停止后',value:'不再创建新任务，已经受理的任务会继续'},
-    ...(project.activeMeasurement?[{label:'当前测量',value:`已有一轮测量${project.activeMeasurement.status==='running'?'正在执行':'已排队'}；停止自动监测后它仍会继续`}]:[]),
+    // The round that is already accepted is opened exactly, by its id, for whoever can read the project; stopping does not end it.
+    ...(project.activeMeasurement?[{label:'当前测量',value:<>{`已有一轮测量${project.activeMeasurement.status==='running'?'正在执行':'已排队'}；停止自动监测后它仍会继续`}{' '}<Link className="rounded text-link underline decoration-1 underline-offset-4 hover:decoration-2" to={path(`${geoTabPath(project.id,'questions')}?diagnosisRound=${encodeURIComponent(project.activeMeasurement.id)}`)}>查看这轮测量</Link></>}]:[]),
   ];
   const actions=mayChange?<span className="flex flex-wrap items-center gap-2">
     <Button size="sm" variant="text" className="text-accent hover:text-accent" loading={busy} onClick={()=>change(!enabled)}>{enabled?'停止自动监测':'开始自动监测'}</Button>
     {!enabled && consent?.state!=='declined' && requested && <Button size="sm" variant="text" disabled={busy} onClick={()=>change(false)}>暂不启动</Button>}
     {canAsk && <AskAi project={{projectId:project.projectId,geoId:project.id,sessionId:project.sessionId}} label="在对话中调整监测范围" draft={`请核对本项目的持续监测问题集，并将监测范围调整为当前项目选择的 ${project.engines.map(engineName).join('、')}，覆盖 ${project.coverageDays} 天。保留历史版本，说明问题数、重复次数和预计调用量；在我确认后保存相符的新监测契约。本次不自动启动测量或持续监测。`} />}
-  </span>:null;
+  </span>:<Link className="rounded text-ui text-link hover:underline" to={path(geoTabPath(project.id,'questions'))}>查看测量范围</Link>;
   return <section id="geo-automation" aria-label="自动监测" className="flex flex-col gap-3">
     <h2 className="text-section font-semibold">{enabled?'已开启自动监测':requested?'尚未开启自动监测':'可选：持续监测'}</h2>
     <Note action={actions}>{sentence}</Note>
