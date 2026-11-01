@@ -516,8 +516,9 @@ def cmd_verify(args):
         say(f"{service}: dataset hosts pinned to loopback {len(blocked)}/{len(DATASET_HOSTS)}; open hosts resolving {len(open_ok)}/{len(OPEN_HOSTS)}")
         if len(blocked) != len(DATASET_HOSTS) or len(open_ok) != len(OPEN_HOSTS):
             failures.append(f"{service}:hosts")
+    probe_py = "import socket,sys;print(','.join(sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1],443)})))"
     search = run(compose_command(["exec", "-T", "open-science-web-search", "sh", "-c",
-                                  "for h in huggingface.co hf.co; do echo \"$h $(getent hosts $h | head -1 | cut -d' ' -f1)\"; done"]),
+                                  f"for h in huggingface.co hf.co; do echo \"$h $(python3 -c \"{probe_py}\" $h 2>/dev/null || echo none)\"; done"]),
                  check=False, capture=True).stdout or ""
     rows = dict(line.split(None, 1) if len(line.split(None, 1)) == 2 else (line.strip(), "") for line in search.splitlines())
     pinned = sum(1 for value in rows.values() if value.strip() == "127.0.0.1")
