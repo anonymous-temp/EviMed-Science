@@ -6164,7 +6164,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const input=(transcript.messages ?? []).filter(message=>message.role==='user' && message.source==='user').at(-1);
         return input ? {requestId:input.sourceRequestId,turnStartSeq:input.turnStartSeq} : null;
       },
-      resolve:createVcrCompletionResolver({accounts:store,studies:vcr.store,sessions:researchSessions,allows:user=>vcr.service.allows(user)}),
+      resolve:createVcrCompletionResolver({accounts:store,studies:vcr.store,sessions:researchSessions,allows:user=>vcr.service.allows(user),
+        adoptSession:async (project,sessionId)=>(await agentRuns.list(project)).some(run=>run.sessionId===sessionId) ? researchSessions.put(project,sessionId,{mode:'open-domain'}) : null}),
       inbox: async (project,sessionId) => {
         // A stopped runtime cannot be busy. Only a dispatch that passed the spend
         // guards starts it; probing a blocked continuation never keeps it warm.

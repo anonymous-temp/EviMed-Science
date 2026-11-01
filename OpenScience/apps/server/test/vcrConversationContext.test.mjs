@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { verifyVcrInvocation } from '../src/vcrExecutionContext.mjs';
+import { createVcrCompletionResolver } from '../src/vcrConversationCompletions.mjs';
 
 function fixture({ child = false, input = { what: 'study' }, pending = true } = {}) {
   const project = { id: 'project', userId: 'user' };
@@ -52,4 +53,14 @@ test('native trial-benchmark file expansion is verified against exact control-pl
  const verified={comparisons:[{predicted:0.3}],sourceFile:{name:'predictions.json',sha256:'a'.repeat(64)}};
  const result=await verifyVcrInvocation({...f,header:header('root'),operation:'write',body:{what:'trial_benchmark',data:verified},readBenchmark:async(_project,file)=>{assert.equal(file,'predictions.json');return verified;}});assert.equal(result.rootSessionId,'root');
  await assert.rejects(verifyVcrInvocation({...f,header:header('root'),operation:'write',body:{what:'trial_benchmark',data:{...verified,comparisons:[{predicted:0.8}]}},readBenchmark:async()=>verified}),{code:'vcr_invocation_unavailable'});
+});
+test('a job that outlives a turn typed in the composer finds its conversation', async () => {
+  const accounts = { userById: async () => ({ id: 'owner' }), requireProject: async () => ({ id: 'p', userId: 'owner' }) };
+  const studies = { getStudy: async () => ({ projectId: 'p', status: 'active', scope: 'conversation', conversationSessionId: 'root' }) };
+  const row = { user_id: 'owner', project_id: 'p', study_id: 'std', root_session_id: 'root' };
+  const resolve = (adoptSession) => createVcrCompletionResolver({ accounts, studies, sessions: { get: async () => null }, allows: () => true, adoptSession })(row);
+  assert.deepEqual((await resolve(async (_project, id) => ({ sessionId: id }))).session, { sessionId: 'root' });
+  // A conversation with no run of its own is still unavailable.
+  assert.equal((await resolve(async () => null)).session, null);
+  assert.equal((await resolve(undefined)).session, null);
 });
