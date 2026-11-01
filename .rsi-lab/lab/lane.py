@@ -126,8 +126,29 @@ class Sampler(threading.Thread):
         return float(match.group(1)) * scale.get(match.group(2), 1)
 
     def run(self):
-        while not self.stop_flag.wait(30):
-            self.sample()
+        tick = 0
+        while not self.stop_flag.wait(10):
+            tick += 1
+            self.sample_runtime_cgroups()
+            if tick % 3 == 0:
+                self.sample()
+
+    def sample_runtime_cgroups(self):
+        """The kernel's own high-water mark of each runtime container's memory cgroup (memory.peak): exact, whatever the sampling period."""
+        try:
+            ids = subprocess.run(["docker", "ps", "-q", "--no-trunc", "--filter", "label=open-science.web.runtime=true"], capture_output=True, timeout=20).stdout.decode().split()
+        except (subprocess.TimeoutExpired, OSError):
+            return
+        with self.lock:
+            for container in ids:
+                for path in (f"/sys/fs/cgroup/system.slice/docker-{container}.scope/memory.peak", f"/sys/fs/cgroup/docker/{container}/memory.peak"):
+                    try:
+                        peak = int(pathlib.Path(path).read_text().strip()) / 1048576
+                    except (OSError, ValueError):
+                        continue
+                    label = self.runtime_names.setdefault(container, f"runtime{len(self.runtime_names) + 1}")
+                    self.peaks[label] = max(self.peaks.get(label, 0), round(peak))
+                    break
 
     def sample(self):
         try:
@@ -146,7 +167,7 @@ class Sampler(threading.Thread):
                 total += megabytes
                 # Runtime containers are named after their project (and so after the item); the numbers carry no name.
                 if name in runtimes:
-                    label = self.runtime_names.setdefault(name, f"runtime{len(self.runtime_names) + 1}")
+                    continue  # runtimes are read from their cgroups (sample_runtime_cgroups): exact, and numbered once
                 elif name.startswith("rsi-driver"):
                     label = "driver"
                 else:
@@ -220,6 +241,9 @@ def fetch_data(entries):
             marker = pathlib.Path(str(unzip["into"]).replace("/bench/", str(BENCH) + "/", 1)) / ".extracted" if unzip else None
             if marker is not None and marker.exists():
                 continue
+            packed = dest.with_name(dest.name + ".gz")
+            if entry.get("gzip") and packed.exists() and packed.stat().st_size > 0:
+                continue
             good = dest.exists() and (entry.get("bytes") is None or dest.stat().st_size == entry["bytes"])
             if good and entry.get("sha256"):
                 good = sha256_file(dest) == entry["sha256"]
@@ -228,6 +252,13 @@ def fetch_data(entries):
                 fetched += 1
             if unzip:
                 extract(dest, unzip)
+            if entry.get("gzip"):
+                # The host kept a file above the upload limit gzipped (its item names the .gz); the same bytes, compressed without a clock.
+                import gzip
+                with open(dest, "rb") as source, open(packed, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0, filename="") as out:
+                    for chunk in iter(lambda: source.read(1 << 20), b""):
+                        out.write(chunk)
+                dest.unlink()
     return fetched
 
 

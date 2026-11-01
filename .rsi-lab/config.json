@@ -1,17 +1,12 @@
 {
   "mode": "lanes",
-  "batch": "b007",
+  "batch": "b008",
   "sourceRef": "main",
   "labFrom": "branch",
   "imageRunId": 41307417699,
   "imageArtifact": "rsi-lab-images-5c740327bb8c",
   "idleExitMin": 4,
   "arms": [
-    {
-      "key": "base-ctl",
-      "jobs": 1,
-      "workers": 1
-    },
     {
       "key": "probe1",
       "jobs": 1,

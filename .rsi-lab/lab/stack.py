@@ -28,6 +28,7 @@ import secrets as token_source
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -248,10 +249,30 @@ def cmd_build_delta(args):
     tag = f"open-science-runtime:lab-{re.sub(r'[^A-Za-z0-9_.-]', '-', args.key)}"
     revision = run(["git", "-C", str(source.parent), "rev-parse", "HEAD"], capture=True).stdout.strip()
     started = time.time()
-    run(["docker", "build", "-q", "-f", str(source / "deploy/runtime-dsh/Dockerfile.delta"),
-         "--build-arg", f"RUNTIME_BASE_IMAGE={base}", "--build-arg", f"RELEASE_ID=evimed-{revision[:12]}-lab",
-         "--build-arg", f"SOURCE_REVISION={revision}", "--build-arg", f"BUILD_CREATED={time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime())}",
-         "-t", tag, str(source)], capture=True, timeout=3000)
+    command = ["docker", "build", "--progress=plain", "-f", str(source / "deploy/runtime-dsh/Dockerfile.delta"),
+               "--build-arg", f"RUNTIME_BASE_IMAGE={base}", "--build-arg", f"RELEASE_ID=evimed-{revision[:12]}-lab",
+               "--build-arg", f"SOURCE_REVISION={revision}", "--build-arg", f"BUILD_CREATED={time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime())}",
+               "-t", tag, str(source)]
+    log = WORK / "delta-build.log"
+    stop = threading.Event()
+
+    def watch():
+        # A runner that goes away mid-build leaves nothing else to read: memory and disk, every 20 s.
+        while not stop.wait(20):
+            memory = run(["free", "-m"], capture=True).stdout.splitlines()[1].split()
+            disk = run(["df", "-BM", "--output=avail", "/"], capture=True).stdout.splitlines()[1].strip()
+            say(f"build running {time.time() - started:.0f}s: mem used {memory[2]}M free {memory[3]}M avail {memory[6]}M, disk avail {disk}")
+
+    threading.Thread(target=watch, daemon=True).start()
+    with open(log, "wb") as sink:
+        code = subprocess.run(command, stdout=sink, stderr=subprocess.STDOUT, timeout=3000).returncode
+    stop.set()
+    text = log.read_text(errors="replace")
+    steps = [line for line in text.splitlines() if re.match(r"#\d+ \[", line)]
+    say(f"build steps seen: {len(steps)}; last: {steps[-1][:160] if steps else 'none'}")
+    if code != 0:
+        say("build failed; the log's last lines:\n" + "\n".join(text.splitlines()[-25:])[-2500:])
+        raise SystemExit(f"delta build failed ({code})")
     images["runtimeDelta"] = tag
     images["runtimeDeltaRevision"] = revision
     (WORK / "images.json").write_text(json.dumps(images, indent=2))
