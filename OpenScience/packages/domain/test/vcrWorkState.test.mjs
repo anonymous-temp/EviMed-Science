@@ -39,7 +39,7 @@ test('a job past the budget waits for the lead and is not a failure; a paused st
   assert.equal(VCR_JOB_STATE_LABELS_ZH.awaiting_budget, '等你确认预算')
   assert.notEqual(VCR_JOB_STATE_LABELS_ZH.awaiting_budget, VCR_JOB_STATE_LABELS_ZH.failed)
   assert.equal(VCR_JOB_STATE_LABELS_ZH.canceled, WORK_STATE_LABEL.stopped)
-  for (const state of VCR_JOB_STATES) assert.ok(vcrJobWorkState(state).state && VCR_JOB_STATE_LABELS_ZH[state], state)
+  for (const state of VCR_JOB_STATES) assert.ok(vcrJobWorkState(state).state && /** @type {Record<string, string>} */ (VCR_JOB_STATE_LABELS_ZH)[state], state)
   assert.equal(vcrStudyWorkState('paused'), 'paused')
   assert.equal(VCR_STUDY_STATUS_LABELS_ZH.paused, WORK_STATE_LABEL.paused)
   for (const status of ['draft', 'active', 'archived', undefined]) assert.equal(vcrStudyWorkState(status), null)

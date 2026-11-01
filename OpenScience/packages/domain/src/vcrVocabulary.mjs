@@ -33,9 +33,9 @@
  * @module @evimed/domain/vcrVocabulary
  */
 
-/** @param {readonly string[]} list */
 import { WORK_STATE_LABEL, workStateLabel } from './workState.mjs'
 
+/** @param {readonly string[]} list */
 const frozen = (list) => Object.freeze([...list])
 
 // ---------------------------------------------------------------------------
