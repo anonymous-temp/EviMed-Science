@@ -30,7 +30,7 @@
  */
 
 import {
-  VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_RESULT_KIND_TABS, VCR_TAB_LABELS_ZH, errorCodeMessage,
+  VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_RESULT_KIND_TABS, VCR_TAB_LABELS_ZH, errorCodeMessage, vcrResultClass,
 } from "@evimed/domain";
 
 /** The seven kinds, by the key each notice is counted under. */
@@ -84,10 +84,11 @@ const count = (value) => Math.round(value).toLocaleString("en-US");
  * (「B 1:1 固定设计」 reads as 「1:1 固定设计」: the letter is the page's).
  *
  * @param {{ resultKind: string, stage?: string | null, label?: string | null, state: "succeeded" | "failed", result?: Record<string, any> | null,
- *   error?: Record<string, any> | null }} facts
+ *   error?: Record<string, any> | null, method?: string | null }} facts `method`: the engine method of the job, which tells a comparator that is a benchmark
+ *   (a literature curve, an unanchored MAIC, a model's prediction) from one that estimates an effect
  * @returns {{ title: string, body: string, tab: string } | null} null for a computation that has nothing to say (a not-estimable comparator has its own notice)
  */
-export function vcrJobNoticeText({ resultKind, stage = null, label = null, state, result = null, error = null }) {
+export function vcrJobNoticeText({ resultKind, stage = null, label = null, state, result = null, error = null, method = null }) {
   const tab = /** @type {Record<string, string>} */ (VCR_RESULT_KIND_TABS)[resultKind] ?? "overview";
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
@@ -124,7 +125,9 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const real = finiteNumber(result?.counts?.realPatients);
     headline = generated !== null && generated > 0 ? `${count(generated)} 条生成记录` : real !== null && real > 0 ? `${count(real)} 人` : null;
   } else if (resultKind === "comparator") {
-    headline = /** @type {Record<string, string>} */ ({ estimable: "可以估计", limited: "有限制地估计" })[String(result?.conclusion)] ?? null;
+    // A benchmark says so (A8): the researcher is not told that an effect was estimated when what landed is a reference.
+    const word = vcrResultClass({ conclusion: result?.conclusion, method, diagnostics: result?.diagnostics, measures: result?.measures });
+    headline = /** @type {Record<string, string>} */ ({ estimable: "可以估计", limited: "有限制地估计", benchmark_only: "仅基准" })[String(word)] ?? null;
   }
   return {
     title: `${what}完成${headline ? `：${headline}` : ""}`,
@@ -250,10 +253,10 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
      * per job; the programme's own recomputation sends none. The source is the study's tab, which carries both the study and the
      * tab for whoever opens it or toasts it.
      * @param {any} study @param {{ jobId: string, resultKind: string, stage?: string | null, label?: string | null,
-     *   state: "succeeded" | "failed", result?: Record<string, any> | null, error?: Record<string, any> | null }} facts
+     *   state: "succeeded" | "failed", result?: Record<string, any> | null, error?: Record<string, any> | null, method?: string | null }} facts
      */
-    async jobFinished(study, { jobId, resultKind, stage = null, label = null, state, result = null, error = null }) {
-      const text = vcrJobNoticeText({ resultKind, stage, label, state, result, error });
+    async jobFinished(study, { jobId, resultKind, stage = null, label = null, state, result = null, error = null, method = null }) {
+      const text = vcrJobNoticeText({ resultKind, stage, label, state, result, error, method });
       if (!text) return true;
       return send(study, "job_finished", {
         // The title is the finding; which study it is about is the first thing the body says.

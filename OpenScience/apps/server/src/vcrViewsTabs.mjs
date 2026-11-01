@@ -32,7 +32,7 @@ import { presentVcrReview } from "./vcrViewsKit.mjs";
 
 import {
   VCR_COMPARABILITY_DIMENSION_LABELS_ZH, VCR_COMPARABILITY_DIMENSIONS, VCR_COMPARATOR_ROUTES, VCR_COMPARATOR_ROUTE_LABELS_ZH,
-  VCR_CONCLUSIONS, VCR_CRITERION_TYPE_LABELS_ZH, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_E10_CONDITIONS,
+  VCR_CRITERION_TYPE_LABELS_ZH, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_E10_CONDITIONS,
   VCR_E10_CONDITION_LABELS_ZH, VCR_ELIGIBILITY_SUMMARY_LABELS_ZH,
   VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_POPULATION_KIND_LABELS_ZH, VCR_ROUTE_MIN_TIER,
   VCR_SMD_FLOOR, VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH, VCR_TWIN_LABELS_ZH, VCR_VALUE_SOURCES, VCR_ESTIMAND_LABELS_ZH,
@@ -42,6 +42,8 @@ import {
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
   VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_DESIGN_SUPPORT, VCR_INTENDED_USE_LABELS_ZH, knownErrorCodeMessage, vcrAppliedDefaults,
   vcrAssessmentIssues, vcrAssessmentRows,
+  VCR_APPLICABILITY_LIMIT_LABELS_ZH, VCR_BENCHMARK_ONLY_BASIS_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH, VCR_RESULT_CLASSES, VCR_RESULT_CLASS_LABELS_ZH, VCR_SMD_SEVERE,
+  vcrApplicability, vcrBalanceSentence, vcrBalanceVerdictOf, vcrBenchmarkBasis, vcrResultClass, vcrTargetTrial,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -624,12 +626,17 @@ export function presentComparatorTab(bundle) {
     const design = latestByRoute.get(route) ?? null;
     const designResult = design ? resultById(bundle, design.resultId) : null;
     const conclusion = design ? (designResult?.conclusion ?? design.conclusion ?? null) : null;
+    // The class a reader gets: the conclusion, or 仅基准 for a result that is a benchmark (a literature curve, an unanchored MAIC, a
+    // model's prediction); the engine's conclusion is stored as it was.
+    const readAs = conclusion && designResult
+      ? vcrResultClass({ conclusion, method: executionOf(bundle, designResult)?.method ?? null, route, diagnostics: designResult.diagnostics, measures: designResult.measures })
+      : conclusion;
     const gaps = design ? list(design.gapList).length : 0;
     /** @type {string} */
     let state;
     // A route somebody evaluated says what it found, whatever its tier: an
     // external control at T0 that was judged not estimable is a result.
-    if (conclusion && (/** @type {readonly string[]} */ (VCR_CONCLUSIONS)).includes(conclusion)) state = conclusion;
+    if (readAs && (/** @type {readonly string[]} */ (VCR_RESULT_CLASSES)).includes(readAs)) state = readAs;
     else if (!reachable) state = "not_applicable";
     else state = route === "model_comparator" ? "scenario" : "design_only";
     const rule = designResult?.notEstimableRule ? (/** @type {Record<string, string>} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH))[designResult.notEstimableRule] ?? null : null;
@@ -712,6 +719,29 @@ export function presentComparatorTab(bundle) {
   const echoedUnit = diagnostics.timeUnit === undefined ? TIME_UNIT_WORDS.months : TIME_UNIT_WORDS[String(diagnostics.timeUnit)] ?? null;
   const tauWords = numeric(diagnostics.tau) !== null && echoedUnit ? `${diagnostics.tau} ${echoedUnit.after} ` : "";
   const conclusion = result?.conclusion ?? shown?.conclusion ?? null;
+  // What the reader is told: the conclusion, or 仅基准 for a result that is a benchmark (A8).
+  const readAs = conclusion && result
+    ? vcrResultClass({ conclusion, method: execution?.method ?? null, route: shown?.route, diagnostics, measures: result.measures })
+    : conclusion;
+  // Why the result is read with care, in sentences: the weighted balance (decision 2: the estimate is delivered with it, limited above
+  // 0.10 and severe above 0.25), the reasons the comparator's own records give (A7), and what a benchmark is a benchmark of (A8).
+  // A not-estimable result has its gap list instead.
+  /** @type {Array<{ key: string, text: string }>} */
+  const limits = [];
+  if (result && conclusion !== "not_estimable") {
+    const verdict = Object.keys(object(diagnostics.balanceVerdict)).length ? object(diagnostics.balanceVerdict) : vcrBalanceVerdictOf(list(diagnostics.balance).map(object));
+    const balanceSentence = vcrBalanceSentence(verdict);
+    if (balanceSentence) limits.push({ key: "balance", text: balanceSentence });
+    for (const entry of list(diagnostics.applicabilityLimits).map(object)) {
+      const sentence = (/** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH))[String(entry.code)] ?? text(entry.reason);
+      if (sentence) limits.push({ key: String(entry.code), text: sentence });
+    }
+    // An unanchored comparison says what it leaves unknown in the premises (残余误差大小未知); the other two say it here.
+    const basis = readAs === "benchmark_only" ? vcrBenchmarkBasis({ method: execution?.method ?? null, route: shown?.route, diagnostics, measures: result.measures }) : null;
+    if (basis && basis !== "unanchored_maic") limits.push({ key: "benchmark", text: (/** @type {Record<string, string>} */ (VCR_BENCHMARK_ONLY_BASIS_LABELS_ZH))[basis] });
+  }
+  // The target trial, as one record whichever shape it was written in.
+  const targetTrial = current ? vcrTargetTrial(current.targetTrial, current.configuration?.targetTrial) : null;
   // The owned execution identifies a sensitivity-only run. An E-value measure alongside
   // another method's effect estimate must not relabel that comparison.
   const sensitivityOnly = execution?.method === "comparator.evalue";
@@ -729,7 +759,7 @@ export function presentComparatorTab(bundle) {
     headline: shown && conclusion && conclusion !== "not_estimable"
       ? sensitivityOnly
         ? `未测量混杂敏感性分析：${conclusion === "limited" ? "结果有限制" : "已计算"}；输入效应值的来源需另行核实${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
-        : `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${tauWords}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
+        : `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ (VCR_RESULT_CLASS_LABELS_ZH))[String(readAs)] ?? ""}${rmstValue && rmstValue.value !== null ? `，${tauWords}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
       : null,
     routes,
     curves,
@@ -744,13 +774,15 @@ export function presentComparatorTab(bundle) {
       key: text(entry.key) ?? "", label: (/** @type {Record<string, string>} */ (VCR_E10_CONDITION_LABELS_ZH))[String(entry.key)] ?? text(entry.label) ?? "",
       state: ["met", "partial", "doubtful"].includes(String(entry.state)) ? String(entry.state) : "doubtful", note: text(entry.note),
     })).filter((entry) => (VCR_E10_CONDITIONS).includes(entry.key)),
+    // The estimand, and the target trial in its seven components (A6): each says how far the comparison can emulate it. What the premise
+    // block (above) shows of it is the components that are not exact; this is the whole record, folded into the section.
     estimand: current ? {
       rows: [
         { label: "估计目标", value: estimandLabel ?? "" },
-        ...(text(object(current.targetTrial).population) ? [{ label: "目标试验的人群", value: String(object(current.targetTrial).population) }] : []),
-        ...(text(object(current.targetTrial).treatment) ? [{ label: "处理策略", value: String(object(current.targetTrial).treatment) }] : []),
+        ...(targetTrial?.components ?? []).map((entry) => ({ label: entry.label, value: [entry.statusLabel, entry.text].filter(Boolean).join("：") || "没有写" })),
+        ...(targetTrial?.other ?? []).map((entry) => ({ label: entry.item, value: entry.status ? (/** @type {Record<string, string>} */ ({ exact: "可精确复现", approximate: "只能近似", not_possible: "无法复现" }))[entry.status] : "没有写" })),
       ],
-      note: text(object(current.targetTrial).note),
+      note: targetTrial?.note ?? null,
       source: "assumed",
     } : null,
     comparability: balance.map((row, index) => {
@@ -761,18 +793,26 @@ export function presentComparatorTab(bundle) {
         smd, smdBefore: finite(row.smdUnadjusted), flagged: smd !== null && Math.abs(smd) > VCR_SMD_FLOOR, note: null,
       };
     }),
-    comparabilityNote: balance.length ? "标准化差异是加权之后的；界值 0.1。" : null,
+    comparabilityNote: balance.length ? `标准化差异是加权之后的；界值 ${VCR_SMD_FLOOR}，超过 ${VCR_SMD_SEVERE} 为严重失衡。` : null,
     dimensions,
     diagnostics: [...diagnosticRows, ...routeRows],
     prior: priorRows,
     // A borrowing route's rejection probabilities over the drifts of the true control rate (`comparator.map_prior`), with their errors.
     operatingCharacteristics: operatingCharacteristicsView(diagnostics),
     // 「这个结论的前提」: the list and its rules are `vcrPremises`'s; the comparator's facts are filled in beside the route's own rows.
-    premises: vcrPremises("comparator", { route: shown?.route ?? null, diagnostics }),
+    premises: vcrPremises("comparator", {
+      route: shown?.route ?? null, estimand: shown?.estimand ?? null, estimandStated: shown ? shown.estimand !== "ATT" : false, diagnostics,
+      measures: Object.fromEntries(list(result?.measures).map(object).map((measure) => [String(measure.name), numeric(measure.value)])),
+      applicability: shown ? vcrApplicability(shown.configuration) : null,
+      targetTrial: shown ? vcrTargetTrial(shown.targetTrial, shown.configuration?.targetTrial) : null,
+      covariates: list(shown?.configuration?.covariates).length ? list(shown?.configuration?.covariates).map(String) : balance.map((row) => String(row.covariate ?? "")),
+      anchored: typeof diagnostics.anchored === "boolean" ? diagnostics.anchored : null,
+    }),
+    limits,
     robustness: robustnessView(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
-    verdict: shown ? { conclusion } : null,
+    verdict: shown ? { conclusion: readAs } : null,
     at: shown ? zhTime(shown.createdAt, now) : null,
     stale: staleNote(marks),
     // One sentence, and no version numbers: the page says that these are the previous design's numbers, not which version that was.
@@ -1574,6 +1614,8 @@ export function presentDataTab(bundle, query = {}) {
       version: card.version,
       sourceType: (/** @type {Record<string, string>} */ (VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH))[card.sourceKind] ?? card.sourceKind,
       sourceKind: card.sourceKind,
+      // What an effect is on its card (A13): the difference worth finding, or the one realistically expected; null for a card that says none.
+      effectRole: (/** @type {Record<string, string>} */ (VCR_EFFECT_ROLE_LABELS_ZH))[String(card.effectRole)] ? String(card.effectRole) : null,
       applicability: applicabilityText(card),
       sensitivity: sensitivityText(card),
       review: reviewOf(card),

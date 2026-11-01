@@ -147,7 +147,7 @@ function componentOf(value) {
  * @param {unknown} raw
  */
 function readTargetTrial(raw) {
-  /** @type {Map<string, { status: string | null, text: string | null }>} */
+  /** @type {Map<string, { status: 'exact' | 'approximate' | 'not_possible' | null, text: string | null }>} */
   const byKey = new Map()
   /** @type {Array<{ item: string, status: 'exact' | 'approximate' | 'not_possible' | null }>} */
   const other = []
@@ -191,6 +191,7 @@ function readTargetTrial(raw) {
 export function vcrTargetTrial(record, configured = undefined) {
   const first = readTargetTrial(record)
   const second = readTargetTrial(configured)
+  /** @type {VcrTargetTrialComponent[]} */
   const components = VCR_TARGET_TRIAL_COMPONENTS.flatMap((key) => {
     const entry = first.byKey.get(key) ?? second.byKey.get(key)
     if (!entry) return []

@@ -522,7 +522,7 @@
       "id": "mth_3",
       "name": "双重稳健估计（AIPW）",
       "method": "comparator.aipw",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "连续 · 二分类",
       "numeric": null,
       "validation": {
@@ -536,7 +536,7 @@
       "id": "mth_4",
       "name": "协变量集敏感性分析",
       "method": "comparator.covariate_sets",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -550,7 +550,7 @@
       "id": "mth_5",
       "name": "熵平衡加权",
       "method": "comparator.entropy_balance",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -620,7 +620,7 @@
       "id": "mth_10",
       "name": "阴性对照结局",
       "method": "comparator.negative_control",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -648,7 +648,7 @@
       "id": "mth_12",
       "name": "倾向评分加权",
       "method": "comparator.propensity_weight",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -690,7 +690,7 @@
       "id": "mth_15",
       "name": "加权 Cox 风险比",
       "method": "comparator.weighted_cox",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "事件时间",
       "numeric": null,
       "validation": {

@@ -1874,9 +1874,13 @@ export class VcrJobs {
         const sourced = assumedInputs
           ? measures.map((measure) => (object(measure).source === "aggregate" ? { ...object(measure), source: "assumed" } : measure))
           : measures;
+        // What the comparator's own records limit it by (the orchestrator froze it with the job): an estimable result is then `limited`
+        // and says why. A result the engine already called limited or not estimable is not changed by it, and nothing is withheld.
+        const recordLimits = list(detail.applicabilityLimits).map(object).filter((entry) => typeof entry.code === "string");
         /** @type {any} */
         const incoming = {
-          conclusion: complete ? (status === "not_estimable" ? "not_estimable" : (result.conclusion ?? "estimable")) : "limited",
+          conclusion: complete ? (status === "not_estimable" ? "not_estimable"
+            : (result.conclusion ?? "estimable") === "estimable" && recordLimits.length ? "limited" : (result.conclusion ?? "estimable")) : "limited",
           notEstimableRule: result.notEstimableRule ?? null,
           counts: object(result.counts), measures: sourced,
           diagnostics: { ...object(result.diagnostics), ...(detail.sourceModel ? { sourceModel: detail.sourceModel } : {}),
@@ -1889,6 +1893,7 @@ export class VcrJobs {
             ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}),
             // Control-plane facts about the run, frozen with the job: the defaults it took, and why it ran as many replicates as it did.
             ...(list(detail.appliedDefaults).length ? { appliedDefaults: list(detail.appliedDefaults) } : {}),
+            ...(recordLimits.length ? { applicabilityLimits: recordLimits.map((entry) => ({ code: String(entry.code), reason: String(entry.reason ?? "") })) } : {}),
             ...(Object.keys(object(detail.replicatePlan)).length ? { replicatePlan: object(detail.replicatePlan) } : {}) },
           tables: list(result.tables),
         };
@@ -1922,7 +1927,7 @@ export class VcrJobs {
           diagnostics: filed.diagnostics, tables: filed.tables,
           tiers: [...new Set([...tiers, ...carried.filter((entry) => entry.name === "method").map((entry) => String(entry.tier))])],
           models: [...models, ...carried.filter((entry) => entry.name !== "method")],
-          supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory",
+          supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory", method: String(row.method),
         }, { client });
         if (outcome.verifiedStage) {
           const proof = { recordedResultId: recorded.id, recordedResultVersion: recorded.version,

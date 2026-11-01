@@ -44,6 +44,7 @@ import {
   normalizeVcrAssessment, roleAllows, useWithin,
 } from "@evimed/domain";
 
+import { VCR_BENCHMARK_ONLY_USE_CEILING, vcrBenchmarkBasis } from "@evimed/domain";
 import { DISPLAY_TIME_ZONE, VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -273,7 +274,7 @@ function assumptionFromRow(row) {
     valueSource: String(row.value_source ?? "assumed"), poolingMethod: text(row.pooling_method), pooling: object(row.pooling),
     evidenceIds: list(row.evidence_ids).map(String), applicability: object(row.applicability),
     reviewState: String(row.review_state ?? "ai_set"), note: String(row.note ?? ""), createdAt: iso(row.created_at),
-    afterFreeze: row.after_freeze === true,
+    afterFreeze: row.after_freeze === true, effectRole: text(row.effect_role),
   };
 }
 
@@ -1060,24 +1061,29 @@ export class VcrStore extends VcrStoreBase {
       // is not computed again — never a stale prior silently standing behind a new value.
       // `distribution: {}` says 「none」 in as many words.
       let distribution = input.distribution;
-      if (distribution === undefined && version > 1) {
+      // An effect's role (A13) is a fact about the card, not about its number: an edit that does not say it keeps the one it had.
+      let effectRole = input.effectRole ?? null;
+      if ((distribution === undefined || input.effectRole === undefined) && version > 1) {
         // The card the study has: a version written after the freeze is beside it, not what an edit starts from.
-        const previous = (await client.query(`SELECT point_value, distribution FROM ${VCR_SCHEMA}.assumptions
+        const previous = (await client.query(`SELECT point_value, distribution, effect_role FROM ${VCR_SCHEMA}.assumptions
           WHERE study_id = $1 AND key = $2 AND NOT after_freeze ORDER BY version DESC LIMIT 1`, [input.studyId, String(input.key)])).rows[0];
-        const sameValue = input.pointValue === undefined || input.pointValue === null
-          ? previous?.point_value == null : Number(previous?.point_value) === Number(input.pointValue);
-        distribution = previous && sameValue ? object(previous.distribution) : {};
+        if (input.effectRole === undefined) effectRole = text(previous?.effect_role);
+        if (distribution === undefined) {
+          const sameValue = input.pointValue === undefined || input.pointValue === null
+            ? previous?.point_value == null : Number(previous?.point_value) === Number(input.pointValue);
+          distribution = previous && sameValue ? object(previous.distribution) : {};
+        }
       }
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.assumptions
         (id, study_id, user_id, key, version, name, endpoint, unit, point_value, distribution, sensitivity, source_kind,
-         value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16::text[], $17::jsonb, $18, $19, $20)
+         value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze, effect_role)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16::text[], $17::jsonb, $18, $19, $20, $21)
         RETURNING *`,
       [vcrId("assumption"), input.studyId, String(input.userId), String(input.key), version, String(input.name ?? input.key),
         input.endpoint ?? null, input.unit ?? null, input.pointValue ?? null, JSON.stringify(distribution ?? {}),
         JSON.stringify(input.sensitivity ?? {}), String(input.sourceKind ?? "expert_set"), String(input.valueSource ?? "assumed"),
         input.poolingMethod ?? null, JSON.stringify(input.pooling ?? {}), list(input.evidenceIds).map(String),
-        JSON.stringify(input.applicability ?? {}), input.reviewState ?? "ai_set", String(input.note ?? ""), input.afterFreeze === true])).rows[0];
+        JSON.stringify(input.applicability ?? {}), input.reviewState ?? "ai_set", String(input.note ?? ""), input.afterFreeze === true, effectRole])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.assumption.save",
         object: String(row.id), detail: { key: String(input.key), version, ...(input.afterFreeze === true ? { afterFreeze: true } : {}) } });
       return assumptionFromRow(row);
@@ -1348,7 +1354,8 @@ export class VcrStore extends VcrStoreBase {
    *   conclusion?: string | null, notEstimableRule?: string | null, counts?: Record<string, any>, measures?: unknown[],
    *   diagnostics?: Record<string, any>, tables?: unknown[], tiers?: string[],
    *   models?: Array<{ tier?: string, risk?: string, evidence?: string[], name?: string }>,
-   *   supersedesSubjects?: string[], requestedUse?: string }} input
+   *   supersedesSubjects?: string[], requestedUse?: string, method?: string | null }} input
+   *   `method` is the engine method that made the numbers, for the class of the result (a benchmark has a lower ceiling of use).
    *   `supersedesSubjects` are earlier versions of the same object — a new version of a labelled trial
    *   scenario is a new row with its own id, and the result of the version it replaces is no longer current.
    * @param {{ client?: any }} [options] the caller's transaction, when the result has to land with other rows
@@ -1368,11 +1375,16 @@ export class VcrStore extends VcrStoreBase {
     // its declared risk's and what its held evidence supports, and the weakest
     // decides (`intendedUseCeilingFor`). A model short of its evidence is
     // reported by name, whichever of the three set the limit.
-    const ceiling = detail.ceiling;
+    // A benchmark (a curve reconstructed from the literature, an unanchored MAIC, a model's prediction; A8) informs a design and is not an
+    // analysis of an effect: whatever the method's tier would allow, its use is no higher than design support.
+    const benchmark = vcrBenchmarkBasis({ method: input.method ?? null, diagnostics: input.diagnostics ?? null, measures: /** @type {any} */ (input.measures ?? null) });
+    const tierCeiling = detail.ceiling;
+    const ceiling = benchmark && !useWithin(tierCeiling, VCR_BENCHMARK_ONLY_USE_CEILING) ? VCR_BENCHMARK_ONLY_USE_CEILING : tierCeiling;
     const intendedUse = useWithin(requested, ceiling) ? requested : ceiling;
     const evidenceLimited = detail.limitedBy.some((entry) => entry.cause === "evidence");
     const downgrade = intendedUse === requested ? null : {
-      requested, ceiling, reason: evidenceLimited || shortfalls.length ? "model_evidence_missing" : "model_tier_ceiling",
+      requested, ceiling,
+      reason: ceiling !== tierCeiling ? "benchmark_only" : evidenceLimited || shortfalls.length ? "model_evidence_missing" : "model_tier_ceiling",
       models: [...list(input.tiers).map((tier) => ({ name: "method", tier: String(tier), risk: "none" })),
         ...models.map((model) => ({ name: String(model?.name ?? "model"), tier: String(model?.tier ?? "scenario"), risk: String(model?.risk ?? "none") }))],
       missingEvidence: shortfalls,

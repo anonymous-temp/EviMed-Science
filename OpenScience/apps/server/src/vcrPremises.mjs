@@ -24,7 +24,7 @@
  * @module vcrPremises
  */
 
-import { VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
 import { TIME_UNIT_WORDS, list, numeric, object, text } from "./vcrViewsKit.mjs";
 
 /**
@@ -38,6 +38,9 @@ import { TIME_UNIT_WORDS, list, numeric, object, text } from "./vcrViewsKit.mjs"
  */
 const PRIORITY = Object.freeze([
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrual", "alpha", "assurance",
+  // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
+  // borrowed prior rests on, how strong an unmeasured confounder would have to be
+  "applicability", "targetTrial", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
 ]);
 
 /**
@@ -283,11 +286,86 @@ function populationPremises(input) {
 // --- the comparator ---------------------------------------------------------------------------------------------------------------
 
 /**
- * The premises of a comparator result. The comparator page fills this in (the route's estimand, the covariates the comparison
- * adjusts for, the borrowing weight): the list and its rules are this module's, the facts are that page's.
- * @param {Record<string, any>} _input
+ * The premises of a comparator result: how suitable the run judged the comparison, how far the target trial can be emulated, what an
+ * indirect comparison leaves unadjusted, what a borrowed prior rests on, and how strong an unmeasured confounder would have to be.
+ * A record the run has not written is not a premise (no row has a value to show); the run is reminded of it in the answer of the
+ * write, and what it costs the result is on the page as a limit.
+ *
+ * What an E-value is: how strong an unmeasured confounder would have to be to explain the estimate away. It is worded that way and
+ * never as the absence of bias, which no number from the data can show.
+ *
+ * @param {{ route?: string | null, estimand?: string | null, estimandStated?: boolean, diagnostics?: Record<string, any>,
+ *   measures?: Record<string, number | null>, applicability?: Record<string, any> | null,
+ *   targetTrial?: { components: ReadonlyArray<{ key: string, label: string, status: string | null, statusLabel: string | null, text: string | null }> } | null,
+ *   covariates?: readonly string[], anchored?: boolean | null }} input
+ * `measures`: the result's numbers by name, for the few a premise quotes.
  * @returns {Array<Partial<VcrPremise>>}
  */
-function comparatorPremises(_input) {
-  return [];
+function comparatorPremises(input) {
+  const diagnostics = object(input.diagnostics);
+  const measures = object(input.measures);
+  const route = String(input.route ?? "");
+  /** @type {Array<Partial<VcrPremise>>} */
+  const rows = [];
+
+  // The run's own judgement of the comparison, first: FDA, EMA and the CDE all put it before the statistics.
+  const applicability = object(input.applicability);
+  if (applicability.present === true) {
+    const value = [applicability.stateLabel, applicability.claimLabel ? `要支持${applicability.claimLabel}结论` : null].filter(Boolean).join("，")
+      + (text(applicability.note) ? `：${text(applicability.note)}` : "");
+    rows.push({ key: "applicability", label: "这项对照是否适用", value, source: "assumed", decisive: true });
+  }
+
+  // How far the control emulates the target trial: the components it cannot reproduce exactly are what the conclusion turns on. A
+  // record whose components say nothing of how far they are emulated (the older shapes) has no value to show here; the page lists it.
+  const components = list(object(input.targetTrial).components).map(object);
+  if (components.some((entry) => entry.status !== null && entry.status !== undefined)) {
+    const weak = components.filter((entry) => entry.status === "approximate" || entry.status === "not_possible");
+    const value = weak.length ? weak.map((entry) => `${entry.label}：${entry.statusLabel}`).join("；")
+      : components.every((entry) => entry.status === "exact") ? "已记录的要素都可以精确复现" : "已标注的要素都可以精确复现";
+    rows.push({ key: "targetTrial", label: "目标试验的复现程度", value, source: "assumed", decisive: weak.length > 0 });
+  }
+
+  // An indirect comparison of a published trial (MAIC): who the effect is for, what is left unadjusted, and, without a common
+  // comparator, that the size of the residual error is not known.
+  if (typeof input.anchored === "boolean") {
+    if (diagnostics.targetPopulation === "aggregate_data_trial") {
+      rows.push({ key: "maicTarget", label: "目标人群", value: "对方试验已发表的人群（只有汇总数）", source: "literature", decisive: true });
+    }
+    const modifiers = list(diagnostics.unadjustedEffectModifiers).map(String).filter(Boolean);
+    rows.push({ key: "maicModifiers", label: "未调整的效应修饰因子", value: modifiers.length ? modifiers.join("、") : "没有列出", source: "assumed", decisive: true });
+    if (input.anchored === false) rows.push({ key: "residual", label: "非锚定比较", value: "残余误差大小未知", source: "default", decisive: true });
+  }
+
+  // A borrowed prior rests on the historical numbers it was built from, and is worth some number of this study's patients.
+  if (route === "hybrid_control") {
+    rows.push({ key: "borrowedHistory", label: "历史对照的数字",
+      value: diagnostics.inputsAssumed === true ? "没有经过核对的来源（输入为假设）" : "来自核对过的证据",
+      source: diagnostics.inputsAssumed === true ? "assumed" : "literature", decisive: true });
+    const worth = numeric(measures.prior_effective_sample_size_elir) ?? numeric(measures.map_effective_sample_size_elir);
+    if (worth !== null) rows.push({ key: "priorWorth", label: "先验相当于多少例患者", value: `${plain(worth)} 例`, source: "literature", decisive: true });
+  }
+
+  // How strong an unmeasured confounder would have to be (E-value, after the estimate).
+  const point = numeric(measures.e_value);
+  if (point !== null) {
+    const limit = numeric(measures.e_value_confidence_limit);
+    rows.push({ key: "unmeasured", label: "未测量的混杂",
+      value: `E 值 ${plain(point)}${limit !== null ? `（置信限 ${plain(limit)}）` : ""}：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果`,
+      source: "assumed", decisive: true });
+  }
+
+  // What an external control is estimated for, and what it is adjusted by: stated, and folded.
+  if (route === "external_control") {
+    const estimand = text(input.estimand);
+    if (estimand) {
+      rows.push({ key: "estimand", label: "估计目标", value: /** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH)[estimand] ?? estimand,
+        source: input.estimandStated === true ? "assumed" : "default", decisive: false });
+    }
+    const covariates = list(input.covariates).map(String).filter(Boolean);
+    if (covariates.length) {
+      rows.push({ key: "covariates", label: "调整的协变量", value: `${covariates.slice(0, 6).join("、")}${covariates.length > 6 ? ` 等 ${covariates.length} 个` : ""}`, source: "assumed", decisive: false });
+    }
+  }
+  return rows;
 }

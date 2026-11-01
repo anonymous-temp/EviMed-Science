@@ -407,8 +407,12 @@ test("a comparator is a route and an estimand; whether it is estimable is the en
   const data = res.json().data;
   assert.equal(data.ok, true);
   assert.deepEqual(calls.filter((call) => call[0] === "comparator"), [["comparator", "external_control", null]]);
-  assert.deepEqual(data.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[1, "conclusion", "vcr_write_field_forbidden"]],
+  const refused = data.issues.filter((/** @type {any} */ issue) => issue.code !== "vcr_comparator_record_incomplete");
+  assert.deepEqual(refused.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[1, "conclusion", "vcr_write_field_forbidden"]],
     "a conclusion is not a field of the write at all, and the gap list beside it is a result field");
+  // the saved comparator has no target-trial record and no applicability record: both come back as reminders, and it was saved all the same
+  assert.deepEqual(data.issues.filter((/** @type {any} */ issue) => issue.index === 0).map((/** @type {any} */ issue) => [issue.field, issue.code]),
+    [["targetTrial", "vcr_comparator_record_incomplete"], ["configuration.applicability", "vcr_comparator_record_incomplete"]]);
 });
 
 test("a run may ask for a step and leave a note; it cannot declare one finished, and says so by being refused", async () => {

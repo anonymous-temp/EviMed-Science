@@ -86,9 +86,11 @@ export function SourceTag({ source, className }: { source: VcrValueSource | null
 }
 
 /**
- * What the method itself says: 可估计 / 有限制地估计 / 不可估计. Never the
- * same thing as the run state (plan §3.6). Who set a number and whether a
- * person has signed it are not drawn beside it (owner ruling 2026-10-10).
+ * What the method itself says: 可估计 / 有限制地估计 / 不可估计, and 仅基准 for a
+ * result that is a benchmark and not an estimate of an effect (a literature curve,
+ * an unanchored MAIC, a model's prediction; remediation plan A8). Never the same
+ * thing as the run state (plan §3.6). Who set a number and whether a person has
+ * signed it are not drawn beside it (owner ruling 2026-10-10).
  */
 export function ConclusionChip({ state, className }: { state: VcrConclusion | null | undefined; className?: string }) {
   if (!state) return null;

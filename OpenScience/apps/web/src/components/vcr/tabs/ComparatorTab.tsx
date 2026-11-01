@@ -3,7 +3,7 @@ import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState, type ReactNode } from "react";
 import { ChevronLeft, CircleCheck, Info, PenLine } from "lucide-react";
 import { VCR_COMPARATOR_ROUTE_LABELS_ZH } from "@evimed/domain";
-import { getVcrComparator, type VcrComparatorTab as ComparatorData, type VcrOperatingCharacteristics, type VcrPremise, type VcrStudy } from "@/lib/vcrClient";
+import { getVcrComparator, type VcrComparatorTab as ComparatorData, type VcrConclusion, type VcrOperatingCharacteristics, type VcrPremise, type VcrStudy } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ChartCard } from "@/components/ui/ChartCard";
@@ -38,8 +38,8 @@ const ROUTE_STATE_WORDS: Record<string, string> = {
   design_only: "设计期可用",
 };
 
-/** The routes whose state is a conclusion (a chip of its own); the rest are a word. */
-const CONCLUSIONS = new Set(["estimable", "limited", "not_estimable"]);
+/** The routes whose state is a conclusion or the benchmark class (a chip of its own); the rest are a word. */
+const CONCLUSIONS = new Set(["estimable", "limited", "benchmark_only", "not_estimable"]);
 
 /** What 「评估可比性」 puts in the conversation's composer — never sent. */
 export const VCR_ASSESS_COMPARABILITY_DRAFT = "请评估这项对照在十个可比性维度上能模拟到什么程度：";
@@ -102,7 +102,7 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
             titleProps={{ "data-vcr-route": route.route, "data-vcr-route-state": route.state }}
             meta={(
               <span className="flex flex-wrap items-center gap-1.5">
-                {CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as "estimable" | "limited" | "not_estimable"} /> : <Tag>{ROUTE_STATE_WORDS[route.state] ?? route.state}</Tag>}
+                {CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as VcrConclusion} /> : <Tag>{ROUTE_STATE_WORDS[route.state] ?? route.state}</Tag>}
                 {route.selected && <Tag tone="accent">采用</Tag>}
                 {(route.reason || route.note) && <span className="min-w-0 truncate text-caption text-text-3">{route.reason ?? route.note}</span>}
               </span>
@@ -131,6 +131,14 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
                 </span>
               )}
             </div>
+          )}
+
+          {/* Why the result is read with care, in the server's own sentences: the weighted balance beside the estimate, the reasons the
+              comparator's records give, what a benchmark is a benchmark of. The estimate is on the page whatever they say. */}
+          {(data.limits ?? []).length > 0 && (
+            <ul data-vcr-limits="" className="flex flex-col gap-1 text-body text-text-2">
+              {(data.limits ?? []).map((limit) => <li key={limit.key} data-vcr-limit={limit.key}>{limit.text}</li>)}
+            </ul>
           )}
 
           {/* What the conclusion stands on, once; the comparator's own premises are listed by the server (`vcrPremises`). */}
@@ -304,7 +312,7 @@ function OtherRoute({ data, route }: { data: ComparatorData; route: ComparatorDa
   const rows: Fact[] = gaps
     ? []
     : [
-      { label: "状态", value: CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as "estimable" | "limited" | "not_estimable"} /> : ROUTE_STATE_WORDS[route.state] ?? route.state },
+      { label: "状态", value: CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as VcrConclusion} /> : ROUTE_STATE_WORDS[route.state] ?? route.state },
       ...(route.reason ? [{ label: needs ? "需要什么" : "原因", value: route.reason }] : []),
       ...(route.note ? [{ label: "说明", value: route.note }] : []),
     ];

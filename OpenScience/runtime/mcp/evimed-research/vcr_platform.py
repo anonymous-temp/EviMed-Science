@@ -736,13 +736,28 @@ def write(arguments: dict) -> dict:
             "warnings": [_issue_line(issue) for issue in issues[:20]],
             "next_actions": ["Correct the named items and write them again; nothing else changed."],
         }
+    # A reminder is not a refusal: the object it is about is saved and computed as it stands (a record not written yet, a role not
+    # stated), and the answer says what to add in a next version.
+    reminders = [issue for issue in issues if issue.get("code") in _REMINDER_CODES]
+    refused = [issue for issue in issues if issue.get("code") not in _REMINDER_CODES]
+    next_actions = []
+    if refused:
+        next_actions.append("Correct the refused items and write only those again.")
+    if reminders:
+        next_actions.append("The warnings that name a record or a role are reminders: the object is saved and its result is delivered as it "
+                            "stands. Add what they name by writing the same object again (a new version), without waiting for anyone.")
     return _with_entry({
         "status": "warning" if issues else "success",
-        "summary": "Wrote %s: %d written%s." % (what, len(ids), ", %d refused" % len(issues) if issues else ""),
+        "summary": "Wrote %s: %d written%s%s." % (what, len(ids), ", %d refused" % len(refused) if refused else "",
+                                                   ", %d reminder(s)" % len(reminders) if reminders else ""),
         "data": data,
         "warnings": [_issue_line(issue) for issue in issues[:20]],
-        "next_actions": ["Correct the refused items and write only those again."] if issues else [],
+        "next_actions": next_actions,
     }, data)
+
+
+# The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing"})
 
 
 def _issue_line(issue: dict) -> str:

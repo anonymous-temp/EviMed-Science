@@ -117,15 +117,47 @@ describe("对照 · the routes and the record in use", () => {
 });
 
 describe("对照 · the record of the route in use", () => {
-  it("says the method's conclusion in the sentence, and nothing of who set it or whether it was reviewed", async () => {
+  it("says the class of the result in the sentence, and nothing of who set it or whether it was reviewed", async () => {
     const { container } = draw();
     const verdict = await found(container, "[data-vcr-verdict]");
-    expect(verdict).toHaveTextContent("有限制地估计");
+    // The route in use is a reconstructed literature curve: a benchmark, not an estimate of an effect (A8).
+    expect(verdict).toHaveTextContent("仅基准");
     expect(verdict).not.toHaveTextContent(/AI 设定|未复核|已复核/);
-    expect(container.querySelector("[data-headline]")).toHaveTextContent("文献对照：有限制地估计，12 个月 RMST 5.900 个月。");
+    expect(container.querySelector("[data-headline]")).toHaveTextContent("文献对照：仅基准，12 个月 RMST 5.900 个月。");
+    expect(container.querySelector("[data-vcr-route='literature_control']")?.closest("li")).toHaveTextContent("仅基准");
     // What the page used to say last, 「本页结论」, is the chip beside its first sentence.
     expect(container.textContent).not.toContain("本页结论");
     expect((container.querySelector("[data-headline]") as HTMLElement).compareDocumentPosition(verdict) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says the engine's own conclusion where the result is an estimate, and beside it the sentences that limit it: the balance, the records, a benchmark's basis", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.verdict = { conclusion: "limited" };
+    raw.headline = "文献对照：有限制地估计，12 个月 RMST 5.900 个月。";
+    raw.routes = raw.routes.map((route: { route: string }) => (route.route === "literature_control" ? { ...route, state: "limited" } : route));
+    raw.limits = [
+      { key: "balance", text: "严重失衡：加权后“既往免疫治疗”的标准化差异为 0.31，超过 0.25。" },
+      { key: "no_time_zero_rule", text: "没有写明两组各从什么时刻开始随访（时间零点），起点不一致会带来偏倚。" },
+    ];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const verdict = await found(container, "[data-vcr-verdict]");
+    expect(verdict).toHaveTextContent("有限制地估计");
+    expect(verdict).not.toHaveTextContent("仅基准");
+    const limits = await found(container, "[data-vcr-limits]");
+    expect([...limits.querySelectorAll("[data-vcr-limit]")].map((node) => node.getAttribute("data-vcr-limit"))).toEqual(["balance", "no_time_zero_rule"]);
+    expect(limits).toHaveTextContent("严重失衡：加权后“既往免疫治疗”的标准化差异为 0.31，超过 0.25。");
+    // the estimate is on the page beside them
+    expect(container.querySelector("[data-vcr-rmst]")).toHaveTextContent("5.9");
+  });
+
+  it("draws no list of limits when the server has none to say", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.limits = [];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-limits]")).toBeNull();
   });
 
   it("draws a reconstructed curve dashed, always, says in the legend what the dash is, and draws a curve of any other source by its own rule", async () => {

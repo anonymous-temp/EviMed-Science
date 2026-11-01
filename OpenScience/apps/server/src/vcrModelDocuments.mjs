@@ -769,7 +769,7 @@ function resultBlocks(result, index, model) {
   const facts = [["结论", `${conclusion}${rule}`]];
   if (result.intendedUse) {
     const downgrade = object(result.useDowngrade);
-    const why = /** @type {Record<string, string>} */ ({ model_evidence_missing: "模型证据不足", model_tier_ceiling: "模型层级的上限" })[String(downgrade.reason)] ?? "模型的限制";
+    const why = /** @type {Record<string, string>} */ ({ model_evidence_missing: "模型证据不足", model_tier_ceiling: "模型层级的上限", benchmark_only: "这个结果只作基准" })[String(downgrade.reason)] ?? "模型的限制";
     facts.push(["结果可标注的预期用途", `${wordOf(VCR_INTENDED_USE_LABELS_ZH, result.intendedUse)}${downgrade.reason ? `（已下调：${why}${list(downgrade.missingEvidence).length ? `，缺 ${list(downgrade.missingEvidence).map(evidenceLabel).join("、")}` : ""}）` : ""}` ]);
   }
   blocks.push({ type: "facts", title: `${result.kindLabel}：${result.subject}`, rows: facts });

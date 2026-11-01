@@ -43,7 +43,7 @@ import {
   VCR_EXPORT_KINDS, VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_STATES, VCR_MEMBER_ROLES,
   VCR_MISSING_REASONS, VCR_MODEL_RISKS, VCR_MODEL_TIERS, VCR_POOLING_METHODS, VCR_POPULATION_KINDS,
   VCR_RATINGS, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
-  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES, PLATFORM_PUBLISHER_USER_ID,
+  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES, PLATFORM_PUBLISHER_USER_ID, VCR_EFFECT_ROLES,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 import { VCR_ERASURE_SQL } from "./vcrErasureSchema.mjs";
@@ -460,6 +460,9 @@ CREATE INDEX IF NOT EXISTS vcr_assumptions_study_idx ON evimed_vcr.assumptions (
 -- card and shown beside the version the plan froze with, and is never the study's current one — every reader of "the card" skips it,
 -- so a frozen plan is not touched and no recomputation starts from it.
 ALTER TABLE evimed_vcr.assumptions ADD COLUMN IF NOT EXISTS after_freeze boolean NOT NULL DEFAULT false;
+-- What an effect is on its card (remediation plan A13, DELTA2): the difference worth finding or the difference realistically expected.
+-- Null for every card written before, and for any card that is not an effect; a missing role is reminded to the run, never refused.
+ALTER TABLE evimed_vcr.assumptions ADD COLUMN IF NOT EXISTS effect_role text CHECK (effect_role IS NULL OR effect_role IN ${inList(VCR_EFFECT_ROLES)});
 
 -- ---------------------------------------------------------------------------
 -- Data plane (plan §8.1). Patient-level rows live outside this schema.

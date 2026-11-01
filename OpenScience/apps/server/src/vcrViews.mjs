@@ -41,7 +41,7 @@ import {
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_RESULT_KIND_TABS, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
-  VCR_TRIAL_DESIGN_LABELS_ZH,
+  VCR_TRIAL_DESIGN_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH,
   allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
@@ -1164,7 +1164,7 @@ function dominatedOf(scenarios, resultOf, goal) {
 
 // --- assumptions (shared by the overview and the data tab) -----------------------------------------------------------------
 
-/** 「7 项 · 预测区间 3.0–5.6」. @param {Record<string, any>} card */
+/** 「重要差异 · 7 项 · 预测区间 3.0–5.6」: the role of an effect first (A13), when the card states one. @param {Record<string, any>} card */
 export function assumptionSummary(card, { interval = true } = {}) {
   const pooling = object(card.pooling);
   const k = numeric(pooling.k);
@@ -1172,6 +1172,8 @@ export function assumptionSummary(card, { interval = true } = {}) {
   const low = finite(range.low);
   const high = finite(range.high);
   const parts = [];
+  const role = (/** @type {Record<string, string>} */ (VCR_EFFECT_ROLE_LABELS_ZH))[String(card.effectRole)];
+  if (role) parts.push(role);
   if (k !== null) parts.push(`${k} 项`);
   if (interval && low !== null && high !== null) parts.push(`预测区间 ${rangeString(low, high)}`);
   else if (card.sourceKind === "scenario") parts.push("情景假设");

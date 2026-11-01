@@ -445,6 +445,27 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(caught.exception.code, "vcr_write_payload_invalid")
         self.assertEqual(len(_Gateway.seen), 1)
 
+    def test_a_record_the_object_has_not_got_yet_is_a_reminder_and_never_a_refusal(self):
+        # The comparator is saved and computed as it stands; the answer says what to add in a next version (remediation plan A6, A7, A13).
+        _Gateway.answers["write"] = (200, {"data": {"what": "comparator", "ok": True, "ids": ["cmp_1"], "issues": [
+            {"index": 0, "field": "targetTrial", "code": "vcr_comparator_record_incomplete", "message": "目标试验记录还缺：时间零点。"},
+            {"index": 0, "field": "configuration.applicability", "code": "vcr_comparator_record_incomplete", "message": "对照没有适用性记录。"}]}})
+        result = self.server.call_tool("vcr_write", {"what": "comparator", "items": [{"route": "external_control"}]})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("1 written, 2 reminder(s)", result["summary"])
+        self.assertNotIn("refused", result["summary"])
+        self.assertEqual(len(result["warnings"]), 2)
+        self.assertEqual(len(result["next_actions"]), 1)
+        self.assertIn("reminders", result["next_actions"][0])
+        self.assertNotIn("Correct the refused items", result["next_actions"][0])
+        # a refusal beside a reminder keeps both lines
+        _Gateway.answers["write"] = (200, {"data": {"what": "assumption", "ok": True, "ids": ["asm_1"], "issues": [
+            {"index": 0, "field": "effectRole", "code": "vcr_assumption_role_missing", "message": "写 effectRole。"},
+            {"index": 1, "field": "key", "code": "vcr_write_value_invalid", "message": "key is a lowercase name."}]}})
+        both = self.server.call_tool("vcr_write", {"what": "assumption", "items": [{"key": "hazard_ratio"}, {"key": "Bad Key"}]})
+        self.assertIn("1 refused, 1 reminder(s)", both["summary"])
+        self.assertEqual(len(both["next_actions"]), 2)
+
     def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
         entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}
         _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": True, "ids": ["f1"], "issues": [], "resultEntry": entry}})

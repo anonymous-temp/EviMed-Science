@@ -243,7 +243,9 @@ async function runTurn(module, study, body) {
       store, service: module.service, orchestrator: module.orchestrator, study, evidenceStore: module.evidenceStore,
       what, items: Array.isArray(payload) ? payload : null, data: Array.isArray(payload) ? null : payload,
     });
-    assert.deepEqual(written.issues, [], `${what} was refused: ${JSON.stringify(written.issues)}`);
+    // A reminder (a record the object has not got yet) is not a refusal: the object was saved.
+    const refused = written.issues.filter((/** @type {any} */ issue) => !["vcr_comparator_record_incomplete", "vcr_assumption_role_missing"].includes(issue.code));
+    assert.deepEqual(refused, [], `${what} was refused: ${JSON.stringify(refused)}`);
     return written;
   };
   await body(write);
@@ -333,7 +335,7 @@ test("AC-01 AC-35 a T0 study runs from one sentence to a finished package, and e
     assert.equal(extracted.verified, 1);
     const written = await write("assumption", [
       { key: "control_median_pfs", name: "对照组中位 PFS", unit: "月", parameter: "median_time", sourceKind: "external_evidence", evidenceIds: extracted.verifiedIds },
-      { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed",
+      { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed", effectRole: "realistic_expectation",
         distribution: { family: "lognormal", params: { meanlog: Math.log(0.7), sdlog: 0.15 } } },
       { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" },
     ]);

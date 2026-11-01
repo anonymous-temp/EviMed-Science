@@ -70,6 +70,9 @@ import {
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
   isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse, VCR_SOA_LIMITS,
+  VCR_APPLICABILITY_NOTE_MAX, VCR_APPLICABILITY_STATES, VCR_COMPARISON_CLAIMS, VCR_EFFECT_ROLES, VCR_EFFECT_ROLE_LABELS_ZH,
+  VCR_TARGET_TRIAL_COMPONENTS, VCR_TARGET_TRIAL_COMPONENT_LABELS_ZH, VCR_TARGET_TRIAL_STATUSES, VCR_TARGET_TRIAL_TEXT_MAX,
+  vcrApplicability, vcrIsEffectCardKey, vcrTargetTrial, vcrTargetTrialStored,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -799,6 +802,85 @@ function activitiesOf(item) {
 }
 
 /**
+ * The target-trial record of a write, validated and in its one stored shape. A record is the seven components (each a sentence or
+ * `{ status, text }`, `status` one of `exact`, `approximate`, `not_possible`); the engine's `{ item, emulation }` list and the page's
+ * old `{ population, treatment, note }` are read too. A word outside the closed ones is refused by name, because a status nobody can
+ * read would be a record that says nothing; a record that is merely short is a reminder, not a refusal.
+ * @param {Item} item @param {string} field @param {unknown} raw
+ * @returns {Record<string, any> | undefined} the stored record, or undefined when there is none or it was refused
+ */
+function targetTrialOf(item, field, raw) {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object") { item.bad(field, `${field} 是一个对象：七项目标试验要素，每项写 { status, text }。`); return undefined; }
+  if (!Array.isArray(raw)) {
+    const known = new Set([...VCR_TARGET_TRIAL_COMPONENTS, "time_zero", "population", "treatment", "note", "other"]);
+    const stray = Object.keys(raw).find((key) => !known.has(key));
+    if (stray) { item.bad(`${field}.${stray}`, `${stray} 不是目标试验的要素；只写这七项：${VCR_TARGET_TRIAL_COMPONENTS.join("、")}。`); return undefined; }
+    for (const key of VCR_TARGET_TRIAL_COMPONENTS) {
+      const value = /** @type {any} */ (raw)[key] ?? (key === "timeZero" ? /** @type {any} */ (raw).time_zero : undefined);
+      if (value === undefined || value === null || typeof value === "string") {
+        if (typeof value === "string" && [...value].length > VCR_TARGET_TRIAL_TEXT_MAX) { item.bad(`${field}.${key}`, `${key} 的说明不超过 ${VCR_TARGET_TRIAL_TEXT_MAX} 个字符。`); return undefined; }
+        continue;
+      }
+      const entry = object(value);
+      const status = entry.status ?? entry.emulation;
+      if (typeof value !== "object" || Array.isArray(value)
+        || (status !== undefined && !["cannot", ...VCR_TARGET_TRIAL_STATUSES].includes(String(status)))
+        || (entry.text !== undefined && (typeof entry.text !== "string" || [...entry.text].length > VCR_TARGET_TRIAL_TEXT_MAX))) {
+        item.bad(`${field}.${key}`, `${key} 写 { status, text }：status 取 ${VCR_TARGET_TRIAL_STATUSES.join(" / ")}，text 是不超过 ${VCR_TARGET_TRIAL_TEXT_MAX} 个字符的一句话。`);
+        return undefined;
+      }
+    }
+  }
+  return vcrTargetTrialStored(vcrTargetTrial(raw));
+}
+
+/**
+ * The applicability record (`configuration.applicability`) of a comparator write: how suitable the run judges the comparison for the
+ * question, and what claim it is to support. A word outside the closed ones is refused by name; a missing record is a reminder.
+ * @param {Item} item @param {Record<string, any>} configuration
+ */
+function applicabilityOf(item, configuration) {
+  const raw = configuration.applicability;
+  if (raw === undefined || raw === null) return;
+  const record = object(raw);
+  if (typeof raw !== "object" || Array.isArray(raw)
+    || !VCR_APPLICABILITY_STATES.includes(record.state)
+    || (record.claim !== undefined && !VCR_COMPARISON_CLAIMS.includes(record.claim))
+    || (record.note !== undefined && (typeof record.note !== "string" || [...record.note].length > VCR_APPLICABILITY_NOTE_MAX))) {
+    item.bad("configuration.applicability", `applicability 写 { state, claim, note }：state 取 ${VCR_APPLICABILITY_STATES.join(" / ")}，claim（这项比较要支持什么）取 ${VCR_COMPARISON_CLAIMS.join(" / ")}，note 是不超过 ${VCR_APPLICABILITY_NOTE_MAX} 个字符的一两句话。`);
+  }
+}
+
+/**
+ * What a saved comparator has not said, as reminders: the target-trial components without a status (a real-data external control), and
+ * the applicability record (every comparison that borrows its control). Advice to the run, in the answer of the write that saved the
+ * comparator; the comparison is computed whatever the record holds.
+ * @param {{ route: string, targetTrial: unknown, configuration: Record<string, any> }} input
+ * @returns {Array<{ field: string, code: string, message: string }>}
+ */
+export function comparatorReminders({ route, targetTrial, configuration }) {
+  /** @type {Array<{ field: string, code: string, message: string }>} */
+  const reminders = [];
+  if (route === "external_control") {
+    const record = vcrTargetTrial(targetTrial, configuration.targetTrial);
+    if (record.missing.length) {
+      const labels = /** @type {Record<string, string>} */ (VCR_TARGET_TRIAL_COMPONENT_LABELS_ZH);
+      reminders.push({ field: "targetTrial", code: "vcr_comparator_record_incomplete",
+        message: `目标试验记录还缺：${record.missing.map((key) => labels[key]).join("、")}。每项写 { status, text }（status 取 ${VCR_TARGET_TRIAL_STATUSES.join(" / ")}）；这一版已保存、照常计算，补上后把对照再写一个版本。` });
+    }
+  }
+  // A single published curve is a benchmark and has no comparison to be suitable for; a MAIC or two curves compared do.
+  const compares = route === "external_control" || route === "hybrid_control"
+    || (route === "literature_control" && (configuration.method === "maic" || (configuration.treatmentArm !== null && typeof configuration.treatmentArm === "object")));
+  if (compares && !vcrApplicability(configuration).present) {
+    reminders.push({ field: "configuration.applicability", code: "vcr_comparator_record_incomplete",
+      message: `对照没有适用性记录：在 configuration.applicability 写 { state, claim, note }（state 取 ${VCR_APPLICABILITY_STATES.join(" / ")}，claim 是这项比较要支持的结论）。这一版已保存、照常计算，补上后再写一个版本。` });
+  }
+  return reminders;
+}
+
+/**
  * The writers, one per kind. Each takes the item's kit and the deps, validates
  * every field it uses first, and returns the id it wrote — or nothing, having
  * recorded why.
@@ -849,6 +931,9 @@ const WRITERS = {
     const applicability = item.obj("applicability", { bytes: 8 * 1024 }) ?? {};
     const parameter = item.str("parameter", { max: 120 });
     const sourceKind = item.choice("sourceKind", ["expert_set", "scenario", "external_evidence"], { fallback: "expert_set" });
+    // What an effect is on its card (A13): the difference worth finding, or the difference realistically expected. Optional here;
+    // an effect card without one is reminded after it is saved (`assumption`'s wrapper below), never refused.
+    const effectRole = item.choice("effectRole", VCR_EFFECT_ROLES) ?? null;
     const derived = item.row.fromPooling != null || item.row.expertFrom != null || sourceKind === "external_evidence";
     if (!item.ok) return null;
 
@@ -878,7 +963,7 @@ const WRITERS = {
       }
       const saved = await evidence.saveAssumptionFromPooling({
         userId: study.userId, studyId: study.id, key, name, parameter: poolParameter, endpoint: endpoint ?? "", unit: unit ?? "",
-        results, evidenceIdsByCalibre, applicability, note, afterFreeze,
+        results, evidenceIdsByCalibre, applicability, note, afterFreeze, effectRole,
       });
       if (!saved.assumption) {
         return void item.bad("fromPooling", saved.reason === "no_pool_succeeded"
@@ -918,7 +1003,7 @@ const WRITERS = {
         return void item.bad("expertFrom", "expertFrom 写 { evidenceId } 或 { jobId }，再加 reason。");
       }
       const saved = await evidence.saveExpertSet({ userId: study.userId, studyId: study.id, key, name, parameter: parameter ?? "", unit: unit ?? "",
-        nearest, reason, applicability, afterFreeze });
+        nearest, reason, applicability, afterFreeze, effectRole });
       noteChange(saved.assumption);
       return saved.assumption.id;
     }
@@ -955,6 +1040,7 @@ const WRITERS = {
         distribution: { family: "point", params: { point: Number(row.value) }, range },
         sensitivity: { range, calibres: [] }, sourceKind: "external_evidence", valueSource: row.value_source, poolingMethod: "single_study",
         pooling: { k: 1, note: "单项研究直接取值，没有预测区间" }, evidenceIds: cited, applicability, reviewState: "ai_set", note, afterFreeze,
+        ...(effectRole ? { effectRole } : {}),
       } });
       noteChange(saved);
       return saved.id;
@@ -972,7 +1058,7 @@ const WRITERS = {
     const sensitivity = item.obj("sensitivity", { bytes: 8 * 1024 }) ?? {};
     if (!item.ok) return null;
     const card = { key, name, endpoint, unit, pointValue: pointValue ?? null, distribution, sensitivity, sourceKind, valueSource,
-      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note, afterFreeze };
+      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note, afterFreeze, ...(effectRole ? { effectRole } : {}) };
     const saved = evidenceStore ? await evidenceStore.saveAssumption({ userId: study.userId, studyId: study.id, card })
       : await store.saveAssumption({ studyId: study.id, userId: study.userId, ...card });
     noteChange(saved);
@@ -1309,13 +1395,20 @@ const WRITERS = {
     // The routes this version can compute: the model-prediction comparator is not one of them, at any tier (it is listed as unsupported).
     const route = item.choice("route", vcrRouteOptions(study.dataTier).filter((option) => option.supported).map((option) => option.route), { required: true });
     const estimand = item.choice("estimand", VCR_ESTIMANDS, { fallback: "ATT" });
-    const targetTrial = item.obj("targetTrial") ?? {};
     const configuration = item.obj("configuration") ?? {};
+    // One shape for the target trial (A6): the seven components, each with how far the comparison can emulate it. The older shapes
+    // are read as they were written and stored as this one.
+    const targetTrial = targetTrialOf(item, "targetTrial", item.row.targetTrial) ?? {};
+    if (configuration.targetTrial !== undefined && !Array.isArray(configuration.targetTrial)) targetTrialOf(item, "configuration.targetTrial", configuration.targetTrial);
+    applicabilityOf(item, configuration);
     if (configuration.snapshotId != null) await item.owned("configuration.snapshotId", "snapshot", configuration.snapshotId);
     if (!item.ok) return null;
     const saved = await store.saveComparatorDesign({
       studyId: study.id, userId: study.userId, route, estimand, targetTrial, configuration, conclusion: null, gapList: [], reviewState: "ai_set",
     });
+    // What the record has not said yet comes back as notices, never as a refusal: it is stored as it stands, the comparison is
+    // computed, and the next version carries what is added (A6, A7).
+    for (const reminder of comparatorReminders({ route, targetTrial, configuration })) item.issues.push(issue(item.index, reminder.field, reminder.code, reminder.message));
     return saved.id;
   },
 
@@ -1819,6 +1912,25 @@ const WRITERS = {
     return target.id;
   },
 };
+
+// An effect card without its role is reminded and never refused (A13): the card is saved as it stands, and the answer says that the
+// difference worth finding and the difference expected are two numbers.
+{
+  const writeCard = WRITERS.assumption;
+  WRITERS.assumption = async (item, deps, extra) => {
+    const id = await writeCard(item, deps, extra);
+    const key = typeof item.row.key === "string" ? item.row.key : "";
+    if (id && item.ok && vcrIsEffectCardKey(key) && !VCR_EFFECT_ROLES.includes(/** @type {any} */ (item.row.effectRole))) {
+      const stored = (await deps.store.assumptions(deps.study.id)).find((card) => card.key === key);
+      if (!stored?.effectRole) {
+        const labels = /** @type {Record<string, string>} */ (VCR_EFFECT_ROLE_LABELS_ZH);
+        item.issues.push(issue(item.index, "effectRole", "vcr_assumption_role_missing",
+          `这张卡是效应：写 effectRole，${VCR_EFFECT_ROLES.map((role) => `${role}（${labels[role]}）`).join(" 还是 ")}？前者是研究认为值得发现的最小差异，后者是实际预期的差异，两个数不同。这张卡已保存，补上后再写一个版本。`));
+      }
+    }
+    return id;
+  };
+}
 
 /**
  * The runtime's write. Every `what` validates its own fields, refuses item by

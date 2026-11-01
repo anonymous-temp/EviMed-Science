@@ -1673,16 +1673,16 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      *
      * @param {{ userId: string, studyId: string, key: string, name: string, parameter: string,
      *   endpoint?: string, unit?: string, results: Record<string, any>,
-     *   evidenceIdsByCalibre: Record<string, string[]>, applicability?: any, note?: string, afterFreeze?: boolean }} input
+     *   evidenceIdsByCalibre: Record<string, string[]>, applicability?: any, note?: string, afterFreeze?: boolean, effectRole?: string | null }} input
      *   `afterFreeze` writes the version beside the one the study's plan froze with (flywheel F24).
      */
-    async saveAssumptionFromPooling({ userId, studyId, key, name, parameter, endpoint = "", unit = "", results, evidenceIdsByCalibre, applicability = {}, note: cardNote = "", afterFreeze = false }) {
+    async saveAssumptionFromPooling({ userId, studyId, key, name, parameter, endpoint = "", unit = "", results, evidenceIdsByCalibre, applicability = {}, note: cardNote = "", afterFreeze = false, effectRole = null }) {
       /** @type {Record<string, ReturnType<typeof readPoolResult>>} */
       const pools = {};
       for (const [calibre, result] of Object.entries(results ?? {})) pools[calibre] = readPoolResult(result);
       const built = assumptionFromPooling({ key, name, parameter, endpoint, unit, pools, evidenceIdsByCalibre, applicability, note: cardNote });
       if (built.ok) {
-        const row = await store.saveAssumption({ userId, studyId, card: { ...built.card, ...(afterFreeze ? { afterFreeze: true } : {}) } });
+        const row = await store.saveAssumption({ userId, studyId, card: { ...built.card, ...(afterFreeze ? { afterFreeze: true } : {}), ...(effectRole ? { effectRole } : {}) } });
         note("vcr.evidence.card", { userId, studyId, key, calibre: built.card?.pooling.calibre });
         return { status: "ok", assumption: row, card: built.card, pools };
       }
@@ -1698,7 +1698,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           reason: `只有 ${pool.k ?? "少数"} 项研究，合并结果没有预测区间；取合并值并按置信区间加宽`,
           basedOn: { evidenceIds: evidenceIdsByCalibre?.[calibre] ?? [], calibre, k: pool.k ?? null },
         });
-        const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}) } });
+        const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}), ...(effectRole ? { effectRole } : {}) } });
         return { status: "expert_set", reason: built.reason, assumption: row, card, pools };
       }
       return { status: "not_written", reason: built.reason, pools };
@@ -1708,11 +1708,11 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * A parameter no evidence reached. Written as a card so a simulation can
      * run and the gap stays visible (plan §6.2).
      * @param {{ userId: string, studyId: string, key: string, name: string, parameter?: string,
-     *   unit?: string, nearest: any, reason: string, applicability?: any, afterFreeze?: boolean }} input
+     *   unit?: string, nearest: any, reason: string, applicability?: any, afterFreeze?: boolean, effectRole?: string | null }} input
      */
-    async saveExpertSet({ userId, studyId, key, name, parameter = "", unit = "", nearest, reason, applicability = {}, afterFreeze = false }) {
+    async saveExpertSet({ userId, studyId, key, name, parameter = "", unit = "", nearest, reason, applicability = {}, afterFreeze = false, effectRole = null }) {
       const card = expertSetCard({ key, name, parameter, unit, nearest, reason, applicability });
-      const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}) } });
+      const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}), ...(effectRole ? { effectRole } : {}) } });
       return { status: "ok", assumption: row, card };
     },
 

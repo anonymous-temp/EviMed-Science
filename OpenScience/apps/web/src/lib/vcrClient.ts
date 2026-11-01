@@ -61,8 +61,11 @@ export type {
 export type VcrValueSource =
   | "observed" | "extracted" | "calculated" | "imputed" | "aggregate"
   | "reconstructed" | "predicted" | "assumed" | "synthetic";
-/** What the method itself says about the estimate (`VCR_CONCLUSIONS`). */
-export type VcrConclusion = "estimable" | "limited" | "not_estimable";
+/**
+ * What a reader is told about an estimate: the method's own conclusion (`VCR_CONCLUSIONS`), or 仅基准 (`benchmark_only`) for a result
+ * that is a benchmark and not an estimate of an effect (a literature curve, an unanchored MAIC, a model's prediction; `VCR_RESULT_CLASSES`).
+ */
+export type VcrConclusion = "estimable" | "limited" | "benchmark_only" | "not_estimable";
 /** A countersignature on one version, never a gate (`VCR_REVIEW_STATES`). */
 export type VcrReviewState = "ai_set" | "reviewed" | "changed_after_review";
 export type VcrReviewKind = "clinical" | "statistical" | "data";
@@ -1023,6 +1026,12 @@ export interface VcrOperatingCharacteristics {
 export interface VcrComparatorTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
+  /**
+   * Why the result is read with care, in sentences the server wrote: the weighted balance (limited above a standardized difference of
+   * 0.10, severe above 0.25, the estimate delivered beside it), the reasons the comparator's own records give, and what a benchmark is a
+   * benchmark of. Empty when there is nothing to say; a not-estimable result has its gap list instead.
+   */
+  limits?: Array<{ key: string; text: string }>;
   /** A MAP prior's table of operating characteristics (the rejection probability over the drifts), where the route computed one. */
   operatingCharacteristics?: VcrOperatingCharacteristics | null;
   versions?: Array<{ objectId: string; version: number; label: string; resultId?: string; resultVersion?: number }>;
@@ -1313,8 +1322,10 @@ export interface VcrAssumption {
   key: string;
   name: string;
   value: VcrValue;
-  /** 「7 项 · 预测区间 3.0–5.6」. */
+  /** 「重要差异 · 7 项 · 预测区间 3.0–5.6」: an effect's role first, when the card states one. */
   summary?: string | null;
+  /** What an effect is on its card: `important_difference` or `realistic_expectation` (`VCR_EFFECT_ROLES`); null when it states none. */
+  effectRole?: string | null;
   /** One of the assumptions the study's designs rest on. */
   isKey?: boolean;
   version?: number | null;
@@ -2154,6 +2165,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
   return {
     ...(value as unknown as VcrComparatorTab),
     premises: readPremises(value.premises),
+    limits: arr(value.limits).map((row) => ({ key: text(row.key) ?? "", text: text(row.text) ?? "" })).filter((row) => row.text),
     operatingCharacteristics: readOperatingCharacteristics(value.operatingCharacteristics),
     selection: typeof selection.id === "string" ? { id: selection.id, version: finite(selection.version), resultId: text(selection.resultId), resultVersion: finite(selection.resultVersion), route: text(selection.route) ?? "" } : null,
     predictionBenchmark: Object.keys(benchmark).length ? {

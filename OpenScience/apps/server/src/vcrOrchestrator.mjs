@@ -65,7 +65,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
   VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, knownErrorCodeMessage, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, validateLongitudinalScenario,
   vcrCommonTimeUnit, vcrConvertTime, vcrEventHistoryScopeIssues, vcrModelCardIssues, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf,
-  vcrIsNullScenario, vcrNullTruth, vcrVisibleQuestion, whenHolds,
+  VCR_ROBUSTNESS_STAGES, vcrIsNullScenario, vcrNullTruth, vcrVisibleQuestion, whenHolds, vcrApplicabilityLimits, vcrTargetTrial, vcrTargetTrialEngineItems,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -537,13 +537,13 @@ const isObject = (value) => value !== null && typeof value === "object" && !Arra
 
 /**
  * Keys a research object may carry that are not the engine's: what a page
- * reads (a design's `cost`, a comparator's `comparability` and `e10` tables, a
+ * reads (a design's `cost`, a comparator's `comparability`, `e10` and `applicability` records, a
  * population's evidence window) and what binds an input (`snapshotId`) or
  * chooses between methods (`method`, `jobKind`). They never reach a scenario,
  * and they are the only keys allowed to be dropped without a word.
  */
 export const VCR_NON_ENGINE_KEYS = Object.freeze([
-  "label", "name", "note", "notes", "cost", "comparability", "e10", "snapshotId", "method", "jobKind", "evidenceWindow", "protocol", "simonSelection", "baselineBindings", "modelResultId", "modelResultVersion", "modelParameterQuantile",
+  "label", "name", "note", "notes", "cost", "comparability", "e10", "applicability", "snapshotId", "method", "jobKind", "evidenceWindow", "protocol", "simonSelection", "baselineBindings", "modelResultId", "modelResultVersion", "modelParameterQuantile",
 ]);
 
 /**
@@ -1071,6 +1071,16 @@ function forecastPlan(model, row, forecast) {
 }
 
 /**
+ * The limits a comparator's own records put on its result, as the job detail that carries them (empty when there are none).
+ * @param {Record<string, any>} row the comparator design
+ * @returns {{ applicabilityLimits?: Array<{ code: string, reason: string }> }}
+ */
+export function comparatorLimitsDetail(row) {
+  const limits = vcrApplicabilityLimits({ route: row.route, configuration: row.configuration, targetTrial: row.targetTrial });
+  return limits.length ? { applicabilityLimits: limits } : {};
+}
+
+/**
  * Turn an object into the jobs that compute it — or say why it cannot be
  * computed. Pure: everything it reads is in `context`.
  *
@@ -1370,6 +1380,13 @@ export function vcrBuildStages(item, context) {
       // --- end robustness methods ---
       /** @type {Record<string, any>} */
       const candidate = { ...withoutRobustnessKeys(configuration), estimand, endpoint: { ...object(configuration.endpoint), type } };
+      // The target trial, in the engine's own words (A6): the record is read in whatever shape it was written (the row's seven
+      // components, the configuration's list, the page's old two sentences) and the engine is given what it reads, which is whether a
+      // component can be emulated at all. A method that does not read a target trial is not handed one.
+      if (Object.hasOwn(object(object(/** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[String(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[jobKind])]).fields), "targetTrial")) {
+        const items = vcrTargetTrialEngineItems(vcrTargetTrial(row.targetTrial, configuration.targetTrial));
+        if (items.length) candidate.targetTrial = items; else delete candidate.targetTrial;
+      }
       // The analysis a covariate-set comparison re-runs is the design's own method, written by code from it and never typed in.
       if (jobKind === "covariate_set_comparator") candidate.analysis = covariateSetAnalysis(configuration, estimand);
       // A Cox model under another estimand than the ATT is weighted by the propensity score, as the weighting jobs are.
@@ -2835,6 +2852,10 @@ export class VcrOrchestrator {
         ...(study.steps?.[item.step]?.askedAt && !read.staleByNode.has(node) ? { asked: true } : {}),
         // A hybrid control's historical counts are evidence only when verified extractions say so.
         ...(stage.jobKind === "map_prior" && !(await this.#historicalIsVerified(study, stage.scenario)) ? { inputsAssumed: true } : {}),
+        // What code can see in the comparator's records that limits the comparison (A7), frozen with the job: the result says it
+        // is `limited` and why, and is delivered all the same.
+        // A stress test is its own verdict; it is the comparison that the comparator's records limit.
+        ...(item.kind === "comparator" && !VCR_ROBUSTNESS_STAGES.includes(String(stage.stage)) ? comparatorLimitsDetail(item.row) : {}),
         ...stage.detail };
       if (detail.modelId && stage.jobKind !== "forecast_trajectories") {
         const chosen = read.models.find(model => model.id === detail.modelId || model.name === detail.modelId);
@@ -3068,7 +3089,7 @@ export class VcrOrchestrator {
     if (job.state === "succeeded" && !conversation && stage && planned.length && planned[planned.length - 1] !== stage) return;
     const owner = named.subjectId ? await this.#subjectLabel(study.id, resultKind, String(named.subjectId)) : null;
     await this.#notice(study, `notice:job:${job.id}`, () => this.notifier.jobFinished(study, {
-      jobId: job.id, resultKind, stage, label: owner, state: job.state, result, error: job.error ?? null,
+      jobId: job.id, resultKind, stage, label: owner, state: job.state, result, error: job.error ?? null, method: String(job.method ?? ""),
     }));
   }
 

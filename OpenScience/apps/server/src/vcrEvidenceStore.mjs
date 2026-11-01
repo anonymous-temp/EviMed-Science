@@ -376,8 +376,8 @@ export class VcrEvidenceStore extends VcrStoreBase {
       const result = await handle.query(
         `INSERT INTO ${VCR_SCHEMA}.assumptions
            (id, study_id, user_id, key, version, name, endpoint, unit, point_value, distribution, sensitivity,
-            source_kind, value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18, $19, $20)
+            source_kind, value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze, effect_role)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18, $19, $20, $21)
          RETURNING *`,
         [
           vcrId("assumption"), studyId, userId, key, version,
@@ -386,7 +386,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
           String(card?.sourceKind ?? "expert_set"), String(card?.valueSource ?? "assumed"),
           card?.poolingMethod ?? null, jsonb(card?.pooling),
           [...(card?.evidenceIds ?? [])].map(String), jsonb(card?.applicability),
-          String(card?.reviewState ?? "ai_set"), String(card?.note ?? ""), card?.afterFreeze === true,
+          String(card?.reviewState ?? "ai_set"), String(card?.note ?? ""), card?.afterFreeze === true, card?.effectRole ?? null,
         ],
       );
       await this.audit({

@@ -26,6 +26,7 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "applicability",
     "note",
     "parameter",
+    "effectRole",
     "fromPooling",
     "expertFrom"
   ],

@@ -23,7 +23,7 @@
     "route": "literature_control"
   },
   "predictionBenchmark": null,
-  "headline": "文献对照：有限制地估计，12 个月 RMST 5.900 个月。",
+  "headline": "文献对照：仅基准，12 个月 RMST 5.900 个月。",
   "routes": [
     {
       "route": "prognostic_adjustment",
@@ -41,7 +41,7 @@
     },
     {
       "route": "literature_control",
-      "state": "limited",
+      "state": "benchmark_only",
       "reason": null,
       "note": null,
       "selected": true
@@ -306,7 +306,7 @@
         "value": "对试验人群（ATT）"
       },
       {
-        "label": "目标试验的人群",
+        "label": "入选标准",
         "value": "二线 NSCLC，多西他赛单药"
       },
       {
@@ -387,7 +387,7 @@
       "note": null
     }
   ],
-  "comparabilityNote": "标准化差异是加权之后的；界值 0.1。",
+  "comparabilityNote": "标准化差异是加权之后的；界值 0.1，超过 0.25 为严重失衡。",
   "dimensions": [
     {
       "key": "time_period",
@@ -557,6 +557,16 @@
   "prior": [],
   "operatingCharacteristics": null,
   "premises": [],
+  "limits": [
+    {
+      "key": "balance",
+      "text": "严重失衡：加权后“既往免疫治疗”的标准化差异为 0.31，超过 0.25。"
+    },
+    {
+      "key": "benchmark",
+      "text": "只重建了文献里的曲线，没有和另一组比较"
+    }
+  ],
   "robustness": null,
   "gaps": {
     "title": "真实外部对照：不可估计",
@@ -587,7 +597,7 @@
     "scope": null
   },
   "verdict": {
-    "conclusion": "limited"
+    "conclusion": "benchmark_only"
   },
   "at": "昨天 09:14",
   "stale": null,

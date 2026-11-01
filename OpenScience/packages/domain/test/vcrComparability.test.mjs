@@ -58,12 +58,12 @@ test("the weighted balance has three bands and says its worst variable", () => {
   assert.equal(vcrBalanceSentence({ worst: 0.05, variable: "age" }), null, "balanced says nothing");
   assert.equal(vcrBalanceSentence(null), null);
   assert.equal(vcrBalanceSentence({ band: "moderate", worst: 0.119, variable: "age" }), "加权后“age”的标准化差异仍为 0.12，超过界值 0.1。");
-  const severe = vcrBalanceSentence({ band: "severe", worst: -0.274, variable: "re74" });
+  const severe = String(vcrBalanceSentence({ band: "severe", worst: -0.274, variable: "re74" }));
   assert.match(severe, /^严重失衡：/);
   assert.match(severe, /“re74”/);
   assert.match(severe, /0\.27/);
   assert.match(severe, /0\.25/);
-  assert.match(vcrBalanceSentence({ worst: 0.3 }), /加权后最大的标准化差异/, "a verdict with no variable still says the number");
+  assert.match(String(vcrBalanceSentence({ worst: 0.3 })), /加权后最大的标准化差异/, "a verdict with no variable still says the number");
 
   // a result written before the engine said its verdict is read from its balance table
   const verdict = vcrBalanceVerdictOf([{ covariate: "age", smdAdjusted: 0.04 }, { covariate: "re74", smdAdjusted: -0.31 }, { covariate: "educ", smdAdjusted: 0.12 }]);
