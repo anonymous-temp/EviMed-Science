@@ -4975,7 +4975,7 @@ export function handoffProbe([action]) {
     return {
       path: `${location.pathname}${location.search}`,
       title: heading ? words(heading) : null,
-      button: [...document.querySelectorAll("main button")].some((el) => visible(el) && words(el).endsWith("深入研究")),
+      button: [...document.querySelectorAll("main button")].some((el) => visible(el) && words(el) === "让 AI 深入研究"),
     };
   }
   const state = window.history.state && typeof window.history.state === "object" ? window.history.state.usr : null;
@@ -5036,7 +5036,7 @@ async function walkEventHandoff(page, base, route) {
   await openRoute(page, base, route);
   const before = await page.evaluate(handoffProbe, ["event"]);
   if (!before || !before.button) return { failures: [], notices: handoffFindings(before, null, null).notices, read: { before } };
-  await page.evaluate(clickNamed, ["button", "深入研究", "main"]);
+  await page.evaluate(clickNamed, ["button", "让 AI 深入研究", "main"]);
   await page.waitForTimeout(1_500);
   const after = await page.evaluate(handoffProbe, ["intent"]);
   let back = null;

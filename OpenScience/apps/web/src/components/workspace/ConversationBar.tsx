@@ -28,7 +28,7 @@ export function ConversationBar({ onOpen, readOnlyTo, busy = false, placeholder 
   }
   const open = () => { if (!busy) onOpen(text.trim() || undefined); };
   return (
-    <div data-conversation-bar="" className="mx-auto flex w-full max-w-wide items-end gap-2 rounded-composer border border-border-hairline bg-surface py-1 pl-4 pr-1">
+    <div data-conversation-bar="" className="mx-auto flex w-full max-w-wide items-end gap-2 rounded-composer bg-surface py-1 pl-4 pr-1">
       <textarea
         rows={1}
         aria-label="告诉 AI 接下来要做什么"
