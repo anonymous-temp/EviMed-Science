@@ -27,7 +27,7 @@ Read the part this task is about before writing its first object; each part hold
 
 A delivery owes its files under fixed names — `analysis-report.md` and `results.json` every time, `comparability.md` with a comparator, `simulation.json` with a trial design; what each holds, how numbers are cited and the checks before submitting are in the delivery part.
 
-A report ends with two steps, `traceability-review` then `manuscript-humanize`; references/delivery.md says what each does.
+A report ends with two steps, `traceability-review` then `manuscript-humanize`; references/delivery.md says what each does. Process notes go in `revision-notes.md`, never in the report.
 
 The method examples in these parts are reference shapes for the requested computation.
 They do not require a complete study definition or a fixed order of methods.

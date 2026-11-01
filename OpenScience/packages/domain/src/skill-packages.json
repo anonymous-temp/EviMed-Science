@@ -1111,7 +1111,7 @@
       "origin": "capability",
       "version": "1.7.1",
       "source": {"kind":"release"},
-      "digest": "sha256:878ad9af23237cc3eca46e1ebf9e13fc0234b904e351664d722b4f66affe2021",
+      "digest": "sha256:5dbc72eac402ec26fd26743fdbdcdf5ab344ce53d45e5ccd0fbb316d6be4d1df",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"capability.yaml","sha256":"6467389b661bb81f5d53a0dbfbe1be27ffb11877a5d762a5168a42878af37988"},
