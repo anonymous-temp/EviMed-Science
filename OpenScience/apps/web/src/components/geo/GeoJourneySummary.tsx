@@ -10,8 +10,6 @@ import { RailMark } from '@/components/ui/ProgressRail';
 import { geoJourney } from './geoJourney';
 import { useGeoFrame } from './geoFrame';
 import { useOpenGeoConversation } from './useOpenGeoConversation';
-import { useGeoDestinationPath } from './useGeoPath';
-import { GEO_STEP_HOME } from './geoTabs';
 
 /**
  * The work's one 「现在」: a sentence, and either what is still missing or its one way on. A choice of task only fills the composer. Saved
@@ -21,10 +19,9 @@ export function GeoJourneySummary({project, compact = false}: {project: GeoProje
   const journey = geoJourney(project);
   const frame = useGeoFrame();
   const open = useOpenGeoConversation();
-  const destination = useGeoDestinationPath();
   const target = {geoId:project.id,projectId:project.projectId,sessionId:frame?.conversation,primarySessionId:project.sessionId};
   const next = journey.next;
-  const href = next.step ? destination(project.id, GEO_STEP_HOME[next.step]) : `/app/geo/${encodeURIComponent(project.id)}`;
+  const href = `/app/geo/${encodeURIComponent(project.id)}/evidence`;
   const intents = journey.canConverse && !['running','queued','paused'].includes(journey.stage) ? journey.intents : [];
   const draftChoices = <span className="flex flex-wrap gap-2">{intents.map(intent => <Button key={intent.key} variant="secondary" size="sm" actionKind="draft" onClick={() => void open(target,intent.draft)}><PenLine size={16} aria-hidden="true" />{intent.label}</Button>)}</span>;
   return <section aria-label="当前工作" data-geo-journey={journey.stage} className="flex flex-col gap-3">
@@ -36,11 +33,8 @@ export function GeoJourneySummary({project, compact = false}: {project: GeoProje
       </List>
       {/* 这次要做什么's choices say what they do on their own: each is a draft, with the pencil, and the composer holds what it wrote. */}
     </> : <>
-      {/* The sentence and its one way on are a note; what is kept is a fact, not a second grey line. */}
-      <Note action={<span className="flex flex-wrap gap-2">
-        {next.kind === 'conversation' && journey.canConverse ? <Button variant="secondary" actionKind="draft" onClick={() => void open(target,next.draft)}><PenLine size={16} aria-hidden="true" />{next.label}</Button> : <Link className={buttonClasses({variant:'secondary'})} to={href}>{next.kind === 'conversation' ? '查看项目依据' : next.label}</Link>}
-        {journey.runId && <GeoStepRunButton project={project} runId={journey.runId} />}
-      </span>}>{journey.detail}</Note>
+      {/* The way on is the header's one primary; here only what this block adds to it: the record of the run. */}
+      <Note action={journey.runId ? <GeoStepRunButton project={project} runId={journey.runId} /> : null}>{journey.detail}</Note>
       {journey.retained.length > 0 && <FactList ruled={false} rows={[{label:'已保留',value:journey.retained.join('、')}]} />}
       {!compact && intents.length > 0 && <div className="flex flex-col gap-2">
         <Note action={draftChoices}>也可以直接交代一项任务，选了只会填进输入框。</Note>

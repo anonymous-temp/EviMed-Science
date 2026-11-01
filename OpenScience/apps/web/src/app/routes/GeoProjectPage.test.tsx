@@ -1157,12 +1157,12 @@ const header = () => document.querySelector("[data-page-header]") as HTMLElement
 const projectHeader = async () => { await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" }); return within(header()); };
 
 describe("the header's one primary is the next step", () => {
-  it("asks the AI to confirm the product when there is none yet: a draft that fills the composer, with the pencil", async () => {
+  it("leaves the header empty while what is missing is listed on the overview: its way on is a draft that fills the composer, with the pencil", async () => {
     client.getGeoProject.mockResolvedValue(projectWith({}, { product: {}, budget: null }));
     renderProject();
-    const primary = (await projectHeader()).getByRole("button", { name: "让 AI 确认产品" });
+    expect((await projectHeader()).queryByRole("button", { name: "让 AI 确认产品" })).not.toBeInTheDocument();
+    const primary = await screen.findByRole("button", { name: "让 AI 确认产品" });
     expect(primary).toHaveAttribute("data-action-kind", "draft");
-    expect(primary).toHaveClass("bg-accent");
     expect(primary.querySelector("svg")).not.toBeNull();
     await userEvent.click(primary);
     await waitFor(() => expect(client.open).toHaveBeenCalledWith(expect.objectContaining({ geoId: "geo_masi" }), expect.stringContaining("目标受众")));

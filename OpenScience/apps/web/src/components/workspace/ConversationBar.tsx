@@ -14,7 +14,7 @@ import { Button, buttonClasses } from "@/components/ui/Button";
  *
  * `readOnlyTo` is the conversation of someone whose role reads and does not run: a link to it, and nothing to type into.
  */
-export function ConversationBar({ onOpen, readOnlyTo, busy = false, placeholder = "告诉 AI 接下来要做什么，或把资料发给它…" }: {
+export function ConversationBar({ onOpen, readOnlyTo, busy = false, placeholder = "告诉 AI 接下来要做什么…" }: {
   onOpen?: (draft: string | undefined) => void;
   readOnlyTo?: string | null;
   busy?: boolean;

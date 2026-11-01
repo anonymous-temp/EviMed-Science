@@ -32,6 +32,7 @@ import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import { ConversationBar } from "@/components/workspace/ConversationBar";
 import { NeedsBar } from "@/components/workspace/NeedsBar";
 import { useWorkspaceSplit, WorkspaceSplit } from "@/components/workspace/WorkspaceSplit";
+import { GeoJourneySummary } from "@/components/geo/GeoJourneySummary";
 import { geoJourney } from "@/components/geo/geoJourney";
 import { geoNeeds } from "@/components/geo/geoNeeds";
 import { geoPathWithContext } from "@/components/geo/useGeoPath";
@@ -545,6 +546,8 @@ function GeoBand({
     // is not asked for money first.
     if (budgetOwed && can("manage_money") && !paused) return { id: "budget", label: "设投放预算", kind: "external" as const, onSelect: () => api.openPanel("budget") };
     const next = journey.next;
+    // What is missing to begin is its own list on the overview, with its own way on; the header adds nothing to it.
+    if (journey.stage === "inputs") return undefined;
     if (next.kind === "conversation") return canConverse ? { id: "next", label: next.label, kind: "draft" as const, icon: PenLine, loading: busy === "conversation", onSelect: () => { setBusy("conversation"); void openConversation(target, next.draft).finally(() => setBusy(null)); } } : undefined;
     // Already where it leads: the page is the next step, and has nothing to press for it.
     if (!next.step || next.step === selectedStep || onChat && next.kind === "view") return undefined;
@@ -597,6 +600,9 @@ function GeoBand({
     <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
   ) : (
     <>
+      {!analysis && <h2 className="sr-only">{GEO_TABS.find((item) => item.key === tab)?.label}</h2>}
+      {/* The work's one 「现在」, before anything else the project has to show. */}
+      {tab === "overview" && !analysis && <GeoJourneySummary project={project} compact={started} />}
       {tab !== "overview" && <NeedsBar needs={needs} more={<span className="text-caption text-text-3">其余在总览</span>} />}
       {!analysis && project.signalsSupported && <GeoSignalsWorkbench geoId={geoId} project={project} step={api.step} />}
       {api.scopePending && (api.scopeError ? <LoadError message={api.scopeError} onRetry={reload} /> : <TabSkeleton />)}
@@ -714,7 +720,6 @@ const GeoTab = memo(function GeoTab({ api }: { api: GeoFrameApi }) {
   const Tab = TABS[api.tab];
   return (
     <>
-      <h2 className="sr-only">{GEO_TABS.find((item) => item.key === api.tab)?.label}</h2>
       {api.tab === "actions" ? <ActionsTab key={api.step} geoId={api.geoId} project={api.project}
         mode={api.step === "distribution" ? "distribution" : api.step === "monitoring" ? "monitoring" : "content"} />
         : <Tab geoId={api.geoId} project={api.project} />}

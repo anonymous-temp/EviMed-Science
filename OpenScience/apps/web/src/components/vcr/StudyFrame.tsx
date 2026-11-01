@@ -162,7 +162,7 @@ export function StudyFrame({ studyId, study, view, tab, reload, menu, onChat, on
         actionPlan={actionPlan}
         {...(strip ? { activity: strip } : {})}
         toolbar={bandToolbar}
-        dock={view !== "chat" && conversable ? <ConversationBar placeholder="告诉 AI 要研究什么、改什么，或把资料发给它…" onOpen={(draft) => onChat(draft)} /> : undefined}
+        dock={view !== "chat" && conversable ? <ConversationBar placeholder="告诉 AI 要研究什么、改什么…" onOpen={(draft) => onChat(draft)} /> : undefined}
       >
         {view === "chat" ? children : <div id={STUDY_PANEL_ID} role="region" aria-label="研究内容">{children}</div>}
       </PageShell>
