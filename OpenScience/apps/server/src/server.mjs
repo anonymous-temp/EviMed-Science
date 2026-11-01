@@ -8929,7 +8929,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // is not here — that one already needs a session and its CSRF token.
       (pathname === "/api/auth/evimed/session" && req.method === "POST") ||
       // Captcha, SMS and recovery are anonymous upstream operations too. They
-      // share the same auth budget, including captcha's GET request.
+      // share the same auth budget, captcha's request included.
       isEvimedAccountPath(pathname) ||
       (pathname.startsWith("/api/auth/oidc/") && req.method === "GET")
     ) {

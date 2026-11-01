@@ -27,6 +27,12 @@ const EVIMED_SEARCH_MESSAGES = Object.freeze({
   evimed_search_detail_unavailable: "暂时无法读取这条资料的详情，可尝试打开来源页面。",
 });
 
+/** The team's account adapter (the login page's phone form) and the names a registration cannot take: what the control plane refuses before it asks anything. */
+const EVIMED_ACCOUNT_MESSAGES = Object.freeze({
+  evimed_sms_rate_limited: "这个手机号获取验证码太频繁，请稍后再试。",
+  account_name_reserved: "这个账号名是系统保留的，请换一个。",
+})
+
 /** The tool's own refusals a run repairs by changing what it sent, as opposed to the outages it waits out. */
 const DATA_SEMANTICS_RUN_FIXES = ["semantics_request_invalid", "semantics_request_too_large", "semantics_dataset_invalid", "semantics_revision_conflict"];
 
@@ -2030,6 +2036,7 @@ export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_inval
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...Object.keys(EVIMED_SEARCH_MESSAGES),
+  ...Object.keys(EVIMED_ACCOUNT_MESSAGES),
   ...Object.keys(EVOLUTION_ERROR_MESSAGES),
   ...Object.keys(READINESS_ERROR_MESSAGES_ZH),
   ...EXTENSION_ERROR_CODES,
@@ -2156,6 +2163,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_erasure_unavailable: '本部署暂不支持这项清除。',
 
   ...EVIMED_SEARCH_MESSAGES,
+  ...EVIMED_ACCOUNT_MESSAGES,
   ...EVOLUTION_ERROR_MESSAGES,
   // What the deployment's configuration check says (`/api/ready`): the operator console reads these.
   ...READINESS_ERROR_MESSAGES_ZH,
@@ -3291,6 +3299,7 @@ export function errorCodeOutcome(code) {
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
   if (Object.hasOwn(EVIMED_SEARCH_MESSAGES, text)) return 'upstream'
+  if (Object.hasOwn(EVIMED_ACCOUNT_MESSAGES, text)) return 'upstream'
   // An evidence card's refusals are about one write to one zone, never a verdict on a run.
   if (Object.hasOwn(EVIDENCE_CARD_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
@@ -3411,7 +3420,7 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway, ...verification,
   ])
   claim('person', [
-    ...keys(EVIMED_SEARCH_MESSAGES),
+    ...keys(EVIMED_SEARCH_MESSAGES), ...keys(EVIMED_ACCOUNT_MESSAGES),
     ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes, ...autopilotMaterialErrorCodes, ...AUTOPILOT_BUDGET_ERROR_CODES,
     ...libraryErrorCodes, ...capsuleTransferErrorCodes, ...CAPSULE_SHARE_ERROR_CODES, ...EXTENSION_ERROR_CODES,
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,

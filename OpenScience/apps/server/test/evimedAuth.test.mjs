@@ -552,3 +552,32 @@ test("local sign-in and registration refuse a cross-site browser request and sti
     assert.equal(registered.status, 201);
   });
 });
+
+test("an id the EviMed sign-in derives cannot be registered by hand, and the EviMed sign-in itself still makes it", async () => {
+  const endpoint = await startEvimedUserEndpoint({ status: 200, body: { code: 200, data: { userId: "98211", nickName: "Dr. Zhang" } } });
+  try {
+    await withApp(evimedOverrides(endpoint.url, { selfRegistrationEnabled: true, authMode: "local", evimedAuthEnabled: true }), async ({ base, store, dataDir }) => {
+      // The id is a hash of the endpoint's origin and the person's EviMed id, which anyone who knows that id can compute.
+      const settings = validateEvimedAuthSettings({ evimedUserIntrospectUrl: endpoint.url, evimedAuthEnabled: true, evimedIntrospectTimeoutMs: 5_000, evimedIntrospectCacheTtlMs: 0 });
+      const derived = evimedUserId(settings, "98211");
+      for (const username of [derived, derived.toUpperCase(), "evimed_anything-at-all"]) {
+        const refused = await fetch(`${base}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password: "registered-password-1" }) });
+        assert.equal(refused.status, 400, username);
+        assert.equal((await refused.json()).code, "account_name_reserved");
+      }
+      await assert.rejects(store.createUser(derived, "registered-password-1", "Squatter"), { code: "account_name_reserved" });
+      await assert.rejects(readFile(path.join(dataDir, "users.json"), "utf8"), (/** @type {any} */ error) => error.code === "ENOENT", "nothing was made");
+      // The person themselves signs in through EviMed and gets the account that id names.
+      const signedIn = await exchange(base, { token: shellCredential });
+      assert.equal(signedIn.status, 200);
+      assert.equal((await signedIn.json()).data.user.id, derived);
+      // An ordinary name is still registrable.
+      const ordinary = await fetch(`${base}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "dr-zhang", password: "registered-password-1" }) });
+      assert.equal(ordinary.status, 201);
+    });
+  } finally {
+    await endpoint.close();
+  }
+});
