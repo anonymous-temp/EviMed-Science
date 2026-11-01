@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:a5c2333efd6e7bfd8e3cae6605cb65c81ecd0c31fc22880ee375953d86f6d25f",
+  "version": "sha256:b706e319b403c1d531398c175665d81a4d05e7a10e0582fd6a5c044c2bd10321",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1454,6 +1454,8 @@
               "tipping_point",
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
+              "population_check",
+              "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
               "compare_forecasts",
@@ -1574,7 +1576,8 @@
               "trial_benchmark",
               "candidate_trial",
               "soa",
-              "regulatory_contact"
+              "regulatory_contact",
+              "result_record"
             ]
           },
           "items": {

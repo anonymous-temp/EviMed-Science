@@ -25,6 +25,10 @@ predictors/units/categories stay unavailable. Published equations with fixed
 coefficients do not quantify coefficient uncertainty. A continuous design needs
 outcome variance including residual variance, not the SE of predicted means.
 
+`apply_prognostic_model` can hold the equation against an outcome the table itself has: `calibration: {"outcomeColumn": "..."}` for a linear or logistic equation (a binary outcome is 0/1), `{"timeColumn": "...", "statusColumn": "..."}` for a Cox equation. The result then gives the calibration intercept (ideal 0) and slope (ideal 1) with intervals, and the observed and the predicted risk. The slope needs at least 10 events and 10 non-events (10 pairs for a continuous outcome); with fewer only the intercept is reported and the result says why, with none of one kind there is no intercept either. The outcome must be observed, never a synthetic or predicted column. It is calibration in this table, not clinical validation, and says nothing about another population: say so, and do not call the model validated.
+
+A model card may carry TRIPOD-style words beside its inputs and limits (`developmentPopulation`, `validationStudy`, `outcomeHorizon`, `intendedUse`). Write the ones the source states; none is required, and a card without them is a card.
+
 Trial configurations may reference a saved `modelResultId`, `modelResultVersion`
 and `modelParameterQuantile` (`p10`, `p50`, `p90`, default `p50`). A grid can use
 these references in `dimensions.base` and request `modelParameterQuantile: "all"`.

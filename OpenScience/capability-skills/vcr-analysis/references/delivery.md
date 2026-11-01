@@ -15,9 +15,11 @@ Part of the vcr-analysis skill: read it with [../SKILL.md](../SKILL.md), which h
 
 `results.json` 至少要有 `conclusion`、`counts`（四个数，没有的写 `null` 不写 `0`）、`measures`（每个仿真指标带 `mcse`）、`diagnostics`；人群还要 `waterfall`（每步带 `unknown`）与 `populationKind`，经验合成人群另加 `qualityReport`（保真度、可用性、泄露风险）；对照还要 `estimand` 与 `diagnostics`。
 
-`simulation.json` 按 FDA 复杂创新设计指导原则的清单：`designSummary`、`exampleTrial`、`scenarios`（含 `null: true` 的零效应情景）、`replicates`、`operatingCharacteristics`（每行带 `mcse`）、`sensitivity`、`code`（种子与软件版本）、`summary`。
+`simulation.json` 按 FDA 复杂创新设计指导原则的清单：`designSummary`、`exampleTrial`（取自仿真结果的 `diagnostics.exampleTrial`，引擎用种子算的第一次重复，不自己编）、`scenarios`（含 `null: true` 的零效应情景）、`replicates`、`operatingCharacteristics`（每行带 `mcse`）、`sensitivity`、`code`（种子与软件版本）、`summary`。
 
 **报告里的每个数写成 `{{n:…}}` 引用**，用 `mcp__evimed__vcr_read` `what: "report_model"` 看能引用哪些路径。例如 `{{n:measure(power).value|pct1}}`、`{{n:counts.realPatients|thousands}}`、`{{n:measure(power)|pm}}`、`{{n:measure(hazard_ratio)|ci}}`；同一份报告里比较几个方案时按方案的 id 指名：`{{n:measure(power, scenario=<方案 id>).value|pct1}}`。平台在交付时按研究已保存的结果渲染这些引用，渲染不出来的写成「未计算」，不会写成 0；手打的数字（年份、12 以内的序号、日期、页码图表编号和「」里引的方案原文除外）平台也写成「未计算」，并在返回值 `issues` 里告诉你；读不成引用的 `{{n:…}}`（格式要小写，如 `pct1`）同样。
+
+**要一份短记录时**（有人要把某个结果交给别人看，不是每次交付都要）：`mcp__evimed__vcr_write` `what: "result_record"`，`data: {"resultId": "<结果 id>"}`。平台从已保存的结果生成：它是什么结果、运行时的假设、种子和版本、一个示例试验（仿真结果里引擎用种子算的第一次重复）、回到结果和输入的链接。不用你写正文，也不要在没人要的时候做。
 
 ## 运行完成前
 

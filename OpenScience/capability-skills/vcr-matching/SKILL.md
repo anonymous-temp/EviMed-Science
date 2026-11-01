@@ -93,6 +93,8 @@ Every eligibility verdict you deliver, whether a sentence in the reply, a table 
 
 病历很长时（读回带 `long`）不必一段段读完：同一读取再写 `id`（一条条件的 id）或 `query`（几个词），平台按条件的用词、变量名和术语找出片段，给出 `passages`（`start`/`end`）。这只是检索线索：找不到片段就不写这个事实，条件保持未知，不要写成否认；要上下文用 `offset` 读那一段前后；事实照常带逐字引文。
 
+**一批病历、一个名单时**（几十位以上）不要自己一位位读、一条条写：`mcp__evimed__vcr_simulate` `{ "action": "start", "kind": "match_extract" }`，不带场景，可带 `selection: { protocolVersionId?, subjectKeys?, prefilter? }`。平台按方案的入排条件一份份读病历、写事实（引文照常逐字核对），答复里先把账说清：要读多少位、多少份，最多花多少（是上限，做完会写实际用量），谁不读——表格里已有的变量不再问病历，表格已确定不符合的人病历不读（仍会评估；`prefilter: false` 则都读），读过的不会重读；一批最多读多少位，剩下的再启动同样的选择接着读。不用问用户确认，它已经开始了：把答复里这段话转述给用户，结束这一轮，读完会通知。中途取消，读完的保留；再启动同样的选择只读没读过的。读完后照第四节为同一批人启动 `match_criteria`；没读到的人在评估里是「未知」，不是不符合。
+
 每个事实用 `mcp__evimed__vcr_write` `what: "fact"` 写，一次最多 200 项：
 
 ```json
