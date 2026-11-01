@@ -399,6 +399,16 @@ export interface VcrPremise {
 }
 
 /** A design on the trade-off scatter and in the grid. */
+/** Whether a number meets a bound: `borderline` is inside twice its Monte-Carlo error of it. */
+export type VcrBoundState = "ok" | "borderline" | "no";
+
+export interface VcrDesignBaseline {
+  name: string;
+  /** One sentence putting the sequential design's own sizes beside the fixed-sample ones. */
+  note: string | null;
+  measures: Record<string, VcrValue>;
+}
+
 export interface VcrDesign {
   computationBasis?: VcrScientificComputationBasis | null;
   id: string;
@@ -428,6 +438,12 @@ export interface VcrDesign {
   /** The type I error held against its closed form where one exists (a check, in percentage points); null where there is none. */
   nullCheck?: { name: string; analytic: number; simulated: number; differencePoints: number; agrees: boolean | null } | null;
   measures: Record<string, VcrValue>;
+  /** The fixed-sample design at the same assumptions, beside a sequential or two-stage one: the page draws it as a row marked 基准 (C5). */
+  baseline?: VcrDesignBaseline | null;
+  /** A row the page made from `baseline`: it is not a design, cannot be chosen, edited or opened. */
+  isBaseline?: boolean;
+  /** Whether the design's own numbers meet the objective's two bounds (C7): a statement about the numbers, not a verdict on the design. */
+  meets?: { typeOneError: VcrBoundState | null; power: VcrBoundState | null } | null;
   /** The run behind the row, as numbers: what the row's record drawer reads (`vcrViews.mjs`); null before the design ran. */
   record?: {
     method: string | null;
@@ -1123,6 +1139,16 @@ export interface VcrRegulatoryContact {
 export interface VcrTrialTab {
   /** 「这个结论的前提」 of the headline design: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
+  /** What the sample size rests on, one input at a time, largest first, and the power the effect's published shrinkage leaves (C6). */
+  sensitivity?: {
+    design: string;
+    measure: string | null;
+    base: VcrValue | null;
+    rows: Array<{ parameter: string | null; label: string; range: string | null; low: number; high: number }>;
+    discount: { label: string; power: number; targetPower: number | null; hazardRatio: number | null; planned: number | null; observed: number | null } | null;
+  } | null;
+  /** The yardstick the trade-off is drawn against: the researcher's own goal, else alpha and the target power (C7). Percentages. */
+  objective?: { source: "default" | "stated"; alpha: number | null; power: number | null; sided: number | null; text: string } | null;
   accrualForecasts?: Array<{ id: string; version: number; scenarioId: string | null; scenarioVersion: number | null; design: string | null; name: string; lastPatientIn: VcrValue | null; targetEvents: VcrValue | null; probabilityByMonth: Array<{ month: number; probability: number }> }>;
   headline?: string | null;
   /** ADEMP, one line each. */
@@ -1706,8 +1732,42 @@ function readDesign(raw: unknown): VcrDesign {
     nullState: (["done", "queued", "running", "failed", "canceled"] as const).find((state) => state === value.nullState) ?? null,
     nullCheck: readNullCheck(value.nullCheck),
     measures: Object.fromEntries(Object.entries(measures).map(([key, cell]) => [key, readVcrValue(cell)])),
+    baseline: readDesignBaseline(value.baseline),
+    meets: readMeets(value.meets),
     record: readDesignRecord(value.record),
   };
+}
+
+function readDesignBaseline(raw: unknown): VcrDesignBaseline | null {
+  const value = obj(raw);
+  const measures = obj(value.measures);
+  if (!text(value.name) || !Object.keys(measures).length) return null;
+  return { name: text(value.name) ?? "", note: text(value.note), measures: Object.fromEntries(Object.entries(measures).map(([key, cell]) => [key, readVcrValue(cell)])) };
+}
+
+function readMeets(raw: unknown): VcrDesign["meets"] {
+  const value = obj(raw);
+  const state = (entry: unknown): VcrBoundState | null => (["ok", "borderline", "no"] as const).find((candidate) => candidate === entry) ?? null;
+  const typeOneError = state(value.typeOneError), power = state(value.power);
+  return typeOneError === null && power === null ? null : { typeOneError, power };
+}
+
+function readTrialSensitivity(raw: unknown): VcrTrialTab["sensitivity"] {
+  const value = obj(raw);
+  const rows = arr(value.rows).map((row) => ({ parameter: text(row.parameter), label: text(row.label) ?? "", range: text(row.range), low: finite(row.low) ?? 0, high: finite(row.high) ?? 0 })).filter((row) => row.label);
+  if (!rows.length) return null;
+  const discount = obj(value.discount);
+  return {
+    design: text(value.design) ?? "", measure: text(value.measure), base: value.base ? readVcrValue(value.base) : null, rows,
+    discount: finite(discount.power) === null ? null : { label: text(discount.label) ?? "", power: Number(finite(discount.power)), targetPower: finite(discount.targetPower),
+      hazardRatio: finite(discount.hazardRatio), planned: finite(discount.planned), observed: finite(discount.observed) },
+  };
+}
+
+function readTrialObjective(raw: unknown): VcrTrialTab["objective"] {
+  const value = obj(raw);
+  if (!text(value.text)) return null;
+  return { source: value.source === "stated" ? "stated" : "default", alpha: finite(value.alpha), power: finite(value.power), sided: finite(value.sided), text: text(value.text) ?? "" };
 }
 
 function readNullCheck(raw: unknown): VcrDesign["nullCheck"] {
@@ -2209,6 +2269,8 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
   return {
     ...(value as unknown as VcrTrialTab),
     premises: readPremises(value.premises),
+    sensitivity: readTrialSensitivity(value.sensitivity),
+    objective: readTrialObjective(value.objective),
     ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
     accrualForecasts: arr(value.accrualForecasts).map(row => ({ id: text(row.id) ?? "", version: finite(row.version) ?? 1, scenarioId: text(row.scenarioId), scenarioVersion: finite(row.scenarioVersion), design: text(row.design), name: text(row.name) ?? "入组假设模拟", lastPatientIn: row.lastPatientIn ? readVcrValue(row.lastPatientIn) : null, targetEvents: row.targetEvents ? readVcrValue(row.targetEvents) : null, probabilityByMonth: arr(row.probabilityByMonth).filter(point => finite(point.month) !== null && Number(point.month) >= 0 && finite(point.probability) !== null && Number(point.probability) >= 0 && Number(point.probability) <= 1).map(point => ({ month: Number(point.month), probability: Number(point.probability) })) })),
     designs: arr(value.designs).map(readDesign),

@@ -1024,6 +1024,54 @@ function crossCheckOf(stages, stage = "simulation") {
   };
 }
 
+/** A count as a sentence says it: rounded, with thousands separators. @param {unknown} value */
+const countText = (value) => Math.round(Number(value)).toLocaleString("en-US");
+
+/**
+ * The fixed-sample design a sequential or two-stage design is held against, at the same assumptions (C5; ICH E20 asks for the
+ * baseline beside the candidate): the analytic stage computed it with the main result, and this is its row on the page, marked as the
+ * baseline and in the same measures the designs are compared by — what it needs, the power it has, the type I error it spends —
+ * with one sentence putting the sequential design's own sizes beside it. Null when the stage did not compute one (a job from before
+ * the engine did, a design with no fixed-sample counterpart).
+ * @param {{ result: Record<string, any>, diagnostics: Record<string, any> } | undefined} stage
+ * @param {{ execution: Record<string, any> | null, staleMark: Record<string, any> | null }} context
+ */
+function baselineView(stage, { execution, staleMark }) {
+  const base = object(stage?.diagnostics?.baselineDesign);
+  if (!stage || base.kind !== "fixed_sample") return null;
+  const fixed = object(base.fixed);
+  const design = object(base.design);
+  /** @param {string} name @param {unknown} raw */
+  const value = (name, raw) => (finite(raw) === null ? null : measureValue({ name, value: raw, source: "calculated" },
+    { kind: "trial_scenario", result: stage.result, execution, staleMark, tab: "trial" }));
+  /** @type {Record<string, any>} */
+  const measures = {};
+  let note = null;
+  if (base.of === "group_sequential") {
+    const events = finite(fixed.events);
+    if (events === null) return null;
+    measures.required_events = value("required_events", events);
+    const patients = finite(fixed.patients);
+    if (patients !== null) measures.sample_size = value("required_total", patients);
+    const sequential = [finite(design.maxEvents) !== null ? `${countText(design.maxEvents)} 个事件` : null,
+      finite(design.maxPatients) !== null ? `${countText(design.maxPatients)} 名患者` : null].filter(Boolean).join("、");
+    note = `同样的假设下，固定样本设计需要 ${[`${countText(events)} 个事件`, patients !== null ? `${countText(patients)} 名患者` : null].filter(Boolean).join("、")}；`
+      + `成组序贯最多 ${sequential}${finite(design.expectedEventsH1) !== null ? `，效应成立时期望 ${countText(design.expectedEventsH1)} 个事件` : ""}。`;
+    measures.power = value("power", base.targetPower);
+    measures.type_one_error = value("type_one_error", base.alpha);
+  } else if (base.of === "simon_two_stage") {
+    const n = finite(fixed.n);
+    if (n === null) return null;
+    measures.sample_size = value("required_total", n);
+    measures.power = value("power", fixed.power);
+    measures.type_one_error = value("type_one_error", fixed.typeOneError);
+    const optimal = object(object(design).optimal);
+    note = `同样的假设下，单阶段固定样本设计需要 ${countText(n)} 例（应答超过 ${countText(fixed.r)} 例即判有效）；`
+      + `Simon 两阶段${finite(optimal.n) !== null ? `最多 ${countText(optimal.n)} 例` : ""}${finite(optimal.EN0) !== null ? `，零假设下期望 ${Math.round(Number(optimal.EN0) * 10) / 10} 例` : ""}。`;
+  } else return null;
+  return { name: "基准：固定样本设计", note, measures: Object.fromEntries(Object.entries(measures).filter(([, cell]) => cell)) };
+}
+
 /**
  * The trial scenarios as designs: the latest row of each label, with the
  * measures its own result carries. Dominance is the deterministic judgement on
@@ -1140,6 +1188,8 @@ export function presentDesigns(bundle) {
       nullState: beaten ? null : nullStateOf(bundle.jobs, scenario, stages),
       nullCheck: beaten ? null : crossCheckOf(stages, "simulation_null"),
       ...(computationBasis ? { computationBasis } : {}),
+      // The fixed-sample design at the same assumptions, beside a sequential or two-stage one (C5).
+      ...(beaten ? {} : (() => { const baseline = baselineView(stages.analytic, { execution: executionOfStage("analytic") ?? execution, staleMark }); return baseline ? { baseline } : {}; })()),
       _scenario: scenario,
       _result: result,
       _stages: stages,

@@ -282,3 +282,76 @@ test("a reconstruction says what the paper gave it, lists the checks it could no
   assert.ok(unchecked.every((row) => row.passed === false && /没有核对/.test(row.value)));
   assert.equal(tab.qc.filter((row) => row.passed).length, 2, "what was held and passed is counted; what was not held is not");
 });
+
+// --- what the sample size rests on (C5, C6, C7) ---------------------------------------------------------------------------------
+
+/** The analytic stage as the engine's 1.3.0 leaves it for a group-sequential design. */
+function withAnalyticExtras(/** @type {Record<string, any>} */ extras, /** @type {Record<string, any>} */ over = {}) {
+  const bundle = designBundle({ withNull: true, jobs: [job("simulation_null", "succeeded")] });
+  const staged = bundle.allResults[0].diagnostics.stageResults.analytic;
+  staged.diagnostics = extras;
+  Object.assign(bundle.scenarios[0].configuration.analysis ?? {}, over);
+  return bundle;
+}
+const SWEEP = {
+  measure: "所需总样本量", base: { value: 428 },
+  rows: [{ parameter: "effect", label: "效应（log 风险比）", range: "HR 0.607–0.717", low: 304, high: 652 }, { parameter: "control", label: "对照组中位时间", range: "9.6–14.4", low: 378, high: 478 },
+    { parameter: "dropout", label: "每年脱落率", range: "5%–15%", low: 412, high: 446 }],
+  discount: { planned: 0.66, observed: 0.72, retained: 0.7905, hazardRatio: 0.72, events: 244, power: 0.7277, targetPower: 0.9 },
+};
+
+test("the trial page lists what the sample size rests on, one input at a time and largest first, and the power the effect's published shrinkage leaves (C6)", () => {
+  const tab = presentTrialTab(withAnalyticExtras({ sensitivity: SWEEP }));
+  assert.equal(tab.sensitivity.measure, "所需总样本量");
+  assert.equal(tab.sensitivity.base.value, 428);
+  assert.deepEqual(tab.sensitivity.rows.map((row) => row.parameter), ["effect", "control", "dropout"]);
+  assert.deepEqual(tab.sensitivity.discount, { label: "效应按已发表的计划—实测差距折减后的把握度", power: 72.8, targetPower: 90, hazardRatio: 0.72, planned: 0.66, observed: 0.72 });
+  // The premise block holds the row folded, with the source's limits as its reason and a value of its own.
+  const premise = tab.premises.find((row) => row.key === "effectDiscount");
+  assert.equal(premise.label, "效应按已发表的计划—实测差距折减后的把握度");
+  assert.match(premise.value, /^72\.8%（效应 HR 0\.72，按计划的效应设计把握度是 90%）$/);
+  assert.equal(premise.decisive, false);
+  assert.match(premise.reason, /综述简报.*原文未核对.*二分类和连续终点没有这样的数/);
+  // An endpoint with no such figure has no row and no sentence about its absence.
+  const binary = presentTrialTab(withAnalyticExtras({ sensitivity: { ...SWEEP, discount: null } }));
+  assert.equal(binary.sensitivity.discount, null);
+  assert.equal(binary.premises.find((row) => row.key === "effectDiscount"), undefined);
+  assert.equal(presentTrialTab(designBundle()).sensitivity, null, "a stage from before the engine swept has nothing to show");
+});
+
+test("a sequential design carries the fixed-sample design as a marked baseline row, beside its own sizes (C5)", () => {
+  const sequential = { baselineDesign: { kind: "fixed_sample", of: "group_sequential", endpoint: "time_to_event", targetPower: 0.9, alpha: 0.025,
+    fixed: { events: 244, patients: 428 }, design: { maxEvents: 246, maxPatients: 431, expectedEventsH0: 245, expectedEventsH1: 213.4, inflation: 1.008 } } };
+  const row = presentTrialTab(withAnalyticExtras(sequential)).designs[0].baseline;
+  assert.equal(row.name, "基准：固定样本设计");
+  assert.equal(row.measures.required_events.value, 244);
+  assert.equal(row.measures.sample_size.value, 428);
+  assert.equal(row.measures.power.value, 90);
+  assert.equal(row.measures.type_one_error.value, 2.5);
+  assert.equal(row.note, "同样的假设下，固定样本设计需要 244 个事件、428 名患者；成组序贯最多 246 个事件、431 名患者，效应成立时期望 213 个事件。");
+  const simon = presentTrialTab(withAnalyticExtras({ baselineDesign: { kind: "fixed_sample", of: "simon_two_stage", endpoint: "binary", targetPower: 0.8, alpha: 0.05,
+    fixed: { n: 25, r: 5, typeOneError: 0.0334, power: 0.8065 }, design: { optimal: { n: 29, EN0: 15.0 }, minimax: { n: 25 } } } })).designs[0].baseline;
+  assert.equal(simon.measures.sample_size.value, 25);
+  assert.equal(simon.measures.type_one_error.value, 3.34);
+  assert.match(simon.note, /^同样的假设下，单阶段固定样本设计需要 25 例（应答超过 5 例即判有效）；Simon 两阶段最多 29 例，零假设下期望 15 例。$/);
+  assert.equal("baseline" in presentTrialTab(designBundle()).designs[0], false, "a fixed design with no baseline has no row of one");
+});
+
+test("the trade-off is drawn against an objective taken from alpha and the target power, and names which bound each design meets (C7)", () => {
+  const tab = presentTrialTab(withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] }));
+  assert.deepEqual(tab.objective, { source: "default", alpha: 2.5, power: 90, sided: 1, text: "I 类错误不超过 单侧 2.5%，功效不低于 90%" });
+  // The design measured 90% power (±0.4) and a type I error of 2.46% (±0.11): both bounds are met.
+  assert.deepEqual(tab.designs[0].meets, { typeOneError: "ok", power: "ok" });
+  // A researcher's own comparison goal is the objective when there is one, and the bounds are still read for the designs.
+  const written = designBundle({ withNull: true });
+  written.decisions = [{ id: "dec_1", question: "I 类错误不超过 2.5%，功效尽量高", createdAt: "2026-11-01T11:30:00.000Z", chosen: {} }];
+  assert.equal(presentTrialTab(written).objective.source, "stated");
+  assert.equal(presentTrialTab(written).objective.text, "I 类错误不超过 2.5%，功效尽量高");
+  // A design short of the target says so, and one within twice its Monte-Carlo error of it is borderline, never silently met.
+  const short = withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] });
+  const power = short.allResults[0].diagnostics.stageResults.simulation.measures.find((measure) => measure.name === "power");
+  power.value = 0.894; power.mcse = 0.004;
+  assert.equal(presentTrialTab(short).designs[0].meets.power, "borderline");
+  power.value = 0.8;
+  assert.equal(presentTrialTab(short).designs[0].meets.power, "no");
+});

@@ -1,4 +1,4 @@
-import { vcrPredictionLimit } from "@evimed/domain";
+import { vcrPredictionLimit, VCR_EFFECT_DISCOUNT_LABEL_ZH } from "@evimed/domain";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
@@ -977,6 +977,79 @@ export function trialHeadline(designs) {
 }
 
 /**
+ * What each input of the formula does to the sample size, one at a time, from the analytic stage of the design the page is read
+ * through (C6): the rows sorted by how far they move it, and — for an event-time endpoint — the power the design keeps when its effect
+ * is reduced by the published gap between a planned and a measured one. The discount row exists only where the engine computed it;
+ * a binary or a continuous endpoint has none, and nothing is said about its absence.
+ * @param {Record<string, any> | null} row a design row of `presentDesigns`
+ */
+function trialSensitivity(row) {
+  const raw = object(row?._stages?.analytic?.diagnostics?.sensitivity);
+  const rows = list(raw.rows).map(object).filter((entry) => text(entry.label) && finite(entry.low) !== null && finite(entry.high) !== null);
+  if (!row || !rows.length) return null;
+  const discount = object(raw.discount);
+  return {
+    design: row.code,
+    measure: text(raw.measure),
+    base: finite(object(raw.base).value) === null ? null : plainValue(raw.base, { source: "calculated" }),
+    rows: rows.map((entry) => ({ parameter: text(entry.parameter), label: String(entry.label), range: text(entry.range), low: Number(entry.low), high: Number(entry.high) })),
+    discount: finite(discount.power) === null ? null : {
+      label: VCR_EFFECT_DISCOUNT_LABEL_ZH,
+      power: roundTo(Number(discount.power) * 100, 1),
+      targetPower: finite(discount.targetPower) === null ? null : roundTo(Number(discount.targetPower) * 100, 1),
+      hazardRatio: finite(discount.hazardRatio) === null ? null : roundTo(Number(discount.hazardRatio), 2),
+      planned: finite(discount.planned), observed: finite(discount.observed),
+    },
+  };
+}
+
+/**
+ * The objective designs are compared on when nobody wrote one (C7): what the design was built to meet — the type I error at most
+ * its alpha, the power at least its target — taken from the scenario's own analysis block (what it states, else what the engine
+ * applied), or the researcher's own comparison goal when there is one. It is a yardstick the page draws and a sentence the
+ * recommendation names a side of; it picks nothing, hides nothing and greys no design out.
+ * @param {Record<string, any> | null} row the headline design row @param {string | null} statedGoal the researcher's comparison goal
+ */
+function trialObjective(row, statedGoal) {
+  if (!row) return null;
+  const analysis = object(object(row._scenario?.configuration).analysis);
+  const defaults = [...list(row._stages?.analytic?.diagnostics?.appliedDefaults), ...list(row._stages?.simulation?.diagnostics?.appliedDefaults)].map(object);
+  const taken = (/** @type {string} */ path) => numeric(defaults.find((entry) => entry.path === path)?.value);
+  const alpha = numeric(analysis.alpha) ?? taken("analysis.alpha");
+  const power = numeric(analysis.power) ?? taken("analysis.power");
+  const sided = numeric(analysis.sided) ?? taken("analysis.sided");
+  if (alpha === null && power === null) return null;
+  const alphaPercent = alpha === null ? null : roundTo(alpha * 100, 4);
+  const powerPercent = power === null ? null : roundTo(power * 100, 4);
+  return {
+    source: statedGoal ? "stated" : "default",
+    alpha: alphaPercent, power: powerPercent, sided,
+    text: statedGoal ?? [alphaPercent !== null ? `I 类错误不超过 ${sided === 2 ? "双侧" : "单侧"} ${alphaPercent}%` : null, powerPercent !== null ? `功效不低于 ${powerPercent}%` : null].filter(Boolean).join("，"),
+  };
+}
+
+/**
+ * Whether a design's own numbers meet the objective's two bounds: `ok`, `borderline` (inside twice the Monte-Carlo error of the
+ * bound) or `no`; null where the design has not measured it. A statement about the numbers, not a verdict on the design.
+ * @param {Record<string, any>} measures a design's measures @param {{ alpha: number | null, power: number | null } | null} objective
+ */
+function trialMeets(measures, objective) {
+  if (!objective) return null;
+  /** @param {string} name @param {number | null} bound @param {'at_most' | 'at_least'} direction */
+  const read = (name, bound, direction) => {
+    const value = finite(measures[name]?.value);
+    if (bound === null || value === null) return null;
+    const error = 2 * (finite(measures[name]?.mcse) ?? 0);
+    const met = direction === "at_most" ? value <= bound : value >= bound;
+    if (met) return "ok";
+    return (direction === "at_most" ? value - error <= bound : value + error >= bound) ? "borderline" : "no";
+  };
+  const typeOneError = read("type_one_error", objective.alpha, "at_most");
+  const power = read("power", objective.power, "at_least");
+  return typeOneError === null && power === null ? null : { typeOneError, power };
+}
+
+/**
  * `GET /api/vcr/studies/:id/trial`.
  * @param {Record<string, any>} bundle
  */
@@ -1025,9 +1098,12 @@ export function presentTrialTab(bundle) {
       },
     };
   };
+  const statedGoal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
+  const objective = trialObjective(headlineRow, statedGoal);
   const recorded = designs.map((design) => {
     const row = designRows.find((entry) => entry.id === design.id);
-    return { ...design, record: row?._result ? recordOf(row) : null };
+    const meets = design.dominated ? null : trialMeets(design.measures, objective);
+    return { ...design, record: row?._result ? recordOf(row) : null, ...(meets ? { meets } : {}) };
   });
   const forecastRows = forecasts.map((forecast) => forecastView(forecast, now));
   const milestones = designRows.filter(row => !row.dominated).map(row => ({
@@ -1057,6 +1133,10 @@ export function presentTrialTab(bundle) {
     ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics), headlineRow?._stages ?? {}),
     // 「这个结论的前提」: the numbers the headline design's result stands on, where each came from, and the defaults among them.
     premises: headlineRow ? vcrPremises("trial", trialPremiseInput(bundle, headlineRow)) : [],
+    // What the sample size rests on, one input at a time, and the power the effect's published shrinkage leaves (C6).
+    sensitivity: trialSensitivity(headlineRow),
+    // The yardstick the trade-off is drawn against when nobody wrote one: alpha and the target power (C7).
+    objective,
     designs: recorded,
     columns,
     grid: grids.heat,
@@ -1112,6 +1192,8 @@ function trialPremiseInput(bundle, row) {
     appliedDefaults: appliedDefaultsOf(scenario, stages),
     hasAssurance: !(supportsAssurance && ran) || Boolean(stages.assurance),
     assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布",
+    // The power the design keeps at the effect reduced by the published gap, from the analytic stage (C6); absent where there is none.
+    effectDiscount: object(stages.analytic?.diagnostics?.sensitivity).discount ?? null,
   };
 }
 

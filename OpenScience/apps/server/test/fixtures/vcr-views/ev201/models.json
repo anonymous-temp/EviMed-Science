@@ -704,7 +704,7 @@
       "id": "mth_16",
       "name": "方案的解析计算",
       "method": "design.analytic",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {

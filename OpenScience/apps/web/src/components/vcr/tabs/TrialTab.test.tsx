@@ -754,3 +754,87 @@ describe("试验 · the premises, and the type I error that follows the result",
     expect((await found(stopped.container, "[data-vcr-null-state='canceled']"))).toHaveTextContent("已取消");
   });
 });
+
+describe("试验 · what the sample size rests on, the baseline and the objective (C5, C6, C7)", () => {
+  const SENSITIVITY = {
+    design: "B", measure: "所需总样本量",
+    base: { value: 428, text: null, unit: "例", source: "calculated", interval: null, mcse: null, review: null, precision: 0, reason: null, stale: false, detail: null },
+    rows: [{ parameter: "effect", label: "效应（log 风险比）", range: "HR 0.607–0.717", low: 304, high: 652 }, { parameter: "control", label: "对照组中位时间", range: "9.6–14.4", low: 378, high: 478 }],
+    discount: { label: "效应按已发表的计划—实测差距折减后的把握度", power: 72.8, targetPower: 90, hazardRatio: 0.72, planned: 0.66, observed: 0.72 },
+  };
+  const value = (raw: any, over: Record<string, unknown> = {}) => ({ ...raw, ...over });
+  const serve = (change: (raw: any) => void) => {
+    const raw = fixture("ev201/trial.json");
+    change(raw);
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+  };
+
+  it("draws the fixed-sample baseline as a row under its design, marked 基准, that cannot be chosen, edited or opened", async () => {
+    serve((raw) => {
+      raw.designs[1].baseline = { name: "基准：固定样本设计", note: "同样的假设下，固定样本设计需要 244 个事件、428 名患者；成组序贯最多 246 个事件、431 名患者，效应成立时期望 213 个事件。",
+        measures: { sample_size: value(raw.designs[1].measures.sample_size, { value: 428, source: "calculated" }), power: value(raw.designs[1].measures.power, { value: 90, mcse: null, interval: null, source: "calculated" }) } };
+    });
+    const { container } = draw();
+    await trialDrawn();
+    const rows = [...container.querySelectorAll("tr[data-vcr-design]")].map((row) => `${row.getAttribute("data-vcr-design")}${row.hasAttribute("data-vcr-baseline") ? "*" : ""}`);
+    expect(rows).toEqual(["A", "B", "基准*", "C", "D"]);
+    const baseline = container.querySelector("tr[data-vcr-baseline]") as HTMLElement;
+    expect(baseline).toHaveTextContent("基准：固定样本设计");
+    expect(baseline).toHaveTextContent("成组序贯最多 246 个事件");
+    expect(baseline.querySelector("[data-vcr-measure='sample_size']")).toHaveTextContent("428");
+    expect(baseline.querySelector("[data-vcr-measure='power']")).toHaveTextContent("90");
+    expect(baseline.querySelector("[data-vcr-edit]")).toBeNull();
+    expect(within(baseline).queryByRole("button", { name: /打开方案/ })).toBeNull();
+    expect(baseline.querySelector("[data-vcr-replicates]")).toBeNull();
+    // Choosing does not offer it as a design.
+    expect(container.querySelectorAll("[data-vcr-baseline]")).toHaveLength(1);
+  });
+
+  it("folds the one-input-at-a-time table with its biggest mover first, and the power the effect's published shrinkage leaves, with no mention of a figure that does not exist", async () => {
+    serve((raw) => { raw.sensitivity = SENSITIVITY; });
+    const { container } = draw();
+    await trialDrawn();
+    const summary = await screen.findByText(/哪些假设影响最大 · 方案 B · 所需总样本量/);
+    await userEvent.click(summary);
+    const panel = await found(container, "[data-vcr-sensitivity]");
+    const labels = [...panel.querySelectorAll("[data-vcr-tornado] li")].map((row) => row.textContent ?? "");
+    expect(labels[0]).toContain("效应（log 风险比）");
+    expect(labels[1]).toContain("对照组中位时间");
+    expect(panel.querySelector("[data-vcr-effect-discount]")).toHaveTextContent("效应按已发表的计划—实测差距折减后的把握度：72.8%（效应 HR 0.72；按计划的效应设计的把握度是 90%）");
+    // A binary or a continuous endpoint has no such row, and nothing stands in its place.
+    serve((raw) => { raw.sensitivity = { ...SENSITIVITY, discount: null }; });
+    const other = draw();
+    await trialDrawn();
+    await userEvent.click(await within(other.container).findByText(/哪些假设影响最大/));
+    expect(other.container.querySelector("[data-vcr-effect-discount]")).toBeNull();
+    expect(other.container).not.toHaveTextContent("折减");
+  });
+
+  it("draws sample size against power with the target power as the line to clear when there is no duration and no success probability, names the objective, and tags only a bound that is not met", async () => {
+    serve((raw) => {
+      raw.objective = { source: "default", alpha: 2.5, power: 90, sided: 1, text: "I 类错误不超过 单侧 2.5%，功效不低于 90%" };
+      for (const design of raw.designs) { delete design.measures.duration_months; delete design.measures.assurance; }
+      raw.designs[0].meets = { typeOneError: "ok", power: "ok" };
+      raw.designs[1].meets = { typeOneError: "ok", power: "no" };
+      raw.designs[2].meets = { typeOneError: "borderline", power: "ok" };
+    });
+    const { container } = draw();
+    await trialDrawn();
+    const scatter = await found(container, "[data-vcr-scatter]");
+    expect(scatter.querySelector("[data-vcr-scatter-reference]")).not.toBeNull();
+    expect(scatter).toHaveTextContent("目标功效 90%");
+    expect(container.querySelector("[data-vcr-objective='default']")).toHaveTextContent("I 类错误不超过 单侧 2.5%，功效不低于 90%");
+    expect(container.querySelector("tr[data-vcr-design='A'] [data-vcr-bound]")).toBeNull();
+    expect(container.querySelector("tr[data-vcr-design='B'] [data-vcr-bound='no']")).toHaveTextContent("未达标");
+    // Nothing is picked or greyed out by drawing it.
+    expect(container.querySelectorAll("tr[data-vcr-dominated]")).toHaveLength(1);
+    expect(container.querySelectorAll("tr[data-vcr-chosen]")).toHaveLength(1);
+  });
+
+  it("keeps the duration against success probability trade-off where the server sent those", async () => {
+    const { container } = draw();
+    await trialDrawn();
+    expect(await screen.findByText("周期、成本与成功把握的取舍")).toBeInTheDocument();
+    expect(container.querySelector("[data-vcr-scatter-reference]")).toBeNull();
+  });
+});

@@ -85,6 +85,14 @@
       "reason": null
     }
   ],
+  "sensitivity": null,
+  "objective": {
+    "source": "stated",
+    "alpha": 2.5,
+    "power": null,
+    "sided": 1,
+    "text": "在成功把握尽量高、样本量尽量少的目标下选哪个方案"
+  },
   "designs": [
     {
       "id": "scn_1",
@@ -732,6 +740,10 @@
           "approximate": false,
           "agrees": true
         }
+      },
+      "meets": {
+        "typeOneError": "ok",
+        "power": null
       }
     },
     {
@@ -1081,6 +1093,10 @@
           "approximate": false,
           "agrees": true
         }
+      },
+      "meets": {
+        "typeOneError": "borderline",
+        "power": null
       }
     },
     {

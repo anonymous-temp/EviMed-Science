@@ -23,7 +23,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { HeatGrid } from "@/components/charts/HeatGrid";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
-import { VcrMilestoneTimeline, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
+import { VcrMilestoneTimeline, VcrTornadoChart, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
 import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
 import { RegulatoryContactForm, VcrRegulatoryLog } from "../VcrRegulatoryLog";
 import { VcrScheduleCard } from "../VcrSchedule";
@@ -268,6 +268,11 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
   // The trade-off is drawn only when there is something to place: two designs with a duration and an assurance. A card whose chart
   // draws nothing is a title over an empty box.
   const tradeoff = data.designs.length > 1 && canDrawTradeoff(data.designs, "duration_months", "assurance");
+  // With no duration and no success probability the trade-off is the one the objective is written in: how many people against the
+  // power it buys, with the target power drawn as the line to clear (C7). Nothing is greyed out and nothing is picked by drawing it.
+  const sizeKey = data.designs.some((design) => design.measures.expected_sample_size?.value != null) ? "expected_sample_size" : "sample_size";
+  const sizeTradeoff = !tradeoff && data.designs.filter((design) => !design.dominated).length > 1 && canDrawTradeoff(data.designs, sizeKey, "power");
+  const sensitivity = data.sensitivity && data.sensitivity.rows.length > 0 ? data.sensitivity : null;
   const powerCurve = data.powerCurve && data.powerCurve.series.length > 0 ? data.powerCurve : null;
   const cells: ChartGridCell[] = [];
   if (powerCurve) {
@@ -315,6 +320,26 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       ),
     });
   }
+  if (sizeTradeoff) {
+    cells.push({
+      key: "tradeoff",
+      node: (
+        <ChartCard title="样本量与功效的取舍">
+          <VcrTradeoffScatter
+            designs={data.designs}
+            xKey={sizeKey}
+            yKey="power"
+            sizeKey="cost"
+            xLabel={sizeKey === "expected_sample_size" ? "期望样本量（例）" : "样本量（例）"}
+            yLabel="功效"
+            sizeLabel="气泡面积 = 成本"
+            reference={data.objective?.power != null ? { value: data.objective.power, label: `目标功效 ${data.objective.power}%` } : null}
+          />
+          {data.objective && <p data-vcr-objective={data.objective.source} className="mt-2 text-caption text-text-3">{data.objective.text}</p>}
+        </ChartCard>
+      ),
+    });
+  }
   if (data.grid && data.grid.rows.length > 0) {
     cells.push({
       key: "grid",
@@ -352,15 +377,16 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
             <DataTable
               label="方案的对比"
               columns={designColumns(data, onEdit, onOpen)}
-              rows={data.designs}
+              rows={data.designs.flatMap((design) => (design.baseline ? [design, baselineRow(design)] : [design]))}
               rowKey={(design) => design.id}
               highlight={(design) => Boolean(design.chosen)}
               rowAttrs={(design) => ({
                 "data-vcr-design": design.code,
+                ...(design.isBaseline ? { "data-vcr-baseline": "" } : {}),
                 ...(design.dominated ? { "data-vcr-dominated": "" } : {}),
                 ...(design.chosen ? { "data-vcr-chosen": "" } : {}),
               })}
-              onRowOpen={(design) => { if (hasRun(design)) onOpen(design); }}
+              onRowOpen={(design) => { if (!design.isBaseline && hasRun(design)) onOpen(design); }}
             />
             {data.footnotes?.map((note, index) => (
               <p key={note} className="mt-1.5 text-caption text-text-3">
@@ -376,6 +402,26 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       {setup.length > 0 && (
         <Disclosure summary="模拟设定">
           <div data-vcr-setup=""><FactList rows={setup} max={setup.length} /></div>
+        </Disclosure>
+      )}
+
+      {/* What the sample size rests on, one input at a time, the biggest mover first; folded, as the other explanations are. */}
+      {sensitivity && (
+        <Disclosure summary={`哪些假设影响最大 · ${data.designs.length > 1 ? `方案 ${sensitivity.design} · ` : ""}${sensitivity.measure ?? "样本量"}`}>
+          <div data-vcr-sensitivity="" className="flex flex-col gap-3">
+            <VcrTornadoChart
+              rows={sensitivity.rows}
+              centre={sensitivity.base?.value ?? null}
+              centreLabel={sensitivity.base ? <VcrNumber value={sensitivity.base} label="基准" /> : undefined}
+            />
+            {sensitivity.discount && (
+              <p data-vcr-effect-discount="" className="text-caption text-text-2">
+                <span>{sensitivity.discount.label}：</span>
+                <span className="tabular-nums text-text">{`${numberText(sensitivity.discount.power)}%`}</span>
+                {sensitivity.discount.hazardRatio != null && <span className="text-text-3">{`（效应 HR ${numberText(sensitivity.discount.hazardRatio, 2)}${sensitivity.discount.targetPower != null ? `；按计划的效应设计的把握度是 ${numberText(sensitivity.discount.targetPower)}%` : ""}）`}</span>}
+              </p>
+            )}
+          </div>
         </Disclosure>
       )}
 
@@ -411,6 +457,29 @@ function NotComputedDesigns({ designs, studyId, study, failed }: { designs: read
 }
 
 /**
+ * The row the fixed-sample baseline makes under its design (C5): the same measures in the same columns, marked 基准, with the one
+ * sentence that sets the sequential design's own sizes beside it. It is not a design: it has no letter, cannot be chosen, edited or
+ * opened, and carries no replicates (it is a closed-form calculation, no simulation).
+ */
+function baselineRow(design: VcrDesign): VcrDesign {
+  const baseline = design.baseline as NonNullable<VcrDesign["baseline"]>;
+  return {
+    id: `${design.id}#baseline`, code: "基准", name: baseline.name, note: baseline.note, measures: baseline.measures,
+    method: "解析", replicates: null, nullState: null, nullCheck: null, record: null, isBaseline: true,
+  };
+}
+
+/** A bound the design's own number does not meet, said on the number: nothing is said of one that is met. */
+function BoundTag({ state }: { state: NonNullable<VcrDesign["meets"]>["power"] }) {
+  if (state !== "no" && state !== "borderline") return null;
+  return (
+    <Tag tone={state === "no" ? "warn" : "neutral"} title={state === "no" ? "没有达到这条要求" : "在蒙特卡洛误差的两倍之内，分不清是否达到"}>
+      <span data-vcr-bound={state}>{state === "no" ? "未达标" : "接近"}</span>
+    </Tag>
+  );
+}
+
+/**
  * The grid's columns, from the payload's own list. A dominated design says what beat it under its name and draws no numbers;
  * power is a bar and its number.
  */
@@ -423,13 +492,17 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       cell: (design) => (
         <span className="flex flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta",
-              design.dominated ? "bg-surface-2 text-text-3" : design.chosen ? "bg-accent text-accent-fg" : "bg-surface-2 text-text-2")}
-            >
-              {design.code}
-            </span>
+            {design.isBaseline
+              ? <Tag>{design.code}</Tag>
+              : (
+                <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta",
+                  design.dominated ? "bg-surface-2 text-text-3" : design.chosen ? "bg-accent text-accent-fg" : "bg-surface-2 text-text-2")}
+                >
+                  {design.code}
+                </span>
+              )}
             {/* The keyboard's way into the run behind the row; a press anywhere else on the row does the same for a pointer. */}
-            {onOpen && hasRun(design)
+            {onOpen && hasRun(design) && !design.isBaseline
               ? (
                 <button type="button" aria-label={`打开方案 ${design.code} 的计算详情`} onClick={() => onOpen(design)} className={cn("rounded text-left font-normal hover:underline", design.dominated ? "text-text-3" : "text-text")}>
                   {design.name}
@@ -478,6 +551,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
               </span>
             )}
             {interval && <span data-vcr-interval="" className="text-meta font-normal text-text-3">{interval}</span>}
+            {(column.key === "power" || column.key === "type_one_error") && !design.isBaseline && <BoundTag state={design.meets?.[column.key === "power" ? "power" : "typeOneError"] ?? null} />}
             {/* Where the closed form can answer the same question (the nominal alpha for a fixed design), the simulation is a check on it. */}
             {column.key === "type_one_error" && design.nullCheck && (
               <Tag tone={design.nullCheck.agrees === false ? "warn" : "neutral"} title={`与解析值核对：解析 ${numberText(design.nullCheck.analytic)}% · 仿真 ${numberText(design.nullCheck.simulated)}%`}>
@@ -507,9 +581,9 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       key: "edit",
       header: <span className="sr-only">操作</span>,
       align: "right" as const,
-      cell: (design: VcrDesign) => (
+      cell: (design: VcrDesign) => (design.isBaseline ? null : (
         <Button size="sm" variant="text" actionKind="draft" data-vcr-edit={design.code} onClick={() => onEdit(design)} aria-label={`${DRAFT_PREFIX}调整：方案 ${design.code}`}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}调整`}</Button>
-      ),
+      )),
     }] : []),
   ];
 }

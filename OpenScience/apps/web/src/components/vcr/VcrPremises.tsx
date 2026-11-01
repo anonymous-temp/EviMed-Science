@@ -35,6 +35,8 @@ function PremiseRow({ premise, onChange }: { premise: VcrPremise; onChange: ((pr
           </Button>
         )
         : <span />}
+      {/* Where a figure comes from and how far it goes, when it is not this study's own evidence (the premise's folded detail). */}
+      {premise.reason && <span data-vcr-premise-reason="" className="col-span-full text-caption text-text-3">{premise.reason}</span>}
     </li>
   );
 }

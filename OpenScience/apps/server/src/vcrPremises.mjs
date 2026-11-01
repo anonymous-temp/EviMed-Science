@@ -24,7 +24,7 @@
  * @module vcrPremises
  */
 
-import { VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
 import { TIME_UNIT_WORDS, list, numeric, object, text } from "./vcrViewsKit.mjs";
 
 /**
@@ -114,7 +114,7 @@ function timeWord(configuration, diagnostics) {
 /**
  * The premises of a trial result: the design a person is looking at, the cards bound into it and the defaults its stages took.
  *
- * @param {{ endpointType?: string | null, configuration?: Record<string, any>, diagnostics?: Record<string, any>,
+ * @param {{ endpointType?: string | null, configuration?: Record<string, any>, diagnostics?: Record<string, any>, effectDiscount?: Record<string, any> | null,
  *   bound?: ReadonlyArray<{ key?: string, path?: string }>, cards?: ReadonlyArray<Record<string, any>>,
  *   appliedDefaults?: ReadonlyArray<{ path: string, value?: unknown }>, hasAssurance?: boolean, assuranceReason?: string | null,
  *   designKind?: string | null }} input
@@ -225,6 +225,16 @@ function trialPremises(input) {
   if (type === "time_to_event" && timeBasis.unit) {
     rows.push({ key: "timeUnit", label: "时间单位", value: String(TIME_UNIT_WORDS[String(timeBasis.unit)]?.bare ?? timeBasis.unit),
       source: timeBasis.basis === "stated" ? "assumed" : timeBasis.basis === "evidence" ? "literature" : "default", decisive: false });
+  }
+
+  // The power the design keeps when its effect shrinks the way planned effects have been measured to (C6): one folded row with the
+  // figure's source and its limits, only where the engine computed it (an event-time endpoint with an effect in favour).
+  const discount = object(input.effectDiscount);
+  if (numeric(discount.power) !== null) {
+    const hr = numeric(discount.hazardRatio);
+    const target = numeric(discount.targetPower);
+    rows.push({ key: "effectDiscount", label: VCR_EFFECT_DISCOUNT_LABEL_ZH, value: `${percent(Number(discount.power))}${hr !== null ? `（效应 HR ${plain(hr)}${target !== null ? `，按计划的效应设计把握度是 ${percent(target)}` : ""}）` : ""}`,
+      source: "assumed", decisive: false, reason: VCR_EFFECT_DISCOUNT_LIMITS_ZH });
   }
 
   // A success probability that is not there, and why (A14): the effect was a single value, and a single value has nothing to integrate.

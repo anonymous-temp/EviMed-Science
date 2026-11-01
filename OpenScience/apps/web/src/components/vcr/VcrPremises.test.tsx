@@ -42,6 +42,16 @@ describe("这个结论的前提", () => {
     expect(container.querySelector("[role='alert'], [role='status']")).toBeNull();
   });
 
+  it("says where a figure comes from and how far it goes, in the folded detail of the premise that has one", async () => {
+    const limits = "来自一份对肿瘤三期试验生存终点的综述简报（预期风险比 0.66、实测 0.72，原文未核对）：说明计划的效应常被高估，不预测这项试验。";
+    const { container } = render(<VcrPremises premises={[...SIX, premise("effectDiscount", { label: "效应按已发表的计划—实测差距折减后的把握度", value: "72.8%", decisive: false, reason: limits })]} />);
+    expect(container.querySelector("[data-vcr-premises-open] [data-vcr-premise-reason]")).toBeNull();
+    await userEvent.click(screen.getByText(/其余 2 条前提/));
+    const row = container.querySelector("[data-vcr-premise='effectDiscount']") as HTMLElement;
+    expect(row.querySelector("[data-vcr-premise-reason]")).toHaveTextContent(limits);
+    expect(container.querySelector("[data-vcr-premise='method'] [data-vcr-premise-reason]")).toBeNull();
+  });
+
   it("shows no more than five open premises however many arrive decisive", () => {
     const many = Array.from({ length: 8 }, (_, index) => premise(`p${index}`));
     const { container } = render(<VcrPremises premises={many} />);
