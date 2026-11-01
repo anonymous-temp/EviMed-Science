@@ -176,13 +176,90 @@ the control 0.6864 (b) and 0.8428 (c), macro 0.5932 (b) and 0.6967 (c). My own c
   (the rule that holds the 10-29 invented-date cases): 104 facts were refused for a date against 14 for the control. Of the 157 facts for which the model wrote a date, only 38 were kept;
   36 of the 157 were myocardial infarction facts (2 of them kept), an event the model dated from partial dates such as `2/2087`. (These counts are a read of the model's answers made after the scoring; no gold is involved and they are not in the frozen code.) A lost fact leaves its criterion `unknown`. This is consistent with the lower strict accuracy of
   ADVANCED-CAD (-0.074 (-0.130 to -0.018)), ASP-FOR-MI (-0.049 (-0.099 to +0.000)), ALCOHOL-ABUSE and ABDOMINAL; I did not test that cause (no arm drops only the date).
-  The step that follows from it is the one the unit already has: an unsupported date drops the date and keeps the fact. That is a product ruling (it changes what the 10-29 rule refuses) and a third measurement, and neither was done here.
+  The step that follows from it is the one the unit already has: an unsupported date drops the date and keeps the fact. That is a product ruling (it changes what the 10-29 rule refuses) and a third measurement, and neither was done here. (The ruling was made and the step taken afterwards; see "Third run".)
 - **Overall the change is small and not distinguishable from zero**: +0.014 (-0.004 to +0.031) strict, +0.011 (-0.001 to +0.023) under (b), +0.013 (-0.002 to +0.028) micro F1 (b). A gain on HBA1C is offset by losses elsewhere, and some criteria moved by about what one model sample moves them (MAKES-DECISIONS +0.056 (+0.012 to +0.099) has no fix aimed at it).
 - **The standing comparison with the majority baseline is unchanged.** Under (b) the fixed pipeline is 0.73 accuracy and 0.6997 micro F1 against 0.77 and 0.7595 for the baseline learnt from the forty development patients: still below it. Under (c) it is above (0.86, 0.8511), with the same caveat as before that two criteria which are about 95% met carry much of it.
 
 Limits of this measurement, besides those below: the 162 are training patients of the same corpus, annotated by the same people, and nothing was tuned on them, but they are not the official split and their score
 is not comparable with the published one; the control arm is a second model sample, not a replay; one sample per patient per arm; the criteria structure is the same translation as before; 3 of 162 answers were unreadable JSON for the fixed pipeline
 (the control: 2). Total spend for everything, both measurements, the development rounds and the control: CNY 11.70 of the hard budget of 200 (2.96 for the fixed pipeline on the 162, 2.87 for the control).
+
+## Third run: after dropping the unsupported date (a regression check, not a clean estimate)
+
+**This is a third run on the same 162 training patients that the second measurement had already scored.** It checks that one further fix does what it
+should. It is not a clean estimate: those patients are no longer unseen, because the second measurement's results were read before the fix was chosen.
+It is not the official test split either. The first and second results above are untouched, and nothing was tuned after this run, whatever it showed.
+
+The fix: a date that no quotation prints (not the fact's own, not its `dateQuote`) no longer refuses the whole fact. The date is dropped and the fact is
+kept undated, with a non-blocking notice in the tool answer (`date_not_shown`); `occurredAt` and `recordedAt` stand or fall each on its own, and a second
+quotation no remaining date rests on is not stored. The batch reading uses the same writer, so it does the same. No invented date is stored: a dataset year,
+an upload time, an age with no date, a short form such as `3/14` and file metadata still supply nothing; they now pass by the date being absent, and the
+evaluator's own check (`verifyFactEvidence`, with its 10-29 tests) is unchanged. A window criterion over an undated fact stays unknown (reason `undated`);
+a presence criterion counts the fact. An interval the quotation does not bound is still refused. The skill's wording already said "otherwise omit that
+timestamp", so it was not changed and the prompt digest is the second manifest's.
+
+How it was run: `FROZEN-3.json` was committed before any prediction. It pins the control (the first pipeline) and the second run by the digest of their
+predictions, and it carries the same prompt, model and settings as the second manifest. Two sets of predictions were made under it: a **fresh model sample**
+(the third run proper, CNY 1.28) and **the second run's cached answers read again through the fixed writer**, with no model call, which shows what the fix did to
+identical model answers. A development check on the forty development patients came first (`results/dev-r7.json`: the dev-r6 answers through the fixed
+writer; facts kept 373 to 392). One scoring (`score-heldout --manifest 3`); the baseline is still learnt from the forty development patients only.
+
+### The numbers
+
+95% intervals from the patient-level cluster bootstrap (2,000 resamples); changes are resampled on both sides together.
+
+| | First pipeline (control) | Second run | Third run (fresh sample) | Second run's answers, fixed writer | Majority baseline |
+|---|---|---|---|---|---|
+| Accuracy (a), `unknown` is wrong | 0.321 (0.298 to 0.342) | 0.334 (0.310 to 0.360) | 0.355 (0.331 to 0.379) | 0.347 (0.323 to 0.372) | 0.766 (0.750 to 0.782) |
+| Unknown share | 0.647 (0.625 to 0.670) | 0.631 (0.605 to 0.656) | 0.615 (0.591 to 0.639) | 0.618 (0.593 to 0.643) | 0.000 (0.000 to 0.000) |
+| Accuracy (b), `unknown` is not met | 0.720 (0.706 to 0.734) | 0.731 (0.717 to 0.744) | 0.749 (0.735 to 0.762) | 0.740 (0.727 to 0.753) | 0.766 (0.750 to 0.782) |
+| Accuracy (c) | 0.849 (0.834 to 0.862) | 0.857 (0.843 to 0.870) | 0.873 (0.860 to 0.886) | 0.866 (0.853 to 0.878) | 0.766 (0.750 to 0.782) |
+| Micro F1 (b), official scorer | 0.686 (0.669 to 0.703) | 0.700 (0.682 to 0.717) | 0.723 (0.706 to 0.738) | 0.712 (0.695 to 0.727) | 0.759 (0.743 to 0.776) |
+| Micro F1 (c), official scorer | 0.843 (0.828 to 0.857) | 0.851 (0.837 to 0.865) | 0.869 (0.855 to 0.882) | 0.861 (0.847 to 0.874) | 0.759 (0.743 to 0.776) |
+| Macro F1 (b) | 0.593 (0.570 to 0.612) | 0.607 (0.584 to 0.626) | 0.630 (0.610 to 0.647) | 0.617 (0.595 to 0.636) | 0.426 (0.420 to 0.432) |
+
+Official scorer, third run: micro F1 0.7226 (b) and 0.8690 (c), macro 0.6298 (b) and 0.7413 (c).
+My computation agrees with the scorer to four decimals.
+
+| Change | Third run minus control | Third run minus second run | Fixed writer minus second run, same answers |
+|---|---|---|---|
+| Strict accuracy (a) | +0.034 (+0.022 to +0.046) | +0.020 (+0.005 to +0.037) | +0.013 (+0.008 to +0.019) |
+| Accuracy (b) | +0.029 (+0.018 to +0.039) | +0.018 (+0.008 to +0.029) | +0.009 (+0.005 to +0.014) |
+| Accuracy (c) | +0.025 (+0.015 to +0.034) | +0.017 (+0.008 to +0.026) | +0.009 (+0.005 to +0.014) |
+| Unknown share | -0.032 (-0.045 to -0.018) | -0.016 (-0.034 to +0.001) | -0.013 (-0.018 to -0.008) |
+| Micro F1 (b) | +0.036 (+0.023 to +0.049) | +0.023 (+0.009 to +0.037) | +0.012 (+0.006 to +0.019) |
+| Micro F1 (c) | +0.026 (+0.015 to +0.036) | +0.018 (+0.008 to +0.028) | +0.010 (+0.005 to +0.015) |
+
+| Criterion | Gold met (of 162) | Strict accuracy, control | second run | third run | Third minus control | Fixed writer minus second run |
+|---|---|---|---|---|---|---|
+| ABDOMINAL | 64 | 0.302 | 0.265 | 0.284 | -0.018 (-0.056 to +0.018) | +0.018 (+0.000 to +0.043) |
+| ADVANCED-CAD | 101 | 0.525 | 0.451 | 0.518 | -0.006 (-0.062 to +0.049) | +0.049 (+0.018 to +0.086) |
+| ALCOHOL-ABUSE | 4 | 0.624 | 0.543 | 0.568 | -0.056 (-0.117 to +0.006) | +0.012 (+0.000 to +0.031) |
+| ASP-FOR-MI | 135 | 0.765 | 0.716 | 0.765 | +0.000 (-0.037 to +0.037) | +0.031 (+0.006 to +0.062) |
+| CREATININE | 70 | 0.525 | 0.562 | 0.580 | +0.056 (+0.018 to +0.099) | +0.000 (+0.000 to +0.000) |
+| DIETSUPP-2MOS | 84 | 0.000 | 0.018 | 0.012 | +0.012 (+0.000 to +0.031) | +0.000 (+0.000 to +0.000) |
+| DRUG-ABUSE | 8 | 0.494 | 0.469 | 0.494 | +0.000 (-0.049 to +0.043) | +0.006 (+0.000 to +0.018) |
+| ENGLISH | 153 | 0.056 | 0.074 | 0.080 | +0.025 (+0.006 to +0.049) | +0.000 (+0.000 to +0.000) |
+| HBA1C | 56 | 0.056 | 0.383 | 0.432 | +0.377 (+0.302 to +0.451) | +0.043 (+0.012 to +0.074) |
+| KETO-1YR | 1 | 0.006 | 0.018 | 0.012 | +0.006 (+0.000 to +0.018) | +0.000 (+0.000 to +0.000) |
+| MAJOR-DIABETES | 95 | 0.414 | 0.414 | 0.420 | +0.006 (-0.012 to +0.031) | +0.006 (+0.000 to +0.018) |
+| MAKES-DECISIONS | 156 | 0.179 | 0.235 | 0.247 | +0.068 (+0.018 to +0.117) | +0.000 (+0.000 to +0.000) |
+| MI-6MOS | 13 | 0.222 | 0.198 | 0.198 | -0.025 (-0.068 to +0.019) | +0.000 (+0.000 to +0.000) |
+
+### What it shows
+
+- **It does what it should.** On the second run's own answers the writer now keeps 104 more facts (1485 to 1589): none is refused for a date any more (it was 104) and 104 were kept undated.
+  That alone is +0.013 (+0.008 to +0.019) strict accuracy, and it is where the loss the second measurement found was recovered: ADVANCED-CAD +0.049 (+0.018 to +0.086), ASP-FOR-MI +0.031 (+0.006 to +0.062).
+  Against the control, ADVANCED-CAD (-0.006 (-0.062 to +0.049)) and ASP-FOR-MI (+0.000 (-0.037 to +0.037)) are no longer lower, as they were in the second run.
+- **Net against the first pipeline, on these patients:** +0.034 (+0.022 to +0.046) strict, +0.029 (+0.018 to +0.039) under (b), +0.036 (+0.023 to +0.049) micro F1 (b), and the interval now excludes zero.
+  Most of it is the unit fix: HBA1C alone is +0.377 of strict accuracy, which is about 0.029 of the pooled change (each criterion has the same 162 patients).
+- **The windows are not solved.** The date quotation dated 43 facts; `undated` unknowns went from 124 (control) and 123 (second run) to 146 in the third run because more facts are kept and many of them have no date.
+  DIETSUPP-2MOS is 0.012 and MI-6MOS 0.198 on strict accuracy, as before. What the date path does now is cost nothing; it does not yet date the facts the windows need.
+- **Still below the majority baseline under (b)**: accuracy 0.749 against 0.766, micro F1 0.7226 against 0.7595. Under (c) it is above (0.873, 0.8690), with the caveat that two criteria which are about 95% met carry much of it.
+- **Sampling noise is about a percentage point.** The fresh sample (0.355 strict) and the same answers re-read by the same writer (0.347) differ by +0.008; a difference of that size between two runs is not a finding.
+
+Limits of this run, besides those below: the same 162 patients as the second measurement; one fresh sample; the control and the second run are the earlier predictions, pinned by digest, not re-run; the replay
+is a re-reading, not an independent sample. Spend: CNY 1.28 for the fresh sample, none for the replay, CNY 12.98 for everything so far of the hard budget of 200.
 
 ## What was measured
 
@@ -272,6 +349,11 @@ node --test evals/vcr-matching/n2c2/n2c2.test.mjs                               
 node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 2 --dev-run <name> --rounds <n>    # writes FROZEN-2.json, once
 node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --run <name>                 # refuses without a matching FROZEN-2.json
 node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --run <name> [--control-run <name>]    # scores once; the control run holds the first pipeline's predictions
+# the third run, a regression check on the same patients
+node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 3 --dev-run <name> --rounds <n> --control-run <name> --previous-run <name> --replay-run <name>
+node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 3 --run <name>                       # a fresh model sample
+node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 3 --run <replay> --reuse-run <second>  # the second run's answers, no model call
+node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --manifest 3 --run <name> --control-run <name> --previous-run <name> --replay-run <replay>
 ```
 
 The tests also run with the server's (`apps/server/test/vcrN2c2Eval.test.mjs`); the data-dependent ones skip when the data is absent.
