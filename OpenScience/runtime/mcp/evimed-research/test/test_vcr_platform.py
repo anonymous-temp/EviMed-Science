@@ -533,6 +533,23 @@ class VcrReadWriteTests(_GatewayCase):
         listed = self.server.call_tool("vcr_read", {"what": "candidate_trials"})
         self.assertFalse(any("ranking" in action for action in listed["next_actions"]), "the list of trials is not a patient's table")
 
+    def test_the_passages_of_a_long_record_are_told_to_be_a_hint_and_a_long_record_how_to_ask(self):
+        # M4: the answer of subject_document says what a passage is and is not, in the tool answer and not in a description.
+        _Gateway.answers["read"] = (200, {"data": {"what": "subject_document", "available": True, "document": {"id": "doc_1", "chars": 91234},
+                                                    "passages": [{"start": 100, "end": 180, "text": "..."}], "passageSearch": {"criterionId": "crt_1", "returned": 1}}})
+        found = self.server.call_tool("vcr_read", {"what": "subject_document", "filter": {"subjectKey": "P-1", "documentId": "doc_1", "id": "crt_1"}})
+        said = " ".join(found["next_actions"])
+        for fragment in ("hint, never a verdict", "offset=start-300", "verbatim quote", "criterion stays unknown", "negated"):
+            self.assertIn(fragment, said)
+        self.assertEqual(_Gateway.seen[-1]["body"]["filter"], {"subjectKey": "P-1", "documentId": "doc_1", "id": "crt_1"})
+        _Gateway.answers["read"] = (200, {"data": {"what": "subject_document", "available": True, "document": {"id": "doc_1", "chars": 91234, "text": "..."},
+                                                    "long": {"chars": 91234, "threshold": 40000, "how": "..."}}})
+        long = self.server.call_tool("vcr_read", {"what": "subject_document", "filter": {"subjectKey": "P-1", "documentId": "doc_1"}})
+        self.assertTrue(any("filter.id" in action and "filter.query" in action for action in long["next_actions"]))
+        _Gateway.answers["read"] = (200, {"data": {"what": "subject_document", "available": True, "document": {"id": "doc_2", "chars": 900, "text": "..."}}})
+        short = self.server.call_tool("vcr_read", {"what": "subject_document", "filter": {"subjectKey": "P-1", "documentId": "doc_2"}})
+        self.assertFalse(any("passages" in action or "long" in action for action in short["next_actions"]))
+
     def test_a_registry_search_for_a_patient_is_a_read_that_says_where_it_looked(self):
         # M1: `candidates` is one more `what`, not a new root tool, and what the root conversation carries every request does not grow.
         self.assertIn("candidates", vcr_platform.READ_WHATS)

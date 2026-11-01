@@ -260,8 +260,11 @@ test("candidates is a read of its own, a registry search that needs no study, an
   assert.equal(answer.candidates[0].parsedBefore, true);
   assert.ok(answer.candidates.slice(1).every((candidate) => candidate.parsedBefore === undefined));
   assert.equal(held[0][0], "u1");
-  // The registry's own figures are not this study's people: nothing is hollowed by the small-cell floor.
+  // The registry's own figures are not this study's people, and nothing about them is a cell of a few people: the study's small-cell
+  // boundary, which this read passes through like every read, leaves the answer as it was (the counts of a list of 3 or 4 are not hidden).
   assert.equal(answer.registries[0].searched[0].total, 2);
+  const raw = await evidence.candidatesFor({ userId: "u1" }, { condition: "lung cancer" }, 3);
+  assert.deepEqual({ ...answer, candidates: answer.candidates.map(({ parsedBefore: _p, ...candidate }) => candidate) }, JSON.parse(JSON.stringify(raw)));
   const absent = await new VcrService({ store: {}, config: {} }).runtimeRead({ id: null, userId: "u1", scope: "conversation" }, "candidates", { condition: "x" });
   assert.deepEqual([absent.available, absent.code], [false, "registry_unavailable"]);
 });

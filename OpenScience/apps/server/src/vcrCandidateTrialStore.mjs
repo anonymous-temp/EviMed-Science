@@ -209,6 +209,14 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
         ORDER BY updated_at DESC LIMIT 1`, [studyId, registryId, registry]));
   }
 
+  /**
+   * One criterion of a candidate trial of the study, by its id; a criterion of another study's trial is not found.
+   * @param {{ studyId: string, id: string }} input
+   */
+  async getCriterion({ studyId, id }) {
+    return criterionOf(await this.one(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_criteria WHERE study_id = $1 AND id = $2`, [studyId, id]));
+  }
+
   /** The criteria of one trial, in order. @param {string} candidateTrialId */
   async listCriteria(candidateTrialId) {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_criteria WHERE candidate_trial_id = $1 ORDER BY ordinal`, [candidateTrialId])).map(criterionOf);

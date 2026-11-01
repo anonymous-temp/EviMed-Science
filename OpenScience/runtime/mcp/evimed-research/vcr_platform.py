@@ -685,6 +685,12 @@ def read(arguments: dict) -> dict:
     if what == "candidate_trials" and data.get("subjectKey") and data.get("ranking"):
         next_actions.append("ranking holds this patient's saved verdict for each trial, in the platform's order. A delivered per-trial table copies registryId, eligibility, criteriaCounts and evidenceGaps from it; a criterion belongs to the trial it was saved under, so never move one between trials.")
         next_actions.append("Say how much is decided with each trial (decided of applicable: unknown and waiting criteria stay in the total) and, from undecided, which criteria are open and why. status is the registry's word as of statusAsOf, not a place at a centre. The order puts trials the patient is not excluded from first and the better-decided first; 符合 says the stated criteria are met, it is not a recommendation.")
+    if what == "subject_document" and isinstance(data.get("passages"), list) and data.get("passageSearch") is not None:
+        next_actions.append("passages are sentences of the record found by the words they share with the criterion, each with its start and end (UTF-16 offsets): a hint, never a "
+                            "verdict. Read around one with offset=start-300. A fact still needs a verbatim quote that the platform checks at write. When no passage fits, write no fact: the "
+                            "criterion stays unknown -- do not write it negated, and do not take silence in a hint for silence in the record.")
+    if what == "subject_document" and isinstance(data.get("long"), dict):
+        next_actions.append("This record is long: ask for the part a criterion bears on by repeating the read with filter.id (a criterion id) or filter.query (a few words) instead of reading every window.")
     if what == "candidates" and data.get("available") is not False:
         next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed and why, and that CDE and ICTRP are not covered. "
                             "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking and none is a judgement about the patient.")

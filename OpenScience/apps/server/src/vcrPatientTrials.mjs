@@ -560,6 +560,11 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       return { ...saved, evaluation };
     },
 
+    /** A criterion of one of the study's candidate trials, by id (the words a long record is searched for it with, M4). @param {any} study @param {string} id */
+    async criterionById(study, id) {
+      return candidateStore.getCriterion({ studyId: study.id, id });
+    },
+
     /**
      * The account's earlier parse of this trial, made from this very record (same registry id, same record hash): what a second study
      * of the same account reads instead of asking for the parse again. `null` when there is none or the record has changed since — the

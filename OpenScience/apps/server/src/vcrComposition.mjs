@@ -1,6 +1,7 @@
 import { CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, VCR_REQUIREMENT_CONTRACT, VCR_CRITERION_TYPES, clinicalTerminologyContext } from '@evimed/domain';
 import { clinicalSemanticFields } from '@evimed/domain';
 import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
+import { locatePassages, passageWindow } from './vcrPassages.mjs';
 /**
  * 「虚拟临床研究」, composed: the seven packages joined into the one object the
  * control plane registers (build plan 2026-09-28 §11.2, build contract §2).
@@ -402,6 +403,10 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
   };
 }
 
+/** What every passage answer says: the passages are found by shared words, so a missing one proves nothing. */
+const PASSAGES_NOTE = "这些是按条件的用词在病历里找出的候选片段（位置是 UTF-16 字符偏移），是检索线索，不是判断：没出现不等于病历没写。" +
+  "找不到相关片段时，事实不写，条件保持未知，不能写成 negated；需要上下文就用 offset 读那一段的前后。事实仍要带逐字引文，写入时照常核对。";
+
 /**
  * The documents seam of the matching flow: a patient document read through the
  * data plane's own reader, which judges the read as a patient-level read of the
@@ -410,12 +415,14 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
  * the document's own (the pseudonym the plane stored with it), or the document is
  * not found — a run that guessed another patient's document id gets nothing.
  *
- * @param {{ dataPlane: VcrDataPlane | null }} parts
+ * @param {{ dataPlane: VcrDataPlane | null, passagesMinChars?: number }} parts
  */
-export function vcrDocumentsSeam({ dataPlane }) {
+export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
   return {
     /** Characters of one document a read returns: the window a run reads a chart through. */
     windowChars: 20_000,
+    /** A document longer than this is offered by the passages that bear on a criterion (`vcrPassages`), not only window after window. */
+    passagesMinChars,
     /**
      * One document with its text, or `null`.
      * @param {any} study @param {{ subjectKey: string, documentId: string }} input
@@ -495,10 +502,31 @@ export function vcrDocumentsSeam({ dataPlane }) {
         }
         if (!document) return { available: false, code: "vcr_document_not_found", message: "这位受试者没有这份文档。" };
         const offset = Math.max(0, Number(filter?.offset ?? 0));
+        const chars = document.text.length;
+        const long = chars > this.passagesMinChars;
+        const asked = /** @type {{ terms: import('./vcrPassages.mjs').PassageTerms, criterionId: string | null } | undefined} */ (filter?.passages);
+        if (asked && long) {
+          // The passages of a long record that carry the criterion's words, each with where it stands (a retrieval hint, never a verdict).
+          const found = locatePassages(document.text, asked.terms);
+          if (study.cloudContext && dataPlane.recordDocumentWindow) {
+            for (const passage of found.passages) await dataPlane.recordDocumentWindow(study.id, document.id, study.cloudContext, passageWindow(passage, chars));
+          }
+          return { available: true,
+            document: { id: document.id, subjectKey, chars, visibleAt: document.visibleAt, offsetUnit: "utf16", projectionHash: document.projectionHash },
+            passages: found.passages,
+            passageSearch: { criterionId: asked.criterionId, variables: asked.terms.variables, terminologyTerms: asked.terms.fromTerminology, queryWords: found.queryTokens,
+              searchedChars: chars, units: found.units, returned: found.passages.length },
+            note: PASSAGES_NOTE };
+        }
         const window = clinicalDocumentWindow(document.text, offset, this.windowChars);
         if (study.cloudContext && dataPlane.recordDocumentWindow) await dataPlane.recordDocumentWindow(study.id, document.id, study.cloudContext, window);
-        return { available: true, document: { id: document.id, subjectKey, chars: document.text.length, visibleAt: document.visibleAt,
-          ...window, projectionHash: document.projectionHash } };
+        return { available: true, document: { id: document.id, subjectKey, chars, visibleAt: document.visibleAt,
+          ...window, projectionHash: document.projectionHash },
+        // A record this long is not read in order: say how to ask for the part a criterion bears on. A short one is read as it always was.
+        ...(long && !asked && offset === 0 ? { long: { chars, threshold: this.passagesMinChars,
+          how: "这份病历很长，不必一段段读完：同样的读取里再写 id（一条入排条件的 id）或 query（几个检索词），平台会按条件找出相关片段并给出位置；" +
+            "找不到片段的条件，事实不写（条件保持未知），不要写成否认。" } } : {}),
+        ...(asked && !long ? { passages: [], passageSearch: { searchedChars: chars, note: `这份病历只有 ${chars} 字，不超过 ${this.passagesMinChars} 字：直接读窗口就行。` } } : {}) };
       }
       const documents = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId, subjectKey });
       if (subjectKey) {
@@ -586,6 +614,24 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
 
   const seam = {
     languageKeys,
+
+    /**
+     * A criterion of any of the study's protocol versions, by id — what the passages of a long record are looked for with (M4).
+     * @param {any} study @param {string} id
+     */
+    async criterionById(study, id) {
+      if (!study?.id) return null;
+      return (await matchStore.listCriteria({ studyId: study.id, allVersions: true }).catch(() => [])).find((criterion) => criterion.id === id) ?? null;
+    },
+
+    /**
+     * The terminology the deployment's disease pack holds for the variables a criterion names (labels, Chinese labels, synonyms), or null:
+     * words for a lexical search of a long record. Selected pack definitions, never a patient diagnosis.
+     * @param {any} study @param {any} criterion
+     */
+    async passageTerminology(study, criterion) {
+      return clinicalEnabled(study) ? clinicalContext(study, [criterion]).catch(() => null) : null;
+    },
 
     /** @param {any} study */
     async tab(study) {
@@ -1050,7 +1096,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
 
   // Patient documents are read through the plane's own judged, audited reader;
   // with no plane there are none, and a fact a run wrote about a document is void.
-  const documents = vcrDocumentsSeam({ dataPlane });
+  const documents = vcrDocumentsSeam({ dataPlane, passagesMinChars: Number(config.vcrPassagesMinChars) > 0 ? Number(config.vcrPassagesMinChars) : undefined });
   const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane }) : null;
   const jobs = new VcrJobs({
     store, config, engine, report, dataPlane, engineObserver: engineProbe,

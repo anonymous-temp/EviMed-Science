@@ -38,6 +38,7 @@ import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
  */
 
 import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS, statedRequirement } from './vcrMatching.mjs';
+import { passageTerms } from './vcrPassages.mjs';
 import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
@@ -128,7 +129,7 @@ export function stripPlaneAddresses(value, ancestors = new Set()) {
  * recognised by shape: a shape rule is the thing that let the first boundary
  * pass what nothing produced.
  */
-export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents", "trial_registry_record", "candidates"]);
+export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents", "trial_registry_record"]);
 
 export const VCR_WRITE_WHATS = Object.freeze([
   "data_intake",
@@ -1803,7 +1804,10 @@ export class VcrService {
         if (!documents?.subjectDocuments) {
           return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面未接入病历文档：这一步暂不可用，其余步骤照常。" };
         }
-        return documents.subjectDocuments(study, { ...filter, limit });
+        // A read of one document that names a criterion (`id`) or some words (`query`) asks for the passages that bear on it (M4).
+        const passages = filter.documentId && (filter.id || filter.query) ? await this.#passageRequest(study, filter) : null;
+        if (passages && "refusal" in passages) return passages.refusal;
+        return documents.subjectDocuments(study, { ...filter, limit, ...(passages ? { passages } : {}) });
       }
       case "matching": {
         const matching = this.packages.matching;
@@ -1873,6 +1877,26 @@ export class VcrService {
       }
       default: throw failure(400, "vcr_read_what_invalid", "This read has no implementation.");
     }
+  }
+
+  /**
+   * The words a long record is searched with for one read: a criterion's own wording and variables and the terminology the pack holds for
+   * them (`vcrPassages.passageTerms`), with any words the run added. A criterion that is not this study's is a named refusal, not an empty
+   * answer — the passages of nothing would read as a record that says nothing.
+   * @param {any} study @param {Record<string, any>} filter
+   * @returns {Promise<{ terms: import('./vcrPassages.mjs').PassageTerms, criterionId: string | null } | { refusal: Record<string, any> }>}
+   */
+  async #passageRequest(study, filter) {
+    const query = filter.query ? String(filter.query) : null;
+    if (!filter.id) return { terms: passageTerms(null, null, query), criterionId: null };
+    const id = String(filter.id);
+    const criterion = await this.packages.matching?.criterionById?.(study, id).catch(() => null)
+      ?? await this.packages.patientTrials?.criterionById?.(study, id).catch(() => null) ?? null;
+    if (!criterion) {
+      return { refusal: { available: false, code: "vcr_read_filter_invalid", message: "本研究里没有这条条件：id 取自 vcr_read what:criteria（方案的条件）或 what:candidate_trials（候选试验的条件）。" } };
+    }
+    const terminology = await this.packages.matching?.passageTerminology?.(study, criterion).catch(() => null) ?? null;
+    return { terms: passageTerms(criterion, terminology, query), criterionId: id };
   }
 
   /** The counters the metric families read. */
