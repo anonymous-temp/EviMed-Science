@@ -173,6 +173,23 @@ test("any deviation from the two profile shapes is refused by name, and nothing 
   }
 });
 
+test("the launcher is found the way the image lays it out: the platform package of the global kernel install, executable ones only", async () => {
+  const tree = path.join(scratch, "node_modules", "@deepseek-ai");
+  const { mkdir, copyFile } = await import("node:fs/promises");
+  await mkdir(path.join(tree, "node-addon-system-linux-arm64", "bin"), { recursive: true });
+  await mkdir(path.join(tree, "node-addon-system-linux-x64", "bin"), { recursive: true });
+  await writeFile(path.join(tree, "node-addon-system-linux-arm64", "bin", "landlock-run"), "#!/bin/sh\nexit 99\n"); // present, not executable
+  const real = await fakeLauncher();
+  await copyFile(real, path.join(tree, "node-addon-system-linux-x64", "bin", "landlock-run"));
+  await chmod(path.join(tree, "node-addon-system-linux-x64", "bin", "landlock-run"), 0o755);
+  const runner = await runnerWith({ launcher: `${tree}/node-addon-system-*/bin/landlock-run` });
+  const entry = fixture.cases[0];
+  const result = run(runner, entry.runnerCommand.slice(1));
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual((await recorded(result.out))?.slice(0, 4), ["--ro", "/", "--rw", "/dev/null"]);
+  assert.match(runnerSource, /^launcher_pattern='\/usr\/local\/lib\/node_modules\/@deepseek-ai\/dsh\/node_modules\/@deepseek-ai\/node-addon-system-\*\/bin\/landlock-run'$/m, "the image's pattern is the one check-tool-sandbox.sh measured");
+});
+
 test("a runner that cannot find the launcher refuses, by name, and runs nothing", async () => {
   const runner = await runnerWith({ launcher: path.join(scratch, "no-launcher-here", "landlock-run") });
   const entry = fixture.cases[1];
