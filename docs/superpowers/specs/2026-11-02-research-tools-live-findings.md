@@ -2,6 +2,25 @@
 
 These observations are from the deployed production revision `evimed-77ba0a43657b-1`, not the local candidate. The tests use public or synthetic data. They do not establish readiness of all tools.
 
+## Browser coverage and remaining verification
+
+Each row describes a production-browser exercise, not a pass of the local candidate.
+
+| Tool | Observed path and limitation |
+| --- | --- |
+| Literature review | Completed ASPREE review; trial and follow-up windows were mixed in the reply. |
+| Research topic selection | Completed three proposals; one evidence-gap claim was too broad. |
+| Statistical analysis | Public Wisconsin breast-cancer CSV uploaded and Welch results independently checked; a separate synthetic diagnostic was overinterpreted. |
+| Drug safety | Osimertinib signal report completed; a label figure was checked, but the full signal counts were not independently reproduced and review notices remained. |
+| Comprehensive drug evaluation | Empagliflozin report completed; primary trial figures checked, current Chinese labels and economic claims remain unverified. |
+| Drug selection | DOAC comparison completed without invented ranking; numerical-source and current-label issues remain. |
+| Off-label use | Semaglutide report completed; one absence assertion was too strong and current Chinese label remains unverified. |
+| Peer review | Managed synthetic-manuscript review completed via a pasted file; statistical and manuscript-faithfulness issues remain, file chooser not established. |
+| Grant application | Synthetic 24-month, 500,000 CNY framework completed; example arithmetic checked, local feasibility remains unverified. |
+| Meta-analysis | Three synthetic studies completed with independent numerical check; the literature-retrieval workflow was not tested. |
+| Mendelian randomization | Managed job completed; sensitivity interpretation needed qualification and source files were not independently replayed. |
+| Bibliometrics | Local-script result completed; managed job start failed with 403, and the candidate admission fix requires a real-kernel replay. |
+
 ## Drug selection: source version and regulatory status
 
 The completed NVAF DOAC comparison (run `run_ce2834372b2fb74dc8ad01c0bb31c411`) correctly withheld a ranking without an institutional rubric and described differences between the RE-LY trial abstract and a later US label. Its summary nevertheless combined the original article's 1.11% annual dabigatran rate with the later label's 1.72% warfarin rate and 0.65 hazard ratio as one result. The [original RE-LY article](https://www.nejm.org/doi/full/10.1056/NEJMoa0905561) reports 1.11%, 1.69% and 0.66; the [PRADAXA label](https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=ba74e3cd-b06f-4145-b284-5fd6b84ff3c9) reports 1.12%, 1.72% and 0.65. These source versions must not be merged into a single row without labeling their provenance.
@@ -57,3 +76,9 @@ The production browser run completed a managed GWAS Catalog job `mr-202611011650
 The production browser run saved the supplied synthetic manuscript and completed a managed review. It identified the conflicting 60+60 versus 60+40 denominators, physician assignment despite a randomized label, mismatched follow-up time origins, inclusion of the outcome as a predictor, and a confidence interval crossing the null despite a reported p=0.02. Its crude 12/60 versus 20/40 risks and Fisher exact p approximately 0.0022 agree with an independent calculation. This does not validate the unavailable adjusted model or establish causality.
 
 The final reply also made unsupported interpretations: it called the outcome-as-predictor error collider adjustment without a demonstrated causal structure; presented the reciprocal of the observed, unadjusted risk difference as a number needed to treat; and asserted the abstract mentioned subgroup sizes when the supplied abstract did not. It presented a rejection recommendation in language that could be read as a decision. The revised skill and synthetic evaluation case ask for manuscript fidelity and cautious interpretation in both report and reply; they have not been verified in a candidate-model replay. The manuscript was pasted and saved through the product after the browser file chooser failed to open, so this test does not establish that manuscript upload works.
+
+## Grant application
+
+The synthetic hospital grant framework completed in 11 minutes 28 seconds, with the final delivery call occupying several minutes. It identified that the funding call, local resources, ethics and actual prices were not supplied. The reported example budget checks arithmetically: 439,000 plus 5% is 460,950 CNY, leaving 39,050 under the hypothetical cap. The two illustrative individual-randomization sample sizes (7,385 and 3,558 per arm) and the reported event-count examples match independent standard calculations after rounding. These are conditional scenarios, not validation of the proposed institution or all assumptions.
+
+The reply called 14,770 participants infeasible at one hospital in 24 months without an observed eligible-admission count or verified retrospective coverage. The declared main endpoint is falls per 1,000 inpatient days, while those two examples concern an individually randomized binary risk comparison; neither alone establishes power for the proposed clustered or interrupted-time-series designs. The local skill and new evaluation brief now require explicit distinction and verified accrual before a feasibility conclusion; no candidate-model replay has yet tested the change. The [2022 falls guideline](https://pmc.ncbi.nlm.nih.gov/articles/PMC9523684/) supports the cited conditional hospital risk-assessment recommendation and the medication-review recommendation, while the recent [Cochrane hospital review](https://www.cochrane.org/evidence/CD016065_how-effective-are-interventions-designed-reduce-falls-older-people-hospitals) reports uncertainty about medication optimization. Other references and individual budget rows were not independently checked.

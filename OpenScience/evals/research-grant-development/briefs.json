@@ -78,6 +78,33 @@
         "authoredAt": "2026-08-31",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "grant-004-unknown-recruitment-rate",
+      "title": "院内跌倒研究：样本量与实际可及性尚未核实",
+      "why": "A live run calculated illustrative sample sizes and labelled assumptions, but asserted that 14,770 participants were infeasible at one hospital without knowing eligible admissions or retrospective coverage. Its primary outcome was a person-time fall rate, while its numerical illustration was an individually randomized binary risk calculation.",
+      "inputs": {
+        "fundingCall": "未提供；模拟院内项目，24个月，预算上限50万元",
+        "resources": "电子病历可能可用；年合格入院量与数据可回溯年限未知",
+        "outcome": "每1000住院日的跌倒率，拟探索整群或中断时间序列",
+        "callDocument": "data/calls/synthetic-hospital-brief.txt（模拟委托说明，不是正式申报指南）",
+        "researchDirection": "一家三级医院的老年住院患者跌倒风险药物暴露与药师干预"
+      },
+      "mustDo": [
+        "Label the illustrative power calculation by outcome and design, and identify parameters needed for a rate, cluster or time-series design.",
+        "Compare target enrollment to a verified eligible accrual and observation period, or leave feasibility explicitly unresolved in both the proposal and final reply.",
+        "Keep the budget arithmetic reproducible and distinguish illustrative prices from confirmed institutional rates."
+      ],
+      "mustNotDo": [
+        "Declare a required sample size feasible or infeasible without the local eligible recruitment or data coverage needed to substantiate the claim.",
+        "Present power for an individual binary outcome as power for the proposed person-time or clustered analysis.",
+        "Invent a formal funding call, ethics approval or preliminary results."
+      ],
+      "gradedOn": "Whether feasibility and power are qualified consistently in the deliverable and final reply.",
+      "generated": {
+        "authoredAt": "2026-11-02",
+        "authoredAtSource": "synthetic live browser run"
+      }
     }
   ]
 }
