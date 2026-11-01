@@ -43,7 +43,7 @@ export function AddLinkDialog({ projectId, destinations = [], onClose, onAdded }
           error={error} disabled={busy} autoComplete="off" />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" disabled={busy} onClick={requestClose}>取消</Button>
-          <Button type="submit" loading={busy} disabled={!url.trim()}>添加</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={!url.trim()}>添加</Button>
         </div>
       </form>}
     </FormDialog>
@@ -83,7 +83,7 @@ export function NewNoteDialog({ projectId, destinations = [], onClose, onAdded }
         <Textarea label="正文" value={body} rows={8} onChange={(event) => setBody(event.target.value)} disabled={busy} error={error} />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" disabled={busy} onClick={requestClose}>取消</Button>
-          <Button type="submit" loading={busy} disabled={!title.trim()}>保存</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={!title.trim()}>保存</Button>
         </div>
       </form>}
     </FormDialog>

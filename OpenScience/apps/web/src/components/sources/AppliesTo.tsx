@@ -135,7 +135,7 @@ export function AppliesToDialog({ source, projects, labels, onClose, onSaved }: 
           {error && <div role="alert" className="text-ui text-danger">{error}</div>}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" disabled={busy} onClick={requestClose}>取消</Button>
-            <Button type="submit" loading={busy} disabled={!dirty}>保存</Button>
+            <Button actionKind="set" type="submit" loading={busy} disabled={!dirty}>保存</Button>
           </div>
         </form>
       )}

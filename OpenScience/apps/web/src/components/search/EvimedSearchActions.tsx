@@ -72,7 +72,7 @@ function ActionFailure({ error, fallback, onRetry }: { error: unknown; fallback:
   return <div role="alert" className="space-y-2 text-ui text-error">
     <div>{actionMessage(error, fallback)}</div>
     {login ? <a href={`/login?reauth=evimed&next=${next}`} className={buttonClasses({ variant: "secondary", size: "sm" })}>重新登录</a>
-      : expired ? refresh ? <Button variant="secondary" size="sm" onClick={refresh}>重新检索</Button>
+      : expired ? refresh ? <Button variant="secondary" size="sm" actionKind="start" onClick={refresh}>重新检索</Button>
         : <a href={`${search.pathname}${search.search}`} className={buttonClasses({ variant: "secondary", size: "sm" })}>重新检索</a>
       : onRetry && <Button variant="secondary" size="sm" onClick={onRetry}>重试</Button>}
   </div>;
@@ -247,13 +247,13 @@ function FullTextDialog({ category, item, onClose }: { category: EvimedSearchCat
         : error !== null ? <ActionFailure error={error} fallback="暂时无法获取原文，请重试。" onRetry={() => { void read(); }} />
           : offer ? <OfferDetails offer={offer} />
             : status?.status === 1 ? <div role="status" className="text-ui text-text-2">原文正在获取中。</div>
-              : status?.canRequest ? <Note action={<Button variant="secondary" onClick={() => { void request(); }}>获取原文</Button>}>可申请获取这篇原文。</Note>
+              : status?.canRequest ? <Note action={<Button variant="secondary" actionKind="start" onClick={() => { void request(); }}>获取原文</Button>}>可申请获取这篇原文。</Note>
                 : <Note action={<Button variant="text" size="sm" onClick={() => { void read(); }}>刷新状态</Button>}>暂时没有可下载的原文。</Note>}
       {notice && <div role="status" className="text-ui text-text-2">{notice}</div>}
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="text" disabled={working} onClick={onClose}>取消</Button>
         {!loading && status?.status === 1 && !offer && <Button variant="secondary" disabled={working} onClick={() => { void read(); }}>刷新状态</Button>}
-        {offer && <Button loading={working} disabled={loading || error !== null} onClick={() => { void download(); }}>
+        {offer && <Button actionKind="external" loading={working} disabled={loading || error !== null} onClick={() => { void download(); }}>
           {offer.amount > 0 ? `确认下载 · ${offer.amount} 灵豆` : "确认下载"}
         </Button>}
       </div>

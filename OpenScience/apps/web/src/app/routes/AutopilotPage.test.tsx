@@ -300,7 +300,7 @@ describe("scheduled tasks", () => {
       mocks.listAgendas.mockResolvedValue({ items: [agenda], available: false }); render(); await barElement();
       expect(within(bar()).getByText(/定时执行暂不可用/)).toBeInTheDocument();
       expect(bar()).not.toHaveTextContent("下次");
-      expect(screen.queryByRole("region", { name: "即将执行" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "待开始" })).not.toBeInTheDocument();
       expect(within(bar()).getByRole("button", { name: "立即运行" })).toBeDisabled();
       expect(within(bar()).getByRole("button", { name: "切换执行" })).toBeEnabled();
       await userEvent.click(await barMenu());
@@ -521,19 +521,19 @@ describe("scheduled tasks", () => {
         expect(within(header).getByText("波立维 · 9月29日")).toBeInTheDocument();
       } finally { useProjectStore.setState({ projects: [] }); }
     });
-    it("groups the tasks as 即将执行 / 已暂停 / 已完成 and draws only the groups that have rows, with no templates or opportunities on the page", async () => {
+    it("groups the tasks as 待开始 / 已暂停 / 已完成 and draws only the groups that have rows, with no templates or opportunities on the page", async () => {
       const done = { ...agenda, id: "done", payload: { ...agenda.payload, title: "做完的任务", scheduleState: "completed", nextRunAt: null, schedule: { kind: "once", date: "2026-09-29", time: "07:30", timeZone: "Asia/Shanghai" } } };
       mocks.listAgendas.mockResolvedValue({ items: [done, paused({ title: "已停的任务" }, "paused"), agenda] });
       render("/app/autopilot");
-      const upcoming = await screen.findByRole("region", { name: "即将执行" });
+      const upcoming = await screen.findByRole("region", { name: "待开始" });
       expect(within(upcoming).getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
       expect(within(screen.getByRole("region", { name: "已暂停" })).getByRole("link", { name: "已停的任务" })).toBeInTheDocument();
       expect(within(screen.getByRole("region", { name: "已完成" })).getByRole("link", { name: "做完的任务" })).toBeInTheDocument();
-      expect([...list().querySelectorAll("section h2")].map(each => each.textContent)).toEqual(["即将执行", "已暂停", "已完成"]);
+      expect([...list().querySelectorAll("section h2")].map(each => each.textContent)).toEqual(["待开始", "已暂停", "已完成"]);
       // The list holds tasks and nothing else (page structure rule 1): the starting points are in the new-task dialog.
       expect(screen.queryByRole("region", { name: "推荐" })).not.toBeInTheDocument(); expect(screen.queryByRole("region", { name: "研究机会" })).not.toBeInTheDocument();
       cleanup(); mocks.listAgendas.mockResolvedValue({ items: [agenda] }); render("/app/autopilot");
-      await screen.findByRole("region", { name: "即将执行" });
+      await screen.findByRole("region", { name: "待开始" });
       expect(screen.queryByRole("region", { name: "已暂停" })).not.toBeInTheDocument(); expect(screen.queryByRole("region", { name: "已完成" })).not.toBeInTheDocument();
     });
     it("says in each row only when it runs next and how often, that it is running, why it stopped, or that it is done", async () => {
@@ -673,7 +673,7 @@ describe("scheduled tasks", () => {
       expect(screen.getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
       expect(bar()).toHaveTextContent("心衰证据追踪");
     });
-    it("opens the task the list draws first: the soonest of 即将执行, before a paused one", async () => {
+    it("opens the task the list draws first: the soonest of 待开始, before a paused one", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [paused({ title: "已停的任务" }, "paused"), agenda] });
       render("/app/autopilot"); await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
       cleanup(); mocks.listAgendas.mockResolvedValue({ items: [paused({ title: "已停的任务" }, "paused")] });

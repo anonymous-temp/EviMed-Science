@@ -191,13 +191,13 @@ export const inFlight = (episode: Pick<EpisodeRecord, "payload">) => RUN_IN_FLIG
 
 /** The tasks' three groups, in the order the list draws them. A finished one-time task is not paused: it is done. */
 export type TaskGroupKey = "upcoming" | "paused" | "completed";
-export const TASK_GROUPS: ReadonlyArray<readonly [TaskGroupKey, string]> = [["upcoming", "即将执行"], ["paused", "已暂停"], ["completed", "已完成"]];
+export const TASK_GROUPS: ReadonlyArray<readonly [TaskGroupKey, string]> = [["upcoming", workStateLabel("todo")], ["paused", workStateLabel("paused")], ["completed", workStateLabel("done")]];
 export function taskGroupOf(agenda: AgendaRecord): TaskGroupKey {
   if (cancellationPending(agenda)) return "paused";
   if (agenda.payload.scheduleState === "completed") return "completed";
   return activeAgenda(agenda) ? "upcoming" : "paused";
 }
-/** The tasks of one group in the order the list draws them: the soonest first under 即将执行, by name under the others. */
+/** The tasks of one group in the order the list draws them: the soonest first under 待开始, by name under the others. */
 export function sortGroup(key: TaskGroupKey, tasks: readonly AgendaRecord[]): AgendaRecord[] {
   return [...tasks].sort((a, b) => key === "upcoming" ? (a.payload.nextRunAt ?? "z").localeCompare(b.payload.nextRunAt ?? "z") : a.payload.title.localeCompare(b.payload.title, "zh-CN"));
 }

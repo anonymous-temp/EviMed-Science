@@ -143,7 +143,7 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
                 </span>
               );
             })}
-            {canCompile && <Button variant="text" size="sm" className="ml-auto" onClick={() => void compile()}>重新整理</Button>}
+            {canCompile && <Button actionKind="start" variant="text" size="sm" className="ml-auto" onClick={() => void compile()}>重新整理</Button>}
           </div>
         )}
         {page.restored && page.restored.count > 0 && (
@@ -220,7 +220,7 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
       </div>}
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="text" onClick={onCancel} disabled={saving}>取消</Button>
-        <Button type="submit" loading={saving} disabled={!changed || !text.trim() || newer !== null}>保存</Button>
+        <Button actionKind="set" type="submit" loading={saving} disabled={!changed || !text.trim() || newer !== null}>保存</Button>
       </div>
     </form>
   );

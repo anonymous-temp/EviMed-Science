@@ -437,7 +437,7 @@ export function InboxPage() {
         // 「全部已读」 is an action on the list below, so it is the toolbar's — a 36 px text button in the header was a kind of control of its
         // own (the owner's inbox drew nine against a budget of eight), and the header is the title, the scope and at most one primary.
         actions: (
-          <Button variant="text" size="sm" loading={markingAll} disabled={!hasUnread || batchBusy} onClick={() => void readAll()}>
+          <Button variant="text" size="sm" actionKind="set" loading={markingAll} disabled={!hasUnread || batchBusy} onClick={() => void readAll()}>
             {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
           </Button>
         ),
@@ -448,7 +448,7 @@ export function InboxPage() {
             <span role="status" className="text-ui tabular-nums text-text-2">已选 {selectedIds.length} 条</span>
             <Button variant="text" size="sm" disabled={pageSelection.checked || batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: eligibleIds })}>全选已加载的 {eligibleIds.length} 条</Button>
             <Button variant="text" size="sm" disabled={batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: [] })}>清除选择</Button>
-            <Button variant="secondary" size="sm" loading={batchBusy} disabled={!!busyId || markingAll || !!busyGroup} onClick={() => void readSelected()}>所选标为已读</Button>
+            <Button actionKind="set" variant="secondary" size="sm" loading={batchBusy} disabled={!!busyId || markingAll || !!busyGroup} onClick={() => void readSelected()}>所选标为已读</Button>
           </div>
         ) : undefined,
         filters: sources.length > 1 ? [{
@@ -495,7 +495,7 @@ export function InboxPage() {
           onClose={() => setGroup(null)}
           widthClassName="max-w-2xl"
           actions={!openGroupEntry.group.safety && openGroupEntry.group.unread > 0 ? (
-            <Button variant="text" size="sm" loading={busyGroup === openGroupEntry.group.key} onClick={() => void readGroup(openGroupEntry.group)}>全部标为已读</Button>
+            <Button actionKind="set" variant="text" size="sm" loading={busyGroup === openGroupEntry.group.key} onClick={() => void readGroup(openGroupEntry.group)}>全部标为已读</Button>
           ) : undefined}
         >
           <List label="这一组的消息">{openGroupEntry.group.items.map(row)}</List>

@@ -143,13 +143,13 @@ export function SharedCapsulePage() {
             <div className="space-y-2">
               <p role="status" className="text-ui text-text">已收下“{imported.payload.title}”。它还没有生效：先试用一次，或直接启用。</p>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={busy} onClick={() => void perform(async () => {
+                <Button actionKind="start" disabled={busy} onClick={() => void perform(async () => {
                   // The conversation's id is chosen here so it can be marked as the trial before the frame opens it.
                   const intent = newRuntimeUiIntent();
                   await startCapsuleTrial(imported.id, intent.sessionId);
                   navigate("/app/chat", { state: { runtimeUiIntent: intent } });
                 })}>试用一次</Button>
-                <Button variant="secondary" disabled={busy} onClick={() => void perform(async () => {
+                <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void perform(async () => {
                   await enableReceivedCapsule(imported.id); announceMemoryChanged(); navigate("/app/memory");
                 })}>启用</Button>
                 <Button variant="text" disabled={busy} onClick={() => navigate("/app/memory")}>稍后再说</Button>
@@ -159,12 +159,12 @@ export function SharedCapsulePage() {
             <div className="space-y-3">
               <Input label="收下后的名称" value={title} disabled={busy} maxLength={150} onChange={(event) => setTitle(event.target.value)} />
               <div className="flex flex-wrap gap-2">
-                <Button disabled={busy || !preview.canImport || !title.trim()} onClick={() => void perform(async () => {
+                <Button actionKind="set" disabled={busy || !preview.canImport || !title.trim()} onClick={() => void perform(async () => {
                   const input = { expectedDigest: preview.archiveSha256, title: title.trim() };
                   const result = token ? await importShareLink(token, input) : await importDelivery(deliveryId ?? "", input);
                   if (mounted.current) { setImported(result); announceMemoryChanged(); }
                 })}>收下</Button>
-                {deliveryId && <Button variant="text" disabled={busy} onClick={() => void perform(async () => { await declineDelivery(deliveryId); navigate("/app/inbox"); })}>不需要</Button>}
+                {deliveryId && <Button variant="text" actionKind="set" disabled={busy} onClick={() => void perform(async () => { await declineDelivery(deliveryId); navigate("/app/inbox"); })}>不需要</Button>}
               </div>
             </div>
           )}

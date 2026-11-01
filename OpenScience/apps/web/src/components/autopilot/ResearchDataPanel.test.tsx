@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import type { ResearchState } from "@/lib/autopilotClient";
 import { ResearchDataPanel } from "./ResearchDataPanel";
+import { MATERIAL_STATE } from "./taskPresentation";
 
 const materials: ResearchState["materials"] = [
   { sourceId: "src/ready", name: "方案.pdf", addedAt: "", state: "ready" },
@@ -23,6 +24,14 @@ describe("ResearchDataPanel", () => {
     ["正在读取", "需要处理", "无法使用"].forEach((status, index) => expect(within(rows[index + 1]).getByText(status)).toBeInTheDocument());
     await userEvent.click(within(rows[0]).getByRole("button", { name: "移除 方案.pdf" }));
     expect(input.onRemove).toHaveBeenCalledWith("src/ready");
+  });
+
+  // Module workspace audit D9: the enum had two maps of words; the task drawer's is the only one now.
+  it("says a material's state with the words the task drawer says it with: one map for the enum", () => {
+    draw(props());
+    const rows = within(screen.getByRole("list", { name: "已加入的资料" })).getAllByRole("listitem");
+    (["reading", "attention", "unavailable"] as const).forEach((state, index) => expect(within(rows[index + 1]).getByText(MATERIAL_STATE[state])).toBeInTheDocument());
+    expect(MATERIAL_STATE.ready).toBe("");
   });
 
   it("marks a table imported from a database as partial when only part of it came over, and says nothing of a whole one", () => {

@@ -29,7 +29,7 @@ export interface TaskRowActions {
  * The tasks of the project, as one column of the page (the whole page when there is no room for a conversation beside it).
  *
  * The header is the page's heading and one quiet 「新建」 icon button, which opens the new-task form beside the list; under it, a search
- * box and the groups 即将执行 / 已暂停 / 已完成, a group with nothing in it not drawn — and, with no task at all, the examples to start one from. A row is the task's name and one line — when it runs next and how often, that it is running,
+ * box and the groups 待开始 / 已暂停 / 已完成, a group with nothing in it not drawn — and, with no task at all, the examples to start one from. A row is the task's name and one line — when it runs next and how often, that it is running,
  * why it stopped — and its 「⋯」, always visible. It is a link: it opens the task's page, and the open task's row is marked.
  */
 export function TaskList({ agendas, available = true, createLocked = false, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, empty, actionNotice }: {
