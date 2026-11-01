@@ -13,7 +13,7 @@ Two roles, fixed by the caller's authorized_keys line and never by the client:
                   lane-status <lane> <json>                the lane's last report (at most 4 KB)
 
   --role admin  the operator, as `runuser -u rsi-broker -- broker.py --role admin <command>` (see brokerctl.py):
-                submit | status | results | cat <rid> | purge <rid> | pause | resume | drain | requeue <rid>
+                submit | status | results | cat <rid> | purge <rid> | pause | resume | drain | requeue <rid> | release <rid>
 
 State is plain files under RSI_BROKER_ROOT (default /srv/rsi-lab/h2):
 
@@ -331,6 +331,17 @@ class Broker:
             self.path("attempts", f"{rid}.json").unlink(missing_ok=True)
             return removed
 
+    def release(self, rid):
+        """Operator override: a claimed request goes back to pending now, with its attempt count cleared (a lane that died with it)."""
+        with self.locked():
+            claimed = self.path("claimed", f"{rid}.json")
+            if not claimed.exists():
+                return "not_claimed"
+            os.replace(claimed, self.path("pending", f"{rid}.json"))
+            self.path("claimed", f"{rid}.claim").unlink(missing_ok=True)
+            self.path("attempts", f"{rid}.json").unlink(missing_ok=True)
+            return "released"
+
     def set_paused(self, paused):
         flag = self.root / "PAUSE"
         with self.locked():
@@ -442,7 +453,7 @@ def admin_command(broker, argv):
     sub.add_parser("submit")
     sub.add_parser("status")
     sub.add_parser("results")
-    for name in ("cat", "purge", "requeue"):
+    for name in ("cat", "purge", "requeue", "release"):
         sub.add_parser(name).add_argument("rid")
     sub.add_parser("pause")
     sub.add_parser("resume")
@@ -464,6 +475,8 @@ def admin_command(broker, argv):
         print(json.dumps(broker.purge(args.rid)))
     elif args.command == "requeue":
         print(broker.requeue(args.rid))
+    elif args.command == "release":
+        print(broker.release(args.rid))
     elif args.command == "pause":
         broker.set_paused(True)
         print("paused")

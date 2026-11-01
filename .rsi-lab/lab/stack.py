@@ -148,7 +148,8 @@ PARITY = {
 def lab_overrides(lanes):
     """Differences from production, name -> (lab value, why). ENV-DIFFERENCES.md carries the same list in prose."""
     return {
-        "OPEN_SCIENCE_PUBLIC_URL": ("https://localhost", "no public address; readiness wants an https origin"),
+        "OPEN_SCIENCE_PUBLIC_URL": ("http://127.0.0.1:8787", "no TLS terminator: the driver's Origin must equal the request's own origin, which the control plane "
+                                    "computes from this scheme (https here would refuse every registration with 403 csrf_required)"),
         "OPEN_SCIENCE_DOMAIN": ("localhost", "no public address"),
         "OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN": ("https://localhost:8443", "no public address; readiness wants an https origin for the kernel page"),
         "OPEN_SCIENCE_OPENVIKING_URL": ("", "no context engine"),

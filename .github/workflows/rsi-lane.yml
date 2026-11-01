@@ -27,6 +27,7 @@ jobs:
       sourceRef: ${{ steps.cfg.outputs.sourceRef }}
       labFrom: ${{ steps.cfg.outputs.labFrom }}
       idleExitMin: ${{ steps.cfg.outputs.idleExitMin }}
+      sandboxCheck: ${{ steps.cfg.outputs.sandboxCheck }}
     steps:
       - uses: actions/checkout@v4
       - id: cfg
@@ -52,6 +53,7 @@ jobs:
               fh.write(f"sourceRef={cfg.get('sourceRef', 'main')}\n")
               fh.write(f"labFrom={cfg.get('labFrom', 'branch')}\n")
               fh.write(f"idleExitMin={int(cfg.get('idleExitMin', 30))}\n")
+              fh.write(f"sandboxCheck={'true' if cfg.get('sandboxCheck') else 'false'}\n")
           print(f"mode {mode}: {len(include)} lane job(s)")
           PY
 
@@ -184,6 +186,16 @@ jobs:
 
       - name: Start the stack
         run: python3 -B "$LAB/stack.py" up
+
+      - name: Tool sandbox check on the runtime image
+        if: needs.plan.outputs.sandboxCheck == 'true'
+        continue-on-error: true
+        run: |
+          image="$(python3 -c "import json; d=json.load(open('$LAB_WORK/images.json')); print(d.get('runtimeDelta') or d['roles']['runtime'])")"
+          bash "$LAB_SRC/deploy/runtime-dsh/check-tool-sandbox.sh" "$image" 2>&1 | tail -60
+          # What the kernel reports for Landlock on this runner (the level production demands is "full").
+          docker run --rm --entrypoint sh "$image" -c 'ls /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/node-addon-system-*/bin/landlock-run >/dev/null && echo "landlock launcher present"'
+          cat /sys/kernel/security/lsm; echo; uname -r
 
       - name: Lab checks
         run: python3 -B "$LAB/stack.py" verify

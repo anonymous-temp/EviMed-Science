@@ -1,6 +1,6 @@
 {
   "mode": "lanes",
-  "batch": "b005",
+  "batch": "b006",
   "sourceRef": "main",
   "labFrom": "branch",
   "imageRunId": 41307417699,
@@ -12,5 +12,6 @@
       "jobs": 1,
       "workers": 3
     }
-  ]
+  ],
+  "sandboxCheck": true
 }
