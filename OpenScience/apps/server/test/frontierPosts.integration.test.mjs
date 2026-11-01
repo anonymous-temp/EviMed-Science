@@ -715,3 +715,136 @@ test("F13: an operator's withdrawal of a post the pipeline already withdrew repl
   await pipelineFor(editor, { plugin: pluginFor(texts), now: new Date(NOW.getTime() + 3_600_000) }).processBatch();
   assert.equal((await rowOf(bare)).state, "withdrawn", "the operator's withdrawal stands");
 });
+
+// ───────────────────────── rev-1101: a parser that fails is not a picture that failed ─────────────────────────
+
+const MINUTE = 60_000;
+const attemptsOf = async (/** @type {{ id: string }} */ item) => (await database.query("SELECT picture_attempts, picture_retry_at, picture_tried_at FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
+
+test("R1: every picture of a post fails with a code that may be the service's — the post is put off, not tried, not withdrawn, not failed, and the round stops at the first", options, async () => {
+  for (const code of ["source_parser_timeout", "source_parser_canceled", "source_parser_upstream_error", "source_parser_internal_error", "frontier_processing_failed"]) {
+    await database.query("DELETE FROM evimed_frontier.items");
+    await database.query("DELETE FROM evimed_frontier.entries");
+    await markSwept();
+    const texts = new Map();
+    // Three posts: one already shown, two on their way to the feed; each thin, with a picture that the parser will fail on.
+    const shown = await storedPost(DOUYIN_TWICE, { media: [pictureRef(PICTURE_ID)] });
+    const queued = [];
+    for (let i = 0; i < 2; i += 1) queued.push(await deliver({ ...XHS_TAGS, title: `只有标签的第${i}条笔记`, text: `只有标签的第${i}条笔记 #罕见病[话题]#` }, texts, { media: [pictureRef(PICTURE_ID)] }));
+    const parser = parserWith(async () => { throw refused(code); });
+    const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+    const pipeline = pipelineFor(editor, { plugin: pluginFor(texts), parser });
+    await pipeline.processBatch();
+
+    assert.equal(parser.calls.length, 1, `${code}: the round stops at the first failure, one parse and not three`);
+    assert.equal(pipeline.counters.postsWithdrawn, 0, code);
+    assert.equal((await rowOf(shown)).state, "published", `${code}: a shown post is not withdrawn for the parser's trouble`);
+    const stored = await Promise.all([shown, ...(await Promise.all(queued.map((entry) => itemOfEntry(entry.entryId))))].map((item) => attemptsOf(item)));
+    // Exactly one post was looked at, and it was put off: nothing is tried.
+    assert.equal(stored.filter((row) => row.picture_attempts === 1).length, 1, code);
+    assert.ok(stored.every((row) => row.picture_tried_at === null), `${code}: no post is tried`);
+    const put = stored.find((row) => row.picture_attempts === 1);
+    assert.equal(new Date(put.picture_retry_at).getTime(), NOW.getTime() + 15 * MINUTE, `${code}: looked at again in a quarter of an hour`);
+    for (const entry of queued) assert.notEqual((await itemOfEntry(entry.entryId)).state, "failed", code);
+    assert.equal(pipeline.counters.postPicturesFailed, 0, code);
+    assert.ok(pipeline.counters.postPicturesDeferred >= 1, code);
+  }
+});
+
+test("R1: a parser that comes back reads the post that was put off, once its wait is over and not before", options, async () => {
+  await markSwept();
+  const texts = new Map();
+  const shown = await storedPost(DOUYIN_TWICE, { media: [pictureRef(PICTURE_ID)] });
+  let working = false;
+  const parser = parserWith(async () => { if (!working) throw refused("source_parser_upstream_error"); return { text: WORDS_A }; });
+  const editor = editorWith({ lead: () => ({ lead_zh: "司美格鲁肽减重须遵医嘱。" }) });
+  const media = mediaFor();
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, media }).processBatch();
+  assert.equal(parser.calls.length, 1);
+  working = true;
+  // Ten minutes later the wait is not over: the post is not looked at, and the parser is not asked.
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, media, now: new Date(NOW.getTime() + 10 * MINUTE) }).processBatch();
+  assert.equal(parser.calls.length, 1, "inside the wait");
+  assert.equal((await attemptsOf(shown)).picture_tried_at, null);
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, media, now: new Date(NOW.getTime() + 16 * MINUTE) }).processBatch();
+  assert.equal(parser.calls.length, 2);
+  const after = await attemptsOf(shown);
+  assert.ok(after.picture_tried_at);
+  assert.equal((await textsOf(shown.id)).picture_text, WORDS_A);
+  assert.equal((await rowOf(shown)).state, "published");
+});
+
+test("R1: a post that is put off four times is decided the fifth by what its pictures gave — a poison post holds nothing for longer than that", options, async () => {
+  await markSwept();
+  const texts = new Map();
+  const poison = await storedPost(DOUYIN_TWICE, { media: [pictureRef(PICTURE_ID)] });
+  const other = await storedPost({ ...XHS_TAGS, title: "排在后面的另一条笔记", text: "排在后面的另一条笔记 #新药[话题]#" }, { media: [pictureRef(PICTURE_ID_2)], visibleAt: "2026-10-30T01:00:00Z" });
+  // The poison picture's parse always fails; the other post's picture reads. The poison post is newer, so it is first in the queue.
+  const parser = parserWith(async (input) => { if (input.filename[0] === "a") throw refused("source_parser_internal_error"); return { text: WORDS_A }; });
+  const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+  const media = mediaFor();
+  const waits = [15, 30, 45, 60];
+  let at = NOW.getTime();
+  const pipeline = pipelineFor(editor, { plugin: pluginFor(texts), parser, media });
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    pipeline.now = () => new Date(at);
+    await pipeline.processBatch();
+    const row = await attemptsOf(poison);
+    assert.equal(row.picture_attempts, attempt, `put off ${attempt} times`);
+    assert.equal(row.picture_tried_at, null);
+    assert.equal((await rowOf(poison)).state, "published");
+    // The round that failed on the poison post read nothing behind it; the next round, with the poison post in its wait, does.
+    pipeline.now = () => new Date(at + MINUTE);
+    await pipeline.processBatch();
+    if (attempt === 1) {
+      assert.ok((await attemptsOf(other)).picture_tried_at, "the queue behind the poison post moved while it waited");
+      assert.equal((await rowOf(other)).state, "published");
+    }
+    assert.equal((await attemptsOf(poison)).picture_attempts, attempt, "not looked at inside its wait");
+    at += waits[attempt - 1] * MINUTE + MINUTE;
+  }
+  // The fifth time the failure is the picture's own: tried, no words, a thin published post goes out.
+  pipeline.now = () => new Date(at);
+  await pipeline.processBatch();
+  const decided = await attemptsOf(poison);
+  assert.ok(decided.picture_tried_at, "decided");
+  assert.equal((await rowOf(poison)).state, "withdrawn");
+  assert.equal((await rowOf(poison)).withdrawn_reason, POST_WITHDRAWN);
+});
+
+test("R1: a service failure after enough words were read decides the post with them; a picture's own refusal never delays", options, async () => {
+  await markSwept();
+  const texts = new Map();
+  const good = await storedPost(DOUYIN_TWICE, { media: [pictureRef(PICTURE_ID), pictureRef(PICTURE_ID_2)] });
+  const evicted = await storedPost({ ...XHS_TAGS, title: "图片已被清理的笔记", text: "图片已被清理的笔记 #新药[话题]#" }, { media: [pictureRef(PICTURE_ID_3)], visibleAt: "2026-10-30T01:00:00Z" });
+  const parser = parserByLetter({ a: WORDS_A, b: refused("source_parser_timeout"), c: "" });
+  const editor = editorWith({ lead: () => ({ lead_zh: "" }) });
+  // Picture three is not stored any more (the plugin's 404): its own failure.
+  const media = mediaFor({ pictures: new Set([PICTURE_ID, PICTURE_ID_2]) });
+  const pipeline = pipelineFor(editor, { plugin: pluginFor(texts), parser, media });
+  await pipeline.processBatch();
+  assert.ok((await attemptsOf(good)).picture_tried_at, "the first picture's words made it a text");
+  assert.equal((await textsOf(good.id)).picture_text, WORDS_A);
+  assert.equal((await rowOf(good)).state, "published");
+  assert.equal((await attemptsOf(good)).picture_attempts, 0);
+  // The timeout stopped the round: the evicted picture's post waits for the next one, and is then decided at once.
+  assert.equal((await attemptsOf(evicted)).picture_tried_at, null);
+  await pipelineFor(editor, { plugin: pluginFor(texts), parser, media, now: new Date(NOW.getTime() + MINUTE) }).processBatch();
+  const gone = await attemptsOf(evicted);
+  assert.ok(gone.picture_tried_at, "an evicted picture is its own failure: tried, not put off");
+  assert.equal(gone.picture_attempts, 0);
+});
+
+test("R2: a picture whose body the plugin could not deliver is the service's failure, and the post is put off", options, async () => {
+  await markSwept();
+  const texts = new Map();
+  const shown = await storedPost(DOUYIN_TWICE, { media: [pictureRef(PICTURE_ID)] });
+  const media = Object.assign(async () => { throw Object.assign(new Error("body stopped"), { code: "frontier_media_unreadable" }); }, { fetched: [] });
+  const parser = parserByLetter({ a: WORDS_A });
+  const pipeline = pipelineFor(editorWith({ lead: () => ({ lead_zh: "" }) }), { plugin: pluginFor(texts), parser, media });
+  await pipeline.processBatch();
+  assert.equal(parser.calls.length, 0, "nothing to parse");
+  assert.equal((await attemptsOf(shown)).picture_attempts, 1);
+  assert.equal((await attemptsOf(shown)).picture_tried_at, null);
+  assert.equal((await rowOf(shown)).state, "published");
+});
