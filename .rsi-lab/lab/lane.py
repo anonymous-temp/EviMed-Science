@@ -420,6 +420,14 @@ class Lane:
             healthy = self.healthy()
             if result is None:
                 reason = "no_result"
+                tail = ""
+                try:
+                    tail = (folder_root / "driver.stdout").read_text(encoding="utf-8", errors="replace")[-600:]
+                except OSError:
+                    pass
+                # The driver's own last lines, with the item's key taken out; they name accounts and refusals, never a prompt.
+                tail = tail.replace(item["key"], "<key>")
+                say(f"[{worker}] {rid}: the driver left no result (exit {code}); its last lines: {' | '.join(tail.strip().splitlines()[-3:])[:360]}")
             elif status in INFRA_STATUS or result.get("infrastructureFailure"):
                 reason = f"driver_{status}"
             elif status == "failed" and INFRA_ERROR.search(str(result.get("errorCode") or "")):

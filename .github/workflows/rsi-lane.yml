@@ -188,6 +188,9 @@ jobs:
       - name: Lab checks
         run: python3 -B "$LAB/stack.py" verify
 
+      - name: Account self-check
+        run: python3 -B "$LAB/stack.py" selfcheck
+
       - name: Take requests
         run: python3 -B "$LAB/lane.py"
 

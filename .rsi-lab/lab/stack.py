@@ -11,6 +11,7 @@ a model output: every line is a counter, a name or a bounded code.
   stack.py ready                            print the readiness checks that are not ok (codes only)
   stack.py health                           exit 0 when the stack is fit to take the next item; restart what died
   stack.py verify                           the lab's own checks: dataset hosts unreachable, runtime keyless, sandbox level
+  stack.py selfcheck                        register and delete one throwaway account through the product's own helper
   stack.py diagnose [--logs]                container state (and redacted log tails)
   stack.py down                             stop and remove everything
 
@@ -562,6 +563,23 @@ def verify_runtime_keyless(failures):
             failures.append("runtime:keys")
 
 
+def cmd_selfcheck(args):
+    """The path every request takes first, once, before any request: register a throwaway account through the product's own helper in the
+    web image, then delete it. Prints the helper's own lines (an account id of the form labchk-<time>-<hex>, never a password)."""
+    images = load_images()
+    script = ("const { fetchTransport, openThrowawayAccount } = await import('/app/scripts/ops/throwaway-account.mjs');"
+              f"const base = '{API}';"
+              "try { const a = await openThrowawayAccount({ base, send: fetchTransport(base), prefix: 'labchk', say: console.log });"
+              " const r = await a.close(); console.log(JSON.stringify(r)); process.exit(r.deleted ? 0 : 3); }"
+              " catch (e) { console.log('FAIL ' + String(e && e.message).slice(0, 300)); process.exit(2); }")
+    result = run(["docker", "run", "--rm", "--network", "host", "--user", "0:0", "--entrypoint", "node", images["roles"]["web"],
+                  "--input-type=module", "-e", script], check=False, capture=True, timeout=180)
+    say((result.stdout or "").strip()[-600:])
+    if result.returncode != 0:
+        say((result.stderr or "").strip()[-300:])
+        raise SystemExit(f"throwaway account self-check failed ({result.returncode})")
+
+
 # ------------------------------------------------------------------------------------------------------------------ down
 def cmd_down(args):
     run(compose_command(["--profile", "runtime-image", "down", "-v", "--remove-orphans"]), check=False, capture=True, timeout=600)
@@ -584,11 +602,11 @@ def main():
     s.add_argument("--delta", action="store_true")
     s = sub.add_parser("diagnose")
     s.add_argument("--logs", action="store_true")
-    for name in ("up", "ready", "health", "verify", "down"):
+    for name in ("up", "ready", "health", "verify", "selfcheck", "down"):
         sub.add_parser(name)
     args = parser.parse_args()
     {"images": cmd_images, "build-delta": cmd_build_delta, "env": cmd_env, "up": cmd_up, "ready": cmd_ready, "health": cmd_health,
-     "verify": cmd_verify, "down": cmd_down, "diagnose": cmd_diagnose}[args.command](args)
+     "verify": cmd_verify, "selfcheck": cmd_selfcheck, "down": cmd_down, "diagnose": cmd_diagnose}[args.command](args)
 
 
 if __name__ == "__main__":
