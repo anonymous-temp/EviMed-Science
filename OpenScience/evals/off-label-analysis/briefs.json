@@ -33,7 +33,8 @@
         "Let guideline or trial support change the label-status classification on any dimension.",
         "Report one overall verdict in place of the seven dimension results.",
         "Convert 「potentially_off_label」 into a statement that the use is illegal, unsupported or clinically inappropriate.",
-        "State that the assessment authorizes the use, or that the committee may proceed."
+        "State that the assessment authorizes the use, or that the committee may proceed.",
+        "Turn an incomplete search into a categorical statement that no trial exists, or infer universal interchangeability or non-interchangeability solely from ingredient identity."
       ],
       "gradedOn": "Whether a pharmacy committee member can read the four axes and see that a strong evidence section and an off-label classification are both true at once, without either having moved the other.",
       "generated": {

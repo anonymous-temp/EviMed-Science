@@ -56,6 +56,8 @@ Report four separate axes:
 3. Clinical appropriateness for the defined patient and alternatives.
 4. Workflow authorization: explicitly out of scope for this scoring agent.
 
+A search that did not find an eligible trial does not prove no trial exists. State the searched sources, query and date and say that no eligible result was found within that scope; never convert an incomplete search into a categorical absence claim. A different brand or device is a distinct regulatory product, but do not infer universal non-interchangeability or dose equivalence without the relevant product-specific evidence and policy.
+
 Literature support does not change label status. Label mismatch does not prove ineffectiveness. Evidence presence does not prove benefit, and study counts never substitute for outcome appraisal. Do not infer regulatory approval, legality, reimbursement, or clinical appropriateness from literature support.
 
 ## 5. Deliverables
