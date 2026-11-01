@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:aa412b2293d1f743b11ec9a0c1bb81ea155563cc9fcdbf9807b285613ecb9b8b",
+  "version": "sha256:48bc0b9e90d2b020915a2bfbbe6bd57cced54df885bd07e3d0c46354199ab69a",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1622,7 +1622,8 @@
               "longitudinal",
               "candidate_trials",
               "soa",
-              "regulatory_contacts"
+              "regulatory_contacts",
+              "candidates"
             ]
           },
           "filter": {

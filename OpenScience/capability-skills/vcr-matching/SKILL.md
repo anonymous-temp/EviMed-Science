@@ -91,6 +91,8 @@ Every eligibility verdict you deliver, whether a sentence in the reply, a table 
 
 这是读病历的唯一入口；不要用知识库检索代替它，那里的内容不带受试者身份，也不进事实的核对。
 
+病历很长时（读回带 `long`）不必一段段读完：同一读取再写 `id`（一条条件的 id）或 `query`（几个词），平台按条件的用词、变量名和术语找出片段，给出 `passages`（`start`/`end`）。这只是检索线索：找不到片段就不写这个事实，条件保持未知，不要写成否认；要上下文用 `offset` 读那一段前后；事实照常带逐字引文。
+
 每个事实用 `mcp__evimed__vcr_write` `what: "fact"` 写，一次最多 200 项：
 
 ```json
@@ -149,7 +151,7 @@ After completion the platform preserves assessments and their evidence, and retu
 
 ## 七、排序，以及它不是什么
 
-按评估器的结论排序——各状态的条数、补齐缺口要花的代价。你可以另加一个临床优先级，加的话要明说它**不是获益概率**。
+按评估器的结论排序——没被排除的在前，其中已判（满足或不满足）的比例高的在前，再看补齐缺口要花的代价。读回的 `decided` 是已判条数/适用条数，未知和待复评留在分母里；表里写“已判 n/m”和每条未知的原因（`undecided`）。你可以另加一个临床优先级，加的话要明说它**不是获益概率**。**“符合”只说明已写出的条件都满足，不是推荐，也不是值得参加。**
 
 一位受试者若只因为某条 `language` 条件被判不符合，进入「待复核排除」，不要从名单里拿走——假排除率的分母就靠它。
 
@@ -162,7 +164,9 @@ Report inter-rater agreement and disagreements as properties of that reference s
 
 用户要为某位受试者找可参加的试验时（页面上的「为该患者找试验」，或在对话里直接说），做的是同一件事的另一头：不是一份方案找患者，而是一位患者找试验。条件的文法、事实的写法、语言条件的回答、判定由评估器做，都和上面一样。
 
-- 候选试验来自试验登记平台：`mcp__evimed__clinical_trial_search` 找正在招募或即将招募的，凭这位患者的诊断、分期、生物标志物、年龄、性别和所在地区挑；有希望的用 `mcp__evimed__trial_registry_record` 读登记记录。本研究已经有的候选试验在 `mcp__evimed__vcr_read` `{ "what": "candidate_trials" }` 里，不必重复写。
+- 候选试验先读 `mcp__evimed__vcr_read` `{ "what": "candidates", "filter": { "condition": "…", "terms": ["英文说法", "中文说法"], "age": 63, "sex": "female", "region": "China" } }`：检索词你写（`condition` 必填，`terms` 最多 3 个，中英文都可以），年龄、性别、国家（登记库的英文写法）知道才写。平台同时查 ClinicalTrials.gov、CTIS、ChiCTR，合并、去重，按记录自己写明的状态、年龄、性别、国家筛选并封顶；记录没写的项不排除，列在 `unknown`。回复里照 `coverage` 说查了哪些库、哪些失败、截至哪天，并写明 CDE 和 ICTRP 没有覆盖。列表的顺序不是适合程度。别的问法仍可用 `mcp__evimed__clinical_trial_search`。有希望的用 `mcp__evimed__trial_registry_record` 读登记记录。本研究已经有的候选试验在 `mcp__evimed__vcr_read` `{ "what": "candidate_trials" }` 里，不必重复写。
+- 候选里标 `parsedBefore` 的，本账户结构化过它：只写 `registryId` 和 `subjectKeys`，记录没变就沿用，不必再解析；记录变了才重写 `criteria`。
+- 登记记录没有入排原文的（ChiCTR 只有清单）：条件照写保存，评估时一律按未知，原因是“缺登记原文”；不要补写原文，也不要借别处的记录。
 - 一个试验写成一项候选试验：`what: "candidate_trial"`，`registryId`、`subjectKeys`（这位患者）和 `criteria`——登记记录里入选和排除标准的原句，一条一条按第一节的写法结构化，`sourceText` 逐字照抄，判不了的写成 `language`。试验的名称、分期、状态和中心由平台从登记记录读，你不写。写入时平台就把这位患者对照这个试验判了，判定在返回值里。条件里的 `variable` 用这位患者已有事实的变量名（`mcp__evimed__vcr_read` 读到的那些，例如已有 `egfr` 就不要另写 `gfr`）：同一个概念一个名字，平台才能拿这条事实判这条条件；单位照登记原句写，年龄、病程这类时间单位平台会换算。没有对应事实的，再按第一节起名。
 
 ```json
@@ -177,7 +181,7 @@ Report inter-rater agreement and disagreements as properties of that reference s
 
 - 补了这位患者的新事实，或要让另一位受试者也对照已有的试验：同一个 `registryId` 再写一次，只写 `subjectKeys`，不带 `criteria`。条件要改就把整套 `criteria` 重写，平台会把受影响的判定重做。
 - 语言条件的回答用第三节的 `language_judgment`，写 `candidateTrialId`（读回的试验 id）代替 `protocolVersionId`；还欠哪些，读 `{ "what": "candidate_trials", "filter": { "subjectKey": "P-001" } }` 的 `requests[]`。
-- 同一次读取的 `ranking` 就是平台排好的顺序：全部满足的在前，其余按还差几条，被排除的在后，同样的再看登记状态；本研究自己的方案也在里面。顺序不是你的判断，不改它，也不写「匹配度」。
+- 同一次读取的 `ranking` 就是平台排好的顺序：全部满足的在前，其余没被排除的按已判比例，被排除的在后，同样的再看登记状态（那是读记录那天的状态，`statusAsOf`，不是某个中心现在有名额）；本研究自己的方案也在里面。顺序不是你的判断，不改它，也不写「匹配度」。
 - 交付 `matching-assessment.md`：每个试验一段——登记号、名称、状态、为什么可能合适、还缺哪些证据和怎么补，满足和不满足各引患者原句与试验原句；`matching.json` 写 `subjectKey`、`direction: "patient_to_trial"` 和 `trials[]`（抄自 `ranking`）。登记状态不等于某个中心现在有名额；联系患者、转诊、入组都不归你。
 
 ## 交付之前的两步
