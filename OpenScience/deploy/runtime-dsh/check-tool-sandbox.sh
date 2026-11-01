@@ -71,8 +71,8 @@ else
   echo "info  /dev/shm is ${shm_mb} MB here, not the container's default; the fill check is skipped"
 fi
 
-echo "== the analysis libraries"
-check "DESeq2, edgeR, limma and org.Hs.eg.db load" "$(sandboxed_out Rscript -e 'suppressMessages({library(DESeq2); library(edgeR); library(limma); library(org.Hs.eg.db)}); cat("ok")' | tail -n 1)" ok
+# DESeq2, edgeR, limma and org.Hs.eg.db are checked below in a container of their own: loading them takes about 650 MB (measured
+# 2026-11-01, killed at 512 MB, loaded at 1 GB), more than this one holds and less than the runtime's real limit.
 check "pydeseq2, shap, xgboost and lightgbm import" "$(sandboxed_out python -c 'import pydeseq2, shap, xgboost, lightgbm; print("ok", end="")' | tail -n 1)" ok
 
 echo "== a runaway command dies before the kernel does (stand-in kernel of 300 MB, 512 MB container, no swap)"
@@ -111,8 +111,18 @@ exit "${failed}"
 INNER
 )"
 
+set +e
 "${docker_bin}" run --rm --network none --memory 512m --memory-swap 512m --pids-limit 512 \
   --cap-drop ALL --security-opt no-new-privileges --read-only \
   --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /runtime:rw --tmpfs /workspace:rw --workdir /workspace \
   -e TMPDIR=/runtime/tmp -e "GUARD=${guard}" -e "TOOL_ENV=${tool_env}" -e "RUNNER=${runner}" \
   --entrypoint bash "${image}" -c "${inner}"
+status=$?
+
+echo "== the analysis libraries (1 GB container)"
+libraries="$("${docker_bin}" run --rm --network none --memory 1g --memory-swap 1g --pids-limit 512 \
+  --cap-drop ALL --security-opt no-new-privileges --read-only \
+  --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /runtime:rw --tmpfs /workspace:rw --workdir /workspace \
+  -e TMPDIR=/tmp -e "RUNNER=${runner}" --entrypoint bash "${image}" -c '"${RUNNER}" --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent --tmpfs /tmp --bind /workspace /workspace -- Rscript -e '"'"'suppressMessages({library(DESeq2); library(edgeR); library(limma); library(org.Hs.eg.db)}); cat("ok")'"'"' 2>&1 | grep -v "partial enforcement" | tail -n 1')"
+if [ "${libraries}" = ok ]; then echo "ok    DESeq2, edgeR, limma and org.Hs.eg.db load"; else echo "FAIL  DESeq2, edgeR, limma and org.Hs.eg.db load: got [${libraries}], want [ok]"; status=1; fi
+exit "${status}"
