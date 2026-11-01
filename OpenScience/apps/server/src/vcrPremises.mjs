@@ -25,7 +25,7 @@
  */
 
 import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
-import { TIME_UNIT_WORDS, list, numeric, object, text } from "./vcrViewsKit.mjs";
+import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
 
 /**
  * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given', decisive: boolean,
@@ -155,7 +155,10 @@ function trialPremises(input) {
     if (nullRate && numeric(nullRate.value) !== null) rows.push({ key: "control", label: "要超过的应答率（零假设）", value: percent(Number(nullRate.value)), source: nullRate.source, decisive: true });
   } else if (type === "time_to_event") {
     const hr = stand("truth.hazardRatio", truth.hazardRatio);
+    const law = hazardLawWords(truth.treatmentHazardRatios, time);
     if (hr && numeric(hr.value) !== null) rows.push({ key: "effect", label: "真实效应（风险比）", value: plain(Number(hr.value)), source: hr.source, decisive: true });
+    // a hazard ratio that changes over time has no single number to state; it is the effect, in the words it was written in
+    else if (law) rows.push({ key: "effect", label: "真实效应（风险比随时间变化）", value: law, source: stand("truth.treatmentHazardRatios", truth.treatmentHazardRatios)?.source ?? "assumed", decisive: true });
   } else if (type === "continuous") {
     const effect = stand("truth.effect", truth.effect);
     if (effect && numeric(effect.value) !== null) rows.push({ key: "effect", label: "真实效应（均数差）", value: plain(Number(effect.value)), source: effect.source, decisive: true });

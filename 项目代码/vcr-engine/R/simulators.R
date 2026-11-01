@@ -224,6 +224,57 @@ vcr_inverse_cumhaz <- function(H, dist) {
 
 vcr_dist_exponential_from_median <- function(median) list(kind = "exponential", rate = log(2) / median)
 
+#' The cumulative hazard of the control distribution: the inverse of `vcr_inverse_cumhaz`.
+vcr_cumhaz <- function(t, dist) {
+  kind <- dist$kind %||% "exponential"
+  if (identical(kind, "exponential")) return(dist$rate * t)
+  if (identical(kind, "weibull")) return((t / dist$scale)^dist$shape)
+  if (identical(kind, "piecewise")) {
+    breaks <- c(0, vcr_num(dist$breaks), Inf)
+    rates <- vcr_num(dist$rates)
+    widths <- diff(breaks)
+    return(vapply(t, function(x) sum(rates * pmax(pmin(x - breaks[-length(breaks)], widths), 0)), numeric(1)))
+  }
+  stop("vcr_cumhaz: unknown distribution kind ", kind)
+}
+
+# --- non-proportional hazards (remediation plan D1, 2026-11-01) ---------------------------------------------------------------------
+#
+# Hidden knowledge:
+#
+# - **A treatment-arm hazard ratio that changes over time is a change of slope in the control's own cumulative-hazard scale.** The
+#   treated arm's hazard at time t is `ratios[j] * h0(t)` on the j-th interval of `breaks` (the last runs on), so its cumulative hazard
+#   is a piecewise-linear function G of the control's, H1(t) = G(H0(t)), with slope `ratios[j]` between the knots K_j = H0(breaks[j]).
+#   An event time is still ONE uniform through the inverse of H1, exactly as the proportional case is, so the generator stays
+#   draw-count-stable (the same uniforms give the same patients under any ratios) and common random numbers across scenarios stay
+#   honest. A delayed effect is `ratios = c(1, 0.6)`, a crossing of survival curves `c(1.4, 0.6)`.
+# - **There is no single true hazard ratio.** The log-rank estimate under such a truth is an average that depends on the follow-up and
+#   the censoring, so the simulation reports no bias and no coverage for it (the estimand is not defined), and its power is the
+#   simulation's alone: there is no closed form to check it against.
+
+#' The knots and slopes of the treated arm's cumulative hazard on the control's scale.
+.vcr_nph_spec <- function(spec, dist) {
+  breaks <- vcr_num(spec$breaks); ratios <- vcr_num(spec$ratios)
+  list(K = vcr_cumhaz(breaks, dist), ratios = ratios, breaks = breaks)
+}
+
+#' G: the treated arm's cumulative hazard at a control-scale level `x`.
+.vcr_nph_forward <- function(x, nph) {
+  K <- c(0, nph$K); r <- nph$ratios
+  Gk <- c(0, cumsum(r[seq_along(nph$K)] * diff(K)))
+  j <- findInterval(x, K[-1L]) + 1L
+  Gk[j] + r[j] * (x - K[j])
+}
+
+#' G^-1: the control-scale level at which the treated arm's cumulative hazard is `y`.
+.vcr_nph_inverse <- function(y, nph) {
+  K <- c(0, nph$K); r <- nph$ratios
+  Gk <- c(0, cumsum(r[seq_along(nph$K)] * diff(K)))
+  j <- findInterval(y, Gk[-1L]) + 1L
+  K[j] + (y - Gk[j]) / r[j]
+}
+
+
 #' The unit a scenario states its times in -- months unless it says another (`timeUnit`) -- and what the engine needs of it.
 #' The days each unit stands for are the domain's one table (`timeUnits` in R/domain-snapshot.json), never a number written
 #' here. `perYear` is how many of the unit a "per year" proportion is spread over (the dropout), `months` how many months
@@ -263,6 +314,7 @@ vcr_dropout_hazard <- function(dropout_annual, period = 12) {
 #'             many of the scenario's time unit make a year (12 for months, the default; see
 #'             `vcr_time_unit`): hazard = -log(1 - p) / period per time unit.
 #' `lp`: an extra per-subject log-hazard-ratio term (covariate effects).
+#' `hazard_ratio`: one number (proportional hazards) or an `.vcr_nph_spec` (a ratio that changes over time).
 vcr_sim_tte <- function(n_treat, n_control, control_dist, hazard_ratio,
                         accrual = list(kind = "uniform", duration = 0),
                         followup = Inf, dropout_annual = 0, dropout_period = 12,
@@ -273,9 +325,15 @@ vcr_sim_tte <- function(n_treat, n_control, control_dist, hazard_ratio,
   u_event <- runif(n)
   u_drop <- runif(n)
   u_entry <- runif(n)
-  hr <- ifelse(z == 1L, hazard_ratio, 1) * exp(lp %||% 0)
-  # inversion: S(t) = exp(-hr * H0(t)) = u  =>  H0(t) = -log(u) / hr
-  t_event <- vcr_inverse_cumhaz(-log(u_event) / hr, control_dist)
+  if (is.list(hazard_ratio)) {
+    # a hazard ratio that changes over time (`.vcr_nph_spec`): the same one uniform per subject, through the treated arm's own inverse
+    y <- -log(u_event) / exp(lp %||% 0)
+    t_event <- vcr_inverse_cumhaz(ifelse(z == 1L, .vcr_nph_inverse(y, hazard_ratio), y), control_dist)
+  } else {
+    hr <- ifelse(z == 1L, hazard_ratio, 1) * exp(lp %||% 0)
+    # inversion: S(t) = exp(-hr * H0(t)) = u  =>  H0(t) = -log(u) / hr
+    t_event <- vcr_inverse_cumhaz(-log(u_event) / hr, control_dist)
+  }
   drop_h <- vcr_dropout_hazard(dropout_annual, dropout_period)
   t_drop <- if (drop_h > 0) -log(u_drop) / drop_h else rep(Inf, n)
   entry <- .vcr_accrual_from_u(u_entry, accrual)
@@ -375,6 +433,82 @@ vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1) {
     reject = as.numeric(if (sided == 1) z < -crit else abs(z) > crit),
     events = sum(status), events_treat = O1,
     ci_low = loghr - crit * se, ci_high = loghr + crit * se)
+}
+
+
+# --- MaxCombo (remediation plan D1) -------------------------------------------------------------------------------------------------
+#
+# Hidden knowledge:
+#
+# - **The four Fleming-Harrington weights G(rho, gamma) of the pooled Kaplan-Meier S(t-): (0,0) the log-rank, (0,1) late differences,
+#   (1,0) early differences, (1,1) differences in the middle.** The statistic is the most favourable of the four standardized weighted
+#   log-rank statistics; the four are correlated through the same risk sets, so its null distribution is the maximum of a
+#   multivariate normal with the weighted-covariance correlation (Karrison 2016; Lin et al. 2020), and its p-value is read from that
+#   distribution (`mvtnorm`), not from a Bonferroni bound. It is never a default: an analysis is MaxCombo only when the scenario says
+#   so, because the plain log-rank is often as good (Zhao et al. 2024) and the choice of the four weights is made before the data.
+# - **Sign as the log-rank's: negative is protective.** `statistic` is the most negative of the four (one-sided) or the largest in
+#   absolute value (two-sided); `estimate` is the log-rank's one-step log hazard ratio and is only descriptive.
+
+VCR_FLEMING_HARRINGTON <- list(c(0, 0), c(0, 1), c(1, 0), c(1, 1))
+
+#' The four weighted log-rank statistics and their correlation, from event times and arms.
+#' @return list(z = the four standardized statistics, corr = their correlation, keep = which of the four had a positive variance)
+vcr_fh_statistics <- function(time, status, arm, combos = VCR_FLEMING_HARRINGTON) {
+  ts <- sort(unique(time[status == 1L]))
+  if (!length(ts)) return(list(z = numeric(0), corr = matrix(1, 0, 0), keep = logical(length(combos))))
+  tm1 <- sort(time[arm == 1L]); tm <- sort(time)
+  n <- length(tm) - findInterval(ts, tm, left.open = TRUE)
+  n1 <- length(tm1) - findInterval(ts, tm1, left.open = TRUE)
+  at <- match(time[status == 1L], ts)
+  d <- tabulate(at, length(ts))
+  d1 <- tabulate(at[arm[status == 1L] == 1L], length(ts))
+  s_minus <- c(1, cumprod(1 - d / n))[seq_along(ts)]
+  e1 <- d * n1 / n
+  v <- ifelse(n > 1, d * (n1 / n) * (1 - n1 / n) * (n - d) / pmax(n - 1, 1), 0)
+  w <- vapply(combos, function(g) s_minus^g[1] * (1 - s_minus)^g[2], numeric(length(ts)))
+  w <- matrix(w, nrow = length(ts))
+  u <- colSums(w * (d1 - e1))
+  sig2 <- colSums(w^2 * v)
+  keep <- sig2 > 0
+  if (!any(keep)) return(list(z = numeric(0), corr = matrix(1, 0, 0), keep = keep))
+  cov_ <- crossprod(w[, keep, drop = FALSE] * sqrt(v), w[, keep, drop = FALSE] * sqrt(v))
+  sd_ <- sqrt(diag(cov_))
+  list(z = u[keep] / sd_, corr = cov_ / outer(sd_, sd_), keep = keep)
+}
+
+#' The null probability that the most favourable of the four statistics is at least as extreme as `stat`.
+#'
+#' Hidden knowledge: the four correlation matrices are SINGULAR, always: S + (1 - S) = 1 makes the (0,0) weight the sum of the (1,0) and
+#' (0,1) weights, so U00 = U10 + U01 and the log-rank statistic is a linear combination of two of the others. `mvtnorm`'s Miwa algorithm
+#' refuses a singular problem, so the quasi-Monte-Carlo algorithm of Genz and Bretz (which takes a semi-definite matrix) is used, with its
+#' random shifts drawn from a seed derived from the statistic itself and the caller's random state put back afterwards: the p-value is a
+#' pure function of the data, whichever replicate, batch or core evaluates it, and a replicate's own stream is not touched. Its absolute
+#' error is 1e-6, so a p-value far below alpha is only as exact as that, which is all a decision at alpha needs.
+vcr_maxcombo_p <- function(stat, corr, sided = 1) {
+  k <- nrow(corr)
+  if (k == 1L) return(if (sided == 1) stats::pnorm(stat) else 2 * stats::pnorm(-abs(stat)))
+  if (sided == 1) { lower <- rep(stat, k); upper <- rep(Inf, k) } else { lower <- rep(-abs(stat), k); upper <- rep(abs(stat), k) }
+  held <- if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) get(".Random.seed", envir = globalenv()) else NULL
+  on.exit(if (!is.null(held)) assign(".Random.seed", held, envir = globalenv()), add = TRUE)
+  set.seed(1L + as.integer(round(abs(stat) * 1e5) %% 1000000007))
+  inside <- tryCatch(as.numeric(mvtnorm::pmvnorm(lower = lower, upper = upper, corr = corr,
+                                                 algorithm = mvtnorm::GenzBretz(abseps = 1e-6, maxpts = 50000))), error = function(e) NA_real_)
+  p <- 1 - inside
+  # a matrix the algorithm cannot read: the Bonferroni bound, which only errs conservative
+  if (!is.finite(p)) p <- min(1, (if (sided == 1) k * stats::pnorm(stat) else 2 * k * stats::pnorm(-abs(stat))))
+  min(max(p, 0), 1)
+}
+
+#' The MaxCombo test of a two-arm time-to-event trial, in the log-rank's own return shape.
+vcr_analyse_maxcombo <- function(data, alpha = 0.025, sided = 1) {
+  sided <- vcr_check_sided(sided)
+  base <- vcr_analyse_logrank(data, alpha, sided)
+  fh <- vcr_fh_statistics(data$time, data$status, data$arm)
+  if (!length(fh$z)) { base[c("statistic", "p", "reject")] <- c(0, 1, 0); return(base) }
+  stat <- if (sided == 1) min(fh$z) else fh$z[which.max(abs(fh$z))]
+  p <- vcr_maxcombo_p(stat, (fh$corr + t(fh$corr)) / 2, sided)
+  base[c("statistic", "p", "reject")] <- c(stat, p, as.numeric(p < alpha))
+  base
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

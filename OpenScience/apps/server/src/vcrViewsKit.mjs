@@ -756,6 +756,24 @@ export function plainText(name, value) {
  * true now」; this answers 「what did this object produce」.
  * @param {Record<string, any>} bundle @returns {readonly Record<string, any>[]}
  */
+/**
+ * A treatment-arm hazard ratio that changes over time, in words (D1): "0–6 个月 1；6 个月后 0.6". Null when the truth states none.
+ * @param {unknown} raw `truth.treatmentHazardRatios` @param {string} [unit] the unit word after a number ("个月")
+ * @returns {string | null}
+ */
+export function hazardLawWords(raw, unit = "个月") {
+  const law = object(raw);
+  const breaks = list(law.breaks).map(Number);
+  const ratios = list(law.ratios).map(Number);
+  if (!breaks.length || ratios.length !== breaks.length + 1 || [...breaks, ...ratios].some((value) => !Number.isFinite(value))) return null;
+  const parts = ratios.map((ratio, index) => {
+    if (index === 0) return `0–${breaks[0]} ${unit} ${ratio}`;
+    if (index === breaks.length) return `${breaks[index - 1]} ${unit}后 ${ratio}`;
+    return `${breaks[index - 1]}–${breaks[index]} ${unit} ${ratio}`;
+  });
+  return parts.join("；");
+}
+
 export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [];
 
 /** How an engine method is named on the model library's method rows. */

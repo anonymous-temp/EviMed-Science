@@ -1883,11 +1883,13 @@
       },
       "notes": [
         "design.kind × endpoint.type this method implements: single_arm (binary|continuous|time_to_event); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
-        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst.",
+        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst|maxcombo.",
         "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
         "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm.",
         "costs: the cost measure is perPatient x N + perSite x sites + perMonth x duration. A duration exists only for a time-to-event design with an accrual block, so a continuous or binary design gets its cost from perPatient and perSite, and a perMonth cost there is declined with its reason (diagnostics.performanceNotComputed).",
-        "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it."
+        "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it.",
+        "A hazard ratio that changes over time is simulation-only: truth.treatmentHazardRatios = { breaks, ratios } gives the treatment arm's hazard as ratios[j] times the control's on the j-th interval of breaks (ratios has one more value than breaks, the last runs on), so a delayed effect is breaks [6], ratios [1, 0.6] and a crossing of the curves [6], [1.4, 0.6]. State it INSTEAD of truth.hazardRatio, not beside it; the analytic design (design_analytic) and the assurance refuse it by name. There is then no single true hazard ratio, so bias, mean squared error and coverage are not computed for the log-rank family, and no closed form is drawn for the power; an RMST analysis keeps its bias, against the RMST difference integrated from the two survival curves.",
+        "analysis.method maxcombo (time-to-event, two-arm, fixed design only) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. A group-sequential design looks with the log-rank and refuses maxcombo."
       ],
       "rows": [
         {"path":"design","type":"object","required":true},
@@ -2000,7 +2002,40 @@
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}],
           "fieldRole": "defaultable"
         },
-        {"path":"truth.hazardRatio","type":"number","gt":0,"required":true,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
+        {
+          "path": "truth.hazardRatio",
+          "type": "number",
+          "gt": 0,
+          "requiredWhen": [{"path":"design.kind","in":["single_arm"]}],
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.treatmentHazardRatios",
+          "type": "object",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}]
+        },
+        {
+          "path": "truth.treatmentHazardRatios.breaks",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"number","gt":0,"unit":"time units"},
+          "increasing": true,
+          "required": true,
+          "within": "truth.treatmentHazardRatios",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.treatmentHazardRatios.ratios",
+          "type": "list",
+          "count": {"min":2,"max":21},
+          "items": {"type":"number","gt":0},
+          "required": true,
+          "within": "truth.treatmentHazardRatios",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}],
+          "fieldRole": "research_fact"
+        },
         {"path":"truth.controlMedian","type":"number","gt":0,"unit":"time units","when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
         {"path":"truth.controlDistribution","type":"object","when":[{"path":"endpoint.type","in":["time_to_event"]}]},
         {
@@ -2131,6 +2166,7 @@
             "logistic",
             "logrank",
             "rmst",
+            "maxcombo",
             "exact_binomial",
             "simon_boundary",
             "stratified_risk_difference",
@@ -2356,6 +2392,13 @@
       "rules": [
         {
           "kind": "lengthRule",
+          "key": "truth.treatmentHazardRatios.ratios",
+          "of": "truth.treatmentHazardRatios.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}]
+        },
+        {
+          "kind": "lengthRule",
           "key": "truth.controlDistribution.rates",
           "of": "truth.controlDistribution.breaks",
           "plus": 1,
@@ -2368,6 +2411,11 @@
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}]
         },
         {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
+        {
+          "kind": "exactlyOne",
+          "keys": ["truth.hazardRatio","truth.treatmentHazardRatios"],
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}]
+        },
         {
           "kind": "lengthRule",
           "key": "accrual.rates",
@@ -2417,6 +2465,16 @@
           }
         },
         {
+          "label": "a delayed treatment effect (hazard ratio 1 for 6 months, 0.6 after) analysed by MaxCombo: simulation only",
+          "scenario": {
+            "design": {"kind":"two_arm_fixed","nTreat":150,"nControl":150},
+            "endpoint": {"type":"time_to_event"},
+            "truth": {"treatmentHazardRatios":{"breaks":[6],"ratios":[1,0.6]},"controlMedian":12},
+            "accrual": {"kind":"uniform","duration":12,"followup":18},
+            "analysis": {"method":"maxcombo","alpha":0.025,"sided":1}
+          }
+        },
+        {
           "label": "single arm, continuous: 40 patients against a historical mean of 50, one-sample t",
           "scenario": {
             "design": {"kind":"single_arm","n":40},
@@ -2451,11 +2509,12 @@
       "gridCells": 400,
       "notes": [
         "design.kind × endpoint.type this method implements: single_arm (binary|continuous|time_to_event); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
-        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst.",
+        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst|maxcombo.",
         "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
         "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm.",
         "costs: the cost measure is perPatient x N + perSite x sites + perMonth x duration. A duration exists only for a time-to-event design with an accrual block, so a continuous or binary design gets its cost from perPatient and perSite, and a perMonth cost there is declined with its reason (diagnostics.performanceNotComputed).",
-        "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it."
+        "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it.",
+        "From design.grid 1.3.0 the truth scenarios of one design share that design's random stream (common random numbers), where the generator makes that an honest pairing (two-arm designs); designs are never paired with each other and single-arm designs keep independent seeds. A difference between two truths of a design is then a cleaner comparison; each cell is still one immutable run, equal to the design.simulate job at its own seed. A truth that states treatmentHazardRatios replaces the base truth's hazardRatio (and the other way round)."
       ],
       "rows": [
         {"path":"design","type":"object","required":true},
@@ -2568,7 +2627,40 @@
           "when": [{"path":"endpoint.type","in":["binary"]},{"path":"design.kind","notIn":["single_arm","single_arm_external","simon_two_stage"]}],
           "fieldRole": "defaultable"
         },
-        {"path":"truth.hazardRatio","type":"number","gt":0,"required":true,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
+        {
+          "path": "truth.hazardRatio",
+          "type": "number",
+          "gt": 0,
+          "requiredWhen": [{"path":"design.kind","in":["single_arm"]}],
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.treatmentHazardRatios",
+          "type": "object",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}]
+        },
+        {
+          "path": "truth.treatmentHazardRatios.breaks",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"number","gt":0,"unit":"time units"},
+          "increasing": true,
+          "required": true,
+          "within": "truth.treatmentHazardRatios",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.treatmentHazardRatios.ratios",
+          "type": "list",
+          "count": {"min":2,"max":21},
+          "items": {"type":"number","gt":0},
+          "required": true,
+          "within": "truth.treatmentHazardRatios",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}],
+          "fieldRole": "research_fact"
+        },
         {"path":"truth.controlMedian","type":"number","gt":0,"unit":"time units","when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
         {"path":"truth.controlDistribution","type":"object","when":[{"path":"endpoint.type","in":["time_to_event"]}]},
         {
@@ -2699,6 +2791,7 @@
             "logistic",
             "logrank",
             "rmst",
+            "maxcombo",
             "exact_binomial",
             "simon_boundary",
             "stratified_risk_difference",
@@ -2959,6 +3052,26 @@
         {"path":"truths[].oddsRatio","type":"number","gt":0,"fieldRole":"defaultable"},
         {"path":"truths[].covariateLogit","type":"number","fieldRole":"defaultable"},
         {"path":"truths[].hazardRatio","type":"number","gt":0,"fieldRole":"defaultable"},
+        {"path":"truths[].treatmentHazardRatios","type":"object"},
+        {
+          "path": "truths[].treatmentHazardRatios.breaks",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"number","gt":0,"unit":"time units"},
+          "increasing": true,
+          "required": true,
+          "within": "truths[].treatmentHazardRatios",
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truths[].treatmentHazardRatios.ratios",
+          "type": "list",
+          "count": {"min":2,"max":21},
+          "items": {"type":"number","gt":0},
+          "required": true,
+          "within": "truths[].treatmentHazardRatios",
+          "fieldRole": "research_fact"
+        },
         {"path":"truths[].controlMedian","type":"number","gt":0,"fieldRole":"defaultable"},
         {"path":"truths[].controlDistribution","type":"object"},
         {
@@ -3023,6 +3136,13 @@
       "rules": [
         {
           "kind": "lengthRule",
+          "key": "truth.treatmentHazardRatios.ratios",
+          "of": "truth.treatmentHazardRatios.breaks",
+          "plus": 1,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}]
+        },
+        {
+          "kind": "lengthRule",
           "key": "truth.controlDistribution.rates",
           "of": "truth.controlDistribution.breaks",
           "plus": 1,
@@ -3036,6 +3156,11 @@
         },
         {"kind":"exactlyOne","keys":["truth.controlMedian","truth.controlDistribution"],"when":[{"path":"endpoint.type","in":["time_to_event"]}]},
         {
+          "kind": "exactlyOne",
+          "keys": ["truth.hazardRatio","truth.treatmentHazardRatios"],
+          "when": [{"path":"endpoint.type","in":["time_to_event"]},{"path":"design.kind","in":["two_arm_fixed","group_sequential"]}]
+        },
+        {
           "kind": "lengthRule",
           "key": "accrual.rates",
           "of": "accrual.breaks",
@@ -3043,6 +3168,7 @@
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["piecewise"],"default":"uniform"}
         },
+        {"kind":"lengthRule","key":"truths[].treatmentHazardRatios.ratios","of":"truths[].treatmentHazardRatios.breaks","plus":1},
         {
           "kind": "lengthRule",
           "key": "truths[].controlDistribution.rates",

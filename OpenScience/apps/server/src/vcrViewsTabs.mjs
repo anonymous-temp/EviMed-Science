@@ -61,7 +61,7 @@ import {
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
   personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
-  TIME_UNIT_WORDS, zhUnit, vcrFailureSentence, vcrPageSentence,
+  TIME_UNIT_WORDS, zhUnit, vcrFailureSentence, vcrPageSentence, hazardLawWords,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -901,6 +901,7 @@ function adempOf(bundle, scenario, diagnostics = {}, stages = {}) {
     const dataGeneration = [
       (/** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH))[scenario.endpointType] ?? scenario.endpointType,
       ...Object.entries(truth).filter(([, value]) => typeof value === "number").map(([key, value]) => `${TRUTH_LABELS[key] ?? key} ${value}`),
+      ...(survival && hazardLawWords(truth.treatmentHazardRatios, unit) ? [`风险比随时间变化：${hazardLawWords(truth.treatmentHazardRatios, unit)}`] : []),
       ...(survival && numeric(accrual.duration) !== null ? [`入组 ${accrual.duration} ${unit}`] : []),
       ...(survival && numeric(accrual.followup) !== null ? [`随访 ${accrual.followup} ${unit}`] : []),
       ...(dropout !== null ? [`脱落 ${roundTo(dropout * 100, 1)}%/年${defaulted.has("accrual.dropoutAnnual") ? "（默认）" : ""}`] : []),

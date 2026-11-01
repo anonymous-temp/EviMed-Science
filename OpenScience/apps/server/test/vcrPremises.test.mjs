@@ -355,3 +355,17 @@ test("the trade-off is drawn against an objective taken from alpha and the targe
   power.value = 0.8;
   assert.equal(presentTrialTab(short).designs[0].meets.power, "no");
 });
+
+test("D1: a hazard ratio that changes over time is the effect premise, in the words it was written in, and has no single number", () => {
+  const rows = (/** @type {Record<string, any>} */ truth) => vcrPremises("trial", { endpointType: "time_to_event", configuration: { endpoint: { type: "time_to_event" }, truth, analysis: { method: "maxcombo" } }, diagnostics: {} });
+  const delayed = rows({ treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 12 }).find((row) => row.key === "effect");
+  assert.equal(delayed.label, "真实效应（风险比随时间变化）");
+  assert.equal(delayed.value, "0–6 个月 1；6 个月后 0.6");
+  assert.equal(delayed.decisive, true);
+  assert.equal(delayed.source, "assumed");
+  const crossing = rows({ treatmentHazardRatios: { breaks: [4, 12], ratios: [1.5, 0.5, 1] }, controlMedian: 12 }).find((row) => row.key === "effect");
+  assert.equal(crossing.value, "0–4 个月 1.5；4–12 个月 0.5；12 个月后 1");
+  // one ratio is still the ordinary effect row, and a law that does not hold together says nothing
+  assert.equal(rows({ hazardRatio: 0.7, controlMedian: 12 }).find((row) => row.key === "effect").label, "真实效应（风险比）");
+  assert.equal(rows({ treatmentHazardRatios: { breaks: [6], ratios: [1] }, controlMedian: 12 }).find((row) => row.key === "effect"), undefined);
+});

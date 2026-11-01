@@ -2905,6 +2905,146 @@
         },
         "inputs": []
       }
+    },
+    {
+      "name": "simulate: a delayed treatment effect analysed by MaxCombo",
+      "job": {
+        "jobId": "job_nph",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "grid: a truth that states a hazard ratio that changes over time replaces the base's hazardRatio",
+      "job": {
+        "jobId": "job_nphgrid",
+        "studyId": "std_1",
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "designs": [
+            {
+              "nTreat": 100
+            }
+          ],
+          "truths": [
+            {
+              "treatmentHazardRatios": {
+                "breaks": [
+                  6
+                ],
+                "ratios": [
+                  1,
+                  0.6
+                ]
+              }
+            },
+            {
+              "hazardRatio": 0.8
+            }
+          ]
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "simulate at 1.2.0: proportional hazards replay under the recorded version",
+      "job": {
+        "jobId": "job_old",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      }
     }
   ],
   "invalid": [
@@ -16722,6 +16862,280 @@
       "expected": [
         "scenario_value_invalid@scenario.generated[0].kind",
         "scenario_field_unknown@scenario.unexpected"
+      ]
+    },
+    {
+      "name": "analytic design: a hazard ratio that changes over time is simulated, not sized",
+      "job": {
+        "jobId": "job_a",
+        "studyId": "std_1",
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12,
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            }
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.treatmentHazardRatios"
+      ]
+    },
+    {
+      "name": "simulate: MaxCombo is not a group-sequential analysis",
+      "job": {
+        "jobId": "job_gs",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.5,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "simulate: both hazard laws",
+      "job": {
+        "jobId": "job_both",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.treatmentHazardRatios"
+      ]
+    },
+    {
+      "name": "simulate: neither hazard law",
+      "job": {
+        "jobId": "job_none",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.truth.hazardRatio"
+      ]
+    },
+    {
+      "name": "simulate: one ratio too few for the breaks",
+      "job": {
+        "jobId": "job_short",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.treatmentHazardRatios.ratios"
+      ]
+    },
+    {
+      "name": "simulate at 1.2.0: a design is never labelled with a version that did not have it",
+      "job": {
+        "jobId": "job_old_nph",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
       ]
     }
   ],

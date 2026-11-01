@@ -220,12 +220,23 @@ const CONTROL_DISTRIBUTION = {
 }
 
 /**
+ * A treatment-arm hazard ratio that changes over time (remediation plan D1; simulation only): `ratios[j]` applies on the j-th interval
+ * of `breaks`, the last running on, so a delayed effect is ratios [1, 0.6] with one break and a crossing of the curves [1.4, 0.6].
+ * A formula cannot size it, so the analytic design refuses it by name and points to the simulation.
+ */
+const TREATMENT_HAZARD_RATIOS = object({
+  breaks: req(array(number({ gt: 0, unit: 'time units' }), { min: 1, max: 20, increasing: true })),
+  ratios: req(array(number({ gt: 0 }), { min: 2, max: 21 })),
+}, { lengthRules: [{ key: 'ratios', of: 'breaks', plus: 1 }] })
+
+/**
  * The data-generating truth of a two-arm trial, by endpoint family. `binaryWhen`
  * is the gate of the binary keys (the analytic path drops them for a Simon
  * design, which is single-arm).
- * @param {{ binaryWhen?: any, simulated?: boolean, generator?: boolean, extra?: Record<string, any> }} [options]
+ * `nph` lets a simulated two-arm time-to-event truth state a hazard ratio that changes over time instead of one ratio.
+ * @param {{ binaryWhen?: any, simulated?: boolean, generator?: boolean, nph?: boolean, extra?: Record<string, any> }} [options]
  */
-const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false, extra = {} } = {}) => ({
+const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false, nph = false, extra = {} } = {}) => ({
   ...(simulated && !generator ? { null: boolean() } : {}),
   effect: req(gated(number({ unit: 'outcome units' }), CONTINUOUS)),
   sd: gated(number({ gt: 0, default: 1, unit: 'outcome units' }), CONTINUOUS),
@@ -236,7 +247,10 @@ const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false,
   riskDifference: gated(number({ gt: -1, lt: 1 }), binaryWhen),
   oddsRatio: gated(number({ gt: 0 }), binaryWhen),
   ...(simulated ? { covariateLogit: gated(number({ default: 0 }), binaryWhen) } : {}),
-  hazardRatio: req(gated(number({ gt: 0 }), TIME_TO_EVENT)),
+  // a simulated two-arm trial states either one hazard ratio or one that changes over time (an exactlyOne group of the schema); a
+  // single-arm trial against its benchmark states the one ratio
+  hazardRatio: nph ? { ...gated(number({ gt: 0 }), TIME_TO_EVENT), reqWhen: is('design.kind', 'single_arm') } : req(gated(number({ gt: 0 }), TIME_TO_EVENT)),
+  ...(nph ? { treatmentHazardRatios: gated(TREATMENT_HAZARD_RATIOS, [TIME_TO_EVENT, is('design.kind', 'two_arm_fixed', 'group_sequential')]) } : {}),
   controlMedian: gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT),
   controlDistribution: gated(CONTROL_DISTRIBUTION, TIME_TO_EVENT),
   ...extra,
@@ -275,7 +289,7 @@ const SIMULATED_ACCRUAL = gated({
 }, TIME_TO_EVENT)
 
 const SIMULATED_ANALYSIS = object({
-  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference', 'one_sample_t', 'one_sample_z', 'one_sample_logrank'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
+  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'maxcombo', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference', 'one_sample_t', 'one_sample_z', 'one_sample_logrank'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
   // the standard deviation a one-sample z analysis takes as known (it need not be the generator's)
   sd: req(gated(number({ gt: 0, unit: 'outcome units' }), is('analysis.method', 'one_sample_z'))),
   alternative: req(gated(string({ values: ['greater', 'less', 'two.sided'] }), is('design.kind', 'single_arm'))),
@@ -300,7 +314,7 @@ const SIMULATED_DESIGN_FIELDS = {
 const SIMULATE_FIELDS = {
   design: req(object(SIMULATED_DESIGN_FIELDS)),
   endpoint: req(ENDPOINT()),
-  truth: req(object(truthFields({ binaryWhen: TWO_ARM_BINARY, extra: {
+  truth: req(object(truthFields({ binaryWhen: TWO_ARM_BINARY, nph: true, extra: {
     nullRate: req(gated(number(BINARY_RATE), SINGLE_BINARY_ENDPOINT)),
     responseRate: req(gated(number(BINARY_RATE), SINGLE_BINARY_ENDPOINT)),
     alternativeRate: req(gated(number(BINARY_RATE), is('design.kind', 'simon_two_stage'))),
@@ -308,7 +322,8 @@ const SIMULATE_FIELDS = {
     benchmark: gated(number({ default: 0, unit: 'outcome units' }), SINGLE_CONTINUOUS),
     controlRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
     treatmentRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
-  } }), { exactlyOne: truthGroups(TWO_ARM_BINARY) })),
+  } }), { exactlyOne: [...truthGroups(TWO_ARM_BINARY),
+    { keys: ['hazardRatio', 'treatmentHazardRatios'], when: [TIME_TO_EVENT, is('design.kind', 'two_arm_fixed', 'group_sequential')] }] })),
   analysis: { ...SIMULATED_ANALYSIS, reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') },
   external: req(gated(EXTERNAL_MODEL, SINGLE_EXTERNAL)),
   accrual: SIMULATED_ACCRUAL,
@@ -823,7 +838,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       effect: number(), sd: number({ gt: 0 }), baselineCorrelation: number({ gt: -1, lt: 1 }),
       controlRate: number({ ...PROBABILITY }), treatmentRate: number({ ...PROBABILITY }),
       riskDifference: number({ gt: -1, lt: 1 }), oddsRatio: number({ gt: 0 }), covariateLogit: number(),
-      hazardRatio: number({ gt: 0 }), controlMedian: number({ gt: 0 }), controlDistribution: CONTROL_DISTRIBUTION,
+      hazardRatio: number({ gt: 0 }), treatmentHazardRatios: TREATMENT_HAZARD_RATIOS, controlMedian: number({ gt: 0 }), controlDistribution: CONTROL_DISTRIBUTION,
     }), { min: 1, max: 50 })),
   }, { gridCells: 400 }),
 
@@ -1024,7 +1039,12 @@ export function vcrIsNullScenario(scenario) {
   const tiny = (/** @type {number} */ x) => Math.abs(x) < 1e-12
   const finite = (/** @type {unknown} */ x) => typeof x === 'number' && Number.isFinite(x)
   if (type === 'continuous') return finite(truth.effect) && tiny(truth.effect)
-  if (type === 'time_to_event') return finite(truth.hazardRatio) && truth.hazardRatio > 0 && tiny(Math.log(truth.hazardRatio))
+  if (type === 'time_to_event') {
+    // a hazard ratio that changes over time is null only when every ratio is 1
+    const ratios = truth.treatmentHazardRatios?.ratios
+    if (Array.isArray(ratios)) return ratios.length > 0 && ratios.every((/** @type {unknown} */ r) => finite(r) && /** @type {number} */ (r) > 0 && tiny(Math.log(/** @type {number} */ (r))))
+    return finite(truth.hazardRatio) && truth.hazardRatio > 0 && tiny(Math.log(truth.hazardRatio))
+  }
   if (type === 'binary') {
     const p0 = truth.controlRate
     if (!finite(p0)) return false
@@ -1395,10 +1415,14 @@ function checkGrid(schema, scenario, ctx) {
   for (let d = 0; d < designs.length; d += 1) {
     for (let t = 0; t < truths.length; t += 1) {
       if (!isObject(designs[d]) || !isObject(truths[t])) return
+      // a truth that states its own hazard law replaces the base's, in either form: both would be two laws for one arm
+      const base = { ...(isObject(scenario.truth) ? scenario.truth : {}) }
+      if (truths[t].treatmentHazardRatios !== undefined) delete base.hazardRatio
+      if (truths[t].hazardRatio !== undefined) delete base.treatmentHazardRatios
       const cell = {
         ...scenario,
         design: { ...(isObject(scenario.design) ? scenario.design : {}), ...designs[d] },
-        truth: { ...(isObject(scenario.truth) ? scenario.truth : {}), ...truths[t] },
+        truth: { ...base, ...truths[t] },
       }
       delete cell.designs
       delete cell.truths
@@ -1421,7 +1445,7 @@ function checkGrid(schema, scenario, ctx) {
  * The analyses a two-arm simulation may run, by endpoint, and the one analysis each single-arm design runs. The coupled
  * check below reads them, and so does the help a model is given (`vcrScenarioHelp.mjs`): one table, not a sentence kept beside it.
  */
-export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst'] })
+export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst', 'maxcombo'] })
 export const VCR_SINGLE_ARM_ANALYSIS_METHODS = deepFreeze({
   single_arm: { binary: ['exact_binomial'], continuous: ['one_sample_t', 'one_sample_z'], time_to_event: ['one_sample_logrank'] },
   single_arm_external: { binary: ['stratified_risk_difference'] },
@@ -1436,6 +1460,7 @@ function checkDesignSemantics(scenario, path, ctx) {
   if (!['single_arm', 'single_arm_external', 'simon_two_stage'].includes(kind)) {
     const methods = /** @type {Record<string, readonly string[]>} */ (VCR_TWO_ARM_ANALYSIS_METHODS)
     if (method && !(methods[/** @type {string} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
+    if (method === 'maxcombo' && kind === 'group_sequential') bad('analysis.method', 'MaxCombo is a fixed-design analysis: a group-sequential design looks with the log-rank statistic.')
     return
   }
   // the analyses a single-arm design runs, by endpoint: the external-control and Simon designs are binary-endpoint designs only
@@ -1454,6 +1479,25 @@ function checkDesignSemantics(scenario, path, ctx) {
     if (Number.isFinite(scenario.truth?.alternativeRate) && Number.isFinite(scenario.truth?.nullRate) && scenario.truth.alternativeRate <= scenario.truth.nullRate) bad('truth.alternativeRate', 'The alternative response rate exceeds the null rate.')
   }
   if (typeof scenario.truth?.null === 'boolean' && scenario.truth.null !== vcrIsNullScenario(scenario)) bad('truth.null', 'The null label must agree with the generating estimand; it does not change the generating law.')
+}
+
+/**
+ * A hazard ratio that changes over time and the MaxCombo analysis exist in the simulation only (remediation plan D1): a formula sizes a
+ * proportional-hazards design. The analytic design and the assurance refuse them by name and say where to go, in place of the
+ * schema's "the engine does not read it".
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkNoNonProportionalHazards(scenario, path, ctx) {
+  const where = [
+    scenario?.truth && Object.hasOwn(scenario.truth, 'treatmentHazardRatios') ? 'truth.treatmentHazardRatios' : null,
+    scenario?.analysis?.method === 'maxcombo' ? 'analysis.method' : null,
+  ].filter((field) => field !== null)
+  if (!where.length) return
+  ctx.issues = ctx.issues.filter((issue) => !(issue.code === 'scenario_field_unknown' && where.some((field) => issue.field === at(path, /** @type {string} */ (field)))))
+  for (const field of where) {
+    raise(ctx, 'scenario_value_invalid', at(path, /** @type {string} */ (field)),
+      'A hazard ratio that changes over time and the MaxCombo analysis are simulated, not sized by a formula: ask for design_simulation (design.simulate) with this truth and analysis.')
+  }
 }
 
 /**
@@ -1511,6 +1555,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   }
   checkObject(schema, scenario, path, ctx)
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
+  if (method === 'design.analytic' || method === 'design.assurance') checkNoNonProportionalHazards(scenario, path, ctx)
   if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
   if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)
   if (schema.gridCells) checkGrid(schema, scenario, ctx)

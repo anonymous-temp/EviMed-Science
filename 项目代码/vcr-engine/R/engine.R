@@ -1891,7 +1891,8 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   generated<-if(!is.null(res$values) && "generatedRecords" %in% colnames(res$values))sum(res$values[,"generatedRecords"],na.rm=TRUE) else res$diagnostics$replicatesCompleted*n_per
   # the analytic power curve at this size with the simulated point on it: analytic first, the simulation as the check
   simulated <- Filter(function(m) identical(m$name, "power"), res$measures)
-  curve <- tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
+  # the analytic curve is the log-rank's: a MaxCombo analysis has no closed form to draw it from
+  curve <- if (identical(sc$analysis$method, "maxcombo")) NULL else tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
                                             if (length(simulated)) list(value = simulated[[1]]$value, mcse = simulated[[1]]$mcse %||% NA_real_) else NULL),
                     error = function(e) NULL)
   list(status = res$status, measures = res$measures, issues = res$issues,
@@ -1902,17 +1903,31 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
        tables = tables)
 }
 
+#' What a grid says about its random streams, from what it did. The older words are the old release's, said as they were; from the release
+#' with common random numbers, "no common random numbers between cells" is written only for a grid in which no design's truths were paired.
+.vcr_grid_seed_policy <- function(common, cells) {
+  if (!common) return("independent_cell_seeds; independent_L_Ecuyer_replicate_streams_within_cell; no_common_random_numbers_between_cells")
+  paired <- any(vapply(cells, function(c_) isTRUE(c_$pairedStream), logical(1)))
+  paste(c(if (paired) "common_random_numbers_between_the_truth_scenarios_of_a_design",
+          "independent_seeds_between_designs",
+          if (!all(vapply(cells, function(c_) isTRUE(c_$pairedStream), logical(1)))) "independent_cell_seeds_where_the_generator_is_not_draw_stable",
+          "independent_L_Ecuyer_replicate_streams_within_cell",
+          if (!paired) "no_common_random_numbers_between_cells"), collapse = "; ")
+}
+
 vcr_job_design_grid <- function(job, output_dir = NULL, cancel_file = NULL, progress = NULL) {
   sc <- job$scenario
   designs <- sc$designs; truths <- sc$truths
   if (!is.list(designs) || !length(designs) || !is.list(truths) || !length(truths)) {
     vcr_abort("scenario_field_missing", "scenario.designs", "A grid lists its designs and its truth scenarios.")
   }
+  # from the release that introduced it, the truth scenarios of a design share its random stream where that is an honest pairing
+  common <- utils::compareVersion(as.character(job$methodVersion %||% "1.0.0"), VCR_GRID_COMMON_STREAMS_FROM) >= 0
   cells <- vcr_design_grid(sc, designs, truths, job$seed, job$replicates,
                            vcr_cores(job$cores), cancel_file,
                            checkpoint_dir = output_dir, progress = progress,
                            batch_size = vcr_scalar(job$batchSize, 500L),
-                           cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf))
+                           cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), common_streams = common)
   long <- do.call(rbind, lapply(cells, function(c_) {
     if (!length(c_$measures)) {
       return(data.frame(designIndex = c_$designIndex, truthIndex = c_$truthIndex, parameters = c_$parameters,
@@ -1945,15 +1960,20 @@ vcr_job_design_grid <- function(job, output_dir = NULL, cancel_file = NULL, prog
        measures = list(vcr_measure("cells", length(cells), source = "calculated")),
        counts = vcr_counts(),
        issues = issues,
-       diagnostics = list(seedPolicy = "independent_cell_seeds; independent_L_Ecuyer_replicate_streams_within_cell; no_common_random_numbers_between_cells", replicatesCompleted = done, cellsPlanned = planned, cellsRun = length(cells),
+       diagnostics = list(seedPolicy = .vcr_grid_seed_policy(common, cells), replicatesCompleted = done, cellsPlanned = planned, cellsRun = length(cells),
                           # the cells with their numbers: the page draws the heat grid from these (the full table stays a CSV)
-                          cells = lapply(cells, function(c_) list(designIndex = c_$designIndex, truthIndex = c_$truthIndex, seed = c_$seed,
-                                                                  scenarioHash = c_$scenarioHash, status = c_$status,
-                                                                  # a cell that stopped before it finished and holds measures says `limited`, as a stopped job does
-                                                                  conclusion = if (identical(c_$status, "succeeded")) c_$diagnostics$conclusion else if (length(c_$measures)) "limited" else NULL,
-                                                                  replicatesCapped = isTRUE(c_$diagnostics$replicatesCapped),
-                                                                  refusal = if (!is.null(c_$refusal)) c_$refusal$code else NULL,
-                                                                  measures = lapply(c_$measures, function(m) list(name = m$name, value = m$value, mcse = m$mcse))))),
+                          cells = lapply(cells, function(c_) {
+                            cell <- list(designIndex = c_$designIndex, truthIndex = c_$truthIndex, seed = c_$seed,
+                                         scenarioHash = c_$scenarioHash, status = c_$status,
+                                         # a cell that stopped before it finished and holds measures says `limited`, as a stopped job does
+                                         conclusion = if (identical(c_$status, "succeeded")) c_$diagnostics$conclusion else if (length(c_$measures)) "limited" else NULL,
+                                         replicatesCapped = isTRUE(c_$diagnostics$replicatesCapped),
+                                         refusal = if (!is.null(c_$refusal)) c_$refusal$code else NULL,
+                                         measures = lapply(c_$measures, function(m) list(name = m$name, value = m$value, mcse = m$mcse)))
+                            # said only from the release that has common random numbers: an older result keeps the bytes it had
+                            if (common) cell$pairedStream <- isTRUE(c_$pairedStream)
+                            cell
+                          })),
        tables = .vcr_tables_of(list(vcr_write_table(long, "operating-characteristics", output_dir))))
 }
 

@@ -273,7 +273,7 @@
       ]
     },
     "design.simulate": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -286,6 +286,9 @@
         "independent normal approximation of the one-sample log-rank score"
       ],
       "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.2.0"
+      ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
         "two_arm_fixed",
@@ -317,7 +320,7 @@
       ]
     },
     "design.grid": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -325,6 +328,9 @@
       ],
       "crossChecks": [],
       "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.2.0"
+      ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
         "two_arm_fixed",
@@ -5876,7 +5882,61 @@
                   "time_to_event"
                 ]
               },
-              "req": true
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              }
+            },
+            "treatmentHazardRatios": {
+              "t": "object",
+              "fields": {
+                "breaks": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units"
+                  },
+                  "min": 1,
+                  "max": 20,
+                  "increasing": true,
+                  "req": true
+                },
+                "ratios": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0
+                  },
+                  "min": 2,
+                  "max": 21,
+                  "req": true
+                }
+              },
+              "lengthRules": [
+                {
+                  "key": "ratios",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             },
             "controlMedian": {
               "t": "number",
@@ -6100,6 +6160,27 @@
                   "time_to_event"
                 ]
               }
+            },
+            {
+              "keys": [
+                "hazardRatio",
+                "treatmentHazardRatios"
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             }
           ],
           "req": true
@@ -6116,6 +6197,7 @@
                 "logistic",
                 "logrank",
                 "rmst",
+                "maxcombo",
                 "exact_binomial",
                 "simon_boundary",
                 "stratified_risk_difference",
@@ -6732,7 +6814,61 @@
                   "time_to_event"
                 ]
               },
-              "req": true
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              }
+            },
+            "treatmentHazardRatios": {
+              "t": "object",
+              "fields": {
+                "breaks": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units"
+                  },
+                  "min": 1,
+                  "max": 20,
+                  "increasing": true,
+                  "req": true
+                },
+                "ratios": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0
+                  },
+                  "min": 2,
+                  "max": 21,
+                  "req": true
+                }
+              },
+              "lengthRules": [
+                {
+                  "key": "ratios",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             },
             "controlMedian": {
               "t": "number",
@@ -6956,6 +7092,27 @@
                   "time_to_event"
                 ]
               }
+            },
+            {
+              "keys": [
+                "hazardRatio",
+                "treatmentHazardRatios"
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             }
           ],
           "req": true
@@ -6972,6 +7129,7 @@
                 "logistic",
                 "logrank",
                 "rmst",
+                "maxcombo",
                 "exact_binomial",
                 "simon_boundary",
                 "stratified_risk_difference",
@@ -7430,6 +7588,40 @@
               "hazardRatio": {
                 "t": "number",
                 "gt": 0
+              },
+              "treatmentHazardRatios": {
+                "t": "object",
+                "fields": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0,
+                      "unit": "time units"
+                    },
+                    "min": 1,
+                    "max": 20,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "ratios": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 21,
+                    "req": true
+                  }
+                },
+                "lengthRules": [
+                  {
+                    "key": "ratios",
+                    "of": "breaks",
+                    "plus": 1
+                  }
+                ]
               },
               "controlMedian": {
                 "t": "number",

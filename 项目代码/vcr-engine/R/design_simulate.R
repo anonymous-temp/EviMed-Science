@@ -92,7 +92,7 @@ VCR_SIMULATED_DESIGNS <- c("two_arm_fixed", "group_sequential", "single_arm", "s
 #' correct approximation would read as disagreeing with a correct simulation.
 VCR_LOGRANK_APPROXIMATION_BIAS <- 0.015
 VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk_difference", "logistic"),
-                             time_to_event = c("logrank", "rmst"))
+                             time_to_event = c("logrank", "rmst", "maxcombo"))
 
 .vcr_check_design <- function(scenario) {
   kind <- scenario$design$kind %||% "two_arm_fixed"
@@ -287,17 +287,24 @@ vcr_scenario_runner <- function(scenario) {
   }
 
   # time to event
-  hr <- .vcr_need(truth$hazardRatio, "scenario.truth.hazardRatio", "A time-to-event scenario states the hazard ratio (1 for the null).")
   dist <- vcr_control_distribution(truth)
+  nph <- if (is.list(truth$treatmentHazardRatios)) .vcr_nph_spec(truth$treatmentHazardRatios, dist) else NULL
+  hr <- if (is.null(nph)) .vcr_need(truth$hazardRatio, "scenario.truth.hazardRatio", "A time-to-event scenario states the hazard ratio (1 for the null), or a hazard ratio that changes over time (treatmentHazardRatios).") else nph
+  if (identical(method, "maxcombo") && gs) {
+    vcr_abort("scenario_value_invalid", "scenario.analysis.method", "MaxCombo is a fixed-design analysis: a group-sequential design looks with the log-rank statistic.")
+  }
   accrual <- acc %||% list(kind = "uniform", duration = 0)
   followup <- vcr_scalar(acc$followup, Inf)
   dropout <- vcr_scalar(acc$dropoutAnnual, 0)
   max_fu <- vcr_scalar(acc$maxFollowup, Inf)
   tau <- vcr_scalar(analysis$tau, NULL)
   if (identical(method, "rmst") && is.null(tau)) vcr_abort("scenario_field_missing", "scenario.analysis.tau", "An RMST analysis states its horizon tau.")
+  # Under a hazard ratio that changes over time there is no single true log hazard ratio for the log-rank family to be biased
+  # against; the RMST difference still has a true value, integrated from the two survival curves.
   estimand <- if (identical(method, "rmst")) {
-    vcr_rmst_analytic(.vcr_scale_hazard(dist, hr), tau) - vcr_rmst_analytic(dist, tau)
-  } else log(hr)
+    if (is.null(nph)) vcr_rmst_analytic(.vcr_scale_hazard(dist, hr), tau) - vcr_rmst_analytic(dist, tau)
+    else stats::integrate(function(t) exp(-.vcr_nph_forward(vcr_cumhaz(t, dist), nph)), 0, tau, rel.tol = 1e-10)$value - vcr_rmst_analytic(dist, tau)
+  } else if (is.null(nph)) log(hr) else NA_real_
   list(estimand = estimand, groupSequential = gs_design, run = function(i) {
     d <- vcr_sim_tte(n1, n0, dist, hr, accrual, followup, dropout, dropout_period = tu$perYear, max_followup = max_fu)
     dur <- if (is.finite(followup)) .vcr_accrual_end(d$entry, accrual) + followup else max(d$entry + d$time)
@@ -316,7 +323,7 @@ vcr_scenario_runner <- function(scenario) {
                events = sum(d$status), sampleSize = n1 + n0, duration = dur))
     }
     if (gs) return(.vcr_run_group_sequential(d, gs_design, alpha, sided))
-    r <- vcr_analyse_logrank(d, alpha, sided)
+    r <- if (identical(method, "maxcombo")) vcr_analyse_maxcombo(d, alpha, sided) else vcr_analyse_logrank(d, alpha, sided)
     c(r, sampleSize = n1 + n0, duration = dur)
   })
 }
@@ -537,7 +544,12 @@ vcr_summarize_replicates <- function(values, estimand, scenario, done) {
     add(vcr_measure(name, p, simulated = TRUE, mcse = mcse, source = src,
                     interval = vcr_interval("monte_carlo", max(0, p - 1.96 * mcse), min(1, p + 1.96 * mcse))))
   }
-  if ("bias" %in% wanted && n > 1) {
+  defined <- length(estimand) == 1L && is.finite(estimand)
+  if (!defined && any(c("bias", "coverage") %in% wanted)) {
+    notes[[length(notes) + 1L]] <- vcr_issue("performance_measure_unsupported", "performance",
+      "Under a hazard ratio that changes over time the log-rank family has no single true hazard ratio, so bias, mean squared error and coverage are not computed; power and the other measures stand.")
+  }
+  if ("bias" %in% wanted && n > 1 && defined) {
     b <- mean(est[usable]) - estimand
     add(vcr_measure("bias", b, simulated = TRUE, mcse = vcr_mcse_mean(est[usable]), source = src))
     add(vcr_measure("empirical_se", stats::sd(est[usable]), simulated = TRUE,
@@ -546,7 +558,7 @@ vcr_summarize_replicates <- function(values, estimand, scenario, done) {
     add(vcr_measure("mse", mse, simulated = TRUE,
                     mcse = stats::sd((est[usable] - estimand)^2) / sqrt(n), source = src))
   }
-  if ("coverage" %in% wanted && all(c("ci_low", "ci_high") %in% colnames(values))) {
+  if ("coverage" %in% wanted && defined && all(c("ci_low", "ci_high") %in% colnames(values))) {
     ok <- is.finite(values[, "ci_low"]) & is.finite(values[, "ci_high"])
     if (any(ok)) {
       covered <- ok & values[, "ci_low"] <= estimand & values[, "ci_high"] >= estimand
@@ -661,7 +673,7 @@ vcr_analytic_check <- function(scenario, measures) {
     analytic <- list(name = if (is_null) "type_one_error" else "power",
                      value = if (is_null) alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided))
   }
-  if (identical(endpoint, "time_to_event") && fixed && !identical(method %||% "logrank", "rmst")) {
+  if (identical(endpoint, "time_to_event") && fixed && !(method %||% "logrank") %in% c("rmst", "maxcombo") && is.null(truth$treatmentHazardRatios)) {
     hr <- vcr_scalar(truth$hazardRatio, 1)
     if (is_null) {
       analytic <- list(name = "type_one_error", value = alpha, basis = "nominal_alpha")
@@ -717,18 +729,42 @@ vcr_grid_cell_scenario <- function(base_scenario, design_override, truth_overrid
   sc <- base_scenario
   sc[["designs"]] <- NULL; sc[["truths"]] <- NULL
   sc[["design"]] <- .vcrp_merge(base_scenario[["design"]], design_override)
-  sc[["truth"]] <- .vcrp_merge(base_scenario[["truth"]], truth_override)
+  base_truth <- base_scenario[["truth"]]
+  # a truth that states its own hazard law replaces the base's, in either form: both would be two laws for one arm
+  if (!is.null(truth_override[["treatmentHazardRatios"]])) base_truth[["hazardRatio"]] <- NULL
+  if (!is.null(truth_override[["hazardRatio"]])) base_truth[["treatmentHazardRatios"]] <- NULL
+  sc[["truth"]] <- .vcrp_merge(base_truth, truth_override)
   sc
 }
+
+#' Is the random stream of a design's cells an honest pairing of its truth scenarios? (remediation plan D5)
+#'
+#' Hidden knowledge: two cells share a stream honestly only when the same replicate draws mean the same patients under both truths,
+#' and that holds when the generator takes a FIXED number of uniforms per subject whatever the truth says: the three endpoint
+#' families of a two-arm design are generated by inversion that way (`simulators.R`: an event time, a dropout time and an entry time are
+#' one uniform each, a binary outcome is a threshold on one, a continuous outcome two normals). A single-arm design draws counts
+#' (`rbinom`), whose draw count and mapping change with the rate, so a shared seed there is a coincidence and not a pairing: those
+#' designs keep independent cell seeds. Designs are never paired with each other (their sizes shift every later draw).
+vcr_grid_pairs_truths <- function(base_scenario, design_override, truths) {
+  if (length(truths) < 2L) return(FALSE)
+  kind <- as.character(design_override[["kind"]] %||% base_scenario[["design"]][["kind"]] %||% "")
+  kind %in% c("two_arm_fixed", "group_sequential")
+}
+
+#' The release of a design grid from which its truth scenarios share a random stream within a design. Before it, every cell had a
+#' seed of its own and a job recorded at an older version replays that way, bit for bit.
+VCR_GRID_COMMON_STREAMS_FROM <- "1.3.0"
 
 #' A design grid: designs x truth scenarios, every cell one immutable run.
 #'
 #' The cell seed is `(seed + k * 7919) mod (2^31 - 1)` in *double* arithmetic:
 #' the integer version overflowed to NA at seeds near the top of the range and
-#' every cell of the grid failed (CE-2).
+#' every cell of the grid failed (CE-2). With `common_streams`, the truth scenarios of one design
+#' share the seed of their design, `(seed + design index * 7919)`, where `vcr_grid_pairs_truths` says the pairing is honest: replicate r
+#' of every truth then draws the same uniforms, so a difference between two truths of a design is not Monte-Carlo noise twice over.
 vcr_design_grid <- function(base_scenario, designs, truths, seed, replicates = NULL,
                             cores = 1L, cancel_file = NULL, checkpoint_dir = NULL,
-                            progress = NULL, batch_size = 500L, cpu_seconds_limit = Inf) {
+                            progress = NULL, batch_size = 500L, cpu_seconds_limit = Inf, common_streams = FALSE) {
   cells <- list()
   total <- length(designs) * length(truths)
   cpu0 <- vcr_cpu_seconds()
@@ -740,7 +776,8 @@ vcr_design_grid <- function(base_scenario, designs, truths, seed, replicates = N
     sc <- vcr_grid_cell_scenario(base_scenario, designs[[di]], truths[[ti]])
     # Each cell gets its own seed derived from the job seed and the cell index,
     # so adding a cell never changes another cell's numbers.
-    cell_seed <- as.integer((as.numeric(seed) + k * 7919) %% 2147483647)
+    paired <- isTRUE(common_streams) && vcr_grid_pairs_truths(base_scenario, designs[[di]], truths)
+    cell_seed <- as.integer((as.numeric(seed) + (if (paired) di else k) * 7919) %% 2147483647)
     cp <- if (is.null(checkpoint_dir)) NULL else file.path(checkpoint_dir, sprintf("cell-%03d.rds", k))
     remaining <- if (is.finite(cpu_seconds_limit)) max(0, cpu_seconds_limit - (vcr_cpu_seconds() - cpu0)) else Inf
     res <- tryCatch(
@@ -752,7 +789,7 @@ vcr_design_grid <- function(base_scenario, designs, truths, seed, replicates = N
     cells[[k]] <- list(designIndex = di, truthIndex = ti, design = designs[[di]],
                        truth = truths[[ti]], seed = cell_seed,
                        parameters = vcr_canonical_json(list(design = designs[[di]], truth = truths[[ti]])),
-                       scenarioHash = res$scenarioHash, measures = res$measures,
+                       scenarioHash = res$scenarioHash, measures = res$measures, pairedStream = paired,
                        diagnostics = res$diagnostics, status = res$status, refusal = res$refusal)
     if (!is.null(progress)) progress(k, total)
     if (res$status %in% c("canceled") || (identical(res$status, "failed") && isTRUE(res$diagnostics$overCpuBudget))) break

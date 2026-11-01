@@ -23,7 +23,7 @@
 
 #' The kind of a reference row: the fields it states decide it.
 .vcr_check_reference_kind <- function(row) {
-  if (!is.null(row$proportions)) "categorical" else if (!is.null(row$proportion)) "binary" else "continuous"
+  if (!is.null(row$proportions)) "categorical" else if (!is.null(row[["proportion"]])) "binary" else "continuous"
 }
 
 #' A generated profile entry's levels as a named numeric vector of proportions (NULL cells are dropped).
@@ -65,7 +65,7 @@
   if (identical(kind, "binary")) {
     lv <- if (identical(gk, "binary") || identical(gk, "categorical")) .vcr_check_levels(gen) else NULL
     if (is.null(lv) || !("1" %in% names(lv)) || length(lv) != 2L) return(c(row, list(reason = "kind_differs", generatedKind = gk)))
-    pg <- lv[["1"]]; pr <- .vcr_check_num(ref$proportion)
+    pg <- lv[["1"]]; pr <- .vcr_check_num(ref[["proportion"]])
     row$generated <- list(proportion = pg); row$reference <- list(proportion = pr)
     if (!is.finite(pg) || !is.finite(pr)) return(c(row, list(reason = "value_missing")))
     pooled <- sqrt((pg * (1 - pg) + pr * (1 - pr)) / 2)

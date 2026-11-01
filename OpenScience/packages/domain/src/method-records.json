@@ -644,7 +644,7 @@
   },
   "design.simulate": {
    "id": "design.simulate",
-   "version": "1.2.0",
+   "version": "1.3.0",
    "engine": "vcr-engine",
    "title": "Trial operating characteristics under fixed scenario assumptions",
    "estimand": "Monte Carlo power, bias and duration with simulation uncertainty. Scenario parameters are assumptions, not observations.",
@@ -657,6 +657,11 @@
     {
      "id": "simulation_precision",
      "text": "The seed and replicate budget are explicit; Monte Carlo uncertainty and partial completion are preserved.",
+     "checkedBy": "output:diagnostics"
+    },
+    {
+     "id": "hazard_law",
+     "text": "A treatment-arm hazard ratio that changes over time is a stated assumption about how the effect evolves, not an estimate. Under it the log-rank family has no single true hazard ratio, so bias and coverage are not computed; the MaxCombo analysis is the most favourable of four weighted log-rank statistics read against their joint null distribution, never a default.",
      "checkedBy": "output:diagnostics"
     }
    ],
@@ -698,6 +703,20 @@
      "source": "Independent joint-binomial operating-characteristic sums (N31b); exact one-sample t/z and declared survival approximation (N48).",
      "tolerance": "Binary operating characteristics within 3 Monte Carlo SE; continuous/survival tolerances stated per N48 case.",
      "test": "项目代码/vcr-engine/tests/numeric/N31_single_arm.R"
+    },
+    {
+     "id": "nonproportional_hazards_and_maxcombo",
+     "kind": "other-implementation",
+     "source": "The treated arm's survival function in closed form for exponential, Weibull and piecewise control laws under a piecewise hazard ratio (N58a); the four Fleming-Harrington statistics rewritten from their definition and against survival::survdiff (N58b); MaxCombo type I error against alpha with its Monte-Carlo standard error, and the RMST difference integrated from the two survival curves against its closed form (N58c).",
+     "tolerance": "Survival proportions within 4.5 binomial standard errors at 4e5 per arm; statistics equal to 1e-9; type I error within 3 Monte-Carlo standard errors; RMST truth to 1e-7.",
+     "test": "项目代码/vcr-engine/tests/numeric/N58_nonproportional_hazards.R"
+    },
+    {
+     "id": "grid_common_random_numbers",
+     "kind": "other-implementation",
+     "source": "Variance of the difference between the estimated powers of two neighbouring truths, over independent job seeds, with and without the shared stream of design.grid 1.3.0 (N59a, N59b); a cell equals the design.simulate job at its own seed (N06d, N59c); a grid replayed at 1.2.0 keeps its per-cell seeds (N06d).",
+     "tolerance": "The shared stream's variance is at most half (continuous) or 0.8 (time-to-event) of the independent seeds'; replay at 1.2.0 is bit for bit.",
+     "test": "项目代码/vcr-engine/tests/numeric/N59_grid_common_random_numbers.R"
     }
    ]
   },

@@ -120,8 +120,8 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
   'design.analytic': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
-  'design.simulate': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
-  'design.grid': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'design.simulate': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
+  'design.grid': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(["O'Hagan 2005", 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['EMA 2022 qualification opinion']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Anisimov & Fedorov 2007']), modelTier: 'scenario' },
@@ -726,6 +726,16 @@ export function validateEngineJob(job) {
 }
 
 /**
+ * Does a simulation scenario ask for what design.simulate and design.grid 1.3.0 added: a treatment-arm hazard ratio that changes over
+ * time (in the truth, or in a cell of a grid) or the MaxCombo analysis? Mirrored by `.vcrp_legacy_design_version` in protocol.R.
+ * @param {any} scenario
+ */
+function usesNonProportionalHazards(scenario) {
+  const truths = [scenario?.truth, ...(Array.isArray(scenario?.truths) ? scenario.truths : [])]
+  return truths.some((truth) => truth && typeof truth === 'object' && truth.treatmentHazardRatios !== undefined) || scenario?.analysis?.method === 'maxcombo'
+}
+
+/**
  * Replay prior supported designs under their recorded version; never label new designs as old. Two kinds of record: the oldest
  * (`legacyVersion`) is by design, and a later release (`legacyReleases`) is by design and endpoint.
  * @param {any} job
@@ -733,7 +743,11 @@ export function validateEngineJob(job) {
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
-  if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
+  if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) {
+    // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
+    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario)) return false
+    return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
+  }
   const base = job.scenario?.design?.kind
   const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)
     ? job.scenario.designs.map((/** @type {any} */ design) => design.kind ?? base) : [base]
