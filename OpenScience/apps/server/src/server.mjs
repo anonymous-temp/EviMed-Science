@@ -220,6 +220,7 @@ import {
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearch, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { createDeepSeekTools, deepseekToolMetricFamilies } from "./deepseekTools.mjs";
 import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
+import { projectGatewayLimitMetricFamily } from "./projectGatewayLimit.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { GeoProbeRequests } from "./geoProbeRequests.mjs";
@@ -512,6 +513,7 @@ import {
   assertNoSymlinkPath,
   assertObject,
   assertProjectCapacity,
+  assertSameSiteBrowserRequest,
   assertString,
   clearSessionCookie,
   directorySize,
@@ -7320,6 +7322,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         let username = "";
         try {
+          // Before there is a session there is no CSRF token to ask for: a page on another site must not be able to sign a visitor in as
+          // someone else (a login CSRF). A script that posts with no browser headers is unaffected.
+          assertSameSiteBrowserRequest(req, config);
           const body = await readJson(req, config.maxJsonBytes);
           username = assertString(body.username, "username", { max: 64 });
           const password = assertString(body.password, "password", { max: 4096 });
@@ -7349,6 +7354,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         let username = "";
         try {
+          // Registration signs the new account in, so it is the same login CSRF as `/api/auth/login`.
+          assertSameSiteBrowserRequest(req, config);
           const body = await readJson(req, config.maxJsonBytes);
           username = assertString(body.username, "username", { max: 64 });
           const password = assertString(body.password, "password", { max: 4096 });
@@ -8923,7 +8930,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // is not here — that one already needs a session and its CSRF token.
       (pathname === "/api/auth/evimed/session" && req.method === "POST") ||
       // Captcha, SMS and recovery are anonymous upstream operations too. They
-      // share the same auth budget, including captcha's GET request.
+      // share the same auth budget, captcha's request included.
       isEvimedAccountPath(pathname) ||
       (pathname.startsWith("/api/auth/oidc/") && req.method === "GET")
     ) {
@@ -11092,6 +11099,10 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // EvimedEvidenceRefused).
   const credentialMissing = publicSourceCredentialMissingMetricFamily();
   addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
+  // What the per-project limits of the public-source and web-search gateways held back: requests over a project's minute, and
+  // buffered requests queued or refused behind its in-flight cap (projectGatewayLimit.mjs).
+  const projectLimits = projectGatewayLimitMetricFamily();
+  addMetric(lines, projectLimits.name, projectLimits.help, projectLimits.type, projectLimits.series);
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
   // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);

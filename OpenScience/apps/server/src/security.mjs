@@ -224,6 +224,33 @@ export function setSessionCookie(res, name, value, secure = false, maxAgeSeconds
   appendSetCookie(res, cookie);
 }
 
+/**
+ * Refuse a browser request that comes from another site, for the routes that sign a visitor in before there is a session to carry a CSRF
+ * token (`/api/auth/login`, `/api/auth/register`, the EviMed session exchange and the account forms). The attack is a login CSRF: a page on
+ * another site posts a form (`text/plain`, so no preflight) with the attacker's credential and the visitor is signed in as the attacker, whose
+ * account then keeps what the visitor types into it. A browser tells us where the request came from: `Origin` names the page's origin on a
+ * cross-origin POST and `Sec-Fetch-Site` says `cross-site`; either one, or an `Origin` that is no origin of ours, refuses it. An origin of ours is
+ * the configured public one or the one the request was made to (a page served from a host the visitor reached us by, whatever the public name is: a
+ * page of another site cannot have our host as its origin); a deployment that is not production also takes a local development origin.
+ *
+ * A request with neither header is not from a browser's cross-site page (a browser sends `Origin` on every cross-origin POST), and the scripts,
+ * drivers and smoke checks that sign in post exactly so: it passes.
+ * @param {any} req @param {Record<string, any>} config
+ */
+export function assertSameSiteBrowserRequest(req, config) {
+  const refuse = () => new HttpError(403, "csrf_required", "A same-origin request is required.");
+  if (req.headers["sec-fetch-site"] === "cross-site") throw refuse();
+  const origin = req.headers.origin;
+  if (!origin) return;
+  let originUrl;
+  try { originUrl = new URL(String(origin)); } catch { throw refuse(); }
+  const requestOrigin = `${shouldUseSecureCookies(req, config) ? "https" : "http"}://${req.headers.host}`;
+  let publicOrigin = "";
+  try { publicOrigin = new URL(config.publicUrl).origin; } catch { /* An unconfigured local deployment uses its request origin. */ }
+  const local = !config.production && ["localhost", "127.0.0.1", "[::1]"].includes(originUrl.hostname) && ["http:", "https:"].includes(originUrl.protocol);
+  if (originUrl.origin !== publicOrigin && originUrl.origin !== requestOrigin && !local) throw refuse();
+}
+
 export function shouldUseSecureCookies(req, config) {
   if (req.socket.encrypted) return true;
   if (typeof config.publicUrl === "string" && config.publicUrl) {

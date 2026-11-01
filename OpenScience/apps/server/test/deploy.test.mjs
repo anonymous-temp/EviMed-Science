@@ -885,6 +885,41 @@ test("web Caddy proxy caps browser upload body size", async () => {
   assert.match(caddyfile, /respond @internal 404/);
 });
 
+test("the production nginx site answers 404 for the internal gateways, and for a backslash that would name one", async () => {
+  const conf = await readFile(path.join(repoRoot, "deploy/web/nginx/evimed-science.conf"), "utf8");
+  const servers = conf.split(/^server \{/m).slice(1);
+  assert.equal(servers.length, 2, "the plain-HTTP site and the TLS site");
+  const tls = servers.find((block) => /listen 443 ssl/.test(block));
+  assert.ok(tls, "the TLS site is the one that proxies to the application");
+  const plain = servers.find((block) => !/listen 443 ssl/.test(block));
+  assert.doesNotMatch(plain, /proxy_pass/, "the plain-HTTP site only renews the certificate and redirects");
+
+  // The block exists, is a prefix match that beats the regex locations and the catch-all, and returns 404 itself.
+  const hidden = /location \^~ \/internal\/ \{\s*return 404;\s*\}/.exec(tls);
+  assert.ok(hidden, "location ^~ /internal/ must return 404 in the TLS site");
+  assert.ok(tls.indexOf(hidden[0]) < tls.indexOf("proxy_pass"), "and sit before the catch-all that proxies");
+
+  // The application reads a backslash as a slash; nginx does not. The target is refused before it is proxied.
+  const refusal = /if \(\$request_uri ~ "([^"]+)"\) \{\s*return 404;\s*\}/.exec(tls);
+  assert.ok(refusal, "a path carrying a backslash is refused");
+  const pattern = new RegExp(refusal[1]); // the same PCRE-compatible source nginx compiles
+  const appResolves = (target) => new URL(target, "http://open-science.local").pathname;
+  for (const target of ["/x/..\\internal/model/v1/messages", "/internal\\memory/v1/search", "/a/b\\c"]) {
+    assert.ok(pattern.test(target), `${target} is refused`);
+  }
+  assert.equal(appResolves("/x/..\\internal/model/v1/messages"), "/internal/model/v1/messages", "the shape the rule exists for");
+  for (const target of ["/app/chat", "/api/files?path=a%5Cb", "/api/search?q=a\\b", "/runtime-gateway/model/v1/messages"]) {
+    assert.ok(!pattern.test(target), `${target} is not refused`);
+  }
+
+  // Runtimes outside this host come in under /runtime-gateway/, which is not blocked, and the runtime UI site's upstream is
+  // another listener than the web API's.
+  assert.doesNotMatch(conf, /location[^{]*runtime-gateway/);
+  const upstream = (text) => /proxy_pass http:\/\/127\.0\.0\.1:(\d+);/.exec(text)?.[1];
+  const runtimeUi = await readFile(path.join(repoRoot, "deploy/web/nginx/evimed-runtime-ui.conf"), "utf8");
+  assert.ok(upstream(runtimeUi) && upstream(tls) && upstream(runtimeUi) !== upstream(tls), "the runtime UI site does not front the web API");
+});
+
 test("web compose includes a buildable runtime image profile with every download digest-pinned", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   // Read from the pin rather than written out here. A pin spelled as an

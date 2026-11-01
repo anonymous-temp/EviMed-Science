@@ -2497,3 +2497,49 @@ test("a child is composed at its creation: a delegation's own tools and persona,
   assert.deepEqual(sections, [[reservedId, { name: "deployment:persona-prefix", order: 7, text: "你是筛选员。" }]]);
   assert.equal(reservedChildComposition(reservedId), undefined, "consumed");
 });
+
+test("geo_write is not shown to a child the kernel's sub-agent started, and the four GEO capabilities' delegated children keep it", async () => {
+  const f = await combinedFixture();
+  const { startSubagent } = await import("@evimed/harness-port");
+  const { delegationToolFilter } = await import("@evimed/domain");
+  const { NATIVE_CHILD_TOOL_DENY } = await import("../src/runPolicy.mjs");
+  const geoWrite = "mcp__evimed__geo_write";
+  assert.ok(NATIVE_CHILD_TOOL_DENY.includes(geoWrite), "a general child cannot write (or start the diagnosis of) the project's record");
+  /** @type {any[]} */ const restrictions = [];
+  const visible = new Set(["read", "write", "bash", "mcp__evimed__geo_read", geoWrite, "evimed_plan", "present"]);
+  const child = (/** @type {string} */ id) => ({
+    id, session: { id, header: { cwd: "/workspace", origin: "subagent", parentSession: "root-session" } },
+    ctx: {
+      tools: { restrict: (/** @type {any} */ filter) => { restrictions.push([id, filter]); return () => {}; }, get: (/** @type {string} */ name) => (visible.has(name) ? {} : undefined) },
+      systemPrompt: { section: () => () => {}, getSectionOrder: () => 7 },
+    },
+  });
+  const created = (/** @type {any} */ agent) => (f.ctx.listeners.get(SEAMS.events.sessionStart) ?? []).forEach((handler) => handler({ agent, source: "startup" }));
+  // What the child can see is what the registry keeps after its restriction: the filter is read the way the registry reads it.
+  const seen = (/** @type {any} */ filter) => [...visible].filter((name) => (!filter.allow || filter.allow.includes(name)) && !(filter.deny ?? []).includes(name));
+  created(child("native-geo"));
+  const native = restrictions.find(([id]) => id === "native-geo")?.[1];
+  assert.ok(native, "the kernel's own child is composed");
+  assert.ok(!seen(native).includes(geoWrite), "the tool list the child is handed has no geo_write");
+  assert.ok(seen(native).includes("mcp__evimed__geo_read"), "it still reads the project");
+  assert.ok(seen(native).includes("bash") && seen(native).includes("read"), "and does its general work");
+  // A delegation's child is composed from the capability's own tools, which the deny list does not touch.
+  /** @type {any} */ (f.ctx).subagents = {
+    startActivation: async (/** @type {any} */ spec) => {
+      created(child(spec.childId));
+      return { childId: spec.childId, messageId: "m", result: Promise.resolve({ stopReason: "completed", output: [] }), dispose: async () => {} };
+    },
+  };
+  const directory = new URL("../../../deploy/runtime-dsh/capabilities/", import.meta.url);
+  for (const id of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]) {
+    const manifest = JSON.parse(await readFile(new URL(`${id}.json`, directory), "utf8"));
+    assert.ok(manifest.tools.includes(geoWrite), `${id} declares geo_write`);
+    const tools = delegationToolFilter(manifest, { allowBash: true });
+    const before = restrictions.length;
+    const receipt = await startSubagent(f.ctx, { capability: id, label: id, prompt: "p", tools, persona: "", outputSchema: {} }, f.agent, AbortSignal.timeout(2000));
+    const filter = restrictions.slice(before).find(([childId]) => childId === receipt.childId)?.[1];
+    assert.ok(filter?.allow, `${id}'s child is composed from its allow-list`);
+    assert.equal(filter.deny, undefined, `${id}'s child is not masked by the general child's deny list`);
+    assert.ok(seen(filter).includes(geoWrite), `${id}'s child keeps geo_write`);
+  }
+});

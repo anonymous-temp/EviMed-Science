@@ -792,11 +792,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (entry.nativeRouteNeedsReset || claimed.turn > 0 && entry.nativeRouteTurn !== claimed.turn) {
       entry.nativeRouteNeedsReset = false
       entry.nativeRouteTurn = claimed.turn
-      if (entry.nativeGeoContextRef || entry.nativeGeoModuleScope) {
+      if (entry.nativeGeoContextRef || entry.nativeGeoModuleScope || entry.nativeGeoGrantOrphaned) {
         entry.nativeGeoContextRef = null
         entry.nativeGeoAnalysisRead = null
         entry.nativeGeoModuleScope = null
         entry.nativeGeoModuleTold = false
+        entry.nativeGeoGrantOrphaned = false
         entry.nativeCapability = undefined
         entry.inlineCapabilities.clear()
         changed = applyRootNarrowing(agent, [])
@@ -832,6 +833,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       else if (authorityEnabled && claimed.inputs.length) entry.unattended = true
       if (revision !== entry.contextRevision && entry.routedCapability) {
         entry.nativeManagedDispatch = true
+        entry.nativeGeoGrantOrphaned = false
         entry.inlineCapabilities.clear()
         changed = applyRootNarrowing(agent, [])
       }
@@ -857,6 +859,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
               entry.nativeCapability = capabilityId === 'open-domain-answer' ? '' : capabilityId
               entry.nativeManagedDispatch = Boolean(entry.routedCapability && (revision !== entry.contextRevision
                 || inputs.some(input => input.requestId === entry.contextRevision)))
+              entry.nativeGeoGrantOrphaned = false
               entry.inlineCapabilities.clear()
               changed = applyRootNarrowing(agent, []) || changed
               entry.nativeGeoContextRef = /^gpc_[a-f0-9]{64}$/.test(selected.route.geoContextRef ?? '') ? selected.route.geoContextRef : null
@@ -3522,9 +3525,15 @@ function resetRunState(entry, runId) {
   entry.wakeSuppressed = false
   entry.completed = false
   entry.inlineCapabilities = new Set()
+  // A new dispatch is a new run, but the root's narrowing is applied to the agent and this has no agent to lift it from: a
+  // project-tool grant a route gave (`geo_read` / `geo_write`) is left standing here, and the next turn's reset must still find
+  // it after the scope that justified it is gone (it used to read the cleared fields and skip, leaving `geo_write` visible to a
+  // turn with no route). Only a route's grant is marked: a dispatched capability's own tools are not this reset's to lift.
+  entry.nativeGeoGrantOrphaned = Boolean(entry.nativeGeoContextRef || entry.nativeGeoModuleScope || entry.nativeGeoGrantOrphaned)
   entry.nativeGeoContextRef = null
   entry.nativeGeoAnalysisRead = null
   entry.nativeGeoModuleScope = null
+  entry.nativeGeoModuleTold = false
   entry.frozen = false
 }
 

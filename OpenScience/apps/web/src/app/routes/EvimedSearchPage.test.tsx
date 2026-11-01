@@ -140,7 +140,7 @@ it("starts with a composed searchable page and does not issue an empty query", a
   expect(screen.getByRole("button", { name: "检索" })).toBeDisabled();
   expect(api.searchEvimed).not.toHaveBeenCalled();
   expectComposed(container);
-  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "糖尿病");
+  await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), "糖尿病");
   expect(api.searchEvimed).not.toHaveBeenCalled();
   await userEvent.keyboard("{Enter}");
   await waitFor(() => expect(api.searchEvimed).toHaveBeenCalledWith("literature", expect.objectContaining({ query: "糖尿病", page: 1 }), expect.any(AbortSignal)));
@@ -150,12 +150,12 @@ it("starts with a composed searchable page and does not issue an empty query", a
 it("keeps one unsubmitted homepage query across categories and searches only the selected category", async () => {
   serveByRequest();
   open("/app/search");
-  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), " 高血压 ");
+  await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), " 高血压 ");
   for (const label of ["查指南", "找药品", "搜文献", "临床试验"]) {
     await userEvent.click(screen.getByRole("tab", { name: label }));
     expect(screen.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue(" 高血压 ");
-    expect(screen.getByRole("tabpanel", { name: label })).toContainElement(screen.getByRole("searchbox", { name: "检索关键词" }));
+    expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue(" 高血压 ");
+    expect(screen.getByRole("tabpanel", { name: label })).toContainElement(screen.getByRole("textbox", { name: "检索关键词" }));
   }
   expect(api.searchEvimed).not.toHaveBeenCalled();
   expect(api.readEvimedSearchFacets).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ it.each([
 ] as const)("prefills a %s example without a request until it is submitted", async (category, example, placeholder) => {
   serveByRequest();
   open(`/app/search/${category}`);
-  const input = screen.getByRole("searchbox", { name: "检索关键词" });
+  const input = screen.getByRole("textbox", { name: "检索关键词" });
   expect(input).toHaveAttribute("placeholder", placeholder);
   await userEvent.click(await screen.findByRole("button", { name: example }));
   expect(input).toHaveValue(example);
@@ -190,7 +190,7 @@ it("returns to a clean homepage and honors the result URL when navigating back",
   await screen.findByRole("link", { name: resultTitle("literature", "高血压", 2) });
   await userEvent.click(screen.getByRole("link", { name: "检索首页" }));
   expect(screen.getByRole("region", { name: "医学检索首页" })).toBeInTheDocument();
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("");
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("");
   expect(queryParams().size).toBe(0);
   expect(api.searchEvimed).toHaveBeenCalledTimes(1);
   await act(async () => { await router.navigate(-1); });
@@ -200,7 +200,7 @@ it("returns to a clean homepage and honors the result URL when navigating back",
 
 it("does not submit partially composed Chinese text", async () => {
   open("/app/search");
-  const input = screen.getByRole("searchbox", { name: "检索关键词" });
+  const input = screen.getByRole("textbox", { name: "检索关键词" });
   fireEvent.compositionStart(input);
   fireEvent.change(input, { target: { value: "gaoxueya" } });
   fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
@@ -213,13 +213,13 @@ it("does not submit partially composed Chinese text", async () => {
 
 it("allows a multiline homepage query without submitting on Shift+Enter", async () => {
   open("/app/search");
-  const input = screen.getByRole("searchbox", { name: "检索关键词" });
+  const input = screen.getByRole("textbox", { name: "检索关键词" });
   expect(input.tagName).toBe("TEXTAREA");
   await userEvent.type(input, "高血压{Shift>}{Enter}{/Shift}治疗");
   expect(input).toHaveValue("高血压\n治疗");
   expect(api.searchEvimed).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("高血压\n治疗");
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("高血压\n治疗");
   await userEvent.click(screen.getByRole("button", { name: "检索" }));
   await waitFor(() => expect(api.searchEvimed).toHaveBeenCalledTimes(1));
   expect(api.searchEvimed).toHaveBeenCalledWith("guidelines", expect.objectContaining({ query: "高血压\n治疗" }), expect.any(AbortSignal));
@@ -329,7 +329,7 @@ it.each([
   vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   vi.mocked(api.readEvimedSearchFacets).mockImplementationOnce(() => new Promise(() => {}));
   open(`/app/search/${category}`);
-  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "阿司匹林");
+  await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), "阿司匹林");
   await userEvent.click(screen.getByRole("button", { name: "检索" }));
   const transition = screen.getByRole("region", { name: `正在检索${noun}` });
   expect(transition).toHaveAttribute("aria-busy", "true");
@@ -351,7 +351,7 @@ it("returns a pending search to its editable keyword and ignores cancelled respo
   vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   vi.mocked(api.readEvimedSearchFacets).mockImplementationOnce(() => new Promise(() => {}));
   open("/app/search/literature");
-  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "高血压");
+  await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), "高血压");
   await userEvent.click(screen.getByRole("button", { name: "检索" }));
   const searchSignal = vi.mocked(api.searchEvimed).mock.calls[0][2];
   const facetSignal = vi.mocked(api.readEvimedSearchFacets).mock.calls[0][2];
@@ -359,8 +359,8 @@ it("returns a pending search to its editable keyword and ignores cancelled respo
   expect(searchSignal?.aborted).toBe(true);
   expect(facetSignal?.aborted).toBe(true);
   expect(queryParams().has("q")).toBe(false);
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("高血压");
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveFocus();
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("高血压");
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveFocus();
   await act(async () => finish({ ...result, items: [{ ...item, title: "Cancelled old result" }] }));
   expect(screen.queryByText("Cancelled old result")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "检索" }));
@@ -392,7 +392,7 @@ it.each(["empty", "error"] as const)("leaves the transition when the request end
   let fail!: (error: Error) => void;
   vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
   open("/app/search/literature");
-  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "高血压");
+  await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), "高血压");
   await userEvent.click(screen.getByRole("button", { name: "检索" }));
   expect(screen.getByRole("region", { name: "正在检索文献" })).toBeInTheDocument();
   await act(async () => {
@@ -434,6 +434,26 @@ it("offers explicit EviMed reauthentication without silently leaving the search 
   expect(next.searchParams.get("q")).toBe("阿司匹林");
   expect(next.searchParams.get("source")).toBe("NMPA");
   expect(screen.getByTestId("location")).toHaveTextContent("/app/search/drugs");
+});
+
+it("draws no filter rail, sort or selection around an account that cannot search at all", async () => {
+  vi.mocked(api.searchEvimed).mockRejectedValueOnce(new WebApiError("sign in", { status: 403, code: "evimed_search_login_required" }));
+  open("/app/search/literature?q=哮喘");
+  expect(await screen.findByRole("link", { name: "重新登录" })).toBeInTheDocument();
+  expect(screen.queryByRole("checkbox", { name: "选择本页" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "综合排序" })).toBeNull();
+  expect(screen.queryByText("清空筛选")).toBeNull();
+  // The keyword row stays, so the person can search again once signed in.
+  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("哮喘");
+});
+
+it("says a deployment without the medical search has none, and offers the way back instead of a retry that cannot work", async () => {
+  vi.mocked(api.searchEvimed).mockRejectedValueOnce(new WebApiError("unavailable", { status: 503, code: "evimed_search_unavailable" }));
+  open("/app/search/literature?q=哮喘");
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("医学检索暂未开通，请联系管理员。");
+  expect(within(alert).queryByRole("button", { name: "重试" })).toBeNull();
+  expect(within(alert).getByRole("link", { name: "回到对话" })).toHaveAttribute("href", "/app/home");
 });
 
 it("ignores a late response from the previous category", async () => {
@@ -649,11 +669,11 @@ it.each(["button", "escape"])("clears the entire search round with %s and cannot
   }
   expect(screen.getByText("输入关键词，开始检索。")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("");
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("");
   expect(queryParams().get("q")).toBeNull();
   expect(queryParams().get("language")).toBeNull();
   expect(api.searchEvimed).toHaveBeenCalledTimes(requests);
-  await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "高血压{Enter}");
+  await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), "高血压{Enter}");
   await screen.findByRole("link", { name: resultTitle("literature") });
   expect(api.searchEvimed).toHaveBeenCalledTimes(requests + 1);
   expect(api.searchEvimed).toHaveBeenLastCalledWith("literature", expect.objectContaining({ page: 1, filters: { language: "", sort: "comprehensive" } }), expect.any(AbortSignal));
@@ -853,7 +873,7 @@ it("clears private tab state on a cross-tab session signal while ignoring unrela
     }));
   });
   expect(screen.getByText("输入关键词，开始检索。")).toBeInTheDocument();
-  expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("");
+  expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("");
   expect(queryParams().get("q")).toBeNull();
   await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
   expect(queryParams().get("page")).toBeNull();
@@ -1208,7 +1228,7 @@ it.each(["filter", "new-keyword", "same-keyword", "session"])("clears selected r
   }
   if (reason === "session") {
     await screen.findByText("输入关键词，开始检索。");
-    await userEvent.type(screen.getByRole("searchbox", { name: "检索关键词" }), "高血压{Enter}");
+    await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), "高血压{Enter}");
   }
   await screen.findByRole("link", { name: "literature 1-0" });
   expect(screen.queryByRole("group", { name: "已选文献操作" })).toBeNull();

@@ -1440,6 +1440,38 @@ test("programme preparation locks questions and enqueues exactly one baseline ac
 });
 
 
+test("a diagnosis measures the engines its saved contract names, even when the project selects more: it never sticks at queued (2026-11-01)", options, async () => {
+  const world = harness();
+  const { project } = await newProject();
+  for (const step of ["evidence", "journey", "questions", "diagnosis"]) await store.setStep(project.id, step, { requested: true });
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  // A saved recurring contract over two of the project's three engines (an import's, or one saved before the engines grew).
+  const agreement = { samplingMode: "recurring", engines: ["deepseek", "kimi"], repeats: 2, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  await q(`UPDATE evimed_geo.question_sets SET contract=$2::jsonb WHERE geo_project_id=$1`, [project.id, JSON.stringify(agreement)]);
+  await world.orchestrator.advance(project.id);
+  const rounds = world.enqueued.filter(row => row.geoProjectId === project.id);
+  assert.deepEqual(rounds.map(row => row.kind), ["baseline"], "the baseline is asked, as before the contract was checked against the project's engines");
+  assert.deepEqual(rounds[0].engines, ["deepseek", "kimi"]);
+  assert.equal((await reload(project.id)).steps.diagnosis.status, "running");
+});
+
+test("a recurring round outside its saved contract's engines is skipped by name, never silently retried forever (2026-11-01)", options, async () => {
+  const { world, project } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  // The contract is saved again over fewer engines than the consent still covers.
+  const agreement = { samplingMode: "recurring", engines: ["deepseek"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  await q(`UPDATE evimed_geo.question_sets SET contract=$2::jsonb WHERE geo_project_id=$1`, [project.id, JSON.stringify(agreement)]);
+  const before = world.enqueued.length;
+  world.setClock("2026-10-04T19:10:00Z"); // Monday 2026-10-05 03:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  assert.equal(world.enqueued.length, before, "nothing outside the contract is measured");
+  const marks = await q(`SELECT key, state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key LIKE 'weekly:%'`, [project.id]);
+  assert.ok(marks.length > 0, "the week's key is written");
+  for (const mark of marks) assert.deepEqual([mark.state, mark.detail?.reason], ["skipped", "geo_monitoring_scope_changed"]);
+});
+
 test("a new monitoring round supersedes completed weekly status without being hidden by another active lane", options, async () => {
   const { world, project } = await lockedProgram();
   await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });

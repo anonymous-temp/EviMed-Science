@@ -939,18 +939,24 @@ export class NativeMemoryOverlay {
    * text (`normalisedStatement`, at most 400 characters), because recognising a reworded repeat needs the words: a line that contains
    * it, or that a model judges to say the same, is taken out again. The text is the account's own, read by nothing but that
    * recognition, and goes with the rejection (a restatement by the person, a reset, the account).
-   * @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines
+   *
+   * `origin` says how the lines were removed: `edit` — the person's own edit of a file replaced them, so their old words may still be drawn as
+   * what the memory used to say — or `forget` (the default: a forget, a delete, an undo, the engine's repeat taken out again), which no
+   * reader may draw. A line is `edit` only while every rejection of it was one: a forget of the same words, by whatever file, makes it `forget`
+   * for good, and a row from before the column has none and is read as `forget`.
+   * @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines @param {{ origin?: "edit" | "forget" }} [options]
    */
-  async reject(userId, memoryType, uri, lines) {
+  async reject(userId, memoryType, uri, lines, { origin = "forget" } = {}) {
     /** @type {Map<string, string>} */
     const unique = new Map();
     for (const line of lines) { const print = lineFingerprint(line); if (!unique.has(print)) unique.set(print, normalisedStatement(line).slice(0, 400)); }
     const prints = [...unique.keys()].slice(0, 500);
     if (!prints.length) return 0;
-    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text)
-      SELECT $1, $2, print, $3, text FROM unnest($4::text[], $5::text[]) AS rejected(print, text)
-      ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp(), text=COALESCE(EXCLUDED.text, evimed_memory.native_rejections.text)`,
-    [owner(userId), String(memoryType), String(uri).slice(0, 600), prints, prints.map((print) => unique.get(print) ?? "")]);
+    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text, origin)
+      SELECT $1, $2, print, $3, text, $6 FROM unnest($4::text[], $5::text[]) AS rejected(print, text)
+      ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp(), text=COALESCE(EXCLUDED.text, evimed_memory.native_rejections.text),
+        origin=CASE WHEN EXCLUDED.origin = 'edit' AND evimed_memory.native_rejections.origin = 'edit' THEN 'edit' ELSE 'forget' END`,
+    [owner(userId), String(memoryType), String(uri).slice(0, 600), prints, prints.map((print) => unique.get(print) ?? ""), origin === "edit" ? "edit" : "forget"]);
     return prints.length;
   }
 
@@ -970,13 +976,29 @@ export class NativeMemoryOverlay {
 
   /**
    * The lines the person removed from memories of this type, with the words each had when there are any (a rejection made before the
-   * words were kept has only its fingerprint and can only be met by an exact repeat). Newest first.
-   * @param {string} userId @param {string} memoryType @param {{ limit?: number }} [options] @returns {Promise<{ fingerprint: string, text: string | null }[]>}
+   * words were kept has only its fingerprint and can only be met by an exact repeat), and how each was removed (`origin`: `edit` only when
+   * the person's own edit replaced it, else `forget`, which a row from before the column is read as). Newest first.
+   * @param {string} userId @param {string} memoryType @param {{ limit?: number }} [options]
+   * @returns {Promise<{ fingerprint: string, text: string | null, origin: "edit" | "forget" }[]>}
    */
   async rejectedLines(userId, memoryType, { limit = 300 } = {}) {
-    const result = await this.#query("SELECT fingerprint, text FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 ORDER BY rejected_at DESC LIMIT $3",
+    const result = await this.#query("SELECT fingerprint, text, origin FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 ORDER BY rejected_at DESC LIMIT $3",
       [owner(userId), String(memoryType), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
-    return result.rows.map((/** @type {any} */ row) => ({ fingerprint: String(row.fingerprint), text: typeof row.text === "string" && row.text ? row.text : null }));
+    return result.rows.map((/** @type {any} */ row) => ({ fingerprint: String(row.fingerprint), text: typeof row.text === "string" && row.text ? row.text : null,
+      origin: row.origin === "edit" ? "edit" : "forget" }));
+  }
+
+  /**
+   * The lines the person forgot or deleted, of the memories of these types: the rejections that were not an edit replacing a line (`origin` is
+   * anything but `edit`; a row from before the column counts). What no reader may show out of the history of any file. Newest first.
+   * @param {string} userId @param {readonly string[]} memoryTypes @param {{ limit?: number }} [options]
+   * @returns {Promise<{ fingerprint: string, text: string | null, origin: "forget" }[]>}
+   */
+  async forgottenLines(userId, memoryTypes, { limit = 2_000 } = {}) {
+    if (!memoryTypes.length) return [];
+    const result = await this.#query("SELECT fingerprint, text FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type = ANY($2::text[]) AND origin IS DISTINCT FROM 'edit' ORDER BY rejected_at DESC LIMIT $3",
+      [owner(userId), memoryTypes.map(String), Math.max(1, Math.min(5_000, Math.trunc(Number(limit)) || 2_000))]);
+    return result.rows.map((/** @type {any} */ row) => ({ fingerprint: String(row.fingerprint), text: typeof row.text === "string" && row.text ? row.text : null, origin: "forget" }));
   }
 
   /** @param {string} userId @param {string} memoryType @returns {Promise<Set<string>>} */

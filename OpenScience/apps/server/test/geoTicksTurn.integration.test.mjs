@@ -35,7 +35,11 @@ async function projects(count) {
   const userId = `turn-${randomUUID().slice(0, 8)}`;
   const made = [];
   for (let index = 0; index < count; index += 1) {
-    made.push(await store.createProject({ userId, projectId: `p${index}-${randomUUID().slice(0, 6)}`, engines: ["deepseek"], coverageDays: 90 }));
+    const project = await store.createProject({ userId, projectId: `p${index}-${randomUUID().slice(0, 6)}`, engines: ["deepseek"], coverageDays: 90 });
+    // A project is scheduled only when recurring measurement was asked for and confirmed for its own engines and coverage.
+    await store.setStep(project.id, "monitoring", { requested: true, requestOrigin: "browser", requestedAt: new Date().toISOString(), requestedBy: userId,
+      automation: { state: "confirmed", actorId: userId, at: new Date().toISOString(), engines: ["deepseek"], coverageDays: 90 } });
+    made.push(await store.getProject(userId, project.id));
   }
   return made;
 }

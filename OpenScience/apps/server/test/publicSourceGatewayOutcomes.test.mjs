@@ -298,7 +298,9 @@ test("every request the gateway refuses itself is one the runtime's transport wo
     assert.ok(block, `${name} is declared in source_transport.py`);
     return [...block[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
   };
-  const named = [...listed("GATEWAY_INVALID_REQUEST_CODES"), ...listed("GATEWAY_FORBIDDEN_REQUEST_CODES")].sort();
+  // The third list is the gateway holding a project to its pace (projectGatewayLimit.mjs): worded as the deployment's and
+  // retryable, where the other two are a fault in the request or a policy.
+  const named = [...listed("GATEWAY_INVALID_REQUEST_CODES"), ...listed("GATEWAY_FORBIDDEN_REQUEST_CODES"), ...listed("GATEWAY_PROJECT_LIMIT_CODES")].sort();
   const gateway = fs.readFileSync(path.resolve(here, "../src/publicSourceGateway.mjs"), "utf8");
   // The 4xx codes the gateway raises about the request it was handed. The web-read mode's own codes belong to that
   // mode, a credential nobody configured is read through `_not_configured_from_failure`, and 404 is an answer.

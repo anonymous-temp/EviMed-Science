@@ -676,3 +676,71 @@ test("an offer that expires during the final authorization check cannot consume 
     } finally { context.mock.restoreAll(); }
   });
 });
+
+// ───────────────────────── rev-1101: a 403 is that request's refusal, a 401 is the authorization going ─────────────────────────
+
+const forbiddenReplies = [
+  ["HTTP 403", () => new Response("{}", { status: 403 })],
+  ["HTTP 200 carrying code 403", () => json(null, 403)],
+];
+
+test("an upstream 403 on a search is a permission error of that request and keeps the credential; a 401 still ends it", async () => {
+  for (const [label, reply] of forbiddenReplies) {
+    await fixture(async ({ config, store, signed }) => {
+      const upstream = provider(); const service = new EvimedSearchService(config, store, upstream);
+      upstream.answerWith(call => call.path.endsWith("/screen") ? json({ screenId: "screen" }) : reply());
+      const refused = await service.search(signed.req, responseHeaders(), "literature", { query: "aspirin" }).then(() => null, error => error);
+      assert.equal(refused?.code, "evimed_search_forbidden", label);
+      assert.equal(refused.status, 403);
+      assert.match(evimedSearchFailureDetail(refused), /"reason":"permission"/, label);
+      assert.equal((await store.evimedSearchSession(signed.req, responseHeaders())).credential, credential, `${label}: the credential stays`);
+      // The same account's next search works: nothing forced a sign-in.
+      upstream.answerWith(undefined);
+      assert.equal((await service.search(signed.req, responseHeaders(), "literature", { query: "aspirin" })).category, "literature", label);
+    });
+  }
+  await fixture(async ({ config, store, signed }) => {
+    const upstream = provider(); const service = new EvimedSearchService(config, store, upstream);
+    upstream.answerWith(() => new Response("{}", { status: 401 }));
+    await assert.rejects(service.search(signed.req, responseHeaders(), "literature", { query: "aspirin" }), { status: 403, code: "evimed_search_credential_expired" });
+    assert.equal((await store.evimedSearchSession(signed.req, responseHeaders())).credential, null);
+  });
+});
+
+test("one facet the account may not use is unavailable to it and does not end the request or the sign-in", async () => {
+  await fixture(async ({ config, store, signed }) => {
+    const upstream = provider(); const service = new EvimedSearchService(config, store, upstream);
+    upstream.answerWith(call => {
+      if (call.path.endsWith("/screen")) return json({ screenId: "screen" });
+      if (call.path.endsWith("/chart")) return json({ name: [2026], value: [3] });
+      if (call.path.endsWith("/leftSidebarP")) return new Response("{}", { status: 403 });
+      if (call.path.endsWith("/leftSidebarIc")) return json(null, 403);
+      if (call.path.endsWith("/leftSidebarMiddle")) return json({ middle: [{ name: "Trial", value: "2" }] });
+      return json({ journal: { journalA: 10 }, bottom: {}, ic: {} });
+    });
+    const result = await service.facets(signed.req, responseHeaders(), "literature", { query: "aspirin" });
+    assert.deepEqual(result.timeline, [{ year: 2026, count: 3 }]);
+    assert.deepEqual(result.unavailable.sort(), ["ic", "p"]);
+    assert.ok(result.groups.some(group => group.key === "articleType"), "the other groups are there");
+    assert.equal((await store.evimedSearchSession(signed.req, responseHeaders())).credential, credential, "the sign-in is kept");
+  });
+});
+
+test("an export the account may not make is a permission error and keeps the credential; an expired one ends it", async () => {
+  await fixture(async ({ config, store, signed }) => {
+    const upstream = provider(); const service = new EvimedSearchService(config, store, upstream);
+    const list = await service.search(signed.req, responseHeaders(), "literature", { query: "aspirin" });
+    const actionRefs = [list.items[0].actionRef];
+    for (const reply of [
+      () => new Response("{}", { status: 403 }),
+      () => new Response(JSON.stringify({ code: 403 }), { headers: { "content-type": "application/json" } }),
+    ]) {
+      upstream.answerWith(reply);
+      await assert.rejects(service.action(signed.req, responseHeaders(), "literature", "export", { actionRefs, format: 2 }), { status: 403, code: "evimed_search_forbidden" });
+      assert.equal((await store.evimedSearchSession(signed.req, responseHeaders())).credential, credential);
+    }
+    upstream.answerWith(() => new Response("{}", { status: 401 }));
+    await assert.rejects(service.action(signed.req, responseHeaders(), "literature", "export", { actionRefs, format: 2 }), { code: "evimed_search_credential_expired" });
+    assert.equal((await store.evimedSearchSession(signed.req, responseHeaders())).credential, null);
+  });
+});

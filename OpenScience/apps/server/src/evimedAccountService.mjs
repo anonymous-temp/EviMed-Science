@@ -1,5 +1,5 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { appendSetCookie, HttpError, parseCookies, shouldUseSecureCookies } from "./security.mjs";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
+import { appendSetCookie, assertSameSiteBrowserRequest, HttpError, parseCookies, shouldUseSecureCookies } from "./security.mjs";
 import { validateEvimedAuthSettings } from "./evimedAuthService.mjs";
 
 /** The team owns credentials, SMS, captcha and recovery; these routes only adapt its wire. */
@@ -172,6 +172,32 @@ export class EvimedAccountService {
     this.fetch = fetchImpl ?? globalThis.fetch;
     // A restart ends pending captcha/recovery flows. No cookie jar or credential is stored on disk or shared between browsers.
     this.flowKey = randomBytes(32);
+    /** Verification codes sent per phone number: a fixed window per keyed hash of the number, in memory (`allowSms`). @type {Map<string, { count: number, resetAt: number }>} */
+    this.smsWindows = new Map();
+  }
+
+  /**
+   * One more verification code for this phone number, or the refusal: at most `evimedSmsPerPhoneMax` in `evimedSmsPerPhoneWindowMs`, whatever the
+   * purpose and whoever asks. The per-address auth limit is shared with every other sign-in and does not follow a number, so a number could be
+   * flooded with the team's SMS from many addresses, or one address spread over many numbers. The number is kept only as an HMAC under a
+   * key that lives in memory, never in a log, an audit line or an error. A code the team's service then refuses has still been counted: the count
+   * is of what was asked, not of what was sent. @param {string} phone
+   */
+  allowSms(phone) {
+    const max = Number(this.config.evimedSmsPerPhoneMax);
+    const windowMs = Number(this.config.evimedSmsPerPhoneWindowMs);
+    if (!Number.isFinite(max) || max <= 0 || !Number.isFinite(windowMs) || windowMs <= 0) return;
+    const now = Date.now();
+    const key = createHmac("sha256", this.flowKey).update(phone).digest("base64url");
+    const held = this.smsWindows.get(key);
+    const bucket = !held || held.resetAt <= now ? { count: 0, resetAt: now + windowMs } : held;
+    if (bucket.count >= max) {
+      throw new HttpError(429, "evimed_sms_rate_limited", "Too many verification codes were requested for this phone number.",
+        { retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000) });
+    }
+    bucket.count += 1;
+    this.smsWindows.set(key, bucket);
+    if (this.smsWindows.size > 10_000) for (const [other, window] of this.smsWindows) if (window.resetAt <= now) this.smsWindows.delete(other);
   }
 
   get enabled() { return Boolean(this.config.evimedAuthEnabled && this.config.evimedAccountApiBaseUrl); }
@@ -182,19 +208,9 @@ export class EvimedAccountService {
     return { account: EVIMED_ACCOUNT_PATHS };
   }
 
-  /** Anonymous JSON calls cannot use a session CSRF token; browser origin checks protect their flow cookie. @param {any} req */
+  /** Anonymous JSON calls cannot use a session CSRF token; browser origin checks (`assertSameSiteBrowserRequest`) protect their flow cookie. @param {any} req */
   assertOrigin(req) {
-    if (req.headers["sec-fetch-site"] === "cross-site") throw new HttpError(403, "csrf_required", "A same-origin account request is required.");
-    const origin = req.headers.origin;
-    if (origin) {
-      let originUrl;
-      try { originUrl = new URL(origin); } catch { throw new HttpError(403, "csrf_required", "A same-origin account request is required."); }
-      const requestOrigin = `${shouldUseSecureCookies(req, this.config) ? "https" : "http"}://${req.headers.host}`;
-      let publicOrigin = "";
-      try { publicOrigin = new URL(this.config.publicUrl).origin; } catch { /* An unconfigured local deployment uses its request origin. */ }
-      const local = !this.config.production && ["localhost", "127.0.0.1", "[::1]"].includes(originUrl.hostname) && ["http:", "https:"].includes(originUrl.protocol);
-      if (originUrl.origin !== (publicOrigin || requestOrigin) && !local) throw new HttpError(403, "csrf_required", "A same-origin account request is required.");
-    }
+    assertSameSiteBrowserRequest(req, this.config);
     if (req.method !== "GET" && !/^application\/json(?:\s*;|$)/i.test(String(req.headers["content-type"] ?? ""))) {
       throw new HttpError(400, "invalid_json", "Account requests require a JSON object.");
     }
@@ -274,14 +290,15 @@ export class EvimedAccountService {
     if (!this.enabled) throw new HttpError(404, "auth_method_disabled", "EviMed account authentication is disabled.");
     const settings = validateEvimedAccountSettings(this.config);
     this.assertOrigin(req);
-    if (url.pathname !== EVIMED_ACCOUNT_PATHS.captchaUrl && url.search) throw invalid();
+    // No route takes a query: the phone number the captcha is for travels in the body, so that it never reaches an access log's URL.
+    if (url.search) throw invalid();
     let flow = this.readFlow(req);
     let path;
     let payload;
     let login = false;
     if (url.pathname === EVIMED_ACCOUNT_PATHS.captchaUrl) {
-      if ([...url.searchParams.keys()].some((key) => key !== "phoneNumber") || url.searchParams.getAll("phoneNumber").length !== 1) throw invalid();
-      const phone = phoneOf(url.searchParams.get("phoneNumber"));
+      fields(body, ["phone"]);
+      const phone = phoneOf(body.phone);
       flow = { expiresAt: Date.now() + FLOW_TTL_MS, cookies: {}, phone };
       path = "system/captcha/get";
       payload = { phoneNumber: phone };
@@ -296,6 +313,8 @@ export class EvimedAccountService {
       } else if (body.purpose === "register" && body.xcode === undefined) payload = { mark: 1, prefix: "86", receiver: phone };
       else if (body.purpose === "reset" && body.xcode === undefined) payload = { mark: 2, receiver: phone };
       else throw invalid();
+      // After the request is known to be well formed and before the team's service is asked: a refusal costs it nothing.
+      this.allowSms(phone);
     } else if (url.pathname === EVIMED_ACCOUNT_PATHS.passwordLoginUrl) {
       fields(body, ["username", "password"]);
       if (typeof body.username !== "string" || !body.username.trim() || body.username.length > 128) throw invalid();
@@ -314,7 +333,8 @@ export class EvimedAccountService {
     }
     const destination = new URL(path, settings.baseUrl);
     const isCaptcha = url.pathname === EVIMED_ACCOUNT_PATHS.captchaUrl;
-    if (isCaptcha) destination.searchParams.set("phoneNumber", String(url.searchParams.get("phoneNumber")));
+    // The team's service takes the number in the query of a GET; that call is between the two servers and is not ours to change.
+    if (isCaptcha) destination.searchParams.set("phoneNumber", String(flow.phone));
     let response;
     try {
       response = await this.fetch(destination, {
@@ -340,6 +360,10 @@ export class EvimedAccountService {
       this.writeFlow(req, res, flow, true);
       return { data: session, userId: session.user.id };
     }
+    // A password reset revokes no session of ours, and cannot: our account for a person is named by a hash of the team's own user id (`evimedUserId`,
+    // from the identity endpoint's answer for a token), and a reset arrives with a phone number alone. Nothing here maps a number to an
+    // account (no number is stored, by design), so there is no account to revoke the sessions of; the team's service ends its own tokens, and a
+    // session of ours lasts its own lifetime. Revoking here would need the team's service to return the user id with the reset.
     const finished = url.pathname === EVIMED_ACCOUNT_PATHS.registerUrl || url.pathname === EVIMED_ACCOUNT_PATHS.resetPasswordUrl;
     if (!finished) this.updateCookies(response, flow);
     const data = isCaptcha ? await captchaOf(answer, (value) => this.imageOf(value, settings, flow)) : true;

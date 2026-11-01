@@ -1,7 +1,7 @@
 {
-  "version": "3.1.0",
-  "archiveSha256": "1908c9553168876f37cff5af0d60f53e1c3ed1a2fbebe1e48a1efffcbf23f22e",
-  "treeSha256": "6c1d3806001444cbc84b7aba9cc8b2be874e63ddd0e2ffc53e59d4ab8908a707",
+  "version": "3.0.1",
+  "archiveSha256": "a2654221963fe8b18ba014b0a1dfd84bccdd972056b632ce2f09eaae67edbe9d",
+  "treeSha256": "e3ef7ebc507380a1cb8571b8d945a2e778bb2600b7cc2287b4112268af0b5e30",
   "skills": [
     "geo-audit-cross-artifact-consistency",
     "geo-build-complete-client-package",

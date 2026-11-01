@@ -40,6 +40,21 @@ export function isReservedAccountIdentity(id, name) {
   return isPlatformAccountId(id) || isPlatformAccountName(name);
 }
 
+/**
+ * Whether an id is of the form the EviMed sign-in derives for its accounts (`evimedUserId`: `evimed_` and forty hex digits of a hash of the
+ * identity endpoint and the person's EviMed id). The hash is of two things anyone who knows a person's EviMed id can compute, so an id of this
+ * form registered by hand would take the place of that person's account: their EviMed sign-in would meet `identity_collision` for good. Only the
+ * EviMed sign-in creates one (`upsertExternalUser`); a registration is refused it. @param {unknown} id
+ */
+export function isEvimedDerivedAccountId(id) {
+  return typeof id === "string" && /^evimed_/iu.test(id);
+}
+
+/** What no one may register: an id the EviMed sign-in derives for its own accounts. */
+export function accountNameReserved() {
+  return new HttpError(400, "account_name_reserved", "This account name is reserved by the platform.");
+}
+
 /** The display name an external identity is kept under: the identity provider's own, unless it is the publisher's.
  *  @param {unknown} name @returns {string} */
 export function externalDisplayName(name) {

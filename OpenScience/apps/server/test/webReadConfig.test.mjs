@@ -19,6 +19,10 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 
 const LEVERS = [
   ["OPEN_SCIENCE_WEB_READ_ENABLED", "webReadEnabled"],
+  // The per-project limits of the public-source and web-search gateways (projectGatewayLimit.mjs).
+  ["OPEN_SCIENCE_PUBLIC_SOURCE_PROJECT_RATE_PER_MINUTE", "publicSourceProjectRatePerMinute"],
+  ["OPEN_SCIENCE_PUBLIC_SOURCE_PROJECT_CONCURRENCY", "publicSourceProjectConcurrency"],
+  ["OPEN_SCIENCE_WEB_SEARCH_PROJECT_RATE_PER_MINUTE", "webSearchProjectRatePerMinute"],
   ["OPEN_SCIENCE_WEB_READ_CONCURRENCY", "webReadConcurrency"],
   ["OPEN_SCIENCE_WEB_READ_RUNTIME_CONCURRENCY", "webReadRuntimeConcurrency"],
   ["OPEN_SCIENCE_WEB_READ_HOST_INTERVAL_MS", "webReadHostIntervalMs"],

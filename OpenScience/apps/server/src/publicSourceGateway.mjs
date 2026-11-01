@@ -4,6 +4,7 @@ import { connectorCredentialSpec, connectorMissingCode } from "@evimed/domain";
 import { DEEPSEEK_FETCH_RESERVE_MS, deepseekRenditionResult, webReadFallbackReason } from "./deepseekTools.mjs";
 import { headerValue, nodeWebTransport, privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
 import { recordGeneExpressionDownload, recordGeneExpressionLimit } from "./geneExpressionMetrics.mjs";
+import { createProjectGatewayLimit } from "./projectGatewayLimit.mjs";
 import { GENE_EXPRESSION_LIMIT_ACTIONS, GENE_EXPRESSION_LIMIT_NAMES } from "@evimed/domain";
 
 const gatewayPath = "/internal/sources/v1/fetch";
@@ -1491,6 +1492,12 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fallbackFetch = null, pause = abortablePause, deepseekTools = null,
 } = {}) {
   const openAccessTransport = pdfTransport ?? nodeWebTransport({ resolveImpl });
+  // What one project's runtime may ask of this gateway: a minute's ceiling over every request, and a cap on the buffered ones in
+  // flight (a web read has its runtime gate in webRead.mjs, and the gene-expression note is an acknowledgement).
+  const projectLimit = createProjectGatewayLimit({
+    gateway: "sources", ratePerMinute: Number(config.publicSourceProjectRatePerMinute ?? 600),
+    concurrency: Number(config.publicSourceProjectConcurrency ?? 16), queue: 2 * Number(config.publicSourceProjectConcurrency ?? 16),
+  });
   return async function publicSourceGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -1514,6 +1521,8 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
       return timer;
     };
     let timeout = arm(timeoutMs);
+    /** @type {(() => void) | null} the project's place among its requests in flight, given back in `finally` */
+    let place = null;
     try {
       const token = bearerToken(req);
       let identity;
@@ -1522,7 +1531,18 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
       } catch {
         throw gatewayError(401, "public_source_gateway_token_invalid", "Public-source gateway authentication failed.");
       }
+      const refused = projectLimit.admit(identity);
+      if (refused) {
+        throw Object.assign(
+          gatewayError(429, "public_source_gateway_project_rate_limited", `This project may make ${projectLimit.ceiling} public-source requests a minute; ask again in ${refused.retryAfterSeconds} s.`),
+          { retryAfterSeconds: refused.retryAfterSeconds },
+        );
+      }
       const request = validatedRequest(await readJsonBody(req, 16 * 1024));
+      if (request.mode !== "web-read" && request.mode !== "gene-expression-limit") {
+        place = await projectLimit.enter(identity, controller.signal);
+        if (!place) throw gatewayError(429, "public_source_gateway_project_busy", `This project already has ${projectLimit.concurrency} public-source requests under way and ${projectLimit.queue} waiting; let them finish first.`);
+      }
       await evaluationIsolation?.assertRequest(identity, "public-source", { ...request, url: String(request.url ?? "") });
       const evaluating = await evaluationIsolation?.isEvaluation(identity);
       if (evaluating && ["open-access-pdf", "download"].includes(request.mode)) throw gatewayError(403, "evaluation_opaque_source_excluded", "Opaque downloads are unavailable during isolated evaluation; use parsed sources.");
@@ -1750,6 +1770,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
     } catch (error) {
       sendError(res, error, onFailure);
     } finally {
+      place?.();
       clearTimeout(timeout);
     }
   };

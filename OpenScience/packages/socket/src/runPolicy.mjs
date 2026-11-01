@@ -230,6 +230,12 @@ export const NATIVE_SUBAGENT_TOOL = 'subagent'
  * screen a batch, or hand a file to the user. Those belong to the orchestrator; a general-work child hands its result
  * back. Masked in the child's own scope at its creation (`installChildComposition`) — the list the preset row carried
  * as `toolFilter.deny` until 0.2.1 refused the field.
+ *
+ * `geo_write` is in it for the same reason: it writes the project's record and starts its diagnosis, which spends the
+ * project's money, and the gateway knows only the project's token, not which session of the runtime holds it. A general
+ * child of a 循证 GEO project's conversation reports to its parent, which writes. This list is the fallback for the kernel's
+ * own `subagent` only: a delegation's child is composed from its capability's declared tools (`reservedChildComposition`),
+ * so the four GEO capabilities keep the tool they declare.
  * @type {readonly string[]}
  */
 export const NATIVE_CHILD_TOOL_DENY = Object.freeze([
@@ -241,6 +247,7 @@ export const NATIVE_CHILD_TOOL_DENY = Object.freeze([
   SOCKET_TOOL_NAMES.reviseDeliverable,
   SOCKET_TOOL_NAMES.screenBatch,
   'present',
+  `${MCP_TOOL_PREFIX}geo_write`,
 ])
 
 /**

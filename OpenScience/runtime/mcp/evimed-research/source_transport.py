@@ -251,6 +251,13 @@ GATEWAY_FORBIDDEN_REQUEST_CODES = frozenset({
     "public_source_gateway_graphql_forbidden", "public_source_pdf_host_forbidden",
     "evaluation_source_excluded", "evaluation_opaque_source_excluded",
 })
+# What the gateway holds back about a project's pace, neither about the request nor about a source (`projectGatewayLimit.mjs`):
+# the project asked for more in a minute, or at once, than it may. Not the source rate limiting anyone (the source was not
+# asked), and not a fault in the request: ask again after the wait, or ask for less at a time. A test holds this list to the
+# codes raised there.
+GATEWAY_PROJECT_LIMIT_CODES = frozenset({
+    "public_source_gateway_project_rate_limited", "public_source_gateway_project_busy",
+})
 
 
 def _gateway_refused(code, envelope, *, scope, forbidden):
@@ -267,6 +274,19 @@ def _gateway_refused(code, envelope, *, scope, forbidden):
     return source_outcome.unavailable(
         message, scope=scope, reason="gateway_refused", retryable=False,
         how="The request this tool built is not one the gateway accepts, which is a fault on the EviMed side and says nothing about %s or about whether the record exists. Do not retry the same call: report that the lookup could not be made from here, and go on with other sources or ask the researcher to supply the document." % source,
+    )
+
+
+def _gateway_paced(code, envelope, *, scope, retry_after):
+    """The gateway holding this project to its pace, said as the deployment's and not as the source's."""
+    source = scope or "the source"
+    detail = envelope.get("message") if isinstance(envelope.get("message"), str) else ""
+    message = "EviMed's own gateway held this project's requests to their limit (%s%s); %s was not asked." % (
+        code, (": %s" % detail.rstrip(".")) if detail else "", source)
+    wait = (" about %d s" % retry_after) if retry_after else " a little"
+    return source_outcome.unavailable(
+        message, scope=scope, reason="gateway_project_limit", retryable=True, retry_after=retry_after,
+        how="This project has asked the gateway for more, or at once more, than it allows; %s was never asked, so this says nothing about it or about whether the record exists. Wait%s and ask again, ask for fewer things at a time, and do not describe it as %s refusing." % (source, wait, source),
     )
 
 
@@ -297,6 +317,8 @@ def classify_http_error(error, *, scope):
         return _gateway_refused(code, envelope, scope=scope, forbidden=False)
     if code in GATEWAY_FORBIDDEN_REQUEST_CODES:
         return _gateway_refused(code, envelope, scope=scope, forbidden=True)
+    if code in GATEWAY_PROJECT_LIMIT_CODES:
+        return _gateway_paced(code, envelope, scope=scope, retry_after=retry_after)
     if status == 404:
         return NotFound()
     if code == "public_source_gateway_response_too_large":

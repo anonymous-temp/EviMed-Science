@@ -38,6 +38,7 @@ import { edgeFetch, edgeStats } from "./edgeProxy.mjs";
 import { DEEPSEEK_SEARCH_MAX_QUERY, DeepSeekToolError, createDeepSeekTools } from "./deepseekTools.mjs";
 import { GatewaySpendRefusal, reserveGatewaySpend } from "./gatewaySpend.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
+import { createProjectGatewayLimit } from "./projectGatewayLimit.mjs";
 
 const gatewayPath = "/internal/search/v1/query";
 const maxQueryLength = 512;
@@ -595,6 +596,8 @@ export function createWebSearch(config, { fetchImpl = fetch, edge = null, edgeFe
  */
 export function createWebSearchGatewayHandler(config, runtimeManager, { service = null, ...options } = {}) {
   const search = service ?? createWebSearch(config, options);
+  // Searches in one minute from one project's runtime: the engines' rate and DeepSeek's price are shared and per request.
+  const projectLimit = createProjectGatewayLimit({ gateway: "search", ratePerMinute: Number(config.webSearchProjectRatePerMinute ?? 300) });
   return async function webSearchGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -611,6 +614,10 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { service 
         caller = runtimeManager.assertActiveModelGatewayToken(token);
       } catch {
         throw gatewayError(401, "web_search_gateway_token_invalid", "Web search authentication failed.");
+      }
+      const refused = projectLimit.admit(caller);
+      if (refused) {
+        throw gatewayError(429, "web_search_project_rate_limited", `This project may make ${projectLimit.ceiling} web searches a minute; ask again in ${refused.retryAfterSeconds} s.`);
       }
       const request = validatedRequest(await readJsonBody(req, 8 * 1024));
       sendJson(res, 200, await search.run(request, caller, controller));

@@ -224,6 +224,8 @@ const WALK_TABLES = {
       {"view":"autopilot-first","discovered":true,"pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":false,"rowsNote":"the first-use state of 定时任务, a project with no task (found from the account's own project list: the production walk's throwaway account has nothing, and so do the fixture's study projects): the examples fill the new-task form beside them and make nothing, and the form is read as it stands"},
       {"view":"active-research","route":"/app/active-research","pattern":"/app/active-research","family":"active-research","template":"T4","budget":"data","rows":false,"rowsNote":"Research rows select an execution in place; the generic walk row click expects navigation, while the selection is exercised by ActiveResearchPage tests."},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true,"budgetOverride":{"controls":9},"budgetNote":"controls: each message row carries its selection checkbox (design system v3.1, 2026-10-26: select messages and mark them read together; the batch actions are in the toolbar only while something is ticked) — a 16 px native checkbox, one look, the ninth beside the shell's, the tabs, the source and kind chips and the rows; 9 on the fixture walk of 2026-10-26 (int/1026-fix)"},
+      {"view":"search","route":"/app/search","pattern":"/app/search/:category?","family":"search","template":"T1","rows":false,"rowsNote":"the search home: a composer and three topic buttons that fill it; no list whose row opens anything"},
+      {"view":"search-results","route":"/app/search/literature?q=aripiprazole","pattern":"/app/search/:category?","family":"search","template":"T1","rows":false,"rowsNote":"an account with no Evimed login has no results: the page is walked in the state it meets, the sentence and the way forward it gives"},
       {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":false,"rowsNote":"a settings page of rows with their own buttons (用户名, 密码 修改, 退出登录, 导出, 删除): no list whose row opens anything, in any account — the click could only ever report a coverage gap (r19-guards2, from the fixture walk)"},
       {"view":"account-appearance","route":"/app/account?tab=appearance","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-usage","route":"/app/account?tab=usage","pattern":"/app/account","family":"settings","template":"T6","rows":false},
@@ -263,8 +265,7 @@ const WALK_TABLES = {
       {"pattern":"/app/memory/map","template":"screen","why":"a redirect to 总览 (2026-10-27: the map's relation graph and topics are a panel of it): it carries over what it can and is decided by the address, and the router test holds each case"},
       {"pattern":"/app/memory/delivered/:deliveryId","template":"screen","why":"the same page as a share link (`memory-shared-missing` walks that component with an address that is not there)"},
       {"pattern":"/app/frontier/zones/s/:slug","template":"T5","why":"the same page as /app/frontier/zones/:zoneId, reached by the zone's readable name; the id's route is walked as frontier-zone"},
-      {"pattern":"/app/account/simulated/:page","template":"T1","why":"the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold"},
-      {"pattern":"/app/search/:category?","template":"T1","why":"the medical search (医学检索) is offered only where /api/me says features.evimedSearch: an Evimed account login and the Evimed account API configured, and the sidebar draws its entry on the same answer; the walk's throwaway account and fixture have neither, so every request the page makes would fail by design, and its states are held by EvimedSearchPage.test.tsx"}
+      {"pattern":"/app/account/simulated/:page","template":"T1","why":"the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold"}
     ]
   },
   "baseline": {
@@ -1035,10 +1036,21 @@ export const EXPECTED_REFUSALS = {
   "frontier-daily-empty": [404],
   "extensions-skill-missing": [404],
   "memory-shared-missing": [400, 404, 410],
+  // 医学检索 asks the Evimed account service on the account's own login. The walk's account has none (403, "sign in again"), and a
+  // deployment without the service answers 503: the page is walked to say which, in words and with a way forward.
+  "search-results": [403, 503],
 };
 
 /** The pages that open a conversation of the kernel as they land. */
 const LANDING_CONVERSATION_PAGES = new Set(["autopilot"]);
+
+/**
+ * The topic suggestions of the search home: a read the control plane answers by starting the project's runtime (`searchTopicsFor`),
+ * which the walk never lets happen. The walk answers it itself with the control plane's own `evimed_search_topics_unavailable` (the
+ * page then shows its error state, which has its retry), and the 503 it drew is by design, on the search home alone.
+ */
+export const TOPICS_READ = /\/api\/projects\/[^/]+\/evimed-search\/topics(?:[/?]|$)/;
+const TOPICS_UNAVAILABLE_BY_DESIGN = new Set(["search"]);
 
 /**
  * `<status> <path>` of the responses a page drew, without the refusals it was walked to meet (`EXPECTED_REFUSALS`).
@@ -1055,7 +1067,9 @@ export function unexpectedRefusals(name, httpErrors) {
   // A page that opens a conversation on landing asks for the kernel's frame, and the walk starts no runtime: that one call is refused by
   // design (定时任务 opens its first task beside the list, owner 2026-10-28); any other refusal on the page still fails it.
   const frame = LANDING_CONVERSATION_PAGES.has(budgetKey(name)) ? /^503 \/api\/runtime-ui\/frames(?:[/?#]|$)/ : null;
-  return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)) && !frame?.test(entry));
+  // The report keeps the first 60 characters of a path, which a project id of 36 characters leaves ending in `/evimed-se`.
+  const topics = TOPICS_UNAVAILABLE_BY_DESIGN.has(budgetKey(name)) ? /^503 \/api\/projects\/[^/]+\/evimed-/ : null;
+  return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)) && !frame?.test(entry) && !topics?.test(entry));
 }
 
 /** Replace a tab, keeping its authenticated context and reinstalling its observers. */
@@ -3335,9 +3349,11 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   // the band: the body is `[data-page-body]`, and the band's rows are blocks of the page too (the band itself is wider than the column).
   const band = document.querySelector("[data-page-chrome]");
   const body = document.querySelector("[data-page-body]") ?? (at >= 0 ? siblings[at + 1] ?? null : null);
-  // A block that is laid over the page (a drawer's backdrop, a dialog's) is not a block of the page: it starts at the window's edge.
+  // A block that is laid over the page (a drawer's backdrop, a dialog's) is not a block of the page: it starts at the window's edge. Nor
+  // is a title the header keeps for a screen reader alone (`headerVisibility="sr-only"`, the search home): it is one pixel, a pixel
+  // to the left of where its page begins, and nobody sees an edge there.
   const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(band ? [...band.children] : []), ...(body ? [...body.children] : [])]
-    .filter((el) => el && visible(el) && !["fixed", "absolute"].includes(getComputedStyle(el).position));
+    .filter((el) => el && visible(el) && !el.closest(".sr-only") && !["fixed", "absolute"].includes(getComputedStyle(el).position));
   const pageLefts = [...new Set(blocks.map((el) => Math.round(el.getBoundingClientRect().left)))];
   const rowTitleLefts = [];
   for (const list of document.querySelectorAll("ul, ol")) {
@@ -3992,6 +4008,13 @@ async function main() {
       if (allowRuntimeStart) return route.continue();
       runtimeStartsRefused[current] = (runtimeStartsRefused[current] ?? 0) + 1;
       return route.abort();
+    });
+    // The search home's topic suggestions start the project's runtime in the control plane: answered here, as it answers when it has
+    // none to give, and counted with the starts refused.
+    await context.route(TOPICS_READ, (route) => {
+      if (allowRuntimeStart) return route.continue();
+      runtimeStartsRefused[current] = (runtimeStartsRefused[current] ?? 0) + 1;
+      return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Search topic recommendations are temporarily unavailable.", code: "evimed_search_topics_unavailable", requestId: null }) });
     });
     if (signIn.mode === "seeded") {
       const login = await context.request.post(`${base}/api/auth/login`, {

@@ -1,6 +1,6 @@
-import { HttpError, readJson, sendJson } from "./security.mjs";
+import { assertSameSiteBrowserRequest, HttpError, readJsonWithSize, readJson, sendJson } from "./security.mjs";
 import { EVIMED_LOGOUT_PATH, EVIMED_SESSION_PATH } from "./evimedAuthService.mjs";
-import { EVIMED_ACCOUNT_PATHS, evimedAccountFailureDetail, isEvimedAccountPath } from "./evimedAccountService.mjs";
+import { evimedAccountFailureDetail, isEvimedAccountPath } from "./evimedAccountService.mjs";
 
 /**
  * The EviMed shell's session bridge (fusion plan 2026-09-26 §9.2), with the
@@ -57,12 +57,12 @@ export function createEvimedAuthRoutes({ store, service, accountService, maxJson
     if (isEvimedAccountPath(url.pathname)) {
       res.setHeader("Cache-Control", "no-store");
       if (!accountService?.enabled) throw new HttpError(404, "auth_method_disabled", "EviMed account authentication is disabled.");
-      const expected = url.pathname === EVIMED_ACCOUNT_PATHS.captchaUrl ? "GET" : "POST";
-      if ((req.method ?? "GET").toUpperCase() !== expected) throw new HttpError(405, "method_not_allowed", "The account route does not accept this method.");
+      // Every account route is a POST, the captcha's too: a GET would carry the phone number in the URL, which proxies and access logs keep.
+      if ((req.method ?? "GET").toUpperCase() !== "POST") throw new HttpError(405, "method_not_allowed", "The account route does not accept this method.");
       const action = `auth.evimed.${url.pathname.slice("/api/auth/evimed/".length)}`;
       try {
         accountService.assertOrigin(req);
-        const body = expected === "POST" ? await readJson(req, Math.min(maxJsonBytes, 16 * 1024)) : {};
+        const body = await readJson(req, Math.min(maxJsonBytes, 16 * 1024));
         const result = await accountService.execute(req, res, url, body);
         await record(action, "completed", result.userId ? { userId: result.userId } : {});
         sendJson(res, 200, { data: result.data });
@@ -82,8 +82,15 @@ export function createEvimedAuthRoutes({ store, service, accountService, maxJson
       // A body is optional — an empty one reads as `{}` — because the
       // credential may be the platform's session cookie, which the browser
       // attached instead.
-      const body = await readJson(req, maxJsonBytes);
       try {
+        // The route is reached before there is a session, so a page on another site could post here with its own credential and sign the
+        // visitor in as someone else (a login CSRF): the browser's origin is checked, and a body must be JSON (a cross-site form can only
+        // send text, urlencoded or multipart without a preflight).
+        assertSameSiteBrowserRequest(req, service.config);
+        const { body, bytes } = await readJsonWithSize(req, maxJsonBytes);
+        if (bytes > 0 && !/^application\/json(?:\s*;|$)/i.test(String(req.headers["content-type"] ?? ""))) {
+          throw new HttpError(400, "invalid_json", "Session requests require a JSON object.");
+        }
         const session = await service.createSession(req, res, body);
         await record("auth.evimed.session", "completed", { userId: session.user.id });
         sendJson(res, 200, { data: session });

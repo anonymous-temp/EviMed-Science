@@ -1403,7 +1403,8 @@ async function evimedAccountRequest<T>(path: string, body?: Record<string, strin
 }
 
 export function fetchEvimedCaptcha(phone: string): Promise<EvimedCaptcha> {
-  return evimedAccountRequest(`captcha?phoneNumber=${encodeURIComponent(phone)}`);
+  // A POST: the number is in the body, not in a URL that proxies and access logs keep.
+  return evimedAccountRequest("captcha", { phone });
 }
 
 export async function sendEvimedCode(purpose: "login" | "register" | "reset", phone: string, xcode?: string): Promise<void> {

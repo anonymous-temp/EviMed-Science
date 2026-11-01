@@ -1967,9 +1967,70 @@ describe("the cover of a new conversation", () => {
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", intent: { kind: "create", draft: "  总结这份数据" } });
-    await waitFor(() => expect(typed()).toHaveAttribute("readonly"));
+    // The box is not locked after the hand-over: nothing typed there is dropped without a word.
+    expect(typed()).not.toHaveAttribute("readonly");
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "request-cover", ok: true, sessionId: "session-new" });
     await waitFor(() => expect(typed()).toBeNull());
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  const navigations = (post: { mock: { calls: unknown[][] } }) => post.mock.calls.map((call) => call[0] as any).filter((message) => message.type === "evimed.runtime-ui.navigate");
+
+  it("hands the opened conversation text typed while the opening was acknowledged late, when nothing was typed at the hand-over", async () => {
+    const frame = await open(created);
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(navigations(post)[0].intent).not.toHaveProperty("draft");
+    fireEvent.change(typed()!, { target: { value: "慢线路上打的字" } });
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "request-cover", ok: true, sessionId: "session-new" });
+    await waitFor(() => expect(navigations(post)).toHaveLength(2));
+    const [, followUp] = navigations(post);
+    expect(followUp).toMatchObject({ intent: { kind: "open", sessionId: "session-new", draft: "慢线路上打的字" } });
+    expect(followUp.requestId).not.toBe("request-cover");
+    // The text stays in the shell until the frame says it is in the composer.
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: followUp.requestId, ok: true, sessionId: "session-new" });
+    await waitFor(() => expect(typed()).toBeNull());
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("hands the opened conversation the keystrokes that came after the hand-over, as the whole draft", async () => {
+    const frame = await open(created);
+    fireEvent.change(typed()!, { target: { value: "总结" } });
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(navigations(post)[0]).toMatchObject({ requestId: "request-cover", intent: { kind: "create", draft: "总结" } });
+    fireEvent.change(typed()!, { target: { value: "总结这份数据" } });
+    expect(typed()).toHaveValue("总结这份数据");
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "request-cover", ok: true, sessionId: "session-new" });
+    await waitFor(() => expect(navigations(post)).toHaveLength(2));
+    expect(navigations(post)[1]).toMatchObject({ intent: { kind: "open", sessionId: "session-new", draft: "总结这份数据" } });
+  });
+
+  it("hands the opened conversation an emptied box too, so text deleted after the hand-over does not come back", async () => {
+    const frame = await open(created);
+    fireEvent.change(typed()!, { target: { value: "写错了的" } });
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    fireEvent.change(typed()!, { target: { value: "" } });
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "request-cover", ok: true, sessionId: "session-new" });
+    await waitFor(() => expect(navigations(post)).toHaveLength(2));
+    expect(navigations(post)[1]).toMatchObject({ intent: { kind: "open", sessionId: "session-new", draft: "" } });
+  });
+
+  it("says so when the composer could not take the follow-up draft", async () => {
+    mocks.toastError.mockReset();
+    const frame = await open(created);
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    fireEvent.change(typed()!, { target: { value: "晚到的字" } });
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "request-cover", ok: true, sessionId: "session-new" });
+    await waitFor(() => expect(navigations(post)).toHaveLength(2));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: navigations(post)[1].requestId, ok: false });
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("重新输入")));
   });
 
   it("hands over nothing when nothing was typed", async () => {

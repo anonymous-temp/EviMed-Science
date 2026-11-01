@@ -983,11 +983,21 @@ export class GeoOrchestrator {
     if (existing && existing.state !== "claimed") return existing.round_id ?? null;
     if (!this.enqueueRound) return null;
     const monitored = await geoMonitoringSet(this.store, project.id);
-    const engines = spec.engines ?? project.engines;
-    // The stored agreement is immutable; the actual round can narrow it, never expand it.
-    if (monitored.contract && !engines.every((/** @type {string} */ engine) => monitored.contract?.engines?.includes(engine))) return null;
+    const contract = monitored.contract;
+    // A baseline or single-step diagnosis measures the engines its saved agreement names, as it did before the agreement was checked
+    // against the project's engines: the programme passes every selected engine, and an agreement over fewer of them used to leave the
+    // step queued on every tick with nothing said (2026-11-01).
+    const engines = contract && ["baseline", "single_step"].includes(spec.kind) && Array.isArray(contract.engines) && contract.engines.length
+      ? contract.engines : spec.engines ?? project.engines;
     if (["weekly", "sentinel", "post_publication", "noise"].includes(spec.kind)
       && (!geoAutomationEnabled(project) || !engines.every((/** @type {string} */ engine) => project.steps.monitoring.automation.engines.includes(engine)))) return null;
+    // The stored agreement is immutable; the actual round can narrow it, never expand it. A round outside it is recorded as skipped
+    // with the reason, so nothing waits on a key that will not be different in a minute.
+    if (contract && !engines.every((/** @type {string} */ engine) => contract.engines?.includes(engine))) {
+      await this.#skip(project, key, "geo_monitoring_scope_changed");
+      this.report("enqueue:geo_monitoring_scope_changed");
+      return null;
+    }
     const claimed = await this.#claim(project, key, "round", "claimed", { detail: { kind: spec.kind } });
     if (!claimed) return null;
     const made = (await this.store.query(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND ref ->> 'scheduleKey' = $2

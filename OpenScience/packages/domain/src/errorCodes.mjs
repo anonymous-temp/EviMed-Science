@@ -17,6 +17,7 @@ const EVIMED_SEARCH_MESSAGES = Object.freeze({
   evimed_search_topics_unavailable: "主题推荐暂时无法加载，请稍后重试；你也可以直接输入检索词。",
   evimed_search_login_required: "请重新登录 EviMed 账号后继续检索。",
   evimed_search_credential_expired: "检索授权已失效，请重新登录 EviMed 账号。",
+  evimed_search_forbidden: "当前 EviMed 账号没有使用这项功能的权限。",
   evimed_search_invalid_input: "请检查检索词、筛选条件和页码后重试。",
   evimed_search_reference_invalid: "这条详情链接已失效，请返回检索结果重新打开。",
   evimed_search_rate_limited: "检索请求较多，请稍后重试。",
@@ -25,6 +26,12 @@ const EVIMED_SEARCH_MESSAGES = Object.freeze({
   evimed_search_response_invalid: "资料来源返回的数据暂时无法读取，请稍后重试。",
   evimed_search_detail_unavailable: "暂时无法读取这条资料的详情，可尝试打开来源页面。",
 });
+
+/** The team's account adapter (the login page's phone form) and the names a registration cannot take: what the control plane refuses before it asks anything. */
+const EVIMED_ACCOUNT_MESSAGES = Object.freeze({
+  evimed_sms_rate_limited: "这个手机号获取验证码太频繁，请稍后再试。",
+  account_name_reserved: "这个账号名是系统保留的，请换一个。",
+})
 
 /** The tool's own refusals a run repairs by changing what it sent, as opposed to the outages it waits out. */
 const DATA_SEMANTICS_RUN_FIXES = ["semantics_request_invalid", "semantics_request_too_large", "semantics_dataset_invalid", "semantics_revision_conflict"];
@@ -122,6 +129,10 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_unavailable",
   "public_source_gateway_timeout",
   "public_source_gateway_rate_limited",
+  // One project's runtime asking the public-source gateway faster, or at once more, than a project may (2026-11-01,
+  // `projectGatewayLimit.mjs`): the run asks again after the stated wait, or elsewhere.
+  "public_source_gateway_project_rate_limited",
+  "public_source_gateway_project_busy",
   // A source that said no to this caller (HTTP 401 or 403): the item exists and
   // the source will not serve it, so it is a limitation to report and retrying
   // cannot change it. The gateway names it apart from `..._upstream_error` so
@@ -207,6 +218,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "web_search_unconfigured",
   "web_search_unavailable",
   "web_search_rate_limited",
+  "web_search_project_rate_limited",
   "web_search_upstream_error",
   "web_search_timeout",
   "web_search_response_invalid",
@@ -2029,6 +2041,7 @@ export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_inval
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...Object.keys(EVIMED_SEARCH_MESSAGES),
+  ...Object.keys(EVIMED_ACCOUNT_MESSAGES),
   ...Object.keys(EVOLUTION_ERROR_MESSAGES),
   ...Object.keys(READINESS_ERROR_MESSAGES_ZH),
   ...EXTENSION_ERROR_CODES,
@@ -2116,6 +2129,10 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  // A project's runtime held by the per-project limit of a gateway that spends outside resources (`projectGatewayLimit.mjs`).
+  public_source_gateway_project_rate_limited: '这个项目一分钟内读取公共数据源的次数已达上限，稍等片刻再继续；已读到的内容不受影响。',
+  public_source_gateway_project_busy: '这个项目同时在读的公共数据源请求过多，等当前的读完再继续。',
+  web_search_project_rate_limited: '这个项目一分钟内的网页检索次数已达上限，稍等片刻再继续。',
   // c3-ask: the feed holds no such item (withdrawn, or an id nobody published) — a reader's page, or the run asked by id.
   frontier_item_not_found: '这条动态已不再提供。',
   vcr_split_invalid: '请为验证指定患者、时间或中心划分，并检查日期顺序。',
@@ -2155,6 +2172,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_erasure_unavailable: '本部署暂不支持这项清除。',
 
   ...EVIMED_SEARCH_MESSAGES,
+  ...EVIMED_ACCOUNT_MESSAGES,
   ...EVOLUTION_ERROR_MESSAGES,
   // What the deployment's configuration check says (`/api/ready`): the operator console reads these.
   ...READINESS_ERROR_MESSAGES_ZH,
@@ -3290,6 +3308,7 @@ export function errorCodeOutcome(code) {
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
   if (Object.hasOwn(EVIMED_SEARCH_MESSAGES, text)) return 'upstream'
+  if (Object.hasOwn(EVIMED_ACCOUNT_MESSAGES, text)) return 'upstream'
   // An evidence card's refusals are about one write to one zone, never a verdict on a run.
   if (Object.hasOwn(EVIDENCE_CARD_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
@@ -3410,7 +3429,7 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway, ...verification,
   ])
   claim('person', [
-    ...keys(EVIMED_SEARCH_MESSAGES),
+    ...keys(EVIMED_SEARCH_MESSAGES), ...keys(EVIMED_ACCOUNT_MESSAGES),
     ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes, ...autopilotMaterialErrorCodes, ...AUTOPILOT_BUDGET_ERROR_CODES,
     ...libraryErrorCodes, ...capsuleTransferErrorCodes, ...CAPSULE_SHARE_ERROR_CODES, ...EXTENSION_ERROR_CODES,
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,

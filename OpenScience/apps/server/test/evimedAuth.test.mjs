@@ -478,3 +478,106 @@ test("the settings refuse what cannot be used, and the account id is stable", ()
   // It carries nothing of EviMed's identifier into our filesystem or ledgers.
   assert.match(evimedUserId(here, "98211"), /^evimed_[a-f0-9]{40}$/);
 });
+
+// ───────────────────────── rev-1101: a page on another site cannot sign a visitor in ─────────────────────────
+
+test("the session exchange refuses a cross-site browser request and a body that is not JSON, and asks EviMed nothing", async () => {
+  const endpoint = await startEvimedUserEndpoint({ status: 200, body: { code: 200, data: { userId: "40017", nickName: "Dr. Li" } } });
+  try {
+    await withApp(evimedOverrides(endpoint.url), async ({ base, dataDir }) => {
+      const post = (/** @type {Record<string, string>} */ headers, /** @type {string} */ body = JSON.stringify({ token: shellCredential })) =>
+        fetch(`${base}/api/auth/evimed/session`, { method: "POST", headers, body });
+      // A cross-site page: its Origin is its own, or the browser says cross-site; either way the visitor is not signed in as the attacker.
+      for (const headers of [
+        { "Content-Type": "application/json", Origin: "https://attacker.example" },
+        { "Content-Type": "application/json", Origin: "null" },
+        { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
+        { "Content-Type": "application/json", Origin: "https://www.evimed.com.attacker.example" },
+      ]) {
+        const refused = await post(headers);
+        assert.equal(refused.status, 403, JSON.stringify(headers));
+        assert.equal((await refused.json()).code, "csrf_required");
+        assert.equal(cookieValue(refused, "os_session"), "");
+      }
+      // A cross-site form can only send text: a JSON-looking text/plain body is not a JSON request.
+      for (const type of ["text/plain", "application/x-www-form-urlencoded", ""]) {
+        const refused = await post(type ? { "Content-Type": type } : {});
+        assert.equal(refused.status, 400, type);
+        assert.equal((await refused.json()).code, "invalid_json");
+      }
+      assert.equal(endpoint.requests.length, 0, "no credential was introspected");
+      await assert.rejects(() => readFile(path.join(dataDir, "users.json"), "utf8"), (/** @type {any} */ error) => error.code === "ENOENT");
+
+      // The shell on our own origin, the same page by the host it was reached at, and a script with no browser headers all sign in.
+      for (const headers of [
+        { "Content-Type": "application/json", Origin: "https://www.evimed.com", "Sec-Fetch-Site": "same-origin" },
+        { "Content-Type": "application/json", Origin: base },
+        { "Content-Type": "application/json" },
+      ]) {
+        const accepted = await post(headers);
+        assert.equal(accepted.status, 200, JSON.stringify(headers));
+        assert.match(cookieValue(accepted, "os_session"), /^os_session=.+/);
+      }
+      // No body at all (the credential is the cookie the browser attached) needs no content type.
+      const bare = await fetch(`${base}/api/auth/evimed/session`, { method: "POST", headers: { Origin: "https://www.evimed.com" } });
+      assert.equal(bare.status, 400);
+      assert.equal((await bare.json()).code, "evimed_credential_missing");
+    });
+  } finally {
+    await endpoint.close();
+  }
+});
+
+test("local sign-in and registration refuse a cross-site browser request and still take a script that sends no browser headers", async () => {
+  const operator = { authMode: "local", runtimeMode: "mock", bootstrapUser: "operator", bootstrapPassword: "operator-account-password", selfRegistrationEnabled: true, publicUrl: "https://www.evimed.com" };
+  await withApp(operator, async ({ base }) => {
+    const send = (/** @type {string} */ route, /** @type {Record<string, string>} */ headers, /** @type {Record<string, string>} */ body) =>
+      fetch(`${base}${route}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    const login = { username: "operator", password: "operator-account-password" };
+    for (const headers of [{ Origin: "https://attacker.example" }, { "Sec-Fetch-Site": "cross-site" }, { Origin: "null" }]) {
+      for (const [route, body] of [["/api/auth/login", login], ["/api/auth/register", { username: "visitor-x", password: "visitor-password-1" }]]) {
+        const refused = await send(route, headers, body);
+        assert.equal(refused.status, 403, `${route} ${JSON.stringify(headers)}`);
+        assert.equal((await refused.json()).code, "csrf_required");
+        assert.equal(cookieValue(refused, "os_session"), "");
+      }
+    }
+    // The page on our own origin, and the drivers, the smoke check and the walk that post with no Origin at all.
+    for (const headers of [{ Origin: "https://www.evimed.com", "Sec-Fetch-Site": "same-origin" }, { Origin: base }, {}]) {
+      const accepted = await send("/api/auth/login", headers, login);
+      assert.equal(accepted.status, 200, JSON.stringify(headers));
+      assert.match(cookieValue(accepted, "os_session"), /^os_session=.+/);
+    }
+    const registered = await send("/api/auth/register", {}, { username: "driver-account", password: "driver-password-1" });
+    assert.equal(registered.status, 201);
+  });
+});
+
+test("an id the EviMed sign-in derives cannot be registered by hand, and the EviMed sign-in itself still makes it", async () => {
+  const endpoint = await startEvimedUserEndpoint({ status: 200, body: { code: 200, data: { userId: "98211", nickName: "Dr. Zhang" } } });
+  try {
+    await withApp(evimedOverrides(endpoint.url, { selfRegistrationEnabled: true, authMode: "local", evimedAuthEnabled: true }), async ({ base, store, dataDir }) => {
+      // The id is a hash of the endpoint's origin and the person's EviMed id, which anyone who knows that id can compute.
+      const settings = validateEvimedAuthSettings({ evimedUserIntrospectUrl: endpoint.url, evimedAuthEnabled: true, evimedIntrospectTimeoutMs: 5_000, evimedIntrospectCacheTtlMs: 0 });
+      const derived = evimedUserId(settings, "98211");
+      for (const username of [derived, derived.toUpperCase(), "evimed_anything-at-all"]) {
+        const refused = await fetch(`${base}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password: "registered-password-1" }) });
+        assert.equal(refused.status, 400, username);
+        assert.equal((await refused.json()).code, "account_name_reserved");
+      }
+      await assert.rejects(store.createUser(derived, "registered-password-1", "Squatter"), { code: "account_name_reserved" });
+      await assert.rejects(readFile(path.join(dataDir, "users.json"), "utf8"), (/** @type {any} */ error) => error.code === "ENOENT", "nothing was made");
+      // The person themselves signs in through EviMed and gets the account that id names.
+      const signedIn = await exchange(base, { token: shellCredential });
+      assert.equal(signedIn.status, 200);
+      assert.equal((await signedIn.json()).data.user.id, derived);
+      // An ordinary name is still registrable.
+      const ordinary = await fetch(`${base}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "dr-zhang", password: "registered-password-1" }) });
+      assert.equal(ordinary.status, 201);
+    });
+  } finally {
+    await endpoint.close();
+  }
+});

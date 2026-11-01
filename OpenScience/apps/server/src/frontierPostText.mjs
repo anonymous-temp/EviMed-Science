@@ -17,7 +17,7 @@
  * - **Words and tags.** The tags a post ends with are its topic marks, not its words; the tags inside a sentence stay where they are.
  *   `words` is the text without the title copy at its head and without the trailing tags, `tags` the trailing run.
  * - **What a post says of its own** (`own`): the letters and digits of the words that are not the title again, not a tag, not a link and
- *   not an `@` mention, a Han character one and any other character three-tenths — the unit `frontierLeadLimit` counts in.
+ *   not an `@` mention, a Han character one and any other word two and a half (`WORD_WEIGHT`).
  *   `FRONTIER_POST_LIMITS.own` is the least a post must say to be shown as text: measured on the 90 real items of
  *   `rd/lead-samples.jsonl` (see the constant).
  *
@@ -147,18 +147,30 @@ function withoutTitleCopy(text, rawTitle, head) {
 }
 
 /**
- * The characters a text says, in `frontierLeadLimit`'s unit: letters and digits only (punctuation, symbols and emoji say nothing), a Han
- * character one and any other three-tenths. @param {string} text
+ * What a non-Han word weighs in a Han character's unit. A text in a script of words (English, and the digits and codes in any text) is read
+ * in words, not letters: a clinical title renders in Chinese at about two and a half characters a word (「Pembrolizumab plus chemotherapy
+ * versus placebo plus chemotherapy for metastatic triple-negative breast cancer」: thirteen words, 108 characters; 「帕博利珠单抗联合化疗对比
+ * 安慰剂联合化疗治疗转移性三阴性乳腺癌」: thirty characters). The older measure, three-tenths of one for every letter, made the 100
+ * characters the plugin keeps of a title at most 29.7, under the caption line of 30, and a clause of seven words under the 12 of a text:
+ * no non-Chinese post could be shown for its title or its few words, and the sweep withdrew those that were.
+ */
+const WORD_WEIGHT = 2.5;
+const WORDS = new Intl.Segmenter("en", { granularity: "word" });
+
+/**
+ * What a text says, in the unit of `FRONTIER_POST_LIMITS`: a Han character is one and any other word (a run of letters or digits between
+ * the breaks of Unicode's word rule; punctuation, symbols and emoji are no word) `WORD_WEIGHT`. Counting characters by script is measurement,
+ * not language. @param {string} text
  */
 export function frontierPostWeight(text) {
   let han = 0;
-  let other = 0;
+  let rest = "";
   for (const char of text) {
-    if (!/[\p{L}\p{N}]/u.test(char)) continue;
-    if (HAN.test(char)) han += 1;
-    else other += 1;
+    if (HAN.test(char)) { han += 1; rest += " "; } else rest += char;
   }
-  return han + 0.3 * other;
+  let words = 0;
+  for (const part of WORDS.segment(rest)) if (part.isWordLike) words += 1;
+  return han + WORD_WEIGHT * words;
 }
 
 /** The trailing tags of a text and the text without them. @param {string} text @returns {{ words: string, tags: string[] }} */
