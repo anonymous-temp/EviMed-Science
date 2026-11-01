@@ -19,6 +19,8 @@ Call `mcp__evimed__comprehensive_drug_evaluation` with `action: retrieve`. Use l
 
 Labels come from `mcp__evimed__drug_label_search`: search by the medicine's name and jurisdiction (for China it reads the EviMed label index), then read the label you rely on with its `labelId`, which preserves the text with its approval number. `mcp__evimed__biomedical_source_search` asks one catalogued `source` at a time; `dailymed` and `openfda` hold US labels and match a drug name, not a phrase such as "FARXIGA dapagliflozin tablets label".
 
+For a material current approval, label, withdrawal or availability claim, compare the exact product and jurisdiction against subsequent regulator decisions and the latest available official label as of the decision date. A dated label or search result is not proof that it remains current; if verification is unavailable, retain it as dated evidence and state that present status is unconfirmed. Never infer product availability from another medicine’s label wording.
+
 The optional `mcp__evimed__pharmacy_reference_search` tool may supply private
 terminology, dose-risk, interaction, route, monitoring, or special-population
 context. Treat every returned row as a hypothesis or institution-specific

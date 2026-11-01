@@ -209,7 +209,7 @@
       "origin": "capability",
       "version": "1.3.1",
       "source": {"kind":"release"},
-      "digest": "sha256:52e52ae29fb3c1f5b69778cb2a0c50d45ca526aedaf5173fc4c916d809419214",
+      "digest": "sha256:c4f10b6718a32e676b5b095eba726b36bf31d6b50167a62e1f1c71f1a3e1b5fb",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"b5992dca09f2a561b6197c5c4a3ddb735cb73427c8c0a1cb69f8a83b4934e74b"}],
       "dependencies": [
@@ -327,7 +327,7 @@
       "origin": "capability",
       "version": "2.5.1",
       "source": {"kind":"release"},
-      "digest": "sha256:8178427483e01b295b6529a3043dd38915fc04205a67661afb6c62a63febf549",
+      "digest": "sha256:766816f1973e539c0093a2b287bb2e527b6d23e2bdc91d49735c0814ea09ca7d",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"7373d33de03735b26e928a06e9f78fdaa1b6a58beb8beaff2d9b77074242597e"}],
       "dependencies": [
@@ -875,7 +875,7 @@
       "origin": "capability",
       "version": "2.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:9f1be8cba6412f159f6f88186175e38152deeb2b89aca1a0176776cf340be2ea",
+      "digest": "sha256:704c6b2081b178b640257c649bcc0052db97e27e381857c9714069b0ca5efb2a",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"a969edb240327086246c3a2fdef26b5c16761adc23ba217240634142711a3711"}],
       "dependencies": [

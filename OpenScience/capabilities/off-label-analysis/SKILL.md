@@ -19,6 +19,8 @@ Jurisdiction is a classification boundary. If it is missing, record the gap and 
 
 Call `mcp__evimed__offlabel_evidence_packet` with `action: retrieve`. Verify the exact current official product label with `mcp__evimed__drug_label_search`. Use the EviMed NMPA candidate first for a China question, then verify product, approval number, revision date, and currentness. If an exact institutional copy is material but EviMed does not return it, ask once for the current institution label or uploaded file and preserve the gap if it is not supplied. An institutional copy is local evidence and must not be presented as proof of the current NMPA record. If the product originated in another jurisdiction, retrieve that origin-country label separately as evidence support; it must never replace the target-jurisdiction label classification. Use guidelines, trials, literature, and active catalogued biomedical sources only for separate evidence-support questions.
 
+For a material current approval, label, withdrawal or availability claim, compare the exact product and jurisdiction against subsequent regulator decisions and the latest available official label as of the decision date. A dated label or search result is not proof that it remains current; if verification is unavailable, retain it as dated evidence and state that present status is unconfirmed. Never infer product availability from another medicine’s label wording.
+
 The optional `mcp__evimed__pharmacy_reference_search` tool can help normalize private
 names, routes, frequencies, dose-risk rules, interactions, or special-population
 screening terms. Its output cannot establish target-jurisdiction label status,

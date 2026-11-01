@@ -26,7 +26,8 @@
         "Compare indication, population, dose, route, frequency, duration and formulation independently, each with match, mismatch, unclear or not_assessed, a rationale, and the exact label evidenceIds.",
         "Assess evidence support separately by type — guideline, systematic review, randomized trial, nonrandomized study, reference work — and record the appraisal tool and its observed rating where one was applied.",
         "Report the four axes separately: label status, evidence strength and directness, clinical appropriateness for this population, and workflow authorization as out of scope.",
-        "Freeze the deduplicated sources, exact queries, scope and retrieval times in evidence-snapshot.json before assessment, and cite nothing that is not in it."
+        "Freeze the deduplicated sources, exact queries, scope and retrieval times in evidence-snapshot.json before assessment, and cite nothing that is not in it.",
+        "For any current product approval or availability claim, check the exact product and jurisdiction against later regulatory decisions and current official labeling; label unverified or superseded status explicitly."
       ],
       "mustNotDo": [
         "Let guideline or trial support change the label-status classification on any dimension.",
