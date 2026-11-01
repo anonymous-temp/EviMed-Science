@@ -184,7 +184,7 @@ describe("the seven tabs", () => {
     await heading();
     const rowOf = (step: string) => document.querySelector(`[data-vcr-step-row="${step}"]`)!.closest("li") as HTMLElement;
     await waitFor(() => expect(rowOf("trial")).toHaveTextContent("5 分钟前"));
-    expect(rowOf("matching")).toHaveTextContent("未开始");
+    expect(rowOf("matching")).toHaveTextContent("待开始");
     expect(rowOf("matching")).not.toHaveTextContent("分钟前");
   });
 
@@ -294,7 +294,7 @@ const RUN = {
 const strip = () => document.querySelector("[data-activity='strip']") as HTMLElement | null;
 
 describe("what the study is doing, in the strip under the header", () => {
-  it("says the run that is out in the person's own sentence, what it has counted and for how long, with 取消 — under the header and above the tabs", async () => {
+  it("says the run that is out in the person's own sentence, what it has counted and for how long, with 停止整个研究 — under the header and above the tabs", async () => {
     server = installVcrServer(network.productRequest, {
       [`GET /vcr/studies/${STUDY_ID}`]: studyWith({ run: RUN, queue: [{ step: "comparator", waitingFor: "patients" }], jobs: [], last: null }),
     });
@@ -304,7 +304,7 @@ describe("what the study is doing, in the strip under the header", () => {
     expect(line).toHaveTextContent("正在构建人群、生成虚拟患者");
     expect(line).toHaveTextContent("检索 6 次 · 纳入 23 篇");
     expect(line).toHaveTextContent("另有 1 项排队");
-    expect(within(line).getByRole("button", { name: "取消" })).toBeInTheDocument();
+    expect(within(line).getByRole("button", { name: "停止整个研究" })).toBeInTheDocument();
     // The strip is in the band, above the row of tabs — and says no percentage and no instruction the model was briefed with.
     const tabs = document.querySelector("[data-toolbar]")!;
     expect(line.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -312,13 +312,13 @@ describe("what the study is doing, in the strip under the header", () => {
     expect(line.textContent).not.toMatch(/%|vcr_|exploratory|数据档位/);
   });
 
-  it("is the engine job that moves when no run is out: its step as a verb and an object, how far it has come, and 取消", async () => {
+  it("is the engine job that moves when no run is out: its step as a verb and an object, how far it has come, and 停止整个研究", async () => {
     draw();
     await heading();
     const line = strip()!;
     expect(line).toHaveTextContent("正在模拟试验方案");
     expect(line).toHaveTextContent("计算 3 / 10");
-    expect(within(line).getByRole("button", { name: "取消" })).toBeInTheDocument();
+    expect(within(line).getByRole("button", { name: "停止整个研究" })).toBeInTheDocument();
     expect(within(line).queryByRole("progressbar")).toBeNull();
   });
 
@@ -333,7 +333,7 @@ describe("what the study is doing, in the strip under the header", () => {
     expect(line).toHaveTextContent("生成虚拟患者 · 排队中");
     expect(line).toHaveTextContent("等“证据”做完");
     // Nothing is out, and a person may still stop what is waiting: the cancel holds the programme, so it is not taken up in its turn.
-    expect(within(line).getByRole("button", { name: "取消" })).toBeInTheDocument();
+    expect(within(line).getByRole("button", { name: "停止整个研究" })).toBeInTheDocument();
   });
 
   it("holds a step that is only in line with one request — a person who changed their mind has a way to say so", async () => {
@@ -343,7 +343,7 @@ describe("what the study is doing, in the strip under the header", () => {
     });
     draw();
     await heading();
-    await userEvent.click(within(strip()!).getByRole("button", { name: "取消" }));
+    await userEvent.click(within(strip()!).getByRole("button", { name: "停止整个研究" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cancel`, "POST", {}));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1");
   });
@@ -393,7 +393,7 @@ describe("what the study is doing, in the strip under the header", () => {
     await heading();
     const reads = () => server.calls.filter((call) => call.method === "GET" && call.path === `/vcr/studies/${STUDY_ID}`).length;
     const before = reads();
-    await userEvent.click(within(strip()!).getByRole("button", { name: "取消" }));
+    await userEvent.click(within(strip()!).getByRole("button", { name: "停止整个研究" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cancel`, "POST", {}));
     await waitFor(() => expect(reads()).toBe(before + 1));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1");
@@ -540,9 +540,94 @@ describe("the 「⋯」 menu", () => {
   // CW-16: the pause toast says what the server did, nothing more.
   it("pauses the study and says only that", async () => {
     draw();
-    await openMenu("暂停");
+    await openMenu("暂停研究");
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1", "PATCH", { status: "paused" }));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已暂停。"));
+  });
+
+  // A pause is the project's, and the page used to show nothing of it: the toast said 已暂停 once and every tab went on reading as work.
+  describe("a paused study", () => {
+    const paused = (abilities?: string[]) => {
+      const study = fixture("ev201/study.json");
+      study.status = "paused";
+      if (abilities) study.abilities = abilities;
+      server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    };
+
+    it("says 已暂停 in the header beside the tier, and says what a pause means", async () => {
+      paused();
+      draw();
+      await heading();
+      expect(document.querySelector("[data-vcr-paused]")).toHaveTextContent("已暂停");
+      expect(screen.getByText(/已暂停：新的步骤不会开始/)).toBeInTheDocument();
+    });
+
+    it("offers the lead 继续 beside the sentence, which sets the study active again and nothing else", async () => {
+      paused();
+      draw();
+      await heading();
+      const go = await screen.findByRole("button", { name: "继续" });
+      expect(go).toHaveAttribute("data-action-kind", "set");
+      await userEvent.click(go);
+      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1", "PATCH", { status: "active" }));
+      expect(server.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    });
+
+    it("tells a reader who is not the lead, and gives them no button the route would refuse", async () => {
+      paused(["read", "write", "run"]);
+      draw();
+      await heading();
+      expect(screen.getByText(/已暂停：新的步骤不会开始/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "继续" })).toBeNull();
+    });
+
+    it("says nothing of a pause for an active study", async () => {
+      draw();
+      await heading();
+      expect(document.querySelector("[data-vcr-paused]")).toBeNull();
+      expect(screen.queryByText(/新的步骤不会开始/)).toBeNull();
+    });
+  });
+
+  // Waits that no page read before: the answer the AI asked for, and the data's own two confirmations.
+  describe("what the overview waits for a person to do", () => {
+    it("shows the data intake's waits as lines that open 数据接入, and nothing else of them", async () => {
+      const study = fixture("ev201/study.json");
+      study.overview.attention = [
+        { kind: "intake_confirm", tone: "attention", text: "2 份数据的字段映射在等你确认", action: { label: "数据接入", tab: null } },
+        { kind: "intake_freeze", tone: "attention", text: "1 份数据的字段映射已确认，在等你冻结快照", action: { label: "数据接入", tab: null } },
+      ];
+      server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+      draw();
+      await heading();
+      const lines = await screen.findAllByText(/字段映射/);
+      expect(lines).toHaveLength(2);
+      const buttons = await screen.findAllByRole("button", { name: "数据接入" });
+      expect(buttons).toHaveLength(2);
+      await userEvent.click(buttons[0]);
+      expect(await screen.findByRole("dialog", { name: "数据接入" })).toBeInTheDocument();
+    });
+
+    it("shows a study that waits for the answer to the AI's question, and takes the reader to where it was asked", async () => {
+      const study = fixture("ev201/study.json");
+      study.conversation = { sessionId: "submitted_canonical", exists: true, submitted: true, awaitingInput: true };
+      server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+      draw();
+      await heading();
+      expect(await screen.findByText(/等你补充研究信息/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "补充信息" }));
+      expect(screen.getByTestId("location")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`);
+    });
+
+    it("does not ask a reader who cannot write to answer", async () => {
+      const study = fixture("ev201/study.json");
+      study.abilities = ["read"];
+      study.conversation = { sessionId: "submitted_canonical", exists: true, submitted: true, awaitingInput: true };
+      server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+      draw();
+      await heading();
+      expect(screen.queryByText(/等你补充研究信息/)).toBeNull();
+    });
   });
 
   // CW-10: the study leaves 虚拟临床研究; the project's conversations and files stay.
@@ -733,7 +818,7 @@ describe("the 「⋯」 menu follows the reader's abilities", () => {
 
   it("offers the lead everything: rename, export, the data intake, members, budget, pause, the record, the AI's runs, and — apart — delete", async () => {
     draw();
-    expect(await items()).toEqual(["重命名", "导出…", "数据接入", "成员与角色", "计算预算", "暂停", "变更记录", "AI 运行", "删除"]);
+    expect(await items()).toEqual(["重命名", "导出…", "数据接入", "成员与角色", "计算预算", "暂停研究", "变更记录", "AI 运行", "删除"]);
   });
 
   it("offers a reader who only exports the export, and the two records — nothing that changes the study", async () => {

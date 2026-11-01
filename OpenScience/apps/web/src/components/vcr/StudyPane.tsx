@@ -3,6 +3,7 @@ import { Loader2, MessageSquare } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { StepState } from "@/components/ui/StepState";
+import { STOP_STUDY_LABEL } from "./vcrActionWords";
 import { useProjectStore } from "@/lib/projects";
 import { registerTaskPane } from "@/lib/taskPane";
 import type { VcrStudy } from "@/lib/vcrClient";
@@ -128,7 +129,7 @@ export function StudyPane({ study, unreachable, onRetry, onStop }: {
     const detail = runDetailLine(run);
     return (
       <div role="region" aria-label="研究对话" data-study-pane="progress" className="mx-auto flex max-w-measure flex-col items-center gap-1 py-10">
-        <StepState phase="running" step={run.label || "推进研究"} phaseName={detail || undefined} startedAt={run.startedAt} onStop={onStop} />
+        <StepState phase="running" step={run.label || "推进研究"} phaseName={detail || undefined} startedAt={run.startedAt} onStop={onStop} stopLabel={STOP_STUDY_LABEL} />
         <p className="text-caption text-text-3">结束后可以在这里继续</p>
       </div>
     );

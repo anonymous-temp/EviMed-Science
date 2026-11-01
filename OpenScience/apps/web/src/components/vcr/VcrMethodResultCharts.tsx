@@ -1,7 +1,7 @@
 import type { VcrMethodResult, VcrSeries, VcrProfileRow, VcrDesign, VcrValue, VcrValueSource } from "@/lib/vcrClient";
 import type { LongitudinalRecord } from "@/lib/vcrLongitudinalClient";
 import { VcrForecastComparisonResult } from "./VcrForecastComparisonResult";
-import { VCR_VALUE_SOURCES, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, knownErrorCodeMessage } from "@evimed/domain";
+import { VCR_VALUE_SOURCES, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, knownErrorCodeMessage, workStateLabel } from "@evimed/domain";
 import { Tag } from "@/components/ui/Tag";
 import { FactList } from "@/components/ui/FactList";
 import { DataTable } from "@/components/ui/DataTable";
@@ -44,8 +44,8 @@ export function readMethodResultSeries(raw: unknown, source: VcrValueSource): Vc
   });
 }
 function gridCellState(cell: Record<string, unknown>): string {
-  if (cell.status === "canceled") return "已取消";
-  if (cell.status === "failed") return list(cell.measures).length ? "未完成，保留部分结果" : "未完成";
+  if (cell.status === "canceled") return workStateLabel("stopped");
+  if (cell.status === "failed") return list(cell.measures).length ? `${workStateLabel("failed")}，保留部分结果` : workStateLabel("failed");
   if (cell.replicatesCapped === true) return "重复次数达到上限";
   if (cell.conclusion === "limited") return "有限制的结果";
   if (cell.conclusion === "not_estimable" || cell.refusal) return "不可估计";

@@ -1,4 +1,5 @@
 import { getVcrBackgroundRuns, type VcrStudy } from "@/lib/vcrClient";
+import { workStateLabel } from "@evimed/domain";
 import { Drawer } from "@/components/ui/Drawer";
 import { Tag } from "@/components/ui/Tag";
 import { List } from "@/components/ui/ListRow";
@@ -27,7 +28,7 @@ export function VcrChangeLogDrawer({ study, onClose }: { study: Pick<VcrStudy, "
                     {change.text}
                     {change.by && <span className="ml-1.5 text-caption text-text-3">{change.by}</span>}
                   </span>
-                  {change.state === "stale" ? <Tag>已过期</Tag> : null}
+                  {change.state === "stale" ? <Tag>{workStateLabel("stale")}</Tag> : null}
                 </li>
               ))}
             </List>

@@ -183,7 +183,7 @@ describe("总览", () => {
       const api = frame();
       draw(study(), api);
       const region = screen.getByRole("region", { name: "需要关注" });
-      await userEvent.click(within(region).getByRole("button", { name: "在对话中继续" }));
+      await userEvent.click(within(region).getByRole("button", { name: "让 AI 接着做" }));
       expect(api.openChat).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ kind: "step", studyId: STUDY_ID }));
     });
 
@@ -196,7 +196,7 @@ describe("总览", () => {
 
     it("offers no 接着做 to a reader who may not run a step", () => {
       draw(study((raw) => { raw.abilities = ["read"]; }));
-      expect(screen.queryByRole("button", { name: "在对话中继续" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "让 AI 接着做" })).toBeNull();
     });
 
     it("is not drawn at all while there is nothing in it", () => {
@@ -210,7 +210,7 @@ describe("总览", () => {
   describe("the deliverables", () => {
     it("keeps existing deliverables visible when cohort input and computation fail", () => {
       draw(study((raw) => { raw.overview.researchProgress = { populationId: "p1", populationVersion: 1, definition: "saved", input: "missing", calculation: "failed", resultId: null, counts: {}, profileStatistics: [] }; }));
-      expect(screen.getByText("计算未完成")).toBeInTheDocument();
+      expect(screen.getByText("计算").parentElement).toHaveTextContent("未完成");
       expect(screen.getByRole("link", { name: /研究包 v1/ })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "返回研究对话" })).toBeInTheDocument();
     });

@@ -67,6 +67,8 @@ export interface StepStateProps {
 
   /** `queued`: the step it waits for. */
   after?: string;
+  /** `queued`: the word for the state when it is not 排队中 — a step asked for and not yet started is 待开始 (`workStateLabel`). */
+  stateWord?: string;
 
   /** `running`: what `counts` counts (「计算」). */
   phaseName?: string;
@@ -103,7 +105,7 @@ const SHELL = "flex flex-col items-center gap-3 px-6 py-12 text-center";
  * Verification: StepState.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
 export function StepState(props: StepStateProps) {
-  const { phase, step, noun, to, uses = [], gives, onStart, starting, startLabel, startKind, startIcon: StartIcon, stopLabel, reason, after, phaseName, counts, startedAt, onStop, stopping,
+  const { phase, step, noun, to, uses = [], gives, onStart, starting, startLabel, startKind, startIcon: StartIcon, stopLabel, reason, after, stateWord, phaseName, counts, startedAt, onStop, stopping,
     kept, failure, onResume, resuming, waiting, topUp } = props;
   const elapsed = useElapsed(startedAt, phase === "running");
   const conversation = to ? <Link to={to} className="rounded text-ui text-link hover:underline">查看对话</Link> : null;
@@ -145,7 +147,7 @@ export function StepState(props: StepStateProps) {
   if (phase === "queued") {
     return (
       <div data-step-state="queued" role="status" className={SHELL}>
-        <p className="text-ui font-semibold text-text">{`${step}，排队中`}</p>
+        <p className="text-ui font-semibold text-text">{`${step}，${stateWord ?? "排队中"}`}</p>
         <p className="text-caption text-text-3">{after ? `“${after}”做完后自动开始。` : "轮到它时会自动开始。"}</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {conversation}

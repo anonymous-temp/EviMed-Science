@@ -5,6 +5,7 @@ import { ChevronLeft, MessageSquare } from "lucide-react";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { toast } from "@/lib/toast";
 import { webErrorMessage } from "@/lib/apiClient";
+import { workStateLabel } from "@evimed/domain";
 import { cancelVcrStudy, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
 import { PageShell } from "@/components/layout/PageShell";
 import type { ActivityStripProps } from "@/components/ui/ActivityStrip";
@@ -18,6 +19,7 @@ import { budgetWaitOf } from "./VcrBudgetDialog";
 import { leadJob, jobLabel, runDetailLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
 import { VCR_HOME_PATH, VCR_TAB_ITEMS } from "./vcrTabs";
 import { intendedUseLabel, tierLabel } from "./vcrText";
+import { STOP_STUDY_LABEL } from "./vcrActionWords";
 
 /** The one view of a study that is not a tab: its conversation. */
 export type StudyView = VcrTabKey | "chat";
@@ -50,12 +52,13 @@ export interface StudyFrameProps {
 /**
  * The strip's facts, from `activity`: the run that is out (its person's sentence, what phase it is in, what it has counted, for how
  * long), else the engine job that moves (its done of total), else the step in line and what it waits for. Null when nothing is.
- * Each has 取消 for a reader who may run a step.
+ * Each has 停止整个研究 for a reader who may run a step: the cancel reaches the run, every open job and the programme, not the one
+ * thing the strip names.
  */
 export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => void; cancelling?: boolean }): ActivityStripProps | null {
   const activity = study.activity;
   if (!activity) return null;
-  const cancel = { onCancel: handlers.onCancel, cancelling: handlers.cancelling };
+  const cancel = { onCancel: handlers.onCancel, cancelling: handlers.cancelling, cancelLabel: STOP_STUDY_LABEL };
   const open = activity.queue.length;
   if (activity.run) {
     const detail = runDetailLine(activity.run);
@@ -161,15 +164,17 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
 }
 
 /**
- * What the header says of the study beside its name: the data tier — and, when the results cannot carry the use it asked for, both
+ * What the header says of the study beside its name: the data tier, 已暂停 while it is paused — and, when the results cannot carry the use it asked for, both
  * (「指定研究分析 → 研究设计支持」), a button that opens the reasons. Plain text and a text button: a tag is a label, never a control.
  */
-function StudyMeta({ study }: { study: Pick<VcrStudy, "tier" | "ceiling"> }) {
+function StudyMeta({ study }: { study: Pick<VcrStudy, "tier" | "ceiling" | "status"> }) {
   const [open, setOpen] = useState(false);
   const downgraded = study.ceiling && !study.ceiling.withinCeiling ? study.ceiling : null;
   return (
     <>
       <span>{tierLabel(study.tier)}</span>
+      {/* A pause is the project's and outranks the steps under it: the header says it, so no tab reads as work going on. */}
+      {study.status === "paused" && <span data-vcr-paused="" className="ml-3 text-warn-strong">{workStateLabel("paused")}</span>}
       {downgraded && (
         <Button
           variant="text"

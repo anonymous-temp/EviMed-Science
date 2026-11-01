@@ -200,11 +200,13 @@ describe("what the strip says", () => {
     expect(strip).toMatchObject({ label: "构建人群", phase: "检索 6 次 · 结论 4/10 已核对", queued: 2, startedAt: "2026-10-14T01:00:00.000Z" });
     strip?.onCancel?.();
     expect(onCancel).toHaveBeenCalled();
+    // The cancel reaches the run, every open job and the programme; the strip says so and not 「取消」 of the one thing it names.
+    expect(strip?.cancelLabel).toBe("停止整个研究");
   });
 
   it("is a step in line with what it waits for, and it can be stopped: the cancel holds the programme, so what waits is not taken up", () => {
     const strip = activityStripOf(base((raw) => { raw.activity = { run: null, queue: [{ step: "patients", waitingFor: "allowance" }], jobs: [], last: null }; }), { onCancel: () => undefined });
-    expect(strip).toMatchObject({ label: "生成虚拟患者", waiting: "等研究额度" });
+    expect(strip).toMatchObject({ label: "生成虚拟患者", waiting: "等你充值" });
     expect(strip?.onCancel).toBeTypeOf("function");
   });
 

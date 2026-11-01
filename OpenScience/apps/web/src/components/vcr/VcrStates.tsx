@@ -1,11 +1,13 @@
 import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { CircleDashed, History, MessageSquare, TriangleAlert, UsersRound } from "lucide-react";
-import { VCR_STEP_NEEDS } from "@evimed/domain";
+import { CircleDashed, History, MessageSquare, PenLine, TriangleAlert, UsersRound } from "lucide-react";
+import { VCR_STEP_NEEDS, workStateLabel } from "@evimed/domain";
 import { cancelVcrStudy, type VcrActivity, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { cn } from "@/lib/cn";
+import { toast } from "@/lib/toast";
+import { webErrorMessage } from "@/lib/apiClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +19,7 @@ import { useStudyFrame } from "./studyFrameContext";
 import { resumeVcrStep } from "./vcrConversationActions";
 import { leadJob, runDetailLine, stepAction, stepName } from "./vcrActivity";
 import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_GIVES, VCR_STEP_NOUNS } from "./vcrText";
+import { DRAFT_PREFIX, RESUME_LABEL, STOP_STUDY_LABEL } from "./vcrActionWords";
 import { VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
 
 /**
@@ -125,10 +128,13 @@ function activityOfStep(activity: VcrActivity | null | undefined, step: VcrStepK
 /**
  * What a step's tab shows while it has nothing to show — the one body for four states, drawn by `StepState` (R19): **the recipe**
  * (what the step uses, each a way to the thing; what it gives; one button that names the work as a verb and its object) when it has
- * not run; **where it waits** when it is in line; **what is being done, for how long, and 停止** while it runs; and the way to the
- * allowance when that is what it waits for. A step that failed with nothing to show is `VcrStepFailed`'s.
+ * not run; **where it waits** when it is in line; **what is being done, for how long, and 停止整个研究** while it runs; and the way to
+ * the allowance when that is what it waits for. A step that failed with nothing to show is `VcrStepFailed`'s.
  *
- * The action drafts a request in the existing conversation. Nothing runs until the researcher sends it.
+ * The action drafts a request in the existing conversation. Nothing runs until the researcher sends it, so it is worded as a draft
+ * (「让 AI 生成虚拟患者」, `actionKind="draft"`) and not as the verb of the work: 「生成虚拟患者」 on a button that started nothing was
+ * the audit's first defect. The stop reaches the whole study (`cancelVcrStudy` stops the run and every open job and holds the
+ * programme), so it says so.
  */
 export function VcrStepPending({ studyId, study, step, hint, blocked }: {
   studyId: string;
@@ -145,7 +151,10 @@ export function VcrStepPending({ studyId, study, step, hint, blocked }: {
   const activity = study.activity ?? frame?.activity ?? null;
   const here = activityOfStep(activity, step);
   const action = stepAction(step);
-  const cancel = () => { void cancelVcrStudy(studyId).then(() => frame?.refresh()).catch(() => undefined); };
+  const cancel = () => {
+    void cancelVcrStudy(studyId).then(() => frame?.refresh())
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法停止，请稍后重试。" })));
+  };
 
 
   // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
@@ -168,6 +177,7 @@ export function VcrStepPending({ studyId, study, step, hint, blocked }: {
           counts={here.job && here.job.done !== null && here.job.total ? { done: here.job.done, total: here.job.total } : undefined}
           startedAt={here.run?.startedAt}
           onStop={mayRun && (here.run || here.job) ? cancel : undefined}
+          stopLabel={STOP_STUDY_LABEL}
         />
       </div>
     );
@@ -175,7 +185,7 @@ export function VcrStepPending({ studyId, study, step, hint, blocked }: {
   if (state?.status === "queued") {
     return (
       <div data-vcr-step-waiting={step}>
-        <StepState phase="queued" step={action} after={waitingNoun(here.queued?.waitingFor)} onStop={mayRun ? cancel : undefined} />
+        <StepState phase="queued" step={action} after={waitingNoun(here.queued?.waitingFor)} onStop={mayRun ? cancel : undefined} stopLabel={STOP_STUDY_LABEL} />
       </div>
     );
   }
@@ -189,7 +199,7 @@ export function VcrStepPending({ studyId, study, step, hint, blocked }: {
   if (state?.status === "none" && state.requested === true && state.held !== true) {
     return (
       <div data-vcr-step-waiting={step}>
-        <StepState phase="queued" step={action} onStop={mayRun ? cancel : undefined} />
+        <StepState phase="queued" step={action} stateWord={workStateLabel("todo")} onStop={mayRun ? cancel : undefined} stopLabel={STOP_STUDY_LABEL} />
       </div>
     );
   }
@@ -215,6 +225,9 @@ export function VcrStepPending({ studyId, study, step, hint, blocked }: {
         uses={uses}
         gives={hint ?? VCR_STEP_GIVES[step]}
         onStart={startHere}
+        startLabel={`${DRAFT_PREFIX}${action}`}
+        startKind="draft"
+        startIcon={PenLine}
         reason={startHere ? undefined : blocked || "需要有运行权限的成员来开始这一步。"}
       />
     </div>
@@ -260,15 +273,15 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
     <section data-vcr-step-failed={step} role="status" className="rounded-card border border-border bg-surface p-4">
       <Heading className="flex items-center gap-2 text-section font-semibold text-text">
         <TriangleAlert size={20} aria-hidden="true" className="text-warn" />
-        这一步未完成
+        {`这一步${workStateLabel("failed")}`}
         <span className="text-ui font-normal text-text-3">{stepLabel(step)}</span>
       </Heading>
       {note && <p className="mt-1 text-ui text-text-2">{note}</p>}
       {partial && <PartialResultNote sentence={partial.sentence} className="mt-3" />}
       {study.abilities.includes("run") && (
         <div className="mt-3">
-          <Button variant="secondary" onClick={() => resumeVcrStep(frame, studyId, step)}>
-            在对话中继续
+          <Button variant="secondary" actionKind="draft" onClick={() => resumeVcrStep(frame, studyId, step)}>
+            <PenLine size={16} aria-hidden="true" />{RESUME_LABEL}
           </Button>
         </div>
       )}
@@ -393,7 +406,7 @@ function ResumeStep({ studyId, study, step }: { studyId: string; study: VcrStudy
   // A step already running or queued is going on by itself, and a reader who may not run steps is not offered a button that is refused.
   if (!study.abilities.includes("run") || status === "running" || status === "queued") return null;
   return (
-    <Button size="sm" variant="text" onClick={() => resumeVcrStep(frame, studyId, step)}>在对话中继续</Button>
+    <Button size="sm" variant="text" actionKind="draft" onClick={() => resumeVcrStep(frame, studyId, step)}><PenLine size={16} aria-hidden="true" />{RESUME_LABEL}</Button>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { UsersRound } from "lucide-react";
+import { workStateLabel } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   cancelVcrStudy,
@@ -31,6 +32,7 @@ import { VcrPackageReader } from "@/components/vcr/VcrPackageReader";
 import { VcrBackgroundRunsDrawer, VcrChangeLogDrawer } from "@/components/vcr/VcrStudyDrawers";
 import { VcrExportDialog, VcrRenameDialog } from "@/components/vcr/VcrStudyDialogs";
 import { VcrIntakeDrawer } from "@/components/vcr/VcrIntakeDrawer";
+import { INTAKE_LABEL } from "@/components/vcr/vcrActionWords";
 import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
 import { StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
@@ -206,13 +208,13 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
     ...(can("export") ? [{ label: "导出…", disabled: running, onSelect: () => setPanel("export") }] : []),
     // 数据接入 is one entry on every tier: a study with no data plane to take it says so in the drawer, and a tier that takes real
     // data finds its sources there — it used to be the last block of 定义与证据.
-    ...(can("manage_data") || can("read") ? [{ label: "数据接入", onSelect: () => setPanel("intake") }] : []),
+    ...(can("manage_data") || can("read") ? [{ label: INTAKE_LABEL, onSelect: () => setPanel("intake") }] : []),
     ...(can("manage_members") ? [{ label: "成员与角色", onSelect: () => setPanel("members") }] : []),
     // The compute budget, the study's status and its deletion are the lead's
     // (`manage_study`): the second human stop is confirmed by the person who
     // signs the study off, not by whoever queued the compute.
     ...(can("manage_study") ? [{ label: "计算预算", onSelect: () => setPanel("budget") }] : []),
-    ...(can("manage_study") ? [{ label: paused ? "继续" : "暂停", disabled: changingStatus, onSelect: setStatus }] : []),
+    ...(can("manage_study") ? [{ label: paused ? "继续研究" : "暂停研究", disabled: changingStatus, onSelect: setStatus }] : []),
     { label: "变更记录", onSelect: () => setPanel("changes") },
     { label: "AI 运行", onSelect: () => setPanel("runs") },
     ...(can("manage_study") ? ["separator" as const, { label: "删除", destructive: true, onSelect: () => setPanel("delete") }] : []),
@@ -272,7 +274,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
     else navigate(study.purpose === "calculation" ? `${vcrCalculationPath(studyId)}/${next}` : vcrTabPath(studyId, next));
   }, [navigate, openChat, studyId, study.purpose]);
 
-  const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法取消，请稍后重试。" }))); };
+  const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法停止，请稍后重试。" }))); };
 
   // What waits for the lead's word: a job past the budget. Said once, with the way to give it — and not to a reader who cannot.
   // The header's primary action is 确认预算 while this is so (`StudyFrame`); the sentence says how much, and its number opens the same dialog.
@@ -283,6 +285,17 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
       className="mb-4"
       result={["有 ", { n: waiting.count, onOpen: () => setPanel("budget"), label: `${waiting.count} 项计算等待预算确认` }, ` 项计算等你确认预算${waiting.seconds > 0 ? `，需 ${cpuTimeText(waiting.seconds)} CPU 时间` : ""}`]}
     />
+  ) : null;
+
+  // A pause is the study's and not a step's: new work is not started until it goes on, and the one who paused it (the lead) goes on from here.
+  const pausedNote = paused ? (
+    <Note
+      tone="warn"
+      className="mb-4"
+      action={can("manage_study") ? <Button size="sm" variant="secondary" actionKind="set" loading={changingStatus} onClick={setStatus}>继续</Button> : undefined}
+    >
+      {`${workStateLabel("paused")}：新的步骤不会开始，已有的结果仍可查看。`}
+    </Note>
   ) : null;
 
   // The tab's element is made once per study read: a toolbar its tab hands the band re-renders the band, never the tab.
@@ -299,6 +312,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
         <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
       ) : (
         <>
+          {pausedNote}
           {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
           {budgetNote}
           {packageId ? (
