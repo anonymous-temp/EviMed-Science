@@ -66,10 +66,12 @@ test('a just-submitted native turn waits for its exact run to be adopted without
     config: { deepseekModel: 'deepseek-flash' },
     store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
     agentRuns: {
-      activeRuns: async () => (++reads < 4 ? [{ id: 'other-run', sessionId: 'other' }] : [{ id: 'own-run', sessionId: 'mine' }]),
+      activeRuns: async () => (++reads < 4 ? [{ id: 'other-run', sessionId: 'other' }] : [{ id: 'own-run', sessionId: 'mine', nativeTurn: { startSeq: 10 } }]),
       runIdForSession: (id, list) => list.find((run) => run.sessionId === id)?.id ?? null,
     },
-    runtimeManager: { sessionModelSelection: async (_project, id) => {
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+      messages: [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine' }] }] }),
+      sessionModelSelection: async (_project, id) => {
       selections++;
       assert.equal(id, 'mine');
       return { lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' } };
@@ -93,4 +95,21 @@ test('waiting never turns an unowned session into the only active run', async ()
   });
   await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('foreign', 'high')), { code: 'engine_model_session_unowned' });
   assert.equal(reads, 3, 'one initial check and two bounded retries');
+});
+
+
+test('an older tool call cannot attach to a newer turn of the same session while waiting', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => (++reads === 1 ? [] : [{ id: 'new-run', sessionId: 'mine', nativeTurn: { startSeq: 20 } }]),
+      runIdForSession: (id, runs) => runs.find((run) => run.sessionId === id)?.id ?? null },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+      messages: [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine' }] }] }),
+      sessionModelSelection: async () => { throw new Error('must not read'); } },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
 });
