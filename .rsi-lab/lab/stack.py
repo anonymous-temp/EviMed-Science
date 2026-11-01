@@ -261,7 +261,13 @@ def cmd_build_delta(args):
         while not stop.wait(20):
             memory = run(["free", "-m"], capture=True).stdout.splitlines()[1].split()
             disk = run(["df", "-BM", "--output=avail", "/"], capture=True).stdout.splitlines()[1].strip()
-            say(f"build running {time.time() - started:.0f}s: mem used {memory[2]}M free {memory[3]}M avail {memory[6]}M, disk avail {disk}")
+            top = run(["ps", "-eo", "rss,comm", "--sort=-rss"], capture=True).stdout.splitlines()[1:4]
+            try:
+                headers = [line for line in log.read_text(errors="replace").splitlines() if re.match(r"#\d+ \[", line)]
+            except OSError:
+                headers = []
+            say(f"build running {time.time() - started:.0f}s: mem used {memory[2]}M avail {memory[6]}M, disk avail {disk}; top "
+                f"{[(int(row.split()[0]) // 1024, row.split()[1]) for row in top]}; step {headers[-1][:110] if headers else '-'}")
 
     threading.Thread(target=watch, daemon=True).start()
     with open(log, "wb") as sink:

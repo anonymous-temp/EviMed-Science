@@ -182,7 +182,12 @@ jobs:
 
       - name: Build the candidate runtime image
         if: matrix.patch != ''
-        run: python3 -B "$LAB/stack.py" build-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}"
+        run: |
+          # A swap file for the build only: it is taken away again before any request runs, so the lane's own memory is what it is.
+          fallocate -l 24G /swap-build && chmod 600 /swap-build && mkswap /swap-build >/dev/null && swapon /swap-build
+          python3 -B "$LAB/stack.py" build-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}" || status=$?
+          swapoff /swap-build && rm -f /swap-build
+          exit "${status:-0}"
 
       - name: Write the environment and the secret files
         run: python3 -B "$LAB/stack.py" env --lanes "${{ matrix.workers }}" ${{ matrix.patch != '' && '--delta' || '' }}
