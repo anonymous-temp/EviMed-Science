@@ -1,12 +1,12 @@
 # EviMed Frontend Design System
 
-Version 3.2 · 2026-10-27 · Owner-reviewed specification; implementation and release status are separate.
+Version 3.3 · 2026-11-01 · Owner-reviewed specification; implementation and release status are separate.
 
 EviMed is a general-purpose agent platform with a professional medical layer. Ordinary writing, documents, spreadsheets, slides, code, data, web research and scheduled work are first-class tasks. Medical methods, vocabulary and checks enhance relevant work; they do not become entry requirements for other work.
 
 The owner's October 26 direction is **warm paper surfaces, restrained terracotta actions, and a near-black EviMed identity**. The implemented light identity is `#24211e`; the dark identity is light paper ink. The logo decision is near-black. Deep navy is the adopted information-status family, not a second general action accent. Preserve the existing molecule geometry and the useful native conversation surface.
 
-This revision supersedes v3.1 after the October 27 page-composition review and consolidates the September/October decisions. `DESIGN.md` is the engineering companion. The actual machine-readable values are in `packages/design-tokens`; prose does not create a competing token source. Historical reports describe their own dates, not current defects.
+This revision adds DS23, the module workspace, after the November 1 interaction audit; v3.2 added DS22 after the October 27 page-composition review. Together they consolidate the September/October decisions. `DESIGN.md` is the engineering companion. The actual machine-readable values are in `packages/design-tokens`; prose does not create a competing token source. Historical reports describe their own dates, not current defects.
 
 ## 1 Authority and acceptance
 
@@ -18,7 +18,7 @@ The October 26 audit examined 389 product TSX files through an AST inventory and
 
 ### 1.1 Status and release identity
 
-The local integration worktree implements **token package 3.0.0** against the historical **specification 3.1** baseline. Specification **3.2** adds DS22 composition rules; shared controls and affected GEO, memory, reader, knowledge, research and skill-authoring surfaces have local implementation and scoped test/browser receipts. The route inventory, native runtime, accessibility and release acceptance remain open in `../../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`. This composition revision does not change token package 3.0.0. The preceding main 2.2.0 read and uncommitted 2.3.0 warm-brand candidate remain historical provenance. Generated values, component contracts and release digests belong to the coordinated major migration; compatible added roles are minor and within-role tuning is patch.
+The local integration worktree implements **token package 3.0.0** against the historical **specification 3.1** baseline. Specification **3.2** adds DS22 composition rules and **3.3** adds DS23, the module workspace; shared controls and affected GEO, memory, reader, knowledge, research and skill-authoring surfaces have local implementation and scoped test/browser receipts. The route inventory, native runtime, accessibility and release acceptance remain open in `../../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`. This composition revision does not change token package 3.0.0. The preceding main 2.2.0 read and uncommitted 2.3.0 warm-brand candidate remain historical provenance. Generated values, component contracts and release digests belong to the coordinated major migration; compatible added roles are minor and within-role tuning is patch.
 
 Implemented locally: derived color/focus/status roles, shared interaction and input primitives, typed measurements/quantities, scientific-viewer repairs, scoped GEO/VCR/module adoption, and public component contracts. See the [execution ledger](../../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) for actual proof and outstanding gates. Local implementation does not establish publication, push, main adoption or deployment.
 
@@ -30,7 +30,7 @@ External Vue adoption, installed production PWA cache behavior, physical touch, 
 
 Proof codes: **L** lint/static contract; **T** behavioral or type test; **W** rendered route/interaction walk; **G** gallery/composition fixture; **M** manual keyboard/touch/assistive-technology check. A listed check is a required proof method, not a claim it exists or passed. New rules require an ID, owner, applicable states and proof method. Appendix A covers every DS group; DS21 and the component adoption table add rule-level detail.
 
-DS01-DS21 identifiers are retained; DS22 adds page composition and complexity. AT01-AT58 are the minimum regression scenarios, not a complete WCAG checklist. No UI rule creates an additional runtime evidence veto.
+DS01-DS21 identifiers are retained; DS22 adds page composition and complexity and DS23 the module workspace. AT01-AT66 are the minimum regression scenarios, not a complete WCAG checklist. No UI rule creates an additional runtime evidence veto.
 
 ## DS01 Product grammar and modes
 
@@ -218,11 +218,11 @@ Import/sharing explains what is included, recipient scope, activation and revoca
 
 ## DS15 GEO product-policy boundary
 
-Owner **B**. The maintained product scope and workflow live in the [GEO iteration plan](../../docs/superpowers/plans/2026-10-23-geo-profound-pureblue-todo.md), including its dated UI acceptance handoff. This design system governs truthful missingness, typed metrics, navigation discoverability, shared components and task/result identity; it does not maintain a second copy of GEO product sequencing. AT07/20 plus that plan's journeys are the acceptance contract.
+Owner **B**. DS23 governs how the module's work is presented. The maintained product scope and workflow live in the [GEO iteration plan](../../docs/superpowers/plans/2026-10-23-geo-profound-pureblue-todo.md), including its dated UI acceptance handoff. This design system governs truthful missingness, typed metrics, navigation discoverability, shared components and task/result identity; it does not maintain a second copy of GEO product sequencing. AT07/20 plus that plan's journeys are the acceptance contract.
 
 ## DS16 VCR product-policy boundary
 
-Owner **B**. The [October 25 AI-native reset](../../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) owns task scope, retained scientific objects, recruitment removals and conversation-first entry. Its dated UI handoff preserves the original v3 requirements. Apply shared numeric, provenance, keyboard and result-version rules here. AT08/15/25 and the reset's scientific journeys must pass; a design-document revision does not implement the reset.
+Owner **B**. DS23 governs how the module's work is presented; the reset's six result destinations take the place of a step rail. The [October 25 AI-native reset](../../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) owns task scope, retained scientific objects, recruitment removals and conversation-first entry. Its dated UI handoff preserves the original v3 requirements. Apply shared numeric, provenance, keyboard and result-version rules here. AT08/15/25 and the reset's scientific journeys must pass; a design-document revision does not implement the reset.
 
 ## DS17 Other module policies
 
@@ -393,6 +393,56 @@ Verify **G/W/M**, AT57. Cards MUST represent meaningful groups rather than enclo
 
 Verify **L/T/G/W/M** as applicable, AT58. Maintain an exact affected-surface map with route, mode, state, width, owner and evidence. Review whole pages across initial loading, first-use/filtered empty, populated, partial, stale, denied, error and mutation states where applicable, at narrow, intermediate and wide widths; include dark theme, zoom/short height and native boundaries where affected. A shared-component test alone cannot close page adoption. Geometry/lint tests detect their declared mechanical constraints; UI review separately judges task coherence, discoverability and preserved behavior. Neither a cosmetic classifier pass nor arbitrary budget relaxation establishes compliance. Timing evidence must name the measured interaction and environment: there is no universal five-second acceptance standard. Preserve historical v3.1 audit findings and its seven OPEN acceptance items separately from new DS22 work; local proof, commit/push, main adoption and deployment are separate receipts.
 
+## DS23 Module workspace
+
+Adopted 2026-11-01 from the owner's review of a GEO project's conversation. Owner **H**, with **B** acceptance where the native frame is involved. The November 1 audit found that the platform has no shared idea of a module's work: 9 progress displays and 8 next actions in GEO, 22 sets of state words across the app, 10 ways into a conversation, buttons that look alike and either fill a draft, spend money or change state, and results that vanish while the conversation is open. Evidence and the plan are in [the audit](../../docs/ui-ux-audit/2026-11-01-module-workspace/整改方案.md). These rules apply to a page that combines work with a conversation: a GEO project, a VCR study, a scheduled task, a 主动科研 goal. They add no approval, no second composer and no new state of the work. Where DS22.1 or older rulings differ on the conversation's place, this section wins.
+
+### DS23.1 One projection
+
+Verify **T**, AT59. A module projects its records onto one structure, and its list, preview, workbench and conversation read that one result: identity, stages, now, needs, activity, automation, results. No surface words a state or computes a next step of its own. Permissions are decided once, in the projection, and a person is never told of something they cannot act on.
+
+### DS23.2 One vocabulary
+
+Verify **L/T**, AT60. A work state is one of `@evimed/domain` `WORK_STATES`, in its one word: 待开始, 排队中, 进行中, 等你 (followed by what: 等你设预算), 简版已完成, 已完成, 未完成, 已过期, 已停止, 已暂停. Work outside what was asked for has **no state and says only its name**; it is not 未开始 or 未请求. A dependency that will run is 待开始. 未完成 keeps what was computed; failure is not worded otherwise. Connection, parsing, editorial and calendar states are not work states and keep their own words, without borrowing these.
+
+### DS23.3 One 现在
+
+Verify **T/W**, AT61. The header's primary action is the next step and nothing else. It is never “对话”, which has its own place in DS23.5. Already standing where the next step is, or with nothing to do, the header has no primary. A long-running stage does not invent one: the strip says what is going on.
+
+### DS23.4 Four kinds of action
+
+Verify **T/W**, AT62. Every action on a module's page declares what pressing it does (`Button` `actionKind`, `PageAction` `kind`), and its words match:
+
+| Kind | Pressing it | Words |
+|---|---|---|
+| `draft` | Fills the composer, unsent; the page stays | “让 AI …”, with the pencil where it is the main way in |
+| `start` | Runs on the server now; the strip appears and can stop it | “开始 …”, “生成 …”; states the cost where known |
+| `set` | Changes state where it stands | a verb and its object |
+| `external` | Spends money or goes outside the platform | says the consequence; uses the confirmation it already had |
+
+A button named for a piece of work must do that work. Only filling a draft is never worded as doing it. A setting whose change ends automation says so before it is saved.
+
+### DS23.5 One conversation, two forms
+
+Verify **T/W/M**, AT63. The conversation is one native composer in two forms, on every view of the work.
+
+- **Collapsed:** a bar in PageShell's `dock`, at the window's bottom. It is drawn by the host and starts no runtime, because a person has two at a time and a cold one takes as long as it takes. What is typed goes unsent into the native composer when the conversation opens. Nothing sends from the bar.
+- **Open:** from 1180 px a 432 px column on the right, results beside it (`WorkspaceSplit`), its composer at the column's foot and in the window always. Under 1180 px it covers the results, with a way back. The address says it is open and which result is beside it (`…/chat/<session>?result=<tab>`), so it can be linked and reloaded. A press in the results changes what is beside the conversation and leaves it open. Collapsing is leaving that address; the resident frame stays alive.
+
+A blank module conversation has no greeting and no project card, because the page beside it says where the work stands; it offers the module's ways to begin as small pills that fill the composer, and its composer is at the bottom, where it will stay. A role that reads and does not run has a link to the kept conversation and nothing to type into. Entering a module does not open the conversation by itself, for the same reason the bar starts no runtime.
+
+### DS23.6 Needs
+
+Verify **T/W**, AT64. What waits for a person (待提供, 待确认, 需处理, 平台外) is said over the results on every view and in the conversation's company, not only on an overview; the need is done in its own place. Only what already needs a person is listed. What is missing to begin is a checklist that ticks itself from what the project records, filled by saying it in the conversation or sending a file: not a form, and not a template pasted into the composer. Only what is stored can be ticked.
+
+### DS23.7 Linkage
+
+Verify **T/W**, AT65. The end of a conversation's turn refreshes the page beside it at once (`CONVERSATION_SETTLED_EVENT`), and not at the next poll. What a turn wrote is marked where it appears, and a newer version never silently replaces the one being read. Running work has a strip (PageShell `activity`) with its stop, on every view. A stage's press on a page with an open detail leaves that detail. A status sentence that promises something (“正在搜集”, “正在复核”) re-reads itself until it is resolved, and says when it stops trying. A run that holds the project's conversation says so before anyone meets it.
+
+### DS23.8 Automation
+
+Verify **T/W/M**, AT66. Work is described to its person in three tiers: **自动** (runs unasked: dependencies, queues, recovery), **授权后自动** (agreed once, then recurring: weekly measurement, placing within a budget) and **每次要人** (budget, release, a choice that is theirs). Automatic work that spends the person's allowance is visible with its next run and can be stopped. A promise of automatic work is made only when the agreement behind it stands. Notifications are sent when the person is the blocker, or when long work ends and they are elsewhere. Say what happens, in the reader's words; workers and queues stay off the page.
+
 ## Minimum acceptance scenarios (existing and new; not a pass list)
 
 | ID | Scenario | Required result |
@@ -455,6 +505,14 @@ Verify **L/T/G/W/M** as applicable, AT58. Maintain an exact affected-surface map
 | AT56 | Import/edit mode and return | Main-area complex work, short auxiliary drawer, preserved draft/scope and visible consequential commit parameters |
 | AT57 | Information density | Meaningful card groups, compact sparse history, appropriate selector width; no content hidden to pass a budget |
 | AT58 | Whole-page state and width matrix | Exact affected-surface map and separate geometry/behavior/UI evidence; historical open gates and release receipts remain distinct |
+| AT59 | One projection | List, preview, workbench and conversation agree on stage state and next step; a need is shown only to who can act on it |
+| AT60 | One vocabulary | Every state word from the domain; work outside the request says only its name; a dependency reads 待开始 |
+| AT61 | One 现在 | Header primary is the next step or absent, never the conversation; unchanged before and after later reads land |
+| AT62 | Action kinds | Draft: address's work stays and composer holds it unsent. Start: strip within 2 s, stoppable. External: consequence first. Words match the kind |
+| AT63 | Conversation forms | Bar on every view starts no runtime; typed text arrives unsent; split from 1180 px with composer in the window; cover below; reload keeps result; read-only role has no input |
+| AT64 | Needs | Needs visible on every view; checklist ticks itself after a real turn writes the fact; nothing new asks approval |
+| AT65 | Linkage | Turn end refreshes at once; stage press clears an open detail; promising sentences resolve or say they stopped; hold is announced first |
+| AT66 | Automation | Next automatic run visible and stoppable; changing what automation agreed to warns before and says after; promises conditional on agreement |
 
 ## Appendix A — ownership and verification coverage
 

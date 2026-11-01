@@ -597,13 +597,13 @@ page framework — the components above, `PageShell`'s slots, `layoutRules.test.
    What stands over and in the band is the same on every tab too (the fixture walk of 2026-10-28 measured the band 10 to 36 px
    taller on the tabs that had more): the way back is on every tab — 项目总览 from a step, 循证 GEO from the overview — as a block link, not an
    inline one (which is a kind of control of its own); the open step's own action (加问, 选目标档, 让 AI 写下一批) is the toolbar's
-   `contextAction`, a quiet 28 px text button at the row's end and never a primary — the page's one primary is the header's 「对话」,
+   `contextAction`, a quiet 28 px text button at the row's end and never a primary — the page's one primary is the header's next step (模块工作台 below; until 2026-11-01 it was 「对话」),
    and a header button is exactly 36 px for a one-line label (`HeaderActions`), the look of every other 36 px button; and at a phone's
    width the band's row, whose view and scope choices cannot fold into 「筛选」, is one line that scrolls sideways (`Toolbar`
    `nowrap`), ending in the search, the count and the action.
 10. **Starting work never takes the person away.** The button starts the work; the page's
     `ActivityStrip` says what is happening and how far, and the page updates itself when it ends. The
-    conversation is a view of the same page, not another place.
+    conversation stands beside the results, or as a bar under them (模块工作台 below; owner, 2026-11-01). It no longer replaces them.
 11. **Every number opens what it counts, and a chart and its table share one selection.** A figure in a
     sentence or a `StatTile` is a link or a button to the things counted (`to` / `onOpen`); a word that
     stands in for a number opens nothing. Selecting a mark selects its row.
@@ -621,7 +621,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 |---|---|---|---|---|
 | T1 列表页 | 前沿动态, 收件箱, 科研工具, 插件与技能, the study home's library views | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
 | T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 循证 GEO and 虚拟临床研究 homes, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
-| T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
+| T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below; both are held to 模块工作台 | header (the primary action is the next step, or none) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body beside the open conversation · `dock` (the collapsed conversation) | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
 | T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · 记忆总览 only: 记忆星图 · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
@@ -649,7 +649,7 @@ warning; `layoutLint.test.ts` holds each number. Two more are counts that only f
 | every page | one `PageShell`; at most one primary action in the header; a sentence is a `Note`, `Headline`, `EmptyState` or heading | a hand-drawn `<h1>`, back arrow or search box; a grey sentence with no action or number; a `Tag` that is pressed or sits in a control; a status word drawn as a button; a switch to an empty place that says nothing and offers no next step (the walk's `zero-count`; see the v3.1 rules below for what may stay) |
 | T1 | the toolbar above the list, views and filters in one row | a second tab list in the body; chips under the list; a hand-written `ul divide-y` (`List`, `ListRow`) |
 | T2 | the record in the right-hand column on a wide page; with no record, the column holds what starts one (the new-task form beside the examples, a module home's recipe) — the page stays split; creating is a form in the main area (`/…/new`), editing may be a dialog; a preview's actions are secondary, the one solid button is the list header's | a record in a drawer beside a list that has room; a conversation in a drawer; an empty state that collapses the page into one stacked column; a project picker above the list (a project is a label on a row, chosen per row) |
-| T3 | GEO: `StepRail` on every tab with the same steps; VCR: six result destinations without a step rail; the toolbar row reserved on a tab without one | the rail on one tab only; a button that carries the person to the conversation; two kinds of object in one tab; the primary action in the body |
+| T3 | GEO: `StepRail` on every tab with the same steps; VCR: six result destinations without a step rail; the toolbar row reserved on a tab without one; the next step as the header's primary; the conversation as a bar or a column on every view | the rail on one tab only; a button that replaces the page with the conversation; two kinds of object in one tab; the primary action in the body; 「对话」 as the primary |
 | T4 | a `Headline` whose numbers open what they count; a `ChartGrid` whose rows are full; legend and replay controls in the card's header | a placeholder tile; a hole in the grid; a control under the canvas it controls |
 | T5 | an `Outline` from four sections; the serif title | a page of many screens with no contents; the action under the title |
 | T6 | settings sections only in the left rail | a link to another page (插件, 技能, 运维) drawn as a section |
@@ -994,7 +994,7 @@ hint under a card, “为什么入选”; this historical blanket wording is sup
 - Frontier uses an editorial list, coherent summaries and distinct reader blocks. Keep original-source access predictable. Publication/discovery dates and AI importance/evidence quality stay distinguishable. The whole feed card opens its addressed reader; original-source access is separate, and long article text is not hidden behind retired reveal actions.
 - Knowledge distinguishes source/readiness/compiled page/graph/output. Reading preserves source location and jump-back. Fixed scientific canvases still need readable UI text and keyboard equivalents.
 - Memory uses the current native OpenViking engine and combines honest sparse visualizations with readable records and real source/scope; there is no retired records-engine fallback. One person has one capsule, and project is an entry label. Do not create visual links without evidence or mistake a membership star for semantic relationships.
-- GEO, VCR, schedules, extensions and settings/inbox product decisions are linked by the full specification DS15-DS17 and the adoption plan's module register. Do not duplicate their changing task scope here.
+- GEO, VCR, schedules, extensions and settings/inbox product decisions are linked by the full specification DS15-DS17 and the adoption plan's module register; how work is presented on those pages is DS23 (模块工作台 below). Do not duplicate their changing task scope here.
 
 ---
 
@@ -1113,6 +1113,18 @@ Last updated: 2026-10-26. This replaces the VCR seven-step, method-catalogue and
 - Trial-design views distinguish full-study mean duration (`duration_months`, Monte Carlo uncertainty) from last-patient-in accrual timing. Fitted survival curves and extrapolation use distinct rendering; fitted-median parameter quantiles do not become patient percentiles. Unsupported absolute risks or adapter paths stay unavailable rather than interpolated into a scientific claim.
 - Keep the v3.1 semantic tokens (warm paper and terracotta, above), typography, shared controls, Chinese baseline UI, mobile/keyboard access and the native frame. Huashu 3.0 informs conceptual hierarchy and purpose; Impeccable Operate/Read informs production interaction refinement. Neither authorizes a new brand world or prototype replacement.
 - Local synthetic browser inspection verifies layout/navigation/accessibility only. Actual DSH/model completion, numerical correctness, real-record matching validity, clinical validation and production acceptance need their own evidence. These boundaries do not add a new approval flow.
+
+## 模块工作台 (owner, 2026-11-01)
+
+The canonical specification's DS23 owns these rules; this is how they are built. The audit and the owner's request are in
+`../docs/ui-ux-audit/2026-11-01-module-workspace/`. Applies to 循证 GEO's project, 虚拟临床研究's study, a scheduled task's page and 主动科研.
+
+- **Vocabulary.** `packages/domain/src/workState.mjs`: `WORK_STATES`, `WORK_STATE_LABEL`, `workStateLabel(state, detail)`, `WORK_NEED_KINDS`, `WORK_ACTION_KINDS`. A module maps its records onto them (`geoStepView` in `components/geo/geoBand.ts`, the study's in `packages/domain/src/vcrVocabulary.mjs`); no page words a state. `null` is outside the work asked for, and `StepRail`'s `outside` draws only the name, with no second line in the row while every step is outside.
+- **Actions.** `Button` `actionKind` and `PageAction` `kind`, written as `data-action-kind`: `draft`, `start`, `set`, `external`. A draft says “让 AI …”; `start` says “开始 …” or “生成 …”. The walk presses them.
+- **Conversation.** `components/workspace/`: `ConversationBar` (PageShell's `dock`), `WorkspaceSplit` (`data-workspace="split"` from 1180 px, `cover` under it, column 432) and `useFitToScroller`, which keeps a sticky pane's foot inside the scroll box. The chat route is unchanged and carries the result beside it (`?result=`); `geoPathWithContext` keeps a press in the results on it. The resident frame moves by rectangle (`registerTaskPane`), so opening and collapsing never reload it. The frame's blank state is `runtimeUiCommands.mjs`'s `data-evimed-module-hero` with two rules in `runtimeUiShell.mjs` (no greeting; composer at the foot): these read `_stack` and `_headline`, so a kernel move re-reads them.
+- **Needs.** `NeedsBar`, from `geoNeeds` and the study's attention lines, over the body of every view; the list itself stays on the overview.
+- **Linkage.** `CONVERSATION_SETTLED_EVENT` on `window`, from `lib/runtimeUiBridge.ts`, at the end of a turn. `geoActivity` and `activityStripOf` fill PageShell's `activity`; GEO stops a step's run through `POST /api/geo/projects/:id/runs/:runId/stop`.
+- **Deliberately not built.** No “正在看” chip on the composer: nothing tells the model what the page is showing, and a chip would claim it does. No remembered open/closed form that reopens a conversation on entry: it would start a runtime on a visit. No overlay panel between 768 and 1180 px: the conversation covers the results, with 回到结果.
 
 ## Implementation proof
 
