@@ -4185,7 +4185,7 @@ test('an attended receipt proves only the exact words it signed: a request id us
 // ---- the wall-clock budget a dispatch states ----------------------------------------------------------------------------------------
 //
 // `timeBudgetMinutes` on a dispatch reaches the run policy in the session's index, and the policy says the clock to the model: at the
-// turn's first step and on crossing 50%, 75% and 90% of the budget, each once, measured on its own clock from the turn's own start. It
+// turn's first step and each time another 5% of the budget has passed, measured on its own clock from the turn's own start. It
 // is a line of context. Nothing is refused for it, no turn ends at it, and a turn without a budget reads exactly what it read before.
 
 const CLOCK_MINUTE = 60_000;
@@ -4208,37 +4208,29 @@ async function clockFixture({ child = false } = {}) {
 }
 const clockLine = (/** @type {number} */ budget, /** @type {number} */ used) => `<evimed-run>本轮时间预算 ${budget} 分钟，已用 ${used} 分钟，剩余 ${budget - used} 分钟。时间用完之前，要有一份完整的可交付成果。</evimed-run>`;
 
-test("a turn with a wall-clock budget is told the clock at its first step and on crossing 50%, 75% and 90%, each once", async () => {
+test("a turn with a wall-clock budget is told the clock at its first step and each time another 5% has passed, once each", async () => {
   const { f, dispatch, advance, clock } = await clockFixture();
   dispatch("run_clock", "req_clock", { timeBudgetMinutes: 60 });
   await f.step(1);
   assert.deepEqual(clock(), [clockLine(60, 0)], "the first step");
   await f.step(1);
-  advance(29);
+  advance(2);
   await f.step(1);
-  assert.equal(clock().length, 1, "29 of 60 minutes is not yet half");
+  assert.equal(clock().length, 1, "2 of 60 minutes is not yet 5%");
   advance(1);
   await f.step(1);
   await f.step(1);
-  assert.deepEqual(clock().slice(1), [clockLine(60, 30)], "half, once");
-  advance(14);
+  assert.deepEqual(clock().slice(1), [clockLine(60, 3)], "5%, once");
+  advance(27);
   await f.step(1);
-  assert.equal(clock().length, 2, "44 minutes is not three quarters");
-  advance(1);
+  assert.deepEqual(clock().slice(2), [clockLine(60, 30)], "one long step is told once, the latest");
+  advance(30);
   await f.step(1);
-  assert.deepEqual(clock().slice(2), [clockLine(60, 45)], "three quarters");
-  advance(8);
-  await f.step(1);
-  assert.equal(clock().length, 3, "53 minutes is not nine tenths");
-  advance(1);
-  await f.step(1);
-  assert.deepEqual(clock().slice(3), [clockLine(60, 54)], "nine tenths");
-  advance(5);
-  await f.step(1);
+  assert.deepEqual(clock().slice(3), [clockLine(60, 60)], "the budget is spent");
   advance(600);
   await f.step(1);
   await f.step(1);
-  assert.equal(clock().length, 4, "four lines in all: nothing more is said once the last has been, however long the turn runs");
+  assert.equal(clock().length, 4, "nothing more is said once the budget is spent, however long the turn runs");
 
   const line = f.injected.find((/** @type {any} */ message) => String(message.content?.[0]?.text).includes("本轮时间预算"));
   assert.equal(line.role, "user");

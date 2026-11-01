@@ -406,21 +406,21 @@ export function stepPolicy(budget, limits) {
 }
 
 /**
- * Where in a turn's wall-clock budget the model is told the clock, as shares of it: at its first step (0%), then on crossing
- * each of these. Whole percents, so the comparison below is integer arithmetic and 90% of a budget is exactly 90%.
+ * How often in a turn's wall-clock budget the model is told the clock: at its first step, then each time this share of it has passed.
  */
-export const TIME_BUDGET_NOTICE_PERCENTS = Object.freeze([0, 50, 75, 90])
+export const TIME_BUDGET_NOTICE_STEP_PERCENT = 5
 
 /**
  * The sentence a turn that has a wall-clock budget is told, when one is due, or null. The caller wraps it as the run's own
  * context (`<evimed-run>`, a tag the memory door and the learning loop already read as machine text).
  *
  * Context only (`RUN_TIME_BUDGET_MINUTES`): it names the budget, what was used and what is left, and says a complete deliverable
- * should exist before the time is out. It stops nothing and nothing waits on it. `said` is the highest level already told this
- * turn (-1: none). A step that finds more than one level crossed — a long step, or a first step that comes late — is told once,
- * the latest, and the levels before it are then said; so each level is told at most once, and a turn is told nothing more once the
- * last has been. The platform's own lines are written in Chinese whatever the researcher's language is; the dispatch's context
- * says whose words decide the language of the reply.
+ * should exist before the time is out. It stops nothing and nothing waits on it. Told at the first step and then whenever another
+ * 5% of the budget has passed, at the next step: a model that hears the clock only at 0, 50, 75 and 90% guesses in between, and it
+ * guesses high — on 40 search tasks with 20 minutes (lab, 2026-11-01) runs wrote "about 18 minutes used" at 3.8 and answered "None"
+ * at a median of 4.7. `said` is the highest level already told this turn (-1: none), and a level is `spent / 5%`, capped at 100%, so
+ * a long step is told once, the latest, and nothing more once the budget is spent. The platform's own lines are written in Chinese
+ * whatever the researcher's language is; the dispatch's context says whose words decide the language of the reply.
  * @param {number} minutes the budget, in whole minutes; 0 or less is no budget
  * @param {number} elapsedMs since the turn began, on the caller's clock
  * @param {number} said the highest level already told this turn, -1 if none
@@ -429,10 +429,7 @@ export const TIME_BUDGET_NOTICE_PERCENTS = Object.freeze([0, 50, 75, 90])
 export function timeBudgetNotice(minutes, elapsedMs, said) {
   if (!(minutes > 0)) return null
   const spent = Math.max(0, Number(elapsedMs) || 0)
-  let level = -1
-  TIME_BUDGET_NOTICE_PERCENTS.forEach((percent, index) => {
-    if (spent * 100 >= percent * minutes * 60_000) level = index
-  })
+  const level = Math.min(Math.floor((spent * 100) / (minutes * 60_000 * TIME_BUDGET_NOTICE_STEP_PERCENT)), 100 / TIME_BUDGET_NOTICE_STEP_PERCENT)
   if (level <= said) return null
   const elapsed = Math.floor(spent / 60_000)
   return {
