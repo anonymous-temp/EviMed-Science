@@ -51,7 +51,7 @@ function bash(args, { env = {}, input = undefined } = {}) {
 }
 
 test("the files the image carries for the model's shell commands are executable where they must be, and every build copies them to the same places", async () => {
-  for (const file of [guardScript, path.join(shimDir, "timeout")]) {
+  for (const file of [guardScript, path.join(shimDir, "timeout"), path.join(runtimeDir, "evimed-landlock-run.sh")]) {
     assert.doesNotThrow(() => accessSync(file, constants.X_OK), `${file} must be executable`);
   }
   const wanted = {
@@ -59,6 +59,8 @@ test("the files the image carries for the model's shell commands are executable 
     "deploy/runtime-dsh/evimed-tool-env.sh": "/usr/local/lib/evimed/evimed-tool-env.sh",
     "deploy/runtime-dsh/tool-bin/timeout": `${IMAGE_SHIM_DIR}/timeout`,
     "deploy/runtime-dsh/open-science-dsh-serve.sh": "/usr/local/bin/open-science-dsh-serve",
+    // The sandbox row's runner (packages/socket/cordis.patch.yml): copied before the smoke, made executable by the smoke phase and the delta.
+    "deploy/runtime-dsh/evimed-landlock-run.sh": "/usr/local/lib/evimed/evimed-landlock-run",
   };
   for (const name of ["Dockerfile", "Dockerfile.agentbay", "Dockerfile.delta"]) {
     const text = await read(`deploy/runtime-dsh/${name}`);

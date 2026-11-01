@@ -129,7 +129,7 @@
 - id: evimed-seam-probe
   config:
     requiredEnforcement: 'partial'
-    dshVersion: '0.2.1-rc.2'
+    dshVersion: '0.2.1-rc.5'
 
 
 # Inside a container whose only writable place is the workspace nothing
@@ -199,6 +199,8 @@
 - id: ui-settings-session-log
   disabled: true
 - id: ui-schedule
+  disabled: true
+- id: entry-customization
   disabled: true
 - id: ui-permission
   disabled: true

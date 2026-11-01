@@ -10,7 +10,8 @@
 #
 # Why the kernel's environment cannot say it. The bash tool runs every command inside a Landlock
 # domain whose only writable places are /tmp, the workspace and /dev/null (dsh-sandbox-local's
-# landlockProfileArgs, fixed: they do not follow TMPDIR or any setting). The kernel itself is not in
+# landlockProfileArgs, fixed: they do not follow TMPDIR or any setting) and, since the sandbox row names
+# evimed-landlock-run.sh as its runner, /dev/shm. The kernel itself is not in
 # that domain, and its spill files must stay on the project volume (TMPDIR=/runtime/tmp,
 # runtimeManager.mjs `runtimeTmpDir`), so the one environment holds a TMPDIR the commands it starts
 # cannot write to: `Rscript -e` died with "creating temporary file for '-e' failed", and LibreOffice

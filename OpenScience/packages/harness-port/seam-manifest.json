@@ -1,5 +1,5 @@
 {
-  "dsh": "0.2.1-rc.2",
+  "dsh": "0.2.1-rc.5",
   "cordis": "4.0.5",
   "pnpm": "11.7.0",
   "plugins": {
@@ -178,7 +178,7 @@
       },
       "read": "unauthenticated hint",
       "fallback": "the project's single active run, as before",
-      "verifiedAgainst": "0.2.1-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.1-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto; the header is still stamped from options.sessionId)"
+      "verifiedAgainst": "0.2.1-rc.5, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.1-rc.5/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto; the header is still stamped from options.sessionId; rc.4 added a model listing to that plugin, which follows only the official endpoint with the built-in catalogue, and this deployment's route is neither)"
     },
     "personalSkills": {
       "package": "@deepseek-ai/dsh-skill-filesystem",

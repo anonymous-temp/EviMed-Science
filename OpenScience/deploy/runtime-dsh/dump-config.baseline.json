@@ -148,8 +148,21 @@
 # == @deepseek-ai/dsh-base
 - id: subprocess
   name: '@deepseek-ai/dsh-subprocess-local'
+# == @deepseek-ai/dsh-base, patched by @evimed/dsh-socket
 - id: sandbox
   name: '@deepseek-ai/dsh-sandbox-local'
+  config:
+    runnerCommand:
+      - /usr/local/lib/evimed/evimed-landlock-run
+    runnerFailureSignatures:
+      - 'evimed-landlock-run: '
+      - 'landlock-run: usage error'
+      - 'landlock-run: cannot open rule path'
+      - 'landlock-run: landlock ruleset error'
+      - 'landlock-run: landlock is not enforced'
+      - 'landlock-run: exec failed'
+      - 'landlock-run: out of memory'
+# == @deepseek-ai/dsh-base
 - id: sandbox-policy
   name: '@deepseek-ai/dsh-sandbox-policy'
   config:
@@ -661,6 +674,8 @@
   name: '@deepseek-ai/dsh-client-ui-permission-presets'
 - id: ui-agent-preset
   name: '@deepseek-ai/dsh-client-ui-agent-preset'
+- id: entry-customization
+  name: '@deepseek-ai/dsh-client-ui-entry-customization'
 - id: ui-settings-session-log
   name: '@deepseek-ai/dsh-client-ui-settings-session-log'
 - id: ui-settings-plugins

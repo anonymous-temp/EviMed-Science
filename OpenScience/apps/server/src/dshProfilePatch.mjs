@@ -131,7 +131,10 @@ export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
  * and confirmed against 0.2.1-rc.2 again, whose catalog holds `deepseek-flash` (shown there as
  * DeepSeek-V4.1-Flash; the 1017 build is the same id) and `deepseek-v4-pro`, the
  * second text-only. The vision preview id is no longer in it and stays listed for
- * a deployment that still names it (re-read it when the pin moves).
+ * a deployment that still names it (re-read it when the pin moves). Read once more at
+ * 0.2.1-rc.5 (2026-11-01, `settings/describe` of a live kernel): the same two ids with the same
+ * modalities; only the window it states for both moved, 1,000,000 to 1,048,576, which this
+ * deployment never reads because its model row names its own.
  */
 export const IMAGE_INPUT_MODELS = Object.freeze(new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp"]));
 
@@ -453,6 +456,12 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   // the kernel runs itself, over `schedule/*`. The `schedule` row behind it is disabled in the socket's
   // bundle; the platform's own scheduled tasks are control-plane jobs, opened from its own pages.
   "ui-schedule",
+  // 0.2.1-rc.4: the "More" menus of the left sidebar, the conversation's view tabs and the right sidebar's guide, with
+  // two items each: "Browse other plugins" (opens the plugin manager's page, hidden above with its service) and "Create
+  // your plugin" (opens a blank session on the plugin-writing preset, which this composition does not declare). Both
+  // can only fail here, and the row draws nothing else; its client reaches no host namespace of its own
+  // (packages/contracts/dsh/panel-remotes.json).
+  "entry-customization",
   // The composition names this row `ui-permission`, not
   // `ui-permission-presets` after its package. Written from the package name it
   // addressed nothing, and the check that reads the recorded composition is

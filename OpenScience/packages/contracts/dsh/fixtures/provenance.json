@@ -1,9 +1,9 @@
 {
   "dependency": "dsh",
-  "version": "0.2.1-rc.2",
-  "observedAt": "2026-10-28T00:08:07Z",
-  "observedOn": "the dev box, 2026-10-28: `@deepseek-ai/dsh@0.2.1-rc.2` installed with npm under the pin's `publishedBefore` into a scratch prefix, booted as the shipped `web` profile (not the hosted `evimed-runtime` composition) with one `--patch` overlay that sets the `ui-chat` row's config to `transcriptView: standard` and `linkOpening: new-tab`, the two values apps/server/src/dshProfilePatch.mjs writes",
-  "fixtureEvidence": "Every other file in this directory is the verbatim response body the kernel returned, byte for byte, captured with curl after exchanging the printed launch token for the browser cookie. Nothing was re-indented, trimmed or invented.",
+  "version": "0.2.1-rc.5",
+  "observedAt": "2026-11-01T03:20:00Z",
+  "observedOn": "the dev box, 2026-11-01: `@deepseek-ai/dsh@0.2.1-rc.5` installed with npm under the pin's `publishedBefore` into a scratch prefix, booted as the shipped `web` profile (not the hosted `evimed-runtime` composition) with one `--patch` overlay that sets the `ui-chat` row's config to `transcriptView: standard` and `linkOpening: new-tab`, the two values apps/server/src/dshProfilePatch.mjs writes",
+  "fixtureEvidence": "Every other file in this directory is the verbatim response body the kernel returned, byte for byte, captured with curl after exchanging the printed launch token for the browser cookie. Nothing was re-indented, trimmed or invented. Re-recorded at rc.5 (the rc.2 recording of 2026-10-28 differed from it in two ways only: the schema numbers of the refs, and the model catalogue's two changes listed below).",
   "fixtures": {
     "settings-describe.json": {
       "request": "POST /api/settings/describe, body {\"type\":\"client-request\",\"rpcId\":\"r1\",\"method\":\"settings/describe\",\"payload\":{\"args\":{}}}",
@@ -17,6 +17,7 @@
     "The kernel refuses any other payload: `{}` and `null` answer gateway/internal (\"Remote payload must contain exactly one plain-object a…\"), and `{\"args\":{\"x\":1}}` answers gateway/arguments-invalid.",
     "The `--patch` overlay's values arrive in the namespace view's `value`; `base` holds the schema defaults (`linkOpening: sidebar`, no `transcriptView`) and `user` is `{}`. The chat adopts `value`.",
     "The document carries one view per configurable row of the whole composition: 21 here, among them the model provider's catalogue, the web tools' endpoints, the sandbox limits and the permission table. Only `ui-chat` is the page's to read.",
-    "Side by side on the same kernel against a stub Messages endpoint, three tool steps per turn: with the overlay the running turn shows one folded group titled by the step under way plus the live line; without it (the web default `detailed`) it shows six flat Think and tool rows."
+    "Side by side on the same kernel against a stub Messages endpoint, three tool steps per turn: with the overlay the running turn shows one folded group titled by the step under way plus the live line; without it (the web default `detailed`) it shows six flat Think and tool rows.",
+    "0.2.1-rc.5 against rc.2, the same request on the same overlay: the `llm-deepseek` namespace's built-in catalogue states the context window of `deepseek-flash` and `deepseek-v4-pro` as 1048576 (it was 1000000), and the route's schema gains `modelsTimeoutMs` (default 5000) and `modelsMaxAgeMs` (default 600000), the timing of the model listing the official-API route follows when its endpoint is the official origin and its catalogue the built-in one. The hosted composition's route names the control plane's gateway and its own model row, so it follows no listing. The other twenty namespaces are equal, value and schema, to the rc.2 recording."
   ]
 }

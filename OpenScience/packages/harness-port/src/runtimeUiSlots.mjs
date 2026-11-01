@@ -17,6 +17,12 @@
  * node kinds are the same fifteen, and the only changes are how `ui-chat` writes its
  * registrations — `conversation.chat.node` as a `children` declaration of its own
  * entry, `conversation.composer.dock` through a generator — not what they declare).
+ * At 0.2.1-rc.5 (2026-11-01) the eight client packages whose bundles changed since rc.2 (ui-chat,
+ * ui-conversation, ui-sidebar, ui-sidebar-right, ui-workspace, ui-agent-preset, ui-plugin-manager,
+ * ui-settings-general) were diffed against the rc.2 bundles: not one line that names a slot below changed;
+ * what the three added is three new list slots, `sidebar.panellist.actions`,
+ * `conversation.session.header.views.actions` and `sidebar.right.tab.guide.actions`, which only the
+ * kernel's `entry-customization` row (hidden by the hosted profile) occupies.
  * `dsh-client-connection`, which provides `connection`, now serves the browser
  * `lib/client.browser.js` through its `./client` export instead of `lib/client.js`. Three rules of that registry decide whether an occupant
  * appears at all, and each has already cost this codebase a shipped no-op:
@@ -52,7 +58,7 @@
  */
 
 /** The kernel client version these contracts were read from. */
-export const RUNTIME_UI_KERNEL_PIN = '0.2.1-rc.2';
+export const RUNTIME_UI_KERNEL_PIN = '0.2.1-rc.5';
 
 /** Public keyed body/title cell registered by the pinned sidebar-browser client. */
 export const RUNTIME_UI_NATIVE_BROWSER_KEY = '@deepseek-ai/dsh-client-ui-sidebar-browser';

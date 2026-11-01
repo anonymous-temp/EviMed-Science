@@ -638,7 +638,7 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:b232aa9966633b17e2972a1157dcee7a5d2425eaa20a48bfb5edeab32e1c3cce",
+      "digest": "sha256:cb1f7e1c88669e05563582e88a5fc1aefb94b6069856144bc39d3105bab33a64",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"a9b020847950234524ae1e4c83ef6243b2f6cd213619f91149acf6203494bcc5"}],
       "dependencies": [

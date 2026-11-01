@@ -705,7 +705,7 @@ profile_seed() {
 # boots with every entry applied and mounts an evimed-universal session.
 smoke() {
   set -x
-  chmod 0755 /usr/local/bin/evimed-build-smoke
+  chmod 0755 /usr/local/bin/evimed-build-smoke /usr/local/lib/evimed/evimed-landlock-run
   SOCKET_VERSION="${SOCKET_VERSION}" /usr/local/bin/evimed-build-smoke
 }
 

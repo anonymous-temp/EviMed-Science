@@ -65,6 +65,13 @@ const WHAT_STOPS_IT = {
   // 0.2.1: the automation-tasks page, its right-sidebar tab and the header clock, all over `schedule/*` (its recorded
   // client reaches that namespace and no other); the `schedule` row that serves it is disabled in the bundle too.
   "ui-schedule": { namespace: "schedule" },
+  // 0.2.1-rc.4: the "More" menus (browse plugins, create a plugin). The recorded client reaches no host namespace; its two
+  // items open the plugin manager's page (hidden with its service) and a session on the plugin-writing preset, which the
+  // composition does not declare (`preset-cordis` is disabled), so the registry answers `agent-preset/not-found`.
+  "entry-customization": {
+    cosmetic: "a pair of menu items that open the hidden plugin manager's page and a session on a preset the composition does not declare; "
+      + "the recorded client calls no host method of its own, and the registry refuses an undeclared preset.",
+  },
   // Model selection is visible for the approved thinking controls; the
   // runtime proxy still validates the configured provider/model selection.
   "ui-agent-preset": { methods: ["agentPresets/select", "agentPresets/copy", "agentPresets/deletePreset"], namespace: null },

@@ -147,7 +147,7 @@ probe host, a social crawler or a marketplace.
   save those rows under a requestKey, then call `start_diagnosis` with the returned version and
   its own stable requestKey. Generated phrasings are kind `typical`, not `client` or `real`.
   Read `diagnosis_progress` for the returned round. Keep the selected scope and planned call count
-  visible; never batch-probe inside the model turn. `geo_visibility_probe` is only a single
+  visible; never batch-probe inside the model turn. `mcp__evimed__geo_visibility_probe` is only a single
   question explicitly asked in conversation. A source-analysis step already requested through
   the platform is scheduled with its minimal dependencies by the worker; do not duplicate it.
 

@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "b58ec61cf232613a7dca410fca99676ca76d33a929e9d91a075ffbd6a0a96fd1",
+    "sha256": "d1eefe6d8e92117297c6329cef717ef41d66db2888a0614538e0d4cb518e70e5",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -309,7 +309,9 @@
         "id": "sandbox",
         "name": "@deepseek-ai/dsh-sandbox-local",
         "bundle": "@deepseek-ai/dsh-base",
-        "patchedBy": [],
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
         "state": "enabled"
       },
       {
@@ -1360,6 +1362,13 @@
       {
         "id": "ui-agent-preset",
         "name": "@deepseek-ai/dsh-client-ui-agent-preset",
+        "bundle": "@deepseek-ai/dsh-web-app",
+        "patchedBy": [],
+        "state": "enabled"
+      },
+      {
+        "id": "entry-customization",
+        "name": "@deepseek-ai/dsh-client-ui-entry-customization",
         "bundle": "@deepseek-ai/dsh-web-app",
         "patchedBy": [],
         "state": "enabled"

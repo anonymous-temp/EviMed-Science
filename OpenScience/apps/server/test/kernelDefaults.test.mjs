@@ -96,7 +96,8 @@ test("every setting the runtime depends on still holds in the composition the im
   // and the 1017 model label), two out (skill-badge, tool-ralph).
   // 209 on 2026-10-31 (merge of the Gitee main e9c9f96f6): `evimed-search-topics`, the row of the independent search-topics host bundle
   // (disabled unless EVIMED_SEARCH_TOPICS_ENABLED), written by hand into the baseline with BASELINE_PROVENANCE.sha256 moved in the same edit.
-  assert.equal(report.counts.baselineRows, 209, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
+  // 210 on 2026-11-01 (0.2.1-rc.5): `entry-customization`, the More menus the kernel's web app adds (hidden by the hosted profile).
+  assert.equal(report.counts.baselineRows, 210, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
@@ -203,6 +204,16 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "preset-ptc.disabled=true",
       "preset-standard.disabled=true",
       "product-analytics.disabled=true",
+      // The sandbox row's runner (deploy/runtime-dsh/evimed-landlock-run.sh): the kernel's Landlock launcher plus /dev/shm, so that
+      // Python's process pools work in a command, and the launcher's own fatal lines as the failure signatures that make it fail closed.
+      "sandbox.config.runnerCommand[0]=/usr/local/lib/evimed/evimed-landlock-run",
+      "sandbox.config.runnerFailureSignatures[0]=evimed-landlock-run: ",
+      "sandbox.config.runnerFailureSignatures[1]=landlock-run: usage error",
+      "sandbox.config.runnerFailureSignatures[2]=landlock-run: cannot open rule path",
+      "sandbox.config.runnerFailureSignatures[3]=landlock-run: landlock ruleset error",
+      "sandbox.config.runnerFailureSignatures[4]=landlock-run: landlock is not enforced",
+      "sandbox.config.runnerFailureSignatures[5]=landlock-run: exec failed",
+      "sandbox.config.runnerFailureSignatures[6]=landlock-run: out of memory",
       // 0.2.1 brought the kernel's own cron-like prompts back into the web app; scheduled work is the control plane's.
       "schedule.disabled=true",
       // 0.1.7 flipped its default on: the whole session log with every request.

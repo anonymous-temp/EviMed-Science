@@ -1516,6 +1516,9 @@ async function probeToolPipeline(ctx) {
   }
 }
 
+/** The line the Landlock launcher prints on stderr when the running kernel's ABI covers only part of the ruleset. */
+const LANDLOCK_PARTIAL_LINE = /^landlock-run: partial enforcement \(older Landlock ABI\)$/m
+
 /**
  * Runs one empty command through the sandbox. In a container bwrap is
  * unavailable (it needs an unprivileged user namespace, which Docker's default
@@ -1525,7 +1528,7 @@ async function probeToolPipeline(ctx) {
  * @param {any} ctx @param {'full'|'partial'} required
  * @returns {Promise<{ error: string | null, enforcement: string }>}
  */
-async function probeSandbox(ctx, required) {
+export async function probeSandbox(ctx, required) {
   const shell = ctx.get('shell')
   if (!shell) return { error: 'seam missing: ctx.shell', enforcement: 'none' }
   // `run()` takes a spec from `resolve()`, never a raw request — the executor's
@@ -1553,7 +1556,12 @@ async function probeSandbox(ctx, required) {
     // The harness reports this as `{ mode, denied, enforcement?, runnerFailed? }`
     // under `sandbox`; the flat read is a fallback for a shape that moves.
     const sandbox = result?.sandbox && typeof result.sandbox === 'object' ? result.sandbox : {}
-    const enforcement = String(result?.enforcement ?? sandbox.enforcement ?? 'unknown')
+    // A custom runner (the sandbox row's `runnerCommand`, which `deploy/runtime-dsh/evimed-landlock-run.sh` is) is asserted `full` by
+    // the kernel without a probe; the Landlock launcher says on stderr, for every command, when the host's kernel enforces only part
+    // of the ruleset. The kernel's own Landlock runner reports that as `partial`; this reads the same line, so a profile that
+    // requires `full` is not satisfied by a host that does not give it.
+    const reported = String(result?.enforcement ?? sandbox.enforcement ?? 'unknown')
+    const enforcement = reported === 'full' && LANDLOCK_PARTIAL_LINE.test(String(result?.stderr?.text ?? '')) ? 'partial' : reported
     // `enforcement` is optional in the harness's own type, so its absence has to
     // read as unknown rather than as satisfied — a probe that treats a missing
     // field as a pass is the one that certifies exactly the broken deployment.
