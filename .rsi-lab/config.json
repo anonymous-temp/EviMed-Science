@@ -1,6 +1,6 @@
 {
   "mode": "lanes",
-  "batch": "b021",
+  "batch": "b022",
   "sourceRef": "main",
   "labFrom": "branch",
   "imageRunId": 41307417699,
@@ -9,7 +9,7 @@
   "arms": [
     {
       "key": "cand-c0",
-      "jobs": 2,
+      "jobs": 1,
       "workers": 3,
       "patch": "rsi-lab/patch-c0"
     }
