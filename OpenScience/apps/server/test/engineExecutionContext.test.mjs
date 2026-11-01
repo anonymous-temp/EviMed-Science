@@ -70,7 +70,7 @@ test('a just-submitted native turn waits for its exact run to be adopted without
       runIdForSession: (id, list) => list.find((run) => run.sessionId === id)?.id ?? null,
     },
     runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
-      messages: [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine' }] }] }),
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
       sessionModelSelection: async (_project, id) => {
       selections++;
       assert.equal(id, 'mine');
@@ -91,7 +91,7 @@ test('waiting never turns an unowned session into the only active run', async ()
     store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
     agentRuns: { activeRuns: async () => { reads++; return [{ id: 'other-run', sessionId: 'other' }]; }, runIdForSession: () => null },
     runtimeManager: { sessionTranscript: async () => ({ sessionId: 'foreign', turns: [{ startSeq: 10, end: null }],
-      messages: [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-foreign' }] }] }),
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-foreign', status: 'pending' }] }] }),
       sessionModelSelection: async () => { throw new Error('must not read'); } },
     adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
   });
@@ -109,7 +109,7 @@ test('an older tool call cannot attach to a newer turn of the same session while
     agentRuns: { activeRuns: async () => (++reads === 1 ? [] : [{ id: 'new-run', sessionId: 'mine', nativeTurn: { startSeq: 20 } }]),
       runIdForSession: (id, runs) => runs.find((run) => run.sessionId === id)?.id ?? null },
     runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
-      messages: [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine' }] }] }),
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
       sessionModelSelection: async () => { throw new Error('must not read'); } },
     adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
   });
@@ -126,10 +126,45 @@ test('a missing or completed call is never admitted by adoption waiting', async 
       store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
       agentRuns: { activeRuns: async () => { reads++; return []; }, runIdForSession: () => null },
       runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: ended ? { kind: 'completed' } : null }],
-        messages: ended ? [{ turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine' }] }] : [] }) },
+        messages: ended ? [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] : [] }) },
       adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
     });
     await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
     assert.equal(reads, 1, 'without exact live call evidence there is no adoption wait');
   }
+});
+
+test('a call that ends during adoption waiting cannot receive a credential', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  let transcriptReads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => (++reads === 1 ? [] : [{ id: 'own-run', sessionId: 'mine', nativeTurn: { startSeq: 10 } }]),
+      runIdForSession: (id, runs) => runs.find((run) => run.sessionId === id)?.id ?? null },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10,
+      end: ++transcriptReads === 1 ? null : { kind: 'completed' } }],
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
+      sessionModelSelection: async () => { throw new Error('must not read'); } },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+  assert.equal(transcriptReads, 2);
+});
+
+
+test('a completed tool call in an otherwise active turn cannot wait for adoption', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => { reads++; return []; }, runIdForSession: () => null },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'completed' }] }] }) },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+  assert.equal(reads, 1);
 });
