@@ -1,18 +1,31 @@
 import { VcrForecastComparisonResult } from "./VcrForecastComparisonResult";
 import { useEffect, useState } from 'react';
+import { workStateLabel } from '@evimed/domain';
 import { Button } from '@/components/ui/Button';
+import { Note } from '@/components/ui/Note';
 import { Select } from '@/components/ui/Input';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { queueVcrJob, getVcrJob } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import type { LongitudinalRecord } from '@/lib/vcrLongitudinalClient';
+import { useStudyFrame } from './studyFrameContext';
+import { COMPARE_START_LABEL } from './vcrActionWords';
 
 const modes: Record<string, string> = { scenario: '治疗情景', input_sensitivity: '输入敏感性', model_version: '模型版本', update: '新增观测后的更新' };
 const date = (value?: string) => value ? new Date(value).toLocaleDateString('zh-CN') : '未记录';
 
-export function VcrForecastComparison({ studyId, selected, records, canRun, onComplete }: {
-  studyId: string; selected: LongitudinalRecord; records: LongitudinalRecord[]; canRun: boolean; onComplete: () => void;
+/**
+ * Two predictions of one endpoint, compared by an engine job the reader starts (开始比较). A job past the study's compute budget is
+ * not a failure: it waits for the lead to confirm the budget (`awaiting_budget`), and the page says so and opens the budget panel —
+ * it offers no retry, because a retry would queue a second job behind the one that is waiting.
+ */
+export function VcrForecastComparison({ studyId, selected, records, canRun, canManage = false, onComplete }: {
+  studyId: string; selected: LongitudinalRecord; records: LongitudinalRecord[]; canRun: boolean;
+  /** The reader may confirm the compute budget (`manage_study`, the lead's). */
+  canManage?: boolean; onComplete: () => void;
 }) {
+  const frame = useStudyFrame();
+  const [awaitingBudget, setAwaitingBudget] = useState(false);
   const [otherId, setOtherId] = useState('');
   const [mode, setMode] = useState('');
   const [jobId, setJobId] = useState('');
@@ -35,7 +48,8 @@ export function VcrForecastComparison({ studyId, selected, records, canRun, onCo
         const job = await getVcrJob(studyId, jobId);
         if (!active) return;
         if (job.state === 'succeeded') { setJobId(''); setBusy(false); setMessage('比较已完成。'); onComplete(); }
-        else if (['failed', 'canceled', 'awaiting_budget'].includes(job.state)) {
+        else if (job.state === 'awaiting_budget') { setJobId(''); setBusy(false); setError(false); setMessage(''); setAwaitingBudget(true); }
+        else if (['failed', 'canceled'].includes(job.state)) {
           setJobId(''); setBusy(false); setError(true); setMessage(job.error?.message ?? '本次比较未完成，可在研究对话中查看原因或重试。');
         } else timer = setTimeout(() => { void poll(); }, 1200);
       } catch (cause) {
@@ -45,6 +59,9 @@ export function VcrForecastComparison({ studyId, selected, records, canRun, onCo
     void poll();
     return () => { active = false; clearTimeout(timer); };
   }, [jobId, studyId, onComplete]);
+  // The comparison that was waiting for the budget has arrived: the wait is over.
+  const arrived = comparisons.length;
+  useEffect(() => { setAwaitingBudget(false); }, [arrived]);
   async function compare() {
     if (!other) return;
     setBusy(true); setError(false); setMessage('正在比较相同受试者的预测。');
@@ -62,9 +79,14 @@ export function VcrForecastComparison({ studyId, selected, records, canRun, onCo
         <Select label="比较目的" value={mode || inferredMode} onChange={event => setMode(event.target.value)} disabled={busy}>
           {Object.entries(modes).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </Select>
-        <div><Button variant="secondary" size="sm" loading={busy} disabled={busy} onClick={() => { void compare(); }}>比较所选预测</Button></div>
+        <div><Button variant="secondary" size="sm" actionKind="start" loading={busy} disabled={busy || awaitingBudget} onClick={() => { void compare(); }}>{COMPARE_START_LABEL}</Button></div>
       </>}
       {!other && !comparisons.length && <p className="text-caption text-text-2">同一终点有两个预测版本后，可以比较治疗情景、输入变化或新增观测后的结果。</p>}
+      {awaitingBudget && (
+        <Note tone="warn" action={canManage && frame ? <Button size="sm" variant="secondary" actionKind="set" onClick={() => frame.openPanel('budget')}>确认预算</Button> : undefined}>
+          {`${workStateLabel('waiting', '确认预算')}：这次比较超出了研究的计算预算，确认后会自动开始。`}
+        </Note>
+      )}
       {message && <p role={error ? 'alert' : 'status'} className={error ? 'text-caption text-error' : 'text-caption text-text-2'}>{message}</p>}
       {comparisons.map(record => <VcrForecastComparisonResult key={record.id} record={record} records={records} />)}
     </div>

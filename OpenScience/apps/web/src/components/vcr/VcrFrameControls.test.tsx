@@ -62,11 +62,11 @@ describe("the 虚拟临床研究 chip", () => {
     const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-protocol", sessionId: "session-a" }));
-    const labels = ["患者匹配", "人群与患者", "合成对照", "虚拟试验"];
+    const labels = ["匹配", "人群与患者", "对照", "试验"];
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", null)));
     expect(labels.every(label => view.queryByRole("button", { name: label }))).toBe(true);
     expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
-    fireEvent.click(view.getByRole("button", { name: "虚拟试验" }));
+    fireEvent.click(view.getByRole("button", { name: "试验" }));
     expect(f.drafts).toEqual(["帮我比较临床试验设计。研究是："]);
     expect(f.sent).toEqual([]);
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read", "write", "manage_study"]))));
@@ -109,7 +109,7 @@ describe("the 虚拟临床研究 chip", () => {
       expect(view.queryByRole("dialog")).toBeNull();
       expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
       expect(view.getByText("虚拟临床研究")).toBeInTheDocument();
-      expect(view.getByRole("button", { name: "患者匹配" })).toBeInTheDocument();
+      expect(view.getByRole("button", { name: "匹配" })).toBeInTheDocument();
     }
     expect(f.sent).toEqual([]);
   });

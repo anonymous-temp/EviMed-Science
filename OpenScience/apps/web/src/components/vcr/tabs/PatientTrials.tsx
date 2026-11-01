@@ -22,6 +22,7 @@ import {
   VCR_PATIENT_TRIALS_OFF,
   VCR_TRIAL_SEARCH_FAILED,
 } from "../vcrText";
+import { FIND_TRIALS_LABEL } from "../vcrActionWords";
 
 /** The eligibility chip's tone: the ones still to settle are the ones a coordinator acts on. */
 const ELIGIBILITY_TONE: Record<string, TagTone> = { eligible: "accent", insufficient_evidence: "warn", pending: "warn" };
@@ -150,7 +151,7 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
       <div data-vcr-patient-trials-empty="none">
         <EmptyState
           title={patientTrialsNoneSentence(subject)}
-          action={mayRun ? <Button loading={busy} onClick={ask}>为该患者找试验</Button> : undefined}
+          action={mayRun ? <Button actionKind="start" loading={busy} onClick={ask}>{FIND_TRIALS_LABEL}</Button> : undefined}
         />
       </div>
     );
@@ -169,7 +170,7 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
     <Section
       title={`${subject} 的试验`}
       count={`${page.trials.length} 项`}
-      toolbar={mayRun ? <Button variant="secondary" size="sm" loading={busy} onClick={ask}>为该患者找试验</Button> : undefined}
+      toolbar={mayRun ? <Button variant="secondary" size="sm" actionKind="start" loading={busy} onClick={ask}>{FIND_TRIALS_LABEL}</Button> : undefined}
     >
       <div data-vcr-patient-trials={subject} className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
         <ul aria-busy={staleList || undefined} className={cn("flex flex-col gap-2", staleList && "opacity-60")}>

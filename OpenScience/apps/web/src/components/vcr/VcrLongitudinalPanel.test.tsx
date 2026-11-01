@@ -170,7 +170,7 @@ it('compares forecasts from updated histories and automatically displays the com
   draw();
   await user.click(await screen.findByText('预测之间的比较', { exact: true }));
   expect(screen.getByLabelText('比较目的')).toHaveValue('update');
-  await user.click(screen.getByRole('button', { name: '比较所选预测' }));
+  await user.click(screen.getByRole('button', { name: '开始比较' }));
   expect(await screen.findByText('比较已完成。')).toBeInTheDocument();
   expect(network.productRequest).toHaveBeenCalledWith('/vcr/studies/one/jobs', 'POST', { kind: 'compare_forecasts', scenario: { predictionId: 'first', otherPredictionId: 'second', mode: 'update' } });
   expect(await screen.findByRole('table', { name: '同一日期、相同受试者的预测差异' })).toHaveTextContent('-1');

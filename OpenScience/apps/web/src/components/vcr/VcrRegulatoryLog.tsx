@@ -107,7 +107,7 @@ export function RegulatoryContactForm({ studyId, onAdded }: { studyId: string; o
         placeholder="每行一条：文件名、路径或链接"
       />
       <div>
-        <Button type="submit" disabled={!ready || busy} loading={busy}>添加</Button>
+        <Button actionKind="set" type="submit" disabled={!ready || busy} loading={busy}>添加</Button>
       </div>
     </form>
   );

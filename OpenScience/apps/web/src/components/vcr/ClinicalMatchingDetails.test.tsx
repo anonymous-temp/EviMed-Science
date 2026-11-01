@@ -84,18 +84,18 @@ describe('evaluating from the controls',()=>{
     api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
     controls(page({basisUpdated:{count:2,subjects:['P-001','P-002']}}));
     expect(screen.getByText('2 人的评估依据已更新')).toBeVisible();
-    fireEvent.click(screen.getByRole('button',{name:'重新评估'}));
+    fireEvent.click(screen.getByRole('button',{name:'重新开始评估'}));
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],subjectKeys:['P-001','P-002'],direction:'trial_to_patient'}));
     expect(await screen.findByText('已提交 1 项评估。')).toBeVisible();
   });
   it('says nothing about a basis when nothing changed, and offers the evaluation only to a reader who may run it',()=>{
     controls();
     expect(screen.queryByText(/评估依据已更新/)).toBeNull();
-    expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'重新开始评估'})).toBeNull();
     document.body.innerHTML='';
     controls(page({basisUpdated:{count:1,subjects:['P-001']}}),{canRun:false});
     expect(document.body).toHaveTextContent('1 人的评估依据已更新');
-    expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'重新开始评估'})).toBeNull();
   });
   it('offers no run to a reader who may not run it, and no refresh either',()=>{
     controls(page(),{canRun:false});

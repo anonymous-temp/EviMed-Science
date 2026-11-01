@@ -1,8 +1,9 @@
-import { CircleCheck, CircleDashed, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleDashed, PenLine, TriangleAlert } from "lucide-react";
 import type { VcrDimension } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
+import { DRAFT_PREFIX } from "../vcrActionWords";
 
 /** How far a simulation can reproduce one comparability dimension (plan §5.3). */
 const STATE_WORDS: Record<VcrDimension["state"], string> = {
@@ -32,7 +33,7 @@ export function DimensionBand({ dimensions, onAssess }: { dimensions: readonly V
     return (
       <div data-vcr-dimensions-unassessed="" className="flex flex-wrap items-center gap-3">
         <Tag>可比性：未评估</Tag>
-        {onAssess && <Button size="sm" variant="secondary" onClick={onAssess}>评估可比性</Button>}
+        {onAssess && <Button size="sm" variant="secondary" actionKind="draft" onClick={onAssess}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}评估可比性`}</Button>}
       </div>
     );
   }

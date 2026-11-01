@@ -7,7 +7,7 @@ import { VcrVersionComparison } from "./VcrVersionComparison";
 it("requires two explicit versions and binds their immutable selection outside visible prose", async () => {
   const spies = makeFrameSpies();
   render(<MemoryRouter><TabFrame studyId="std_1" spies={spies}><VcrVersionComparison studyId="std_1" kind="population" onClose={() => {}} versions={[{ objectId: "pop_a", version: 1, label: "人群版本一", resultId: "res_a" }, { objectId: "pop_b", version: 2, label: "人群版本二", resultId: "res_b" }]} /></TabFrame></MemoryRouter>);
-  const action = screen.getByRole("button", { name: "将比较请求放入研究对话" });
+  const action = screen.getByRole("button", { name: "放进对话" });
   expect(action).toBeDisabled();
   await userEvent.selectOptions(screen.getByLabelText("第一个保存版本"), "pop_a:1");
   expect(action).toBeDisabled();

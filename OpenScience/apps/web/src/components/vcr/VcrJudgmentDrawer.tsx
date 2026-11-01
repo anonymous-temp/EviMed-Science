@@ -59,7 +59,7 @@ export function VcrJudgmentDrawer({ studyId, assessmentId, criterion, onClose, o
         <Textarea label="依据" rows={3} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-          <Button type="submit" loading={busy} disabled={busy}>保存</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={busy}>保存</Button>
         </div>
       </form>
     </Drawer>

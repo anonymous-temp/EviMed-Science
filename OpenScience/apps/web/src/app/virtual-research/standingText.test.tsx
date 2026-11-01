@@ -80,7 +80,7 @@ describe("the frame and the views that are its own", () => {
       [`GET /vcr/studies/${STUDY_ID}/comparator`]: fixture("empty/comparator.json"),
     });
     drawStudy(`/app/virtual-research/${STUDY_ID}/comparator`);
-    await screen.findByRole("button", { name: "设计对照" });
+    await screen.findByRole("button", { name: "让 AI 设计对照" });
     expect(blocks()).toEqual([]);
   });
 

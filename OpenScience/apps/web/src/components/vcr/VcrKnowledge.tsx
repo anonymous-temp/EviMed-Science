@@ -38,6 +38,7 @@ import { VCR_HOME_PATH, vcrTabPath } from "./vcrTabs";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { numberText } from "./vcrText";
+import { COMPARE_START_LABEL } from "./vcrActionWords";
 
 /**
  * 病种定义包与人群定义库: which disease pack a study works from and which library
@@ -148,7 +149,7 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
       <p className="flex flex-wrap items-center gap-2 text-ui text-text">
         <span className="font-semibold">{packName(pack)}</span>
         <span className="text-caption text-text-3">{counts}</span>
-        {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
+        {pack.canPromote && <Button actionKind="set" size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
       {/* The study chose an edition of this pack that the catalogue no longer holds: say that what it reads now is the newest. */}
       {pack.binding?.resolution === "newest_compatible" && <p data-vcr-pack-edition="newest"><Tag>改按最新一版读取</Tag></p>}
@@ -202,7 +203,7 @@ function PlatformRequest({ studyId, request, onChanged }: { studyId: string; req
     <div data-vcr-platform-request="" className="flex flex-col gap-2">
       {request.canRequest && (
         <p className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" loading={busy} onClick={ask}>申请成为平台病种定义包</Button>
+          <Button actionKind="set" size="sm" variant="secondary" loading={busy} onClick={ask}>申请成为平台病种定义包</Button>
           <span className="text-caption text-text-3">平台会重新核对结构、授权和来源；通过后所有账号都能选用，并署上你的名字。</span>
         </p>
       )}
@@ -245,7 +246,7 @@ function BindPackSection({ studyId, onChanged }: { studyId: string; onChanged: (
               {state.data.map((pack) => <option key={`${pack.origin}-${pack.id}`} value={pack.id}>{packName(pack)}</option>)}
             </Select>
           </div>
-          <Button variant="secondary" loading={busy} disabled={!choice} onClick={bind}>绑定</Button>
+          <Button actionKind="set" variant="secondary" loading={busy} disabled={!choice} onClick={bind}>绑定</Button>
         </div>
       </div>
     </Section>
@@ -355,7 +356,7 @@ function SaveDefinitionDrawer({ studyId, populationId, suggested, onClose, onSav
         <Textarea label="哪些人在里面" rows={4} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" type="button" onClick={onClose} disabled={busy}>取消</Button>
-          <Button type="submit" loading={busy} disabled={!valid}>存入</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={!valid}>存入</Button>
         </div>
       </form>
     </Drawer>
@@ -420,7 +421,7 @@ function UseDefinition({ studyId, library, onChanged }: { studyId: string; libra
         </div>
       )}
       {entry && version && <DefinitionVersionPreview key={`${entry.id}:${version}`} entry={entry} version={Number(version)} />}
-      <Button variant="secondary" loading={busy} disabled={!entry || !version} onClick={use}>用于本研究</Button>
+      <Button actionKind="set" variant="secondary" loading={busy} disabled={!entry || !version} onClick={use}>用于本研究</Button>
     </div>
   );
 }
@@ -477,7 +478,7 @@ function CompareVersions({ studyId, definitions, onChanged }: {
           {versions.map((number) => <option key={number} value={String(number)}>{`v${number}`}</option>)}
         </Select>
       </div>
-      <Button variant="secondary" loading={busy} disabled={!valid} onClick={compare}>比较版本</Button>
+      <Button variant="secondary" actionKind="start" loading={busy} disabled={!valid} onClick={compare}>{COMPARE_START_LABEL}</Button>
     </div>
   );
 }

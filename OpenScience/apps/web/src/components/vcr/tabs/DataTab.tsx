@@ -519,7 +519,7 @@ function EditCard({ studyId, assumption, onClose, onSaved }: {
       <Textarea label="说明" rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-        <Button type="submit" loading={busy} disabled={!valid || busy}>保存</Button>
+        <Button actionKind="set" type="submit" loading={busy} disabled={!valid || busy}>保存</Button>
       </div>
     </form>
   );
@@ -569,7 +569,7 @@ function SignCard({ studyId, assumption, kinds, onClose, onSigned }: {
       <Input label="备注" value={note} onChange={(event) => setNote(event.target.value)} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-        <Button type="submit" loading={busy} disabled={busy}>签注</Button>
+        <Button actionKind="set" type="submit" loading={busy} disabled={busy}>签注</Button>
       </div>
     </form>
   );

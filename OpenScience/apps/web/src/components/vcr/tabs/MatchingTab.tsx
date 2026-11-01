@@ -2,7 +2,7 @@ import { useStudyFrame } from "../studyFrameContext";
 import { ClinicalTimeline, CriterionTable, useMatchingControls } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
-import { CircleCheck, TriangleAlert } from "lucide-react";
+import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
 import {
   getVcrMatching,
   recordVcrDecision,
@@ -34,6 +34,7 @@ import { PatientTrials } from "./PatientTrials";
 import { useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { criterionStateLabel, NO_VALUE, numberText, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
+import { DRAFT_PREFIX, INTAKE_LABEL } from "../vcrActionWords";
 
 type Direction = NonNullable<MatchingData["direction"]>;
 
@@ -140,8 +141,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
         {aside}
         <EmptyState title="暂时无法进行患者匹配" action={<>
           {data.unavailable?.code !== "vcr_matching_unavailable" && <Button variant="secondary" onClick={reload}>重试读取匹配结果</Button>}
-          {frame && <Button variant="secondary" onClick={() => frame.openPanel("intake")}>检查患者资料</Button>}
-          {frame && <Button variant="text" onClick={() => frame.openChat("请先评估患者匹配需要的资料和证据，并说明目前缺失的信息。", { kind: "step", studyId, objectId: "matching" })}>在对话中检查证据</Button>}
+          {frame && <Button variant="secondary" onClick={() => frame.openPanel("intake")}>{INTAKE_LABEL}</Button>}
+          {frame && <Button variant="text" actionKind="draft" onClick={() => frame.openChat("请先评估患者匹配需要的资料和证据，并说明目前缺失的信息。", { kind: "step", studyId, objectId: "matching" })}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}检查证据`}</Button>}
         </>} />
       </div>
     );
@@ -419,13 +420,14 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 </p>
               )}
               {mayReview && (
-                <Button variant="secondary" loading={busy === "review"} disabled={busy !== null} onClick={review}>复核这份评估</Button>
+                <Button actionKind="set" variant="secondary" loading={busy === "review"} disabled={busy !== null} onClick={review}>复核这份评估</Button>
               )}
               {selected.reviewedBy && <span data-vcr-reviewed-by=""><Tag>{`已复核 · ${selected.reviewedByName ?? NO_VALUE}`}</Tag></span>}
               {/* A person with nothing open has nothing to ask for: the button is not drawn grey, it is not drawn. */}
               {(needs.length > 0) && (
                 <Button
                   variant="secondary"
+                  actionKind="set"
                   loading={busy === "evidence"}
                   disabled={!mayAskEvidence || busy !== null}
                   onClick={requestEvidence}

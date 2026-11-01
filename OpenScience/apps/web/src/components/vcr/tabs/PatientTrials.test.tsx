@@ -72,7 +72,7 @@ describe("给患者找试验 — before a patient is chosen", () => {
     expect(await screen.findByText("选一位患者，看有哪些试验可以参加。")).toBeInTheDocument();
     expect(reads(server).at(-1)?.get("direction")).toBe("patient_to_trial");
     expect(reads(server).at(-1)?.has("candidate")).toBe(false);
-    expect(screen.queryByRole("button", { name: "为该患者找试验" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "开始为该患者找试验" })).toBeNull();
     // The funnel, the candidate list and the protocol's criterion table of the other direction are not drawn under it.
     expect(screen.queryByRole("heading", { name: "P-0201" })).toBeNull();
     expect(document.querySelector("[data-vcr-candidate]")).toBeNull();
@@ -173,7 +173,7 @@ describe("给患者找试验 — a patient with trials", () => {
     await openDirection();
     await choose("P-0192");
     await screen.findByRole("heading", { name: "P-0192 的试验" });
-    expect(screen.getByRole("button", { name: "为该患者找试验" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "开始为该患者找试验" })).toBeEnabled();
   });
 });
 
@@ -183,7 +183,7 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     await choose("P-0201");
     expect(await screen.findByText("还没有为 P-0201 找过试验。")).toBeInTheDocument();
     expect(document.querySelector("[data-vcr-trial]")).toBeNull();
-    const button = screen.getByRole("button", { name: "为该患者找试验" });
+    const button = screen.getByRole("button", { name: "开始为该患者找试验" });
     expect(button).toBeEnabled();
     await userEvent.click(button);
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(SEARCH, "POST", { subjectKey: "P-0201" }));
@@ -198,7 +198,7 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     server = installVcrServer(network.productRequest, { [`POST ${SEARCH}`]: () => new Promise((resolve) => { release = resolve; }) });
     await openDirection();
     await choose("P-0201");
-    const button = await screen.findByRole("button", { name: "为该患者找试验" });
+    const button = await screen.findByRole("button", { name: "开始为该患者找试验" });
     await userEvent.click(button);
     await userEvent.click(button);
     expect(searches(server)).toHaveLength(1);
@@ -210,7 +210,7 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     server = installVcrServer(network.productRequest, { [`POST ${SEARCH}`]: { accepted: true, runId: null, step: null, queuedBehind: [{ step: null, waitingFor: "run" }], evaluated: 0 } });
     const { spies } = await openDirection();
     await choose("P-0201");
-    const button = await screen.findByRole("button", { name: "为该患者找试验" });
+    const button = await screen.findByRole("button", { name: "开始为该患者找试验" });
     const before = reads(server).length;
     await userEvent.click(button);
     await waitFor(() => expect(spies.refresh).toHaveBeenCalled());
@@ -224,10 +224,10 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     server = installVcrServer(network.productRequest, { [`POST ${SEARCH}`]: () => { throw new Error("boom"); } });
     await openDirection();
     await choose("P-0201");
-    await userEvent.click(await screen.findByRole("button", { name: "为该患者找试验" }));
+    await userEvent.click(await screen.findByRole("button", { name: "开始为该患者找试验" }));
     await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("暂时无法开始查找，请稍后重试。"));
     expect(screen.getByText("还没有为 P-0201 找过试验。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "为该患者找试验" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "开始为该患者找试验" })).toBeEnabled();
   });
 
   it("offers no search to a reader who may not start a run, and still says what there is", async () => {
@@ -236,7 +236,7 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     await userEvent.click(screen.getByRole("button", { name: "给患者找试验" }));
     await choose("P-0201");
     expect(await screen.findByText("还没有为 P-0201 找过试验。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "为该患者找试验" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "开始为该患者找试验" })).toBeNull();
   });
 });
 
@@ -260,7 +260,7 @@ describe("给患者找试验 — the other direction is the way back", () => {
     await userEvent.click(screen.getByRole("button", { name: "给患者找试验" }));
     await waitFor(() => expect(reads(server).some((query) => query.get("direction") === "patient_to_trial")).toBe(true));
     expect(screen.getByRole("heading", { name: "P-0201" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "为该患者找试验" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "开始为该患者找试验" })).toBeNull();
   });
 
   it("says the direction is not here when the server says it is not composed, with no button to press", async () => {
@@ -273,6 +273,6 @@ describe("给患者找试验 — the other direction is the way back", () => {
     });
     await openDirection();
     expect(await screen.findByText("给患者找试验在本部署尚未接入。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "为该患者找试验" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "开始为该患者找试验" })).toBeNull();
   });
 });

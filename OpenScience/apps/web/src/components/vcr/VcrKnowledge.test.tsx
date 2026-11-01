@@ -243,10 +243,10 @@ describe("定义库 on the population tab", () => {
 
   it("asks the engine to compare two different versions of a definition used here, and only offers it to someone who may run", async () => {
     const { rerender } = draw(<VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun={false} onChanged={() => undefined} />);
-    expect(screen.queryByRole("button", { name: "比较版本" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始比较" })).not.toBeInTheDocument();
     rerender(<MemoryRouter><VcrDefinitionsSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite canRun onChanged={() => undefined} /></MemoryRouter>);
     await userEvent.click(screen.getByText("管理定义与版本"));
-    const compare = screen.getByRole("button", { name: "比较版本" });
+    const compare = screen.getByRole("button", { name: "开始比较" });
     expect(compare).toBeDisabled();
     await userEvent.selectOptions(screen.getByLabelText("比较"), "1");
     await userEvent.selectOptions(screen.getByLabelText("与"), "1");

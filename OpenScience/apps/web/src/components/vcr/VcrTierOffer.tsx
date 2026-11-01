@@ -35,7 +35,7 @@ export function VcrTierOffer({ studyId, offer, onMoved }: { studyId: string; off
       <p className="min-w-0 flex-1 text-ui text-text">
         {`你接入的数据已够 ${offer.tier}：${offer.unlocks.join("；")}。`}
       </p>
-      <Button size="sm" loading={moving} onClick={move}>{`升到 ${offer.tier}`}</Button>
+      <Button actionKind="set" size="sm" loading={moving} onClick={move}>{`升到 ${offer.tier}`}</Button>
     </section>
   );
 }
