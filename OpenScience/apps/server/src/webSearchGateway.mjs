@@ -54,23 +54,27 @@ const allowedTimeRanges = new Set(["day", "week", "month", "year"]);
 const allowedLanguages = /^[a-z]{2}(?:-[A-Z]{2})?$/;
 
 class WebSearchGatewayError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, retryAfterSeconds = null) {
     super(message);
     this.status = status;
     this.code = code;
+    /** When to ask again, for a refusal that is a pace and not a verdict (whole seconds). */
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
-function gatewayError(status, code, message) {
-  return new WebSearchGatewayError(status, code, message);
+/** @param {number} status @param {string} code @param {string} message @param {number | null} [retryAfterSeconds] */
+function gatewayError(status, code, message, retryAfterSeconds = null) {
+  return new WebSearchGatewayError(status, code, message, Number.isSafeInteger(retryAfterSeconds) ? retryAfterSeconds : null);
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, headers = {}) {
   const body = Buffer.from(JSON.stringify(payload), "utf8");
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": String(body.length),
     "cache-control": "no-store",
+    ...headers,
   });
   res.end(body);
 }
@@ -83,7 +87,10 @@ function sendError(res, error, onFailure) {
   if (typeof onFailure === "function") {
     onFailure({ code, status, truncated: res.headersSent && !res.writableEnded, upstream: error?.upstream ?? null });
   }
-  sendJson(res, status, { error: message, code });
+  // A pace the project was held to says when to come back, in the body and in the header, as the public-source gateway's does.
+  const retryAfter = error instanceof WebSearchGatewayError && Number.isSafeInteger(error.retryAfterSeconds) ? error.retryAfterSeconds : null;
+  sendJson(res, status, { error: message, code, ...(retryAfter !== null ? { retryAfterSeconds: retryAfter } : {}) },
+    retryAfter !== null ? { "retry-after": String(retryAfter) } : {});
 }
 
 function bearerToken(req) {
@@ -617,7 +624,7 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { service 
       }
       const refused = projectLimit.admit(caller);
       if (refused) {
-        throw gatewayError(429, "web_search_project_rate_limited", `This project may make ${projectLimit.ceiling} web searches a minute; ask again in ${refused.retryAfterSeconds} s.`);
+        throw gatewayError(429, "web_search_project_rate_limited", `This project may make ${projectLimit.ceiling} web searches a minute; ask again in ${refused.retryAfterSeconds} s.`, refused.retryAfterSeconds);
       }
       const request = validatedRequest(await readJsonBody(req, 8 * 1024));
       sendJson(res, 200, await search.run(request, caller, controller));

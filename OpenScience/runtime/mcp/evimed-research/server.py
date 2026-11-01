@@ -1116,8 +1116,8 @@ def warning(summary, warnings, next_actions, **fields):
     }
 
 
-def failure(code, message, retryable, stop_reason, next_actions):
-    return {
+def failure(code, message, retryable, stop_reason, next_actions, retry_after=None):
+    result = {
         "status": "error",
         "summary": message,
         "next_actions": next_actions,
@@ -1128,6 +1128,10 @@ def failure(code, message, retryable, stop_reason, next_actions):
             "stopReason": stop_reason,
         },
     }
+    # How long a refusal that is a pace asked the caller to wait; absent when nobody said.
+    if retry_after is not None:
+        result["error"]["retryAfterSeconds"] = int(retry_after)
+    return result
 
 
 def _public_source_failure(error, stop_reason, next_actions):
@@ -2152,9 +2156,12 @@ def _dispatch(name, arguments, execution_context=None):
                 error.retryable,
                 "retry" if error.retryable else "unsupported",
                 [
-                    "Retry once the backend recovers." if error.retryable
+                    ("Wait about %d s, then search again, or ask for fewer searches at a time; the search was not made, so this says nothing about what the web holds." % error.retry_after)
+                    if error.retry_after
+                    else "Retry once the backend recovers." if error.retryable
                     else "Read a page whose address you know with web_read; for published literature the bibliographic databases are one option. Say plainly that search was unavailable, and do not read an unavailable web search as an empty field.",
                 ],
+                retry_after=error.retry_after,
             )
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result

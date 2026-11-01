@@ -168,6 +168,9 @@ test("the web-search gateway refuses a project's search past its minute, and the
   const body = await limited.json();
   assert.equal(body.code, "web_search_project_rate_limited");
   assert.match(body.error, /2 web searches a minute/);
+  // When to come back is said in the body and in the header, as whole seconds inside the minute, so the runtime can pass the wait on.
+  assert.ok(Number.isSafeInteger(body.retryAfterSeconds) && body.retryAfterSeconds >= 1 && body.retryAfterSeconds <= 60, `${body.retryAfterSeconds}`);
+  assert.equal(limited.headers.get("retry-after"), String(body.retryAfterSeconds));
   assert.equal(asked, 2, "the refused search spent nothing");
   assert.equal((await searchRequest(base, "bob-token", { query: "aripiprazole" })).status, 200);
   assert.equal(counted("search", "rate", "refused"), 1);

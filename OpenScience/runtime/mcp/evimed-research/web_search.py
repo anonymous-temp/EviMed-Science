@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 
 import public_sources
+import source_transport
 
 MAX_QUERY = 512
 MAX_RESULTS = 25
@@ -32,10 +33,12 @@ TIME_RANGES = ("day", "week", "month", "year")
 
 
 class WebSearchError(Exception):
-    def __init__(self, code: str, message: str, retryable: bool = False):
+    def __init__(self, code: str, message: str, retryable: bool = False, retry_after: int | None = None):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        # How long the gateway asked the caller to wait (whole seconds), for a refusal that is a pace and not a verdict.
+        self.retry_after = retry_after
 
 
 def _gateway():
@@ -84,6 +87,31 @@ def _validated(arguments: dict) -> dict:
     return payload
 
 
+def _refusal(error: urllib.error.HTTPError):
+    """What the gateway said of a refusal: its code, its sentence and how long it asked the caller to wait.
+
+    The gateway answers `{error: <sentence>, code, retryAfterSeconds?}` and a `Retry-After` header; the nested envelope the
+    public-source gateway uses is read too. Whatever cannot be read is left out: the status is the finding, not the parse.
+    """
+    code, said, wait = "", "", None
+    try:
+        body = json.loads(error.read(64 * 1024).decode("utf-8", "replace"))
+        if isinstance(body, dict):
+            nested = body.get("error") if isinstance(body.get("error"), dict) else {}
+            code = body.get("code") or nested.get("code") or ""
+            said = body.get("error") if isinstance(body.get("error"), str) else (nested.get("message") or body.get("message") or "")
+            seconds = body.get("retryAfterSeconds", nested.get("retryAfterSeconds"))
+            if isinstance(seconds, (int, float)) and not isinstance(seconds, bool):
+                wait = seconds
+    except Exception:  # noqa: BLE001
+        pass
+    if wait is None:
+        wait = source_transport.parse_retry_after(error.headers.get("Retry-After") if getattr(error, "headers", None) is not None else None)
+    if isinstance(wait, (int, float)):
+        wait = min(max(int(wait), 0), source_transport.MAX_RETRY_AFTER_SECONDS)
+    return (code if isinstance(code, str) else ""), (said if isinstance(said, str) else ""), wait
+
+
 def search(arguments: dict) -> dict:
     payload = _validated(arguments)
     url, token = _gateway()
@@ -102,15 +130,14 @@ def search(arguments: dict) -> dict:
         with public_sources._OPENER.open(request, timeout=60) as response:  # noqa: SLF001
             body = response.read(MAX_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as error:
-        detail = ""
-        try:
-            detail = json.loads(error.read(64 * 1024).decode("utf-8", "replace")).get("code", "")
-        except Exception:  # noqa: BLE001 - the status is the finding, not the parse
-            detail = ""
+        code, said, wait = _refusal(error)
+        message = "The web-search gateway returned HTTP %d" % error.code
+        message += (": %s" % said.rstrip(".")) if said else ""
         raise WebSearchError(
-            detail or "web_search_upstream_error",
-            "The web-search gateway returned HTTP %d." % error.code,
+            code or "web_search_upstream_error",
+            message + ".",
             retryable=error.code in (429, 502, 503, 504),
+            retry_after=wait,
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise WebSearchError("web_search_unavailable", "The web-search gateway is unreachable.", retryable=True) from error
