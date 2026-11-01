@@ -22,7 +22,7 @@ export function NeedsBar({ needs, more }: { needs: readonly WorkNeed[]; more?: R
   return (
     <div data-work-needs={needs.length} className="mb-4">
       <Note tone="warn" action={<span className="flex flex-wrap items-center gap-3">{first.action}{needs.length > 1 && more}</span>}>
-        <span className="font-semibold">{`等你 · ${WORK_NEED_LABEL[first.kind]}`}</span>{` ${first.text}`}{needs.length > 1 ? `（共 ${needs.length} 项）` : ""}
+        <span>{`等你 · ${WORK_NEED_LABEL[first.kind]}`}</span>{` ${first.text}`}{needs.length > 1 ? `（共 ${needs.length} 项）` : ""}
       </Note>
     </div>
   );

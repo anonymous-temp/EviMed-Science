@@ -222,7 +222,7 @@ const WALK_TABLES = {
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
       {"view":"autopilot-first","discovered":true,"pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":false,"rowsNote":"the first-use state of 定时任务, a project with no task (found from the account's own project list: the production walk's throwaway account has nothing, and so do the fixture's study projects): the examples fill the new-task form beside them and make nothing, and the form is read as it stands"},
-      {"view":"active-research","route":"/app/active-research","pattern":"/app/active-research","family":"active-research","template":"T4","templateNote":"the observatory leads the page (owner, 2026-10-28), and the rest of the research on show is one band of three views under it (结果 / 记录 / 对话, module workspace plan of 2026-11-01, D2) with the activity strip over them while a run is going: a data page that carries a tab list, which T4 allows, and the connected workbench of DESIGN.md's October 20 exception (one object, its picture, its results, its history and its conversation). It is not a module page (T3): it has no step rail, and its tabs are views of one object, not steps","budget":"data","budgetNote":"the budget stays the data page's with no override: the new composition (the queue, the row of the research's controls, the dark scene, the band of views) has not been measured on a live walk yet, and a number is not raised here to pass a walk nobody ran — raise it, with the measure, from the first fixture walk of this page","rows":false,"rowsNote":"Research rows select an execution in place; the generic walk row click expects navigation, while the selection is exercised by ActiveResearchPage tests."},
+      {"view":"active-research","route":"/app/active-research","pattern":"/app/active-research","family":"active-research","template":"T4","templateNote":"the observatory leads the page (owner, 2026-10-28), and the rest of the research on show is one band of three views under it (结果 / 记录 / 对话, module workspace plan of 2026-11-01, D2) with the activity strip over them while a run is going: a data page that carries a tab list, which T4 allows, and the connected workbench of DESIGN.md's October 20 exception (one object, its picture, its results, its history and its conversation). It is not a module page (T3): it has no step rail, and its tabs are views of one object, not steps","budget":"data","budgetOverride":{"borders":4},"budgetNote":"borders: the band of views adds the tab row's hairline and the selected tab's underline, 4 kinds on the fixture walk of 2026-11-01; otherwise the budget stays the data page's: the new composition (the queue, the row of the research's controls, the dark scene, the band of views) has not been measured on a live walk yet, and a number is not raised here to pass a walk nobody ran — raise it, with the measure, from the first fixture walk of this page","rows":false,"rowsNote":"Research rows select an execution in place; the generic walk row click expects navigation, while the selection is exercised by ActiveResearchPage tests."},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true,"budgetOverride":{"controls":9},"budgetNote":"controls: each message row carries its selection checkbox (design system v3.1, 2026-10-26: select messages and mark them read together; the batch actions are in the toolbar only while something is ticked) — a 16 px native checkbox, one look, the ninth beside the shell's, the tabs, the source and kind chips and the rows; 9 on the fixture walk of 2026-10-26 (int/1026-fix)"},
       {"view":"search","route":"/app/search","pattern":"/app/search/:category?","family":"search","template":"T1","rows":false,"rowsNote":"the search home: a composer and three topic buttons that fill it; no list whose row opens anything"},
       {"view":"search-results","route":"/app/search/literature?q=aripiprazole","pattern":"/app/search/:category?","family":"search","template":"T1","rows":false,"rowsNote":"an account with no Evimed login has no results: the page is walked in the state it meets, the sentence and the way forward it gives"},
@@ -1675,7 +1675,7 @@ export function moduleResultProbe() {
   const body = document.querySelector("main [data-page-body]");
   const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
   if (!body) return { status: "unobservable", coverage: false, errors: [], warnings: [], empty: [] };
-  const native = document.querySelector("[data-page-chrome] button[aria-label='查看：对话']") ?? body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
+  const native = body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
   if (native && visible(native)) return { status: "conversation", coverage: false, boundary: "native conversation inspected separately; no runtime started", errors: [], warnings: [], empty: [] };
   const alerts = [...body.querySelectorAll("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']")].filter(visible);
   const retry = alerts.filter((alert) => [...alert.querySelectorAll("button, a")].some((control) => /^(?:重试|重新载入|重新加载)$/u.test(control.textContent?.trim() ?? "")));
@@ -1710,7 +1710,8 @@ export async function readModuleResult(page, target) {
 /** Expected result choices, including the canonical conversation only where it exists. */
 export function moduleViewLabels(module, programme = true, canonical = false) {
   if (module === "geo") return ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
-  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "匹配", "人群与患者", "对照", "试验", "依据"] : ["总览", "匹配", "人群与患者", "依据"])];
+  // The conversation is not a destination since DS23.5: it is the bar under every result, pressed by itself below.
+  return [...(programme ? ["总览", "匹配", "人群与患者", "对照", "试验", "依据"] : ["总览", "匹配", "人群与患者", "依据"])];
 }
 
 /** Standalone walk mirror of vcrTabs.vcrTabPath, studyLocation.vcrChatPath, geoLocation.geoChatPath and
@@ -1865,7 +1866,7 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
     await header.getByRole("button", { name: "项目总览", exact: true }).click();
     await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
     if (!/^\/app\/geo\/[^/]+\/?$/u.test(new URL(page.url()).pathname)) throw new Error("GEO header overview did not reach the project overview");
-    await header.getByRole("button", { name: "对话", exact: true }).click();
+    await page.locator("[data-page-dock] [data-conversation-bar] button").click();
     await page.waitForFunction(() => /\/chat(?:\/|$)/u.test(location.pathname), undefined, { timeout: 15_000 });
     await page.goto(initial, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
@@ -1899,6 +1900,13 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
   }
   await page.goto(initial, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  // The conversation is one press away on any result, and pressing it keeps the result beside it (DS23.5).
+  if (module === "vcr" && programme) {
+    await page.locator("[data-page-dock] [data-conversation-bar] button").click();
+    await page.waitForFunction(() => /\/chat$/u.test(location.pathname) && new URLSearchParams(location.search).has("result"), undefined, { timeout: 15_000 });
+    await page.goto(initial, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  }
   return { destinations, views, notices };
 }
 
@@ -4967,7 +4975,7 @@ export function handoffProbe([action]) {
     return {
       path: `${location.pathname}${location.search}`,
       title: heading ? words(heading) : null,
-      button: [...document.querySelectorAll("main button")].some((el) => visible(el) && words(el) === "深入研究"),
+      button: [...document.querySelectorAll("main button")].some((el) => visible(el) && words(el).endsWith("深入研究")),
     };
   }
   const state = window.history.state && typeof window.history.state === "object" ? window.history.state.usr : null;

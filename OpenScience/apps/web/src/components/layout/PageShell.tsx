@@ -340,7 +340,7 @@ export function PageShell<V extends string = string>({
           </>
         ) : page}
       </div>
-      {dock != null && <div data-page-dock="" className="sticky bottom-0 z-sticky flex-none border-t border-border-hairline bg-bg px-4 py-2 md:px-6">{dock}</div>}
+      {dock != null && <div data-page-dock="" className="sticky bottom-0 z-sticky flex-none bg-bg px-4 py-2 md:px-6">{dock}</div>}
     </div>
   );
 }

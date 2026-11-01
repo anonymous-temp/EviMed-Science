@@ -56,7 +56,7 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   const [paging, setPaging] = useState(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const query = { limit: expanded ? 20 : 5, ...(step ? { step } : {}), ...(filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
+  const query = { limit: expanded ? 20 : step ? 3 : 5, ...(step ? { step } : {}), ...(filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
   useEffect(() => {
     let current = true;
     void listGeoSignals(geoId, query).then(value => { if (current) { setPage(value); setError(null); } }, failure => { if (current) setError(webErrorMessage(failure, { fallback: '发现与处理暂时读不到，请稍后重试。' })); });
