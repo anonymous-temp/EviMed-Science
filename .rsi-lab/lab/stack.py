@@ -138,6 +138,9 @@ PARITY = {
     "OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED": "true",
     "OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED": "true",
     "OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS": "1",
+    "OPEN_SCIENCE_RUNTIME_SKILL_DIRS": "runtime/skills/core,runtime/skills/curated-scientific,runtime/skills/office,runtime/skills/community,runtime/skills/geo-private,capability-skills",
+    "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS": "86400000",
+    "OPEN_SCIENCE_LEARNING_WINDOW": "",
 }
 
 
@@ -146,6 +149,7 @@ def lab_overrides(lanes):
     return {
         "OPEN_SCIENCE_PUBLIC_URL": ("https://localhost", "no public address; readiness wants an https origin"),
         "OPEN_SCIENCE_DOMAIN": ("localhost", "no public address"),
+        "OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN": ("https://localhost:8443", "no public address; readiness wants an https origin for the kernel page"),
         "OPEN_SCIENCE_OPENVIKING_URL": ("", "no context engine"),
         "OPEN_SCIENCE_MEMORY_ENABLED": ("false", "no context engine: memory is off, nothing is recalled or kept"),
         "OPEN_SCIENCE_MEMORY_INDEX_STRICT": ("false", "same as production"),
@@ -158,6 +162,7 @@ def lab_overrides(lanes):
         "OPEN_SCIENCE_EVOLUTION_ENABLED": ("false", "module off"),
         "OPEN_SCIENCE_IM_ENABLED": ("false", "no messaging channel"),
         "OPEN_SCIENCE_WEB_RENDER_ENABLED": ("false", "no cloud browser account"),
+        "OPEN_SCIENCE_MANAGED_BROWSER_ENABLED": ("false", "the managed browser container is not run"),
         "OPEN_SCIENCE_WEB_SEARCH_URL": ("http://open-science-web-search:8080/search", "the bundled SearXNG, direct (no Tokyo edge)"),
         "OPEN_SCIENCE_MAX_RUNNING_RUNTIMES": (str(lanes + 1), "per runner: one runtime per worker and one spare"),
         "OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER": ("2", "same as production; each request has its own account"),
@@ -428,7 +433,7 @@ def cmd_up(args):
                    "OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR": str(WORK / "postgres-backup" / "status")}
     result = run(["python3", "-B", str(SRC / "scripts/ops/postgres-backup.py")], check=False, capture=True, env=environment, cwd=str(SRC))
     say(f"postgres backup receipt: exit {result.returncode}")
-    for attempt in range(60):
+    for attempt in range(8):
         status, checks = readiness_summary()
         if status == 200:
             break
@@ -512,9 +517,11 @@ def cmd_verify(args):
         if len(blocked) != len(DATASET_HOSTS) or len(open_ok) != len(OPEN_HOSTS):
             failures.append(f"{service}:hosts")
     search = run(compose_command(["exec", "-T", "open-science-web-search", "sh", "-c",
-                                  "for h in huggingface.co hf.co; do getent hosts $h || echo none; done"]), check=False, capture=True).stdout or ""
-    pinned = sum(1 for line in search.splitlines() if line.startswith("127.0.0.1"))
-    say(f"open-science-web-search: dataset hosts pinned to loopback {pinned}/2")
+                                  "for h in huggingface.co hf.co; do echo \"$h $(getent hosts $h | head -1 | cut -d' ' -f1)\"; done"]),
+                 check=False, capture=True).stdout or ""
+    rows = dict(line.split(None, 1) if len(line.split(None, 1)) == 2 else (line.strip(), "") for line in search.splitlines())
+    pinned = sum(1 for value in rows.values() if value.strip() == "127.0.0.1")
+    say(f"open-science-web-search: dataset hosts pinned to loopback {pinned}/2 ({json.dumps({k: v.strip() for k, v in rows.items()})})")
     if pinned != 2:
         failures.append("search:hosts")
     # (2) The runner host itself still reaches the dataset host (the lane's own fetch).

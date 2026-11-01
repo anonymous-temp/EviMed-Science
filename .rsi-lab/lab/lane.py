@@ -348,6 +348,18 @@ class Lane:
         self.last_work = time.time()
         self.started = time.time()
         self.stop = threading.Event()
+        self.keyless = None
+
+    # -- the provider keys stay out of the runtime containers (checked once, on the first runtime that runs)
+    def audit_keyless(self):
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        import stack
+        while not self.stop.wait(20) and self.keyless is None:
+            if not subprocess.run(["docker", "ps", "-q", "--filter", "label=open-science.web.runtime=true"], capture_output=True).stdout.strip():
+                continue
+            failures = []
+            stack.verify_runtime_keyless(failures)
+            self.keyless = {"ok": not failures, "failures": failures}
 
     # -- stack
     def healthy(self):
@@ -418,7 +430,7 @@ class Lane:
                 transcript = out_dir / item_folder(item["key"]) / "transcript.json"
                 meta = {"rid": rid, "lane": LANE_ID, "worker": worker, "imageKey": IMAGE_KEY, "attempt": request.get("attempt"),
                         "driverExit": code, "status": status, "wallS": round(time.time() - began), "claimLost": lost.is_set(),
-                        "contamination": contamination(transcript), **self.sampler.snapshot(),
+                        "contamination": contamination(transcript), "runtimeKeyless": self.keyless, **self.sampler.snapshot(),
                         "cost": result.get("cost")}
                 bundle_path = folder_root / "bundle.tgz"
                 dropped = pack(out_dir, item_folder(item["key"]), meta, bundle_path)
@@ -505,6 +517,7 @@ class Lane:
         (BENCH / "data").mkdir(exist_ok=True)
         self.sampler.start()
         threading.Thread(target=self.report_loop, daemon=True).start()
+        threading.Thread(target=self.audit_keyless, daemon=True).start()
         threads = [threading.Thread(target=self.worker_loop, args=(index,)) for index in range(1, WORKERS + 1)]
         for thread in threads:
             thread.start()

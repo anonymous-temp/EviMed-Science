@@ -21,6 +21,9 @@ services:
         condition: service_healthy
     environment:
       OPEN_SCIENCE_OPENVIKING_URL: ""
+      # Forwarded by the ingestion overlay in production, which this stack does not compose.
+      OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: ${OPEN_SCIENCE_SOURCE_INGESTION_ENABLED:-false}
+      OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER: ${OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER:-false}
     extra_hosts: &dataset-hosts
       - "huggingface.co:127.0.0.1"
       - "www.huggingface.co:127.0.0.1"
