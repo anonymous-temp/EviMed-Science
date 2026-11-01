@@ -10,8 +10,8 @@ export const RSI_DEPENDENCY_PROFILES = Object.freeze({
   'frontier-selection': { roots: ['apps/server/src/frontierPipeline.mjs', 'packages/domain/src/frontierMix.mjs'], resources: ['apps/server/src/frontierTagSeed.json', 'apps/server/package.json', 'packages/domain/package.json', 'pnpm-lock.yaml'], requiredSettings: ['model', 'provider'], requiredPins: [], runtimeFileDependencies: {
     // Only frontierTagSeed is deployment data; security's filesystem helpers operate on caller-owned workspace state, not executable/configuration inputs to selection.
     // Source-bound declarations must be re-audited after either module changes.
-    'apps/server/src/frontierPersistence.mjs': { sourceDigest: '03ea483384fc1d6cb658eeb110cab917028f7dbf3e9e6f2ac72f8b76e9f2d7a8', resources: ['apps/server/src/frontierTagSeed.json'] },
-    'apps/server/src/security.mjs': { sourceDigest: 'c433c369f8dd1d0d778fab7686498872808ca68b0dec78c3c0f6f25af15b97fb', resources: [] },
+    'apps/server/src/frontierPersistence.mjs': { sourceDigest: '1e727eb61c38166fb273e2a2af79c2c966e647da15396b5e1d44fdc3902a9101', resources: ['apps/server/src/frontierTagSeed.json'] },
+    'apps/server/src/security.mjs': { sourceDigest: 'a25921ce7c335a34e379ccf6a13fcd4e62dc899593524766056e6dda6556de80', resources: [] },
   } },
 })
 /** Compute a source graph without importing or executing candidate code. Unknown dynamic edges fail closed.
