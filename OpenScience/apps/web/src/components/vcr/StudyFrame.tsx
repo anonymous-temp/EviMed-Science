@@ -132,7 +132,7 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
     ...(controls ?? {}), views: undefined,
     actions: controls?.actions,
     navigation: [{ kind: "select", label: "查看", value: view === "patients" ? "population" : view, pinned: true,
-      options: [...(programme || study.conversation.sessionId ? [{ value: "chat", label: "对话" }] : []), ...(programme ? VCR_TAB_ITEMS : VCR_TAB_ITEMS.filter(item => ["overview", "data", "population", "matching"].includes(item.key))).map(item => ({ value: item.key, label: item.label }))],
+      options: [...(programme || study.conversation.sessionId ? [{ value: "chat", label: "对话" }] : []), ...(programme ? VCR_TAB_ITEMS : VCR_TAB_ITEMS.filter(item => ["data", "population", "matching"].includes(item.key))).map(item => ({ value: item.key, label: item.label }))],
       onChange: next => { if (next) onView(next as StudyView); } },
       ...(view === "population" || view === "patients" ? [{ kind: "select" as const, label: "人群与患者", value: individual ? "individual" : "cohort", options: [{ value: "cohort", label: "队列总览" }, { value: "individual", label: "个体患者" }], onChange: (next: string | null) => { if (next) setParams(previous => { const updated = new URLSearchParams(previous); updated.set("level", next); if (next === "cohort") updated.delete("patient"); return updated; }); } }] : []),
       ...(controls?.views ? [{ kind: "select" as const, label: controls.views.label, value: controls.views.value, options: controls.views.items.map(item => ({ value: item.value, label: item.label })), onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),

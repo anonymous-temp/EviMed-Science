@@ -11,7 +11,7 @@ import { VcrTabSkeleton } from "@/components/vcr/VcrStates";
 import { useVcrLoad, VcrTabError } from "@/components/vcr/vcrTabKit";
 import { isVcrTab, vcrTabPath } from "@/components/vcr/vcrTabs";
 import { vcrChatPath } from "@/lib/studyLocation";
-import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
+import { VCR_NEW_STUDY_PATH, vcrCalculationPath } from "@/lib/vcrMethodLocation";
 
 /** Legacy method addresses preserve an exact job; new work starts in conversation. */
 export function VcrMethodWorkbenchPage() {
@@ -20,7 +20,7 @@ export function VcrMethodWorkbenchPage() {
   const studyId = query.get("study");
   const jobId = query.get("job");
   const view = query.get("view");
-  if (!studyId || !jobId) return <PageShell title="虚拟临床研究" width="wide"><EmptyState title="计算已移入研究对话" description="描述研究问题，AI 会查找证据、选择方法并调用计算。" action={<Link to="/app/virtual-research" className="text-link">开始研究任务</Link>} /></PageShell>;
+  if (!studyId || !jobId) return <PageShell title="虚拟临床研究" width="wide"><EmptyState title="计算已移入研究对话" description="描述研究问题，AI 会查找证据、选择方法并调用计算。" action={<Link to={VCR_NEW_STUDY_PATH} className="text-link">新建研究</Link>} /></PageShell>;
   return <HistoricalResult key={`${studyId}:${jobId}:${methodId}`} studyId={studyId} jobId={jobId} methodId={methodId} view={view} />;
 }
 function HistoricalResult({ studyId, jobId, methodId, view }: { studyId: string; jobId: string; methodId: string; view: string | null }) {

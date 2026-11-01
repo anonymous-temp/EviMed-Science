@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { UsersRound } from "lucide-react";
 import { workStateLabel } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -35,7 +35,7 @@ import { VcrIntakeDrawer } from "@/components/vcr/VcrIntakeDrawer";
 import { INTAKE_LABEL } from "@/components/vcr/vcrActionWords";
 import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
 import { StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
-import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
+import { vcrCalculationPath, vcrCalculationViewPath } from "@/lib/vcrMethodLocation";
 import { StudyPane } from "@/components/vcr/StudyPane";
 import { useStudy } from "@/components/vcr/useStudy";
 import { useVcrRun } from "@/components/vcr/useVcrRun";
@@ -97,6 +97,7 @@ export function VcrStudyPage() {
   const navigate = useNavigate();
   const feature = useVcrFeature();
   const [query] = useSearchParams();
+  const location = useLocation();
   const chat = tabParam === "chat";
   const { tab, moved } = chat ? { tab: "overview" as VcrTabKey, moved: false } : resolveVcrTab(tabParam);
   const view: StudyView = chat ? "chat" : tab;
@@ -132,14 +133,18 @@ export function VcrStudyPage() {
       </PageShell>
     );
   }
-  if (loaded.study.purpose === "calculation" && ((tab === "overview" && !query.has("package")) || (chat && !loaded.study.conversation.sessionId))) return <CalculationRedirect studyId={studyId} />;
+  if (loaded.study.purpose === "calculation") {
+    // A calculation has no overview (the history of its methods is its landing page), and each of its other views has one address: its own.
+    if ((tab === "overview" && !query.has("package")) || (chat && !loaded.study.conversation.sessionId)) return <CalculationRedirect to={vcrCalculationPath(studyId)} />;
+    if (!chat && location.pathname.startsWith(VCR_HOME_PATH)) return <CalculationRedirect to={`${vcrCalculationViewPath(studyId, tab)}${location.search}`} />;
+  }
   // Keyed by the study: the menu's dialogs and the run guard never outlive it.
   return <StudyView key={studyId} studyId={studyId} study={loaded.study} view={view} tab={tab} reload={reload} />;
 }
 
-function CalculationRedirect({ studyId }: { studyId: string }) {
+function CalculationRedirect({ to }: { to: string }) {
   const navigate = useNavigate();
-  useEffect(() => { navigate(vcrCalculationPath(studyId), { replace: true }); }, [navigate, studyId]);
+  useEffect(() => { navigate(to, { replace: true }); }, [navigate, to]);
   return <VcrStudySkeleton />;
 }
 
@@ -271,7 +276,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   }, [view, study.status, study.question, sessionId, studyId, openChat]);
   const openView = useCallback((next: StudyView) => {
     if (next === "chat") openChat();
-    else navigate(study.purpose === "calculation" ? `${vcrCalculationPath(studyId)}/${next}` : vcrTabPath(studyId, next));
+    else navigate(study.purpose === "calculation" ? vcrCalculationViewPath(studyId, next) : vcrTabPath(studyId, next));
   }, [navigate, openChat, studyId, study.purpose]);
 
   const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法停止，请稍后重试。" }))); };
