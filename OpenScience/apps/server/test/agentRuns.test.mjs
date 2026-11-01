@@ -9188,3 +9188,44 @@ test("a later plan status does not erase this turn's witnessed plan write", () =
   assert.equal(evidence.plan.written, false, "status remains a read for projection scoping");
   assert.deepEqual(evidence.writtenPlanIds, ["adr"], "the earlier write remains ownership evidence");
 });
+
+test("two independently ledgered overlapping runs retain only their own planned folders on cancellation", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-concurrent-run-provenance-"));
+  const project = { id: "project-1", userId: "user-1", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const store = new AgentRunStore({ get: async () => null }, { model: "deepseek/deepseek-v4-flash", monitorIntervalMs: 60_000 });
+  store.scheduleMonitor = () => {};
+  const binding = (id) => ({ sessionId: id, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null });
+  const startedAt = new Date(Date.now() - 1000).toISOString();
+  const planHistory = (id, kind, capability, nativeId) => {
+    const item = { id, contractKind: kind, capability };
+    const part = (action, data, input) => ({ type: "tool", tool: "evimed_plan", state: { status: "completed", completedAt: 120,
+      input: { action, ...input }, output: kernelToolText({ ok: true, data }) } });
+    return [{ info: { id: "seq_2", role: "assistant", time: { created: 100 } }, parts: [
+      part("write", { runId: nativeId, revision: 1, deliverables: [item] }, { deliverables: [item] }),
+      part("status", { runId: nativeId, revision: 1, items: [item] }, {}),
+    ] }];
+  };
+  try {
+    const a = (await store.reserveRun(project, binding("session-a"), { baselineCursor: null, nativeTurn: { startSeq: 1, userSeq: 2 }, startedAt })).run;
+    const b = (await store.reserveRun(project, binding("session-b"), { baselineCursor: null, nativeTurn: { startSeq: 1, userSeq: 2 }, startedAt })).run;
+    await store.recordNativeWorkflow(project, a, planHistory("statistics", "statistical-analysis-package", "statistical-analysis", "native-a"));
+    await store.recordNativeWorkflow(project, b, planHistory("adr", "adr-analysis-report", "adr-analysis", "native-b"));
+    await Promise.all(["statistics", "adr"].map(async (id) => {
+      const dir = path.join(project.workspaceDir, "deliverables", id);
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, "report.md"), id);
+    }));
+    const first = await store.finishInternal(project, a.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+    const second = await store.finishInternal(project, b.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+    assert.deepEqual(first.unverifiedArtifacts, ["deliverables/statistics/report.md"]);
+    assert.deepEqual(second.unverifiedArtifacts, ["deliverables/adr/report.md"]);
+    assert.ok(first.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
+    assert.ok(second.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
+  } finally {
+    await store.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
+});
