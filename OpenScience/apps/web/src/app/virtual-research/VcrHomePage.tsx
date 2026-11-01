@@ -2,18 +2,21 @@ import { VcrLegacyDraftRecovery } from "@/components/vcr/VcrLegacyDraftRecovery"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { PenLine, Plus, RefreshCw, UsersRound } from "lucide-react";
-import { workStateLabel } from "@evimed/domain";
+import { VCR_TAB_LABELS_ZH, workStateLabel } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   getVcrHome,
   isVcrOff,
   useVcrFeature,
+  type VcrConversationStudy,
   type VcrHome,
   type VcrStudySummary,
 } from "@/lib/vcrClient";
 import { useGeneralResearchDraft } from "@/components/vcr/useGeneralResearchDraft";
 import { VCR_TASKS } from "@/components/vcr/frameVcrOptions";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
+import { vcrTabPath } from "@/components/vcr/vcrTabs";
+import { VCR_LIBRARIES, isVcrLibraryTab, type VcrLibraryTab } from "@/components/vcr/vcrLibraries";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -22,12 +25,9 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { MasterDetail, type MasterDetailState } from "@/components/ui/MasterDetail";
-import { VcrTaskRequirements } from "@/components/vcr/VcrTaskRequirements";
-// The task selector chooses content in the new-research pane; it is not a page filter or view switch.
-// eslint-disable-next-line no-restricted-imports -- task choice is local to the detail pane, not the page toolbar.
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { Toolbar, type ToolbarFilter, type ToolbarProps, type ToolbarSelect } from "@/components/ui/Toolbar";
+import { Section } from "@/components/ui/Section";
+import { Toolbar, type ToolbarFilter, type ToolbarProps } from "@/components/ui/Toolbar";
 import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
 import { ToolbarSlotContext } from "@/components/vcr/studyFrameContext";
@@ -38,14 +38,8 @@ import { VcrPrecedentsPanel } from "@/components/vcr/VcrPrecedentsPanel";
 
 export { studyStateOf };
 
-type HomeTab = "studies" | "precedents" | "definitions" | "models";
-
-const TABS: ReadonlyArray<{ value: HomeTab; label: string }> = Object.freeze([
-  { value: "studies", label: "研究" },
-  { value: "precedents", label: "参考试验" },
-  { value: "definitions", label: "人群定义" },
-  { value: "models", label: "模型与参数" },
-]);
+/** The page is the list of studies; a library (参考试验, 人群定义, 模型与参数) opens at its old address and is no view of it (`vcrLibraries.ts`). */
+type HomeTab = "studies" | VcrLibraryTab;
 
 /** Router state on the entry the page pushed to open a preview: closing it goes back one entry, to the list it was pushed from. */
 const PREVIEW_PUSHED = "vcrPreviewPushed";
@@ -75,31 +69,12 @@ const STATE_KEYS = ["need", "running", "paused", "done"] as const;
 const STATE_RANK: Record<StudyState, number> = { need: 0, running: 1, paused: 2, other: 3, done: 4 };
 
 /**
- * The page's one view switch: studies, and the three libraries that load their own data. Leaving a view lets go of the study it had open.
- * It is the page's navigation and not a narrowing of the list, so it stands in the toolbar's `navigation`, never in its filters.
- */
-const viewsNavigation = (selected: HomeTab, setParams: ReturnType<typeof useSearchParams>[1]): ToolbarSelect => ({
-  kind: "select",
-  label: "查看",
-  value: selected,
-  pinned: true,
-  options: TABS.map((item) => ({ value: item.value, label: item.label })),
-  onChange: (next) => setParams((previous) => {
-    const updated = new URLSearchParams(previous);
-    updated.delete("study");
-    updated.delete("new");
-    if (next === "studies" || !next) updated.delete("tab"); else updated.set("tab", next);
-    return updated;
-  }),
-});
-
-/**
  * Component: VcrHomePage; owner: VCR; rules: one list and one selected task or research.
- * Anatomy: Research list beside a task selector or selected study preview.
- * Variants: Research list and the existing library views.
+ * Anatomy: Research list (the studies a conversation made, and the module's own) beside the four ways to begin or a selected study preview.
+ * Variants: Research list; a library at its old address (`?tab=`), with no view switch.
  * States: Loading, empty, retained data and retryable error.
  * Hit area: Shared toolbar, buttons and linked rows.
- * Keyboard: Native controls, roving task selection and focus on narrow navigation.
+ * Keyboard: Native controls and focus on narrow navigation.
  * Long content: Task detail and study names wrap.
  * Theme: Shared page and control tokens.
  * Responsive: The detail replaces the list below the split width.
@@ -111,7 +86,7 @@ export function VcrHomePage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const pushedHere = (useLocation().state as Record<string, unknown> | null)?.[PREVIEW_PUSHED] === true;
-  const tab = (TABS.find((item) => item.value === params.get("tab"))?.value ?? "studies") as HomeTab;
+  const tab: HomeTab = isVcrLibraryTab(params.get("tab")) ? params.get("tab") as VcrLibraryTab : "studies";
   const asked = params.get("study");
   const wantsNew = params.get("new") === "1";
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
@@ -148,6 +123,8 @@ export function VcrHomePage() {
   const ready = listing.kind === "ready" ? listing.home : null;
   const studies = useMemo(() => ready?.studies.filter(study => study.purpose !== "calculation") ?? [], [ready]);
   const history = useMemo(() => ready?.studies.filter(study => study.purpose === "calculation") ?? [], [ready]);
+  // The studies the conversations made: a list of their own, read by this page alone (`VcrHome.conversationStudies`).
+  const conversation = useMemo(() => ready?.conversationStudies ?? [], [ready]);
 
   const needle = query.trim().toLowerCase();
   const counts = useMemo(() => {
@@ -164,6 +141,10 @@ export function VcrHomePage() {
     // The server lists newest first, and a stable sort keeps that order within a state.
     return sort === "state" ? [...matching].sort((a, b) => STATE_RANK[studyStateOf(a)] - STATE_RANK[studyStateOf(b)]) : matching;
   }, [studies, needle, state, sort]);
+
+  // The state words are the module-work studies'; a study a conversation made has none, so it is left out while one is chosen.
+  const conversationShown = useMemo(() => (state !== "all" ? [] : conversation.filter((study) => !needle
+    || study.name.toLowerCase().includes(needle) || (study.question ?? "").toLowerCase().includes(needle))), [conversation, needle, state]);
 
   const showingDetail = wantsNew || Boolean(studies.find(study => study.id === asked));
   useEffect(() => {
@@ -213,15 +194,16 @@ export function VcrHomePage() {
       options: [{ value: "state", label: "按状态" }],
     });
   }
-  const onStudies = ready !== null && studies.length > 0;
+  const onStudies = ready !== null && studies.length + conversation.length > 0;
   const toolbar: ToolbarProps = {
-    navigation: [viewsNavigation("studies", setParams)],
+    label: "研究",
     filters,
     ...(ready ? { actions: <IconButton icon={RefreshCw} label="刷新研究列表" onClick={() => setReloads(value => value + 1)} /> } : {}),
     ...(onStudies ? {
       search: { label: "搜索研究", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
       onClear: () => { setQuery(""); setState("all"); },
-      summary: shown.length === studies.length ? `${studies.length} 项` : `${shown.length} / ${studies.length}`,
+      summary: shown.length + conversationShown.length === studies.length + conversation.length
+        ? `${studies.length + conversation.length} 项` : `${shown.length + conversationShown.length} / ${studies.length + conversation.length}`,
     } : {}),
   };
 
@@ -248,23 +230,40 @@ export function VcrHomePage() {
 
   const entry = <TaskEntry ask={ask} />;
 
+  const nothingYet = studies.length === 0 && conversation.length === 0;
   const rows = loading ? <VcrListSkeleton />
     : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
-      : studies.length === 0
+      : nothingYet
         ? (
           <EmptyState
             icon={UsersRound}
             title="暂无研究"
-            reason="在对话里说明要研究什么，发送后研究会列在这里。"
+            reason="在对话里说明要研究什么，AI 保存第一项结果后，研究会列在这里。"
           />
         )
-        : shown.length === 0
-          ? <EmptyState icon={UsersRound} title="没有匹配的研究" action={<Button variant="secondary" onClick={clearFilters}>清除筛选</Button>} />
-          : (
-            <List label="研究">
-              {shown.map((study) => <StudyRow key={study.id} study={study} to={choose(study.id)} selected={study.id === chosen?.id} opening={opening} />)}
-            </List>
-          );
+        : studies.length === 0 ? null
+          : shown.length === 0 && conversationShown.length === 0
+            ? <EmptyState icon={UsersRound} title="没有匹配的研究" action={<Button variant="secondary" onClick={clearFilters}>清除筛选</Button>} />
+            : shown.length === 0 ? null : (
+              <List label="研究">
+                {shown.map((study) => <StudyRow key={study.id} study={study} to={choose(study.id)} selected={study.id === chosen?.id} opening={opening} />)}
+              </List>
+            );
+  // The studies the conversations made: each row opens that study's page where it holds something. With none of the module's own, this is the list.
+  const conversationRows = ready && !loading && listing.kind === "ready" ? (
+    <>
+      {ready.conversationStudiesUnreadable && <LoadError message="对话里的研究暂时无法读取。" onRetry={() => setReloads((value) => value + 1)} />}
+      {conversationShown.length > 0 && (
+        <Section title="对话里的研究" level="sub" count={conversationShown.length}>
+          <List label="对话里的研究">
+            {conversationShown.map((study) => <ConversationStudyRow key={study.id} study={study} />)}
+          </List>
+        </Section>
+      )}
+      {studies.length === 0 && conversation.length > 0 && conversationShown.length === 0
+        && <EmptyState icon={UsersRound} title="没有匹配的研究" action={<Button variant="secondary" onClick={clearFilters}>清除筛选</Button>} />}
+    </>
+  ) : null;
   const retainedWarning = refreshError ? <LoadError message={refreshError} onRetry={() => setReloads(value => value + 1)} /> : null;
   const below = (
     <>
@@ -284,7 +283,7 @@ export function VcrHomePage() {
       <PageHeader title="虚拟临床研究" actionPlan={chosen ? newStudy : undefined} className="shrink-0 px-4 pb-3 pt-5" />
       {/* The one row of controls, over the list it controls. It stands in a fixed column, as the band does on a page, so what does not fit folds. */}
       <div className="shrink-0 px-4 pb-2"><Toolbar {...toolbar} inBand /></div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6">{retainedWarning}{rows}{below}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6">{retainedWarning}{rows}{conversationRows}{below}</div>
     </div>
   ) : (
     // On a narrow page the list fills the available width; detail replaces it when selected.
@@ -292,7 +291,7 @@ export function VcrHomePage() {
       <div className="mx-auto w-full max-w-wide px-4 pb-6 md:px-6">
         <PageHeader title="虚拟临床研究" actionPlan={newStudy} className="pb-3 pt-5" />
         <div className="sticky top-0 z-sticky -mx-4 bg-bg px-4 py-2 md:-mx-6 md:px-6"><Toolbar {...toolbar} inBand /></div>
-        <div className="mt-2">{retainedWarning}{rows}{below}</div>
+        <div className="mt-2">{retainedWarning}{rows}{conversationRows}{below}</div>
       </div>
     </div>
   ));
@@ -320,46 +319,47 @@ export function VcrHomePage() {
 }
 
 /**
- * Component: TaskEntry; owner: VCR; rules: one selected task opens an unsent native draft.
- * Anatomy: Heading, task selector, purpose, data requirements and the draft action (在对话中开始).
- * Variants: Four task types share the same controls.
- * States: Exactly one task is selected.
- * Hit area: Shared segmented control, disclosure and button.
- * Keyboard: Arrow keys select; native controls activate with keyboard.
- * Long content: Details wrap and the selector may scroll horizontally.
+ * Component: TaskEntry; owner: VCR; rules: four examples fill the native composer's draft and nothing else.
+ * Anatomy: Heading, one line saying that saying what to study is enough, and four examples each with what it needs.
+ * Variants: One per kind of work (匹配, 人群与患者, 对照, 试验).
+ * States: None; nothing here has a state, nothing is sent and no study exists until its first result is saved.
+ * Hit area: Shared secondary buttons.
+ * Keyboard: Native buttons.
+ * Long content: Sentences wrap.
  * Theme: Shared text and control tokens.
- * Responsive: Selector stays within the pane.
+ * Responsive: Examples stack in the pane.
  * Verification: VcrHomePage.test.tsx.
  */
 function TaskEntry({ ask }: { ask: ReturnType<typeof useGeneralResearchDraft> }) {
-  const [selected, setSelected] = useState<string>(VCR_TASKS[0].id);
-  const task = VCR_TASKS.find((item) => item.id === selected) ?? VCR_TASKS[0];
   return (
-    <form aria-label="新研究" className="flex flex-col items-start gap-5" onSubmit={(event) => { event.preventDefault(); ask(task.draft); }}>
-      <h2 className="text-section font-semibold text-text">新研究</h2>
-      <div className="max-w-full overflow-x-auto">
-        <SegmentedControl className="whitespace-nowrap" aria-label="研究任务" value={selected} onChange={setSelected} options={VCR_TASKS.map(item => ({ value: item.id, label: item.label }))} />
+    <section aria-label="新研究" className="flex flex-col items-start gap-5">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-section font-semibold text-text">新研究</h2>
+        <p className="max-w-measure text-ui text-text-2">说清要研究什么就能开始，不用先建研究。</p>
       </div>
-      <p className="text-ui text-text-2">{task.summary}</p>
-      <VcrTaskRequirements task={task} />
-      {/* Nothing starts here: the sentence waits in the composer and the study exists once it is sent (the VCR reset ruling). */}
-      <Button type="submit" actionKind="draft"><PenLine size={16} aria-hidden="true" />在对话中开始</Button>
-    </form>
+      <ul aria-label="研究示例" className="flex w-full flex-col gap-4">
+        {VCR_TASKS.map((task) => (
+          <li key={task.id} data-vcr-task={task.id} className="flex flex-col items-start gap-1.5">
+            {/* Nothing starts here: the sentence waits in the composer and the study exists once its first result is saved (the VCR reset ruling). */}
+            <Button variant="secondary" actionKind="draft" onClick={() => ask(task.draft)}><PenLine size={16} aria-hidden="true" />{task.example}</Button>
+            <p data-vcr-data-requirement={task.id} className="max-w-measure text-ui text-text-2">{task.requirement}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
 /**
- * The libraries' page: its views, and beside them whatever the libraries ask for. 方法库 and 试验先例 load their own data and know their
- * own filters, search and buttons, so they hand them to **the page's one toolbar** (`useVcrToolbar`, which finds this slot) instead of
- * drawing a second one under it. A component of its own, so that a panel handing the toolbar over re-renders the toolbar and never the
- * panel — the study page's frame does the same.
+ * A library's page, at its old address: 参考试验, 人群定义 and 模型与参数 are no views of the home (a study's 依据 goes to them), and what
+ * they ask for is handed to **the page's one toolbar** (`useVcrToolbar`, which finds this slot) instead of drawing a second one under it. A
+ * component of its own, so that a panel handing the toolbar over re-renders the toolbar and never the panel — the study page's frame does
+ * the same.
  */
-function OtherViews({ tab, children }: { tab: HomeTab; children: ReactNode }) {
+function OtherViews({ tab, children }: { tab: VcrLibraryTab; children: ReactNode }) {
   const [panel, setPanel] = useState<ToolbarProps | null | undefined>(undefined);
-  const [, setParams] = useSearchParams();
-  const base: ToolbarProps = { label: TABS.find((item) => item.value === tab)?.label ?? "研究" };
-  const merged = panel ? { ...base, ...panel } : base;
-  const controls: ToolbarProps = { ...merged, navigation: [viewsNavigation(tab, setParams), ...(merged.navigation ?? [])] };
+  const base: ToolbarProps = { label: VCR_LIBRARIES.find((library) => library.tab === tab)?.label ?? "研究" };
+  const controls: ToolbarProps = panel ? { ...base, ...panel } : base;
   return (
     <ToolbarSlotContext.Provider value={setPanel}>
       <PageShell title="虚拟临床研究" width="wide" back={<Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link>} toolbar={controls}>
@@ -381,6 +381,24 @@ function StudyRow({ study, to, selected, opening }: { study: VcrStudySummary; to
       selected={selected}
       title={<span className="line-clamp-2">{study.name}</span>}
       meta={<span data-vcr-status="" className="block truncate">{studyStatusLine(study)}</span>}
+      trailing={study.updatedAt ? <span className="tabular-nums">{study.updatedAt}</span> : undefined}
+    />
+  );
+}
+
+/**
+ * A study a conversation made, in the list: its name (the first sentence said in the conversation), the tabs that hold something and
+ * when it last moved. The press opens the study's page at the first of those tabs -- the way back to a result; the original conversation
+ * is the page's own 「对话」.
+ */
+function ConversationStudyRow({ study }: { study: VcrConversationStudy }) {
+  const tab = study.tabs[0] ?? "overview";
+  const holds = [...new Set(study.tabs.map((key) => (VCR_TAB_LABELS_ZH as Record<string, string>)[key]).filter(Boolean))];
+  return (
+    <ListRow
+      to={vcrTabPath(study.id, tab)}
+      title={<span className="line-clamp-2">{study.name}</span>}
+      meta={holds.length > 0 ? <span data-vcr-holds="" className="block truncate">{holds.join(" · ")}</span> : undefined}
       trailing={study.updatedAt ? <span className="tabular-nums">{study.updatedAt}</span> : undefined}
     />
   );

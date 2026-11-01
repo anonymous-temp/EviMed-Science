@@ -30,36 +30,56 @@ function Back() { const navigate = useNavigate(); return <button onClick={() => 
 function Where() { const location = useLocation(); return <p data-testid="where">{`${location.pathname}${location.search}`}</p>; }
 function drawHome(path = "/app/virtual-research") { return render(<MemoryRouter initialEntries={[path]}><VcrHomePage /><Where /></MemoryRouter>); }
 const where = () => screen.getByTestId("where").textContent;
-it.each(["匹配", "人群与患者", "对照", "试验"])("opens %s as an unsent native conversation draft without creating a study", async label => {
-  draw("/app/virtual-research?new=1"); await userEvent.click(await screen.findByRole("radio", { name: label }));
-  // The task choice and 开始 are one form: 开始 submits the selected task (the page's own primary stays 新研究).
-  expect(screen.getByRole("button", { name: "在对话中开始" }).closest("form")).toBe(screen.getByRole("form", { name: "新研究" }));
-  await userEvent.click(screen.getByRole("button", { name: "在对话中开始" }));
+// The four examples, by what each button says; pressing one fills the composer of a new conversation and sends nothing.
+const EXAMPLES: Array<[string, string, string]> = [
+  ["匹配", "让 AI 匹配患者和试验", "帮我匹配患者和临床试验。资料是："],
+  ["人群与患者", "让 AI 研究人群或个体患者", "帮我研究人群或个体患者。需求是："],
+  ["对照", "让 AI 构建对照并比较结局", "帮我构建对照并比较结局。研究是："],
+  ["试验", "让 AI 比较试验设计", "帮我比较临床试验设计。研究是："],
+];
+it.each(EXAMPLES)("opens %s as an unsent native conversation draft without creating a study", async (_label, example, draft) => {
+  draw("/app/virtual-research?new=1");
+  const button = await screen.findByRole("button", { name: example });
+  // An example only fills the draft, and says so to the walk: it is a `draft` action, worded as one.
+  expect(button).toHaveAttribute("data-action-kind", "draft");
+  await userEvent.click(button);
   const location = JSON.parse(screen.getByTestId("location").textContent!);
   expect(location.path).toBe("/app/chat");
   expect(location.state.globalAssistant).toBe(true);
   expect(location.state.conversationProjectId).toBe("default");
   expect(location.state.runtimeUiIntent.projectId).toBe("default");
-  expect(location.state.runtimeUiIntent.draft).toBeTruthy();
+  expect(location.state.runtimeUiIntent.draft).toBe(draft);
   expect(location.state.capabilityId).toBeUndefined();
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
   expect(store.select).toHaveBeenCalledWith("default", expect.any(Function));
 });
-it("keeps the empty list concise and shows only the selected task's requirements", async () => {
+// What is enough to begin, in the brief's four sentences (section 7); a field name or a statistic is never on the home.
+const REQUIREMENTS = [
+  "给一份病例就能开始。批量匹配需要患者数据表。",
+  "说清目标人群就能开始，AI 从文献取基线。用真实队列需要患者数据表。",
+  "说清研究就能先做可行性判断。估计治疗效果需要两组的结局数据。",
+  "说清研究问题和终点就能开始，参数 AI 先从文献找，你可以随时改。",
+];
+const expectFourExamples = (scope: HTMLElement | Document = document) => {
+  for (const [, example] of EXAMPLES) expect(within(scope as HTMLElement).getByRole("button", { name: example })).toBeInTheDocument();
+  for (const sentence of REQUIREMENTS) expect(within(scope as HTMLElement).getByText(sentence)).toBeVisible();
+  expect(scope.querySelectorAll("[data-vcr-data-requirement]")).toHaveLength(4);
+  // No input box of its own, no task selector and no statistic named at the door: the conversation's composer is the only input.
+  expect(within(scope as HTMLElement).queryByRole("textbox")).toBeNull();
+  expect(within(scope as HTMLElement).queryByRole("radiogroup")).toBeNull();
+  expect((scope instanceof Document ? scope.body : scope).textContent).not.toMatch(/显著性水平|效应与变异度|数据要求/);
+};
+it("keeps the empty list concise and says in four sentences what is enough to begin", async () => {
   server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], reviews: [] } }); draw();
   await screen.findByText("暂无研究");
   // An empty state is a recipe: with no button of its own, it says why the list is empty and what fills it.
   expect(screen.getByText("暂无研究").closest("[data-empty]")).toHaveAttribute("data-reason");
-  expect(screen.queryByRole("radiogroup", { name: "研究任务" })).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "新研究" }));
-  expect(screen.getByRole("radio", { name: "匹配" })).toHaveAttribute("aria-checked", "true");
-  expect(document.querySelectorAll("[data-vcr-data-requirement]")).toHaveLength(1);
-  await userEvent.click(screen.getByText("数据要求"));
-  expect(screen.getByText(/年龄、关键诊断和分期/)).toBeVisible();
+  expectFourExamples();
   expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
 });
 it("opens ?new=1 without creating a form or a study", async () => {
-  draw("/app/virtual-research?new=1"); await screen.findByRole("radio", { name: "匹配" });
+  draw("/app/virtual-research?new=1"); await screen.findByRole("button", { name: "让 AI 匹配患者和试验" });
   expect(screen.queryByText("方法库")).toBeNull(); expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
 });
@@ -113,32 +133,29 @@ it("opens saved models at the compatible address without a calculator catalogue"
   expect(screen.queryByRole("radio", { name: "匹配" })).toBeNull();
   expect(document.querySelector("[data-vcr-method-catalogue]")).toBeNull();
 });
-it("keeps the list visible while searching and opens one selected task's data requirements", async () => {
+it("keeps the list visible while searching, and the four examples stay in the new-study pane", async () => {
   draw(); await screen.findByRole("link", { name: /EV-201 二线/ });
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索研究" }), "none");
-  expect(screen.queryByRole("radiogroup", { name: "研究任务" })).toBeNull();
+  expect(screen.queryByRole("list", { name: "研究示例" })).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "新研究" }));
-  await userEvent.click(screen.getByRole("radio", { name: "对照" }));
-  await userEvent.click(screen.getByText("数据要求"));
-  expect(screen.getByText(/效果分析需治疗组别/)).toBeVisible();
-  expect(document.querySelectorAll("[data-vcr-data-requirement]")).toHaveLength(1);
+  expectFourExamples();
 });
 
 // What a study's row and preview say, from the fixture's two studies: GLP-1 (nothing started) and EV-201 (three lines waiting for the reader).
 const GLP = "GLP-1 周制剂 III 期：样本量与脱落情景";
 const EV = "EV-201 二线 NSCLC：单臂 II 期还是随机";
 
-it("says nothing starts at the home form and promises no study before one exists", async () => {
+it("says nothing starts at the home and promises a study only once its first result is saved", async () => {
   server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], reviews: [] } }); draw();
   await screen.findByText("暂无研究");
-  // The empty list does not say a study will be listed once a task is chosen: a study exists after its first sentence is sent.
+  // The empty list says what is true: a study is listed once the assistant has saved its first result, not once a sentence is sent.
   const empty = screen.getByText("暂无研究").closest("[data-empty]")!;
-  expect(empty.textContent).toMatch(/发送后研究会列在这里/);
-  expect(empty.textContent).not.toMatch(/选一项任务开始/);
+  expect(empty.textContent).toContain("在对话里说明要研究什么，AI 保存第一项结果后，研究会列在这里。");
+  expect(empty.textContent).not.toMatch(/选一项任务开始|发送后研究会列在这里/);
   await userEvent.click(screen.getByRole("button", { name: "新研究" }));
-  // What the form's button does is declared: it fills the composer, and the walk holds it to that.
-  expect(screen.getByRole("button", { name: "在对话中开始" })).toHaveAttribute("data-action-kind", "draft");
-  await userEvent.click(screen.getByRole("button", { name: "在对话中开始" }));
+  // What an example does is declared: it fills the composer, and the walk holds it to that.
+  expect(screen.getByRole("button", { name: "让 AI 匹配患者和试验" })).toHaveAttribute("data-action-kind", "draft");
+  await userEvent.click(screen.getByRole("button", { name: "让 AI 匹配患者和试验" }));
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
 });
 
@@ -212,7 +229,7 @@ it("says in each row what asks for the reader, what is being done or how far it 
 describe("the 研究 view beside its preview", () => {
   beforeEach(() => { width = 1100; });
 
-  it("splits at desktop width: the toolbar and the list on the left, the four ways to start on the right, and nothing chosen for the reader", async () => {
+  it("splits at desktop width: the toolbar and the list on the left, the four examples on the right, and nothing chosen for the reader", async () => {
     const { container } = drawHome();
     const rows = await screen.findByRole("list", { name: "研究" });
     expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "split");
@@ -221,25 +238,22 @@ describe("the 研究 view beside its preview", () => {
     expect(listPane).toContainElement(rows);
     expect(listPane).toContainElement(container.querySelector<HTMLElement>("[data-toolbar]"));
     expect(listPane).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
-    // The pane is the recipe: the four ways in and what each needs, and no study's preview.
+    // The pane is the recipe: the four examples and what each needs, and no study's preview.
     expect(within(pane).getByRole("heading", { level: 2, name: "新研究" })).toBeInTheDocument();
-    for (const label of ["匹配", "人群与患者", "对照", "试验"]) expect(within(pane).getByRole("radio", { name: label })).toBeInTheDocument();
-    expect(container.querySelectorAll("[data-vcr-data-requirement]")).toHaveLength(1);
+    expectFourExamples(pane);
     expect(container.querySelector("[data-vcr-preview]")).toBeNull();
     expect(container.querySelector("[data-page-introduction]")).toBeNull();
     expect(rows.querySelector("[aria-current]")).toBeNull();
-    // One solid button on the page, in the list's header, whatever is chosen.
-
+    // With nothing chosen the pane is the new study: the page has no solid button (the examples are secondary, and 新研究 would only open the pane that is open).
     expect(within(container.querySelector<HTMLElement>("[data-page-header]")!).queryByRole("button", { name: "新研究" })).toBeNull();
-    expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
+    expect(container.querySelectorAll(".bg-accent")).toHaveLength(0);
     expect(where()).toBe("/app/virtual-research");
   });
 
-  it("starts a task from the pane exactly as it did from the page: an unsent draft in the native conversation", async () => {
+  it("starts a task from the pane: an unsent draft in the native conversation", async () => {
     drawHome();
     await screen.findByRole("list", { name: "研究" });
-    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("radio", { name: "对照" }));
-    await userEvent.click(screen.getByRole("button", { name: "在对话中开始" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 构建对照并比较结局" }));
     expect(where()).toBe("/app/chat?project=default");
     expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
   });
@@ -275,15 +289,15 @@ describe("the 研究 view beside its preview", () => {
     expect(within(pane).queryByRole("link", { name: "原研究对话" })).toBeNull();
   });
 
-  it("gives the pane back to the four ways to start: 关闭预览 and Escape both clear the chosen study, and the address with it", async () => {
+  it("gives the pane back to the four examples: 关闭预览 and Escape both clear the chosen study, and the address with it", async () => {
     drawHome("/app/virtual-research?study=std_1");
     const pane = await screen.findByRole("region", { name: "研究预览" });
     expect(await within(pane).findByRole("heading", { level: 2, name: EV })).toBeInTheDocument();
-    expect(within(pane).queryByRole("radio", { name: "匹配" })).toBeNull();
+    expect(within(pane).queryByRole("button", { name: "让 AI 匹配患者和试验" })).toBeNull();
     await userEvent.click(within(pane).getByRole("button", { name: "关闭预览" }));
     expect(where()).toBe("/app/virtual-research");
     expect(within(pane).getByRole("heading", { level: 2, name: "新研究" })).toBeInTheDocument();
-    expect(within(pane).getByRole("radio", { name: "匹配" })).toBeInTheDocument();
+    expect(within(pane).getByRole("button", { name: "让 AI 匹配患者和试验" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: EV })).not.toHaveAttribute("aria-current");
     expect(within(pane).queryByRole("button", { name: "关闭预览" })).toBeNull();
     // A study can be chosen again, and Escape does what the button does.
@@ -411,17 +425,17 @@ describe("the 研究 view beside its preview", () => {
     expect(within(listPane).getByRole("link", { name: "Saved calculation" })).toHaveAttribute("href", "/app/capabilities/calculations/legacy_calc");
   });
 
-  it("says the empty account's list in its own column, and keeps the four ways to start in the pane", async () => {
+  it("says the empty account's list in its own column, and keeps the four examples in the pane", async () => {
     server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], reviews: [] } });
     drawHome();
     const empty = await screen.findByText("暂无研究");
     expect(screen.getByRole("region", { name: "研究列表" })).toContainElement(empty);
-    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("radio", { name: "匹配" })).toBeInTheDocument();
-    // Nothing to search or filter: the toolbar is the view switch alone.
+    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 匹配患者和试验" })).toBeInTheDocument();
+    // Nothing to search or filter.
     expect(screen.queryByRole("searchbox", { name: "搜索研究" })).toBeNull();
   });
 
-  it("keeps the other three views exactly as they were: the page's own band, no split", async () => {
+  it("opens a library at its old address on the page's own band, with no split and no view switch", async () => {
     const { container } = drawHome("/app/virtual-research?tab=models&study=std_1");
     expect(await screen.findByRole("list", { name: "保存的模型与参数" })).toBeInTheDocument();
     expect(container.querySelector("[data-master-detail]")).toBeNull();
@@ -431,39 +445,46 @@ describe("the 研究 view beside its preview", () => {
     expect(screen.queryByRole("button", { name: "新研究" })).toBeNull();
   });
 
-  it("lets go of the study that was open when the view is changed", async () => {
+  it("has no view switch: the libraries are reached from a study's 依据, and their old addresses open them", async () => {
     drawHome("/app/virtual-research?study=std_1");
     await screen.findByRole("list", { name: "研究" });
-    await userEvent.click(screen.getByRole("button", { name: /^查看/ }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "参考试验" }));
-    expect(where()).toBe("/app/virtual-research?tab=precedents");
+    expect(screen.queryByRole("button", { name: /^查看/ })).toBeNull();
+    for (const label of ["参考试验", "人群定义", "模型与参数"]) expect(screen.queryByRole("menuitemradio", { name: label })).toBeNull();
+    cleanup();
+    for (const [tab, list] of [["precedents", "试验先例"], ["definitions", "人群定义"], ["models", "保存的模型与参数"]]) {
+      const { container, unmount } = drawHome(`/app/virtual-research?tab=${tab}`);
+      expect(await screen.findByRole("link", { name: "回到研究列表" })).toHaveAttribute("href", "/app/virtual-research");
+      expect(container.querySelector("[data-master-detail]")).toBeNull();
+      expect(container.textContent, list).toBeTruthy();
+      unmount();
+    }
   });
 });
 
 describe("the 研究 view below the room for both", () => {
   beforeEach(() => { width = 600; });
-  it("shows the research list first and swaps to new-task choices without stacking them", async () => {
+  it("shows the research list first and swaps to the examples without stacking them", async () => {
     const { container } = drawHome();
     await screen.findByRole("list", { name: "研究" });
     expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "single");
-    expect(screen.queryByRole("radiogroup", { name: "研究任务" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "研究示例" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "新研究" }));
     expect(where()).toBe("/app/virtual-research?new=1");
     expect(screen.queryByRole("list", { name: "研究" })).toBeNull();
-    expect(screen.getByRole("radiogroup", { name: "研究任务" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "研究示例" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "研究预览" }).contains(document.activeElement)).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "研究列表" }));
     expect(where()).toBe("/app/virtual-research");
     expect(screen.getByRole("list", { name: "研究" })).toBeInTheDocument();
   });
-  it("supports keyboard task selection and browser back to the focused list", async () => {
+  it("reaches the examples by keyboard and returns to the focused list on browser back", async () => {
     render(<MemoryRouter initialEntries={["/app/virtual-research"]}><VcrHomePage /><Where /><Back /></MemoryRouter>);
     await screen.findByRole("list", { name: "研究" });
     await userEvent.click(screen.getByRole("button", { name: "新研究" }));
-    const radio = screen.getByRole("radio", { name: "匹配" }); radio.focus();
-    await userEvent.keyboard("{ArrowRight}");
-    expect(screen.getByRole("radio", { name: "人群与患者" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByText("建立研究队列，查看个体的模拟结果。")).toBeInTheDocument();
+    const first = screen.getByRole("button", { name: "让 AI 匹配患者和试验" }); first.focus();
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "让 AI 研究人群或个体患者" })).toHaveFocus();
+    expect(screen.getByText("说清目标人群就能开始，AI 从文献取基线。用真实队列需要患者数据表。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
     expect(where()).toBe("/app/virtual-research");
     await waitFor(() => expect(screen.getByRole("region", { name: "研究列表" }).contains(document.activeElement)).toBe(true));
@@ -510,5 +531,69 @@ describe("the 研究 view below the room for both", () => {
   it("opens the study named by a deep link", async () => {
     drawHome("/app/virtual-research?study=std_2");
     expect(await screen.findByRole("heading", { name: GLP })).toBeInTheDocument();
+  });
+});
+
+describe("the studies a conversation made (VCR remediation F1)", () => {
+  beforeEach(() => { width = 1100; });
+  const made = (over: Record<string, unknown> = {}) => ({ id: "std_conv", projectId: "default", name: "帮我匹配患者和临床试验", question: null, status: "active", originatingSessionId: "sess_1", tabs: ["matching", "data"], updatedAt: "今天 10:12", createdAt: "2026-11-01T02:12:00.000Z", ...over });
+  const serve = (home: Record<string, unknown>) => installVcrServer(network.productRequest, { "GET /vcr/studies": home });
+
+  it("lists each in a list of its own with what it holds, and a press opens its page where it holds something", async () => {
+    const home = fixture("ev201/home.json");
+    serve({ ...home, conversationStudies: [made(), made({ id: "std_pop", name: "生成一个虚拟人群", tabs: ["population"], updatedAt: "昨天 09:00" })] });
+    drawHome();
+    const rows = await screen.findByRole("list", { name: "对话里的研究" });
+    const first = within(rows).getByRole("link", { name: "帮我匹配患者和临床试验" });
+    expect(first).toHaveAttribute("href", "/app/virtual-research/std_conv/matching");
+    expect(first.closest("li")!.textContent).toContain("匹配 · 依据");
+    expect(first.closest("li")!.textContent).toContain("今天 10:12");
+    expect(within(rows).getByRole("link", { name: "生成一个虚拟人群" })).toHaveAttribute("href", "/app/virtual-research/std_pop/population");
+    // The module's own studies are still their own list, and a press on one of them still previews it.
+    expect(within(await screen.findByRole("list", { name: "研究" })).getByRole("link", { name: EV })).toHaveAttribute("href", "/app/virtual-research?study=std_1");
+    expect(within(await screen.findByRole("list", { name: "研究" })).queryByRole("link", { name: "帮我匹配患者和临床试验" })).toBeNull();
+  });
+
+  it("is the list when the module has no study of its own: the empty state is not drawn, and the examples stay in the pane", async () => {
+    serve({ studies: [], reviews: [], draftProjectIds: [], conversationStudies: [made()] });
+    drawHome();
+    const rows = await screen.findByRole("list", { name: "对话里的研究" });
+    expect(within(rows).getByRole("link", { name: "帮我匹配患者和临床试验" })).toBeInTheDocument();
+    expect(screen.queryByText("暂无研究")).toBeNull();
+    expect(screen.queryByRole("list", { name: "研究" })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 匹配患者和试验" })).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "搜索研究" })).toBeInTheDocument();
+  });
+
+  it("says the list is empty only when both lists are, and says when it could not read the conversations' studies", async () => {
+    serve({ studies: [], reviews: [], draftProjectIds: [], conversationStudies: [] });
+    drawHome();
+    expect(await screen.findByText("暂无研究")).toBeInTheDocument();
+    cleanup();
+    serve({ studies: [], reviews: [], draftProjectIds: [], conversationStudiesUnreadable: true });
+    drawHome();
+    expect(await screen.findByText("对话里的研究暂时无法读取。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+
+  it("is searched with the rest, and has no state, so a chosen state leaves it out", async () => {
+    serve({ ...fixture("ev201/home.json"), conversationStudies: [made(), made({ id: "std_pop", name: "生成一个虚拟人群", tabs: ["population"] })] });
+    drawHome();
+    await screen.findByRole("list", { name: "对话里的研究" });
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索研究" }), "虚拟人群");
+    const rows = screen.getByRole("list", { name: "对话里的研究" });
+    expect(within(rows).queryByRole("link", { name: "帮我匹配患者和临床试验" })).toBeNull();
+    expect(within(rows).getByRole("link", { name: "生成一个虚拟人群" })).toBeInTheDocument();
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索研究" }));
+    await userEvent.click(screen.getByRole("button", { name: /等你/ }));
+    expect(screen.queryByRole("list", { name: "对话里的研究" })).toBeNull();
+  });
+
+  it("is never taken for a study the page can preview: no preview, no study address", async () => {
+    serve({ ...fixture("ev201/home.json"), conversationStudies: [made()] });
+    drawHome("/app/virtual-research?study=std_conv");
+    await screen.findByRole("list", { name: "对话里的研究" });
+    expect(document.querySelector("[data-vcr-preview]")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("heading", { level: 2, name: "新研究" })).toBeInTheDocument();
   });
 });
